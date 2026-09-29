@@ -4,7 +4,7 @@
 package com.digitalasset.canton.participant.protocol
 
 import cats.data.EitherT
-import cats.implicits.toTraverseOps
+import cats.syntax.bifunctor.*
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.base.error.{
   Alarm,
@@ -13,6 +13,7 @@ import com.digitalasset.base.error.{
   ErrorCode,
   Explanation,
   Resolution,
+  RpcError,
 }
 import com.digitalasset.canton.*
 import com.digitalasset.canton.concurrent.FutureSupervisor
@@ -20,11 +21,11 @@ import com.digitalasset.canton.config.{ProcessingTimeout, TestingConfigInternal}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.data.ViewType.TransactionViewType
-import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.*
 import com.digitalasset.canton.error.CantonErrorGroups.ParticipantErrorGroup.TransactionErrorGroup.SubmissionErrorGroup
 import com.digitalasset.canton.ledger.error.groups.ConsistencyErrors
 import com.digitalasset.canton.ledger.participant.state.{ChangeId, SubmitterInfo, TransactionMeta}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, PromiseUnlessShutdownFactory}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
@@ -41,6 +42,8 @@ import com.digitalasset.canton.participant.protocol.submission.{
 }
 import com.digitalasset.canton.participant.protocol.validation.{
   AuthorizationValidator,
+  ExternalCallCheck,
+  ExternalCallValidator,
   InternalConsistencyChecker,
   ModelConformanceChecker,
   TransactionConfirmationResponsesFactory,
@@ -87,6 +90,7 @@ class TransactionProcessor(
     promiseFactory: PromiseUnlessShutdownFactory,
     participantNodeParameters: ParticipantNodeParameters,
     trafficEnforcementBackendO: Option[TrafficEnforcementBackend],
+    externalCallValidator: ExternalCallValidator,
 )(implicit val ec: ExecutionContext)
     extends ProtocolProcessor[
       TransactionProcessingSteps.SubmissionParam,
@@ -111,6 +115,7 @@ class TransactionProcessor(
           packageResolver,
           ephemeral.contractStore,
           participantNodeParameters,
+          staticSynchronizerParameters.protocolVersion,
           crypto.pureCrypto,
           loggerFactory,
         ),
@@ -124,6 +129,12 @@ class TransactionProcessor(
         InternalConsistencyChecker(
           participantId,
           staticSynchronizerParameters.protocolVersion,
+          loggerFactory,
+        ),
+        new ExternalCallCheck(
+          participantId,
+          externalCallValidator,
+          participantNodeParameters.general.batchingConfig.parallelism,
           loggerFactory,
         ),
         commandProgressTracker,
@@ -155,20 +166,21 @@ class TransactionProcessor(
   )(
       trafficCost: Long,
       traceContext: TraceContext,
-  ): FutureUnlessShutdown[Unit] =
-    trafficEnforcementBackendO
-      .traverse(
-        _.validateTraffic(
-          actAs = submissionParam.submitterInfo.actAs,
-          trafficCost = trafficCost,
-        )(traceContext)
-      )
-      .map(_.discard)
+  ): EitherT[FutureUnlessShutdown, RpcError, Unit] =
+    trafficEnforcementBackendO match {
+      case Some(backend) =>
+        backend
+          .validateTraffic(
+            actAs = submissionParam.submitterInfo.actAs,
+            trafficCost = trafficCost,
+          )(traceContext)
+          .leftWiden[RpcError]
+      case None => EitherT.rightT(())
+    }
 
   def submit(
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
-      keyResolver: LfGlobalKeyMapping,
       transaction: WellFormedTransaction[WithoutSuffixes],
       disclosedContracts: Map[LfContractId, ContractInstance],
       topologySnapshot: TopologySnapshot,
@@ -181,13 +193,8 @@ class TransactionProcessor(
   ] =
     this
       .submit(
-        TransactionProcessingSteps.SubmissionParam(
-          submitterInfo,
-          transactionMeta,
-          keyResolver,
-          transaction,
-          disclosedContracts,
-        ),
+        TransactionProcessingSteps
+          .SubmissionParam(submitterInfo, transactionMeta, transaction, disclosedContracts),
         topologySnapshot,
       )
       .map { futRes =>
@@ -245,7 +252,7 @@ object TransactionProcessor {
 
       // TODO(i5990) properly set `definiteAnswer` where appropriate when sub-categories are created
       final case class Error(message: String, reason: TransactionConfirmationRequestCreationError)
-          extends TransactionErrorImpl(cause = "Malformed request") {}
+          extends TransactionErrorImpl(cause = "Malformed request")
     }
 
     @Explanation(

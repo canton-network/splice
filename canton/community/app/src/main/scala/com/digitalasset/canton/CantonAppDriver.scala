@@ -7,7 +7,6 @@ import better.files.File
 import cats.syntax.either.*
 import ch.qos.logback.classic.{Logger, LoggerContext}
 import ch.qos.logback.core.status.{ErrorStatus, Status, StatusListener, WarnStatus}
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.CantonAppDriver.installGCLogging
 import com.digitalasset.canton.buildinfo.BuildInfo
 import com.digitalasset.canton.cli.Command.Sandbox
@@ -27,6 +26,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.{NoTracing, TraceContext}
 import com.digitalasset.canton.util.JarResourceUtils
 import com.digitalasset.canton.version.ReleaseVersion
+import com.digitalasset.nonempty.NonEmpty
 import com.sun.management.GarbageCollectionNotificationInfo
 import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
@@ -144,7 +144,7 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
   logger.debug("Registered shutdown-hook.")
   private object Config {
     val multiSuffix = if (cliOptions.multiSync) "-multi-sync" else ""
-    val alphaConfig = Option.when(cliOptions.devProtocol)(
+    val alphaConfig = Option.when(cliOptions.devProtocol || cliOptions.nuck)(
       JarResourceUtils.extractFileFromJar(s"sandbox/alpha$multiSuffix.conf")
     )
     val sandboxConfig = JarResourceUtils.extractFileFromJar(s"sandbox/sandbox$multiSuffix.conf")

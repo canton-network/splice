@@ -16,7 +16,7 @@ import com.digitalasset.canton.logging.audit.{ApiRequestLogger, ResponseKind, Tr
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.CallMetadata
 import com.digitalasset.canton.platform.PackagePreferenceBackend
-import com.digitalasset.canton.tracing.{TraceContext, W3CTraceContext}
+import com.digitalasset.canton.tracing.{HeaderName, TraceContext, W3CTraceContext}
 import org.apache.pekko.http.scaladsl.model.{AttributeKeys, HttpRequest, MediaType, MediaTypes}
 import org.apache.pekko.http.scaladsl.server.RequestContext
 import org.apache.pekko.stream.Materializer
@@ -25,6 +25,7 @@ import org.apache.pekko.util.ByteString
 import sttp.model.{Header, StatusCode, StatusText}
 import sttp.tapir.model.{ConnectionInfo, ServerRequest}
 import sttp.tapir.server.interceptor.RequestInterceptor.RequestResultTransform
+import sttp.tapir.server.interceptor.decodefailure.DefaultDecodeFailureHandler.FailureMessages
 import sttp.tapir.server.interceptor.{RequestInterceptor, RequestResult}
 import sttp.tapir.server.pekkohttp.{PekkoHttpServerInterpreter, PekkoHttpServerOptions}
 
@@ -44,10 +45,12 @@ class V2Routes(
     userManagementService: JsUserManagementService,
     versionService: JsVersionService,
     metadataServiceIfEnabled: Option[JsDamlDefinitionsService],
+    trafficServiceIfEnabled: Option[JsTrafficService],
     versionClient: VersionClient,
     requestLogger: ApiRequestLogger,
     val loggerFactory: NamedLoggerFactory,
     jsHealthService: JsHealthService,
+    joseService: JsJoseService,
 )(implicit ec: ExecutionContext, apiLoggingConfig: ApiLoggingConfig)
     extends NamedLogging {
   @SuppressWarnings(Array("org.wartremover.warts.Product", "org.wartremover.warts.Serializable"))
@@ -57,8 +60,12 @@ class V2Routes(
       .endpoints() ++ stateService.endpoints() ++ updateService.endpoints() ++ userManagementService
       .endpoints() ++ identityProviderService
       .endpoints() ++ interactiveSubmissionService
-      .endpoints() ++ metadataServiceIfEnabled.toList.flatMap(_.endpoints()) ++ jsHealthService
-      .endpoints() ++ contractService.endpoints()
+      .endpoints() ++ metadataServiceIfEnabled.toList.flatMap(
+      _.endpoints()
+    ) ++ jsHealthService
+      .endpoints() ++ contractService.endpoints() ++
+      joseService.endpoints() ++ trafficServiceIfEnabled.toList
+        .flatMap(_.endpoints())
 
   private val docs =
     new JsApiDocsService(
@@ -83,6 +90,7 @@ object V2Routes {
   def apply(
       ledgerClient: LedgerClient,
       metadataServiceEnabled: Boolean,
+      trafficEnforcementEnabled: Boolean,
       packageSyncService: PackageSyncService,
       packagePreferenceBackend: PackagePreferenceBackend,
       executionContext: ExecutionContext,
@@ -158,10 +166,19 @@ object V2Routes {
         new DamlDefinitionsView(packageSyncService.getPackageMetadataSnapshot(_))
       new JsDamlDefinitionsService(damlDefinitionsService, requestLogger, loggerFactory)
     }
+    val trafficServiceIfEnabled = Option.when(trafficEnforcementEnabled) {
+      new JsTrafficService(ledgerClient, requestLogger, loggerFactory)
+    }
     val jsHealthService = new JsHealthService(
       healthService = healthService,
       requestLogger = requestLogger,
       loggerFactory = loggerFactory,
+    )
+    val jsJoseService = new JsJoseService(
+      ledgerClient,
+      protocolConverters,
+      requestLogger,
+      loggerFactory,
     )
 
     new V2Routes(
@@ -177,10 +194,12 @@ object V2Routes {
       userManagementService,
       versionService,
       damlDefinitionsServiceIfEnabled,
+      trafficServiceIfEnabled,
       ledgerClient.versionClient,
       requestLogger,
       loggerFactory,
       jsHealthService,
+      jsJoseService,
     )(executionContext, apiLoggingConfig)
   }
 }
@@ -193,7 +212,7 @@ class RequestInterceptors(
 
   def loggingInterceptor() =
     RequestInterceptor.transformServerRequest { request =>
-      val incomingHeaders = request.headers.map(h => (h.name, h.value)).toMap
+      val incomingHeaders = request.headers.map(h => (HeaderName(h.name), h.value)).toMap
       val extractedW3cTrace = W3CTraceContext.fromHeaders(incomingHeaders)
       val requestParameters =
         s"[${request.queryParameters.toSeq.map { case (k, v) => s"$k=$v" }.mkString(", ")}]"
@@ -289,7 +308,7 @@ class RequestInterceptors(
 
     def apply[B](request: ServerRequest, result: RequestResult[B]): Future[RequestResult[B]] = {
       val addr = RequestInterceptorsUtil.extractAddress(request)
-      val incomingHeaders = request.headers.map(h => (h.name, h.value)).toMap
+      val incomingHeaders = request.headers.map(h => (HeaderName(h.name), h.value)).toMap
       val extractedW3cTrace = W3CTraceContext.fromHeaders(incomingHeaders)
       val callMetadata = CallMetadata(
         apiEndpoint = request.showShort,
@@ -311,7 +330,7 @@ class RequestInterceptors(
           )
           Future.successful(result)
         case RequestResult.Failure(fails) =>
-          val error = fails.map(_.failure.toString).mkString("; ")
+          val error = fails.map(FailureMessages.failureMessage).mkString("; ")
           auditLogger.logResponseStatus(
             callMetadata,
             ResponseKind.MinorError,

@@ -3,7 +3,6 @@
 
 package com.digitalasset.canton.topology
 
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.ErrorCategory.{
   InvalidGivenCurrentSystemStateOther,
   InvalidGivenCurrentSystemStateResourceExists,
@@ -39,6 +38,7 @@ import com.digitalasset.canton.topology.transaction.TopologyTransaction.{
 }
 import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.language.Util
+import com.digitalasset.nonempty.NonEmpty
 
 sealed trait TopologyManagerError extends ContextualizedCantonError
 
@@ -84,7 +84,7 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
     final case class Unexpected(description: String)(implicit
         val loggingContext: ErrorLoggingContext
     ) extends CantonError.Impl(
-          cause = s"Unhandled error: $description"
+          cause = s"Unexpected error: $description"
         )
         with TopologyManagerError
 
@@ -155,6 +155,33 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
     ) extends CantonError.Impl(
           cause = "No synchronizer store available."
         )
+        with TopologyManagerError
+
+    final case class MultipleSynchronizerStoresFound(storeIds: Seq[TopologyStoreId])(implicit
+        val loggingContext: ErrorLoggingContext
+    ) extends CantonError.Impl(
+          cause =
+            s"Multiple topology stores found for the provided storeId: ${storeIds.mkString(", ")}."
+        )
+        with TopologyManagerError
+
+  }
+
+  @Explanation(
+    "This error indicates that the topology has not yet been initialized or is in the process of being initialized."
+  )
+  @Resolution(
+    "The failed operation can be retried after the store has been fully initialized, for example after the logical synchronizer upgrade has completed."
+  )
+  object TopologyStoreNotInitialized
+      extends ErrorCode(
+        id = "TOPOLOGY_STORE_NOT_INITIALIZED",
+        ErrorCategory.InvalidGivenCurrentSystemStateOther,
+      ) {
+    final case class Failure(storeId: TopologyStoreId)(implicit
+        val loggingContext: ErrorLoggingContext
+    ) extends CantonError.Impl(cause = s"Topology store '$storeId' is not yet initialized.")
+        with TopologyManagerError
   }
 
   @Explanation(
@@ -271,14 +298,6 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
         val loggingContext: ErrorLoggingContext
     ) extends CantonError.Impl(
           cause = s"Invalid synchronizer $invalid"
-        )
-        with TopologyManagerError
-
-    final case class MultipleSynchronizerStoresFound(storeIds: Seq[TopologyStoreId])(implicit
-        val loggingContext: ErrorLoggingContext
-    ) extends CantonError.Impl(
-          cause =
-            s"Multiple synchronizer stores found for the provided storeId: ${storeIds.mkString(", ")}."
         )
         with TopologyManagerError
   }
@@ -668,7 +687,7 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
     ) extends CantonError.Impl(cause = s"""REMOVE must not change the topology mapping:
          |actual: $actual
          |expected: $expected""".stripMargin)
-        with TopologyManagerError {}
+        with TopologyManagerError
   }
 
   @Explanation(
@@ -709,7 +728,7 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
 
     final case class UnexpectedPhysicalSynchronizerId(
         fromParameters: PhysicalSynchronizerId,
-        fromAnnouncement: PhysicalSynchronizerId,
+        fromAnnouncement: OpaquePhysicalSynchronizerId,
     )(implicit val loggingContext: ErrorLoggingContext)
         extends CantonError.Impl(
           cause =
@@ -977,7 +996,7 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
         InvalidIndependentOfSystemState,
       ) {
     final case class Reject(
-        successorSynchronizerId: PhysicalSynchronizerId,
+        successorSynchronizerId: OpaquePhysicalSynchronizerId,
         details: String,
     )(implicit val loggingContext: ErrorLoggingContext)
         extends CantonError.Impl(
@@ -989,7 +1008,7 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
     object Reject {
       def conflictWithCurrentPsid(
           currentSynchronizerId: PhysicalSynchronizerId,
-          successorSynchronizerId: PhysicalSynchronizerId,
+          successorSynchronizerId: OpaquePhysicalSynchronizerId,
       )(implicit loggingContext: ErrorLoggingContext): Reject =
         Reject(
           successorSynchronizerId,
@@ -997,8 +1016,8 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
         )
 
       def conflictWithPreviousAnnouncement(
-          successorSynchronizerId: PhysicalSynchronizerId,
-          previouslyAnnouncedSuccessor: PhysicalSynchronizerId,
+          successorSynchronizerId: OpaquePhysicalSynchronizerId,
+          previouslyAnnouncedSuccessor: OpaquePhysicalSynchronizerId,
       )(implicit loggingContext: ErrorLoggingContext): Reject =
         Reject(
           successorSynchronizerId = successorSynchronizerId,
@@ -1021,8 +1040,8 @@ object TopologyManagerError extends TopologyManagerErrorGroup {
       ) {
     final case class Reject(
         sequencerId: SequencerId,
-        successorPsid: PhysicalSynchronizerId,
-        expectedSuccessorPsid: PhysicalSynchronizerId,
+        successorPsid: OpaquePhysicalSynchronizerId,
+        expectedSuccessorPsid: OpaquePhysicalSynchronizerId,
     )(implicit val loggingContext: ErrorLoggingContext)
         extends CantonError.Impl(
           cause =

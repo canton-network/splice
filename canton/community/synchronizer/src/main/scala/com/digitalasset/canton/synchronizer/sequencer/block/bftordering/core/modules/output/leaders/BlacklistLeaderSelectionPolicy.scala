@@ -15,6 +15,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   FutureContext,
 }
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.version.ProtocolVersion
 
 import scala.collection.mutable
 
@@ -22,6 +23,7 @@ import scala.collection.mutable
 class BlacklistLeaderSelectionPolicy[E <: Env[E]](
     initialState: BlacklistLeaderSelectionPolicyState,
     initialOrderingTopology: OrderingTopology,
+    protocolVersion: ProtocolVersion,
     store: OutputMetadataStore[E],
     metrics: BftOrderingMetrics,
     override val loggerFactory: NamedLoggerFactory,
@@ -30,7 +32,11 @@ class BlacklistLeaderSelectionPolicy[E <: Env[E]](
     with NamedLogging {
 
   private var state =
-    BlacklistLeaderSelectionPolicyStateWithTopology(initialState, initialOrderingTopology)
+    BlacklistLeaderSelectionPolicyStateWithTopology(
+      initialState,
+      initialOrderingTopology,
+      protocolVersion,
+    )
 
   private var blockToLeader: Map[BlockNumber, BftNodeId] =
     state.computeBlockToLeader()
@@ -42,8 +48,7 @@ class BlacklistLeaderSelectionPolicy[E <: Env[E]](
       epochNumber: EpochNumber,
       orderedBlockNumber: BlockNumber,
       viewNumber: ViewNumber,
-  ): Unit = {
-    implicit val tc: TraceContext = TraceContext.empty
+  )(implicit traceContext: TraceContext): Unit = {
     logger.trace(s"Adding $orderedBlockNumber | $viewNumber (epoch $epochNumber) ")
     if (epochNumber < state.epochNumber) {
       // After a restart we might reprocess old blocks in output module. We ignore them here
@@ -94,12 +99,12 @@ class BlacklistLeaderSelectionPolicy[E <: Env[E]](
   private def updateState(
       topology: OrderingTopology,
       epochNumber: EpochNumber,
-  ): Unit = {
+  )(implicit traceContext: TraceContext): Unit = {
     assert(EpochNumber(state.epochNumber + 1) == epochNumber)
 
-    logger.trace(s"old blacklist state $state")(TraceContext.empty)
+    logger.trace(s"old blacklist state $state")
     state = state.update(topology, blockToLeader, nodesToPunish.toSet)
-    logger.trace(s"new blacklist state $state")(TraceContext.empty)
+    logger.trace(s"new blacklist state $state")
     nodesToPunish.clear()
 
     updateMetrics(topology)
@@ -161,6 +166,7 @@ object BlacklistLeaderSelectionPolicy {
   def create[E <: Env[E]](
       state: BlacklistLeaderSelectionPolicyState,
       orderingTopology: OrderingTopology,
+      protocolVersion: ProtocolVersion,
       store: OutputMetadataStore[E],
       metrics: BftOrderingMetrics,
       loggerFactory: NamedLoggerFactory,
@@ -168,6 +174,7 @@ object BlacklistLeaderSelectionPolicy {
     new BlacklistLeaderSelectionPolicy(
       state,
       orderingTopology,
+      protocolVersion,
       store,
       metrics,
       loggerFactory,

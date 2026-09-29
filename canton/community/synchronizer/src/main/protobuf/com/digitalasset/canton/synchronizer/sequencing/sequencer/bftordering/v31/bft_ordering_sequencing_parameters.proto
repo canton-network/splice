@@ -13,6 +13,11 @@ message DynamicSequencingParametersPayload {
   google.protobuf.Duration pbft_view_change_timeout = 1;
   int64 segment_length = 2;
   BlacklistLeaderSelectionPolicy blacklist_leader_selection_policy = 3;
+  int32 max_requests_in_batch = 4;
+  int32 max_batches_per_proposal = 5;
+  google.protobuf.Duration pbft_view_change_timeout_step = 6;
+  google.protobuf.Duration pbft_view_change_timeout_upper_bound = 7;
+  bool stricter_detection_of_requests_potentially_changing_ordering_topology = 8;
 }
 
 message BlacklistLeaderSelectionPolicy {
@@ -20,6 +25,8 @@ message BlacklistLeaderSelectionPolicy {
   oneof how_long_to_blacklist {
     HowLongLinear how_long_linear = 1;
     HowLongNoBlacklisting how_long_no_blacklisting = 2;
+    HowLongLinearWithParameters how_long_linear_with_parameters = 5;
+    HowLongExponential how_long_exponential = 6;
   }
   oneof how_many_can_we_blacklist {
     HowManyNumFaultsTolerated how_many_num_faults_tolerated = 3;
@@ -31,6 +38,15 @@ message HowLongLinear {
   optional int64 maximum_epoch_length_blacklisted = 1;
 }
 message HowLongNoBlacklisting {}
+message HowLongLinearWithParameters {
+  int64 slope = 1;
+  int64 initial_value = 2;
+  optional int64 maximum_epoch_length_blacklisted = 3;
+}
+message HowLongExponential {
+  int64 initial_value = 1;
+  optional int64 maximum_epoch_length_blacklisted = 2;
+}
 
 message HowManyNumFaultsTolerated {}
 message HowManyNoBlacklisting {}

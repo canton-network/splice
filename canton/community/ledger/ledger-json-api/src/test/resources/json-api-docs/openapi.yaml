@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
   title: JSON Ledger API HTTP endpoints
-  version: 3.5.7-SNAPSHOT
+  version: 3.6.0-SNAPSHOT
   description: |-
     This specification version fixes the API inconsistencies where certain fields marked as required in the spec are in fact optional.
     If you use code generation tool based on this file, you might need to adjust the existing application code to handle those fields as optional.
     If you do not want to change your client code, continue using the OpenAPI specification for the latest Canton 3.4 patch release.
-    MINIMUM_CANTON_VERSION=3.5.7
+    MINIMUM_CANTON_VERSION=3.6.0
 paths:
   /v2/commands/submit-and-wait:
     post:
@@ -318,6 +318,46 @@ paths:
         '400':
           description: 'Invalid value, Invalid value for: body, Invalid value for:
             query parameter limit, Invalid value for: query parameter stream_idle_timeout_ms'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/commands/completion-by-hash:
+    post:
+      description: |-
+        Look up a completion by its transaction hash.
+        This is only available for completions received after upgrading to Canton version 3.5.
+        A COMPLETION_NOT_FOUND error will be raised if either of the following is true:
+
+        - there is no completion with this transaction hash,
+        - the completion is not visible to the user,
+        - the completion was populated before upgrading to Canton version 3.5,
+        - respective completions are all pruned.
+      operationId: postV2CommandsCompletion-by-hash
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetCompletionByHashRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCompletionByHashResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
           content:
             text/plain:
               schema:
@@ -869,6 +909,10 @@ paths:
   /v2/parties/external/allocate:
     post:
       description: |-
+        Alpha 3.3: Endpoint to allocate a new external party on a synchronizer
+
+        Expected to be stable in 3.5
+
         The external party must be hosted (at least) on this node with either confirmation or observation permissions
         It can optionally be hosted on other nodes (then called a multi-hosted party).
         If hosted on additional nodes, explicit authorization of the hosting relationship must be performed on those nodes
@@ -1026,6 +1070,10 @@ paths:
   /v2/parties/external/generate-topology:
     post:
       description: |-
+        Alpha 3.3: Convenience endpoint to generate topology transactions for external signing
+
+        Expected to be stable in 3.5
+
         You may use this endpoint to generate the common external topology transactions
         which can be signed externally and uploaded as part of the allocate party process
 
@@ -1133,12 +1181,47 @@ paths:
   /v2/state/active-contracts-page:
     get:
       description: |-
+        Deprecated
+
+        Use POST version of this endpoint
+      operationId: getV2StateActive-contracts-page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetActiveContractsPageRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsGetActiveContractsPageResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      deprecated: true
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+    post:
+      description: |-
         Returns a page of the snapshot of the active contracts and incomplete (un)assignments at a ledger offset.
         Once all pages are fetched by repeated calls to ``GetActiveContractsPage``,
         the client SHOULD begin retrieving updates from the update service,
         starting at the ``GetActiveContractsPageResponse``.``active_at_offset`` specified in this request.
         Clients SHOULD NOT assume that the set of active contracts they receive reflects the state at the ledger end.
-      operationId: getV2StateActive-contracts-page
+      operationId: postV2StateActive-contracts-page
       requestBody:
         content:
           application/json:
@@ -1217,6 +1300,14 @@ paths:
         Get the current ledger end.
         Subscriptions started with the returned offset will serve events after this RPC was called.
       operationId: getV2StateLedger-end
+      parameters:
+      - name: synchronizer_id
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
       responses:
         '200':
           description: ''
@@ -1225,7 +1316,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GetLedgerEndResponse'
         '400':
-          description: Invalid value
+          description: 'Invalid value, Invalid value for: query parameter synchronizer_id'
           content:
             text/plain:
               schema:
@@ -1666,6 +1757,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/JsCantonError'
       deprecated: true
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/updates/update-by-hash:
+    post:
+      description: |-
+        Look up an update by its transaction hash.
+        This is only available for updates received after upgrading to Canton version 3.6.
+        If there is no update with this transaction hash, or all the events are filtered,
+        or the update was populated before upgrading to Canton version 3.6, an UPDATE_NOT_FOUND error will be raised.
+      operationId: postV2UpdatesUpdate-by-hash
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetUpdateByHashRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsGetUpdateResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
       security:
       - httpAuth: []
       - apiKeyAuth: []
@@ -2376,7 +2503,7 @@ paths:
 
         Can be accessed by any Ledger API client with a valid token when Ledger API authorization is enabled.
 
-        Provided for backwards compatibility, it will be removed in the Canton version 3.4.0
+        Deprecated: Use GetPreferredPackages instead.
       operationId: getV2Interactive-submissionPreferred-package-version
       parameters:
       - name: parties
@@ -2443,8 +2570,6 @@ paths:
         a `FAILED_PRECONDITION` error will be returned.
 
         Can be accessed by any Ledger API client with a valid token when Ledger API authorization is enabled.
-
-        Experimental API: this endpoint is not guaranteed to provide backwards compatibility in future releases
       operationId: postV2Interactive-submissionPreferred-packages
       requestBody:
         content:
@@ -2543,6 +2668,170 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GetContractResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/jose/jwks/synchronizer/{synchronizer}/party/{party}:
+    get:
+      description: |-
+        Retrieve public keys as JWKS for a specific party and synchronizer.
+        This endpoint is experimental / alpha, therefore no backwards compatibility is guaranteed.
+      operationId: getV2JoseJwks
+      parameters:
+      - name: synchronizer
+        in: path
+        description: synchronizer from which to read the public keys
+        required: true
+        schema:
+          type: string
+      - name: party
+        in: path
+        description: party for which to retrieve the public keys
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                description: A JWKS as specified by RFC 7517
+                type: object
+                required:
+                - keys
+                properties:
+                  keys:
+                    description: |-
+                      List of JWKs for the specified party and synchronizer.
+                      Only keys of which the usage allows for Party JWT authentication will be returned.
+
+                      Optional: can be empty
+                    type: array
+                    items:
+                      description: A JSON object representing a JWK
+                      type: object
+        '400':
+          description: Invalid value
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/traffic/accounts/{account-id}:
+    get:
+      description: |-
+        Get account state for a given account ID.
+        Permissioned only to users having ActAs or ExecuteAs rights for the party ID associated with the account ID.
+
+        NOTE: This endpoint is exposed only when traffic enforcement feature is enabled (canton.participants.participant1.traffic-enforcement.enabled = true)
+      operationId: getV2TrafficAccountsAccount-id
+      parameters:
+      - name: account-id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAccountResponse'
+        '400':
+          description: Invalid value
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/traffic/accounts:
+    post:
+      description: |-
+        Update account state for a given account ID.
+        Permissioned only to Ledger API admin users.
+
+        NOTE: This endpoint is exposed only when traffic enforcement feature is enabled (canton.participants.participant1.traffic-enforcement.enabled = true)
+      operationId: postV2TrafficAccounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccountRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateAccountResponse'
+        '400':
+          description: 'Invalid value, Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsCantonError'
+      security:
+      - httpAuth: []
+      - apiKeyAuth: []
+  /v2/traffic/events/prune:
+    post:
+      description: |-
+        Prune events from the event log that are older than a given timestamp.
+        Permissioned only to Ledger API admin users.
+        WARNING: Affects de-duplication. If an event is pruned, de-duplication UpdateAccount requests on it will NOT be possible.
+
+        NOTE: This endpoint is exposed only when traffic enforcement feature is enabled (canton.participants.participant1.traffic-enforcement.enabled = true)
+      operationId: postV2TrafficEventsPrune
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PruneEventsRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PruneEventsResponse'
         '400':
           description: 'Invalid value, Invalid value for: body'
           content:
@@ -2834,6 +3123,23 @@ components:
 
             Required
           type: string
+    CanActAsAnyParty:
+      title: CanActAsAnyParty
+      description: |-
+        The right of a user to authorize commands as any party on a participant.
+        Its utility is predominantly for users that act on behalf of many parties.
+      type: object
+      required:
+      - value
+      properties:
+        value:
+          $ref: '#/components/schemas/CanActAsAnyParty1'
+    CanActAsAnyParty1:
+      title: CanActAsAnyParty
+      description: |-
+        The right of a user to authorize commands as any party on a participant.
+        Its utility is predominantly for users that act on behalf of many parties.
+      type: object
     CanExecuteAs:
       title: CanExecuteAs
       type: object
@@ -3101,6 +3407,22 @@ components:
             Optional
           type: integer
           format: int64
+        transactionHash:
+          description: |-
+            The transaction hash signed by the external party for prepared transactions
+            that were submitted using `InteractiveSubmissionService.ExecuteSubmission`
+            or one of its variants.
+
+            Use this to correlate prepared transactions with their execution result
+            on the *same participant* that executed the transaction.
+
+            Not available for:
+
+            - transactions executed on Canton versions prior to 3.5
+            - transactions of internal parties submitted using `CommandSubmissionService.Submit` and its variants
+
+            Optional: can be empty
+          type: string
     CompletionResponse:
       title: CompletionResponse
       description: Required
@@ -3268,6 +3590,7 @@ components:
             - SIGNING_ALGORITHM_SPEC_ED25519
             - SIGNING_ALGORITHM_SPEC_EC_DSA_SHA_256
             - SIGNING_ALGORITHM_SPEC_EC_DSA_SHA_384
+            - SIGNING_ALGORITHM_SPEC_ML_DSA_65
     CreateAndExerciseCommand:
       title: CreateAndExerciseCommand
       description: Create a contract and exercise a choice on it in the same transaction.
@@ -4346,6 +4669,20 @@ components:
 
             Required: must be non-empty
           type: string
+    GetAccountResponse:
+      title: GetAccountResponse
+      type: object
+      required:
+      - accountId
+      - balance
+      properties:
+        accountId:
+          description: Required
+          type: string
+        balance:
+          description: Required
+          type: integer
+          format: int64
     GetActiveContractsPageRequest:
       title: GetActiveContractsPageRequest
       type: object
@@ -4455,6 +4792,40 @@ components:
 
             Optional: can be empty
           type: string
+    GetCompletionByHashRequest:
+      title: GetCompletionByHashRequest
+      type: object
+      required:
+      - transactionHash
+      properties:
+        transactionHash:
+          description: |-
+            The transaction hash of the prepared transaction whose completion is being looked up.
+
+            Required: must be non-empty
+          type: string
+    GetCompletionByHashResponse:
+      title: GetCompletionByHashResponse
+      type: object
+      properties:
+        acceptedCompletion:
+          $ref: '#/components/schemas/Completion1'
+          description: |-
+            The accepted completion for the given transaction hash (at most one can exist).
+            Only completions beyond the current pruning offset are visible.
+
+            Optional
+        lastRejectedCompletions:
+          description: |-
+            Recent rejected completions for the given transaction hash, in descending offset order.
+            The server may truncate this list if there are too many entries.
+            Use ``submission_id`` to correlate with a specific command submission.
+            Only completions beyond the current pruning offset are visible.
+
+            Optional: can be empty
+          type: array
+          items:
+            $ref: '#/components/schemas/Completion1'
     GetCompletionsRequest:
       title: GetCompletionsRequest
       type: object
@@ -4629,6 +5000,15 @@ components:
             Optional
           type: integer
           format: int64
+        synchronizerTimes:
+          description: |-
+            Final record times observed by this participant for each of the requested synchronizers.
+            If there is no connection to a sequencer, corresponding record time can be arbitrarily far back in the past.
+
+            Optional: can be empty
+          type: array
+          items:
+            $ref: '#/components/schemas/SynchronizerTime'
     GetPackageStatusResponse:
       title: GetPackageStatusResponse
       type: object
@@ -4653,7 +5033,7 @@ components:
         participantId:
           description: |-
             Identifier of the participant, which SHOULD be globally unique.
-            Must be a valid LedgerString (as describe in ``value.proto``).
+            Must be a valid ParticipantIdStrings (as describe in ``value.proto``).
 
             Required
           type: string
@@ -4812,6 +5192,25 @@ components:
             - event_format.filters_for_any_party is unset
             - event_format.verbose = true
             - transaction_shape = TRANSACTION_SHAPE_ACS_DELTA
+    GetUpdateByHashRequest:
+      title: GetUpdateByHashRequest
+      type: object
+      required:
+      - transactionHash
+      - updateFormat
+      properties:
+        transactionHash:
+          description: |-
+            The transaction hash to look up.
+
+            Required: must be non-empty
+          type: string
+        updateFormat:
+          $ref: '#/components/schemas/UpdateFormat'
+          description: |-
+            The format for the update.
+
+            Required
     GetUpdateByIdRequest:
       title: GetUpdateByIdRequest
       type: object
@@ -5195,11 +5594,12 @@ components:
           type: string
         reassignmentCounter:
           description: |-
-            Each corresponding assigned and unassigned event has the same reassignment_counter. This strictly increases
-            with each unassign command for the same contract. Creation of the contract corresponds to reassignment_counter
-            equals zero.
-            This field will be the reassignment_counter of the latest observable activation event on this synchronizer, which is
-            before the active_at_offset.
+            The reassignment counter of this event.
+
+            Reassignment counters strictly increase with each unassign command for the same contract. Creation
+            of the contract corresponds to a reassignment_counter equal to zero.
+            This field will be the reassignment_counter of the latest observable activation event on this synchronizer,
+            which is before the active_at_offset.
 
             Required
           type: integer
@@ -5264,9 +5664,10 @@ components:
           type: string
         reassignmentCounter:
           description: |-
-            Each corresponding assigned and unassigned event has the same reassignment_counter. This strictly increases
-            with each unassign command for the same contract. Creation of the contract corresponds to reassignment_counter
-            equals zero.
+            The reassignment counter associated with this assignment on the target synchronizer.
+
+            Reassignment counters strictly increase with each unassign command for the same contract.
+            Creation of the contract corresponds to reassignment_counter equal to zero.
 
             Required
           type: integer
@@ -5583,7 +5984,9 @@ components:
           type: string
         hashingSchemeVersion:
           description: |-
-            The hashing scheme version used when building the hash
+            The hashing scheme version used when building the hash.
+            HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+            rejected on synchronizers running older protocol versions.
 
             Required
           type: string
@@ -5591,6 +5994,7 @@ components:
           - HASHING_SCHEME_VERSION_UNSPECIFIED
           - HASHING_SCHEME_VERSION_V2
           - HASHING_SCHEME_VERSION_V3
+          - HASHING_SCHEME_VERSION_V4
         minLedgerTime:
           $ref: '#/components/schemas/MinLedgerTime'
           description: |-
@@ -5666,7 +6070,9 @@ components:
           type: string
         hashingSchemeVersion:
           description: |-
-            The hashing scheme version used when building the hash
+            The hashing scheme version used when building the hash.
+            HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+            rejected on synchronizers running older protocol versions.
 
             Required
           type: string
@@ -5674,6 +6080,7 @@ components:
           - HASHING_SCHEME_VERSION_UNSPECIFIED
           - HASHING_SCHEME_VERSION_V2
           - HASHING_SCHEME_VERSION_V3
+          - HASHING_SCHEME_VERSION_V4
         minLedgerTime:
           $ref: '#/components/schemas/MinLedgerTime'
           description: |-
@@ -5726,7 +6133,9 @@ components:
           type: string
         hashingSchemeVersion:
           description: |-
-            The hashing scheme version used when building the hash
+            The hashing scheme version used when building the hash.
+            HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+            rejected on synchronizers running older protocol versions.
 
             Required
           type: string
@@ -5734,6 +6143,7 @@ components:
           - HASHING_SCHEME_VERSION_UNSPECIFIED
           - HASHING_SCHEME_VERSION_V2
           - HASHING_SCHEME_VERSION_V3
+          - HASHING_SCHEME_VERSION_V4
         minLedgerTime:
           $ref: '#/components/schemas/MinLedgerTime'
           description: |-
@@ -6110,6 +6520,8 @@ components:
           description: |-
             The hashing scheme version to be used when building the hash.
             Defaults to HASHING_SCHEME_VERSION_V2.
+            HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+            rejected on synchronizers running older protocol versions.
 
             Optional
           type: string
@@ -6117,6 +6529,7 @@ components:
           - HASHING_SCHEME_VERSION_UNSPECIFIED
           - HASHING_SCHEME_VERSION_V2
           - HASHING_SCHEME_VERSION_V3
+          - HASHING_SCHEME_VERSION_V4
     JsPrepareSubmissionResponse:
       title: JsPrepareSubmissionResponse
       description: '[docs-entry-end: HashingSchemeVersion]'
@@ -6143,7 +6556,9 @@ components:
           type: string
         hashingSchemeVersion:
           description: |-
-            The hashing scheme version used when building the hash
+            The hashing scheme version used when building the hash.
+            HASHING_SCHEME_VERSION_V4 is only returned for synchronizers running protocol version 36 or
+            later.
 
             Required
           type: string
@@ -6151,6 +6566,7 @@ components:
           - HASHING_SCHEME_VERSION_UNSPECIFIED
           - HASHING_SCHEME_VERSION_V2
           - HASHING_SCHEME_VERSION_V3
+          - HASHING_SCHEME_VERSION_V4
         hashingDetails:
           description: |-
             Optional additional details on how the transaction was encoded and hashed. Only set if verbose_hashing = true in the request
@@ -6492,6 +6908,7 @@ components:
           type: string
         externalTransactionHash:
           description: |-
+            Deprecated: please use ``transaction_hash`` which has the same value.
             For transaction externally signed, contains the external transaction hash
             signed by the external party. Can be used to correlate an external submission with a committed transaction.
 
@@ -6511,6 +6928,22 @@ components:
             Optional
           type: integer
           format: int64
+        transactionHash:
+          description: |-
+            The transaction hash signed by the external party for prepared transactions
+            that were submitted using `InteractiveSubmissionService.ExecuteSubmission`
+            or one of its variants.
+
+            Use this to correlate prepared transactions with their execution result
+            on the *same participant* that executed the transaction.
+
+            Not available for:
+
+            - transactions executed on Canton versions prior to 3.6
+            - transactions of internal parties submitted using `CommandSubmissionService.Submit` and its variants
+
+            Optional: can be empty
+          type: string
     JsTransactionTree:
       title: JsTransactionTree
       description: |-
@@ -6604,6 +7037,12 @@ components:
         properties:
           CanActAs:
             $ref: '#/components/schemas/CanActAs'
+      - type: object
+        required:
+        - CanActAsAnyParty
+        properties:
+          CanActAsAnyParty:
+            $ref: '#/components/schemas/CanActAsAnyParty'
       - type: object
         required:
         - CanExecuteAs
@@ -6793,7 +7232,11 @@ components:
         nextPageToken:
           description: |-
             Pagination token to retrieve the next page.
-            Empty string if there are no further results.
+            Empty string once there are no further results.
+
+            ``PackageMetadataFilter`` is applied after ``TopologyStateFilter`` has already produced a page,
+            so that page can end up empty even when it has a next token. Keep following the token until
+            there's no token left.
 
             Optional
           type: string
@@ -7368,6 +7811,32 @@ components:
           $ref: '#/components/schemas/UnknownFieldSet'
         valueDecoded:
           type: string
+    PruneEventsRequest:
+      title: PruneEventsRequest
+      type: object
+      required:
+      - beforeOrAt
+      properties:
+        beforeOrAt:
+          description: |-
+            The timestamp before which events should be pruned.
+            Events with a timestamp less than or equal to this value will be pruned.
+
+            Required
+          type: string
+    PruneEventsResponse:
+      title: PruneEventsResponse
+      type: object
+      required:
+      - prunedEventCount
+      properties:
+        prunedEventCount:
+          description: |-
+            The number of events that were pruned.
+
+            Required
+          type: integer
+          format: int32
     Reassignment:
       title: Reassignment
       description: Complete view of an on-ledger reassignment.
@@ -8068,9 +8537,10 @@ components:
           type: string
         reassignmentCounter:
           description: |-
-            Each corresponding assigned and unassigned event has the same reassignment_counter. This strictly increases
-            with each unassign command for the same contract. Creation of the contract corresponds to reassignment_counter
-            equals zero.
+            The reassignment counter associated with this unassignment on the source synchronizer.
+
+            Reassignment counters strictly increase with each unassign command for the same contract.
+            Creation of the contract corresponds to reassignment_counter equal to zero.
 
             Required
           type: integer
@@ -8200,6 +8670,54 @@ components:
         properties:
           TransactionTree:
             $ref: '#/components/schemas/TransactionTree'
+    UpdateAccountRequest:
+      title: UpdateAccountRequest
+      type: object
+      required:
+      - accountId
+      - deduplicationId
+      properties:
+        accountId:
+          description: |-
+            The account ID whose account to update.
+
+            NOTE: Currently, the account ID is tied to and identified by a party ID.
+            This constraint is expected to be removed in a future release, allowing for user-defined
+            account IDs that are not necessarily tied to a specific party.
+
+            Required
+          type: string
+        balanceDelta:
+          description: |-
+            Balance DELTA to apply to the current balance.
+            Negative values will decrease the balance, positive values will increase the balance.
+            If unset, the balance will not be updated
+
+            Note that setting a negative value may result in a negative balance if the delta is larger than the current balance.
+            Optional
+          type: integer
+          format: int64
+        deduplicationId:
+          description: |-
+            Identifier of this logical update, used to de-duplicate.
+            The caller MUST use a distinct id for every distinct update, and MUST reuse the same id when
+            retrying an update that failed after a retryable error. An already processed id is ignored,
+            while a fresh id applies the delta again.
+
+            Required
+          type: string
+    UpdateAccountResponse:
+      title: UpdateAccountResponse
+      type: object
+      required:
+      - response
+      properties:
+        response:
+          $ref: '#/components/schemas/GetAccountResponse'
+          description: |-
+            The account state after the update
+
+            Required
     UpdateFormat:
       title: UpdateFormat
       description: A format specifying what updates to include and how to render them.
