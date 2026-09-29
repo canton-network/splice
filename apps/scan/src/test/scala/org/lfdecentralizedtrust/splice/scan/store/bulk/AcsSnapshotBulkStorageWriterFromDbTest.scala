@@ -445,6 +445,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                   0L,
                   None,
                   None,
+                  indexesCreated = true,
                 )
               )
           }

@@ -74,7 +74,7 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
     storage
       .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
             from acs_snapshot
             where snapshot_record_time <= $before
               and migration_id = $migrationId
@@ -92,7 +92,7 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
 
     val select =
-      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name "
+      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created "
     val orderLimit = sql" order by snapshot_record_time asc limit 1 "
     val sameMig = select ++ sql""" from acs_snapshot
             where snapshot_record_time > $after
@@ -119,7 +119,7 @@ class AcsSnapshotStore(
   ): Future[Option[PerTableAcsSnapshot]] = {
     storage
       .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
             from acs_snapshot
             where not indexes_created
             and   history_id = $historyId
@@ -147,6 +147,7 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       migrationId: Long,
       until: CantonTimestamp,
+      shouldIndexSnapshot: Boolean = true,
   )(implicit tc: TraceContext): Future[Unit] = {
     Future {
       scala.concurrent.blocking {
@@ -179,6 +180,18 @@ class AcsSnapshotStore(
           incrementalSnapshot.copy(recordTime = incrementalSnapshot.targetRecordTime),
           until,
         )
+        snapshot <- lookupSnapshotAtOrBefore(migrationId, until)
+        _ <- snapshot match {
+          case Some(snapshot: PerTableAcsSnapshot) if shouldIndexSnapshot =>
+            indexSnapshotStakeholdersTable(snapshot)
+          case Some(_) => Future.unit
+          case None =>
+            Future.failed(
+              io.grpc.Status.FAILED_PRECONDITION
+                .withDescription("This should've been just created")
+                .asRuntimeException()
+            )
+        }
       } yield ()
     }.andThen { _ =>
       AcsSnapshotStore.PreventConcurrentSnapshotsSemaphore.release()
@@ -223,10 +236,19 @@ class AcsSnapshotStore(
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
+
+    def notFound = FutureUnlessShutdown.failed(
+      io.grpc.Status.NOT_FOUND
+        .withDescription(
+          s"Failed to find ACS snapshot for migration id $migrationId at $snapshot"
+        )
+        .asRuntimeException()
+    )
+
     for {
       snapshot <- storage
         .querySingle(
-          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name
+          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
             from acs_snapshot
             where snapshot_record_time = $snapshot
               and migration_id = $migrationId
@@ -234,15 +256,12 @@ class AcsSnapshotStore(
             limit 1""".as[AcsSnapshot].headOption,
           "queryAcsSnapshot.getSnapshot",
         )
-        .getOrElseF(
-          FutureUnlessShutdown.failed(
-            io.grpc.Status.NOT_FOUND
-              .withDescription(
-                s"Failed to find ACS snapshot for migration id $migrationId at $snapshot"
-              )
-              .asRuntimeException()
-          )
-        )
+        .value
+        .flatMap {
+          case None => notFound
+          case Some(snapshot) if !snapshot.indexesCreated => notFound
+          case Some(snapshot) => Future.successful(snapshot)
+        }
       events <- snapshot match {
         case snapshot: LegacyAcsSnapshot =>
           queryLegacyTable(snapshot, after, limit, partyIds, templates)
@@ -1256,6 +1275,7 @@ object AcsSnapshotStore {
     val historyId: Long
     val unlockedAmuletBalance: Option[BigDecimal]
     val lockedAmuletBalance: Option[BigDecimal]
+    val indexesCreated: Boolean
   }
 
   case class LegacyAcsSnapshot(
@@ -1266,6 +1286,7 @@ object AcsSnapshotStore {
       lastRowId: Long,
       unlockedAmuletBalance: Option[BigDecimal],
       lockedAmuletBalance: Option[BigDecimal],
+      indexesCreated: Boolean,
   ) extends AcsSnapshot {
     import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
     override def pretty: Pretty[this.type] = prettyOfClass(
@@ -1276,6 +1297,7 @@ object AcsSnapshotStore {
       param("lastRowId", _.lastRowId),
       param("unlockedAmuletBalance", _.unlockedAmuletBalance),
       param("lockedAmuletBalance", _.lockedAmuletBalance),
+      param("indexesCreated", _.indexesCreated),
     )
   }
 
@@ -1287,6 +1309,7 @@ object AcsSnapshotStore {
       stakeholdersTableName: String,
       unlockedAmuletBalance: Option[BigDecimal],
       lockedAmuletBalance: Option[BigDecimal],
+      indexesCreated: Boolean,
   ) extends AcsSnapshot {
     import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
     override def pretty: Pretty[this.type] = prettyOfClass(
@@ -1297,6 +1320,7 @@ object AcsSnapshotStore {
       param("stakeholdersTableName", _.stakeholdersTableName.singleQuoted),
       param("unlockedAmuletBalance", _.unlockedAmuletBalance),
       param("lockedAmuletBalance", _.lockedAmuletBalance),
+      param("indexesCreated", _.indexesCreated),
     )
   }
 
@@ -1311,6 +1335,7 @@ object AcsSnapshotStore {
       val lockedAmuletBalance = r.<<[Option[BigDecimal]]
       val createsTableName = r.<<[Option[String]]
       val stakeholdersTableName = r.<<[Option[String]]
+      val indexesCreated = r.<<[Boolean]
       (firstRowId, lastRowId, createsTableName, stakeholdersTableName) match {
         case (Some(first), Some(last), None, None) =>
           LegacyAcsSnapshot(
@@ -1321,6 +1346,7 @@ object AcsSnapshotStore {
             last,
             unlockedAmuletBalance,
             lockedAmuletBalance,
+            indexesCreated,
           )
         case (None, None, Some(createsTableName), Some(stakeholdersTableName)) =>
           PerTableAcsSnapshot(
@@ -1331,6 +1357,7 @@ object AcsSnapshotStore {
             stakeholdersTableName,
             unlockedAmuletBalance,
             lockedAmuletBalance,
+            indexesCreated,
           )
         case _ =>
           throw new IllegalStateException(
