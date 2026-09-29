@@ -1594,7 +1594,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -1667,7 +1668,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -1740,7 +1742,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -1813,7 +1816,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -1886,7 +1890,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -1959,7 +1964,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -2032,7 +2038,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -2105,7 +2112,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -2178,7 +2186,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -2251,7 +2260,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -2324,7 +2334,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -2397,7 +2408,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -2827,6 +2839,29 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -3633,6 +3668,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -4433,6 +4491,29 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -5235,6 +5316,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -6016,6 +6120,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6094,6 +6199,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6148,6 +6257,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6226,6 +6336,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6280,6 +6394,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6358,6 +6473,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6412,6 +6531,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6490,6 +6610,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6544,6 +6668,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6622,6 +6747,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6676,6 +6805,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6754,6 +6884,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6808,6 +6942,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -6886,6 +7021,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -6940,6 +7079,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7018,6 +7158,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -7072,6 +7216,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7150,6 +7295,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -7204,6 +7353,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7282,6 +7432,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -7336,6 +7490,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7414,6 +7569,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -7468,6 +7627,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7546,6 +7706,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -7600,6 +7764,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7678,6 +7843,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -7732,6 +7901,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -7810,6 +7980,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -9124,6 +9298,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -9929,6 +10126,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -10729,6 +10949,29 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -11531,6 +11774,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -12312,6 +12578,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -12390,6 +12657,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -12444,6 +12715,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -12522,6 +12794,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -12576,6 +12852,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -12654,6 +12931,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -12708,6 +12989,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -12786,6 +13068,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -12840,6 +13126,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -12918,6 +13205,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -12972,6 +13263,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13050,6 +13342,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13104,6 +13400,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13182,6 +13479,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13236,6 +13537,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13314,6 +13616,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13368,6 +13674,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13446,6 +13753,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13500,6 +13811,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13578,6 +13890,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13632,6 +13948,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13710,6 +14027,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13764,6 +14085,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13842,6 +14164,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -13896,6 +14222,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -13974,6 +14301,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -14028,6 +14359,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -14106,6 +14438,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -14677,6 +15013,29 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -15483,6 +15842,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -16283,6 +16665,29 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -17085,6 +17490,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -17866,6 +18294,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -17945,6 +18374,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -17999,6 +18432,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18078,6 +18512,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18132,6 +18570,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18211,6 +18650,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18265,6 +18708,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18344,6 +18788,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18398,6 +18846,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18477,6 +18926,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18531,6 +18984,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18610,6 +19064,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18664,6 +19122,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18743,6 +19202,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18797,6 +19260,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -18876,6 +19340,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -18930,6 +19398,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -19009,6 +19478,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -19063,6 +19536,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -19142,6 +19616,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -19196,6 +19674,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -19275,6 +19754,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -19329,6 +19812,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -19408,6 +19892,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -19462,6 +19950,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -19541,6 +20030,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -19595,6 +20088,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -19674,6 +20168,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,

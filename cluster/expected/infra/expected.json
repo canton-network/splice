@@ -679,6 +679,18 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "description": "Drops the load balancer request logs of requests accepted by the Cloud Armor policy waf-whitelist-throttle-ban-mock",
+      "filter": "resource.type=(\"http_external_regional_lb_rule\" OR \"http_load_balancer\")\njsonPayload.enforcedSecurityPolicy.name=\"waf-whitelist-throttle-ban-mock\"\njsonPayload.enforcedSecurityPolicy.outcome=\"ACCEPT\"\n(NOT jsonPayload.previewSecurityPolicy:* OR jsonPayload.previewSecurityPolicy.outcome=\"ACCEPT\")",
+      "name": "cloud-armor-accepted-requests-mock"
+    },
+    "name": "cloud-armor-accepted-requests-mock",
+    "provider": "",
+    "type": "gcp:logging/projectExclusion:ProjectExclusion"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "data": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -1119,11 +1131,15 @@
       },
       "spec": {
         "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
           "logging": {
             "enabled": true,
             "sampleRate": 1000000
           },
-          "securityPolicy": "waf-whitelist-throttle-ban-mock"
+          "securityPolicy": "waf-whitelist-throttle-ban-mock",
+          "timeoutSec": 3600
         },
         "targetRef": {
           "group": "",
@@ -1266,10 +1282,10 @@
       },
       "spec": {
         "default": {
-          "logging": {
-            "enabled": true,
-            "sampleRate": 1000000
-          }
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
+          "timeoutSec": 3600
         },
         "targetRef": {
           "group": "",
@@ -1650,7 +1666,7 @@
         "versionedExpr": "SRC_IPS_V1"
       },
       "preview": true,
-      "priority": 1000010,
+      "priority": 200000000,
       "securityPolicy": "waf-whitelist-throttle-ban-mock"
     },
     "name": "ip-whitelist-0",
@@ -1868,7 +1884,8 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -2140,10 +2157,21 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
+        },
+        "lifecycle": {
+          "preStop": {
+            "exec": {
+              "command": [
+                "sleep",
+                "120"
+              ]
+            }
+          }
         },
         "podAnnotations": {
-          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2}}"
+          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2},\"terminationDrainDuration\":\"60s\"}"
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -2278,6 +2306,7 @@
           ],
           "type": "ClusterIP"
         },
+        "terminationGracePeriodSeconds": 210,
         "tolerations": [
           {
             "effect": "NoSchedule",
@@ -2569,6 +2598,28 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "action": "deny(403)",
+      "description": "Preview-only deny all rule, mirroring the enforced default deny rule",
+      "match": {
+        "config": {
+          "srcIpRanges": [
+            "*"
+          ]
+        },
+        "versionedExpr": "SRC_IPS_V1"
+      },
+      "preview": true,
+      "priority": 2147483646,
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "preview-deny-all",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "kind": "Namespace",
       "metadata": {
@@ -2751,6 +2802,36 @@
                     },
                     "initial_connection_window_size": 104857600,
                     "initial_stream_window_size": 1048576
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "GATEWAY",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                }
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "http2_protocol_options": {
+                    "allow_connect": true,
+                    "connection_keepalive": {
+                      "interval": "30s",
+                      "timeout": "5s"
+                    },
+                    "initial_connection_window_size": 52428800,
+                    "initial_stream_window_size": 524288
                   }
                 }
               }
@@ -4099,11 +4180,11 @@
       "description": "Per source IP throttle rule for all publicScan API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
-      "priority": 100000010,
+      "priority": 300000000,
       "rateLimitOptions": {
         "conformAction": "allow",
         "enforceOnKey": "IP",
@@ -4127,11 +4208,11 @@
       "description": "Per source IP throttle rule for all sequencer API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
-      "priority": 100000110,
+      "priority": 300000100,
       "rateLimitOptions": {
         "conformAction": "allow",
         "enforceOnKey": "IP",
@@ -4152,14 +4233,42 @@
     "id": "",
     "inputs": {
       "action": "throttle",
-      "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
+      "description": "Per source IP throttle rule for all svApp API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/sv\") && request.headers['host'].lower().matches(R\"^(?:sv)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
-      "priority": 100000210,
+      "priority": 300000200,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 500,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-svApp",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "throttle",
+      "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 300000300,
       "rateLimitOptions": {
         "conformAction": "allow",
         "enforceOnKey": "IP",

@@ -148,7 +148,7 @@ trait TimeTestUtil extends TestCommon {
     val Seq(lowestOpen, middleOpen, highestOpen) =
       previousOpenRounds.map(_.contract.payload.round.number)
 
-    actAndCheck()("advancing time", advanceTime(advanceWith))(
+    actAndCheck(timeUntilSuccess = 90.seconds)("advancing time", advanceTime(advanceWith))(
       s"waiting for open round automation (should create OpenMiningRound ${highestOpen + 1})",
       _ => {
         val (newOpenRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()

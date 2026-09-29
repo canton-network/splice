@@ -38,6 +38,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ValueJsonCodecProtobuf as ProtobufCodec,
 }
 import com.digitalasset.canton.config.CantonRequireTypes.String256M
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -97,6 +98,7 @@ class UpdateHistory(
     val updateStreamParty: PartyId,
     val backfillingRequired: BackfillingRequirement,
     internedStringStore: InternedStringStore,
+    analyzableTimeWindowDuration: NonNegativeDuration,
     override protected val loggerFactory: NamedLoggerFactory,
     enableissue12777Workaround: Boolean,
     enableImportUpdateBackfill: Boolean,
@@ -118,6 +120,13 @@ class UpdateHistory(
   private val state = new AtomicReference[State](State.empty())
 
   def lastIngestedRecordTime: Option[CantonTimestamp] = state.get().lastIngestedRecordTime
+  def startAnalyzableTimeWindow: Option[CantonTimestamp] =
+    lastIngestedRecordTime.flatMap { latestRecordTime =>
+      Option.when(analyzableTimeWindowDuration.duration.isFinite) {
+        val duration = java.time.Duration.ofNanos(analyzableTimeWindowDuration.duration.toNanos)
+        latestRecordTime.minus(duration)
+      }
+    }
 
   private def advanceLastIngestedRecordTime(ts: CantonTimestamp): Unit = {
     val newState = state.updateAndGet { s =>

@@ -215,3 +215,7 @@ Now retrying operation 'request current time'
 # TODO(DACH-NY/cn-test-failures#9445) remove once Canton stops failing the whole
 # GetConnectedSynchronizers call for one synchronizer that is mid-reconnect.
 StateService/GetConnectedSynchronizers.*INTERNAL/Failed retrieving SynchronizerTopologyClient
+
+# topology-init download rejection under the test concurrency limit (3); the
+# client retries and succeeds
+SERVER_OVERLOADED.*Reached the limit of concurrent requests for.*DownloadTopologyStateForInit

@@ -209,6 +209,7 @@ jobs:
           pr_number: ${{ inputs.pr_number }}
           base_branch: ${{ inputs.base_branch }}
         with:
+          github-token: ${{ secrets.strong_token }}
           retries: 3
           script: |
             await github.rest.issues.createComment({
