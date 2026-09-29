@@ -145,34 +145,91 @@ ab0ba59509 contains #6515
 58a8ad7324 is cc4539a9ac's parent. The one pass after #6515 (5af1f5a467) fits a timing race (window 0.1-0.9 s in the
 four failures, section 7-9); its log was not downloaded.
 
-## 6. Fix
+## 6. Fix: the snapshot-before endpoints skip unindexed snapshots
 
-Test-side, branch `s11/fix-10236-scan-snapshot-wait-for-index` (7ae2e53dd4, off origin/main 802b9faea0): the
-second wait also requires a defined snapshot, like the first.
+Endpoint-side, branch `s11/fix-10236-scan-snapshot-before-skips-unindexed` (cd34fe9285, off origin/main 1293c69b23).
+`lookupSnapshotAtOrBefore` gets an `onlyIndexed` flag that filters on `indexes_created` in the SQL, and the two HTTP
+paths that resolve "at or before" (`getDateOfMostRecentSnapshotBefore` and `queryWithOptionalAtOrBefore` via
+`getRecordTimeAtOrBefore`) set it, so while the newest snapshot is being indexed they serve the previous indexed
+snapshot instead of 404. The triggers (`AcsSnapshotTriggerBase`, `DeleteCorruptAcsSnapshotTrigger`), the forced
+snapshot, total supply and bulk storage keep seeing every snapshot. `getDateOfFirstSnapshotAfter` is unchanged: when
+the first snapshot after T is not indexed yet, "not available yet" is the right answer, and skipping it could make a
+client paging forward miss a snapshot. ScanTimeBasedIntegrationTest is NOT changed.
 
 ```
-git -C <fix worktree> show 7ae2e53dd4 --stat --format='%h %s'
-git -C <fix worktree> show 7ae2e53dd4 | grep -E '^[+-] '
+git -C <fix worktree> show cd34fe9285 --stat --format='%h %s'
+git -C <fix worktree> show cd34fe9285 -- apps/scan/src/main | grep -E '^[+-] '
 ```
 ```
-7ae2e53dd4 [ci] Wait until ScanTimeBasedIntegrationTest's second ACS snapshot is indexed before reading it
+cd34fe9285 [ci] Serve the latest indexed ACS snapshot from the snapshot-before endpoints instead of 404ing while the newest one is indexed
 
- .../splice/integration/tests/ScanTimeBasedIntegrationTest.scala          | 1 +
- 1 file changed, 1 insertion(+)
-+      snapshotAfter should not be None
+ .../splice/scan/admin/http/HttpScanHandler.scala   |  9 +++--
+ .../splice/scan/store/AcsSnapshotStore.scala       |  2 ++
+ .../splice/store/db/AcsSnapshotStoreTest.scala     | 40 ++++++++++++++++++++++
+ 3 files changed, 48 insertions(+), 3 deletions(-)
+-        .lookupSnapshotAtOrBefore(migrationId, before)
++        .lookupSnapshotAtOrBefore(migrationId, before, onlyIndexed = true)
+-        .lookupSnapshotAtOrBefore(migrationId, Codec.tryDecode(Codec.OffsetDateTime)(before))
++        .lookupSnapshotAtOrBefore(
++          migrationId,
++          Codec.tryDecode(Codec.OffsetDateTime)(before),
++          onlyIndexed = true,
++        )
+-          case Some(snapshot) if !snapshot.indexesCreated => notFound
++      onlyIndexed: Boolean = false,
++              and (indexes_created or not $onlyIndexed)
 ```
 
-`getDateOfMostRecentSnapshotBefore` only returns a snapshot once it is indexed, so once the wait sees 06:00, the
-`after 03:00` lookup at line 254 also sees it (it is the only snapshot after 03:00). Verified here:
-`apps-app/Test/compile` and `apps-app/Test/scalafmtCheck` pass on 7ae2e53dd4 (log/10236/compile-fix.log). NOT run: the
-shard needs the docker-based Canton, and a pass would not prove much for a sub-second race.
+Verified here, one simtime Canton (`./start-canton.sh -s`), the unmodified test, logs in `log/10236/endpoint-fix/`:
 
-App-side, for the #6515 owner (described, not written): while the newest snapshot is unindexed,
-`getDateOfMostRecentSnapshotBefore` answers 404 even though an older indexed snapshot exists (03:00 above), so a
-client polling it sees snapshots disappear for up to ~1 s after every save. Filtering `indexes_created` in the SQL of
-the HTTP lookups (not in `lookupSnapshotAfter` itself, which `AcsSnapshotBulkStorageWriterFromDb` also uses) would
-fall back to the newest indexed snapshot instead. Only matters with `perAcsSnapshotTablesEnabled`, which is off by
-default ("should NOT yet be enabled" in production, #6515 description).
+Baseline on origin/main 1293c69b23 reproduces the CI failure (sbt stops at the first failed command, so one run):
+
+```
+sed -E 's/\x1b\[[0-9;]*m//g' log/10236/endpoint-fix/baseline-main.log | grep -a -E '^\[info\] Tests:|ScanTimeBasedIntegrationTest.scala:254' | head -2
+```
+```
+[info]   The Option on which value was invoked was not defined. (ScanTimeBasedIntegrationTest.scala:254)
+[info] Tests: succeeded 0, failed 1, canceled 0, ignored 0, pending 0
+```
+
+On the fix, five consecutive runs of `snapshotting`, then both AcsSnapshotStore suites (including the new
+"skip snapshots whose indexes are not created yet in lookupSnapshotAtOrBefore with onlyIndexed" in
+TablePerAcsSnapshotStoreTest); `apps-scan/Test/scalafmtCheck` and `apps-scan/scalafmtCheck` pass:
+
+```
+sed -E 's/\x1b\[[0-9;]*m//g' log/10236/endpoint-fix/fix.log | grep -a -E '^\[info\] Tests:' | sort | uniq -c
+sed -E 's/\x1b\[[0-9;]*m//g' log/10236/endpoint-fix/store-tests.log | grep -a -E '^\[info\] Tests:'
+```
+```
+      5 [info] Tests: succeeded 1, failed 0, canceled 0, ignored 0, pending 0
+[info] Tests: succeeded 54, failed 0, canceled 0, ignored 0, pending 0
+```
+
+The five runs did hit the race: in four save-to-index windows the before endpoint was polled and answered with the
+previous indexed snapshot (where main answers 404). The one 404 inside a window is the first snapshot of a fresh
+environment's history, which has no older indexed snapshot; the test's first wait retries on it, as before.
+
+```
+zcat log/10236/endpoint-fix/canton_network_test.clog.gz | grep -a -E 'T15:(2[89]|3[0-5])' \
+  | grep -a -E 'Saved incremental snapshot at|Successfully indexed tables of snapshot|acs/snapshot-timestamp(-after)? from .*Responding with entity data' \
+  | python3 log/10236/endpoint-fix/windows.py
+```
+```
+window 1970-01-02T18:00:00Z: saved 15:30:59.358 indexed 15:31:00.325
+    15:30:59.470 snapshot-timestamp {"record_time":"1970-01-02T15:00:00Z"}
+window 1970-01-05T00:00:00Z: saved 15:32:30.016 indexed 15:32:30.113
+    15:32:30.056 snapshot-timestamp {"record_time":"1970-01-04T00:00:00Z"}
+window 1970-01-05T03:00:00Z: saved 15:33:41.366 indexed 15:33:41.717
+    15:33:41.371 snapshot-timestamp {"error":"No snapshots found before 1970-01-05T04:50:13.995Z"}
+window 1970-01-05T06:00:00Z: saved 15:33:48.300 indexed 15:33:49.036
+    15:33:48.318 snapshot-timestamp {"record_time":"1970-01-05T03:00:00Z"}
+window 1970-01-06T06:00:00Z: saved 15:33:55.405 indexed 15:33:56.005
+    15:33:55.687 snapshot-timestamp {"record_time":"1970-01-05T06:00:00Z"}
+windows: 15 windows with polls: 5 404s outside windows: 38
+```
+
+The earlier test-side branch `s11/fix-10236-scan-snapshot-wait-for-index` (7ae2e53dd4, one extra assertion) is
+superseded and should not be used.
 
 ## 7. 10237 (run 36548918726, main 0a2f98714e, job 109342193703 `docker-canton-simtime (0)`) - same race
 
@@ -213,9 +270,10 @@ Window 1.02 s.
 ## Verdict
 
 - 10236 new (regression of #6515); 10237, 10241, 10242 duplicates of 10236.
-- Flake by mechanism (sub-second race), but a near-certain one since #6515 (4 of 5 runs). Test-side fix on
-  `s11/fix-10236-scan-snapshot-wait-for-index` (7ae2e53dd4), compiled and scalafmt-checked, not run. App-side
-  fallback to the newest indexed snapshot described for the #6515 author (OriolMunoz-da).
-- Not verified: the fixed test passing in the docker-canton-simtime shard; whether other scan clients (UI, bulk
-  storage) poll these endpoints right after a save in other suites (only ScanTimeBasedIntegrationTest failed); the
-  11 s between the 404 at 09:36:16.716 and the "Test failed" report at 09:36:27.887 (not investigated).
+- Flake by mechanism (sub-second race), but a near-certain one since #6515 (4 of 5 runs). Fixed endpoint-side on
+  `s11/fix-10236-scan-snapshot-before-skips-unindexed` (cd34fe9285): the snapshot-before endpoints serve the latest
+  indexed snapshot. Baseline reproduced locally on main (1 run, failed at line 254); the fix passed 5 of 5 runs of the
+  unmodified test with the race hit in 4 windows, and both AcsSnapshotStore suites (54 tests) pass.
+- Not verified: the docker-canton-simtime CI shard itself (run locally with `-s` Canton and the testcontainers S3
+  mock); `getDateOfFirstSnapshotAfter` still 404s for a not-yet-indexed first snapshot by design; the 11 s between the
+  404 at 09:36:16.716 and the "Test failed" report at 09:36:27.887 in the CI run (not investigated).

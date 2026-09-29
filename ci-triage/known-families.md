@@ -247,8 +247,8 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   0.3-1 s after "Saved incremental snapshot". 10236 (+ 10237, 10241, 10242): ScanTimeBasedIntegrationTest "snapshotting",
   `.value` on None at line 254, docker-canton-simtime (0); 4 of 5 runs since #6515, 0 of 7 before. Confirming grep:
   `Saved incremental snapshot at <T>` followed within 1 s by a snapshot-timestamp `No snapshots found` 404 and then
-  `Successfully indexed tables of snapshot <T>`. Test fix `s11/fix-10236-scan-snapshot-wait-for-index`; app-side
-  fallback described for the #6515 author.
+  `Successfully indexed tables of snapshot <T>`. Fix `s11/fix-10236-scan-snapshot-before-skips-unindexed` (the
+  snapshot-before endpoints filter `indexes_created` and serve the latest indexed snapshot).
 - Table name collision within one millisecond: `AcsSnapshotStore` names per-snapshot tables and indexes with
   `targetRecordTime.toEpochMilli`, so two forced snapshots in the same ms fail with `relation
   "acs_snapshot_creates_v1_<historyId>_<ms>" already exists` (SQLSTATE 42P07) and `/api/scan/v0/state/acs/force` returns
