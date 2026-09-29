@@ -131,7 +131,6 @@ object BftCallExecutor {
       handleNotEnoughScans(connections, callConfig, notEnoughScansLogLevel, connectionMetrics)
     } else {
       val timer = startTimer()
-      val requestFrom = Random.shuffle(callConfig.connections).take(callConfig.requestsToDo)
       val nTargetSuccess = callConfig.targetSuccess
 
       executeCallWithRetries(
@@ -141,7 +140,7 @@ object BftCallExecutor {
         call,
         disagreementLogLevel,
         shortenResponsesForLog,
-        requestFrom,
+        Random.shuffle(callConfig.connections).take(callConfig.requestsToDo),
         nTargetSuccess,
         consensusFailureLogLevel,
       )
@@ -156,7 +155,7 @@ object BftCallExecutor {
       call: C => Future[T],
       disagreementLogLevel: Level,
       shortenResponsesForLog: T => Any,
-      requestFrom: Seq[C],
+      requestFrom: => Seq[C],
       nTargetSuccess: Int,
       consensusFailureLogLevel: Level,
   )(implicit
