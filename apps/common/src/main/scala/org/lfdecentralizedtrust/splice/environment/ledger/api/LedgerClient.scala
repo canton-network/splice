@@ -239,6 +239,41 @@ private[environment] class LedgerClient(
     )
   }
 
+  def topologyTransactions(
+      beginExclusive: Long
+  )(implicit tc: TraceContext): Source[TopologyTransactionUpdate, NotUsed] = {
+    import lapi.update_service.GetUpdatesResponse.Update as TU
+    val request = lapi.update_service.GetUpdatesRequest(
+      beginExclusive = beginExclusive,
+      endInclusive = None,
+      updateFormat = Some(
+        transaction_filter.UpdateFormat(
+          includeTransactions = None,
+          includeReassignments = None,
+          includeTopologyEvents = Some(
+            transaction_filter.TopologyFormat(
+              Some(transaction_filter.ParticipantAuthorizationTopologyFormat(parties = Seq.empty))
+            )
+          ),
+        )
+      ),
+      descendingOrder = false,
+    )
+    toSource(
+      for {
+        stub <- withGrpcContext(
+          updateServiceStub,
+          timeout = Some(timeouts.unbounded),
+        )
+      } yield ClientAdapter
+        .serverStreaming(request, stub.getUpdates)
+        .mapConcat(_.update match {
+          case TU.TopologyTransaction(tx) => Some(TopologyTransactionUpdate.fromProto(tx))
+          case _ => None
+        })
+    )
+  }
+
   private[environment] def getTransactionByOffset(
       offset: Long,
       actAs: Seq[String],

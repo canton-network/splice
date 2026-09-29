@@ -591,6 +591,10 @@ class ValidatorApp(
           this.getClass.getSimpleName,
           loggerFactory,
         )
+      _ <-
+        if (config.automation.topologyMetricsPollingInterval.isDefined)
+          readOnlyLedgerConnection.grantReadAsAnyParty(config.ledgerApiUser)
+        else Future.unit
       participantAdminConnection = new ParticipantAdminConnection(
         config.participantClient.adminApi,
         amuletAppParameters.loggingConfig.api,
