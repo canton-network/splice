@@ -13,6 +13,9 @@ const SPOOFED_HEADERS: Record<string, string> = {
 };
 
 const REQUESTS_PER_ATTEMPT = 20;
+// Tokens refilled since the exhaust go to whichever requests arrive first, so all spoofed and
+// control requests are interleaved and only a clear advantage for a header counts as a bypass.
+const BYPASS_MARGIN = REQUESTS_PER_ATTEMPT / 2;
 
 export const spoofingNotPossible: Check = {
   name: 'spoofing-not-possible',
@@ -22,17 +25,30 @@ export const spoofingNotPossible: Check = {
       return `limit not enforced, so spoofing cannot be assessed${describeUnexpected(burst)}`;
     }
 
-    const bypassingHeaders: string[] = [];
-    for (const [header, value] of Object.entries(SPOOFED_HEADERS)) {
-      const spoofed = await probe.send(REQUESTS_PER_ATTEMPT, { [header]: value });
-      const control = await probe.send(REQUESTS_PER_ATTEMPT);
-      if (control.accepted > 0) {
-        return 'inconclusive: the limit refilled during the check, rerun';
-      }
-      if (spoofed.accepted > 0) {
-        bypassingHeaders.push(`${header} (${spoofed.accepted}/${REQUESTS_PER_ATTEMPT} accepted)`);
-      }
-    }
+    // Variant 0 is the control; the others each carry one spoofed header.
+    const variants: [string, Record<string, string>][] = [
+      ['control', {}],
+      ...Object.entries(SPOOFED_HEADERS).map(
+        ([header, value]): [string, Record<string, string>] => [header, { [header]: value }],
+      ),
+    ];
+    const accepted = new Array<number>(variants.length).fill(0);
+    const results = await Promise.all(
+      Array.from({ length: REQUESTS_PER_ATTEMPT * variants.length }, (_, i) =>
+        probe.send(1, variants[i % variants.length][1]),
+      ),
+    );
+    results.forEach((tally, i) => (accepted[i % variants.length] += tally.accepted));
+
+    const control = accepted[0];
+    const bypassingHeaders = variants
+      .map(([header], v) => ({ header, spoofed: accepted[v] }))
+      .slice(1)
+      .filter(({ spoofed }) => spoofed - control >= BYPASS_MARGIN)
+      .map(
+        ({ header, spoofed }) =>
+          `${header} (${spoofed}/${REQUESTS_PER_ATTEMPT} spoofed vs ${control}/${REQUESTS_PER_ATTEMPT} control accepted)`,
+      );
     return bypassingHeaders.length > 0
       ? `limit bypassed via ${bypassingHeaders.join(', ')}`
       : undefined;

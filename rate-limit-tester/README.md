@@ -29,8 +29,9 @@ Edit `config.json` with one entry per component:
 k6 run -e CONFIG=$(pwd)/config.json main.ts
 ```
 
-Run it from a dedicated host: the checks deliberately use up that host's request budget. A run takes
-roughly `windowSeconds` × 2 per component.
+Run it from a dedicated host: the checks deliberately use up that host's request budget. Each
+component/check pair runs as its own k6 scenario in a dedicated 1 minute slot, one after the other,
+so they never share the budget. A run takes 2 minutes per component.
 
 ## Results
 
