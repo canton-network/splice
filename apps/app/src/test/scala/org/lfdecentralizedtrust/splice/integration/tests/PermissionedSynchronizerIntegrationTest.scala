@@ -19,7 +19,6 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.util.Optional
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.topology.transaction.ParticipantPermission.Submission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
@@ -60,37 +59,7 @@ class PermissionedSynchronizerIntegrationTest
       .withManualStart
 
   "Onboard network in RestrictedOpen mode" in { implicit env =>
-    startAllSync(
-      sv1ScanBackend,
-      sv1Backend,
-      sv1ValidatorBackend,
-    )
-
-    var runningSvs = Seq(sv1Backend)
-
-    clue("Sequentially permission and start the remaining SVs") {
-      Seq(
-        (sv2Backend, sv2ScanBackend, sv2ValidatorBackend),
-        (sv3Backend, sv3ScanBackend, sv3ValidatorBackend),
-        (sv4Backend, sv4ScanBackend, sv4ValidatorBackend),
-      ).foreach { case (joiningSv, joiningScan, joiningValidator) =>
-        clue(s"SVs propose ParticipantSynchronizerPermission for ${joiningSv.name}") {
-          runningSvs.foreach { proposerSv =>
-            proposerSv.participantClient.topology.participant_synchronizer_permissions
-              .propose(
-                decentralizedSynchronizerId,
-                joiningSv.participantClientWithAdminToken.id,
-                permission = Submission,
-              )
-          }
-        }
-
-        clue(s"Start ${joiningSv.name}") {
-          startAllSync(joiningScan, joiningSv, joiningValidator)
-          runningSvs = runningSvs :+ joiningSv
-        }
-      }
-    }
+    initDso()
 
     clue(
       "Initially scan doesn't find ParticipantSynchronizerPermission for aliceValidatorBackend"

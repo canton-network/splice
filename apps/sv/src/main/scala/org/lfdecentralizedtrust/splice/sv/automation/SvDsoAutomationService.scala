@@ -298,6 +298,13 @@ class SvDsoAutomationService(
   // Triggers that require namespace permissions and the existence of the DsoRules and AmuletRules contracts
   def registerPostOnboardingTriggers(): Unit = {
     registerTrigger(
+      new GrantSvPermissionTrigger(
+        triggerContext,
+        dsoStore,
+        participantAdminConnection,
+      )
+    )
+    registerTrigger(
       new GrantValidatorPermissionTrigger(
         triggerContext,
         dsoStore,
@@ -827,5 +834,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[ValidatorLicenseRequestTrigger],
       aTrigger[ValidatorUnpermissionTrigger],
       aTrigger[ValidatorRepermissionTrigger],
+      aTrigger[GrantSvPermissionTrigger],
     )
 }
