@@ -155,7 +155,8 @@ object BftCallExecutor {
       call: C => Future[T],
       disagreementLogLevel: Level,
       shortenResponsesForLog: T => Any,
-      requestFrom: => Seq[C], // passed as a function so that we can e.g. reshuffle the list of scans to call on each retry
+      // `requestFrom` is passed as a function so that we can e.g. reshuffle the list of scans to call on each retry
+      requestFrom: => Seq[C],
       nTargetSuccess: Int,
       consensusFailureLogLevel: Level,
   )(implicit
