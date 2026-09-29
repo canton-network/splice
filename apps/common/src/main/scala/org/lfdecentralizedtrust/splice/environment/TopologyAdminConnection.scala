@@ -751,7 +751,7 @@ abstract class TopologyAdminConnection(
             isProposal = false,
           )
         }) { existingTxWithSameUniqueCode =>
-          if (existingTxWithSameUniqueCode == mapping) {
+          if (existingTxWithSameUniqueCode.mapping == mapping) {
             logger.info(
               s"Existing mapping found for ${mapping.code}: $mapping, returning existing transaction with serial ${existingTxWithSameUniqueCode.serial}"
             )
@@ -759,7 +759,7 @@ abstract class TopologyAdminConnection(
           } else {
             throw Status.ALREADY_EXISTS
               .withDescription(
-                s"Mapping with unique key ${mapping.uniqueKey} already exists with a different mapping: $existingTxWithSameUniqueCode"
+                s"Mapping with unique key ${mapping.uniqueKey} already exists with a different mapping: expected $mapping, got $existingTxWithSameUniqueCode"
               )
               .asRuntimeException()
           }
