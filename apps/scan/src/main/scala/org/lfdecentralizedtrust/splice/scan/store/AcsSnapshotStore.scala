@@ -71,6 +71,7 @@ class AcsSnapshotStore(
   def lookupSnapshotAtOrBefore(
       migrationId: Long,
       before: CantonTimestamp,
+      onlyIndexed: Boolean = false,
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
     storage
       .querySingle(
@@ -79,6 +80,7 @@ class AcsSnapshotStore(
             where snapshot_record_time <= $before
               and migration_id = $migrationId
               and history_id = $historyId
+              and (indexes_created or not $onlyIndexed)
             order by snapshot_record_time desc
             limit 1""".as[AcsSnapshot].headOption,
         "lookupSnapshotBefore",

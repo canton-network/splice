@@ -1347,7 +1347,7 @@ class HttpScanHandler(
   ): Future[Option[CantonTimestamp]] =
     OptionT(
       snapshotStore
-        .lookupSnapshotAtOrBefore(migrationId, before)
+        .lookupSnapshotAtOrBefore(migrationId, before, onlyIndexed = true)
     ).map {
       _.snapshotRecordTime
     }.value
@@ -1365,10 +1365,13 @@ class HttpScanHandler(
 
     withSpan(s"$workflowId.getDateOfMostRecentSnapshotBefore") { _ => _ =>
       snapshotStore
-        .lookupSnapshotAtOrBefore(migrationId, Codec.tryDecode(Codec.OffsetDateTime)(before))
+        .lookupSnapshotAtOrBefore(
+          migrationId,
+          Codec.tryDecode(Codec.OffsetDateTime)(before),
+          onlyIndexed = true,
+        )
         .map {
           case None => notFound
-          case Some(snapshot) if !snapshot.indexesCreated => notFound
           case Some(snapshot) =>
             ScanResource.GetDateOfMostRecentSnapshotBeforeResponseOK(
               definitions

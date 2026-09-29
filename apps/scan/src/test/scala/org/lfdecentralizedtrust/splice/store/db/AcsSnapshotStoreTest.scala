@@ -1638,6 +1638,46 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
     }
   }
 
+  "skip snapshots whose indexes are not created yet in lookupSnapshotAtOrBefore with onlyIndexed" in {
+    for {
+      updateHistory <- mkUpdateHistory()
+      store = mkStore(updateHistory)
+      _ <- ingestCreate(
+        updateHistory,
+        openMiningRound(dsoParty, 0L, 1.0),
+        timestamp1.minusSeconds(1L),
+      )
+      _ <- store.insertNewSnapshot(nextTable, DefaultMigrationId, timestamp1)
+      _ <- ingestCreate(
+        updateHistory,
+        openMiningRound(dsoParty, 1L, 1.0),
+        timestamp2.minusSeconds(1L),
+      )
+      _ <- store.insertNewSnapshot(
+        nextTable,
+        DefaultMigrationId,
+        timestamp2,
+        shouldIndexSnapshot = false,
+      )
+      latest <- store.lookupSnapshotAtOrBefore(DefaultMigrationId, CantonTimestamp.MaxValue)
+      latestIndexed <- store.lookupSnapshotAtOrBefore(
+        DefaultMigrationId,
+        CantonTimestamp.MaxValue,
+        onlyIndexed = true,
+      )
+      _ <- indexSnapshot(store, DefaultMigrationId, timestamp2)
+      latestIndexedAfterIndexing <- store.lookupSnapshotAtOrBefore(
+        DefaultMigrationId,
+        CantonTimestamp.MaxValue,
+        onlyIndexed = true,
+      )
+    } yield {
+      latest.map(_.snapshotRecordTime) should be(Some(timestamp2))
+      latestIndexed.map(_.snapshotRecordTime) should be(Some(timestamp1))
+      latestIndexedAfterIndexing.map(_.snapshotRecordTime) should be(Some(timestamp2))
+    }
+  }
+
   "not allow querying unindexed snapshots" in {
     for {
       updateHistory <- mkUpdateHistory()
