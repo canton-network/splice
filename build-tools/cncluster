@@ -108,18 +108,27 @@ function _needs_auth0_validator_management_api_creds() {
     fi
 }
 
+function _gcloud_active_account() {
+    local config_file
+    config_file="${HOME}/.config/gcloud/configurations/config_$(cat "${HOME}/.config/gcloud/active_config" 2>/dev/null || echo default)"
+    grep -E "^account\s*=" "${config_file}" 2>/dev/null | sed 's/^account\s*=\s*//' | tr -d '[:space:]'
+}
+
 function _gcloud_account_active() {
-    # print-access-token exits 0 even when reauthentication fails, so we check stdout is non-empty.
-    local token
-    token=$(gcloud auth print-access-token 2>/dev/null)
-    [ -n "${token}" ]
+    local account
+    account=$(_gcloud_active_account)
+    [ -n "${account}" ] || return 1
+    sqlite3 "${HOME}/.config/gcloud/access_tokens.db" \
+        "SELECT account_id FROM access_tokens WHERE token_expiry > datetime('now');" 2>/dev/null \
+        | grep -qxF "${account}"
 }
 
 function _gcloud_adc_configured() {
-    # Returns 0 when application-default credentials are available.
-    local token
-    token=$(gcloud auth application-default print-access-token 2>/dev/null)
-    [ -n "${token}" ]
+    if [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]; then
+        return 0
+    fi
+    [ -f "${HOME}/.config/gcloud/application_default_credentials.json" ] && \
+        jq -e '.refresh_token' "${HOME}/.config/gcloud/application_default_credentials.json" >/dev/null 2>&1
 }
 
 function _ensure_gcloud_auth() {
