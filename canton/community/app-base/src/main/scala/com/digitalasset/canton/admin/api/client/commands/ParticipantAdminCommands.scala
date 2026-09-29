@@ -96,12 +96,13 @@ import io.grpc.stub.StreamObserver
 import io.grpc.{Context, ManagedChannel}
 import io.scalaland.chimney.dsl.*
 
-import java.io.{File, FileInputStream, IOException}
+import java.io.{File, FileInputStream, IOException, SequenceInputStream}
 import java.nio.file.{Files, Path, Paths}
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, MILLISECONDS}
+import scala.jdk.CollectionConverters.*
 
 object ParticipantAdminCommands {
 
@@ -1029,18 +1030,18 @@ object ParticipantAdminCommands {
           service: ParticipantRepairServiceStub,
           request: Unit,
       ): Future[v30.ImportAcsResponse] = {
-        GrpcStreamingUtils.streamToServerChunked(
+        GrpcStreamingUtils.streamToServer(
           service.importAcs,
-          acsChunk.map(chunk =>
+          (chunk: Array[Byte]) =>
             v30.ImportAcsRequest(
-              chunk,
+              ByteString.copyFrom(chunk),
               Some(workflowIdPrefix),
               Some(contractImportMode.toProtoV30),
               excludedStakeholders.map(_.toProtoPrimitive).toSeq,
               Some(representativePackageIdOverride.toProtoV30),
               Some(synchronizerId.toProtoPrimitive),
-            )
-          ),
+            ),
+          new SequenceInputStream(acsChunk.iterator.map(_.newInput()).asJavaEnumeration),
         )
       }
 

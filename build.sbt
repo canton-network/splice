@@ -2063,8 +2063,9 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.last
     case PathList("org", "checkerframework", _ @_*) => MergeStrategy.first
     case PathList("google", "protobuf", _*) => MergeStrategy.first
-    case "google/longrunning/operations.proto" => MergeStrategy.first
-    case "google/apps/card/v1/card.proto" => MergeStrategy.first
+    case path @ PathList("google", _*) if path.endsWith(".proto") => MergeStrategy.first
+    // we pull these in twice through community-common. Unfortunately we can't just get rid of our fork as some of the modifications do actually matter.
+    case PathList("db", "migration", "canton", _*) => MergeStrategy.first
     case PathList("org", "apache", "logging", _*) => MergeStrategy.first
     case PathList("ch", "qos", "logback", _*) => MergeStrategy.first
     case PathList("META-INF", "okhttp.kotlin_module") => MergeStrategy.first
