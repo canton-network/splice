@@ -252,7 +252,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Table name collision within one millisecond: `AcsSnapshotStore` names per-snapshot tables and indexes with
   `targetRecordTime.toEpochMilli`, so two forced snapshots in the same ms fail with `relation
   "acs_snapshot_creates_v1_<historyId>_<ms>" already exists` (SQLSTATE 42P07) and `/api/scan/v0/state/acs/force` returns
-  HTTP 500. 10238 (TokenStandardMetadataTimeBasedIntegrationTest, simtime (2)). Confirming grep: the two `Forcing ACS
+  HTTP 500. 10238 (TokenStandardMetadataTimeBasedIntegrationTest, simtime (2)); dup 10247 (run 36584417962, main 1293c69b23). Confirming grep: the two `Forcing ACS
   snapshot at <t>` lines share the same epoch ms. Fix: scan app (names from micros or the snapshot id), owner #6515.
 
 ## O. Teardown: scan serves a request after its DbStorage closed (sbt output check)

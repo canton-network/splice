@@ -374,6 +374,7 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | 10238 | 36548918726 | main 0a2f98714e (#7511) | 109342320998 `simtime (2)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
 | 10241 | 36562243359 | main ab0ba59509 (#7505) | 109385885359 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
 | 10242 | 36562304394 | main 802b9faea0 (#7508) | 109386185648 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10247 | 36584417962 | main 1293c69b23 (#7487) | 109461475341 `simtime (2)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
 
 ## Overview
 
@@ -387,6 +388,7 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | 10238 | TokenStandardMetadataTimeBasedIntegrationTest "Scan implements token metadata API": second of two back-to-back forced ACS snapshots (record times 09:52:01.001488 / .001636, same ms) fails with `relation "acs_snapshot_creates_v1_14_35521001" already exists` (09:49:15.760), HTTP 500. | new: regression from #6515 (cc4539a9ac), family N | [10238-per-table-acs-snapshot-name-collision-same-millisecond.md](10238-per-table-acs-snapshot-name-collision-same-millisecond.md). Scan-side fix for the #6515 owner: per-snapshot table/index names from `toMicros` (or snapshot id), not `toEpochMilli`. 1 of 5 post-#6515 runs. No fix branch. |
 | 10241 | Same as 10236, 0.86 s window (11:47:22.653 -> 11:47:23.513). | 10236 | 10236 packet, section 8. |
 | 10242 | Same as 10236, 1.02 s window (11:48:44.068 -> 11:48:45.091). | 10236 | 10236 packet, section 9. |
+| 10247 | Same as 10238: forced snapshots at record times 11:22:52.001218 / .001318 (same ms), second fails with `relation "acs_snapshot_creates_v1_22_5570572001" already exists` (15:10:47.916), HTTP 500. 32/33 tests passed. | 10238 | 10238 packet, section 8. Still unfixed on origin/main 6b4c166b71 (`toEpochMilli` at AcsSnapshotStore.scala:819/821/1506/1520). No fix branch (scan-side, #6515 owner). |
 
 ## Cross-cutting observations (2026-09-29)
 
@@ -394,6 +396,8 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
   mechanisms: the unindexed-snapshot 404 window (10236, 10237, 10241, 10242; 4 of 5 docker-canton-simtime (0) runs since,
   0 of 7 before) and the same-millisecond table name collision (10238). Both are scan-side; 10236 has an endpoint fix
   branch, 10238 does not yet. Worth raising with the #6515 author as one report.
+- 10247 is the second hit of the 10238 collision (same test, same shard, 5 h later); the other two failed jobs of its
+  run (36584417962: `docker-canton-simtime (0)`, `wall-clock-time (0)`) have no ref in this triage and were not looked at.
 - The update history sanity check teardown plugin is now the trigger in two teardown-leak cascades (10176: pause
   timeout; 10235: uninitialized scan). `ray/fix-10176-sanity-check-pause-timeout` and
   `s11/fix-10235-sanity-check-skip-uninitialized-scans` touch the same file, merge cleanly, and together remove both

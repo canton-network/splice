@@ -181,6 +181,109 @@ log/10238/xref-docker-canton-simtime-0/canton-simtime.clog.gz: 0
 log/10238/xref-docker-canton-simtime-0/canton_network_test.clog.gz: 0
 ```
 
+## 8. 10247 (run 36584417962, main 1293c69b23, job 109461475341 `simtime (2)`) - same collision
+
+- Run: https://github.com/canton-network/splice/actions/runs/36584417962, main 1293c69b23 ("refactor bft scan
+  connections tests (#7487)"), post-merge CI, job 109461475341 `ci / scala_test_sim_time / simtime (2)`. The same run
+  also failed `docker-canton-simtime (0)` (109461111106) and `wall-clock-time (0)` (109461497490); those are not
+  mapped to 10247 and were not triaged here.
+- Runtime canton: 3.6.0-snapshot.20260928.20326.0.v5616afeb (`git show 1293c69b23:nix/canton-sources.json | grep -m1 version`).
+- 33 tests in 24 suites, 1 failed, same test and same `CommandFailure`:
+
+```
+sed -E 's/\x1b\[[0-9;]*m//g' log/10247/job.log | grep -a -E 'FAILED \*\*\*|Tests: succeeded|All tests passed|contains problems|error\] +org|Run completed|##\[error\]' | sed -E 's/^[^Z]*Z //' | sort -u
+```
+```
+##[error]Error: failed to run script step (id 7186e630-bc14-11f1-bd95-8358f908aa04): Error: step failed with return code 1
+##[error]Executing the custom container implementation failed. Please contact your self hosted runner administrator.
+##[error]Process completed with exit code 1.
+[info] *** 1 TEST FAILED ***
+[info] - Scan implements token metadata API *** FAILED ***
+[info] Run completed in 36 minutes, 31 seconds.
+[info] Tests: succeeded 32, failed 1, canceled 0, ignored 1, pending 0
+```
+
+Suite timeline:
+
+```
+zcat log/10247/logs-simtime-2/canton_network_test.clog.gz | grep -a -E "TokenStandardMetadata" | grep -a -E "Starting test suite|Test (succeeded|failed)|Starting '" | sed -E 's/"logger_name":.*//; s/\{"@timestamp":"([^"]+)","message":"/\1 /' | cut -c1-260
+```
+```
+2026-09-29T15:09:28.802Z Starting test suite 'TokenStandardMetadataTimeBasedIntegrationTest'...",
+2026-09-29T15:09:58.987Z Starting 'TokenStandardMetadataTimeBasedIntegrationTest/Scan implements token metadata API'...",
+2026-09-29T15:10:47.930Z Test failed: 'TokenStandardMetadataTimeBasedIntegrationTest/Scan implements token metadata API', message: Command execution failed., location: SeeStackDepthException",
+```
+
+The two forces, record times 100 us apart, the second failing on `create table` with SQLSTATE 42P07:
+
+```
+zcat log/10247/logs-simtime-2/canton_network_test.clog.gz | grep -a 'T15:10:4[6-7]' \
+  | grep -a -E 'clue:|acs/force|Forcing ACS snapshot|Saved incremental snapshot|SQL state|Test failed' \
+  | sed -E 's/"logger_name":"([^"]*)".*"level":"([A-Z]+)".*/ [\1] \2/; s/\{"@timestamp":"([^"]+)","message":"/\1 /; s/\(\\n.*//' \
+  | sed -E 's/\[([a-z]\.)+([A-Za-z]+)(:[^]]*)?\]/[\2]/' | cut -c12-230
+```
+```
+15:10:47.796Z Finished clue: (check) waiting for open and issuing round automation (should create OpenMiningRound 9, should advance IssuingMiningRounds List(ContractWithState(Contract
+15:10:47.796Z Finished clue: (act) Advance rounds to a point where round totals are defined and the tapped amulet", [TokenStandardMetadataTimeBasedIntegrationTest] DEBUG
+15:10:47.796Z Running clue: (check) rounds are defined and include tapped amulet", [TokenStandardMetadataTimeBasedIntegrationTest] DEBUG
+15:10:47.800Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57676): received request.", [HttpRequestLogger] DEBUG
+15:10:47.800Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57676): omitting logging of request entity data.", [HttpRequestLogger] DEBUG
+15:10:47.815Z Forcing ACS snapshot at 1970-03-06T11:22:52.001218Z. Last snapshot: None", [HttpScanHandler] INFO
+15:10:47.857Z Saved incremental snapshot 19 at 1970-03-06T11:22:52.001218Z with 39 create rows and 49 stakeholder rows. Next snapshot target record time: 1970-03-06T11:22:52.001218Z", [AcsSnapshotStore] DEBUG
+15:10:47.881Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57676): Responding with status code: 200 OK", [HttpRequestLogger] DEBUG
+15:10:47.881Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57676): Responding with entity data: {\"record_time\":\"1970-03-06T11:22:52.001218Z\",\"migration_id\":0}", [HttpRequestLogger] DEBUG
+15:10:47.882Z HTTP client (POST /api/scan/v0/state/acs/force): HTTP request took 82 ms to complete. Received response with status code: 200 OK", [o.l.s.i.EnvironmentDefinition$$anon$43:TokenStandardMetadataTimeBasedInte
+15:10:47.891Z Finished clue: (check) rounds are defined and include tapped amulet", [TokenStandardMetadataTimeBasedIntegrationTest] DEBUG
+15:10:47.891Z Running clue: Compare direct scan reads to instrument metadata", [TokenStandardMetadataTimeBasedIntegrationTest] DEBUG
+15:10:47.892Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57708): received request.", [HttpRequestLogger] DEBUG
+15:10:47.893Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57708): omitting logging of request entity data.", [HttpRequestLogger] DEBUG
+15:10:47.895Z Forcing ACS snapshot at 1970-03-06T11:22:52.001318Z. Last snapshot: Some(PerTableAcsSnapshot
+15:10:47.914Z Detected an SQLException. SQL state: 42P07, error code: 0", [DbStorageSingle] INFO
+15:10:47.916Z Request to http://127.0.0.1:5012/api/scan/v0/state/acs/force resulted in an unexpected exception: ERROR: relation \"acs_snapshot_creates_v1_22_5570572001\" already exists", [HttpErrorHandler] ERROR
+15:10:47.917Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57708): Responding with status code: 500 Internal Server Error", [HttpRequestLogger] DEBUG
+15:10:47.917Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:57708): Responding with entity data: {\n  \"error\" : \"An unexpected error occurred.\"\n}", [HttpRequestLogger] DEBUG
+15:10:47.917Z HTTP client (POST /api/scan/v0/state/acs/force): HTTP request took 25 ms to complete. Received response with status code: 500 Internal Server Error", [o.l.s.i.EnvironmentDefinition$$anon$43:TokenStandardMe
+15:10:47.927Z org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException: HTTP 500 Internal Server Error POST at '/api/scan/v0/state/acs/force' on 127.0.0.1:5012. Command failed, message: An unexpect
+15:10:47.928Z Failed clue: Compare direct scan reads to instrument metadata", [TokenStandardMetadataTimeBasedIntegrationTest] ERROR
+15:10:47.928Z Failed clue: Once round totals are defined they are served", [TokenStandardMetadataTimeBasedIntegrationTest] ERROR
+15:10:47.930Z Test failed: 'TokenStandardMetadataTimeBasedIntegrationTest/Scan implements token metadata API', message: Command execution failed., location: SeeStackDepthException", [LogReporter] ERROR
+```
+
+Confirming check from family N: both record times truncate to the epoch ms in the colliding table name
+(`acs_snapshot_creates_v1_22_5570572001`, historyId 22):
+
+```
+python3 -c '
+from datetime import datetime,timezone
+for t in ["1970-03-06T11:22:52.001218","1970-03-06T11:22:52.001318"]:
+    d=datetime.fromisoformat(t).replace(tzinfo=timezone.utc); us=int(d.timestamp())*1_000_000+d.microsecond
+    print(t+"Z", "micros", us, "epochMilli", us//1000)'
+```
+```
+1970-03-06T11:22:52.001218Z micros 5570572001218 epochMilli 5570572001
+1970-03-06T11:22:52.001318Z micros 5570572001318 epochMilli 5570572001
+```
+
+#6515 is in the run's sha, and the truncating names are unchanged on origin/main as fetched 2026-09-29 (6b4c166b71,
+2026-09-29 19:07 +0200); no commit touched `AcsSnapshotStore.scala` between the run's sha and that tip:
+
+```
+F=apps/scan/src/main/scala/org/lfdecentralizedtrust/splice/scan/store/AcsSnapshotStore.scala
+git merge-base --is-ancestor cc4539a9ac 1293c69b23 && echo "cc4539a9ac (#6515) in 1293c69b23"
+git show origin/main:$F | grep -n toEpochMilli
+git log --format='%h %ad %s' --date=short 1293c69b23..origin/main -- $F
+```
+```
+cc4539a9ac (#6515) in 1293c69b23
+819:      s"acs_snapshot_creates_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
+821:      s"acs_snapshot_stakeholders_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
+1506:      s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ca_ci"
+1520:      s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}_s_tid_ca_ci"
+```
+
+Same test source at 1293c69b23 (lines 114-126 identical to section 5). Gap between the two forces: 100 us of record
+time, 11 ms of wall time between the first response (47.881) and the second request (47.892).
+
 ## Verdict
 
 - New, real regression from #6515 (cc4539a9ac), not a known family. Not a test flake in the usual sense: the product
@@ -195,5 +298,6 @@ log/10238/xref-docker-canton-simtime-0/canton_network_test.clog.gz: 0
   branch written. A test-side `advanceTime` before `forceAcsSnapshotNow()` would only hide the bug.
 - Production exposure: `/v0/state/acs/force` is gated by `enableForcedAcsSnapshots`; the periodic AcsSnapshotTrigger
   snapshots at interval boundaries, so a same-ms pair outside forced snapshots was not found (not searched further).
+- Second occurrence: 10247 (section 8, main 1293c69b23, test failure 5 h 21 min after 10238's), still unfixed on main at 6b4c166b71.
 - Not verified: the record-time gap in the 4 passing runs (artifacts not downloaded); how the read path resolves the
   table names (only the write path at lines 818-827 and the `toEpochMilli` grep were read); nothing compiled or run.
