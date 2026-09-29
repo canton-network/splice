@@ -200,7 +200,8 @@ function attachBackendPolicy(
           // backend service request logging must be enabled for Cloud Armor
           // rule decisions to show up in Cloud Logging. Without a policy there are no
           // rejections, so nothing to log if only those are wanted.
-          ...(config.backendLogging?.enabled && !(config.backendLogging.onlyRejections && !policy)
+          ...(config.backendLogging?.enabled &&
+          !(config.backendLogging.excludeAcceptedRequests && !policy)
             ? {
                 logging: {
                   enabled: true,

@@ -49,7 +49,8 @@ const cloudArmorMaxRateLimitCount = 1000000;
 export const CloudArmorLoggingConfigSchema = z.object({
   enabled: z.boolean().default(true),
   sampleRate: z.number().min(0).max(1).default(1),
-  onlyRejections: z.boolean().default(true),
+  // reduces log volume significantly
+  excludeAcceptedRequests: z.boolean().default(true),
 });
 
 export type CloudArmorLoggingConfig = z.infer<typeof CloudArmorLoggingConfigSchema>;

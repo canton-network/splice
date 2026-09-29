@@ -118,7 +118,7 @@ export function configureCloudArmorPolicy(
   // Step 5: Add default deny rule
   addDefaultDenyRule(securityPolicy, cac.allRulesPreviewOnly, ruleOpts);
 
-  if (cac.logging.enabled && cac.logging.onlyRejections) {
+  if (cac.logging.enabled && cac.logging.excludeAcceptedRequests) {
     excludeAcceptedRequestLogs(securityPolicy, opts);
   }
 
