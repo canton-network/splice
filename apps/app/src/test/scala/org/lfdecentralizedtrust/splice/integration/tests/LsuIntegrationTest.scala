@@ -505,7 +505,7 @@ class LsuIntegrationTest
           .validFrom
         lsu.topologyFreezeTime shouldBe CantonTimestamp.assertFromInstant(actualTopologyFreezeTime)
         lsu.upgradeTime shouldBe upgradeTime
-        lsu.successorPhysicalSynchronizerId shouldBe successorPsid.opaque
+        lsu.successorPhysicalSynchronizerId shouldBe successorPsid
       }
       val externalPartyHint = "external-party"
       val (keyPair, externalPartyId) =
