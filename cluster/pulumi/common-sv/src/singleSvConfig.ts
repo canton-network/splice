@@ -88,7 +88,7 @@ const SvAppConfigSchema = z
     // Map of package name -> list of versions to explicitly unvet
     additionalPackagesToUnvet: z.record(z.string(), z.array(z.string())).optional(),
     resources: K8sResourceSchema,
-  })
+  }) 
   .strict();
 const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
@@ -104,6 +104,8 @@ export const ScanBigQueryConfigSchema = z
     dataset: z.string(),
     prefix: z.string(),
     functionsDataset: z.string().optional(),
+    silverDataset: z.string().optional(),
+    goldDataset: z.string().optional(),
     enableLegacyDatastream: z.boolean().default(true),
     enableStagProdDatastream: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
@@ -111,7 +113,7 @@ export const ScanBigQueryConfigSchema = z
     retentionPeriodSeconds: z
       .number()
       .min(3 * SECONDS_PER_DAY, {
-        message: 'Value must be at least 3 days (259,200 seconds)',
+        message: 'Value must be at least 3 days (259,200 seconds)', 
       })
       .refine(v => v % SECONDS_PER_DAY === 0, {
         message: 'Value must be an exact number of days, expressed in seconds',
