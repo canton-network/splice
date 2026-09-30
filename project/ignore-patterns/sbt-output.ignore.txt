@@ -141,3 +141,6 @@ Propagating WARN level on Logger
 # rolldown/vite emits a PLUGIN_TIMINGS performance advisory (e.g. for the built-in
 # `rolldown:vite-resolve` resolver) on otherwise-successful builds. Not an error.
 .*\[PLUGIN_TIMINGS\] Warning:.*
+
+# to be looked at later on
+.*[info] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.*
