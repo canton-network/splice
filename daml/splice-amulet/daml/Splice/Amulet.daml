@@ -481,7 +481,6 @@ template RewardCouponV2
 
 
 -- | A coupon for receiving traffic-based validator rewards under CIP-0120.
--- See Splice.Amulet.ValidatorRewardAccountingV2 for the batch-processing side.
 template ValidatorRewardCouponV2
   with
     dso : Party
