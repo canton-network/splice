@@ -96,6 +96,7 @@ testMintingDelegation = do
     round = openRound.round
     providerIsObserver = False
     beneficiary = Some beneficiary
+    kind = None
 
   -- Wait for rounds to advance so coupons can be minted
   runNextIssuance app
@@ -378,6 +379,7 @@ testMintingDelegation_AssignAndMint = do
     round = openRound.round
     providerIsObserver = True
     beneficiary = None
+    kind = None
 
   let coupon2Amount = 500.0
   coupon2Cid <- submit app.dso $ createCmd RewardCouponV2 with
@@ -388,6 +390,7 @@ testMintingDelegation_AssignAndMint = do
     round = openRound.round
     providerIsObserver = True
     beneficiary = None
+    kind = None
 
   -- Advance rounds so coupons can be minted
   runNextIssuance app
@@ -479,6 +482,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
     round = openRound.round
     providerIsObserver = True
     beneficiary = None
+    kind = None
 
   let coupon2Amount = 500.0
   coupon2Cid <- submit app.dso $ createCmd RewardCouponV2 with
@@ -489,6 +493,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
     round = openRound.round
     providerIsObserver = True
     beneficiary = None
+    kind = None
 
   -- Advance rounds so coupons can be minted
   runNextIssuance app
@@ -528,6 +533,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
     round = openRound.round
     providerIsObserver = True
     expiresAt = now `addRelTime` hours 36
+    kind = None
 
   submitMustFail''
     (expectMessageContains "Contract group identifier mismatch")
@@ -590,6 +596,7 @@ testMintingDelegation_Mint_rejectsDelegateOwnedInput = do
     round = openRound.round
     providerIsObserver = False
     expiresAt = now `addRelTime` days 60
+    kind = None
   
   submitMustFail''
     (expectMessageContains "Contract group identifier mismatch")
