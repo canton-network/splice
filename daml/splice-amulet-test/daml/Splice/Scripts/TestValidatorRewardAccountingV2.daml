@@ -66,26 +66,28 @@ test_splitAndBurn_traffic_based_skips_coupon = do
   coupons <- query @ValidatorRewardCoupon app.dso
   assertMsg "no ValidatorRewardCoupon should be created under TrafficBased" (null coupons)
 
--- Exercise RewardCoupon_AssignBeneficiaries via the interface. Split the
--- original coupon 60/40 between two new beneficiaries; verify the
--- original is archived and each beneficiary owns a new coupon with the
--- correct share of the amount.
-test_ValidatorRewardCouponV2_assign_beneficiaries : Script ()
-test_ValidatorRewardCouponV2_assign_beneficiaries = do
+-- Exercise RewardCoupon_AssignBeneficiaries via the interface on a
+-- validator-kind coupon. Split the original 60/40 between two new
+-- beneficiaries; verify the original is archived, each new coupon carries
+-- the correct share of the amount, and 'kind = Some Validator' is
+-- preserved on the new coupons.
+test_RewardCouponV2_validator_assign_beneficiaries : Script ()
+test_RewardCouponV2_validator_assign_beneficiaries = do
   app <- setupApp
   node <- allocateParty "validator-node"
   bob <- allocateParty "bob"
   charlie <- allocateParty "charlie"
   now <- getTime
   let expiresAt = now `addRelTime` hours 36
-  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+  couponCid <- submit app.dso $ createCmd RewardCouponV2 with
     dso = app.dso
-    node
+    provider = node
     round = Round 0
     amount = 100.0
     expiresAt
-    nodeIsObserver = True
+    providerIsObserver = True
     beneficiary = None
+    kind = Some Validator
   let percentages = [(bob, 0.6), (charlie, 0.4)]
   result <- submit (actAs node <> readAs app.dso) $
     exerciseCmd (toInterfaceContractId @Api.RewardAssignmentV1.RewardCoupon couponCid)
@@ -98,12 +100,13 @@ test_ValidatorRewardCouponV2_assign_beneficiaries = do
     let Some (_, percentage) = find (\(p, _) -> p == beneficiary) percentages
     length cids === 1
     forA_ cids $ \cid -> do
-      Some newCoupon <- queryContractId beneficiary (fromInterfaceContractId @ValidatorRewardCouponV2 cid)
-      newCoupon.node === node
+      Some newCoupon <- queryContractId beneficiary (fromInterfaceContractId @RewardCouponV2 cid)
+      newCoupon.provider === node
       newCoupon.beneficiary === Some beneficiary
       newCoupon.amount === 100.0 * percentage
-      newCoupon.nodeIsObserver === True
+      newCoupon.providerIsObserver === True
       newCoupon.round === Round 0
+      newCoupon.kind === Some Validator
   pure ()
 
 -- ProcessBatch rejects when the supplied batch's hash does not match the
