@@ -2333,7 +2333,7 @@ splitAndBurn eventLogCid sender amount inputs context dso developmentFundManager
   logAmuletBurn dso eventLogCid sender amount usage (toInterfaceContractId amuletCid)
   -- Gate legacy ValidatorRewardCoupon creation: skipped once the round is
   -- configured for the CIP-0120 traffic-based scheme (batches signed by
-  -- the DSO party produce ValidatorRewardCouponV2 instead).
+  -- the DSO party produce RewardCouponV2 with kind = Some Validator instead).
   contextMiningRound <- fetchPublicReferenceData (ForDso dso) context.openMiningRound (OpenMiningRound_Fetch dso)
   when (useAmuletBurnValidatorRewards ((.mintingVersion) <$> contextMiningRound.validatorRewardConfig)) $
     void $ create ValidatorRewardCoupon with
