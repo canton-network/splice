@@ -7,6 +7,19 @@
 
 release-notes:: Upcoming
 
+    - Deployment
+
+        - **Breaking**: Splice apps now **fail to start** if
+          `PostgreSQL data checksums <https://www.postgresql.org/docs/current/checksums.html>`_
+          are not enabled on their database. Previously only a ``WARN`` was logged.
+          Databases created by Splice's Helm charts and Docker-Compose setups since 0.6.10 have
+          checksums enabled by default; older databases must enable them before upgrading,
+          e.g. by stopping PostgreSQL and running ``pg_checksums --enable`` against the data directory
+          (see the `pg_checksums documentation <https://www.postgresql.org/docs/current/app-pgchecksums.html>`_).
+          To start anyway and only log a ``WARN``, set
+          ``canton.<app>.<node>.parameters.unsafe-allow-disabled-data-checksums = true``,
+          e.g. via an ``ADDITIONAL_CONFIG_*`` environment variable. This is not recommended.
+
     - SV App
 
         - The deprecated (in 0.8.0) public ``/v0/dso`` endpoint has been removed.

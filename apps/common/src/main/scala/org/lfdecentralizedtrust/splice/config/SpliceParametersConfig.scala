@@ -21,6 +21,7 @@ final case class SpliceParametersConfig(
     circuitBreakers: CircuitBreakersConfig = CircuitBreakersConfig(),
     enabledFeatures: EnabledFeaturesConfig = EnabledFeaturesConfig(),
     databaseDefaultLimit: NonNegativeInt = NonNegativeInt.tryCreate(Limit.DefaultMaxPageSize),
+    unsafeAllowDisabledDataChecksums: Boolean = false,
 ) extends LocalNodeParametersConfig {
   override def alphaVersionSupport: Boolean = false
 
