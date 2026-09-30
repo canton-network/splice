@@ -3,13 +3,11 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
-import cats.data.NonEmptyList
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.{Flow, Source}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
-import org.apache.pekko.util.ByteString
 import org.apache.pekko.pattern.after
 import org.lfdecentralizedtrust.splice.scan.admin.http.{ScanHttpEncodings, ScanJsonSupport}
 import org.lfdecentralizedtrust.splice.store.{
@@ -23,7 +21,6 @@ import org.lfdecentralizedtrust.splice.store.{
 import io.circe.syntax.*
 import org.apache.pekko.actor.ActorSystem
 
-import java.nio.charset.StandardCharsets
 import scala.concurrent.{ExecutionContext, Future}
 import scala.math.Ordering.Implicits.*
 
@@ -118,9 +115,9 @@ class UpdateHistorySegmentBulkStorage(
   }
 
   private def encodeUpdates(
-      updates: NonEmptyList[TreeUpdateWithMigrationId],
+      updates: Seq[TreeUpdateWithMigrationId],
       encoding: ScanStorageConfig.Encoding,
-  ): ByteString = {
+  ): Seq[String] = {
     val encoded = updates.toList.map(update =>
       ScanHttpEncodings.encodeUpdateV2(
         update,
@@ -135,12 +132,10 @@ class UpdateHistorySegmentBulkStorage(
     import ScanJsonSupport.*
     val updatesStr = encoded
       .map(u => u.asJson.noSpacesSortKeys)
-      .mkString("\n") + "\n"
-    val updatesBytes = ByteString(updatesStr.getBytes(StandardCharsets.UTF_8))
     logger.debug(
-      s"Read and encoded ${encoded.length} updates from DB, to a bytestring of size ${updatesBytes.length} bytes, with encoding ${encoding.key}. Timestamps are ${updates.head.update.update.recordTime} to ${updates.last.update.update.recordTime}"
+        s"Read and encoded ${encoded.length} updates from DB with encoding ${encoding.key}. Timestamps are ${updates.headOption.map(_.update.update.recordTime)} to ${updates.lastOption.map(_.update.update.recordTime)}"
     )
-    updatesBytes
+    updatesStr
   }
 
   private def getSource(implicit
@@ -152,10 +147,10 @@ class UpdateHistorySegmentBulkStorage(
         historyMetrics.BulkStorage.incUpdatesCount(updates.length)
         updates
       })
+      .filter(_.nonEmpty)
       .via(
         MultiEncodingBulkStorageFlow(
-          (updates, encoding) =>
-            NonEmptyList.fromFoldable(updates).fold(ByteString.empty)(encodeUpdates(_, encoding)),
+          encodeUpdates,
           encoding =>
             // We use lazyFlow, so that in the case where no updates are emitted, we don't instantiate the S3ZstdObjects at all,
             // since it assumes that it gets at least one chunk to write.
