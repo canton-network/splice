@@ -46,7 +46,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 3,
     bulkAcsSnapshotPeriodHours = 24,
-    bulkDbReadChunkSize = 1000,
+    bulkChunkSize = 1000,
     bulkZstdFrameSize = 10000L,
     bulkMaxFileSize = 50000L,
     zstdCompressionLevel = 3,

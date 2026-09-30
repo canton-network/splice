@@ -61,7 +61,7 @@ class UpdateHistorySegmentBulkStorage(
     for {
       updates <- updateHistory.getUpdatesWithoutImportUpdates(
         Some(TimestampWithMigrationId(afterTs.timestamp, afterTs.migrationId)),
-        PageLimit.tryCreate(storageConfig.bulkDbReadChunkSize),
+        PageLimit.tryCreate(appConfig.dbReadChunkSize),
       )
       updatesInSegment = updates.filter(update =>
         TimestampWithMigrationId(
@@ -71,7 +71,7 @@ class UpdateHistorySegmentBulkStorage(
       )
       result <-
         if (
-          updatesInSegment.length < updates.length || updates.length == storageConfig.bulkDbReadChunkSize
+          updatesInSegment.length < updates.length || updates.length == appConfig.dbReadChunkSize
         ) {
           if (updatesInSegment.nonEmpty) {
             // Found enough updates to add
@@ -99,7 +99,7 @@ class UpdateHistorySegmentBulkStorage(
           }
         } else {
           logger.debug(
-            s"Not enough updates yet (queried for ${storageConfig.bulkDbReadChunkSize}, found ${updates.length}. Last update is from ${updates.lastOption
+            s"Not enough updates yet (queried for ${appConfig.dbReadChunkSize}, found ${updates.length}. Last update is from ${updates.lastOption
                 .map(_.update.update.recordTime)}, migration ${updates.lastOption.map(_.migrationId)}), sleeping..."
           )
           after(

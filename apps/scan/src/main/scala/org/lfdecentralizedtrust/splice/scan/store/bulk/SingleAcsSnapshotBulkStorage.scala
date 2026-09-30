@@ -54,7 +54,7 @@ class SingleAcsSnapshotBulkStorage(
         timestamp.migrationId,
         snapshot = timestamp.timestamp,
         after,
-        PageLimit.tryCreate(storageConfig.bulkDbReadChunkSize),
+        PageLimit.tryCreate(appConfig.dbReadChunkSize),
         Seq.empty,
         Seq.empty,
       )

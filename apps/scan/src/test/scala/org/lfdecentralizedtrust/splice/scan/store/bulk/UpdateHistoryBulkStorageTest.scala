@@ -55,7 +55,7 @@ class UpdateHistoryBulkStorageTest
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
     bulkAcsSnapshotPeriodHours = 2,
-    bulkDbReadChunkSize = 500,
+    bulkChunkSize = 500,
     bulkZstdFrameSize = 10000L,
     maxFileSize,
     zstdCompressionLevel = 3,
