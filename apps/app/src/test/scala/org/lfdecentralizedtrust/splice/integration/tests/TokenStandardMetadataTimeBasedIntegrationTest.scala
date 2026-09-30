@@ -34,7 +34,7 @@ class TokenStandardMetadataTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(
           ConfigurableApp.Scan
-        )( // we force snapshots (via getTotalAmuletBalance) half-way through the test
+        )( // we force snapshots half-way through the test
           _.withPausedTrigger[AcsSnapshotTrigger].withPausedTrigger[AcsSnapshotBackfillingTrigger]
         )(config)
       )
@@ -105,7 +105,7 @@ class TokenStandardMetadataTimeBasedIntegrationTest
     }
 
     clue("Once round totals are defined they are served") {
-      actAndCheck(
+      val (_, forcedSnapshotTime) = actAndCheck(
         "Advance rounds to a point where round totals are defined and the tapped amulet",
         // We sadly need 7 rounds as we need to get to a point where round 0 is closed
         for (i <- 1 to 7) {
@@ -114,14 +114,19 @@ class TokenStandardMetadataTimeBasedIntegrationTest
       )(
         "rounds are defined and include tapped amulet",
         _ => {
-          val totalBalance =
-            sv1ScanBackend
-              .getTotalAmuletBalance("Amulet")
+          // The comparison below reuses this snapshot instead of forcing another one: with sim time,
+          // a second snapshot usually lands in the same millisecond of record time, and snapshot
+          // tables are named by millisecond, so the second force fails.
+          val forcedSnapshotTime = sv1ScanBackend.forceAcsSnapshotNow()
+          val totalBalance = sv1ScanBackend
+            .lookupInstrument("Amulet")
+            .flatMap(_.totalSupply.map(s => BigDecimal(s)))
+            .getOrElse(fail("'Amulet' instrument not found or total supply not defined"))
           totalBalance should be >= walletUsdToAmulet(99.0)
+          forcedSnapshotTime
         },
       )
       clue("Compare direct scan reads to instrument metadata") {
-        val forcedSnapshotTime = sv1ScanBackend.forceAcsSnapshotNow()
         advanceTime(Duration.ofSeconds(1L)) // because the sanity plugin will run another snapshot
         // hope: this test won't have created more than Limit.MaxLimit contracts, so they all fit in a single response
         val totalSupply = sv1ScanBackend
