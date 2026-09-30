@@ -111,6 +111,19 @@ useAmuletBurnValidatorRewards rv = case rv of
 useTrafficBasedValidatorRewards : Optional ValidatorRewardVersion -> Bool
 useTrafficBasedValidatorRewards = not . useAmuletBurnValidatorRewards
 
+-- | Which reward flow a reward-accounting contract belongs to.
+-- Introduced by CIP-0120 to distinguish app-reward and validator-reward
+-- contracts sharing the collapsed on-ledger templates
+-- ('CalculateRewardsV2', 'ProcessRewardsV2', 'RewardCouponV2').
+-- 'None' on those templates means legacy (pre-discriminator) writes,
+-- treated as 'App' for backward compatibility.
+data RewardKind
+  = App
+      -- ^ App-reward flow (CIP-104 traffic-based app rewards).
+  | Validator
+      -- ^ Validator-reward flow (CIP-0120 traffic-based validator rewards).
+  deriving (Eq, Show, Serializable)
+
 -- | Configuration for how validator reward accounting and calculation should be performed.
 data ValidatorRewardConfig = ValidatorRewardConfig with
     mintingVersion : ValidatorRewardVersion
