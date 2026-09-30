@@ -1,0 +1,15 @@
+tests:
+  - it: helm template should not fail with required values supplied
+    set:
+      imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+      imageName: "splitwell-web-ui"
+      auth: {}
+      spliceInstanceNames:
+        networkName: "Canton Network"
+        networkFaviconUrl: "https://example.com/favicon.ico"
+        amuletName: "Amulet"
+        amuletNameAcronym: "AMT"
+        nameServiceName: "Canton Name Service"
+        nameServiceNameAcronym: "CNS"
+    asserts:
+      - notFailedTemplate: {}

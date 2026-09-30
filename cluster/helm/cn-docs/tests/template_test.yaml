@@ -1,0 +1,6 @@
+tests:
+  - it: helm template should not fail with required values supplied
+    set:
+      networkName: "Canton Network"
+    asserts:
+      - notFailedTemplate: {}

@@ -1,0 +1,8 @@
+tests:
+  - it: helm template should not fail with required values supplied
+    set:
+      imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+      config: "config-value"
+      prometheusRw: "prometheus-rw-value"
+    asserts:
+      - notFailedTemplate: {}

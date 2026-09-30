@@ -1,0 +1,4 @@
+tests:
+  - it: helm template should not fail
+    asserts:
+      - notFailedTemplate: {}
