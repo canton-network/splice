@@ -30,7 +30,7 @@ If you make intentional changes in Daml code, run `sbt damlDarsLockFileUpdate` a
 
 ### Backwards-compatible Daml changes
 
-All Daml changes must be backwards-compatible. See the [Upgrading and Extending Daml Applications section of the Canton docs](https://docs.digitalasset.com/build/3.4/sdlc-howtos/smart-contracts/upgrade/).
+All Daml changes must be backwards-compatible. See the [Smart Contract Upgrading Reference from the Canton docs](https://docs.canton.network/appdev/deep-dives/smart-contract-upgrading-reference).
 
 When adding to enums, make sure to only add further nullary constructors to types that only have nullary constructors.
 
@@ -87,4 +87,3 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 - Delay the conversion to Java types until the last possible point.
 - Convert from Java to Scala as early as possible.
 - To convert, import `scala.jdk.CollectionConverters.*` and use the `asScala` and `asJava` methods.
-
