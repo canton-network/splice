@@ -43,6 +43,8 @@ scaleAmuletConfig amuletPrice config = AmuletConfig with
   governanceLockSuperValidatorLockVestingDuration = None
   governanceLockFeaturedAppLockVestingDuration = None
   governanceLockSearchTimeGranularity = None
+  governanceLockFeaturedAppUnderlockGracePeriod = None
+  governanceLockFeaturedAppLockThreshold = None
 
 test : Script ()
 test = script do

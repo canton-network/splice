@@ -127,6 +127,11 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ Vesting duration for an FA governance lock. Default: 60 days.
     governanceLockSearchTimeGranularity : Optional RelTime
       -- ^ Granularity of the governance lock fallback timepoint determination. Default: 1 day.
+    governanceLockFeaturedAppLockThreshold : Optional Decimal
+      -- ^ Amount of amulet a featured app must keep locked to retain its right. Default: 5M.
+    governanceLockFeaturedAppUnderlockGracePeriod : Optional RelTime
+      -- ^ How long an underlocked provider has to cure before its right becomes archivable.
+      --   Default: 7 days.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -238,6 +243,12 @@ defaultGovernanceLockFeaturedAppLockVestingDuration = days 60
 defaultGovernanceLockSearchTimeGranularity : RelTime
 defaultGovernanceLockSearchTimeGranularity = days 1
 
+defaultGovernanceLockFeaturedAppUnderlockGracePeriod : RelTime
+defaultGovernanceLockFeaturedAppUnderlockGracePeriod = days 7
+
+defaultGovernanceLockFeaturedAppLockThreshold : Decimal
+defaultGovernanceLockFeaturedAppLockThreshold = 5_000_000.0
+
 instance Patchable RewardVersion where
   patch = patchScalar
 
@@ -262,6 +273,8 @@ instance Patchable (AmuletConfig USD) where
     governanceLockSuperValidatorLockVestingDuration = patch new.governanceLockSuperValidatorLockVestingDuration base.governanceLockSuperValidatorLockVestingDuration current.governanceLockSuperValidatorLockVestingDuration
     governanceLockFeaturedAppLockVestingDuration = patch new.governanceLockFeaturedAppLockVestingDuration base.governanceLockFeaturedAppLockVestingDuration current.governanceLockFeaturedAppLockVestingDuration
     governanceLockSearchTimeGranularity = patch new.governanceLockSearchTimeGranularity base.governanceLockSearchTimeGranularity current.governanceLockSearchTimeGranularity
+    governanceLockFeaturedAppLockThreshold = patch new.governanceLockFeaturedAppLockThreshold base.governanceLockFeaturedAppLockThreshold current.governanceLockFeaturedAppLockThreshold
+    governanceLockFeaturedAppUnderlockGracePeriod = patch new.governanceLockFeaturedAppUnderlockGracePeriod base.governanceLockFeaturedAppUnderlockGracePeriod current.governanceLockFeaturedAppUnderlockGracePeriod
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with

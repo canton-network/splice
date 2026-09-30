@@ -237,6 +237,8 @@ export function getAmuletRulesConfig(
     governanceLockSuperValidatorLockVestingDuration: null,
     governanceLockFeaturedAppLockVestingDuration: null,
     governanceLockSearchTimeGranularity: null,
+    governanceLockFeaturedAppLockThreshold: null,
+    governanceLockFeaturedAppUnderlockGracePeriod: null,
   };
 }
 
@@ -484,6 +486,14 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
       class="jsondiffpatch-unchanged"
       data-key="governanceLockSearchTimeGranularity"><div
         class="jsondiffpatch-property-name">governanceLockSearchTimeGranularity</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="governanceLockFeaturedAppLockThreshold"><div
+        class="jsondiffpatch-property-name">governanceLockFeaturedAppLockThreshold</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="governanceLockFeaturedAppUnderlockGracePeriod"><div
+        class="jsondiffpatch-property-name">governanceLockFeaturedAppUnderlockGracePeriod</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;

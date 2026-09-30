@@ -187,6 +187,8 @@ export function amuletRules(zeroTransferFees: boolean): any {
         governanceLockSuperValidatorLockVestingDuration: null,
         governanceLockFeaturedAppLockVestingDuration: null,
         governanceLockSearchTimeGranularity: null,
+        governanceLockFeaturedAppLockThreshold: null,
+        governanceLockFeaturedAppUnderlockGracePeriod: null,
       },
       futureValues: [],
     },

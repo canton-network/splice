@@ -73,6 +73,8 @@ trait AmuletConfigUtil extends TestCommon {
       existingAmuletConfig.governanceLockSuperValidatorLockVestingDuration,
       existingAmuletConfig.governanceLockFeaturedAppLockVestingDuration,
       existingAmuletConfig.governanceLockSearchTimeGranularity,
+      existingAmuletConfig.governanceLockFeaturedAppLockThreshold,
+      existingAmuletConfig.governanceLockFeaturedAppUnderlockGracePeriod,
     )
   }
 

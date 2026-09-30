@@ -138,6 +138,8 @@ object SvOnboardingConfig {
         None,
       initialGovernanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
       initialGovernanceLockSearchTimeGranularity: Option[NonNegativeFiniteDuration] = None,
+      initialGovernanceLockFeaturedAppLockThreshold: Option[NonNegativeNumeric[BigDecimal]] = None,
+      initialGovernanceLockFeaturedAppUnderlockGracePeriod: Option[NonNegativeFiniteDuration] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(

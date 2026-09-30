@@ -59,3 +59,10 @@ release-notes:: Upcoming
 
         - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
 
+    - App Providers
+
+        - FeaturedAppRight now carries two optional fields: ``config`` for per-app configuration and
+          ``underlockPermanentAt`` for underlock enforcement.
+        - Once either is populated, either by a governance vote setting app-specific config, or by the right being
+          suspended for underlocking, that contract can no longer be read by participants running on an older version
+          of ``splice-amulet``. App providers whose nodes have not upgraded cannot use their ''FeaturedAppRight'' until their node upgrades. Any transaction that involves such an app provider as a featured app provider will fail because the ''FeaturedAppRight'' downgrade will fail.

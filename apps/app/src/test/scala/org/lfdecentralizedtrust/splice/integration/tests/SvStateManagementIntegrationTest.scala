@@ -514,6 +514,8 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       initialConfig.governanceLockSuperValidatorLockVestingDuration,
       initialConfig.governanceLockFeaturedAppLockVestingDuration,
       initialConfig.governanceLockSearchTimeGranularity,
+      initialConfig.governanceLockFeaturedAppLockThreshold,
+      initialConfig.governanceLockFeaturedAppUnderlockGracePeriod,
     )
 
     val (_, voteRequestCid) = actAndCheck(

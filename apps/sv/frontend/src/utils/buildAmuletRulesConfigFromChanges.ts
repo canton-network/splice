@@ -117,6 +117,10 @@ export function buildAmuletRulesConfigFromChanges(
     true
   );
   const governanceLockSearchTimeGranularity = getValue('governanceLockSearchTimeGranularity', true);
+  const governanceLockFeaturedAppUnderlockGracePeriod = getValue(
+    'governanceLockFeaturedAppUnderlockGracePeriod',
+    true
+  );
 
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },
@@ -232,6 +236,14 @@ export function buildAmuletRulesConfigFromChanges(
       governanceLockSearchTimeGranularity === null
         ? null
         : { microseconds: governanceLockSearchTimeGranularity },
+    governanceLockFeaturedAppLockThreshold: getValue(
+      'governanceLockFeaturedAppLockThreshold',
+      true
+    ),
+    governanceLockFeaturedAppUnderlockGracePeriod:
+      governanceLockFeaturedAppUnderlockGracePeriod === null
+        ? null
+        : { microseconds: governanceLockFeaturedAppUnderlockGracePeriod },
   };
 
   return amuletConfig;

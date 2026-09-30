@@ -273,6 +273,18 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '864000000000',
         newValue: '43200000000',
       },
+      {
+        fieldName: 'governanceLockFeaturedAppLockThreshold',
+        label: 'Governance lock config: Featured app lock threshold (Amulet)',
+        currentValue: '5000000',
+        newValue: '10000000',
+      },
+      {
+        fieldName: 'governanceLockFeaturedAppUnderlockGracePeriod',
+        label: 'Governance lock config: Featured app underlock grace period',
+        currentValue: '604800000000',
+        newValue: '302400000000',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -337,6 +349,10 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     });
     expect(result.governanceLockSearchTimeGranularity).toEqual({
       microseconds: '43200000000',
+    });
+    expect(result.governanceLockFeaturedAppLockThreshold).toEqual('10000000');
+    expect(result.governanceLockFeaturedAppUnderlockGracePeriod).toEqual({
+      microseconds: '302400000000',
     });
   });
 
@@ -544,6 +560,18 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '864000000000',
         newValue: '',
       },
+      {
+        fieldName: 'governanceLockFeaturedAppLockThreshold',
+        label: 'Governance lock config: Featured app lock threshold (Amulet)',
+        currentValue: '5000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockFeaturedAppUnderlockGracePeriod',
+        label: 'Governance lock config: Featured app underlock grace period',
+        currentValue: '604800000000',
+        newValue: '',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -552,6 +580,8 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     expect(result.governanceLockSuperValidatorLockVestingDuration).toBeNull();
     expect(result.governanceLockFeaturedAppLockVestingDuration).toBeNull();
     expect(result.governanceLockSearchTimeGranularity).toBeNull();
+    expect(result.governanceLockFeaturedAppLockThreshold).toBeNull();
+    expect(result.governanceLockFeaturedAppUnderlockGracePeriod).toBeNull();
   });
 });
 

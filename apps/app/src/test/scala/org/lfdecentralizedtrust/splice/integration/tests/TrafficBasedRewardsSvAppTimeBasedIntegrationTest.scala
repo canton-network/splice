@@ -1011,6 +1011,8 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       existing.governanceLockSuperValidatorLockVestingDuration,
       existing.governanceLockFeaturedAppLockVestingDuration,
       existing.governanceLockSearchTimeGranularity,
+      existing.governanceLockFeaturedAppLockThreshold,
+      existing.governanceLockFeaturedAppUnderlockGracePeriod,
     )
     setAmuletConfig(Seq((None, newConfig, existing)))
     eventually() {

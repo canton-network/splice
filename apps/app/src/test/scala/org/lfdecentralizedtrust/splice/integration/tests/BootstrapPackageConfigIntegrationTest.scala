@@ -248,6 +248,8 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.governanceLockSuperValidatorLockVestingDuration,
         amuletConfig.governanceLockFeaturedAppLockVestingDuration,
         amuletConfig.governanceLockSearchTimeGranularity,
+        amuletConfig.governanceLockFeaturedAppLockThreshold,
+        amuletConfig.governanceLockFeaturedAppUnderlockGracePeriod,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -405,6 +407,8 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.governanceLockSuperValidatorLockVestingDuration,
         amuletConfig.governanceLockFeaturedAppLockVestingDuration,
         amuletConfig.governanceLockSearchTimeGranularity,
+        amuletConfig.governanceLockFeaturedAppLockThreshold,
+        amuletConfig.governanceLockFeaturedAppUnderlockGracePeriod,
       )
 
       val upgradeAction = new ARC_AmuletRules(

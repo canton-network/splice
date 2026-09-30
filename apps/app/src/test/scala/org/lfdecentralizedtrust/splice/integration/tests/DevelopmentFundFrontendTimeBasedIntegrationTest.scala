@@ -483,6 +483,8 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       existingConfig.governanceLockSuperValidatorLockVestingDuration,
       existingConfig.governanceLockFeaturedAppLockVestingDuration,
       existingConfig.governanceLockSearchTimeGranularity,
+      existingConfig.governanceLockFeaturedAppLockThreshold,
+      existingConfig.governanceLockFeaturedAppUnderlockGracePeriod,
     )
 
     val action = new ARC_AmuletRules(

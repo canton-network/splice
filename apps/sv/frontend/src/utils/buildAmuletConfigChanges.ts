@@ -169,6 +169,22 @@ export function buildAmuletConfigChanges(
       description:
         'Granularity used by the governance lock fallback timepoint determination (default: 1 day)',
     },
+    {
+      fieldName: 'governanceLockFeaturedAppLockThreshold',
+      label: 'Governance lock config: Featured app lock threshold (Amulet)',
+      currentValue: before?.governanceLockFeaturedAppLockThreshold || '',
+      newValue: after?.governanceLockFeaturedAppLockThreshold || '',
+      description:
+        'Amount of Amulet a featured app must keep locked to retain its right (default: 5 million)',
+    },
+    {
+      fieldName: 'governanceLockFeaturedAppUnderlockGracePeriod',
+      label: 'Governance lock config: Featured app underlock grace period',
+      currentValue: before?.governanceLockFeaturedAppLockThreshold || '',
+      newValue: after?.governanceLockFeaturedAppLockThreshold || '',
+      description:
+        'How long an underlocked featured app provider has to cure before its right becomes archivable (default: 7 days)',
+    },
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);
