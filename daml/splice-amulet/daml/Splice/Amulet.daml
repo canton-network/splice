@@ -461,10 +461,7 @@ template RewardCouponV2
       -- ^ The party that can mint the reward for the activity by the provider.
       -- If not set, this is the provider.
     kind : Optional RewardKind
-      -- ^ Which reward flow the coupon originates from (CIP-0120).
-      -- Copied from the leaf 'ProcessRewardsV2.kind'. 'None' on coupons
-      -- written before the discriminator was introduced; treated as
-      -- 'App' for backward compatibility.
+      -- ^ Copied from the leaf 'ProcessRewardsV2.kind'; 'None' is treated as 'App'.
   where
     signatory dso
     observer if providerIsObserver then [provider] ++ optionalToList beneficiary else []

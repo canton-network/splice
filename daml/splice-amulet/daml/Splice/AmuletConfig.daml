@@ -112,11 +112,8 @@ useTrafficBasedValidatorRewards : Optional ValidatorRewardVersion -> Bool
 useTrafficBasedValidatorRewards = not . useAmuletBurnValidatorRewards
 
 -- | Which reward flow a reward-accounting contract belongs to.
--- Introduced by CIP-0120 to distinguish app-reward and validator-reward
--- contracts sharing the collapsed on-ledger templates
--- ('CalculateRewardsV2', 'ProcessRewardsV2', 'RewardCouponV2').
--- 'None' on those templates means legacy (pre-discriminator) writes,
--- treated as 'App' for backward compatibility.
+-- Carried on 'CalculateRewardsV2', 'ProcessRewardsV2' and 'RewardCouponV2';
+-- 'None' means an unlabelled write and is treated as 'App'.
 data RewardKind
   = App
       -- ^ App-reward flow (CIP-104 traffic-based app rewards).

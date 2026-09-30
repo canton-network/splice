@@ -245,12 +245,9 @@ create_and_process_validator_reward_batches dryRun = do
 
   runNextIssuance app  -- triggers CalculateRewardsV2 (kind = Some Validator) creation
 
-  -- CIP-0120 (post-C1): TBVR round-advance now creates a collapsed
-  -- CalculateRewardsV2 with kind = Some Validator instead of the legacy
-  -- CalculateValidatorRewardsV2. Assert the new shape, then hand-create a
-  -- CalculateValidatorRewardsV2 so the rest of this test can continue to
-  -- exercise the legacy ProcessValidatorRewardsV2 / ValidatorRewardCouponV2
-  -- pipeline until it is rewritten to the collapsed path.
+  -- Round-advance produces the collapsed CalculateRewardsV2; verify its
+  -- kind, then hand-craft a CalculateValidatorRewardsV2 for the legacy
+  -- ProcessValidatorRewardsV2 / ValidatorRewardCouponV2 pipeline below.
   [(_, collapsedCalc)] <- query @CalculateRewardsV2 app.dso
   collapsedCalc.kind === Some Validator
 
