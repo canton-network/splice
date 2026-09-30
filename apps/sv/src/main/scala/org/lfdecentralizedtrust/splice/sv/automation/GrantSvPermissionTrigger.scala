@@ -21,7 +21,6 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.{Contract, SwitchOverTimes}
 
 import scala.concurrent.{ExecutionContext, Future}
-import com.digitalasset.canton.util.MonadUtil
 
 class GrantSvPermissionTrigger(
     override protected val context: TriggerContext,
@@ -36,6 +35,8 @@ class GrantSvPermissionTrigger(
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[GrantSvPermissionTrigger.Task]] = {
+    import cats.implicits.*
+    import com.digitalasset.canton.util.FutureInstances.*
     for {
       dsoRules <- store.getDsoRules()
       tasks <-
@@ -44,7 +45,7 @@ class GrantSvPermissionTrigger(
         } else {
           for {
             confirmations <- store.listSvOnboardingConfirmed()
-            unpermissionedTasks <- MonadUtil.sequentialTraverse(confirmations) { confirmation =>
+            unpermissionedConfirmations <- confirmations.toList.parFilterA { confirmation =>
               participantAdminConnection
                 .listParticipantSynchronizerPermission(
                   SynchronizerId.tryFromString(
@@ -52,13 +53,9 @@ class GrantSvPermissionTrigger(
                   ),
                   confirmation.payload.svParticipantId,
                 )
-                .map { permissions =>
-                  val hasSubmission = permissions.exists(_.mapping.permission == Submission)
-                  if (hasSubmission) None
-                  else Some(GrantSvPermissionTrigger.Task(confirmation))
-                }
+                .map(permissions => !permissions.exists(_.mapping.permission == Submission))
             }
-          } yield unpermissionedTasks.flatten
+          } yield unpermissionedConfirmations.map(GrantSvPermissionTrigger.Task(_))
         }
     } yield tasks
   }
