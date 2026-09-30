@@ -117,18 +117,34 @@ function _gcloud_active_account() {
 function _gcloud_account_active() {
     local account
     account=$(_gcloud_active_account)
-    [ -n "${account}" ] || return 1
-    sqlite3 "${HOME}/.config/gcloud/access_tokens.db" \
-        "SELECT account_id FROM access_tokens WHERE token_expiry > datetime('now');" 2>/dev/null \
-        | grep -qxF "${account}"
+    # This checks the sqlite3 access_tokens.db for a valid token for the active account.
+    # We're using this check because it is faster than invoking gcloud (0.03s vs ~1s)
+    # But the tokens there are valid for ~1h
+    if [ -n "${account}" ] && [ -f "${HOME}/.config/gcloud/access_tokens.db" ]; then
+        if sqlite3 "${HOME}/.config/gcloud/access_tokens.db" \
+                "SELECT account_id FROM access_tokens WHERE token_expiry > datetime('now');" 2>/dev/null \
+                | grep -qxF "${account}"; then
+            return 0
+        fi
+    fi
+    # Fallback to the slow gcloud check, which may refresh the token.
+    local token
+    token=$(gcloud auth print-access-token 2>/dev/null)
+    [ -n "${token}" ]
 }
 
 function _gcloud_adc_configured() {
     if [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]; then
         return 0
     fi
-    [ -f "${HOME}/.config/gcloud/application_default_credentials.json" ] && \
-        jq -e '.refresh_token' "${HOME}/.config/gcloud/application_default_credentials.json" >/dev/null 2>&1
+    if [ -f "${HOME}/.config/gcloud/application_default_credentials.json" ] && \
+            jq -e '.refresh_token' "${HOME}/.config/gcloud/application_default_credentials.json" >/dev/null 2>&1; then
+        return 0
+    fi
+    # Fallback to the slow gcloud check, which may refresh the token.
+    local token
+    token=$(gcloud auth application-default print-access-token 2>/dev/null)
+    [ -n "${token}" ]
 }
 
 function _ensure_gcloud_auth() {
