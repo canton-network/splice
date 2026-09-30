@@ -816,6 +816,7 @@ template AmuletRules
           dryRun = calculateRewards.dryRun
           rewardCouponTimeToLive = calculateRewards.rewardCouponTimeToLive
           batchHash
+          kind = calculateRewards.kind
 
         return AmuletRules_StartProcessingRewardsV2Result {}
 
