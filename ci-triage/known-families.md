@@ -291,3 +291,18 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   for sv1 init; a teardown-plugin failure then leaks the environment (family H).
 - Occurrence: 10235 (sv1Validator init in Ans4SvsIntegrationTest, DefaultSequencer -> SEQ::sv1, same endpoint). Canton-side,
   open; what the stuck connect waits on needs a thread dump.
+
+## Q. Cluster deploy: Pulumi program exception from a private config missing a newly required key
+- Signature (CircleCI `Apply Pulumi configuration to cluster`, 6 of 6 attempts): `[organization/sv-canton/...] - error -
+  error: TypeError: Cannot read properties of undefined (reading '<field>')` at program evaluation, followed about 10 s
+  later by `Aborting: ... Aborting because of caught exception`, then `^C received; cancelling` and Helm `context
+  canceled` / StatefulSet `Resource operation was cancelled` on every other stack. Only the first TypeError matters.
+- Confirm: `grep -a -n "Aborting after the wait time"` names the stack that failed first; its stack trace names the
+  file and line. Check whether the key is read from `getPathToPrivateConfigFile` (CI clusters are `IS_DEVNET=1`, so
+  `configs/DevNet/`; the splice stub has only `TestNet/`).
+- 10264 (parent), 10265, 10266, 10267, 10268 (2026-09-30, cimain deploy_basic x3, ciperiodic sv-reonboard, ciperiodic
+  upgrade): #7546 (5375bb71c3) added `messages.confirmationResponse` in `getSequencerRateLimitConfig`
+  (`cluster/pulumi/sv-canton/src/decentralizedSynchronizerNode.ts:55`). Packet [10264-10268-sv-canton-pulumi-confirmation-response-rate-limit-missing-in-devnet-private-config.md](10264-10268-sv-canton-pulumi-confirmation-response-rate-limit-missing-in-devnet-private-config.md).
+- Fix state: open, owner #7546. Private config key (configs-private#3673) or tolerate absent message types.
+- Not family J: family J deploy failures (10249) are Helm readiness timeouts after the full 600 s wait with no program
+  exception; family Q aborts within minutes, well before the 600 s Helm wait.

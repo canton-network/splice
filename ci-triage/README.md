@@ -427,6 +427,11 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 |--------|--------|--------------|------------|--------|
 | 10256 | 36707602651 | main 825a1daf84 (#7537) | 109861814030 `simtime (1)` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b |
 | 10257 | 36710644051 | main 33b55cb609 (#7523) | 109871755985 `simtime (2)` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b |
+| 10264 | CircleCI 508564 | build/cimain-deploy-basic splice 7aaa1e94 | step 114 `Apply Pulumi configuration to cluster` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b (not reached) |
+| 10265 | CircleCI 508611 | build/cimain-deploy-basic splice c79eb214 | step 114 `Apply Pulumi configuration to cluster` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b (not reached) |
+| 10266 | CircleCI 508636 | build/ciperiodic-sv-reonboard splice 5592838f | step 114 `Apply Pulumi configuration to cluster` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b (not reached) |
+| 10267 | CircleCI 508682 | build/cimain-deploy-basic splice 5592838f | step 114 `Apply Pulumi configuration to cluster` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b (not reached) |
+| 10268 | CircleCI 508741 | build/ciperiodic-upgrade splice 5592838f | step 114 `Apply Pulumi configuration to cluster` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b (not reached) |
 
 ## Overview
 
@@ -434,6 +439,8 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 |--------|--------------------|--------------|---------------------|
 | 10256 | TokenStandardCliTestDataTimeBasedIntegrationTest "expire amulet transfer instructions ...": onboarding bob's wallet user gets `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... global-domain ... but on Set(splitwell ...)` 12 times and gives up at 11:40:23.399; global-domain wrote no block 11:40:14.175-31.946 (reference sequencer `insert block` 40001 backoff to 5.583 s), party reached global at 31.972. | family L (10139, 10197) | [10256-onboard-install-wallet-invalid-prescribed-synchronizer-reference-sequencer-insert-block-storm.md](10256-onboard-install-wallet-invalid-prescribed-synchronizer-reference-sequencer-insert-block-storm.md). Contention is Canton / test infra; validator onboarding mitigation described (wait on the prescribed synchronizer, not any). No branch. |
 | 10257 | TokenStandardMetadataTimeBasedIntegrationTest: forced snapshots at `07:46:51.001288` / `.001403` collide on `acs_snapshot_creates_v1_14_5557611001` (12:12:43.686), HTTP 500. | 10238 | 10238 packet, section 9. Third hit; still unfixed on main 5592838f46. |
+| 10264 | cimain/ciperiodic deploys fail 6 of 6 `pulumi up` attempts: all four sv-canton stacks throw `TypeError: Cannot read properties of undefined (reading 'globalTpsCap')` at `decentralizedSynchronizerNode.ts:47` (first at 15:36:43Z, 1 h 24 min after #7546 merged); the sv/validator1/splitwell Helm `context canceled` errors are the shared abort cascade. #7546 reads `messages.confirmationResponse`, absent from the internal `configs/DevNet/sequencer-rate-limits.json`. | new (family Q) | [10264-10268-sv-canton-pulumi-confirmation-response-rate-limit-missing-in-devnet-private-config.md](10264-10268-sv-canton-pulumi-confirmation-response-rate-limit-missing-in-devnet-private-config.md). Owner #7546: add the key to the DevNet private config (configs-private#3673), or skip absent message types in `getSequencerRateLimitConfig`; reverting line 55 unblocks. No branch. |
+| 10265, 10266, 10267, 10268 | Same TypeError in every attempt (10265 cimain 16:15-16:25Z; 10266 ciperiodic sv-reonboard 16:35-16:46Z; 10267 cimain 16:41-16:51Z; 10268 ciperiodic upgrade 19:16-19:25Z). | 10264 | Same packet. |
 
 ## Cross-cutting observations (2026-09-30)
 
@@ -444,6 +451,9 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 - 10256 shows the same user-facing symptom as 10227 (family B) from a different cause (family L); the
   `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... but on Set(splitwell...)` line alone does not identify the family: check
   whether the global synchronizer is BFT (blacklisting) or reference (`insert block` retries) in that shard.
+- 10264-10268: every CI cluster deploy since #7546 (5375bb71c3, 14:12Z) fails at sv-canton program evaluation;
+  splice's own configs-private stub has only `TestNet/`, so `expected.json` and the static PR checks cannot see a
+  missing key in the DevNet file the CI clusters read. Any new required key in a private config has this hazard.
 
 ## Fix branches written 2026-09-30 (unpushed)
 
