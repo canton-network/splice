@@ -34,7 +34,7 @@ import Splice.TokenStandard.Utils
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
 import Splice.Amulet.RewardAccountingV2
-import Splice.Amulet.ValidatorRewardAccountingV2 (CalculateValidatorRewardsV2(..), ProcessValidatorRewardsV2(..))
+import Splice.Amulet.ValidatorRewardAccountingV2 (ProcessValidatorRewardsV2(..))
 import Splice.Amulet.TokenApiUtils
 import Splice.AmuletConfig
   ( transferConfigToTransferConfigV2, AmuletConfig(..), TransferConfig(..), TransferConfigV2(..), validAmuletConfig
