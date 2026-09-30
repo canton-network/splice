@@ -327,6 +327,55 @@ git fetch -q origin main && git log -1 --format='%h %ad' --date=iso origin/main 
 4
 ```
 
+## 10. Test-side fix: force one snapshot, verified locally (2026-09-30)
+
+Branch `s11/fix-10238-single-forced-acs-snapshot`, commit 8ad568a5f0 on origin/main 5592838f46. The
+`actAndCheck` check forces the snapshot itself (what `getTotalAmuletBalance` did, inlined), returns its time, and the
+comparison clue reuses it instead of calling `forceAcsSnapshotNow()` again. Both snapshot triggers are paused in this
+suite, so the check's snapshot is still the latest one `lookupInstrument` serves total supply from.
+
+Local runs: sim-time Canton (`./start-canton.sh -d -s -p local`), one `apps-app/testOnly` per run, fresh Canton per
+label. `baseline` is the test file from 5592838f46. `*-tap` inject `aliceWalletClient.tap(1)` plus a 3 s wall-clock
+sleep just before the comparison clue (`log/10238/fix-runs/variants/`). That is one extra update in the same sim
+millisecond, standing in for the ~150 events CI saw between the two forces. Scripts and outputs are in
+`log/10238/fix-runs/` (the scripts' paths point at the session scratchpad they ran from).
+
+```
+cd log/10238/fix-runs && for f in fixed-{1..5} baseline-{1..3} baseline-tap-{1,2} fixed-tap-{1,2}; do printf '%-15s %-22s forcing=%s already-existed=%s 42P07=%s\n' $f "$(sed 's/\x1b\[[0-9;]*m//g' $f.log | grep -a -o -m1 'succeeded [0-9]*, failed [0-9]*')" "$(zcat $f.clog.gz | grep -a -c 'Forcing ACS snapshot')" "$(zcat $f.clog.gz | grep -a -c 'already existed, likely')" "$(zcat $f.clog.gz | grep -a -c 'SQL state: 42P07')"; done
+```
+```
+fixed-1         succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+fixed-2         succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+fixed-3         succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+fixed-4         succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+fixed-5         succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+baseline-1      succeeded 1, failed 0  forcing=1 already-existed=1 42P07=0
+baseline-2      succeeded 1, failed 0  forcing=1 already-existed=1 42P07=0
+baseline-3      succeeded 1, failed 0  forcing=1 already-existed=1 42P07=0
+baseline-tap-1  succeeded 0, failed 1  forcing=2 already-existed=0 42P07=1
+baseline-tap-2  succeeded 0, failed 1  forcing=2 already-existed=0 42P07=1
+fixed-tap-1     succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+fixed-tap-2     succeeded 1, failed 0  forcing=1 already-existed=0 42P07=0
+```
+
+Plain baseline does not reproduce locally. A lone suite on a fresh Canton sequences nothing between the two forces,
+so the second one takes the `already existed` shortcut. With one injected update it fails as in CI:
+
+```
+zcat log/10238/fix-runs/baseline-tap-1.clog.gz | grep -a -E 'Forcing ACS snapshot|SQL state|already exists\\"|Test failed' | sed -E 's/\{"@timestamp":"([^"]+)","message":"/\1 /; s/Last snapshot: Some\(PerTableAcsSnapshot.*/Last snapshot: Some(...)/; s/","logger_name.*//; s/\(\\n.*//' | cut -c1-200
+```
+```
+2026-09-30T18:02:35.378Z Forcing ACS snapshot at 1970-01-01T01:11:10.000567Z. Last snapshot: None
+2026-09-30T18:02:38.808Z Forcing ACS snapshot at 1970-01-01T01:11:10.000753Z. Last snapshot: Some(...)
+2026-09-30T18:02:38.818Z Detected an SQLException. SQL state: 42P07, error code: 0
+2026-09-30T18:02:38.819Z Request to http://127.0.0.1:5012/api/scan/v0/state/acs/force resulted in an unexpected exception: ERROR: relation \"acs_snapshot_creates_v1_1_4270000\" already exists
+2026-09-30T18:02:38.827Z Test failed: 'TokenStandardMetadataTimeBasedIntegrationTest/Scan implements token metadata API', message: Command execution failed., location: SeeStackDepthException
+```
+
+The fixed test with the same injected tap forces once and passes (fixed-tap-1/2). Remaining exposure in the fixed
+test: retries of the check itself. Each retry forces, but inside `eventually`, which turns non-fatal exceptions into
+retried test failures (`BaseTest.scala:491-493`). No local run needed a retry.
+
 ## Verdict
 
 - New, real regression from #6515 (cc4539a9ac), not a known family. Not a test flake in the usual sense: the product
@@ -337,11 +386,20 @@ git fetch -q origin main && git log -1 --format='%h %ad' --date=iso origin/main 
   from the snapshot id. The same `toEpochMilli` truncation is in the index names at lines 1506 and 1520
   (`acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ca_ci` / `_s_tid_ca_ci`,
   `git show 0a2f98714e:apps/scan/src/main/scala/org/lfdecentralizedtrust/splice/scan/store/AcsSnapshotStore.scala | grep -n toEpochMilli`)
-  and needs the same change. Owner: #6515 author (Oriol Munoz) / scan. Production changes are left to the owner; no fix
-  branch written. A test-side `advanceTime` before `forceAcsSnapshotNow()` would only hide the bug.
+  and needs the same change. Owner: #6515 author (Oriol Munoz) / scan. Production changes are left to the owner.
+  A test-side `advanceTime` before `forceAcsSnapshotNow()` would not help, and neither would a wall-clock wait. The
+  force takes the latest ingested update's record time, which only leaves the millisecond when a new update lands
+  after the advance.
+- Test-side fix branch (section 10): `s11/fix-10238-single-forced-acs-snapshot` (8ad568a5f0) removes the second
+  forced snapshot that failed in all three occurrences. Locally, the unfixed test plus one injected update fails
+  2/2 with 42P07, and the fixed test plus the same update passes 2/2. The fixed test alone passes 5/5. The product
+  bug (millisecond table and index names) remains for the owner.
 - Production exposure: `/v0/state/acs/force` is gated by `enableForcedAcsSnapshots`; the periodic AcsSnapshotTrigger
   snapshots at interval boundaries, so a same-ms pair outside forced snapshots was not found (not searched further).
 - Third occurrence: 10257 (section 9, main 33b55cb609, 2026-09-30), still unfixed on main at 5592838f46.
 - Second occurrence: 10247 (section 8, main 1293c69b23, test failure 5 h 21 min after 10238's), still unfixed on main at 6b4c166b71.
 - Not verified: the record-time gap in the 4 passing runs (artifacts not downloaded); how the read path resolves the
-  table names (only the write path at lines 818-827 and the `toEpochMilli` grep were read); nothing compiled or run.
+  table names (only the write path at lines 818-827 and the `toEpochMilli` grep were read). Later check at
+  5592838f46: the names are stored in `acs_snapshot.creates_table_name`/`stakeholders_table_name` (V075), so a naming
+  change needs no migration. The index names are re-derived and created `if not exists`, so a same-ms pair silently
+  skips the second snapshot's indexes.

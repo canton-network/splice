@@ -439,7 +439,14 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 
 - 10238's same-millisecond snapshot table collision has now failed three post-merge runs (10238, 10247, 10257) in about
   27 hours, always TokenStandardMetadataTimeBasedIntegrationTest in simtime (2). Worth escalating to the #6515 owner.
+  A test-side fix branch now removes the colliding second force (below). The millisecond table and index names in
+  scan remain for the owner.
 - 10256 shows the same user-facing symptom as 10227 (family B) from a different cause (family L); the
   `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... but on Set(splitwell...)` line alone does not identify the family: check
   whether the global synchronizer is BFT (blacklisting) or reference (`insert block` retries) in that shard.
 
+## Fix branches written 2026-09-30 (unpushed)
+
+| Branch | Commit | Fixes | Verified here |
+|--------|--------|-------|---------------|
+| s11/fix-10238-single-forced-acs-snapshot | 8ad568a5f0 | 10238, 10247, 10257 (test forces one ACS snapshot instead of two; scan naming bug remains) | apps-app/Test/compile + scalafmt; sim-time runs: fixed 5/5 pass; baseline + injected tap fails 2/2 with 42P07, fixed + same tap passes 2/2 (10238 packet, section 10) |

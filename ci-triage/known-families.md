@@ -265,6 +265,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   "acs_snapshot_creates_v1_<historyId>_<ms>" already exists` (SQLSTATE 42P07) and `/api/scan/v0/state/acs/force` returns
   HTTP 500. 10238 (TokenStandardMetadataTimeBasedIntegrationTest, simtime (2)); dups 10247 (run 36584417962, main 1293c69b23), 10257 (run 36710644051, main 33b55cb609). Confirming grep: the two `Forcing ACS
   snapshot at <t>` lines share the same epoch ms. Fix: scan app (names from micros or the snapshot id), owner #6515.
+  Test-side fix for TokenStandardMetadataTimeBasedIntegrationTest: `s11/fix-10238-single-forced-acs-snapshot` (forces
+  once and reuses that snapshot). Wall-clock waits and bare `advanceTime` don't help: in sim time the record time
+  only leaves the millisecond when a new update lands.
 
 ## O. Teardown: scan serves a request after its DbStorage closed (sbt output check)
 - Signature: all tests pass; `Found problems in the sbt output:` `[delay-util-0] [org.apache.pekko.dispatch.Dispatcher]
