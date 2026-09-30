@@ -111,35 +111,35 @@ trait SvUiPreflightIntegrationTestUtil extends TestCommon {
               if (secretsItr.hasNext) Some(secretsItr.next().text) else None
             },
           )
-          actAndCheck(timeUntilSuccess = 2.minutes)(
-            "fill the party hint field and eventuallyClickOn(id(the button to create an onboarding secret", {
-              clue("fill party hint") {
-                inside(find(id("create-party-hint"))) { case Some(element) =>
-                  element.underlying.sendKeys("splice-client-10")
+          clue("fill party hint") {
+            inside(find(id("create-party-hint"))) { case Some(element) =>
+              element.underlying.sendKeys("splice-client-10")
+            }
+          }
+
+          // The UI drops the 429 from this rate-limited POST silently, so a click can create
+          // nothing. Retry the click, not just the table read. Re-clicking is safe: a surplus
+          // secret is unused and expires.
+          eventually(timeUntilSuccess = 2.minutes, maxPollInterval = 5.seconds) {
+            clue("wait for the create button to become enabled") {
+              find(id("create-validator-onboarding-secret")).value.isEnabled shouldBe true
+            }
+
+            clue("click the create validator onboarding secret button") {
+              eventuallyClickOn(id("create-validator-onboarding-secret"))
+            }
+
+            clue("we see that this SV has created an onboarding secret") {
+              eventually(timeUntilSuccess = 15.seconds) {
+                val secretsItr = findAll(className("onboarding-secret-table-secret"))
+                val firstSecret = if (secretsItr.hasNext) Some(secretsItr.next().text) else None
+                firstSecret should not be oldFirstSecret
+                inside(firstSecret) { case Some(s) =>
+                  s should not be ""
                 }
               }
-
-              clue("wait for the create button to become enabled") {
-                eventually() {
-                  find(id("create-validator-onboarding-secret")).value.isEnabled shouldBe true
-                }
-              }
-
-              clue("click the create validator onboarding secret button") {
-                eventuallyClickOn(id("create-validator-onboarding-secret"))
-              }
-            },
-          )(
-            s"We see that this SV has created an onboarding secret",
-            _ => {
-              val secretsItr = findAll(className("onboarding-secret-table-secret"))
-              val firstSecret = if (secretsItr.hasNext) Some(secretsItr.next().text) else None
-              firstSecret should not be oldFirstSecret
-              inside(firstSecret) { case Some(s) =>
-                s should not be ""
-              }
-            },
-          )
+            }
+          }
         }
       }
 

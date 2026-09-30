@@ -179,18 +179,18 @@ class ScanTimeBasedIntegrationTest
     ansRules.payload.config shouldBe defaultAnsConfig()
   }
 
-  def compareAcsV0V1(
-      v0: Vector[definitions.CreatedEvent],
-      v1: Vector[definitions.ActiveContract],
+  def compareAcsV2(
+      a: Vector[definitions.ActiveContract],
+      b: Vector[definitions.ActiveContract],
   ): Unit = {
-    v0.zip(v1).foreach { case (c0, c1) =>
-      c0.contractId shouldBe c1.contractId
-      c0.templateId shouldBe c1.templateId
-      c0.packageName shouldBe c1.packageName
-      c0.createArguments shouldBe c1.createArguments
-      c0.createdAt shouldBe c1.createdAt
-      c0.signatories should contain theSameElementsInOrderAs c1.signatories
-      c0.observers should contain theSameElementsInOrderAs c1.observers
+    a.zip(b).foreach { case (a, b) =>
+      a.contractId shouldBe b.contractId
+      a.templateId shouldBe b.templateId
+      a.packageName shouldBe b.packageName
+      a.createArguments shouldBe b.createArguments
+      a.createdAt shouldBe b.createdAt
+      a.signatories should contain theSameElementsInOrderAs b.signatories
+      a.observers should contain theSameElementsInOrderAs b.observers
     }
   }
 
@@ -316,18 +316,12 @@ class ScanTimeBasedIntegrationTest
           .owner should be(aliceUserParty.toProtoPrimitive)
       }
       val snapshotAfterCts = CantonTimestamp.assertFromInstant(snapshotAfter.value.toInstant)
-      val holdingsStateV0 = sv1ScanBackend.getHoldingsStateAt(
+      val holdingsStateV2 = sv1ScanBackend.getHoldingsStateAtV2(
         snapshotAfterCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
       )
-      val holdingsStateV1 = sv1ScanBackend.getHoldingsStateAtV1(
-        snapshotAfterCts,
-        migrationId,
-        partyIds = Vector(aliceUserParty),
-      )
-      compareAcsV0V1(holdingsStateV0.value.createdEvents, holdingsStateV1.value.createdEvents)
-      inside(holdingsStateV1) { case Some(holdings) =>
+      inside(holdingsStateV2) { case Some(holdings) =>
         holdings.createdEvents should be(coins)
       }
 
@@ -391,22 +385,22 @@ class ScanTimeBasedIntegrationTest
       advanceTime(java.time.Duration.ofMinutes(10))
       val atOrBefore = getLedgerTime
       val atOrBeforeCts = CantonTimestamp.assertFromInstant(atOrBefore.toInstant)
-      val holdingsStateAtOrBefore = sv1ScanBackend.getHoldingsStateAtV1(
+      val holdingsStateAtOrBefore = sv1ScanBackend.getHoldingsStateAtV2(
         atOrBeforeCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
-        recordTimeMatch = Some(definitions.HoldingsStateRequest.RecordTimeMatch.AtOrBefore),
+        recordTimeMatch = Some(definitions.HoldingsStateRequestV2.RecordTimeMatch.AtOrBefore),
       )
       inside(holdingsStateAtOrBefore) { case Some(holdings) =>
         holdings.createdEvents should be(coins)
         holdings.recordTime shouldBe snapshotAfter.value
       }
 
-      sv1ScanBackend.getHoldingsStateAtV1(
+      sv1ScanBackend.getHoldingsStateAtV2(
         atOrBeforeCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
-        recordTimeMatch = Some(definitions.HoldingsStateRequest.RecordTimeMatch.Exact),
+        recordTimeMatch = Some(definitions.HoldingsStateRequestV2.RecordTimeMatch.Exact),
       ) shouldBe None
 
       val holdingsSummaryAtOrBefore = sv1ScanBackend.getHoldingsSummaryAt(
@@ -539,13 +533,7 @@ class ScanTimeBasedIntegrationTest
         .filter(isInTimeRange)
       updatesFromScan should contain theSameElementsAs updatesFromS3
 
-      // Compare acs v0 and v1 endpoints
-      val acsV0AtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAt(CantonTimestamp.assertFromInstant(lastMidnight), 0)
-        .value
-        .createdEvents
-
-      compareAcsV0V1(acsV0AtMidnightFromScan, acsAtMidnightFromScan)
+      compareAcsV2(acsAtMidnightFromScan, acsAtMidnightFromScan)
     }
   }
 }

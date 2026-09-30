@@ -679,6 +679,18 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "description": "Drops the load balancer request logs of requests accepted by the Cloud Armor policy waf-whitelist-throttle-ban-mock",
+      "filter": "resource.type=(\"http_external_regional_lb_rule\" OR \"http_load_balancer\")\njsonPayload.enforcedSecurityPolicy.name=\"waf-whitelist-throttle-ban-mock\"\njsonPayload.enforcedSecurityPolicy.outcome=\"ACCEPT\"\n(NOT jsonPayload.previewSecurityPolicy:* OR jsonPayload.previewSecurityPolicy.outcome=\"ACCEPT\")",
+      "name": "cloud-armor-accepted-requests-mock"
+    },
+    "name": "cloud-armor-accepted-requests-mock",
+    "provider": "",
+    "type": "gcp:logging/projectExclusion:ProjectExclusion"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "data": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -1111,6 +1123,382 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "apiVersion": "networking.gke.io/v1",
+      "kind": "GCPBackendPolicy",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-cloud-armor-link",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
+          "logging": {
+            "enabled": true,
+            "sampleRate": 1000000
+          },
+          "securityPolicy": "waf-whitelist-throttle-ban-mock",
+          "timeoutSec": 3600
+        },
+        "targetRef": {
+          "group": "",
+          "kind": "Service",
+          "name": "istio-ingress",
+          "namespace": "cluster-ingress"
+        }
+      }
+    },
+    "name": "cn-gke-l7-gateway-cloud-armor-link",
+    "provider": "",
+    "type": "kubernetes:networking.gke.io/v1:GCPBackendPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.gke.io/v1",
+      "kind": "HealthCheckPolicy",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-healthcheck",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "default": {
+          "config": {
+            "httpHealthCheck": {
+              "port": 15021,
+              "requestPath": "/healthz/ready"
+            },
+            "type": "HTTP"
+          }
+        },
+        "targetRef": {
+          "group": "",
+          "kind": "Service",
+          "name": "istio-ingress",
+          "namespace": "cluster-ingress"
+        }
+      }
+    },
+    "name": "cn-gke-l7-gateway-healthcheck",
+    "provider": "",
+    "type": "kubernetes:networking.gke.io/v1:HealthCheckPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "kind": "HTTPRoute",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-http-redirect",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "parentRefs": [
+          {
+            "name": "cn-gke-l7-gateway",
+            "namespace": "cluster-ingress",
+            "sectionName": "listen-http"
+          }
+        ],
+        "rules": [
+          {
+            "filters": [
+              {
+                "requestRedirect": {
+                  "scheme": "https",
+                  "statusCode": 301
+                },
+                "type": "RequestRedirect"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "name": "cn-gke-l7-gateway-http-redirect",
+    "provider": "",
+    "type": "kubernetes:gateway.networking.k8s.io/v1:HTTPRoute"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "kind": "HTTPRoute",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-http-route",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "parentRefs": [
+          {
+            "name": "cn-gke-l7-gateway",
+            "namespace": "cluster-ingress",
+            "sectionName": "listen-https"
+          }
+        ],
+        "rules": [
+          {
+            "backendRefs": [
+              {
+                "name": "istio-ingress",
+                "namespace": "cluster-ingress",
+                "port": 80
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "name": "cn-gke-l7-gateway-http-route",
+    "provider": "",
+    "type": "kubernetes:gateway.networking.k8s.io/v1:HTTPRoute"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "description": "SSL Policy for cn-gke-l7-gateway enforcing TLS 1.2+",
+      "minTlsVersion": "TLS_1_2",
+      "name": "cn-gke-l7-gateway-mock-ssl-policy",
+      "profile": "RESTRICTED"
+    },
+    "name": "cn-gke-l7-gateway-mock-ssl-policy",
+    "provider": "",
+    "type": "gcp:compute/regionSslPolicy:RegionSslPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.gke.io/v1",
+      "kind": "GCPBackendPolicy",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-no-cloud-armor-backend-policy",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
+          "timeoutSec": 3600
+        },
+        "targetRef": {
+          "group": "",
+          "kind": "Service",
+          "name": "cn-gke-l7-gateway-no-cloud-armor",
+          "namespace": "cluster-ingress"
+        }
+      }
+    },
+    "name": "cn-gke-l7-gateway-no-cloud-armor-backend-policy",
+    "provider": "",
+    "type": "kubernetes:networking.gke.io/v1:GCPBackendPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.gke.io/v1",
+      "kind": "HealthCheckPolicy",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-no-cloud-armor-healthcheck",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "default": {
+          "config": {
+            "httpHealthCheck": {
+              "port": 15021,
+              "requestPath": "/healthz/ready"
+            },
+            "type": "HTTP"
+          }
+        },
+        "targetRef": {
+          "group": "",
+          "kind": "Service",
+          "name": "cn-gke-l7-gateway-no-cloud-armor",
+          "namespace": "cluster-ingress"
+        }
+      }
+    },
+    "name": "cn-gke-l7-gateway-no-cloud-armor-healthcheck",
+    "provider": "",
+    "type": "kubernetes:networking.gke.io/v1:HealthCheckPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "kind": "HTTPRoute",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-no-cloud-armor-route",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "hostnames": [
+          "sequencer-p2p-9.sv-2.mock.network.canton.global",
+          "sequencer-p2p-9.sv-2.mock.global.canton.network.digitalasset.com",
+          "sequencer-p2p-10.sv-2.mock.network.canton.global",
+          "sequencer-p2p-10.sv-2.mock.global.canton.network.digitalasset.com",
+          "sequencer-p2p-9.sv-1.mock.network.canton.global",
+          "sequencer-p2p-9.sv-1.mock.global.canton.network.digitalasset.com",
+          "sequencer-p2p-10.sv-1.mock.network.canton.global",
+          "sequencer-p2p-10.sv-1.mock.global.canton.network.digitalasset.com",
+          "sequencer-p2p-9.sv.mock.network.canton.global",
+          "sequencer-p2p-9.sv.mock.global.canton.network.digitalasset.com",
+          "sequencer-p2p-10.sv.mock.network.canton.global",
+          "sequencer-p2p-10.sv.mock.global.canton.network.digitalasset.com"
+        ],
+        "parentRefs": [
+          {
+            "name": "cn-gke-l7-gateway",
+            "namespace": "cluster-ingress",
+            "sectionName": "listen-https"
+          }
+        ],
+        "rules": [
+          {
+            "backendRefs": [
+              {
+                "name": "cn-gke-l7-gateway-no-cloud-armor",
+                "namespace": "cluster-ingress",
+                "port": 80
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "name": "cn-gke-l7-gateway-no-cloud-armor-route",
+    "provider": "",
+    "type": "kubernetes:gateway.networking.k8s.io/v1:HTTPRoute"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-no-cloud-armor",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "ports": [
+          {
+            "appProtocol": "kubernetes.io/h2c",
+            "name": "http2",
+            "port": 80,
+            "targetPort": 80
+          }
+        ],
+        "selector": {
+          "app": "istio-ingress"
+        },
+        "type": "ClusterIP"
+      }
+    },
+    "name": "cn-gke-l7-gateway-no-cloud-armor",
+    "provider": "",
+    "type": "kubernetes:core/v1:Service"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.gke.io/v1",
+      "kind": "GCPGatewayPolicy",
+      "metadata": {
+        "name": "cn-gke-l7-gateway-ssl-policy-attachment",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "default": {
+          "sslPolicy": "cn-gke-l7-gateway-mock-ssl-policy"
+        },
+        "targetRef": {
+          "group": "gateway.networking.k8s.io",
+          "kind": "Gateway",
+          "name": "cn-gke-l7-gateway",
+          "namespace": "cluster-ingress"
+        }
+      }
+    },
+    "name": "cn-gke-l7-gateway-ssl-policy-attachment",
+    "provider": "",
+    "type": "kubernetes:networking.gke.io/v1:GCPGatewayPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "kind": "Gateway",
+      "metadata": {
+        "name": "cn-gke-l7-gateway",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "addresses": [
+          {
+            "type": "NamedAddress",
+            "value": "cn-test-stacknet-ip"
+          }
+        ],
+        "gatewayClassName": "gke-l7-regional-external-managed",
+        "listeners": [
+          {
+            "allowedRoutes": {
+              "kinds": [
+                {
+                  "kind": "HTTPRoute"
+                }
+              ]
+            },
+            "name": "listen-http",
+            "port": 80,
+            "protocol": "HTTP"
+          },
+          {
+            "allowedRoutes": {
+              "kinds": [
+                {
+                  "kind": "HTTPRoute"
+                }
+              ]
+            },
+            "name": "listen-https",
+            "port": 443,
+            "protocol": "HTTPS",
+            "tls": {
+              "certificateRefs": [
+                {
+                  "group": "",
+                  "kind": "Secret",
+                  "name": "cn-test-stacknet-tls"
+                }
+              ],
+              "mode": "Terminate"
+            }
+          }
+        ]
+      }
+    },
+    "name": "cn-gke-l7-gateway",
+    "provider": "",
+    "type": "kubernetes:gateway.networking.k8s.io/v1:Gateway"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "Gateway",
       "metadata": {
@@ -1134,9 +1522,6 @@
               "name": "http",
               "number": 80,
               "protocol": "HTTP"
-            },
-            "tls": {
-              "httpsRedirect": true
             }
           },
           {
@@ -1198,6 +1583,28 @@
   },
   {
     "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "allow",
+      "description": "Default rule allowing all other traffic, as all rules are in preview mode",
+      "match": {
+        "config": {
+          "srcIpRanges": [
+            "*"
+          ]
+        },
+        "versionedExpr": "SRC_IPS_V1"
+      },
+      "preview": false,
+      "priority": 2147483647,
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "default-deny",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
     "id": "projects/da-cn-devnet/global/networks/default",
     "inputs": {},
     "name": "default",
@@ -1239,6 +1646,32 @@
     "name": "dns01-sa-key-secret",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "allow",
+      "description": "Allow whitelisted source IPs (1 of 1)",
+      "match": {
+        "config": {
+          "srcIpRanges": [
+            "1.2.3.4/32",
+            "11.12.13.14/32",
+            "2.3.4.5/32",
+            "5.6.7.8/32",
+            "<internal IPs>"
+          ]
+        },
+        "versionedExpr": "SRC_IPS_V1"
+      },
+      "preview": true,
+      "priority": 200000000,
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "ip-whitelist-0",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
   },
   {
     "custom": true,
@@ -1405,7 +1838,7 @@
       "name": "istio-base",
       "namespace": "istio-system",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "global": {
@@ -1428,7 +1861,7 @@
       "name": "istio-ingress-cometbft",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -1451,7 +1884,8 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -1700,7 +2134,7 @@
       "name": "istio-ingress",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -1723,7 +2157,21 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
+        },
+        "lifecycle": {
+          "preStop": {
+            "exec": {
+              "command": [
+                "sleep",
+                "120"
+              ]
+            }
+          }
+        },
+        "podAnnotations": {
+          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2},\"terminationDrainDuration\":\"60s\"}"
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -1739,10 +2187,6 @@
           }
         },
         "service": {
-          "externalTrafficPolicy": "Local",
-          "loadBalancerSourceRanges": [
-            "0.0.0.0/0"
-          ],
           "ports": [
             {
               "name": "status-port",
@@ -1751,6 +2195,7 @@
               "targetPort": 15021
             },
             {
+              "appProtocol": "kubernetes.io/h2c",
               "name": "http2",
               "port": 80,
               "protocol": "TCP",
@@ -1858,8 +2303,10 @@
               "protocol": "TCP",
               "targetPort": 6201
             }
-          ]
+          ],
+          "type": "ClusterIP"
         },
+        "terminationGracePeriodSeconds": 210,
         "tolerations": [
           {
             "effect": "NoSchedule",
@@ -1898,7 +2345,7 @@
       "name": "istiod",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -2151,6 +2598,28 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "action": "deny(403)",
+      "description": "Preview-only deny all rule, mirroring the enforced default deny rule",
+      "match": {
+        "config": {
+          "srcIpRanges": [
+            "*"
+          ]
+        },
+        "versionedExpr": "SRC_IPS_V1"
+      },
+      "preview": true,
+      "priority": 2147483646,
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "preview-deny-all",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "kind": "Namespace",
       "metadata": {
@@ -2274,12 +2743,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "scan.sv-2.mock.network.canton.global",
                     "scan.sv-2.mock.global.canton.network.digitalasset.com",
-                    "scan.sv-1.mock.network.canton.global",
+                    "scan.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "scan.sv-1.mock.global.canton.network.digitalasset.com",
-                    "scan.sv.mock.network.canton.global",
-                    "scan.sv.mock.global.canton.network.digitalasset.com"
+                    "scan.sv-1.mock.global.canton.network.digitalasset.com:*",
+                    "scan.sv.mock.global.canton.network.digitalasset.com",
+                    "scan.sv.mock.global.canton.network.digitalasset.com:*"
                   ]
                 }
               }
@@ -2333,6 +2802,36 @@
                     },
                     "initial_connection_window_size": 104857600,
                     "initial_stream_window_size": 1048576
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "GATEWAY",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                }
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "http2_protocol_options": {
+                    "allow_connect": true,
+                    "connection_keepalive": {
+                      "interval": "30s",
+                      "timeout": "5s"
+                    },
+                    "initial_connection_window_size": 52428800,
+                    "initial_stream_window_size": 524288
                   }
                 }
               }
@@ -2628,52 +3127,28 @@
               {
                 "operation": {
                   "hosts": [
-                    "sequencer-9.sv-2.mock.network.canton.global",
-                    "sequencer-9.sv-2.mock.network.canton.global:*",
                     "sequencer-9.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv-2.mock.network.canton.global",
-                    "sequencer-8.sv-2.mock.network.canton.global:*",
                     "sequencer-8.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv-2.mock.network.canton.global",
-                    "sequencer-7.sv-2.mock.network.canton.global:*",
                     "sequencer-7.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv-2.mock.network.canton.global",
-                    "sequencer-10.sv-2.mock.network.canton.global:*",
                     "sequencer-10.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-9.sv-1.mock.network.canton.global",
-                    "sequencer-9.sv-1.mock.network.canton.global:*",
                     "sequencer-9.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv-1.mock.network.canton.global",
-                    "sequencer-8.sv-1.mock.network.canton.global:*",
                     "sequencer-8.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv-1.mock.network.canton.global",
-                    "sequencer-7.sv-1.mock.network.canton.global:*",
                     "sequencer-7.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv-1.mock.network.canton.global",
-                    "sequencer-10.sv-1.mock.network.canton.global:*",
                     "sequencer-10.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-9.sv.mock.network.canton.global",
-                    "sequencer-9.sv.mock.network.canton.global:*",
                     "sequencer-9.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv.mock.network.canton.global",
-                    "sequencer-8.sv.mock.network.canton.global:*",
                     "sequencer-8.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv.mock.network.canton.global",
-                    "sequencer-7.sv.mock.network.canton.global:*",
                     "sequencer-7.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv.mock.network.canton.global",
-                    "sequencer-10.sv.mock.network.canton.global:*",
                     "sequencer-10.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv.mock.global.canton.network.digitalasset.com:*"
                   ]
@@ -2974,12 +3449,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "sv.sv-2.mock.network.canton.global",
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.network.canton.global",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:*",
+                    "sv.sv.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.global.canton.network.digitalasset.com:*"
                   ],
                   "paths": [
                     "/api/sv/v0/migration-id",
@@ -3041,16 +3516,17 @@
               {
                 "operation": {
                   "hosts": [
-                    "sv.sv-2.mock.network.canton.global",
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.network.canton.global",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:*",
+                    "sv.sv.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.global.canton.network.digitalasset.com:*"
                   ],
                   "paths": [
                     "/api/sv/v0/devnet/onboard/validator/prepare",
-                    "/api/sv/v0/onboard/validator"
+                    "/api/sv/v0/onboard/validator",
+                    "/api/sv/version"
                   ]
                 }
               }
@@ -3700,6 +4176,146 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "action": "throttle",
+      "description": "Per source IP throttle rule for all info API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:info)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 300000000,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 10000,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-info",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "throttle",
+      "description": "Per source IP throttle rule for all publicScan API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 300000100,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 10000,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-publicScan",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "throttle",
+      "description": "Per source IP throttle rule for all sequencer API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 300000200,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 20000,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-sequencer",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "throttle",
+      "description": "Per source IP throttle rule for all svApp API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/sv\") && request.headers['host'].lower().matches(R\"^(?:sv)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 300000300,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 500,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-svApp",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "throttle",
+      "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 300000400,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 10000,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-tokenRegistry",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "authenticationMethod": "none"
     },
     "name": "validator1UiAppCredentials",
@@ -4009,5 +4625,17 @@
     "name": "validator",
     "provider": "",
     "type": "pulumi:providers:auth0"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "description": "Cloud Armor security policy for mock",
+      "name": "waf-whitelist-throttle-ban-mock",
+      "type": "CLOUD_ARMOR"
+    },
+    "name": "waf-whitelist-throttle-ban-mock",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicy:RegionSecurityPolicy"
   }
 ]

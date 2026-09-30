@@ -34,7 +34,7 @@ import org.lfdecentralizedtrust.splice.util.{
   TemplateJsonDecoder,
 }
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLogging}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -197,7 +197,7 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
 
   private[splice] def listExpiredFromPayloadExpiry[C, TCid <: ContractId[T], T <: Template](
       companion: C,
-      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None,
       ignoredPartyFields: Seq[String] = Seq.empty,
   )(implicit
       companionClass: ContractCompanion[C, TCid, T]

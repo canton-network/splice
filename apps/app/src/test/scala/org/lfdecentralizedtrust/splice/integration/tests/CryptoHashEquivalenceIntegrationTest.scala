@@ -1,8 +1,8 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.javaapi.data.{
-  CreatedEvent,
   CreateCommand,
+  CreatedEvent,
   DamlList,
   DamlRecord,
   ExerciseCommand,
@@ -17,7 +17,7 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.{Hash as DamlHash}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.Hash as DamlHash
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.{
   Batch,
   MintingAllowance,
@@ -28,6 +28,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccounti
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
@@ -38,11 +39,13 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.{
 }
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
+import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.util.{DarUtil, WalletTestUtil}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.io.File
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters.*
 
 /** Equivalence test: Daml (real participant) == SQL (scan Postgres).
@@ -137,6 +140,14 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         participantId,
         svParty,
         BackfillingRequirement.BackfillingNotRequired,
+        InternedStringStore.createWithoutWarmup(
+          storage,
+          10_000L,
+          FiniteDuration(1, "minute"),
+          loggerFactory,
+          NoOpMetricsFactory,
+        ),
+        AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = false,

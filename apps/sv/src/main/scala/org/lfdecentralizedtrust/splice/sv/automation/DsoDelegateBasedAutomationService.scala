@@ -13,7 +13,7 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 }
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, IgnoredPartiesStore}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UnavailablePartiesStore}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
@@ -30,6 +30,7 @@ class DsoDelegateBasedAutomationService(
     getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
+    val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -44,10 +45,6 @@ class DsoDelegateBasedAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService.type =
     DsoDelegateBasedAutomationService
-
-  val unavailablePartiesStore = new IgnoredPartiesStore(
-    triggerContext.config.ignoredPartyIds
-  )
 
   def start(): Unit = {
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))

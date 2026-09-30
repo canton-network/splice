@@ -264,6 +264,69 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
       } yield succeed
     }
 
+    "pruneArchivedUpTo deletes the archived rows up to the given time and moves the earliest archived_at" in {
+      val store = mkStore(sync1)
+      val coupon1 = c(1).copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val coupon2 = c(2).copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val coupon3 = c(3).copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val coupon4 = c(4).copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      for {
+        _ <- initWithAcs()(store.acsStore)
+        _ <- sync1.create(coupon1, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.acsStore
+        )
+        _ <- sync1.create(coupon2, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.acsStore
+        )
+        _ <- sync1.create(coupon3, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.acsStore
+        )
+        _ <- sync1.create(coupon4, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
+          store.acsStore
+        )
+        _ <- sync1.archive(coupon1, recordTime = CantonTimestamp.ofEpochSecond(150).toInstant)(
+          store.acsStore
+        )
+        _ <- sync1.archive(coupon2, recordTime = CantonTimestamp.ofEpochSecond(250).toInstant)(
+          store.acsStore
+        )
+        _ <- sync1.archive(coupon3, recordTime = CantonTimestamp.ofEpochSecond(350).toInstant)(
+          store.acsStore
+        )
+        // Populate the cache before pruning
+        beforePrune <- store.getEarliestArchivedAt()
+        _ = beforePrune shouldBe Some(CantonTimestamp.ofEpochSecond(150))
+
+        deleted <- store.pruneArchivedUpTo(CantonTimestamp.ofEpochSecond(250))
+        _ = deleted shouldBe 2L
+        afterPrune <- store.getEarliestArchivedAt()
+        _ = afterPrune shouldBe Some(CantonTimestamp.ofEpochSecond(350))
+
+        // Nothing to delete between the two archivals
+        deletedNothing <- store.pruneArchivedUpTo(CantonTimestamp.ofEpochSecond(300))
+        _ = deletedNothing shouldBe 0L
+        afterNoopPrune <- store.getEarliestArchivedAt()
+        _ = afterNoopPrune shouldBe Some(CantonTimestamp.ofEpochSecond(350))
+
+        // Fails without deleting anything while no archival after the given
+        // time has been ingested, as that would leave the store with no ingestion start.
+        failure <- store.pruneArchivedUpTo(CantonTimestamp.ofEpochSecond(350)).failed
+        _ = failure shouldBe an[IllegalStateException]
+        afterFailedPrune <- store.getEarliestArchivedAt()
+        _ = afterFailedPrune shouldBe Some(CantonTimestamp.ofEpochSecond(350))
+
+        // Succeeds once a later archival has been ingested
+        _ <- sync1.archive(coupon4, recordTime = CantonTimestamp.ofEpochSecond(450).toInstant)(
+          store.acsStore
+        )
+
+        deletedAfterNewArchival <- store.pruneArchivedUpTo(CantonTimestamp.ofEpochSecond(350))
+        _ = deletedAfterNewArchival shouldBe 1L
+        afterNewArchival <- store.getEarliestArchivedAt()
+        _ = afterNewArchival shouldBe Some(CantonTimestamp.ofEpochSecond(450))
+      } yield succeed
+    }
+
     "waitUntilRecordTimeReached completes when record time is reached via offset checkpoint" in {
       val store = mkStore(sync1).acsStore
       val sync1CheckpointTime = CantonTimestamp.ofEpochSecond(200)

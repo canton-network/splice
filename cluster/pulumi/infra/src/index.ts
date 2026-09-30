@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // ensure the config is loaded and the ENV is overriden
 import * as k8s from '@pulumi/kubernetes';
+import * as pulumi from '@pulumi/pulumi';
 import { config } from '@canton-network/splice-pulumi-common';
 import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
+import { local } from '@pulumi/command';
 
 import { configureSweet } from '../sweet';
 import { configureAuth0 } from './auth0';
@@ -36,6 +38,13 @@ const cloudArmorSecurityPolicy = configureCloudArmorPolicy(
 );
 const useGKEL7Gateway = infraConfig.gkeGateway.proxyForIstioHttp;
 
+const gkeGatewayTeardown = !useGKEL7Gateway
+  ? new local.Command('cn-gke-l7-gateway-teardown', {
+      create: pulumi.interpolate`kubectl delete gateway cn-gke-l7-gateway -n ${network.ingressNs.ns.metadata.name} --ignore-not-found --wait=true`,
+      triggers: [useGKEL7Gateway],
+    })
+  : undefined;
+
 if (!useGKEL7Gateway && cloudArmorSecurityPolicy) {
   throw new Error(
     'Cloud Armor requires infra.gkeGateway.proxyForIstioHttp to be enabled to take effect'
@@ -46,7 +55,8 @@ const istio = configureIstio(
   network.ingressNs,
   ingressIp,
   network.cometbftIngressIp.address,
-  useGKEL7Gateway
+  useGKEL7Gateway,
+  gkeGatewayTeardown ? [gkeGatewayTeardown] : []
 );
 
 if (useGKEL7Gateway) {

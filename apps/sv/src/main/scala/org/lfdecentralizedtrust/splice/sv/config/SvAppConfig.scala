@@ -11,6 +11,9 @@ import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
+  SubscriptionLivenessLimits,
+  SynchronizerLimits,
+  TransactionProtocolLimits,
 }
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.{
@@ -339,20 +342,60 @@ final case class SvParticipantClientConfig(
       SvAppBackendConfig.DefaultParticipantSequencerRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
 final case class BftSequencingParameters(
-    pbftViewChangeTimeout: PositiveFiniteDuration,
-    segmentLength: PositiveLong,
-    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
+    pbftViewChangeTimeout: PositiveFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeout,
+    segmentLength: PositiveLong = BftSequencingParameters.default.segmentLength,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig =
+      BftSequencingParameters.default.blacklistLeaderSelectionPolicyConfig,
+    maxRequestsInBatch: Short = BftSequencingParameters.default.maxRequestsInBatch,
+    maxBatchesPerBlockProposal: Short = BftSequencingParameters.default.maxBatchesPerBlockProposal,
+    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeoutStep,
+    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeoutUpperBound,
+    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean =
+      BftSequencingParameters.default.stricterDetectionOfRequestsPotentiallyChangingOrderingTopology,
 ) {
   import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
   def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
     SequencingParameters.create(
-      pbftViewChangeTimeout.toInternal,
-      SequencingParameters.SegmentLength(segmentLength),
-      blacklistLeaderSelectionPolicyConfig,
+      pbftViewChangeTimeout = pbftViewChangeTimeout.toInternal,
+      segmentLength = SequencingParameters.SegmentLength(segmentLength),
+      blacklistLeaderSelectionPolicyConfig = blacklistLeaderSelectionPolicyConfig,
+      maxRequestsInBatch = maxRequestsInBatch,
+      maxBatchesPerBlockProposal = maxBatchesPerBlockProposal,
+      pbftViewChangeTimeoutStep = pbftViewChangeTimeoutStep,
+      pbftViewChangeTimeoutUpperBound = pbftViewChangeTimeoutUpperBound,
+      stricterDetectionOfRequestsPotentiallyChangingOrderingTopology =
+        stricterDetectionOfRequestsPotentiallyChangingOrderingTopology,
     )(protocolVersion)
+}
+
+object BftSequencingParameters {
+  val default =
+    BftSequencingParameters(
+      pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
+      // increased from default as epoch changes are synchronization points which can slow things down.
+      segmentLength =
+        PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
+      blacklistLeaderSelectionPolicyConfig =
+        SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
+          howLongToBlacklist = BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
+            initialValue = 1L,
+            // Reduced by 4 to compensate for increased segmentLength.
+            maximumEpochBlacklisted = Some(250L / 4L),
+          )
+        ),
+      maxRequestsInBatch = SequencingParameters.DefaultMaxRequestsInBatch,
+      maxBatchesPerBlockProposal = SequencingParameters.DefaultMaxBatchesPerProposal,
+      pbftViewChangeTimeoutStep = SequencingParameters.DefaultPbftViewChangeTimeoutStep,
+      pbftViewChangeTimeoutUpperBound = SequencingParameters.DefaultPbftViewChangeTimeoutUpperBound,
+      stricterDetectionOfRequestsPotentiallyChangingOrderingTopology = true,
+    )
 }
 
 case class SvAppBackendConfig(
@@ -475,22 +518,12 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    // Capped exponential backoff used by the persisted unavailable parties store
+    // (used when `enablePersistedUnavailableParties` is set)
+    unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
+      UnavailablePartiesBackoffParameters(),
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
-      BftSequencingParameters(
-        pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
-        // increased from default as epoch changes are synchronization points which can slow things down.
-        segmentLength =
-          PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
-        blacklistLeaderSelectionPolicyConfig =
-          SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
-            howLongToBlacklist =
-              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
-                initialValue = 1L,
-                // Reduced by 4 to compensate for increased segmentLength.
-                maximumEpochBlacklisted = Some(250L / 4L),
-              )
-          ),
-      )
+      BftSequencingParameters.default
     ),
     // Set to false to disable the DB-level exclusive lock that prevents two SV instances
     // from running concurrently against the same database.  Only disable for migration scenarios
@@ -612,6 +645,7 @@ final case class SvMediatorConfig(
       SvAppBackendConfig.DefaultMediatorSequencerRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
     pruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
@@ -638,8 +672,32 @@ final case class SvSynchronizerNodeConfig(
     protocolVersion: ProtocolVersion = ProtocolVersion.v35,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
-    topologyChangeDelayDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMillis(250),
+    topologyChangeDelayDuration: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofMillis(250),
+    // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
+    synchronizerLimits: Option[SynchronizerLimits] = Some(
+      SvSynchronizerNodeConfig.defaultSynchronizerLimits
+    ),
 )
+
+object SvSynchronizerNodeConfig {
+  // Default values as recommended by Canton. Check with the Canton team before changing them.
+  val defaultSynchronizerLimits = SynchronizerLimits(
+    transactionProtocolLimits = TransactionProtocolLimits(
+      maxActAs = PositiveInt.tryCreate(1000),
+      maxEnvelopes = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerBatch = PositiveInt.tryCreate(10_000),
+      maxRecipientsTrees = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerRecipientsTreeLevel = PositiveInt.tryCreate(10_000),
+      maxChildrenPerRecipientsTreeLevel = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerEnvelope = PositiveInt.tryCreate(10_000),
+      maxRecipientsTreeDepth = PositiveInt.tryCreate(100),
+      maxTransactionRootViews = PositiveInt.tryCreate(1_000_000),
+      maxTransactionSubViews = PositiveInt.tryCreate(10_000_000),
+      maxTransactionTreeDepth = PositiveInt.MaxValue,
+    )
+  )
+}
 
 final case class SvSynchronizerNodesConfig(
     current: SvSynchronizerNodeConfig,
@@ -676,4 +734,10 @@ final case class AmuletConversionRateFeedConfig(
 final case class RangeConfig(
     min: BigDecimal,
     max: BigDecimal,
+)
+
+final case class UnavailablePartiesBackoffParameters(
+    baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
+    // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
+    maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
 )

@@ -42,16 +42,14 @@ sv:
     skipInitialization: true
   scan:
     externalRateLimits:
-      rateLimits:
-        /registry/metadata/v1/info:
-          perIpLimits:
-            overrides:
-              test:
-                ips:
-                  - 192.68.78.50
-                maxTokens: 250
-                tokensPerFill: 250
-                fillInterval: 60s
+      globalPerIpLimits:
+        overrides:
+          test:
+            ips:
+              - 192.68.78.50
+            maxTokens: 250
+            tokensPerFill: 250
+            fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
@@ -144,7 +142,10 @@ pulumiProjectConfig:
 monitoring:
   alerting:
     enableNoDataAlerts: true
+    enableExtraHighPrioAlerts: true
     alerts:
+      acsCommitments:
+        usePv36Metrics: true
       cloudSql:
         maintenance: true
       svNames:
@@ -213,7 +214,7 @@ svs:
   sv: !include(sv.yaml)
     participant:
       bftSequencerConnection: false
-  sv-1: !include(sv.yaml)
+  sv-1: !include(sv.yaml;$SPLICE_ROOT/cluster/configs/shared/validator-topology-metrics-export.yaml)
     appsPg:
       cloudSql:
         tier: "apps-pg-override-tier-sv-1"
@@ -280,6 +281,8 @@ svs:
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
 infra:
+  gkeGateway:
+    proxyForIstioHttp: true
   ipWhitelisting:
     extraWhitelistedIngress:
       - 1.2.3.4/32
@@ -311,7 +314,7 @@ infra:
         key: value
         anotherKey: anotherValue
   istio:
-    enableGeneralIpWhitelist: false
+    enablePublicTokenRegistry: true
     istiodValues: # example istiod overrides
       global:
         proxy:
@@ -472,3 +475,7 @@ validators:
     namespace: validator
     partyHint: 'extra-validator'
     walletGateway: !include(../../configs/shared/wallet_gateway.yaml) {}
+cloudArmor:
+  enabled: true
+  logging:
+    enabled: true

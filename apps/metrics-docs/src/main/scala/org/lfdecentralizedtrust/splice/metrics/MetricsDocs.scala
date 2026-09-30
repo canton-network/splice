@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.admin.api.client.DamlGrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.TriggerMetrics
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 import org.lfdecentralizedtrust.splice.scan.metrics.{
+  RewardAccountingPruningMetrics,
   RewardComputationMetrics,
   ScanMediatorVerdictIngestionMetrics,
 }
@@ -128,6 +129,7 @@ object MetricsDocs {
     )
     new ScanMediatorVerdictIngestionMetrics(generator)
     new RewardComputationMetrics(generator)(MetricsContext.Empty)
+    new RewardAccountingPruningMetrics(generator)(MetricsContext.Empty)
     val scanMetrics = generator.getAll()
     generator.reset()
     GeneratedMetrics(

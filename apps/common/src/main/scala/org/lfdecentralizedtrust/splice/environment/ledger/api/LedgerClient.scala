@@ -180,7 +180,7 @@ private[environment] class LedgerClient(
   def ledgerEnd()(implicit
       traceContext: TraceContext
   ): Future[Long] = {
-    val req = lapi.state_service.GetLedgerEndRequest()
+    val req = lapi.state_service.GetLedgerEndRequest(Seq.empty)
     for {
       stub <- withGrpcContext(stateServiceStub)
       resp <- stub.getLedgerEnd(req)

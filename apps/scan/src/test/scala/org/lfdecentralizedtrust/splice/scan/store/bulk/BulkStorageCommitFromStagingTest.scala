@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
@@ -33,6 +34,7 @@ import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 
 import java.security.MessageDigest
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
@@ -97,6 +99,7 @@ class BulkStorageCommitFromStagingTest
         stagingS3Connection,
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
+        _ => CantonTimestamp.MinValue,
         appConfig,
         null, // not used when bft reads are disabled
         loggerFactory,
@@ -114,7 +117,7 @@ class BulkStorageCommitFromStagingTest
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
       val mockScanConnections = new MockScanConnections(objsWithDigests)
-      Seq.range(0, 7).foreach { i =>
+      Seq.range(0, mockScanConnections.nrResponses).foreach { i =>
         mockScanConnections.scanAgrees(i)
       }
 
@@ -150,7 +153,9 @@ class BulkStorageCommitFromStagingTest
 
       clue("When one object is not known to the peers, the copy flow should not complete") {
         Seq.range(0, 2).foreach(i => mockScanConnections.scanAgrees(i))
-        Seq.range(2, 7).foreach(i => mockScanConnections.scanMissingAnObject(i, 1))
+        Seq
+          .range(2, mockScanConnections.nrResponses)
+          .foreach(i => mockScanConnections.scanMissingAnObject(i, 1))
 
         sub.request(1)
         pub.sendNext("go")
@@ -242,72 +247,56 @@ class BulkStorageCommitFromStagingTest
     class MockScanConnections(
         objsWithDigests: Seq[ObjectKeyAndChecksum]
     ) {
+      val nrResponses = 7
+      private val responses: Seq[AtomicReference[Option[GetBulkObjectChecksumsResponse]]] =
+        Seq.fill(nrResponses)(new AtomicReference[Option[GetBulkObjectChecksumsResponse]](None))
 
-      private val singleScanConnections: Seq[SingleScanConnection] = Seq.range(0, 7).map { i =>
-        val mockConn = mock[SingleScanConnection]
-        when(mockConn.config) thenReturn ScanAppClientConfig(
-          NetworkAppClientConfig(
-            Uri(s"http://dummy-admin-$i")
-          )
-        )
-        when(mockConn.url) thenReturn Uri(s"http://scan_$i")
-        mockConn
-      }
-
-      def scanAgrees(idx: Integer): Unit = {
-        when(
-          singleScanConnections(idx)
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
-        )
-          .thenReturn(
-            Future.successful(
-              new GetBulkObjectChecksumsResponse(
-                objsWithDigests
-                  .map(_.checksum)
-                  .map(digest => new GetBulkObjectChecksumsResponse.Checksums(Some(digest)))
-                  .toVector
-              )
+      private val singleScanConnections: Seq[SingleScanConnection] =
+        Seq.range(0, nrResponses).map { i =>
+          val mockConn = mock[SingleScanConnection]
+          when(mockConn.config) thenReturn ScanAppClientConfig(
+            NetworkAppClientConfig(
+              Uri(s"http://dummy-admin-$i")
             )
           )
-        ()
-      }
+          when(mockConn.url) thenReturn Uri(s"http://scan_$i")
+          when(
+            mockConn.getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(
+              any[ExecutionContext],
+              any[TraceContext],
+            )
+          ).thenAnswer {
+            responses(i).get() match {
+              case Some(response) => Future.successful(response)
+              case None =>
+                Future.failed[GetBulkObjectChecksumsResponse](
+                  new IllegalStateException(s"No response configured for scan_$i")
+                )
+            }
+          }
+          mockConn
+        }
 
-      def scanDisagreesOnDigest(scanIdx: Integer, objIdx: Integer): Unit = {
-        when(
-          singleScanConnections(scanIdx)
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
-        )
-          .thenReturn(
-            Future.successful(
-              new GetBulkObjectChecksumsResponse(
-                objsWithDigests
-                  .map(_.checksum)
-                  .updated(objIdx, "wrong-digest")
-                  .map(digest => new GetBulkObjectChecksumsResponse.Checksums(Some(digest)))
-                  .toVector
-              )
+      private def setResponse(idx: Integer, checksums: Seq[Option[String]]): Unit =
+        responses(idx).set(
+          Some(
+            new GetBulkObjectChecksumsResponse(
+              checksums.map(digest => new GetBulkObjectChecksumsResponse.Checksums(digest)).toVector
             )
           )
-      }
-
-      def scanMissingAnObject(scanIdx: Integer, objIdx: Integer): Unit = {
-        when(
-          singleScanConnections(scanIdx)
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
         )
-          .thenReturn(
-            Future.successful(
-              new GetBulkObjectChecksumsResponse(
-                objsWithDigests
-                  .map(_.checksum)
-                  .map(Some(_))
-                  .updated(objIdx, None)
-                  .map(oDigest => new GetBulkObjectChecksumsResponse.Checksums(oDigest))
-                  .toVector
-              )
-            )
-          )
-      }
+
+      def scanAgrees(idx: Integer): Unit =
+        setResponse(idx, objsWithDigests.map(obj => Some(obj.checksum)))
+
+      def scanDisagreesOnDigest(scanIdx: Integer, objIdx: Integer): Unit =
+        setResponse(
+          scanIdx,
+          objsWithDigests.map(_.checksum).updated(objIdx, "wrong-digest").map(Some(_)),
+        )
+
+      def scanMissingAnObject(scanIdx: Integer, objIdx: Integer): Unit =
+        setResponse(scanIdx, objsWithDigests.map(obj => Some(obj.checksum)).updated(objIdx, None))
 
       private val scanList = new BftScanConnection.AllDsoScansBft(
         initialScanConnections = singleScanConnections,
@@ -343,6 +332,7 @@ class BulkStorageCommitFromStagingTest
         stagingS3Connection,
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
+        _ => CantonTimestamp.MinValue,
         config,
         mockScanConnections.peerBftConnection,
         loggerFactory,

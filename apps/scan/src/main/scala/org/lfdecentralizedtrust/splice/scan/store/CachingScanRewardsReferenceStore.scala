@@ -10,12 +10,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.github.blemale.scaffeine.Scaffeine
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
-import org.lfdecentralizedtrust.splice.store.{
-  Limit,
-  MultiDomainAcsStore,
-  SynchronizerStore,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{Limit, MultiDomainAcsStore, SynchronizerStore}
 import org.lfdecentralizedtrust.splice.util.Contract
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -57,7 +52,7 @@ class CachingScanRewardsReferenceStore private[splice] (
 
   override def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]
-  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, TimestampWithMigrationId]] =
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]] =
     store.lookupActiveOpenMiningRounds(recordTimes)
 
   override def lookupFeaturedAppPartiesAsOf(
@@ -91,6 +86,21 @@ class CachingScanRewardsReferenceStore private[splice] (
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
     store.listActiveCalculateRewardsV2ForRound(roundNumber)
+
+  override def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    store.lookupArchivedAtForOpenMiningRound(roundNumber)
+
+  override def lookupLowestPrunableArchivedRewardRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] =
+    store.lookupLowestPrunableArchivedRewardRound()
+
+  override def pruneArchivedUpToRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long] =
+    store.pruneArchivedUpToRound(roundNumber)
 
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit

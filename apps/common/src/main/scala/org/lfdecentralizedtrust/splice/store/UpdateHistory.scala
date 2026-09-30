@@ -9,7 +9,7 @@ import com.daml.ledger.api.v2.TraceContextOuterClass
 import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
 import com.daml.metrics.api.MetricsContext
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.util.HexString
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent.{Assign, Unassign}
@@ -28,7 +28,7 @@ import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.{
   SourceMigrationInfo,
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{HasIngestionSink, IngestionFilter}
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries}
+import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, InternedStringStore}
 import db.AsUpdateReturning.*
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
@@ -38,6 +38,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ValueJsonCodecProtobuf as ProtobufCodec,
 }
 import com.digitalasset.canton.config.CantonRequireTypes.String256M
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -96,6 +97,8 @@ class UpdateHistory(
     participantId: ParticipantId,
     val updateStreamParty: PartyId,
     val backfillingRequired: BackfillingRequirement,
+    internedStringStore: InternedStringStore,
+    analyzableTimeWindowDuration: NonNegativeDuration,
     override protected val loggerFactory: NamedLoggerFactory,
     enableissue12777Workaround: Boolean,
     enableImportUpdateBackfill: Boolean,
@@ -110,6 +113,7 @@ class UpdateHistory(
     with AutoCloseable {
 
   override lazy val profile: JdbcProfile = storage.api.jdbcProfile
+  private implicit val dbProfile: DbStorage.Profile = storage.profile
 
   import profile.api.jdbcActionExtensionMethods
   import UpdateHistory.*
@@ -117,6 +121,13 @@ class UpdateHistory(
   private val state = new AtomicReference[State](State.empty())
 
   def lastIngestedRecordTime: Option[CantonTimestamp] = state.get().lastIngestedRecordTime
+  def startAnalyzableTimeWindow: Option[CantonTimestamp] =
+    lastIngestedRecordTime.flatMap { latestRecordTime =>
+      Option.when(analyzableTimeWindowDuration.duration.isFinite) {
+        val duration = java.time.Duration.ofNanos(analyzableTimeWindowDuration.duration.toNanos)
+        latestRecordTime.minus(duration)
+      }
+    }
 
   private def advanceLastIngestedRecordTime(ts: CantonTimestamp): Unit = {
     val newState = state.updateAndGet { s =>
@@ -430,7 +441,7 @@ class UpdateHistory(
   private def ingestUpdateOrCheckpoint_(
       updateOrCheckpoint: TreeUpdateOrOffsetCheckpoint,
       migrationId: Long,
-  ): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
     updateOrCheckpoint match {
       case TreeUpdateOrOffsetCheckpoint.Update(update, _) =>
         ingestUpdate_(update, migrationId)
@@ -441,7 +452,7 @@ class UpdateHistory(
   private def ingestUpdate_(
       update: TreeUpdate,
       migrationId: Long,
-  ): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
     update match {
       case ReassignmentUpdate(reassignment) =>
         ingestReassignment(reassignment, migrationId).map(_ => IngestedEvents(0, 0))
@@ -453,7 +464,7 @@ class UpdateHistory(
   private def ingestReassignment(
       reassignment: Reassignment[ReassignmentEvent],
       migrationId: Long,
-  ): DBIOAction[?, NoStream, Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[?, NoStream, Effect.Write] = {
     reassignment match {
       case Reassignment(_, _, _, event: ReassignmentEvent.Assign) =>
         ingestAssignment(reassignment, event, migrationId)
@@ -495,7 +506,7 @@ class UpdateHistory(
       reassignment: Reassignment[?],
       event: ReassignmentEvent.Assign,
       migrationId: Long,
-  ): DBIOAction[?, NoStream, Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[?, NoStream, Effect.Write] = {
     val safeUpdateId = lengthLimited(reassignment.updateId)
     val safeRecordTime = reassignment.recordTime
     val safeParticipantOffset = lengthLimited(LegacyOffset.Api.fromLong(reassignment.offset))
@@ -519,7 +530,9 @@ class UpdateHistory(
     val safeSignatories = event.createdEvent.getSignatories.asScala.toSeq.map(lengthLimited)
     val safeObservers = event.createdEvent.getObservers.asScala.toSeq.map(lengthLimited)
     metrics.UpdateHistory.assignments.mark()
-    sqlu"""
+    for {
+      _ <- DBIO.from(internEventStrings(templateId, event.createdEvent.getPackageName, None))
+      result <- sqlu"""
       insert into update_history_assignments(
         history_id,update_id,record_time,
         participant_offset,domain_id,migration_id,
@@ -542,12 +555,13 @@ class UpdateHistory(
 
       )
     """
+    } yield result
   }
 
   private def ingestTransactionTree(
       tree: Transaction,
       migrationId: Long,
-  ): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
     metrics.UpdateHistory.transactionsTrees.mark()
     insertTransactionUpdateRow(tree, migrationId)
       .flatMap(updateRowId => {
@@ -589,7 +603,7 @@ class UpdateHistory(
     val safeWorkflowId = lengthLimited(tree.getWorkflowId)
     val safeCommandId = lengthLimited(tree.getCommandId)
     val safeExternalTransactionHash: Option[Array[Byte]] = sanitizedExtTxnHash(
-      tree.getExternalTransactionHash
+      tree.getTransactionHash
     )
 
     import storage.DbStorageConverters.setParameterOptionalByteArray
@@ -615,7 +629,7 @@ class UpdateHistory(
       tree: Transaction,
       migrationId: Long,
       updateRowId: Long,
-  ): DBIOAction[?, NoStream, Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[?, NoStream, Effect.Write] = {
     val safeEventId = lengthLimited(
       EventId.prefixedFromUpdateIdAndNodeId(updateId, event.getNodeId)
     )
@@ -636,7 +650,9 @@ class UpdateHistory(
     val safeUpdateId = lengthLimited(tree.getUpdateId)
     val safeDomainId = lengthLimited(tree.getSynchronizerId)
 
-    sqlu"""
+    for {
+      _ <- DBIO.from(internEventStrings(templateId, event.getPackageName, None))
+      result <- sqlu"""
       insert into update_history_creates(
         history_id, event_id, update_row_id,
         contract_id, created_at,
@@ -654,6 +670,26 @@ class UpdateHistory(
         $recordTime, $safeUpdateId, $safeDomainId, $migrationId
       )
     """
+    } yield result
+  }
+
+  // This does not need to be transactional with the rest of the transactions in UpdateHistory
+  private def internEventStrings(
+      identifier: Identifier,
+      packageName: String,
+      choiceName: Option[String],
+  )(implicit
+      tc: TraceContext
+  ): Future[Unit] = {
+    import cats.implicits.*
+    // TODO (#6312): use the returned ids in the partitioned table
+    for {
+      _ <- internedStringStore.getOrIntern(identifier.getPackageId)
+      _ <- internedStringStore.getOrIntern(identifier.getModuleName)
+      _ <- internedStringStore.getOrIntern(identifier.getEntityName)
+      _ <- internedStringStore.getOrIntern(packageName)
+      _ <- choiceName.traverse(internedStringStore.getOrIntern)
+    } yield ()
   }
 
   private def insertExerciseEventRow(
@@ -663,7 +699,7 @@ class UpdateHistory(
       migrationId: Long,
       updateRowId: Long,
       childNodeids: Seq[Int],
-  ): DBIOAction[?, NoStream, Effect.Write] = {
+  )(implicit tc: TraceContext): DBIOAction[?, NoStream, Effect.Write] = {
     val safeEventId = lengthLimited(
       EventId.prefixedFromUpdateIdAndNodeId(updateId, event.getNodeId)
     )
@@ -692,7 +728,9 @@ class UpdateHistory(
     val safeUpdateId = lengthLimited(tree.getUpdateId)
     val safeDomainId = lengthLimited(tree.getSynchronizerId)
 
-    sqlu"""
+    for {
+      _ <- DBIO.from(internEventStrings(templateId, event.getPackageName, Some(event.getChoice)))
+      result <- sqlu"""
       insert into update_history_exercises(
         history_id, event_id, update_row_id,
         child_event_ids, choice,
@@ -714,6 +752,7 @@ class UpdateHistory(
         $recordTime, $safeUpdateId, $safeDomainId, $migrationId
       )
     """
+    } yield result
   }
 
   def migrationsWithCorruptSnapshots()(implicit tc: TraceContext): Future[Set[Long]] = {
@@ -893,12 +932,6 @@ class UpdateHistory(
         .update(
           deleteAction.transactionally,
           "deleteUpdatesForTable",
-        )(
-          implicitly,
-          implicitly,
-          { case (n1, n2, n3, n4, n5) =>
-            Seq(n1, n2, n3, n4, n5).exists(_ > 0)
-          },
         )
     } yield (
       logger.info(
@@ -2329,7 +2362,7 @@ class UpdateHistory(
         .queryAndUpdate(
           action.transactionally,
           "destinationHistory.insert",
-        )(implicitly, implicitly, _ => false)
+        )
         .map { nonEmpty =>
           nonEmpty
         }

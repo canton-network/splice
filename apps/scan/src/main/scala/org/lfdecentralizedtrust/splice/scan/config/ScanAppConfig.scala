@@ -81,8 +81,14 @@ case class ScanAppBackendConfig(
     // Max rounding error tolerated wrt actual total of minting allowances
     // and the per-round minting allowance from the CC whitepaper.
     rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
+    // Reward-accounting data is retained for this duration and may get pruned afterwards.
+    rewardAccountingRetentionPeriod: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofDays(7),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
+    // Whether each ACS snapshot should be stored in its own table
+    perAcsSnapshotTablesEnabled: Boolean = false,
+    analyzableTimeWindow: AnalyzableTimeWindowConfig = AnalyzableTimeWindowConfig(),
     // The migration id is normally read from the DB (the highest known migration id in the
     // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
     // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the
@@ -121,6 +127,21 @@ case class ScanAppBackendConfig(
   override val nodeTypeName: String = "scan"
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig
+}
+
+case class AnalyzableTimeWindowConfig(
+    duration: NonNegativeDuration = AnalyzableTimeWindowConfig.UnlimitedAtw
+) {
+  require(
+    duration.duration > AnalyzableTimeWindowConfig.MinimumAtw.duration,
+    s"The analyzable time window must be at least ${AnalyzableTimeWindowConfig.MinimumAtw}",
+  )
+}
+object AnalyzableTimeWindowConfig {
+  private val MinimumAtw = NonNegativeDuration.tryFromJavaDuration(java.time.Duration.ofDays(7L))
+  val UnlimitedAtw: NonNegativeDuration =
+    NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf)
+
 }
 
 final case class ScanRollForwardLsuConfig(
@@ -196,6 +217,10 @@ final case class ScanCacheConfig(
     voteRequests: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 1000,
+    ),
+    internedStrings: CacheConfig = CacheConfig(
+      ttl = NonNegativeFiniteDuration.ofDays(365L),
+      maxSize = 10000,
     ),
 )
 

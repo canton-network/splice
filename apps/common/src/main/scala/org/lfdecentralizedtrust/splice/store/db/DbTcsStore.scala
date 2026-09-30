@@ -37,6 +37,8 @@ class DbTcsStore(
     with AcsQueries
     with TcsQueries {
 
+  import profile.api.jdbcActionExtensionMethods
+
   private val synchronizerId = synchronizerIdFromDescriptor(acsStore.acsStoreDescriptor)
 
   private val archiveTableName = acsStore.acsArchiveConfigOpt
@@ -167,5 +169,50 @@ class DbTcsStore(
             }
         }
     }
+  }
+
+  /** Deletes all rows from the archive table with `archived_at <= uptoInclusive`,
+    * and moves the earliest archived_at (ie the ingestion start) to the earliest
+    * archival after `uptoInclusive`. Fails without deleting anything if no such
+    * archival has been ingested, as the store would otherwise lose its ingestion start.
+    *
+    * Here we don't have a lower bound on the `archived_at`, so this API should
+    * be used with care, preferably ensuring that the deletion happens in small steps.
+    *
+    * Returns number of rows deleted.
+    */
+  def pruneArchivedUpTo(
+      uptoInclusive: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Long] = acsStore.waitUntilAcsIngested {
+    val storeId = acsStore.acsStoreId
+    val migrationId = acsStore.domainMigrationId
+    val action = for {
+      earliestRemainingO <-
+        sql"""SELECT MIN(archived_at) FROM #$archiveTableName
+              WHERE store_id = $storeId
+                AND migration_id = $migrationId
+                AND archived_at > $uptoInclusive
+           """.as[Option[CantonTimestamp]].head
+
+      earliestRemaining = earliestRemainingO.getOrElse(
+        throw new IllegalStateException(
+          s"Cannot prune archived data up to $uptoInclusive as no archival after it has been ingested."
+        )
+      )
+
+      deleted <-
+        sql"""delete from #$archiveTableName
+              where store_id = $storeId and migration_id = $migrationId
+                and archived_at <= $uptoInclusive""".asUpdate
+
+      // Updating it as part of the transaction ensures that a rollback can
+      // only leave the value in the cache too recent, which is safer than
+      // having a value in cache for which we have already deleted the data.
+      _ = earliestArchivedAtCache.set(Some(earliestRemaining))
+    } yield deleted
+
+    futureUnlessShutdownToFuture(
+      storage.queryAndUpdate(action.transactionally, "pruneArchivedUpTo")
+    ).map(_.toLong)
   }
 }

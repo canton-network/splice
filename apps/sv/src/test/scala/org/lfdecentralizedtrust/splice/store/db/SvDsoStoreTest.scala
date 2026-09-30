@@ -54,7 +54,7 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
-  IgnoredPartiesStore,
+  InMemoryUnavailablePartiesStore,
   Limit,
   MiningRoundsStore,
   PageLimit,
@@ -300,20 +300,24 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             traceContext
           )
-          resultNoParty1 <- store.listExpiredAmulets(Some(new IgnoredPartiesStore(Set(party1))))(
+          resultNoParty1 <- store.listExpiredAmulets(
+            Some(new InMemoryUnavailablePartiesStore(Set(party1)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
-          resultNoParty2 <- store.listExpiredAmulets(Some(new IgnoredPartiesStore(Set(party2))))(
+          resultNoParty2 <- store.listExpiredAmulets(
+            Some(new InMemoryUnavailablePartiesStore(Set(party2)))
+          )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
           )(
             traceContext
           )
           resultNoParty1And2 <- store.listExpiredAmulets(
-            Some(new IgnoredPartiesStore(Set(party1, party2)))
+            Some(new InMemoryUnavailablePartiesStore(Set(party1, party2)))
           )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -344,7 +348,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         val party3 = userParty(3)
         val expiresAtRound3 = amulet(party2, 1.0, 2, 1.0)
         val expiresAtRound4 = amulet(party3, 3.0, 1, 1.0)
-        val partiesToIgnore = new IgnoredPartiesStore(Set(party1))
+        val partiesToIgnore = new InMemoryUnavailablePartiesStore(Set(party1))
         val wontExpireAnyTimeSoon = amulet(party1, 10.0, 2, 0.0001)
         for {
           store <- mkStore()
@@ -362,7 +366,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             traceContext
           )
-          _ = partiesToIgnore.addAll(Set(party2))
+          _ <- partiesToIgnore.addParties(Seq(party2))
           result_afterAdd <- expiredAmuletFunction(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -455,7 +459,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             traceContext
           )
           resultNoParty1 <- store.listLockedExpiredAmulets(
-            Some(new IgnoredPartiesStore(Set(party1)))
+            Some(new InMemoryUnavailablePartiesStore(Set(party1)))
           )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -463,7 +467,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             traceContext
           )
           resultNoParty2 <- store.listLockedExpiredAmulets(
-            Some(new IgnoredPartiesStore(Set(party2)))
+            Some(new InMemoryUnavailablePartiesStore(Set(party2)))
           )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -471,7 +475,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             traceContext
           )
           resultNoParty1And2 <- store.listLockedExpiredAmulets(
-            Some(new IgnoredPartiesStore(Set(party1, party2)))
+            Some(new InMemoryUnavailablePartiesStore(Set(party1, party2)))
           )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -479,7 +483,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             traceContext
           )
           resultNoParty3 <- store.listLockedExpiredAmulets(
-            Some(new IgnoredPartiesStore(Set(party3)))
+            Some(new InMemoryUnavailablePartiesStore(Set(party3)))
           )(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -511,7 +515,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         val party3 = userParty(3)
         val expiresAtRound3 = lockedAmulet(party2, 1.0, 2, 1.0, holders = Seq(party2, party3))
         val expiresAtRound4 = lockedAmulet(party3, 3.0, 1, 1.0, holders = Seq.empty)
-        val partiesToIgnore = new IgnoredPartiesStore(Set(party1))
+        val partiesToIgnore = new InMemoryUnavailablePartiesStore(Set(party1))
         val wontExpireAnyTimeSoon = lockedAmulet(party1, 10.0, 2, 0.0001, holders = Seq(party1))
         for {
           store <- mkStore()
@@ -529,7 +533,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(
             traceContext
           )
-          _ = partiesToIgnore.addAll(Set(party2))
+          _ = partiesToIgnore.addParties(Seq(party2))
           result_afterAdd <- expiredLockedAmuletFunction(
             CantonTimestamp.now(),
             PageLimit.tryCreate(100),
@@ -599,14 +603,14 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(traceContext)
 
           resultFiltered <- store.listExpiredAmuletAllocations(
-            Some(new IgnoredPartiesStore(Set(userParty(2))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(2))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
           resultFilteredTwoParties <- store.listExpiredAmuletAllocations(
-            Some(new IgnoredPartiesStore(Set(userParty(2), userParty(3))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(2), userParty(3))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
@@ -741,23 +745,31 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
 
-          resultAll <- store.listExpiredAmuletAllocationsV2(Set.empty)(
+          resultAll <- store.listExpiredAmuletAllocationsV2(None)(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
-          resultOwnerFiltered <- store.listExpiredAmuletAllocationsV2(Set(authorizerToIgnore))(
+          resultOwnerFiltered <- store.listExpiredAmuletAllocationsV2(
+            Some(new InMemoryUnavailablePartiesStore(Set(authorizerToIgnore)))
+          )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
-          resultExecutorFiltered <- store.listExpiredAmuletAllocationsV2(Set(executorToIgnore1))(
+          resultExecutorFiltered <- store.listExpiredAmuletAllocationsV2(
+            Some(new InMemoryUnavailablePartiesStore(Set(executorToIgnore1)))
+          )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
           resultFullyFiltered <- store.listExpiredAmuletAllocationsV2(
-            Set(authorizerToIgnore, executorToIgnore1, executorToIgnore2)
+            Some(
+              new InMemoryUnavailablePartiesStore(
+                Set(authorizerToIgnore, executorToIgnore1, executorToIgnore2)
+              )
+            )
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
@@ -833,7 +845,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(traceContext)
 
           resultFiltered <- store.listExpiredAmuletTransferInstructions(
-            Some(new IgnoredPartiesStore(Set(userParty(2))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(2))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
@@ -901,21 +913,21 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(traceContext)
 
           ignoreProvider <- store.listExpiredRewardCouponsV2(
-            Some(new IgnoredPartiesStore(Set(userParty(1))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(1))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
           ignoreBeneficiary <- store.listExpiredRewardCouponsV2(
-            Some(new IgnoredPartiesStore(Set(userParty(2))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(2))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
           )(traceContext)
 
           ignoreProviderOfHiddenAndNoBeneficiary <- store.listExpiredRewardCouponsV2(
-            Some(new IgnoredPartiesStore(Set(userParty(3), userParty(4))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(3), userParty(4))))
           )(
             CantonTimestamp.assertFromInstant(now),
             PageLimit.tryCreate(100),
@@ -1401,7 +1413,8 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           domain = dummyDomain,
           enableExpireValidatorFaucet = true,
           batchSize = PageLimit.tryCreate(1000),
-          ignoredPartiesStore = Some(new IgnoredPartiesStore(Set(userParty(1), userParty(3)))),
+          unavailablePartiesStore =
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(1), userParty(3)))),
         )
         resultWithoutFaucet <- store.getExpiredCouponsInBatchesPerRoundAndCouponType(
           domain = dummyDomain,
@@ -1810,7 +1823,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           store <- mkStore()
           expired <- setupAnsEntries(store)
           result <- store.listExpiredAnsEntries(
-            Some(new IgnoredPartiesStore(Set(userParty(1), userParty(2))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(1), userParty(2))))
           )(
             time(4),
             PageLimit.tryCreate(100),
@@ -1882,8 +1895,8 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             .listExpiredAnsSubscriptions(
               CantonTimestamp.now(),
               limit = PageLimit.tryCreate(3),
-              ignoredPartiesStore = Some(
-                new IgnoredPartiesStore(Set(userParty(1), userParty(2)))
+              unavailablePartiesStore = Some(
+                new InMemoryUnavailablePartiesStore(Set(userParty(1), userParty(2)))
               ),
             )
             .futureValue should be(expected)
@@ -2045,7 +2058,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           expired <- setupTransferPreapprovals(store)
           result <- store.listExpiredTransferPreapprovals(
             // n=1 is dropped via its receiver, n=2 via its provider
-            Some(new IgnoredPartiesStore(Set(userParty(1), providerParty(2))))
+            Some(new InMemoryUnavailablePartiesStore(Set(userParty(1), providerParty(2))))
           )(
             time(4),
             PageLimit.tryCreate(100),
@@ -2593,7 +2606,7 @@ class DbSvDsoStoreTest
           store
             .featuredAppActivityMarkerCountAboveOrEqualTo(
               threshold,
-              Some(new IgnoredPartiesStore(Set(providerParty(1)))),
+              Some(new InMemoryUnavailablePartiesStore(Set(providerParty(1)))),
             )
             .map(result => (threshold, result))
         )
@@ -2601,7 +2614,7 @@ class DbSvDsoStoreTest
           store
             .featuredAppActivityMarkerCountAboveOrEqualTo(
               threshold,
-              Some(new IgnoredPartiesStore(Set(providerParty(2)))),
+              Some(new InMemoryUnavailablePartiesStore(Set(providerParty(2)))),
             )
             .map(result => (threshold, result))
         )
@@ -2609,7 +2622,7 @@ class DbSvDsoStoreTest
           store
             .featuredAppActivityMarkerCountAboveOrEqualTo(
               threshold,
-              Some(new IgnoredPartiesStore(Set(providerParty(1), providerParty(2)))),
+              Some(new InMemoryUnavailablePartiesStore(Set(providerParty(1), providerParty(2)))),
             )
             .map(result => (threshold, result))
         )
@@ -2685,7 +2698,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Some(new IgnoredPartiesStore(Set(providerParty(1)))),
+            Some(new InMemoryUnavailablePartiesStore(Set(providerParty(1)))),
           )
           .map(_.map(_.contractId))
         resultsNoProvider2 <- store
@@ -2693,7 +2706,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Some(new IgnoredPartiesStore(Set(providerParty(2)))),
+            Some(new InMemoryUnavailablePartiesStore(Set(providerParty(2)))),
           )
           .map(_.map(_.contractId))
         resultsNoProvider1And2 <- store
@@ -2701,7 +2714,7 @@ class DbSvDsoStoreTest
             Int.MinValue,
             Int.MaxValue,
             20,
-            Some(new IgnoredPartiesStore(Set(providerParty(1), providerParty(2)))),
+            Some(new InMemoryUnavailablePartiesStore(Set(providerParty(1), providerParty(2)))),
           )
           .map(_.map(_.contractId))
       } yield {

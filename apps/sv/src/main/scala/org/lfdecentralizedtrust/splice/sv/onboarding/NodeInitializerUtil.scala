@@ -28,7 +28,15 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
-import org.lfdecentralizedtrust.splice.store.db.DbAppStore
+import org.lfdecentralizedtrust.splice.store.{
+  InMemoryUnavailablePartiesStore,
+  UnavailablePartiesStore,
+}
+import org.lfdecentralizedtrust.splice.store.db.{
+  DbAppStore,
+  DbUnavailablePartiesStore,
+  StoreDescriptor,
+}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
@@ -166,26 +174,57 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       templateJsonDecoder: TemplateJsonDecoder,
       esf: ExecutionSequencerFactory,
       tc: TraceContext,
-  ) =
-    new SvDsoAutomationService(
-      clock,
-      domainTimeSync,
-      config,
-      svStore,
-      dsoStore,
-      ledgerClient,
-      participantAdminConnection,
-      retryProvider,
-      synchronizerNodeService,
-      upgradesConfig,
-      spliceInstanceNamesConfig,
-      loggerFactory,
-      grpcClientMetrics,
-      packageVersionSupport,
-      synchronizerId,
-      enabledFeatures,
-      synchronizerNodeReconciler,
-    )
+  ): Future[SvDsoAutomationService] =
+    newUnavailablePartiesStore(dsoStore).map { unavailablePartiesStore =>
+      new SvDsoAutomationService(
+        clock,
+        domainTimeSync,
+        config,
+        svStore,
+        dsoStore,
+        ledgerClient,
+        participantAdminConnection,
+        retryProvider,
+        synchronizerNodeService,
+        upgradesConfig,
+        spliceInstanceNamesConfig,
+        loggerFactory,
+        grpcClientMetrics,
+        packageVersionSupport,
+        synchronizerId,
+        enabledFeatures,
+        synchronizerNodeReconciler,
+        unavailablePartiesStore,
+      )
+    }
+
+  /** Either the persisted or the in-memory store of parties to be skipped by DSO automation,
+    * depending on the `enablePersistedUnavailableParties` feature flag.
+    */
+  protected def newUnavailablePartiesStore(
+      dsoStore: SvDsoStore
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[UnavailablePartiesStore] =
+    if (config.parameters.enabledFeatures.enablePersistedUnavailableParties) {
+      implicit val closeContext: CloseContext = CloseContext(retryProvider)
+      participantAdminConnection.getParticipantId().flatMap { participantId =>
+        DbUnavailablePartiesStore(
+          StoreDescriptor(
+            version = 1,
+            name = "DbUnavailablePartiesStore",
+            party = dsoStore.key.dsoParty,
+            participant = participantId,
+            key = Map("svParty" -> dsoStore.key.svParty.toProtoPrimitive),
+          ),
+          storage,
+          config.unavailablePartiesBackoffParameters.baseIgnoreDuration,
+          config.unavailablePartiesBackoffParameters.maxIgnoreDuration,
+          clock,
+          loggerFactory,
+        )
+      }
+    } else {
+      Future.successful(new InMemoryUnavailablePartiesStore(config.automation.ignoredPartyIds))
+    }
 
   protected def newDsoPartyHosting(
       dsoParty: PartyId

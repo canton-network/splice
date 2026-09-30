@@ -1021,11 +1021,12 @@ class SingleScanConnection private[client] (
     )
 
   override def getBulkObjectChecksums(
-      objectKeys: Seq[String]
+      requiredCatchupTimestamp: CantonTimestamp,
+      objectKeys: Seq[String],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.GetBulkObjectChecksums(objectKeys),
+      HttpScanAppClient.GetBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
     )
 }
 

@@ -12,16 +12,16 @@ import {
   toIngressPath,
 } from './svPublicEndpoints';
 
-const svOpenApiFile = path.join(
-  __dirname,
-  '../../../../../apps/sv/src/main/openapi/sv-internal.yaml'
-);
+const svOpenApiFiles = [
+  '../../../../../apps/sv/src/main/openapi/sv-internal.yaml',
+  '../../../../../apps/sv/src/main/openapi/sv-stream-server.yaml',
+].map(file => path.join(__dirname, file));
 
-describe('the SV OpenAPI spec', () => {
-  const content = fs.readFileSync(svOpenApiFile, 'utf-8');
+describe('the SV OpenAPI specs', () => {
+  const contents = svOpenApiFiles.map(file => fs.readFileSync(file, 'utf-8'));
 
-  test('declares an x-external-audience for every sv_public endpoint', () => {
-    const endpoints = parseSvPublicEndpoints(content);
+  test('declare an x-external-audience for every public endpoint', () => {
+    const endpoints = contents.flatMap(content => parseSvPublicEndpoints(content));
     expect(endpoints.length).toBeGreaterThan(0);
     endpoints.forEach(endpoint => {
       expect(publicAudiences).toContain(endpoint.audience);
@@ -29,10 +29,14 @@ describe('the SV OpenAPI spec', () => {
   });
 
   test('exposes the expected paths per audience', () => {
-    const paths = svPublicIngressPathsByAudience(content);
+    const paths = svPublicIngressPathsByAudience(...contents);
     expect(paths['validators']).toContain('/api/sv/v0/onboard/validator');
     expect(paths['svs']).toContain('/api/sv/v0/migration-id');
     expect(paths['svs']).toContain('/api/sv/v0/onboard/sv/status/*');
+    // defined in sv-stream-server.yaml rather than in sv-internal.yaml
+    expect(paths['svs']).toContain('/api/sv/v0/onboard/sv/party-migration/authorize');
+    // clients check the version before any other call, so /version must be reachable
+    expect(paths['validators']).toContain('/api/sv/version');
     const allPaths = exposedAudiences.flatMap(audience => paths[audience]);
     // endpoints with an audience of none must not be whitelisted
     expect(allPaths).not.toContain('/api/sv/v0/admin/domain/cometbft/status');
@@ -40,6 +44,8 @@ describe('the SV OpenAPI spec', () => {
     // non-public endpoints must not be whitelisted
     expect(allPaths).not.toContain('/api/sv/v0/admin/sv/votes');
     expect(allPaths).not.toContain('/api/sv/readyz');
+    expect(allPaths).not.toContain('/api/sv/livez');
+    expect(allPaths).not.toContain('/api/sv/status');
     // deprecated endpoints must not be whitelisted
     expect(paths['validators']).not.toContain('/api/sv/v0/dso');
   });
@@ -95,6 +101,68 @@ paths:
       operationId: getFoo
 `;
     expect(() => parseSvPublicEndpoints(nonPublic)).toThrow(/only allowed on endpoints/);
+  });
+});
+
+describe('path-level x-external-audience', () => {
+  const refSpec = (extra: string) => `
+openapi: 3.0.0
+paths:
+  /version:
+${extra}    $ref: "common.yaml#/paths/~1version"
+`;
+
+  test('exposes a $ref path item that declares an audience', () => {
+    const content = refSpec('    x-external-audience: validators\n');
+    expect(parseSvPublicEndpoints(content)).toEqual([
+      { path: '/version', method: '*', audience: 'validators' },
+    ]);
+    expect(svPublicIngressPathsByAudience(content)['validators']).toEqual(['/api/sv/version']);
+  });
+
+  test('ignores a $ref path item without an audience', () => {
+    const content = refSpec('');
+    expect(parseSvPublicEndpoints(content)).toEqual([]);
+    expect(svPublicIngressPathsByAudience(content)['validators']).toEqual([]);
+  });
+
+  test('fails on an unknown path-level audience', () => {
+    expect(() => parseSvPublicEndpoints(refSpec('    x-external-audience: everyone\n'))).toThrow(
+      /must be one of/
+    );
+  });
+
+  test('applies a path-level audience to all inline operations', () => {
+    const content = `
+openapi: 3.0.0
+paths:
+  /v0/foo:
+    x-external-audience: svs
+    get:
+      x-jvm-package: sv_public
+      operationId: getFoo
+    post:
+      x-jvm-package: sv_public
+      operationId: postFoo
+`;
+    expect(parseSvPublicEndpoints(content)).toEqual([
+      { path: '/v0/foo', method: 'get', operationId: 'getFoo', audience: 'svs' },
+      { path: '/v0/foo', method: 'post', operationId: 'postFoo', audience: 'svs' },
+    ]);
+  });
+
+  test('rejects declaring the audience both on the path item and on an operation', () => {
+    const content = `
+openapi: 3.0.0
+paths:
+  /v0/foo:
+    x-external-audience: svs
+    get:
+      x-jvm-package: sv_public
+      x-external-audience: svs
+      operationId: getFoo
+`;
+    expect(() => parseSvPublicEndpoints(content)).toThrow(/both on the path item and/);
   });
 });
 

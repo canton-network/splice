@@ -3,6 +3,7 @@
 
 package com.digitalasset.canton.console.commands
 
+import cats.syntax.either.*
 import com.digitalasset.canton.admin.api.client.commands.SequencerAdminCommands.{
   InitializeFromGenesisState,
   InitializeFromGenesisStateV2,
@@ -170,11 +171,14 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
   ): InitializeSequencerResponse = {
     if (waitForReady) node.health.wait_for_ready_for_initialization()
 
+    val nodeStatus = node.health.status
+
     consoleEnvironment.run {
       runner.adminCommand(
         InitializeFromGenesisState(
-          genesisState,
-          synchronizerParameters.toInternal,
+          genesisState.newInput(),
+          synchronizerParameters.toInternal.valueOr(consoleEnvironment.raiseError),
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
     }
@@ -198,11 +202,14 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
   ): InitializeSequencerResponse = {
     if (waitForReady) node.health.wait_for_ready_for_initialization()
 
+    val nodeStatus = node.health.status
+
     consoleEnvironment.run {
       runner.adminCommand(
         InitializeFromGenesisStateV2(
-          Seq(genesisState),
-          synchronizerParameters.toInternal,
+          genesisState.newInput(),
+          synchronizerParameters.toInternal.valueOr(consoleEnvironment.raiseError),
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
     }
@@ -229,15 +236,18 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
   ): Unit = {
     if (waitForReady) node.health.wait_for_ready_for_initialization()
 
+    val nodeStatus = node.health.status
+
     consoleEnvironment.run {
       runner.adminCommand(
         InitializeFromLsuPredecessor(
           new BufferedInputStream(
             new java.io.FileInputStream(inputFile)
           ),
-          synchronizerParameters.toInternal,
+          synchronizerParameters.toInternal.valueOr(consoleEnvironment.raiseError),
           ignorePsidCheck = ignorePsidCheck,
           synchronizerId = synchronizerId,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
     }
@@ -259,7 +269,7 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
 
     consoleEnvironment.run {
       runner.adminCommand(
-        InitializeFromOnboardingState(onboardingState = onboardingState)
+        InitializeFromOnboardingState(onboardingStateStream = onboardingState.newInput())
       )
     }
   }
@@ -276,7 +286,7 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
 
     consoleEnvironment.run {
       runner.adminCommand(
-        InitializeFromOnboardingStateV2(onboardingState)
+        InitializeFromOnboardingStateV2(onboardingState.newInput())
       )
     }
   }

@@ -37,7 +37,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.showPretty
 
@@ -55,7 +55,7 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
 }
 import org.lfdecentralizedtrust.splice.store.db.AcsTables.ContractStateRowData
 import AsUpdateReturning.*
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
@@ -112,6 +112,8 @@ final class DbMultiDomainAcsStore[TXE](
   import DbMultiDomainAcsStore.*
   import MultiDomainAcsStore.*
   import profile.api.jdbcActionExtensionMethods
+
+  private implicit val dbProfile: DbStorage.Profile = storage.profile
 
   override lazy val storeName = acsStoreDescriptor.name
   override lazy val storeParty = acsStoreDescriptor.party
@@ -384,22 +386,22 @@ final class DbMultiDomainAcsStore[TXE](
     T
   ], T <: Template](
       companion: C,
-      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None,
       ignoredPartyFields: Seq[String] = Seq.empty,
   )(implicit
       companionClass: ContractCompanion[C, TCid, T]
   ): ListExpiredContracts[TCid, T] = { (now, limit) => implicit traceContext =>
-    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
-    val ignoredPartiesFilter: SQLActionBuilder =
-      if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
-      else
-        ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
-          (acc ++ sql" and " ++ notInClause(
-            s"acs.create_arguments->>'$field'",
-            ignoredParties,
-          )).toActionBuilder
-        }
     for {
+      ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
+      ignoredPartiesFilter: SQLActionBuilder =
+        if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
+        else
+          ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
+            (acc ++ sql" and " ++ notInClause(
+              s"acs.create_arguments->>'$field'",
+              ignoredParties,
+            )).toActionBuilder
+          }
       _ <- waitUntilAcsIngested()
       result <- storage
         .query( // index: acs_store_template_sid_mid_tid_ce
@@ -1362,7 +1364,7 @@ final class DbMultiDomainAcsStore[TXE](
                   acsInserts.toList ++ incompleteOutInserts ++ incompleteInInserts
                 ),
               "ingestAcsBatch",
-            )(implicitly, implicitly, _ => false)
+            )
         } yield ()
       }
     }
@@ -1397,11 +1399,7 @@ final class DbMultiDomainAcsStore[TXE](
           .sequentialTraverse(steps) {
             case batch: IngestTransactionTreesBatch =>
               storage
-                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")(
-                  implicitly,
-                  implicitly,
-                  _ => false,
-                )
+                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")
                 .map { summaryState =>
                   val lastTree = batch.batch.last.tree
                   val synchronizerIdToRecordTime = batch.batch
@@ -1435,7 +1433,7 @@ final class DbMultiDomainAcsStore[TXE](
                 .queryAndUpdate(
                   ingestReassignment(reassignment.offset, reassignment.transfer),
                   "ingestReassignment",
-                )(implicitly, implicitly, _ => false)
+                )
                 .map { summaryState =>
                   val reassignmentRecordTimes = Map(synchronizerId -> reassignment.recordTime)
                   state
