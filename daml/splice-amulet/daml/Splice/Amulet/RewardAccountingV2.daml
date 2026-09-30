@@ -19,6 +19,7 @@ import DA.Time
 
 import Splice.Amulet.CryptoHash qualified as CryptoHash
 import Splice.Amulet
+import Splice.AmuletConfig (RewardKind)
 import Splice.Types
 import Splice.Util
 
@@ -38,6 +39,10 @@ template CalculateRewardsV2 with
       -- the AmuletConfig later again, which could lead to inconsistencies in case of config changes.
     dryRun : Bool
       -- ^ Whether to only simulate the confirmation without creating any RewardCouponV2 contracts.
+    kind : Optional RewardKind
+      -- ^ Which reward flow this contract belongs to (CIP-0120).
+      -- 'None' on contracts written before the discriminator was introduced;
+      -- treated as 'App' for backward compatibility.
   where
     signatory dso
 
