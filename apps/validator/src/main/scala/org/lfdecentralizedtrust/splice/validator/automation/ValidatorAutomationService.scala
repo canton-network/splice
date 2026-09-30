@@ -8,7 +8,10 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.sequencing.SequencerConnectionPoolDelays
+import com.digitalasset.canton.sequencing.{
+  SequencerConnectionPoolDelays,
+  SubscriptionLivenessLimits,
+}
 import com.digitalasset.canton.time.{Clock, NonNegativeFiniteDuration}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
@@ -68,6 +71,7 @@ class ValidatorAutomationService(
     svValidator: Boolean,
     sequencerSubmissionAmplificationPatience: NonNegativeFiniteDuration,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits,
     contactPoint: String,
     initialSynchronizerTime: Option[CantonTimestamp],
     maxVettingDelay: ConfigNonNegativeFiniteDuration,
@@ -216,6 +220,7 @@ class ValidatorAutomationService(
         synchronizerConnector,
         sequencerSubmissionAmplificationPatience,
         sequencerConnectionPoolDelays,
+        subscriptionLivenessLimits,
         initialSynchronizerTime,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,

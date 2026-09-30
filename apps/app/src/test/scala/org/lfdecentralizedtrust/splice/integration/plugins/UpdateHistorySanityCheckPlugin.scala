@@ -11,9 +11,9 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassign
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTrigger
 import org.lfdecentralizedtrust.splice.util.TriggerTestUtil
-import com.digitalasset.canton.ScalaFuturesWithPatience
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressingLogger
+import com.digitalasset.canton.scalatest.ScalaFuturesWithPatience
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
