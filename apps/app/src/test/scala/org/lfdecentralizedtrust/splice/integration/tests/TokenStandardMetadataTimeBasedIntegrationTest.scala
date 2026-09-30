@@ -114,9 +114,6 @@ class TokenStandardMetadataTimeBasedIntegrationTest
       )(
         "rounds are defined and include tapped amulet",
         _ => {
-          // The comparison below reuses this snapshot instead of forcing another one: with sim time,
-          // a second snapshot usually lands in the same millisecond of record time, and snapshot
-          // tables are named by millisecond, so the second force fails.
           val forcedSnapshotTime = sv1ScanBackend.forceAcsSnapshotNow()
           val totalBalance = sv1ScanBackend
             .lookupInstrument("Amulet")
@@ -127,6 +124,9 @@ class TokenStandardMetadataTimeBasedIntegrationTest
         },
       )
       clue("Compare direct scan reads to instrument metadata") {
+        // we record the snapshot time above instead of using
+        // getTotalAmuletBalance because table-per-snapshot collides if we force
+        // twice (same update ms)
         advanceTime(Duration.ofSeconds(1L)) // because the sanity plugin will run another snapshot
         // hope: this test won't have created more than Limit.MaxLimit contracts, so they all fit in a single response
         val totalSupply = sv1ScanBackend
