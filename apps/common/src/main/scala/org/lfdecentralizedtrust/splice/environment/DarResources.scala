@@ -6553,7 +6553,7 @@ object DarResources {
   )
   lazy val wallet_0_1_26 = DarResource(
     "splice-wallet-0.1.26.dar",
-    "5f6c35b05c760ec58fd683cee857b18de3d39b269213da452a26d2dfb1de14af",
+    "3ef14f09e04ded3cac43d3a0c1e49f35477767714f223e0762b7a29ea247b469",
     PackageMetadata(
       PackageName.assertFromString("splice-wallet"),
       PackageVersion.assertFromString("0.1.26"),
@@ -6616,7 +6616,7 @@ object DarResources {
   )
   lazy val wallet_current = DarResource(
     "splice-wallet-current.dar",
-    "5f6c35b05c760ec58fd683cee857b18de3d39b269213da452a26d2dfb1de14af",
+    "3ef14f09e04ded3cac43d3a0c1e49f35477767714f223e0762b7a29ea247b469",
     PackageMetadata(
       PackageName.assertFromString("splice-wallet"),
       PackageVersion.assertFromString("0.1.26"),
