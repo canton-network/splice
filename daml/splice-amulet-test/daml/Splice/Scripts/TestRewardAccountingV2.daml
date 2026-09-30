@@ -86,9 +86,15 @@ create_and_process_reward_batches dryRun = do
         calculateRewardsCid
         batchHash = rootBatchHash
 
+  -- root ProcessRewardsV2 must carry kind forward from CalculateRewardsV2
+  [(_, rootProcess)] <- query @ProcessRewardsV2 app.dso
+  rootProcess.kind === Some App
+
   let processBatches = do
         states <- query @ProcessRewardsV2 app.dso
         forA_ states $ \(processRewardsCid, processRewards) -> do
+          -- every ProcessRewardsV2 (root + BatchOfBatches recursion) carries kind
+          processRewards.kind === Some App
           let Some (b, badVettingState) = find (\(b, _) -> CryptoHash.hash b == processRewards.batchHash) batchesWithHiding
           void $ submit app.dso $ exerciseCmd processRewardsCid
             ProcessRewardsV2_ProcessBatch with

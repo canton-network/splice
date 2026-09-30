@@ -79,6 +79,10 @@ template ProcessRewardsV2 with
     dryRun : Bool -- ^ Whether to only simulate the processing without creating any RewardCouponV2 contracts.
     rewardCouponTimeToLive : RelTime
     batchHash : CryptoHash.Hash
+    kind : Optional RewardKind
+      -- ^ Which reward flow this contract belongs to (CIP-0120).
+      -- Copied from the originating 'CalculateRewardsV2' and propagated
+      -- unchanged through the 'BatchOfBatches' recursion.
   where
     signatory dso
 
@@ -102,6 +106,7 @@ template ProcessRewardsV2 with
                 rewardCouponTimeToLive
                 dryRun
                 batchHash = newBatchHash
+                kind
           BatchOfMintingAllowances mintingAllowances -> do
             unless dryRun $ do
               -- Coupon expiry is determined here based on the time of creation to ensure
