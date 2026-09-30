@@ -233,6 +233,27 @@ test_reward_accounting_v2_only_archive_dry_run = do
   pure ()
 
 
+-- Validator-kind input propagates to the created ProcessRewardsV2; app kind
+-- is exercised by the round-close scenarios above.
+test_StartProcessingRewardsV2_propagates_validator_kind : Script ()
+test_StartProcessingRewardsV2_propagates_validator_kind = do
+  app <- setupAppWithConfig defaultAmuletConfig
+  now <- getTime
+  calculateCid <- submit app.dso $ createCmd CalculateRewardsV2 with
+    dso = app.dso
+    round = Round 0
+    roundClosedAt = now
+    rewardCouponTimeToLive = hours 36
+    dryRun = False
+    kind = Some Validator
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  submit [app.dso] $ exerciseCmd amuletRulesCid AmuletRules_StartProcessingRewardsV2 with
+    calculateRewardsCid = calculateCid
+    batchHash = CryptoHash.hash (BatchOfMintingAllowances [])
+  [(_, process)] <- query @ProcessRewardsV2 app.dso
+  process.kind === Some Validator
+
+
 -- Reward minting
 -----------------
 
