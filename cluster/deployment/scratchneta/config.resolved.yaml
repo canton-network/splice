@@ -56,7 +56,6 @@ infra:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
-    enablePublicTokenRegistry: true
     flowControl:
       internal:
         initialConnectionWindowSize: 104857600
