@@ -15,8 +15,10 @@ import Daml.Script
 
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
-import Splice.Amulet.RewardAccountingV2 (Batch(..), CalculateRewardsV2(..), MintingAllowance(..))
-import Splice.Amulet.ValidatorRewardAccountingV2
+import Splice.Amulet.RewardAccountingV2
+  ( Batch(..), CalculateRewardsV2(..), MintingAllowance(..)
+  , ProcessRewardsV2(..), ProcessRewardsV2_ProcessBatch(..)
+  )
 import Splice.AmuletConfig
 import Splice.AmuletRules
 import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
@@ -105,26 +107,27 @@ test_ValidatorRewardCouponV2_assign_beneficiaries = do
   pure ()
 
 -- ProcessBatch rejects when the supplied batch's hash does not match the
--- batchHash the ProcessValidatorRewardsV2 contract was created with.
-test_ProcessValidatorRewardsV2_rejects_hash_mismatch : Script ()
-test_ProcessValidatorRewardsV2_rejects_hash_mismatch = do
+-- batchHash the ProcessRewardsV2 contract was created with.
+test_ProcessRewardsV2_rejects_hash_mismatch_validator_kind : Script ()
+test_ProcessRewardsV2_rejects_hash_mismatch_validator_kind = do
   app <- setupApp
   alice <- allocateParty "validator-alice"
   now <- getTime
   let originalBatch = BatchOfMintingAllowances [MintingAllowance alice 100.0]
   let tamperedBatch = BatchOfMintingAllowances [MintingAllowance alice 999.0]
 
-  processCid <- submit app.dso $ createCmd ProcessValidatorRewardsV2 with
+  processCid <- submit app.dso $ createCmd ProcessRewardsV2 with
     dso = app.dso
     round = Round 0
     roundClosedAt = now
     dryRun = False
     rewardCouponTimeToLive = hours 36
     batchHash = CryptoHash.hash originalBatch
+    kind = Some Validator
 
-  submitMustFail app.dso $ exerciseCmd processCid ProcessValidatorRewardsV2_ProcessBatch with
+  submitMustFail app.dso $ exerciseCmd processCid ProcessRewardsV2_ProcessBatch with
     batch = tamperedBatch
-    nodesWithWrongVettingState = Set.empty
+    providersWithWrongVettingState = Set.empty
 
 -- Unhide rejects a coupon whose node is already an observer.
 test_UnhideValidatorRewardCouponsV2_rejects_already_observable : Script ()
@@ -220,11 +223,12 @@ test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set = do
     expiryObservers = [intruder]
 
 
--- End-to-end coverage of the CIP-0120 validator flow: round-close creates
--- a CalculateValidatorRewardsV2; the DSO party starts processing with a
--- root batch hash; recursive ProcessValidatorRewardsV2_ProcessBatch calls
--- unfold the Merkle tree and create coupons; hidden coupons are
--- unhidden once nodes vet; each coupon mints an amulet.
+-- End-to-end coverage of the validator-flow round-close: round-close
+-- creates CalculateRewardsV2 with kind = Some Validator; the DSO party
+-- starts processing with a root batch hash; recursive
+-- ProcessRewardsV2_ProcessBatch calls unfold the Merkle tree and create
+-- RewardCouponV2 with kind = Some Validator; hidden coupons are unhidden
+-- once nodes vet; each coupon mints an amulet.
 
 create_and_process_validator_reward_batches :
   Bool -> Script (Script (), (AmuletApp, Party, Party, Party, Party))
@@ -245,12 +249,6 @@ create_and_process_validator_reward_batches dryRun = do
 
   runNextIssuance app  -- triggers CalculateRewardsV2 (kind = Some Validator) creation
 
-  -- Round-advance produces the collapsed CalculateRewardsV2; verify its
-  -- kind, then hand-craft a CalculateValidatorRewardsV2 for the legacy
-  -- ProcessValidatorRewardsV2 / ValidatorRewardCouponV2 pipeline below.
-  [(_, collapsedCalc)] <- query @CalculateRewardsV2 app.dso
-  collapsedCalc.kind === Some Validator
-
   let allowances1 = sortOn (.provider)
         [ MintingAllowance alice 1000.0
         , MintingAllowance bob 2000.0
@@ -266,27 +264,23 @@ create_and_process_validator_reward_batches dryRun = do
   -- bob and dora are simulated as having wrong vetting state
   let batchesWithHiding = [(b1, [bob]), (b2, [dora]), (rootBatch, [])]
 
-  calculateCid <- submit app.dso $ createCmd CalculateValidatorRewardsV2 with
-    dso = app.dso
-    round = collapsedCalc.round
-    roundClosedAt = collapsedCalc.roundClosedAt
-    rewardCouponTimeToLive = collapsedCalc.rewardCouponTimeToLive
-    dryRun = collapsedCalc.dryRun
+  [(calculateCid, calculate)] <- query @CalculateRewardsV2 app.dso
+  calculate.kind === Some Validator
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
 
-  _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_StartProcessingValidatorRewardsV2 with
+  submit [app.dso] $ exerciseCmd amuletRulesCid AmuletRules_StartProcessingRewardsV2 with
     calculateRewardsCid = calculateCid
     batchHash = rootBatchHash
 
   let processBatches = do
-        states <- query @ProcessValidatorRewardsV2 app.dso
+        states <- query @ProcessRewardsV2 app.dso
         forA_ states $ \(processCid, process) -> do
           let Some (b, badVettingState) =
                 find (\(b, _) -> CryptoHash.hash b == process.batchHash) batchesWithHiding
           void $ submit app.dso $ exerciseCmd processCid
-            ProcessValidatorRewardsV2_ProcessBatch with
+            ProcessRewardsV2_ProcessBatch with
               batch = b
-              nodesWithWrongVettingState = Set.fromList badVettingState
+              providersWithWrongVettingState = Set.fromList badVettingState
 
   pure (processBatches, (app, alice, bob, charlie, dora))
 
@@ -300,40 +294,43 @@ test_validator_reward_accounting_v2 = do
   processBatches  -- root hash → child batch hashes
   processBatches  -- child batch hashes → coupons
 
-  [] <- query @CalculateValidatorRewardsV2 app.dso
-  [] <- query @ProcessValidatorRewardsV2 app.dso
+  [] <- query @CalculateRewardsV2 app.dso
+  [] <- query @ProcessRewardsV2 app.dso
 
   now <- getTime
   let couponExpiryTime = now `addRelTime` hours 36
   let expectedAmounts = [(alice, 1000.0), (bob, 2000.0), (charlie, 30.0), (dora, 5.1)]
   let expectedCoupons = do
         (node, amount) <- expectedAmounts
-        pure ValidatorRewardCouponV2 with
+        pure RewardCouponV2 with
           dso = app.dso
-          node
+          provider = node
           amount
           round = Round 0
           expiresAt = couponExpiryTime
-          nodeIsObserver = node `notElem` [bob, dora]
+          providerIsObserver = node `notElem` [bob, dora]
           beneficiary = None
+          kind = Some Validator
 
-  actualCoupons0 <- query @ValidatorRewardCouponV2 app.dso
-  let actualCoupons = sortOn (.node) $ fmap snd actualCoupons0
+  actualCoupons0 <- query @RewardCouponV2 app.dso
+  let actualCoupons = sortOn (.provider) $ fmap snd actualCoupons0
   actualCoupons === expectedCoupons
 
   -- unhide bob's and dora's coupons (simulate them changing their vetting state)
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
-  unobservableCoupons <- queryFilter @ValidatorRewardCouponV2 app.dso (\c -> not c.nodeIsObserver)
-  void $ submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_UnhideValidatorRewardCouponsV2 with
+  unobservableCoupons <- queryFilter @RewardCouponV2 app.dso (\c -> not c.providerIsObserver)
+  void $ submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_UnhideRewardCouponsV2 with
     rewardCouponCids = map fst unobservableCoupons
-    nodes = map (._2.node) unobservableCoupons
+    providers = map (._2.provider) unobservableCoupons
 
-  couponsAfterUnhiding <- query @ValidatorRewardCouponV2 app.dso
-  sortOn (.node) (map snd couponsAfterUnhiding) ===
-    map (\c -> c with nodeIsObserver = True) expectedCoupons
+  couponsAfterUnhiding <- query @RewardCouponV2 app.dso
+  sortOn (.provider) (map snd couponsAfterUnhiding) ===
+    map (\c -> c with providerIsObserver = True) expectedCoupons
 
-  -- mint each coupon and verify an amulet was created for the node
-  couponCids <- query @ValidatorRewardCouponV2 app.dso
+  -- mint each coupon and verify an amulet was created for the node.
+  -- Note: pre-D7a, InputRewardCouponV2 always attributes to totalAppRewardAmount;
+  -- the amulet is still produced, so this asserts leaf-create + mint end-to-end.
+  couponCids <- query @RewardCouponV2 app.dso
   (openMiningRound, _) <- getLatestOpenRound app
   let ctx = TransferContext with
         openMiningRound
@@ -341,18 +338,18 @@ test_validator_reward_accounting_v2 = do
         validatorRights = Map.empty
         featuredAppRight = None
   forA_ couponCids $ \(couponCid, coupon) -> do
-    void $ submitExerciseAmuletRulesByKey app [coupon.node] [] AmuletRules_Transfer with
+    void $ submitExerciseAmuletRulesByKey app [coupon.provider] [] AmuletRules_Transfer with
       transfer = Transfer with
-        sender = coupon.node
-        provider = coupon.node
-        inputs = [InputValidatorRewardCouponV2 couponCid]
+        sender = coupon.provider
+        provider = coupon.provider
+        inputs = [InputRewardCouponV2 couponCid]
         outputs = []
         beneficiaries = None
       context = ctx
       expectedDso = Some app.dso
-    amulets <- queryFilter @Splice.Amulet.Amulet coupon.node (\a -> a.owner == coupon.node)
+    amulets <- queryFilter @Splice.Amulet.Amulet coupon.provider (\a -> a.owner == coupon.provider)
     assertMsg
-      ("expected at least one Amulet for " <> show coupon.node)
+      ("expected at least one Amulet for " <> show coupon.provider)
       (not (null amulets))
 
 -- Dry-run: batches are processed but no coupons are created, and the
@@ -364,9 +361,9 @@ test_validator_reward_accounting_v2_dry_run = do
   processBatches
   processBatches
 
-  [] <- query @CalculateValidatorRewardsV2 app.dso
-  [] <- query @ProcessValidatorRewardsV2 app.dso
+  [] <- query @CalculateRewardsV2 app.dso
+  [] <- query @ProcessRewardsV2 app.dso
 
   -- no coupons created in dry-run mode
-  [] <- query @ValidatorRewardCouponV2 app.dso
+  [] <- query @RewardCouponV2 app.dso
   pure ()
