@@ -919,7 +919,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
         // one digit at a time that fails and it resets it to Feb 28th. Luckily,
         // this does not happen very often …
         dateTimePicker.sendKeys(dateTime.replaceAll("[^0-9APM]", ""))
-        eventually()(
+        eventually(5.seconds)(
           dateTimePicker.getAttribute("value").toLowerCase shouldBe dateTime.toLowerCase
         )
       }
