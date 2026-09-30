@@ -510,12 +510,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       initialConfig.developmentFundManagerBlacklist,
       initialConfig.minDevelopmentFundMintingDelay,
       initialConfig.amuletSwitchOverTimes,
-      initialConfig.governanceLockMinimumLockAmount,
-      initialConfig.governanceLockSuperValidatorLockVestingDuration,
-      initialConfig.governanceLockFeaturedAppLockVestingDuration,
-      initialConfig.governanceLockSearchTimeGranularity,
-      initialConfig.governanceLockFeaturedAppLockThreshold,
-      initialConfig.governanceLockFeaturedAppUnderlockGracePeriod,
+      initialConfig.governanceLockConfig,
     )
 
     val (_, voteRequestCid) = actAndCheck(

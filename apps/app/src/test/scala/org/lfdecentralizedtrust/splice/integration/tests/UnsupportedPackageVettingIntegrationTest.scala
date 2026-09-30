@@ -200,12 +200,7 @@ class UnsupportedPackageVettingIntegrationTest
           currentConfig.developmentFundManagerBlacklist,
           currentConfig.minDevelopmentFundMintingDelay,
           currentConfig.amuletSwitchOverTimes,
-          currentConfig.governanceLockMinimumLockAmount,
-          currentConfig.governanceLockSuperValidatorLockVestingDuration,
-          currentConfig.governanceLockFeaturedAppLockVestingDuration,
-          currentConfig.governanceLockSearchTimeGranularity,
-          currentConfig.governanceLockFeaturedAppLockThreshold,
-          currentConfig.governanceLockFeaturedAppUnderlockGracePeriod,
+          currentConfig.governanceLockConfig,
         )
         setAmuletConfig(Seq((None, newAmuletConfig, currentConfig)))
       }

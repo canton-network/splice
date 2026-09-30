@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.sv.config.InitialGovernanceLockConfig
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TokenStandardMetadata, WalletTestUtil}
 import org.lfdecentralizedtrust.splice.wallet.store.{BalanceChangeTxLogEntry, TxLogEntry}
 
@@ -30,8 +31,11 @@ class GovernanceLockTimeBasedIntegrationTest
           _.copy(
             // Shorten the SV vesting period so we can test partial and full withdrawal while only
             // advancing the clock a couple minutes
-            initialGovernanceLockSuperValidatorLockVestingDuration =
-              Some(NonNegativeFiniteDuration.ofMinutes(2))
+            initialGovernanceLockConfig = Some(
+              InitialGovernanceLockConfig(
+                superValidatorLockVestingDuration = Some(NonNegativeFiniteDuration.ofMinutes(2))
+              )
+            )
           )
         )(config)
       )

@@ -105,12 +105,7 @@ defaultAmuletConfig = AmuletConfig with
 
   amuletSwitchOverTimes = None
 
-  governanceLockMinimumLockAmount = None
-  governanceLockSuperValidatorLockVestingDuration = None
-  governanceLockFeaturedAppLockVestingDuration = None
-  governanceLockFeaturedAppUnderlockGracePeriod = None
-  governanceLockFeaturedAppLockThreshold = None
-  governanceLockSearchTimeGranularity = None
+  governanceLockConfig = None
 
 -- | Default configuration schedule with single current amulet config
 defaultAmuletConfigSchedule : Schedule Time (AmuletConfig USD)

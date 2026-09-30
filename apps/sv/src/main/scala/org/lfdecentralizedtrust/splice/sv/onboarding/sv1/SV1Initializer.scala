@@ -676,18 +676,8 @@ class SV1Initializer(
                     sv1Config.initialExternalPartyConfigStateTickDuration,
                   optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
                   initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
-                  governanceLockMinimumLockAmount =
-                    sv1Config.initialGovernanceLockMinimumLockAmount,
-                  governanceLockSuperValidatorLockVestingDuration =
-                    sv1Config.initialGovernanceLockSuperValidatorLockVestingDuration,
-                  governanceLockFeaturedAppLockVestingDuration =
-                    sv1Config.initialGovernanceLockFeaturedAppLockVestingDuration,
-                  governanceLockSearchTimeGranularity =
-                    sv1Config.initialGovernanceLockSearchTimeGranularity,
-                  governanceLockFeaturedAppLockThreshold =
-                    sv1Config.initialGovernanceLockFeaturedAppLockThreshold,
-                  governanceLockFeaturedAppUnderlockGracePeriod =
-                    sv1Config.initialGovernanceLockFeaturedAppUnderlockGracePeriod,
+                  initialGovernanceLockConfig =
+                    sv1Config.initialGovernanceLockConfig.map(_.toGovernanceLockConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(

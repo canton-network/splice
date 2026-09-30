@@ -479,12 +479,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       existingConfig.developmentFundManagerBlacklist,
       existingConfig.minDevelopmentFundMintingDelay,
       existingConfig.amuletSwitchOverTimes,
-      existingConfig.governanceLockMinimumLockAmount,
-      existingConfig.governanceLockSuperValidatorLockVestingDuration,
-      existingConfig.governanceLockFeaturedAppLockVestingDuration,
-      existingConfig.governanceLockSearchTimeGranularity,
-      existingConfig.governanceLockFeaturedAppLockThreshold,
-      existingConfig.governanceLockFeaturedAppUnderlockGracePeriod,
+      existingConfig.governanceLockConfig,
     )
 
     val action = new ARC_AmuletRules(

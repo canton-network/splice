@@ -69,12 +69,7 @@ trait AmuletConfigUtil extends TestCommon {
       existingAmuletConfig.developmentFundManagerBlacklist,
       existingAmuletConfig.minDevelopmentFundMintingDelay,
       existingAmuletConfig.amuletSwitchOverTimes,
-      existingAmuletConfig.governanceLockMinimumLockAmount,
-      existingAmuletConfig.governanceLockSuperValidatorLockVestingDuration,
-      existingAmuletConfig.governanceLockFeaturedAppLockVestingDuration,
-      existingAmuletConfig.governanceLockSearchTimeGranularity,
-      existingAmuletConfig.governanceLockFeaturedAppLockThreshold,
-      existingAmuletConfig.governanceLockFeaturedAppUnderlockGracePeriod,
+      existingAmuletConfig.governanceLockConfig,
     )
   }
 

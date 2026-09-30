@@ -233,12 +233,7 @@ export function getAmuletRulesConfig(
     transferPreapprovalBaseDuration: null,
     developmentFundManagerBlacklist: null,
     minDevelopmentFundMintingDelay: null,
-    governanceLockMinimumLockAmount: null,
-    governanceLockSuperValidatorLockVestingDuration: null,
-    governanceLockFeaturedAppLockVestingDuration: null,
-    governanceLockSearchTimeGranularity: null,
-    governanceLockFeaturedAppLockThreshold: null,
-    governanceLockFeaturedAppUnderlockGracePeriod: null,
+    governanceLockConfig: null,
   };
 }
 
@@ -471,29 +466,8 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
       class="jsondiffpatch-unchanged" data-key="amuletSwitchOverTimes"><div
         class="jsondiffpatch-property-name">amuletSwitchOverTimes</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      class="jsondiffpatch-unchanged"
-      data-key="governanceLockMinimumLockAmount"><div
-        class="jsondiffpatch-property-name">governanceLockMinimumLockAmount</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      class="jsondiffpatch-unchanged"
-      data-key="governanceLockSuperValidatorLockVestingDuration"><div
-        class="jsondiffpatch-property-name">governanceLockSuperValidatorLockVestingDuration</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      class="jsondiffpatch-unchanged"
-      data-key="governanceLockFeaturedAppLockVestingDuration"><div
-        class="jsondiffpatch-property-name">governanceLockFeaturedAppLockVestingDuration</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      class="jsondiffpatch-unchanged"
-      data-key="governanceLockSearchTimeGranularity"><div
-        class="jsondiffpatch-property-name">governanceLockSearchTimeGranularity</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      class="jsondiffpatch-unchanged"
-      data-key="governanceLockFeaturedAppLockThreshold"><div
-        class="jsondiffpatch-property-name">governanceLockFeaturedAppLockThreshold</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li><li
-      class="jsondiffpatch-unchanged"
-      data-key="governanceLockFeaturedAppUnderlockGracePeriod"><div
-        class="jsondiffpatch-property-name">governanceLockFeaturedAppUnderlockGracePeriod</div><div
+      class="jsondiffpatch-unchanged" data-key="governanceLockConfig"><div
+        class="jsondiffpatch-property-name">governanceLockConfig</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;

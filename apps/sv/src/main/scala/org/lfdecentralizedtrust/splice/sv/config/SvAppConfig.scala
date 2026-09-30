@@ -58,6 +58,8 @@ import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import org.lfdecentralizedtrust.splice.util.{SpliceUtil, SwitchOverTimes}
 
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
+import scala.jdk.OptionConverters.*
 
 case class ExpectedValidatorOnboardingConfig(
     secret: String,
@@ -133,13 +135,7 @@ object SvOnboardingConfig {
           SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
         )
       ),
-      initialGovernanceLockMinimumLockAmount: Option[NonNegativeNumeric[BigDecimal]] = None,
-      initialGovernanceLockSuperValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] =
-        None,
-      initialGovernanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
-      initialGovernanceLockSearchTimeGranularity: Option[NonNegativeFiniteDuration] = None,
-      initialGovernanceLockFeaturedAppLockThreshold: Option[NonNegativeNumeric[BigDecimal]] = None,
-      initialGovernanceLockFeaturedAppUnderlockGracePeriod: Option[NonNegativeFiniteDuration] = None,
+      initialGovernanceLockConfig: Option[InitialGovernanceLockConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -299,6 +295,35 @@ final case class InitialAnsConfig(
     entryLifetime: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
     entryFee: Double = 1.0,
 )
+
+final case class InitialGovernanceLockConfig(
+    minimumLockAmount: Option[NonNegativeNumeric[BigDecimal]] = None,
+    superValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
+    featuredAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
+    searchTimeGranularity: Option[NonNegativeFiniteDuration] = None,
+    featuredAppLockThreshold: Option[NonNegativeNumeric[BigDecimal]] = None,
+    featuredAppUnderlockGracePeriod: Option[NonNegativeFiniteDuration] = None,
+) {
+  final def toGovernanceLockConfig: splice.amuletconfig.GovernanceLockConfig = {
+    def toRelTime(optDuration: Option[NonNegativeFiniteDuration]) =
+      optDuration
+        .map(duration =>
+          new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+            TimeUnit.NANOSECONDS.toMicros(duration.duration.toNanos)
+          )
+        )
+        .toJava
+
+    new splice.amuletconfig.GovernanceLockConfig(
+      minimumLockAmount.map(_.value.bigDecimal).toJava,
+      toRelTime(superValidatorLockVestingDuration),
+      toRelTime(featuredAppLockVestingDuration),
+      toRelTime(searchTimeGranularity),
+      featuredAppLockThreshold.map(_.value.bigDecimal).toJava,
+      toRelTime(featuredAppUnderlockGracePeriod),
+    )
+  }
+}
 
 final case class SynchronizerFeesConfig(
     extraTrafficPrice: NonNegativeNumeric[BigDecimal] =

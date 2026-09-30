@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireVestingLockTrigger
+import org.lfdecentralizedtrust.splice.sv.config.InitialGovernanceLockConfig
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
 
 import java.time.Duration
@@ -84,8 +85,12 @@ class ExpireVestingLockTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(
-            initialGovernanceLockSuperValidatorLockVestingDuration =
-              Some(NonNegativeFiniteDuration.ofMillis(vestingDuration.toMillis))
+            initialGovernanceLockConfig = Some(
+              InitialGovernanceLockConfig(
+                superValidatorLockVestingDuration =
+                  Some(NonNegativeFiniteDuration.ofMillis(vestingDuration.toMillis))
+              )
+            )
           )
         )(config)
       )

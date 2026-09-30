@@ -249,38 +249,38 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         newValue: '1.0',
       },
       {
-        fieldName: 'governanceLockMinimumLockAmount',
+        fieldName: 'governanceLockConfigMinimumLockAmount',
         label: 'Governance lock config: Minimum governance lock amount in Amulet',
         currentValue: '',
         newValue: '20000',
       },
       {
-        fieldName: 'governanceLockSuperValidatorLockVestingDuration',
+        fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
         label: 'Governance lock config: SV lock vesting duration (microseconds)',
         currentValue: '3600000000',
         newValue: '7200000000',
       },
       {
-        fieldName: 'governanceLockFeaturedAppLockVestingDuration',
+        fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
         label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
         currentValue: '7200000000',
         newValue: '3600000000',
       },
       {
-        fieldName: 'governanceLockSearchTimeGranularity',
+        fieldName: 'governanceLockConfigSearchTimeGranularity',
         label:
           'Governance lock config: Fallback timepoint determination granularity (microseconds)',
         currentValue: '864000000000',
         newValue: '43200000000',
       },
       {
-        fieldName: 'governanceLockFeaturedAppLockThreshold',
+        fieldName: 'governanceLockConfigFeaturedAppLockThreshold',
         label: 'Governance lock config: Featured app lock threshold (Amulet)',
         currentValue: '5000000',
         newValue: '10000000',
       },
       {
-        fieldName: 'governanceLockFeaturedAppUnderlockGracePeriod',
+        fieldName: 'governanceLockConfigFeaturedAppUnderlockGracePeriod',
         label: 'Governance lock config: Featured app underlock grace period',
         currentValue: '604800000000',
         newValue: '302400000000',
@@ -340,19 +340,13 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       appRewardCouponThreshold: '1.0',
     });
 
-    expect(result.governanceLockMinimumLockAmount).toEqual('20000');
-    expect(result.governanceLockSuperValidatorLockVestingDuration).toEqual({
-      microseconds: '7200000000',
-    });
-    expect(result.governanceLockFeaturedAppLockVestingDuration).toEqual({
-      microseconds: '3600000000',
-    });
-    expect(result.governanceLockSearchTimeGranularity).toEqual({
-      microseconds: '43200000000',
-    });
-    expect(result.governanceLockFeaturedAppLockThreshold).toEqual('10000000');
-    expect(result.governanceLockFeaturedAppUnderlockGracePeriod).toEqual({
-      microseconds: '302400000000',
+    expect(result.governanceLockConfig).toEqual({
+      minimumLockAmount: '20000',
+      superValidatorLockVestingDuration: { microseconds: '7200000000' },
+      featuredAppLockVestingDuration: { microseconds: '3600000000' },
+      searchTimeGranularity: { microseconds: '43200000000' },
+      featuredAppLockThreshold: '10000000',
+      featuredAppUnderlockGracePeriod: { microseconds: '302400000000' },
     });
   });
 
@@ -536,38 +530,38 @@ describe('buildAmuletRulesConfigFromChanges', () => {
   test('should map empty governance lock configs to null', () => {
     const changes: ConfigChange[] = [
       {
-        fieldName: 'governanceLockMinimumLockAmount',
+        fieldName: 'governanceLockConfigMinimumLockAmount',
         label: 'Governance lock config: Minimum governance lock amount in Amulet',
         currentValue: '20000',
         newValue: '',
       },
       {
-        fieldName: 'governanceLockSuperValidatorLockVestingDuration',
+        fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
         label: 'Governance lock config: SV lock vesting duration (microseconds)',
         currentValue: '7200000000',
         newValue: '',
       },
       {
-        fieldName: 'governanceLockFeaturedAppLockVestingDuration',
+        fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
         label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
         currentValue: '3600000000',
         newValue: '',
       },
       {
-        fieldName: 'governanceLockSearchTimeGranularity',
+        fieldName: 'governanceLockConfigSearchTimeGranularity',
         label:
           'Governance lock config: Granularity of the fallback timepoint determination (microseconds)',
         currentValue: '864000000000',
         newValue: '',
       },
       {
-        fieldName: 'governanceLockFeaturedAppLockThreshold',
+        fieldName: 'governanceLockConfigFeaturedAppLockThreshold',
         label: 'Governance lock config: Featured app lock threshold (Amulet)',
         currentValue: '5000000',
         newValue: '',
       },
       {
-        fieldName: 'governanceLockFeaturedAppUnderlockGracePeriod',
+        fieldName: 'governanceLockConfigFeaturedAppUnderlockGracePeriod',
         label: 'Governance lock config: Featured app underlock grace period',
         currentValue: '604800000000',
         newValue: '',
@@ -576,12 +570,7 @@ describe('buildAmuletRulesConfigFromChanges', () => {
 
     const result = buildAmuletRulesConfigFromChanges(changes);
 
-    expect(result.governanceLockMinimumLockAmount).toBeNull();
-    expect(result.governanceLockSuperValidatorLockVestingDuration).toBeNull();
-    expect(result.governanceLockFeaturedAppLockVestingDuration).toBeNull();
-    expect(result.governanceLockSearchTimeGranularity).toBeNull();
-    expect(result.governanceLockFeaturedAppLockThreshold).toBeNull();
-    expect(result.governanceLockFeaturedAppUnderlockGracePeriod).toBeNull();
+    expect(result.governanceLockConfig).toBeNull();
   });
 });
 

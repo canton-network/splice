@@ -21,7 +21,7 @@ import DA.Traversable (forA)
 import Splice.Amulet
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer (holdingToTransferInputs)
-import Splice.AmuletConfig (defaultGovernanceLockFeaturedAppLockVestingDuration, defaultGovernanceLockMinimumLockAmount, defaultGovernanceLockSearchTimeGranularity, defaultGovernanceLockSuperValidatorLockVestingDuration)
+import Splice.AmuletConfig (governanceLockFeaturedAppLockVestingDuration, governanceLockMinimumLockAmount, governanceLockSearchTimeGranularity, governanceLockSuperValidatorLockVestingDuration)
 import Splice.AmuletRules
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
@@ -330,7 +330,7 @@ loopUntilRightA f a = do
 searchCurrentTimeBounds : Time -> ExternalPartyConfigState -> Update (Time, Time)
 searchCurrentTimeBounds basis state =
   searchCurrentTimeBounds_impl isLedgerTimeGE assertDeadlineExceeded assertWithinDeadline basis $
-    fromOptional defaultGovernanceLockSearchTimeGranularity state.governanceLockSearchTimeGranularity
+    governanceLockSearchTimeGranularity state.governanceLockConfig
 
 -- | Implementation for searchCurrentTimeBounds, taking explicit functions to
 -- allow running outside of Update.
@@ -703,13 +703,13 @@ describeVestingSpecification lock = "Unlocking from supporting " <> describeGove
 -- Lock properties for LockSubject types
 
 vestingDurationFor : GovernanceLockKind -> ExternalPartyConfigState -> RelTime
-vestingDurationFor (GLK_FeaturedApp _) state = fromOptional defaultGovernanceLockFeaturedAppLockVestingDuration state.governanceLockFeaturedAppLockVestingDuration
+vestingDurationFor (GLK_FeaturedApp _) state = governanceLockFeaturedAppLockVestingDuration state.governanceLockConfig
 vestingDurationFor (GLK_ProvisionalFeaturedApp _) _ = days 0
-vestingDurationFor (GLK_SuperValidatorRightsOwner _) state = fromOptional defaultGovernanceLockSuperValidatorLockVestingDuration state.governanceLockSuperValidatorLockVestingDuration
+vestingDurationFor (GLK_SuperValidatorRightsOwner _) state = governanceLockSuperValidatorLockVestingDuration state.governanceLockConfig
 
 requireMinimumLock : ExternalPartyConfigState -> Decimal -> Update ()
 requireMinimumLock context amount = do
-  require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", fromOptional defaultGovernanceLockMinimumLockAmount context.governanceLockMinimumLockAmount)
+  require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", governanceLockMinimumLockAmount context.governanceLockConfig)
 
 unfeaturedPaymentContextAndConfigFromChoiceContext : Party -> ChoiceContext -> Update (ExternalPartyTransferContext, ExternalPartyConfigState)
 unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do
