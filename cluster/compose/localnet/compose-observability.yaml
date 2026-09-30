@@ -1,0 +1,77 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Prometheus and Grafana for LocalNet, loading the dashboards and automation alerts of
+# cluster/pulumi/observability from the repo checkout. Added by the -G option of
+# build-tools/splice-localnet-compose.sh.
+---
+volumes:
+  grafana-alerting:
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.11.2
+    container_name: localnet-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=1d
+    volumes:
+      - ${LOCALNET_DIR}/conf/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${PROMETHEUS_PORT:-9091}:9090"
+    mem_limit: 512mb
+    profiles:
+      - app-provider
+      - app-user
+      - sv
+      - multi-sync
+
+  # Fills in the values cluster/pulumi/observability/src/observability.ts substitutes into the
+  # alert rules, using the defaults from cluster/configs/shared/base.yaml.
+  grafana-alerting:
+    image: busybox:1.37.0
+    container_name: localnet-grafana-alerting
+    command:
+      - sh
+      - -c
+      - >-
+        sed
+        -e 's/[$$]NODATA/OK/g'
+        -e 's/[$$]CONTENTION_THRESHOLD_PERCENTAGE_PER_NAMESPACE/0.2/g'
+        -e 's/[$$]NON_LOCAL_CONTENTION_ERRORS_THRESHOLD_PERCENTAGE_PER_NAMESPACE/0.05/g'
+        -e 's/[$$]INGESTION_ENTRIES_PER_BATCH_THRESHOLD/80/g'
+        /rules/automation_alerts.yaml > /provisioning/automation_alerts.yaml
+    volumes:
+      - ${LOCALNET_DIR}/../../pulumi/observability/grafana-alerting:/rules:ro
+      - grafana-alerting:/provisioning
+    profiles:
+      - app-provider
+      - app-user
+      - sv
+      - multi-sync
+
+  grafana:
+    image: grafana/grafana:12.4.3
+    container_name: localnet-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ${LOCALNET_DIR}/conf/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ${LOCALNET_DIR}/conf/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-alerting:/etc/grafana/provisioning/alerting:ro
+      - ${LOCALNET_DIR}/../../pulumi/observability/grafana-dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${GRAFANA_PORT:-3030}:3000"
+    mem_limit: 512mb
+    depends_on:
+      prometheus:
+        condition: service_started
+      grafana-alerting:
+        condition: service_completed_successfully
+    profiles:
+      - app-provider
+      - app-user
+      - sv
+      - multi-sync

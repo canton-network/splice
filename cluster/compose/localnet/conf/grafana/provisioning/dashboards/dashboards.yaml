@@ -1,0 +1,10 @@
+# One Grafana folder per directory of cluster/pulumi/observability/grafana-dashboards.
+apiVersion: 1
+providers:
+  - name: splice
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true
