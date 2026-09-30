@@ -40,6 +40,9 @@ class S3ZstdObjects(
       getObjectKey: Int => String
   ): Flow[Seq[String], String, NotUsed] =
     Flow[Seq[String]]
+      // Re-chunk into sequences of exactly 1000 elements (only the last one may be shorter)
+      .mapConcat(identity)
+      .grouped(storageConfig.bulkChunkSize)
       .map(strings => {
         val updatesStr = strings.mkString("\n") + "\n"
         val updateBytes = ByteString(updatesStr.getBytes(StandardCharsets.UTF_8))
