@@ -15,7 +15,7 @@ These are enforced by `.pre-commit-config.yaml` and CI; matching them up front a
 ## Scala
 - Format with scalafmt rules in `.scalafmt.conf`; don't hand-format against them.
 - Follow `.scalafix.conf` rules where applicable.
-- New test files under `**/test/**/*.scala` trigger `updateTestConfigForParallelRuns` — no action needed, just be aware CI reruns config generation.
+- After adding, deleting or renaming a test suite under `**/test/**/*.scala`, run `sbt updateTestConfigForParallelRuns` and commit the `test*.log` files it changes. Static checks regenerate them and fail on any diff (`build.static_tests.yml`, "Verify no changes in SBT test files").
 
 ## Daml
 - No illegal cross-package Daml references (`scripts/rename.sh no_illegal_daml_references`) — don't import across module boundaries that aren't part of the public API.
