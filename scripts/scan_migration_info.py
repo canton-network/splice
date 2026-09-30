@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Query scan API endpoints for migration info and ACS snapshot timestamps,
 then output a CSV summary table.
