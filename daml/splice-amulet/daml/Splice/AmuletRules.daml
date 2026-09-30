@@ -42,6 +42,7 @@ import Splice.AmuletConfig
   , getTransferPreapprovalBaseDuration, useTrafficBasedAppRewards
   , RewardVersion(..), useFeaturedAppMarkers
   , useAmuletBurnValidatorRewards, useTrafficBasedValidatorRewards
+  , RewardKind(..)
   )
 import qualified Splice.AmuletConfig as Unit
 import Splice.ExternalPartyConfigState
@@ -559,6 +560,7 @@ template AmuletRules
               roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
               dryRun = False
+              kind = Some App
 
           when (useTrafficBasedAppRewards rewardConfig.dryRunVersion) $ do
             void $ create CalculateRewardsV2 with
@@ -567,6 +569,7 @@ template AmuletRules
               roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
               dryRun = True
+              kind = Some App
 
         -- trigger off-ledger validator-reward calculation if needed (CIP-0120)
         forA_ roundToArchive.validatorRewardConfig $ \validatorRewardConfig -> do

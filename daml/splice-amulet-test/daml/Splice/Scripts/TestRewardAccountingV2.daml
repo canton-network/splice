@@ -75,7 +75,8 @@ create_and_process_reward_batches dryRun = do
   let batchesWithHiding = [(b1, [bob]), (b2, [dora]), (rootBatch, [])]
 
   -- get the contract representing the pending calculation and confirmation of rewards for round 0
-  [(calculateRewardsCid, _)] <- query @CalculateRewardsV2 app.dso
+  [(calculateRewardsCid, calculateRewards)] <- query @CalculateRewardsV2 app.dso
+  calculateRewards.kind === Some App
 
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
 

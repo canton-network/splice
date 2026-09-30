@@ -364,6 +364,7 @@ abstract class StoreTestBase
       Instant.now().truncatedTo(ChronoUnit.MICROS),
       new RelTime(600_000_000L),
       dryRun,
+      java.util.Optional.empty(),
     )
     contract(
       rewardAccountingCodegen.CalculateRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID,
