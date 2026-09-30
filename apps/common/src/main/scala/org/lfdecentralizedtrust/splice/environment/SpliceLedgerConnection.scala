@@ -94,6 +94,11 @@ class BaseLedgerConnection(
   ): Future[Long] =
     client.ledgerEnd()
 
+  def ledgerEndWithSynchronizerTimes(synchronizerIds: Seq[SynchronizerId])(implicit
+      traceContext: TraceContext
+  ): Future[(Long, Map[SynchronizerId, CantonTimestamp])] =
+    client.ledgerEndWithSynchronizerTimes(synchronizerIds)
+
   def latestPrunedOffset()(implicit
       traceContext: TraceContext
   ): Future[Long] =

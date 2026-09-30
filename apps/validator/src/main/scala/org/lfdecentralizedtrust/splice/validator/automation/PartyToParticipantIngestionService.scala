@@ -7,7 +7,9 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
+import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.RetryingService
@@ -68,19 +70,27 @@ class PartyToParticipantIngestionService(
       synchronizerId: SynchronizerId
   )(implicit traceContext: TraceContext): Future[Long] =
     for {
-      offset <- connection.ledgerEnd()
+      (offset, synchronizerTimes) <- connection.ledgerEndWithSynchronizerTimes(Seq(synchronizerId))
+      recordTime = synchronizerTimes.getOrElse(
+        synchronizerId,
+        throw Status.FAILED_PRECONDITION
+          .withDescription(
+            s"No record time for synchronizer $synchronizerId at ledger end $offset, the participant has not yet observed any updates on it"
+          )
+          .asRuntimeException(),
+      )
       mappings <- participantAdminConnection.listPartyToParticipant(
-        store = Some(TopologyStoreId.Synchronizer(synchronizerId))
+        store = Some(TopologyStoreId.Synchronizer(synchronizerId)),
+        // Snapshot queries are exclusive so we use immediateSuccessor.
+        timeQuery = TimeQuery.Snapshot(recordTime.immediateSuccessor),
       )
       _ = logger.info(
-        s"Initializing party to participant store with ${mappings.size} parties at offset $offset"
+        s"Initializing party to participant store with ${mappings.size} parties at offset $offset and record time $recordTime"
       )
       _ <- store.initialize(
         offset,
         mappings
-          .map(result =>
-            result.mapping.partyId -> result.mapping.participants.map(_.participantId)
-          )
+          .map(result => result.mapping.partyId -> result.mapping.participants.map(_.participantId))
           .toMap,
       )
     } yield offset

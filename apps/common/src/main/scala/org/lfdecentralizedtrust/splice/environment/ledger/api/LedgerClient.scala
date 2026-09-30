@@ -187,6 +187,28 @@ private[environment] class LedgerClient(
     } yield resp.offset
   }
 
+  def ledgerEndWithSynchronizerTimes(synchronizerIds: Seq[SynchronizerId])(implicit
+      traceContext: TraceContext
+  ): Future[(Long, Map[SynchronizerId, CantonTimestamp])] = {
+    val req = lapi.state_service.GetLedgerEndRequest(synchronizerIds.map(_.toProtoPrimitive))
+    for {
+      stub <- withGrpcContext(stateServiceStub)
+      resp <- stub.getLedgerEnd(req)
+    } yield (
+      resp.offset,
+      resp.synchronizerTimes.map { syncTime =>
+        SynchronizerId.tryFromString(syncTime.synchronizerId) -> CantonTimestamp
+          .tryFromProtoTimestamp(
+            syncTime.recordTime.getOrElse(
+              throw new IllegalArgumentException(
+                s"Synchronizer time for ${syncTime.synchronizerId} has no record time"
+              )
+            )
+          )
+      }.toMap,
+    )
+  }
+
   def latestPrunedOffset()(implicit
       traceContext: TraceContext
   ): Future[Long] = {

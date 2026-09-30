@@ -47,11 +47,16 @@ class InMemoryPartyToParticipantStore extends PartyToParticipantStore {
     }.map(_ => ()))
 
   override def hostingParticipants(): Future[Map[PartyId, Seq[ParticipantId]]] =
-    Future.successful(state.get().fold(Map.empty[PartyId, Seq[ParticipantId]])(_.partyToParticipants))
+    Future.successful(
+      state.get().fold(Map.empty[PartyId, Seq[ParticipantId]])(_.partyToParticipants)
+    )
 }
 
 object InMemoryPartyToParticipantStore {
-  private final case class State(offset: Long, partyToParticipants: Map[PartyId, Seq[ParticipantId]]) {
+  private final case class State(
+      offset: Long,
+      partyToParticipants: Map[PartyId, Seq[ParticipantId]],
+  ) {
     def apply(update: TopologyTransactionUpdate): State =
       State(
         update.offset,
