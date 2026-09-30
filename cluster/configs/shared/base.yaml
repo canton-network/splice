@@ -264,6 +264,13 @@ cloudArmor:
   enabled: false
   allRulesPreviewOnly: true
   publicEndpoints:
+    info:
+      hostPrefixRegex: info
+      pathPrefix: /
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 10000
     publicScan:
       hostPrefixRegex: scan
       pathPrefix: /api/scan
