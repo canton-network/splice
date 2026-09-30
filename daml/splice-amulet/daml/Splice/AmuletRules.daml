@@ -574,20 +574,22 @@ template AmuletRules
         -- trigger off-ledger validator-reward calculation if needed (CIP-0120)
         forA_ roundToArchive.validatorRewardConfig $ \validatorRewardConfig -> do
           when (useTrafficBasedValidatorRewards (Some validatorRewardConfig.mintingVersion)) $ do
-            void $ create CalculateValidatorRewardsV2 with
+            void $ create CalculateRewardsV2 with
               dso
               round = roundToArchive.round
               roundClosedAt = now
               rewardCouponTimeToLive = validatorRewardConfig.rewardCouponTimeToLive
               dryRun = False
+              kind = Some Validator
 
           when (useTrafficBasedValidatorRewards validatorRewardConfig.dryRunVersion) $ do
-            void $ create CalculateValidatorRewardsV2 with
+            void $ create CalculateRewardsV2 with
               dso
               round = roundToArchive.round
               roundClosedAt = now
               rewardCouponTimeToLive = validatorRewardConfig.rewardCouponTimeToLive
               dryRun = True
+              kind = Some Validator
 
         -- create the new open round
         newOpenRound <- do

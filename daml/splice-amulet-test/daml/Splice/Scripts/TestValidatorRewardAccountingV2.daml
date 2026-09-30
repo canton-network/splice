@@ -15,7 +15,7 @@ import Daml.Script
 
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
-import Splice.Amulet.RewardAccountingV2 (Batch(..), MintingAllowance(..))
+import Splice.Amulet.RewardAccountingV2 (Batch(..), CalculateRewardsV2(..), MintingAllowance(..))
 import Splice.Amulet.ValidatorRewardAccountingV2
 import Splice.AmuletConfig
 import Splice.AmuletRules
@@ -243,7 +243,16 @@ create_and_process_validator_reward_batches dryRun = do
   charlie <- allocateParty "Charlie"
   dora <- allocateParty "Dora"
 
-  runNextIssuance app  -- triggers CalculateValidatorRewardsV2 creation
+  runNextIssuance app  -- triggers CalculateRewardsV2 (kind = Some Validator) creation
+
+  -- CIP-0120 (post-C1): TBVR round-advance now creates a collapsed
+  -- CalculateRewardsV2 with kind = Some Validator instead of the legacy
+  -- CalculateValidatorRewardsV2. Assert the new shape, then hand-create a
+  -- CalculateValidatorRewardsV2 so the rest of this test can continue to
+  -- exercise the legacy ProcessValidatorRewardsV2 / ValidatorRewardCouponV2
+  -- pipeline until it is rewritten to the collapsed path.
+  [(_, collapsedCalc)] <- query @CalculateRewardsV2 app.dso
+  collapsedCalc.kind === Some Validator
 
   let allowances1 = sortOn (.provider)
         [ MintingAllowance alice 1000.0
@@ -260,7 +269,12 @@ create_and_process_validator_reward_batches dryRun = do
   -- bob and dora are simulated as having wrong vetting state
   let batchesWithHiding = [(b1, [bob]), (b2, [dora]), (rootBatch, [])]
 
-  [(calculateCid, _)] <- query @CalculateValidatorRewardsV2 app.dso
+  calculateCid <- submit app.dso $ createCmd CalculateValidatorRewardsV2 with
+    dso = app.dso
+    round = collapsedCalc.round
+    roundClosedAt = collapsedCalc.roundClosedAt
+    rewardCouponTimeToLive = collapsedCalc.rewardCouponTimeToLive
+    dryRun = collapsedCalc.dryRun
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
 
   _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_StartProcessingValidatorRewardsV2 with
