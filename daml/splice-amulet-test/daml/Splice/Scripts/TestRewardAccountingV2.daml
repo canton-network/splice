@@ -253,6 +253,30 @@ test_StartProcessingRewardsV2_propagates_validator_kind = do
   [(_, process)] <- query @ProcessRewardsV2 app.dso
   process.kind === Some Validator
 
+-- Legacy back-compat: a ProcessRewardsV2 with kind = None (pre-discriminator
+-- write) still creates RewardCouponV2 with kind = None at leaf-create.
+test_ProcessRewardsV2_legacy_kind_propagates_at_leaf : Script ()
+test_ProcessRewardsV2_legacy_kind_propagates_at_leaf = do
+  app <- setupAppWithConfig defaultAmuletConfig
+  alice <- allocateParty "alice"
+  now <- getTime
+  let batch = BatchOfMintingAllowances [MintingAllowance alice 100.0]
+  processCid <- submit app.dso $ createCmd ProcessRewardsV2 with
+    dso = app.dso
+    round = Round 0
+    roundClosedAt = now
+    dryRun = False
+    rewardCouponTimeToLive = hours 36
+    batchHash = CryptoHash.hash batch
+    kind = None
+  submit app.dso $ exerciseCmd processCid ProcessRewardsV2_ProcessBatch with
+    batch
+    providersWithWrongVettingState = Set.empty
+  [(_, coupon)] <- query @RewardCouponV2 app.dso
+  coupon.kind === None
+  coupon.provider === alice
+  coupon.amount === 100.0
+
 
 -- Reward minting
 -----------------
@@ -292,10 +316,7 @@ setupAliceWithCoupon' config = do
         providerIsObserver = not config.hideCoupon
         beneficiary = None
         kind = None
-  couponCid <- submit app.dso $ createCmd coupon
-  -- confirm the legacy-shape coupon reads back with kind = None
-  Some readBack <- queryContractId app.dso couponCid
-  readBack.kind === None
+  submit app.dso $ createCmd coupon
   pure (app, alice, aliceUser)
 
 
