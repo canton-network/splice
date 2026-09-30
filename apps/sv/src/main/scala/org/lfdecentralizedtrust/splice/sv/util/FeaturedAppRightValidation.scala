@@ -53,9 +53,9 @@ object FeaturedAppRightValidation {
     else Right(())
   }
 
-  def runValidator(
+  private def runValidator(
       store: SvDsoStore,
-      validate: FeaturedAppRightValidation.FeaturedAppRightValidator,
+      validate: FeaturedAppRightValidator,
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[Either[String, Unit]] = {
     def loop(after: Option[Long]): Future[Either[String, Unit]] =
       store.paginateFeaturedAppRights(after).flatMap { page =>
@@ -82,18 +82,13 @@ object FeaturedAppRightValidation {
             val provider = g.dsoRules_GrantFeaturedAppRightValue.provider
             val opsParties =
               g.dsoRules_GrantFeaturedAppRightValue.opsParties.toScala.map(_.asScala.toSeq)
-
-            runValidator(store, FeaturedAppRightValidation.validateGrant(provider, opsParties, _))
+            runValidator(store, validateGrant(provider, opsParties, _))
 
           case u: SRARC_UpdateFeaturedAppRight =>
             val rightCid = u.dsoRules_UpdateFeaturedAppRightValue.rightCid
             val newOpsParties = u.dsoRules_UpdateFeaturedAppRightValue.update.newOpsParties.toScala
               .map(_.asScala.toSeq)
-
-            runValidator(
-              store,
-              FeaturedAppRightValidation.validateUpdate(rightCid, newOpsParties, _),
-            )
+            runValidator(store, validateUpdate(rightCid, newOpsParties, _))
 
           case _ => Future.successful(Right(()))
         }
