@@ -575,6 +575,8 @@ trait SvDsoStore
     splice.amulet.rewardaccountingv2.CalculateRewardsV2,
   ]]]
 
+  // TODO(#XXXX): add kind-filtered variants of listCalculateRewardsV2 /
+  // listProcessRewardsV2 for per-kind queries.
   def listProcessRewardsV2(
       limit: Limit = defaultLimit
   )(implicit tc: TraceContext): Future[Seq[AssignedContract[
