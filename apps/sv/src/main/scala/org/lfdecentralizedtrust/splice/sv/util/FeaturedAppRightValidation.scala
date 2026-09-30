@@ -1,23 +1,34 @@
 package org.lfdecentralizedtrust.splice.sv.util
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import scala.jdk.OptionConverters.*
 import scala.jdk.CollectionConverters.*
+import org.lfdecentralizedtrust.splice.util.Contract
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_GrantFeaturedAppRight,
+  SRARC_UpdateFeaturedAppRight,
+}
+import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
+
+import scala.concurrent.{ExecutionContext, Future}
 
 object FeaturedAppRightValidation {
-  type FeaturedAppRightValidator =
-    Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]] => Either[String, Unit]
+  private type FeaturedAppRightValidator =
+    Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]] => Either[String, Unit]
 
   private def opsOf(
-      c: AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]
+      c: Contract[FeaturedAppRight.ContractId, FeaturedAppRight]
   ): Set[String] =
     c.payload.opsParties.toScala.map(_.asScala.toSet).getOrElse(Set.empty)
 
   def validateGrant(
       provider: String,
       opsParties: Option[Seq[String]],
-      featuredAppRights: Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]],
+      featuredAppRights: Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]],
   ): Either[String, Unit] = {
     val proposed = opsParties.getOrElse(Seq.empty).toSet
     val existingOps = featuredAppRights.flatMap(opsOf).toSet
@@ -32,7 +43,7 @@ object FeaturedAppRightValidation {
   def validateUpdate(
       id: FeaturedAppRight.ContractId,
       newOpsParties: Option[Seq[String]],
-      featuredAppRights: Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]],
+      featuredAppRights: Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]],
   ): Either[String, Unit] = {
     val proposed = newOpsParties.getOrElse(Seq.empty).toSet
     val others = featuredAppRights.filterNot(_.contractId == id)
@@ -40,5 +51,53 @@ object FeaturedAppRightValidation {
     val overlap = proposed intersect existingOps
     if (overlap.nonEmpty) Left(s"opsParties already used: ${overlap.mkString(", ")}")
     else Right(())
+  }
+
+  def runValidator(
+      store: SvDsoStore,
+      validate: FeaturedAppRightValidation.FeaturedAppRightValidator,
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Either[String, Unit]] = {
+    def loop(after: Option[Long]): Future[Either[String, Unit]] =
+      store.paginateFeaturedAppRights(after).flatMap { page =>
+        validate(page.resultsInPage) match {
+          case Left(err) => Future.successful(Left(err))
+          case Right(()) =>
+            page.nextPageToken match {
+              case Some(token) => loop(Some(token))
+              case None => Future.successful(Right(()))
+            }
+        }
+      }
+    loop(None)
+  }
+
+  def validateFeaturedAppRightAction(
+      action: ActionRequiringConfirmation,
+      store: SvDsoStore,
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Either[String, Unit]] = {
+    action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case g: SRARC_GrantFeaturedAppRight =>
+            val provider = g.dsoRules_GrantFeaturedAppRightValue.provider
+            val opsParties =
+              g.dsoRules_GrantFeaturedAppRightValue.opsParties.toScala.map(_.asScala.toSeq)
+
+            runValidator(store, FeaturedAppRightValidation.validateGrant(provider, opsParties, _))
+
+          case u: SRARC_UpdateFeaturedAppRight =>
+            val rightCid = u.dsoRules_UpdateFeaturedAppRightValue.rightCid
+            val newOpsParties = u.dsoRules_UpdateFeaturedAppRightValue.update.newOpsParties.toScala
+              .map(_.asScala.toSeq)
+
+            runValidator(
+              store,
+              FeaturedAppRightValidation.validateUpdate(rightCid, newOpsParties, _),
+            )
+
+          case _ => Future.successful(Right(()))
+        }
+      case _ => Future.successful(Right(()))
+    }
   }
 }

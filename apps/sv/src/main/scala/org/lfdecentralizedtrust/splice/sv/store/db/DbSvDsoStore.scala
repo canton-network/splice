@@ -47,11 +47,13 @@ import org.lfdecentralizedtrust.splice.store.db.{
 }
 import org.lfdecentralizedtrust.splice.store.{
   DbVotesAcsStoreQueryBuilder,
-  UnavailablePartiesStore,
   IngestionSummary,
   Limit,
   LimitHelpers,
   MultiDomainAcsStore,
+  ResultsPage,
+  SortOrder,
+  UnavailablePartiesStore,
 }
 import org.lfdecentralizedtrust.splice.sv.store.{AppRewardCouponsSum, SvDsoStore, SvStore}
 import SvDsoStore.RoundBatch
@@ -2280,10 +2282,12 @@ class DbSvDsoStore(
     } yield result.map(contractFromRow(FeaturedAppActivityMarker.COMPANION)(_))
   }
 
-  override def listFeaturedAppRights(limit: Limit)(implicit
+  override def paginateFeaturedAppRights(after: Option[Long], limit: Limit)(implicit
       tc: TraceContext
-  ): Future[Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]]] = {
-    multiDomainAcsStore.listAssignedContracts(FeaturedAppRight.COMPANION, limit)
+  ): Future[ResultsPage[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]] = {
+    multiDomainAcsStore
+      .listContractsPaginated(FeaturedAppRight.COMPANION, after, limit, SortOrder.Ascending)
+      .map(_.mapResultsInPage(_.contract))
   }
 
   override def close(): Unit = {

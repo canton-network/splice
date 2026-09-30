@@ -1196,9 +1196,9 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
-  def listFeaturedAppRights(limit: Limit = defaultLimit)(implicit
+  def paginateFeaturedAppRights(after: Option[Long] = None, limit: Limit = defaultLimit)(implicit
       tc: TraceContext
-  ): Future[Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]]]
+  ): Future[ResultsPage[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 
 }
 

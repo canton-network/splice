@@ -2,7 +2,7 @@ package org.lfdecentralizedtrust.splice.sv.util
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.store.StoreTestBase
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.Contract
 
 class FeaturedAppRightValidationTest extends StoreTestBase {
 
@@ -10,11 +10,8 @@ class FeaturedAppRightValidationTest extends StoreTestBase {
       providerIdx: Int,
       ops: Seq[String] = Seq.empty,
       cid: String = nextCid(),
-  ): AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight] =
-    AssignedContract(
-      featuredAppRight(providerParty(providerIdx), contractId = cid, opsParties = Some(ops)),
-      dummyDomain,
-    )
+  ): Contract[FeaturedAppRight.ContractId, FeaturedAppRight] =
+    featuredAppRight(providerParty(providerIdx), contractId = cid, opsParties = Some(ops))
 
   private def fakeProvider(idx: Int): String = providerParty(idx).toProtoPrimitive
 
