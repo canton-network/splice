@@ -1,0 +1,98 @@
+name: Test Bundle Smoke Check
+on:
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  bundle_smoke_test_demo:
+    runs-on: self-hosted-k8s-large
+    name: Demonstrate bundle smoke check
+    container:
+      image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: "recursive"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/tests/common_test_setup
+        with:
+          cache_version: 10
+          test_name: bundle_smoke_test_demo
+
+      - name: Build bundle
+        uses: ./.github/actions/sbt/execute_sbt_command
+        with:
+          cmd: "bundle"
+
+      - name: Positive smoke test
+        uses: ./.github/actions/nix/run_bash_command_in_nix
+        with:
+          cmd: |
+            set -euo pipefail
+            bundle_tar="apps/app/target/release/splice-node.tar.gz"
+            test -f "$bundle_tar"
+            smoke_dir=$(mktemp -d)
+            tar -xzf "$bundle_tar" -C "$smoke_dir"
+            smoke_conf="$smoke_dir/smoke.conf"
+            cat > "$smoke_conf" <<'SMOKECONF'
+            canton {}
+            SMOKECONF
+            "$smoke_dir/splice-node/bin/splice-node" generate remote-config -c "$smoke_conf"
+
+      - name: Negative smoke test (malformed logback.xml)
+        uses: ./.github/actions/nix/run_bash_command_in_nix
+        with:
+          cmd: |
+            set -euo pipefail
+            bundle_tar="apps/app/target/release/splice-node.tar.gz"
+            smoke_dir=$(mktemp -d)
+            tar -xzf "$bundle_tar" -C "$smoke_dir"
+            smoke_conf="$smoke_dir/smoke.conf"
+            cat > "$smoke_conf" <<'SMOKECONF'
+            canton {}
+            SMOKECONF
+
+            echo "Corrupting logback.xml inside splice-node.jar"
+            jar_dir=$(mktemp -d)
+            cd "$jar_dir"
+            jar xf "$smoke_dir/splice-node/lib/splice-node.jar" logback.xml
+            echo "<invalid-xml" > logback.xml
+            jar uf "$smoke_dir/splice-node/lib/splice-node.jar" logback.xml
+            cd -
+
+            echo "Running bundled splice-node with corrupted logback.xml"
+            set +e
+            "$smoke_dir/splice-node/bin/splice-node" generate remote-config -c "$smoke_conf" > /tmp/bad-logback.out 2>&1
+            exit_code=$?
+            set -e
+            tail -20 /tmp/bad-logback.out
+            if [ "$exit_code" -ne 0 ]; then
+              echo "smoke test correctly failed with exit code $exit_code"
+            else
+              echo "smoke test should have failed but passed"
+              exit 1
+            fi
+
+      - name: Post-SBT job
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/sbt/post_sbt
+        with:
+          cache_version: 10
+          setup_sbt_cache_hits: ${{ steps.setup.outputs.sbt_cache_hits }}
+
+      - name: Report Failures on Slack & Github
+        if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
+        uses: ./.github/actions/tests/failure_notifications
+        with:
+          job_subname: "bundle_smoke_test_demo"
+          workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}'
+          notifications_url: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}'
+          slack_channel: '${{ secrets.FAILURE_NOTIFICATIONS_SLACK_CHANNEL }}'
