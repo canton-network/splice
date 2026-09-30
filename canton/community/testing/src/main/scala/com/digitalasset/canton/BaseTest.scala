@@ -612,7 +612,7 @@ object BaseTest extends EitherValues {
   @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
   def eventually[T](
       timeUntilSuccess: FiniteDuration = DefaultEventuallyTimeUntilSuccess,
-      maxPollInterval: FiniteDuration = 5.seconds,
+      maxPollInterval: FiniteDuration = 100.millis,
       retryOnTestFailuresOnly: Boolean = true,
       logElapsed: Option[(Logger, String)] = None,
   )(testCode: => T): T = {
