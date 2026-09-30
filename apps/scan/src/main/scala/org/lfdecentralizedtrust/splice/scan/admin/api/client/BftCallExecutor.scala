@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse.{
   Available,
   NotYet,
+  Never,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
@@ -96,7 +97,13 @@ object BftCallExecutor {
             disagreementLogLevel,
             shortenResponsesForLog,
             requestFrom = scansWithData,
-            nTargetSuccess = callConfig.targetSuccess,
+            // If we accepted fewer scans than the targetSuccess, that's because all others will never have the data.
+            // This is common when bootstrapping the network, when multiple scans join after genesis, and all are trying
+            // to backfill from the same source.
+            // In this case, we're reducing the targetSuccess to the number of scans that actually have the data.
+            // That means that we're accepting fewer scans than `targetSuccess` providing data for this case, but do
+            // not tolerate any disagreement among those scans that actually have the data.
+            nTargetSuccess = math.min(scansWithData.size, callConfig.targetSuccess),
             consensusFailureLogLevel,
           )
         }
@@ -246,6 +253,9 @@ object BftCallExecutor {
 
     val hasDataResponses =
       new ConcurrentHashMap[DataAvailabilityResponse, Seq[C]]()
+    hasDataResponses.put(Available, Seq.empty)
+    hasDataResponses.put(NotYet, Seq.empty)
+    hasDataResponses.put(Never, Seq.empty)
     val finalResponse = Promise[Seq[C]]()
     val nResponsesDone = new AtomicInteger(0)
 
@@ -294,19 +304,32 @@ object BftCallExecutor {
                   )
                 )
                 markBftCall("not-yet", connectionMetrics)
-              case None =>
+
+              case None if hasDataResponses.get(NotYet).nonEmpty =>
                 val msg =
-                  s"Not enough scans will ever have the data. ${hasDataResponses.get(Available).size} scans have data, ${hasDataResponses.get(NotYet).size} have responded with 'not yet'. Together that's not enough to achieve $requiredNumber, so final result is 'never'"
+                  s"Not enough scans will ever have the data, but some indicated that they will, just not yet. Final result is therefore 'not yet' (if not enough will ever have data, we require all those that will to actually have it first). ${hasDataResponses
+                      .get(Available)
+                      .size} scans have data, ${hasDataResponses.get(NotYet).size} have responded with 'not yet', ${hasDataResponses.get(Never).size} have responded with 'never'."
                 logger.debug(msg)
                 val _ = finalResponse.tryFailure(
                   HttpErrorWithHttpCode(
-                    StatusCodes.BadGateway,
+                    StatusCodes.ServiceUnavailable,
                     msg,
                   )
                 )
-                markBftCall("never", connectionMetrics)
-              case _ =>
-              // Nothing to do. We don't mark the bft call as complete yet, as we are moving to phase 2 where we fetch the actual data.
+                markBftCall("not-yet", connectionMetrics)
+
+              case None =>
+                require(hasDataResponses.get(NotYet).isEmpty)
+                val msg =
+                  s"Not enough scans will ever have the data, but all those that will actually have it already. Returning those as the final response from phase 1. ${hasDataResponses
+                      .get(Available)
+                      .size} scans have data, ${hasDataResponses.get(Never).size} have responded with 'never'."
+                logger.debug(msg)
+                finalResponse.tryComplete(Try(hasDataResponses.get(Available))): Unit
+
+              case Some(_) =>
+              // Nothing to do. We completed the future already, and don't mark the bft call as complete yet, as we are moving to phase 2 where we fetch the actual data.
             }
           }
         })

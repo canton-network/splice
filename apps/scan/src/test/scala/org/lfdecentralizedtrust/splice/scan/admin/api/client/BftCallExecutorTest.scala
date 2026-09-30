@@ -238,7 +238,7 @@ class BftCallExecutorTest
       }
     }
 
-    "throw a 502 when available + not-enough is not enough" in {
+    "throw a 503 when available + not-available is not enough, but not-available is not empty" in {
       val mocks = new Mocks[DataAvailabilityResponse](
         Seq(
           Future.successful(Available: DataAvailabilityResponse),
@@ -252,11 +252,27 @@ class BftCallExecutorTest
         .failed
         .futureValue
       inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
-        code shouldBe StatusCodes.BadGateway
+        code shouldBe StatusCodes.ServiceUnavailable
         msg should include(
-          "1 scans have data, 1 have responded with 'not yet'. Together that's not enough to achieve 3, so final result is 'never'"
+          "Not enough scans will ever have the data, but some indicated that they will, just not yet."
         )
       }
+    }
+
+    "return the available scans when all others will never have the data" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val ret = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 3)
+        .futureValue
+      ret should have size 1
+      ret.head.idx shouldBe 0
     }
 
     "return scans with data if there are enough" in {
