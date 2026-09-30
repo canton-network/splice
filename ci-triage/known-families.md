@@ -195,7 +195,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Cause: several reference sequencers (4 global + 2 splitwell) store serializable block inserts in one Postgres; the
   test configs run the reference driver in both wall-clock and sim-time shards (`sequencers.conf:33`).
 - Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
-  20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
+  20 s test budget). 10256 (simtime (1), canton 3.6.0-snapshot.20260929, 17.8 s without a global block, backoff
+  to 5.583 s): surfaces as `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... but on Set(splitwell...)` on wallet onboarding, like 10227
+  (family B); tell them apart by the global synchronizer's driver (reference `insert block` retries vs BFT blacklisting). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
   the contention itself is Canton / test infra (fewer writers per DB, non-serializable insert, capped backoff).
 
@@ -261,7 +263,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Table name collision within one millisecond: `AcsSnapshotStore` names per-snapshot tables and indexes with
   `targetRecordTime.toEpochMilli`, so two forced snapshots in the same ms fail with `relation
   "acs_snapshot_creates_v1_<historyId>_<ms>" already exists` (SQLSTATE 42P07) and `/api/scan/v0/state/acs/force` returns
-  HTTP 500. 10238 (TokenStandardMetadataTimeBasedIntegrationTest, simtime (2)); dup 10247 (run 36584417962, main 1293c69b23). Confirming grep: the two `Forcing ACS
+  HTTP 500. 10238 (TokenStandardMetadataTimeBasedIntegrationTest, simtime (2)); dups 10247 (run 36584417962, main 1293c69b23), 10257 (run 36710644051, main 33b55cb609). Confirming grep: the two `Forcing ACS
   snapshot at <t>` lines share the same epoch ms. Fix: scan app (names from micros or the snapshot id), owner #6515.
 
 ## O. Teardown: scan serves a request after its DbStorage closed (sbt output check)

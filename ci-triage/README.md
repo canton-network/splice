@@ -418,3 +418,28 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | s11/fix-10236-scan-snapshot-before-skips-unindexed | cd34fe9285 | 10236, 10237, 10241, 10242 (scan endpoints; supersedes the test-side 7ae2e53dd4) | baseline fails on main; 5/5 `snapshotting` passes, AcsSnapshotStore suites 54/54, scalafmtCheck |
 | s11/fix-10235-sanity-check-skip-uninitialized-scans | b63ea6493f | 10235 cascade (not the Canton hang) | apps-app/Test/compile + scalafmtCheck; not run |
 | s11/fix-10248-vite-config-import-meta-dirname | a02660b19c | 10248 (vite config `__dirname`) | uncached `apps-sv-frontend/bundle` + check-sbt-output.sh before (fails) and after (passes); vitest global setup probe; prettier |
+
+# CI failure triage - 2026-09-30
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10256 | 36707602651 | main 825a1daf84 (#7537) | 109861814030 `simtime (1)` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b |
+| 10257 | 36710644051 | main 33b55cb609 (#7523) | 109871755985 `simtime (2)` | 3.6.0-snapshot.20260929.20331.0.v07b3f95b |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10256 | TokenStandardCliTestDataTimeBasedIntegrationTest "expire amulet transfer instructions ...": onboarding bob's wallet user gets `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... global-domain ... but on Set(splitwell ...)` 12 times and gives up at 11:40:23.399; global-domain wrote no block 11:40:14.175-31.946 (reference sequencer `insert block` 40001 backoff to 5.583 s), party reached global at 31.972. | family L (10139, 10197) | [10256-onboard-install-wallet-invalid-prescribed-synchronizer-reference-sequencer-insert-block-storm.md](10256-onboard-install-wallet-invalid-prescribed-synchronizer-reference-sequencer-insert-block-storm.md). Contention is Canton / test infra; validator onboarding mitigation described (wait on the prescribed synchronizer, not any). No branch. |
+| 10257 | TokenStandardMetadataTimeBasedIntegrationTest: forced snapshots at `07:46:51.001288` / `.001403` collide on `acs_snapshot_creates_v1_14_5557611001` (12:12:43.686), HTTP 500. | 10238 | 10238 packet, section 9. Third hit; still unfixed on main 5592838f46. |
+
+## Cross-cutting observations (2026-09-30)
+
+- 10238's same-millisecond snapshot table collision has now failed three post-merge runs (10238, 10247, 10257) in about
+  27 hours, always TokenStandardMetadataTimeBasedIntegrationTest in simtime (2). Worth escalating to the #6515 owner.
+- 10256 shows the same user-facing symptom as 10227 (family B) from a different cause (family L); the
+  `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... but on Set(splitwell...)` line alone does not identify the family: check
+  whether the global synchronizer is BFT (blacklisting) or reference (`insert block` retries) in that shard.
+

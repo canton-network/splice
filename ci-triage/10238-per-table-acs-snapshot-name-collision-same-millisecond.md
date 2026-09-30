@@ -284,6 +284,49 @@ cc4539a9ac (#6515) in 1293c69b23
 Same test source at 1293c69b23 (lines 114-126 identical to section 5). Gap between the two forces: 100 us of record
 time, 11 ms of wall time between the first response (47.881) and the second request (47.892).
 
+## 9. 10257 (run 36710644051, main 33b55cb609, job 109871755985 `simtime (2)`) - same collision
+
+- Run: https://github.com/canton-network/splice/actions/runs/36710644051, main 33b55cb609 ("Bump Canton fork (#7523)"),
+  job 109871755985 `ci / scala_test_sim_time / simtime (2)`. 9 of 10 tests passed.
+- Record times `07:46:51.001288` and `.001403` (115 us apart) share epoch ms 5557611001; table
+  `acs_snapshot_creates_v1_14_5557611001`. Still unfixed on origin/main 5592838f46 (2026-09-30 17:47 +0200).
+
+```
+sed -E 's/\x1b\[[0-9;]*m//g' log/10257/job.log | grep -a -E 'FAILED \*\*\*|Tests: succeeded|All tests passed|contains problems|error\] +org|Run completed' | sed -E 's/^[^Z]*Z //' | sort -u
+zcat log/10257/logs-simtime-2/canton_network_test.clog.gz | grep -a 'T12:12:4[2-3]' \
+  | grep -a -E 'Forcing ACS snapshot|Saved incremental snapshot|SQL state|already exists|acs/force.*Responding with status code|Test failed' \
+  | sed -E 's/"logger_name":"([^"]*)".*"level":"([A-Z]+)".*/ [\1] \2/; s/\{"@timestamp":"([^"]+)","message":"/\1 /; s/\(\\n.*//' \
+  | sed -E 's/\[([a-z]\.)+([A-Za-z]+)(:[^]]*)?\]/[\2]/' | cut -c12-200
+python3 -c '
+from datetime import datetime,timezone
+for t in ["1970-03-06T07:46:51.001288","1970-03-06T07:46:51.001403"]:
+    d=datetime.fromisoformat(t).replace(tzinfo=timezone.utc); us=int(d.timestamp())*1_000_000+d.microsecond
+    print(t+"Z", "micros", us, "epochMilli", us//1000)'
+git show 33b55cb609:nix/canton-sources.json | grep -m1 version
+git show 33b55cb609:apps/scan/src/main/scala/org/lfdecentralizedtrust/splice/scan/store/AcsSnapshotStore.scala | grep -c 'targetRecordTime.toEpochMilli'
+git fetch -q origin main && git log -1 --format='%h %ad' --date=iso origin/main && git show origin/main:apps/scan/src/main/scala/org/lfdecentralizedtrust/splice/scan/store/AcsSnapshotStore.scala | grep -c 'toEpochMilli'
+```
+```
+[info] *** 1 TEST FAILED ***
+[info] - Scan implements token metadata API *** FAILED ***
+[info] Run completed in 17 minutes, 23 seconds.
+[info] Tests: succeeded 9, failed 1, canceled 0, ignored 0, pending 0
+12:12:43.611Z Forcing ACS snapshot at 1970-03-06T07:46:51.001288Z. Last snapshot: None", [HttpScanHandler] INFO
+12:12:43.638Z Saved incremental snapshot 7 at 1970-03-06T07:46:51.001288Z with 30 create rows and 40 stakeholder rows. Next snapshot target record time: 1970-03-06T07:46:51.001288Z", [AcsSn
+12:12:43.654Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:43188): Responding with status code: 200 OK", [HttpRequestLogger] DEBUG
+12:12:43.663Z Forcing ACS snapshot at 1970-03-06T07:46:51.001403Z. Last snapshot: Some(PerTableAcsSnapshot
+12:12:43.685Z Detected an SQLException. SQL state: 42P07, error code: 0", [DbStorageSingle] INFO
+12:12:43.686Z Request to http://127.0.0.1:5012/api/scan/v0/state/acs/force resulted in an unexpected exception: ERROR: relation \"acs_snapshot_creates_v1_14_5557611001\" already exists", [H
+12:12:43.686Z HTTP POST /api/scan/v0/state/acs/force from (127.0.0.1:43202): Responding with status code: 500 Internal Server Error", [HttpRequestLogger] DEBUG
+12:12:43.695Z Test failed: 'TokenStandardMetadataTimeBasedIntegrationTest/Scan implements token metadata API', message: Command execution failed., location: SeeStackDepthException", [LogRep
+1970-03-06T07:46:51.001288Z micros 5557611001288 epochMilli 5557611001
+1970-03-06T07:46:51.001403Z micros 5557611001403 epochMilli 5557611001
+  "version": "3.6.0-snapshot.20260929.20331.0.v07b3f95b",
+2
+5592838f46 2026-09-30 17:47:12 +0200
+4
+```
+
 ## Verdict
 
 - New, real regression from #6515 (cc4539a9ac), not a known family. Not a test flake in the usual sense: the product
@@ -298,6 +341,7 @@ time, 11 ms of wall time between the first response (47.881) and the second requ
   branch written. A test-side `advanceTime` before `forceAcsSnapshotNow()` would only hide the bug.
 - Production exposure: `/v0/state/acs/force` is gated by `enableForcedAcsSnapshots`; the periodic AcsSnapshotTrigger
   snapshots at interval boundaries, so a same-ms pair outside forced snapshots was not found (not searched further).
+- Third occurrence: 10257 (section 9, main 33b55cb609, 2026-09-30), still unfixed on main at 5592838f46.
 - Second occurrence: 10247 (section 8, main 1293c69b23, test failure 5 h 21 min after 10238's), still unfixed on main at 6b4c166b71.
 - Not verified: the record-time gap in the 4 passing runs (artifacts not downloaded); how the read path resolves the
   table names (only the write path at lines 818-827 and the `toEpochMilli` grep were read); nothing compiled or run.
