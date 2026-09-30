@@ -126,9 +126,6 @@ data AmuletRules_ClaimExpiredRewardsV2Result = AmuletRules_ClaimExpiredRewardsV2
 data AmuletRules_StartProcessingRewardsV2Result = AmuletRules_StartProcessingRewardsV2Result {}
   deriving (Serializable)
 
-data AmuletRules_StartProcessingValidatorRewardsV2Result = AmuletRules_StartProcessingValidatorRewardsV2Result {}
-  deriving (Serializable)
-
 data AmuletRules_UnhideRewardCouponsV2Result = AmuletRules_UnhideRewardCouponsV2Result {}
   deriving (Serializable)
 
@@ -821,23 +818,6 @@ template AmuletRules
           kind = calculateRewards.kind
 
         return AmuletRules_StartProcessingRewardsV2Result {}
-
-    nonconsuming choice AmuletRules_StartProcessingValidatorRewardsV2 : AmuletRules_StartProcessingValidatorRewardsV2Result
-      with
-        calculateRewardsCid : ContractId CalculateValidatorRewardsV2
-        batchHash : CryptoHash.Hash
-      controller dso
-      do
-        calculateRewards <- fetchAndArchive (ForDso with dso) calculateRewardsCid
-        create ProcessValidatorRewardsV2 with
-          dso
-          round = calculateRewards.round
-          roundClosedAt = calculateRewards.roundClosedAt
-          dryRun = calculateRewards.dryRun
-          rewardCouponTimeToLive = calculateRewards.rewardCouponTimeToLive
-          batchHash
-
-        return AmuletRules_StartProcessingValidatorRewardsV2Result {}
 
     -- batch conversion of coupons not yet observable by their providers
     nonconsuming choice AmuletRules_UnhideRewardCouponsV2 : AmuletRules_UnhideRewardCouponsV2Result
