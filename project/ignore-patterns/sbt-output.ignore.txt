@@ -143,4 +143,4 @@ Propagating WARN level on Logger
 .*\[PLUGIN_TIMINGS\] Warning:.*
 
 # to be looked at later on
-.*[info] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.*
+.*VITE_CONFIG_NATIVE_IGNORE_WARNING=true.*
