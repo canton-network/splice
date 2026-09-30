@@ -97,13 +97,20 @@ template MintingDelegation
         -- Assign reward coupons to new beneficiaries
         assignResult <- exercise couponCid assignBeneficiaries
 
-        -- Find reward coupons assigned to the delegation's beneficiary and mint along with other inputs
-        let myRewardInputs =
-              [ InputRewardCouponV2 (fromInterfaceContractId @RewardCouponV2 cid)
-              | (party, cids) <- assignResult.newBeneficiariesCouponCids
-              , party == beneficiary
-              , cid <- cids
-              ]
+        -- Find reward coupons assigned to the delegation's beneficiary and
+        -- mint along with other inputs. Fetch each coupon to validate that
+        -- the interface CID actually resolves to a RewardCouponV2 (the
+        -- interface has multiple implementers while ValidatorRewardCouponV2
+        -- still exists). Routing by coupon.kind is handled inside
+        -- AmuletRules_Transfer's summarizeAndConsumeInput.
+        myRewardInputs <- forA
+          [ fromInterfaceContractId @RewardCouponV2 cid
+          | (party, cids) <- assignResult.newBeneficiariesCouponCids
+          , party == beneficiary
+          , cid <- cids
+          ] $ \couponCid -> do
+            _ <- fetch couponCid
+            pure $ InputRewardCouponV2 couponCid
 
         transferResult <- exercise context.amuletRules AmuletRules_Transfer with
           transfer = Transfer with
