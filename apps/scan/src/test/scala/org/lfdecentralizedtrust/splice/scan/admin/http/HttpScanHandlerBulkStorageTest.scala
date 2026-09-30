@@ -186,7 +186,6 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       }
     }
 
-
     "GetBulkObjectsProgress returns false when snapshot progress is behind the required catch-up timestamp" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")

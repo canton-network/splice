@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.environment.{BaseAppConnection, RetryProv
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse.{
   Available,
+  Never,
   NotYet,
   Never,
 }

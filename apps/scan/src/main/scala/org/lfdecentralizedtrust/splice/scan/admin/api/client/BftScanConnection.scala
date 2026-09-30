@@ -5,17 +5,44 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.{NonEmptyList, OptionT}
 import cats.implicits.*
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppRight, UnclaimedDevelopmentFundCoupon}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{AmuletRules, TransferPreapproval}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{ExternalPartyAmuletRules, TransferCommandCounter}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{IssuingMiningRound, OpenMiningRound}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppRight,
+  UnclaimedDevelopmentFundCoupon,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
+  AmuletRules,
+  TransferPreapproval,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
+  ExternalPartyAmuletRules,
+  TransferCommandCounter,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
+  IssuingMiningRound,
+  OpenMiningRound,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, Thresholds, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver.HasAmuletRules
 import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{AnsEntry, GetBulkObjectChecksumsResponse, GetBulkObjectsProgressResponse, GetRewardAccountingActivityTotalsResponse, GetRewardAccountingBatchResponse, GetRewardAccountingRootHashResponse, HoldingsSummaryRequestV1, HoldingsSummaryResponse, HoldingsSummaryResponseV1, LookupTransferCommandStatusResponse, MigrationSchedule}
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{BftCallConfig, ScanList}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  AnsEntry,
+  GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
+  GetRewardAccountingActivityTotalsResponse,
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
+  HoldingsSummaryRequestV1,
+  HoldingsSummaryResponse,
+  HoldingsSummaryResponseV1,
+  LookupTransferCommandStatusResponse,
+  MigrationSchedule,
+}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
+  BftCallConfig,
+  ScanList,
+}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
@@ -24,11 +51,23 @@ import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
-import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, Contract, ContractWithState, DsoInfo, FactoryChoiceWithDisclosures, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  ChoiceContextWithDisclosures,
+  Contract,
+  ContractWithState,
+  DsoInfo,
+  FactoryChoiceWithDisclosures,
+  TemplateJsonDecoder,
+}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, FutureUnlessShutdown, SyncCloseable}
+import com.digitalasset.canton.lifecycle.{
+  AsyncOrSyncCloseable,
+  FlagCloseableAsync,
+  FutureUnlessShutdown,
+  SyncCloseable,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.{Clock, PeriodicAction}
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
@@ -43,11 +82,20 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationi
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules, DsoRules_CloseVoteRequestResult, VoteRequest}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
+  DsoRules_CloseVoteRequestResult,
+  VoteRequest,
+}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse
-import org.lfdecentralizedtrust.tokenstandard.{allocation, allocationinstruction, metadata, transferinstruction}
+import org.lfdecentralizedtrust.tokenstandard.{
+  allocation,
+  allocationinstruction,
+  metadata,
+  transferinstruction,
+}
 import org.slf4j.event.Level
 
 import java.util.concurrent.atomic.AtomicReference
@@ -898,19 +946,22 @@ class BftScanConnection(
       requiredCatchupTimestamp: CantonTimestamp,
       objectKeys: Seq[String],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
-    BftCallExecutor.bftCallForEventualConsistencyEndpoints(
-      scanList.scanConnections,
-      connectionMetrics,
-      retryProvider,
-      logger,
-      hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp).map{
-        case GetBulkObjectsProgressResponse(progress) if progress => DataAvailabilityResponse.Available
-        case _ => DataAvailabilityResponse.NotYet
-      },
-      getData = _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
-      endpoint = "getBulkObjectChecksums",
-      callConfig = BftCallConfig.default(scanList.scanConnections),
-    ).map(_._1)
+    BftCallExecutor
+      .bftCallForEventualConsistencyEndpoints(
+        scanList.scanConnections,
+        connectionMetrics,
+        retryProvider,
+        logger,
+        hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp).map {
+          case GetBulkObjectsProgressResponse(progress) if progress =>
+            DataAvailabilityResponse.Available
+          case _ => DataAvailabilityResponse.NotYet
+        },
+        getData = _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
+        endpoint = "getBulkObjectChecksums",
+        callConfig = BftCallConfig.default(scanList.scanConnections),
+      )
+      .map(_._1)
   }
 
   override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit

@@ -51,9 +51,11 @@ class BulkStorageCommitFromStaging[T](
               logger.debug("Not enough scans have the data yet, will retry after delay")
               Future.successful(None)
             case ex @ HttpErrorWithHttpCode(StatusCodes.BadGateway, _) =>
-              logger.error("Could not reach consensus on checksums for objects. This indicates that different peers have different data, and must be investigated.")
+              logger.error(
+                "Could not reach consensus on checksums for objects. This indicates that different peers have different data, and must be investigated."
+              )
               Future.successful(None)
-         }
+          }
       } yield {
         bft match {
           case Some(bftChecksums) =>

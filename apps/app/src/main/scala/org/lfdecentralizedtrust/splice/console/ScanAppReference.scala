@@ -852,7 +852,7 @@ abstract class ScanAppReference(
     "Get checksums for a list of bulk storage objects (using both staging and committed objects)"
   )
   def getBulkObjectChecksums(
-      objectKeys: Seq[String],
+      objectKeys: Seq[String]
   ): definitions.GetBulkObjectChecksumsResponse =
     consoleEnvironment.run {
       httpCommand(
