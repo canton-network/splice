@@ -1568,12 +1568,16 @@ summarizeAndConsumeInputs csum dso sender inps = do
     summarizeAndConsumeInput _round s (InputRewardCouponV2 couponCid) = do
       coupon <- fetchAndArchive forOwner couponCid
       assertWithinDeadline "RewardCouponV2.expiresAt" coupon.expiresAt
+      -- Route the amount to app-reward or validator-reward totals based on
+      -- the coupon's flow-of-origin discriminator. 'None' means an unlabelled
+      -- (pre-discriminator) write and is treated as 'App'.
+      let (appDelta, validatorDelta) = case coupon.kind of
+            Some Validator -> (0.0, coupon.amount)
+            _ -> (coupon.amount, 0.0)
       return TransferInputsSummary with
         totalAmuletAmount = s.totalAmuletAmount
-        -- Note: in the current implementation RewardCouponV2 is only used for app rewards.
-        -- This may change in the future. As part of such a change we'll adjust the attribution done here.
-        totalAppRewardAmount = s.totalAppRewardAmount + coupon.amount
-        totalValidatorRewardAmount = s.totalValidatorRewardAmount
+        totalAppRewardAmount = s.totalAppRewardAmount + appDelta
+        totalValidatorRewardAmount = s.totalValidatorRewardAmount + validatorDelta
         totalUnclaimedActivityRecordAmount = s.totalUnclaimedActivityRecordAmount
         totalValidatorFaucetAmount = s.totalValidatorFaucetAmount
         totalSvRewardAmount = s.totalSvRewardAmount

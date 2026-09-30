@@ -332,9 +332,9 @@ test_validator_reward_accounting_v2 = do
   sortOn (.provider) (map snd couponsAfterUnhiding) ===
     map (\c -> c with providerIsObserver = True) expectedCoupons
 
-  -- mint each coupon and verify an amulet was created for the node.
-  -- Note: pre-D7a, InputRewardCouponV2 always attributes to totalAppRewardAmount;
-  -- the amulet is still produced, so this asserts leaf-create + mint end-to-end.
+  -- mint each coupon and verify an amulet was created for the node;
+  -- InputRewardCouponV2's summarizeAndConsumeInput routes the amount to
+  -- totalValidatorRewardAmount when coupon.kind == Some Validator.
   couponCids <- query @RewardCouponV2 app.dso
   (openMiningRound, _) <- getLatestOpenRound app
   let ctx = TransferContext with
