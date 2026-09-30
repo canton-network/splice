@@ -287,7 +287,7 @@ class LsuIntegrationTest
             sv1Backend.participantClientWithAdminToken.topology.lsu.sequencer_successors
               .list(store = Some(Synchronizer(decentralizedSynchronizerId)))
           successors should have size svNodesDoingTheLsu.size.toLong
-          successors.map(_.item.successorPsid).toSet shouldBe Set(successorPsid)
+          successors.map(_.item.successorPsid).toSet shouldBe Set(successorPsid.opaque)
         }
       }
 
@@ -505,7 +505,7 @@ class LsuIntegrationTest
           .validFrom
         lsu.topologyFreezeTime shouldBe CantonTimestamp.assertFromInstant(actualTopologyFreezeTime)
         lsu.upgradeTime shouldBe upgradeTime
-        lsu.successorPhysicalSynchronizerId shouldBe successorPsid
+        lsu.successorPhysicalSynchronizerId shouldBe successorPsid.opaque
       }
       val externalPartyHint = "external-party"
       val (keyPair, externalPartyId) =
