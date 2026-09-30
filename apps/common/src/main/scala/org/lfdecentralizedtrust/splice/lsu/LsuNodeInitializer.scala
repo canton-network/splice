@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-package org.lfdecentralizedtrust.splice.sv.lsu
+package org.lfdecentralizedtrust.splice.lsu
 
 import cats.implicits.showInterpolator
 import cats.syntax.foldable.*
@@ -16,17 +16,16 @@ import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.topology.transaction.GrpcConnection
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
-import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider}
+import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, SynchronizerNode}
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
 import org.lfdecentralizedtrust.splice.setup.NodeInitializer
-import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 
 import java.net.URI
 import scala.concurrent.{ExecutionContext, Future}
 
-class LsuNodeInitializer(
-    localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
-    successorSynchronizerNode: LocalSynchronizerNode,
+class LsuNodeInitializer[T <: SynchronizerNode & LsuSynchronizerNode](
+    localSynchronizerNodes: LocalSynchronizerNodes[T],
+    successorSynchronizerNode: T,
     val loggerFactory: NamedLoggerFactory,
     retryProvider: RetryProvider,
 )(implicit ec: ExecutionContext)

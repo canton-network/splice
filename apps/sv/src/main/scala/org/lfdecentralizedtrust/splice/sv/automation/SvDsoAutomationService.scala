@@ -37,6 +37,7 @@ import org.lfdecentralizedtrust.splice.config.{
   UpgradesConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.*
+import org.lfdecentralizedtrust.splice.lsu.LsuTransferTrafficTrigger
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   BftScanConnection,
@@ -65,7 +66,6 @@ import org.lfdecentralizedtrust.splice.sv.config.{SequencerPruningConfig, SvAppB
 import org.lfdecentralizedtrust.splice.sv.lsu.{
   LsuAnnouncementTrigger,
   LsuSequencingTestTrigger,
-  LsuTransferTrafficTrigger,
   LsuTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
