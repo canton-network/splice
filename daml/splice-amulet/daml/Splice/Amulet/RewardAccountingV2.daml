@@ -124,6 +124,7 @@ template ProcessRewardsV2 with
                   providerIsObserver =
                     not $ Set.member provider providersWithWrongVettingState
                   beneficiary = None
+                  kind
 
         -- intentionally not returning any information here to save computational overhead
         return ProcessRewardsV2_ProcessBatchResult {}

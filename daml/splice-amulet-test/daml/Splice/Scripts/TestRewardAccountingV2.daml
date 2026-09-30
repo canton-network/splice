@@ -139,6 +139,7 @@ test_reward_accounting_v2 = do
           expiresAt = couponExpiryTime
           providerIsObserver = provider `notElem` [bob, dora]
           beneficiary = None
+          kind = Some App
 
   actualCoupons0 <- query @RewardCouponV2 app.dso
   let actualCoupons = sortOn (.provider) $ fmap snd actualCoupons0
@@ -260,7 +261,7 @@ setupAliceWithCoupon' config = do
   aliceUser <- setupUserWithoutValidatorRight app "Alice"
   let alice = aliceUser.primaryParty
 
-  -- bare create a coupon
+  -- bare create a coupon (kind = None simulates a legacy pre-upgrade coupon)
   let coupon = RewardCouponV2 with
         dso = app.dso
         provider = alice
@@ -269,7 +270,11 @@ setupAliceWithCoupon' config = do
         expiresAt = demoTime `addRelTime` hours 36
         providerIsObserver = not config.hideCoupon
         beneficiary = None
-  submit app.dso $ createCmd coupon
+        kind = None
+  couponCid <- submit app.dso $ createCmd coupon
+  -- confirm the legacy-shape coupon reads back with kind = None
+  Some readBack <- queryContractId app.dso couponCid
+  readBack.kind === None
   pure (app, alice, aliceUser)
 
 
@@ -338,6 +343,7 @@ testCouponAssignment hideCoupon = do
         expiresAt = demoTime `addRelTime` hours 36 `addRelTime` minutes 10
         providerIsObserver = not hideCoupon
         beneficiary = None
+        kind = None
 
   -- assign both coupons to bob, alice, and charlie
   let percentages = [(bob, 0.3), (alice, 0.5), (charlie, 0.2)]
@@ -363,6 +369,7 @@ testCouponAssignment hideCoupon = do
         expiresAt
         providerIsObserver = True
         beneficiary = Some beneficiary
+        kind = None
   forA_ newBeneficiariesCouponCids $ \(beneficiary, cids) -> do
     let Some (_, percentage) = find (\(p, _) -> p == beneficiary) percentages
     -- each beneficiary gets one coupon per original coupon
@@ -402,6 +409,7 @@ test_claim_expired_coupons = do
         expiresAt = demoTime `addRelTime` hours 48
         providerIsObserver = False
         beneficiary = Some bob
+        kind = None
   submit app.dso $ createCmd extraCoupon
 
   -- show that expiry doesn't work before expiry time

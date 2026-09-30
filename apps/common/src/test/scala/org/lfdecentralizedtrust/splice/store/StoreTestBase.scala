@@ -581,6 +581,7 @@ abstract class StoreTestBase
         expiresAt,
         providerIsObserver,
         beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
+        Optional.empty(),
       ),
     )
 
