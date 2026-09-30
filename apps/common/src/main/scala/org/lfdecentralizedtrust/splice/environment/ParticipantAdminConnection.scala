@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.environment
 
+import better.files.File
 import cats.data.EitherT
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.admin.api.client.commands.{
@@ -53,6 +54,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.google.protobuf.ByteString
 import io.grpc.{Status, StatusRuntimeException}
+import io.grpc.stub.StreamObserver
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.Thresholds
@@ -67,9 +69,11 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
 }
 
 import java.io.{InputStream, SequenceInputStream}
+import java.nio.file.{Files, Path}
 import java.time.Instant
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import scala.util.Failure
 
 /** Connection to the subset of the Canton admin API that we rely
   * on in our own applications.
@@ -177,9 +181,41 @@ class ParticipantAdminConnection(
       activationTime: Instant,
   )(implicit
       traceContext: TraceContext
-  ): Future[Seq[ByteString]] = {
-    val observer = new SeqAccumulatingObserver[ExportPartyAcsResponse]
+  ): Future[Seq[ByteString]] =
+    startExportPartyAcs(
+      party,
+      synchronizerId,
+      targetParticipantId,
+      activationTime,
+      () => new SeqAccumulatingObserver[ExportPartyAcsResponse],
+    ).flatMap(_.resultFuture).map(_.map(_.chunk))
 
+  def exportPartyAcsToFile(
+      party: PartyId,
+      synchronizerId: SynchronizerId,
+      targetParticipantId: ParticipantId,
+      activationTime: Instant,
+      file: Path,
+  )(implicit
+      traceContext: TraceContext
+  ): Future[ByteString] =
+    startExportPartyAcs(
+      party,
+      synchronizerId,
+      targetParticipantId,
+      activationTime,
+      () => Sha256FileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk),
+    ).flatMap(_.result)
+
+  private def startExportPartyAcs[O <: StreamObserver[ExportPartyAcsResponse]](
+      party: PartyId,
+      synchronizerId: SynchronizerId,
+      targetParticipantId: ParticipantId,
+      activationTime: Instant,
+      createObserver: () => O,
+  )(implicit
+      traceContext: TraceContext
+  ): Future[O] =
     for {
       // The current ExportPartyAcs requires us to pass an offset that is right before the topology tx
       // in which the participant started hosing `partyId`.
@@ -191,6 +227,7 @@ class ParticipantAdminConnection(
       _ = logger.info(
         show"Exporting ACS snapshot for party $party from domain $synchronizerId at offset $beforeActivationOffset"
       )
+      observer <- Future(blocking(createObserver()))
       _ <- runCmd(
         ParticipantAdminCommands.PartyManagement.ExportPartyAcs(
           party,
@@ -200,10 +237,8 @@ class ParticipantAdminConnection(
           waitForActivationTimeout = None, // i.e., default
           observer,
         )
-      )
-      chunks <- observer.resultFuture
-    } yield chunks.map(_.chunk)
-  }
+      ).andThen { case Failure(e) => observer.onError(e) }
+    } yield observer
 
   def downloadAcsSnapshotNonChunked(
       parties: Set[PartyId],
@@ -246,16 +281,33 @@ class ParticipantAdminConnection(
 
   def importPartyAcs(acsChunks: Seq[ByteString], synchronizerId: SynchronizerId, partyId: PartyId)(
       implicit tc: TraceContext
-  ): Future[Unit] = {
+  ): Future[Unit] =
+    importPartyAcsFrom(
+      () =>
+        new SequenceInputStream(
+          acsChunks.iterator.map(chunk => chunk.newInput(): InputStream).asJavaEnumeration
+        ),
+      synchronizerId,
+      partyId,
+    )
+
+  def importPartyAcsFromFile(file: Path, synchronizerId: SynchronizerId, partyId: PartyId)(implicit
+      tc: TraceContext
+  ): Future[Unit] =
+    importPartyAcsFrom(() => Files.newInputStream(file), synchronizerId, partyId)
+
+  private def importPartyAcsFrom(
+      openInputStream: () => InputStream,
+      synchronizerId: SynchronizerId,
+      partyId: PartyId,
+  )(implicit tc: TraceContext): Future[Unit] = {
     retryProvider.retryForClientCalls(
       "import_party_acs",
       "Imports the acs in the participant",
       runCmd(
         ParticipantAdminCommands.PartyManagement
           .ImportPartyAcs(
-            new SequenceInputStream(
-              acsChunks.iterator.map(chunk => chunk.newInput(): InputStream).asJavaEnumeration
-            ),
+            openInputStream(),
             synchronizerId,
             IMPORT_ACS_WORKFLOW_ID_PREFIX,
             contractImportMode = ContractImportMode.Validation,
