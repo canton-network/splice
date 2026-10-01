@@ -55,8 +55,8 @@ runs:
       run: |
         sudo mkdir -p /cache/test-reports
         sudo chown $(whoami):$(whoami) "/cache/test-reports"
-        for subproject in `find ${{ inputs.splice_root }} -path "*/target/test-reports" | sed -e 's/^\.\///' -e 's/\/target\/test-reports$//'`
+        for subproject in `find ${{ inputs.splice_root }} -path "*/target/scalatest-reports" | sed -e 's/^\.\///' -e 's/\/target\/scalatest-reports$//'`
         do
           # `|| true` to avoid failing if there are no test reports
-          cp -v "$subproject"/target/test-reports/TEST-*.xml /cache/test-reports/ || true
+          cp -v "$subproject"/target/scalatest-reports/TEST-*.xml /cache/test-reports/ || true
         done

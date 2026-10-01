@@ -111,7 +111,8 @@ object BuildCommon {
         ),
         Test / testOptions ++= Seq(
           // Enable logging of begin and end of test cases, test suites, and test runs.
-          Tests.Argument("-C", "com.digitalasset.canton.LogReporter")
+          Tests.Argument("-C", "com.digitalasset.canton.LogReporter"),
+          Tests.Argument("-u", ((Test / target).value / "scalatest-reports").getAbsolutePath),
         ) ++ {
           val isLegacyPv = sys.env
             .get("PROTOCOL_VERSION")
@@ -353,8 +354,10 @@ object BuildCommon {
   // applies to all Canton-based sub-projects (descendants of community-common)
   lazy val sharedCantonSettings = Seq(
     // Enable logging of begin and end of test cases, test suites, and test runs.
-    Test / testOptions += Tests
-      .Argument("-C", "com.digitalasset.canton.LogReporter"),
+    Test / testOptions ++= Seq(
+      Tests.Argument("-C", "com.digitalasset.canton.LogReporter"),
+      Tests.Argument("-u", ((Test / target).value / "scalatest-reports").getAbsolutePath),
+    ),
     // Commented out from Canton OS repo because we don't have code coverage tests yet
     //    // Ignore daml codegen generated files from code coverage
     //    coverageExcludedFiles := formatCoverageExcludes(
