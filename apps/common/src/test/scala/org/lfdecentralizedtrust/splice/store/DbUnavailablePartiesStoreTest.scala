@@ -285,9 +285,6 @@ class DbUnavailablePartiesStoreTest
         } yield {
           deleted should contain theSameElementsAs Seq(userParty(1))
           parties1 shouldBe empty
-          // FIXME: this fails because the table uses (party) as the primary key,
-          // so the second store's entry is never inserted. The proper primary key
-          // should be (store_id, party), but that would require a migration.
           parties2 should contain theSameElementsAs Seq(userParty(1))
         }
       }

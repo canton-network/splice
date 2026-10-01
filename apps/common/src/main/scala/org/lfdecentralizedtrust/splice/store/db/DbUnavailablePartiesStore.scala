@@ -62,7 +62,7 @@ class DbUnavailablePartiesStore(
                   (party, updated_at, ignore_duration, store_id)
                 select u.party, $nowMicros, $baseMicros, $storeId
                 from unnest($partyArray) as u(party)
-                on conflict (party) do update
+                on conflict (store_id, party) do update
                   set updated_at = excluded.updated_at,
                       ignore_duration = least(
                             dso_unavailable_parties.ignore_duration * 2,
