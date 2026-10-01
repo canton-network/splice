@@ -2285,9 +2285,33 @@ class DbSvDsoStore(
   override def paginateFeaturedAppRights(after: Option[Long], limit: Limit)(implicit
       tc: TraceContext
   ): Future[ResultsPage[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]] = {
-    multiDomainAcsStore
-      .listContractsPaginated(FeaturedAppRight.COMPANION, after, limit, SortOrder.Ascending)
-      .map(_.mapResultsInPage(_.contract))
+    val sortOrder = SortOrder.Ascending
+
+    val where: SQLActionBuilder = after.fold(
+      sql"assigned_domain is not null"
+    )(a => (sql"assigned_domain is not null and " ++ sortOrder.whereEventNumber(a)).toActionBuilder)
+
+    waitUntilAcsIngested {
+      for {
+        result <- storage
+          .query(
+            selectFromAcsTable(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              FeaturedAppRight.COMPANION,
+              where = where,
+              orderLimit = (sortOrder.orderByAcsEventNumber ++ sql""" limit ${sqlLimit(
+                  limit
+                )}""").toActionBuilder,
+            ),
+            "paginateFeaturedAppRights",
+          )
+        limited = applyLimit("paginateFeaturedAppRights", limit, result)
+        contracts = limited.map(contractFromRow(FeaturedAppRight.COMPANION)(_))
+        afterToken = limited.lastOption.map(_.eventNumber)
+      } yield ResultsPage(contracts, afterToken)
+    }
   }
 
   override def close(): Unit = {
