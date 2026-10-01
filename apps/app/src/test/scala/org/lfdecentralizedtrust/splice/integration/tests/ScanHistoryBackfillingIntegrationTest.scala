@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.http.ProtobufJsonScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryStart
 import org.lfdecentralizedtrust.splice.scan.automation.{
   DeleteCorruptAcsSnapshotTrigger,
   ScanHistoryBackfillingTrigger,
@@ -208,6 +209,28 @@ class ScanHistoryBackfillingIntegrationTest
           scan <- synchronizerNode.scan.toScala
         } yield scan
         scans should have size 2 // sv1&2's scans
+      }
+    }
+
+    clue(
+      "Each scan records its history start: genesis on the founder, the DSO hosting time on SV2"
+    ) {
+      val sponsorActivationTime = sv1Backend.appState.participantAdminConnection
+        .getDsoPartyToParticipantTransaction(
+          decentralizedSynchronizerId,
+          sv2Backend.participantClient.id,
+          dsoParty,
+        )
+        .value
+        .futureValue
+        .value
+        .base
+        .validFrom
+      eventually() {
+        sv1ScanBackend.appState.historyStart.get.futureValue shouldBe Some(HistoryStart.Genesis)
+        sv2ScanBackend.appState.historyStart.get.futureValue shouldBe Some(
+          HistoryStart.From(CantonTimestamp.assertFromInstant(sponsorActivationTime))
+        )
       }
     }
 
