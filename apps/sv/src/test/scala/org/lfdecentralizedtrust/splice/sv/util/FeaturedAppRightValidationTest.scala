@@ -8,7 +8,7 @@ class FeaturedAppRightValidationTest extends StoreTestBase {
 
   private def fakeFeaturedAppRight(
       providerIdx: Int,
-      ops: Seq[String] = Seq.empty,
+      ops: Seq[String],
       cid: String = nextCid(),
   ): Contract[FeaturedAppRight.ContractId, FeaturedAppRight] =
     featuredAppRight(providerParty(providerIdx), contractId = cid, opsParties = Some(ops))
@@ -31,14 +31,6 @@ class FeaturedAppRightValidationTest extends StoreTestBase {
         None,
         Seq(fakeFeaturedAppRight(2, ops = Seq(fakeProvider(3)))),
       ) shouldBe Right(())
-    }
-
-    "reject a duplicate provider" in {
-      FeaturedAppRightValidation.validateGrant(
-        fakeProvider(1),
-        None,
-        Seq(fakeFeaturedAppRight(1)),
-      ) shouldBe Left(s"provider ${fakeProvider(1)} already has a FeaturedAppRight")
     }
 
     "reject opsParties already used by an existing right" in {

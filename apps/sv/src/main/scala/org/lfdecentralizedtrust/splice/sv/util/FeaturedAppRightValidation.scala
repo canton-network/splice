@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.sv.util
 
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 
 import scala.jdk.OptionConverters.*
@@ -8,10 +9,7 @@ import org.lfdecentralizedtrust.splice.util.Contract
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
-  SRARC_GrantFeaturedAppRight,
-  SRARC_UpdateFeaturedAppRight,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{SRARC_GrantFeaturedAppRight, SRARC_UpdateFeaturedAppRight}
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -32,10 +30,8 @@ object FeaturedAppRightValidation {
   ): Either[String, Unit] = {
     val proposed = opsParties.getOrElse(Seq.empty).toSet
     val existingOps = featuredAppRights.flatMap(opsOf).toSet
-    val dupProvider = featuredAppRights.exists(_.payload.provider == provider)
     val overlap = proposed intersect existingOps
-    if (dupProvider) Left(s"provider $provider already has a FeaturedAppRight")
-    else if (overlap.nonEmpty) Left(s"opsParties already used: ${overlap.mkString(", ")}")
+    if (overlap.nonEmpty) Left(s"opsParties already used: ${overlap.mkString(", ")}")
     else if (proposed(provider)) Left(s"provider cannot be its own opsParty")
     else Right(())
   }
@@ -82,7 +78,11 @@ object FeaturedAppRightValidation {
             val provider = g.dsoRules_GrantFeaturedAppRightValue.provider
             val opsParties =
               g.dsoRules_GrantFeaturedAppRightValue.opsParties.toScala.map(_.asScala.toSeq)
-            runValidator(store, validateGrant(provider, opsParties, _))
+            val providerPartyId = PartyId.tryFromProtoPrimitive(provider)
+            store.lookupFeaturedAppRight(providerPartyId).flatMap {
+              case Some(_) => Future.successful(Left(s"provider $provider already has a FeaturedAppRight"))
+              case None => runValidator(store, validateGrant(provider, opsParties, _))
+            }
 
           case u: SRARC_UpdateFeaturedAppRight =>
             val rightCid = u.dsoRules_UpdateFeaturedAppRightValue.rightCid
