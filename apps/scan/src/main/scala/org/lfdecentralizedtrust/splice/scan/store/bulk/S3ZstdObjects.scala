@@ -40,8 +40,9 @@ class S3ZstdObjects(
       getObjectKey: Int => String
   ): Flow[Seq[String], String, NotUsed] =
     Flow[Seq[String]]
-      // Re-chunk into sequences of exactly 1000 elements (only the last one may be shorter)
       .mapConcat(identity)
+      // Regardless of which bulk sizes were used for fetching and encoding the data, we must regroup into chunks
+      // of storageConfig.bulkChunkSize, which is consistent across the SVs, to guarantee BFT equality of the resulting S3 objects across all SVs.
       .grouped(storageConfig.bulkChunkSize)
       .map(strings => {
         val updatesStr = strings.mkString("\n") + "\n"
