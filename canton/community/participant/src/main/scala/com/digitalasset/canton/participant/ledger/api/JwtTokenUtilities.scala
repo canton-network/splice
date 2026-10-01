@@ -22,18 +22,23 @@ object JwtTokenUtilities {
       userId: Option[String] = None,
       exp: Option[Instant] = Some(Instant.now().plusNanos(Duration.ofMinutes(5).toNanos)),
       scope: Option[String] = None,
+      audience: Option[String] = None,
   ): String = {
     val payload = StandardJWTPayload(
       issuer = None,
       userId = userId.getOrElse(UserManagementStore.DefaultParticipantAdminUserId),
       participantId = None,
       exp = exp,
-      format = StandardJWTTokenFormat.Scope,
-      audiences = List.empty,
+      format =
+        if (audience.isDefined) StandardJWTTokenFormat.Audience else StandardJWTTokenFormat.Scope,
+      audiences = audience.toList,
       scope = scope.fold(Some(AuthServiceJWTCodec.scopeLedgerApiFull))(Some(_)),
     )
     // stolen from com.digitalasset.canton.ledger.api.auth.Main
-    val jwtPayload = AuthServiceJWTCodec.compactPrint(payload)
+    val jwtPayload = AuthServiceJWTCodec.compactPrint(
+      payload,
+      enforceFormat = Option.when(audience.isDefined)(StandardJWTTokenFormat.Audience),
+    )
     val signed: Jwt = JwtSigner
       .HMAC256(secret)
       .signPayload(jwtPayload)

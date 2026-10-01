@@ -80,7 +80,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
     new ParticipantClientReference(
       env,
       remoteParticipant.name,
-      remoteParticipant.config.copy(token = Some(token)),
+      remoteParticipant.config.copy(ledgerApiToken = Some(token)),
     )
   }
 
