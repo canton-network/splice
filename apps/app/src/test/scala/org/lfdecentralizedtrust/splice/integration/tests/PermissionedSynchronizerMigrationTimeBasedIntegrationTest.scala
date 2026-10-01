@@ -28,7 +28,6 @@ import java.time.Duration
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
-import scala.concurrent.duration.DurationInt
 
 class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -45,7 +44,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
   "Migrate Network from UnrestrictedOpen to RestrictedOpen" in { implicit env =>
     initDso()
 
-    clue("Initially all apps have no ParticipantSynchronizerPermission") {
+    clue("Initially no participant id has ParticipantSynchronizerPermission") {
       Seq(
         sv1ValidatorBackend,
         sv2ValidatorBackend,
@@ -115,7 +114,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       }
     }
 
-    clue("Restart all svApps to trigger reprocessing") {
+    clue("Restart all svApps to trigger ParticipantSynchronizerPermission submission") {
       Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach { sv =>
         sv.stop()
         sv.startSync()
@@ -135,7 +134,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
         clue(
           s"Checking PermissionSynchronizerPermission for ${app.participantClient.id.toProtoPrimitive}"
         ) {
-          eventually(40.seconds) {
+          eventually() {
             val permissionAssigned = sv1ScanBackend.getParticipantSynchronizerPermission(
               decentralizedSynchronizerId.toProtoPrimitive,
               app.participantClient.id.toProtoPrimitive,
@@ -144,7 +143,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
           }
         }
       }
-      eventually(40.seconds) {
+      eventually() {
         sv1ScanBackend.getParticipantSynchronizerPermission(
           decentralizedSynchronizerId.toProtoPrimitive,
           bobValidatorBackend.participantClient.id.toProtoPrimitive,
@@ -162,7 +161,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       }
     }
 
-    clue("Alice onboard user succeeds") {
+    clue("Alice can onboard a user") {
       aliceValidatorBackend.onboardUser("alice-user")
     }
 
@@ -170,7 +169,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       sv1Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
     }
 
-    clue("Bob has ParticipantSynchronizerPermission") {
+    clue("Bob now has ParticipantSynchronizerPermission") {
       eventually() {
         sv1ScanBackend.getParticipantSynchronizerPermission(
           decentralizedSynchronizerId.toProtoPrimitive,
@@ -178,11 +177,9 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
         ) shouldBe Some(SynchronizerPermissionState(None))
       }
     }
-
-    clue("Bob onboard user succeeds") {
+    clue("Bob can onboard a user") {
       bobValidatorBackend.onboardUser("bob-user")
     }
-
   }
 
   private def setPermissionedSynchronizerSwitchOverTime(

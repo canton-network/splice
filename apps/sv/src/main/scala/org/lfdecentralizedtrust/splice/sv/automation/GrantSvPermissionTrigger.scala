@@ -15,12 +15,12 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingConfirmed
 import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryFor}
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.{Contract, SwitchOverTimes}
+import org.lfdecentralizedtrust.splice.util.SwitchOverTimes
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.*
 
 class GrantSvPermissionTrigger(
     override protected val context: TriggerContext,
@@ -45,17 +45,20 @@ class GrantSvPermissionTrigger(
         } else {
           for {
             confirmations <- store.listSvOnboardingConfirmed()
-            unpermissionedConfirmations <- confirmations.toList.parFilterA { confirmation =>
+            inFlightParticipants = confirmations.map(_.payload.svParticipantId)
+            establishedParticipants = dsoRules.payload.svs.asScala.values.map(_.participantId).toSeq
+            allTargetParticipants = (inFlightParticipants ++ establishedParticipants).distinct
+            unpermissionedParticipants <- allTargetParticipants.toList.parFilterA { participantId =>
               participantAdminConnection
                 .listParticipantSynchronizerPermission(
                   SynchronizerId.tryFromString(
                     dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
                   ),
-                  confirmation.payload.svParticipantId,
+                  participantId,
                 )
                 .map(permissions => !permissions.exists(_.mapping.permission == Submission))
             }
-          } yield unpermissionedConfirmations.map(GrantSvPermissionTrigger.Task(_))
+          } yield unpermissionedParticipants.map(GrantSvPermissionTrigger.Task(_))
         }
     } yield tasks
   }
@@ -63,14 +66,12 @@ class GrantSvPermissionTrigger(
   override protected def completeTask(
       task: GrantSvPermissionTrigger.Task
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val payload = task.svOnboardingConfirmed.payload
-
     ParticipantId
-      .fromProtoPrimitive(payload.svParticipantId, "svParticipantId")
+      .fromProtoPrimitive(task.participantId, "svParticipantId")
       .fold(
         err => {
           Future.successful(
-            TaskSuccess(s"Skipping SvOnboardingConfirmed with invalid participantId: $err")
+            TaskSuccess(s"Skipping SV permission task with invalid participantId: $err")
           )
         },
         participantId => {
@@ -103,36 +104,25 @@ class GrantSvPermissionTrigger(
       task: GrantSvPermissionTrigger.Task
   )(implicit tc: TraceContext): Future[Boolean] = {
     for {
-      isArchived <- store.multiDomainAcsStore
-        .lookupContractById(SvOnboardingConfirmed.COMPANION)(task.svOnboardingConfirmed.contractId)
-        .map(_.isEmpty)
-
-      isAlreadyPermissioned <-
-        if (isArchived) Future.successful(false)
-        else {
-          for {
-            dsoRules <- store.getDsoRules()
-            synchronizerId = SynchronizerId.tryFromString(
-              dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
-            )
-            permissions <- participantAdminConnection
-              .listParticipantSynchronizerPermission(
-                synchronizerId,
-                task.svOnboardingConfirmed.payload.svParticipantId,
-              )
-          } yield permissions.exists(_.mapping.permission == Submission)
-        }
-    } yield isArchived || isAlreadyPermissioned
+      dsoRules <- store.getDsoRules()
+      synchronizerId = SynchronizerId.tryFromString(
+        dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
+      )
+      permissions <- participantAdminConnection
+        .listParticipantSynchronizerPermission(
+          synchronizerId,
+          task.participantId,
+        )
+    } yield permissions.exists(_.mapping.permission == Submission)
   }
 }
 
 object GrantSvPermissionTrigger {
   final case class Task(
-      svOnboardingConfirmed: Contract[SvOnboardingConfirmed.ContractId, SvOnboardingConfirmed]
+      participantId: String
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] = prettyOfClass(
-      param("contractId", _.svOnboardingConfirmed.contractId.contractId.unquoted),
-      param("svParticipantId", _.svOnboardingConfirmed.payload.svParticipantId.unquoted),
+      param("participantId", _.participantId.unquoted)
     )
   }
 }
