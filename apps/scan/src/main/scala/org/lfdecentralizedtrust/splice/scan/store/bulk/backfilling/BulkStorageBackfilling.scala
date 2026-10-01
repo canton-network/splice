@@ -41,6 +41,9 @@ class BulkStorageBackfilling(
 
   private type Next = Future[Option[(State, Step)]]
 
+  private[backfilling] def serviceSource()(implicit tc: TraceContext): Source[Step, NotUsed] =
+    mksrc().concat(Source.never)
+
   private[backfilling] def mksrc()(implicit tc: TraceContext): Source[Step, NotUsed] =
     Source.future(progress.isComplete).flatMapConcat {
       case true =>
@@ -199,7 +202,7 @@ class BulkStorageBackfilling(
   )(implicit tracer: Tracer): PekkoRetryingService[Step] =
     withNewTrace(description) { implicit traceContext => _ =>
       new PekkoRetryingService(
-        mksrc(),
+        serviceSource(),
         Sink.ignore,
         automationConfig,
         backoffClock,

@@ -22,6 +22,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import java.time.Instant
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.*
 
 class BulkStorageBackfillingTest
     extends AsyncWordSpec
@@ -218,6 +219,25 @@ class BulkStorageBackfillingTest
           .map(_.key)
         progress.complete.get() shouldBe 1
       }
+    }
+
+    "keep the service stream open after completion, so the retrying service does not restart it" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      service(
+        progress,
+        copier,
+        new FakeListing(folders, snapshots),
+        new SequenceBound(BackfillEnd.HistoryComplete),
+        pageSize = 3,
+      ).serviceSource()
+        .completionTimeout(300.millis)
+        .runWith(Sink.ignore)
+        .failed
+        .map { failure =>
+          failure shouldBe a[java.util.concurrent.TimeoutException]
+          progress.complete.get() shouldBe 1
+        }
     }
 
     "do nothing once complete" in {
