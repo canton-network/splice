@@ -35,7 +35,10 @@ import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.lsu.RollForwardLsuTrigger
-import org.lfdecentralizedtrust.splice.validator.store.ValidatorStore
+import org.lfdecentralizedtrust.splice.validator.store.{
+  InMemoryPartyToParticipantStore,
+  ValidatorStore,
+}
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
 import org.lfdecentralizedtrust.splice.wallet.automation.{
   OffboardUserPartyTrigger,
@@ -100,17 +103,29 @@ class ValidatorAutomationService(
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =
     ValidatorAutomationService
 
-  automationConfig.topologyMetricsPollingInterval.foreach(topologyPollingInterval =>
+  automationConfig.topologyMetricsPollingInterval.foreach { topologyPollingInterval =>
+    val partyToParticipantStore = new InMemoryPartyToParticipantStore()
+    registerService(
+      new PartyToParticipantIngestionService(
+        partyToParticipantStore,
+        scanConnection,
+        connection(SpliceLedgerConnectionPriority.Low),
+        participantAdminConnection,
+        automationConfig,
+        backoffClock = triggerContext.pollingClock,
+        triggerContext.retryProvider,
+        triggerContext.loggerFactory,
+      )
+    )
     registerTrigger(
       new TopologyMetricsTrigger(
         triggerContext
           .focus(_.config.pollingInterval)
           .replace(topologyPollingInterval),
-        scanConnection,
-        participantAdminConnection,
+        partyToParticipantStore,
       )
     )
-  )
+  }
 
   walletManagerOpt.foreach { walletManager =>
     registerTrigger(
