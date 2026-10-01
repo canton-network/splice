@@ -152,7 +152,7 @@ function _ensure_gcloud_auth() {
         if [ -n "${CI:-}" ]; then
             _error "Not authenticated to Google Cloud. In CI, ensure a service account is activated (e.g., via gcloud auth activate-service-account)."
         fi
-        _log "Google Cloud authentication required. Running gcloud auth login..."
+        _info "Google Cloud authentication required. Running gcloud auth login..."
         # we use --no-launch-browser to prevent gcloud from trying to open a browser, which is useful in headless environments (i.e. tmux)
         gcloud auth login --no-launch-browser
     fi
