@@ -1,0 +1,19 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "action": "deny(403)",
+    "description": "WAF: remote code execution and local file inclusion",
+    "match": {
+      "expr": {
+        "expression": "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id932110-rce', 'owasp-crs-v030301-id932115-rce', 'owasp-crs-v030301-id932120-rce', 'owasp-crs-v030301-id932140-rce']}) || evaluatePreconfiguredWaf('lfi-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id930110-lfi']})"
+      }
+    },
+    "preview": true,
+    "priority": 10,
+    "securityPolicy": "waf-whitelist-throttle-ban-mock"
+  },
+  "name": "waf-rce-lfi",
+  "provider": "",
+  "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+}
