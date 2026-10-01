@@ -18,7 +18,11 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.{
 }
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, TimestampWithMigrationId}
+import org.lfdecentralizedtrust.splice.store.{
+  HistoryMetrics,
+  StoreTestBase,
+  TimestampWithMigrationId,
+}
 
 import java.time.Instant
 import scala.concurrent.Future

@@ -54,7 +54,9 @@ class VerifiedObjectCopier(
       tc: TraceContext
   ): Future[Boolean] = {
     def has(bucket: S3BucketConnection) =
-      bucket.getChecksums(Seq(obj.key))(ec, mat.system, tc).map(_.exists(_.checksum == obj.checksum))
+      bucket
+        .getChecksums(Seq(obj.key))(ec, mat.system, tc)
+        .map(_.exists(_.checksum == obj.checksum))
     has(staging).flatMap {
       case true => Future.successful(true)
       case false => has(committed)

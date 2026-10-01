@@ -4,19 +4,23 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
 import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.stream.scaladsl.Sink
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
-import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageBackfillingConfig, ScanStorageConfigs}
+import org.lfdecentralizedtrust.splice.scan.config.{
+  BulkStorageBackfillingConfig,
+  ScanStorageConfigs,
+}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdatesSegment
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 import org.scalatest.wordspec.AsyncWordSpec
 
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.{ExecutionContext, Future}
 
 class BulkStorageBackfillingTest
@@ -43,6 +47,9 @@ class BulkStorageBackfillingTest
   private def objects(folderName: String, n: Int): Seq[ObjectKeyAndChecksum] =
     (0 until n).map(i => ObjectKeyAndChecksum(s"$folderName/updates_compact_json_$i.zstd", s"d-$i"))
 
+  private def snapshotAt(day: Int): (CantonTimestamp, Seq[ObjectKeyAndChecksum]) =
+    ts(day) -> Seq(ObjectKeyAndChecksum(s"${ts(day)}/ACS_compact_json_0.zstd", s"s-$day"))
+
   private class InMemoryProgress extends BackfillingProgress {
     val updates = new AtomicReference[Option[UpdatesSegment]](None)
     val snapshots = new AtomicReference[Option[TimestampWithMigrationId]](None)
@@ -68,15 +75,18 @@ class BulkStorageBackfillingTest
   }
 
   private class FakeListing(
-      folders: Seq[(String, Seq[ObjectKeyAndChecksum])],
-      snapshotsByTime: Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
+      folders: => Seq[(String, Seq[ObjectKeyAndChecksum])],
+      snapshotsByTime: => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
+      val updateListings: AtomicInteger = new AtomicInteger(0),
   ) extends BulkObjectListing {
+
     override def updateObjectsPage(
         startRecordTime: CantonTimestamp,
         endRecordTime: CantonTimestamp,
         pageSize: Int,
         nextPageToken: Option[String],
     )(implicit tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] = {
+      updateListings.incrementAndGet()
       val inRange = folders.filter { case (name, _) =>
         val (from, to) = storageConfig.getStartAndEndTimestampsForFolder(name) match {
           case Right(range) => range
@@ -94,20 +104,20 @@ class BulkStorageBackfillingTest
 
     override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
         tc: TraceContext
-    ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
+    ): Future[Option[BulkStorageObjects.SnapshotObjects]] = {
+      val snapshots = snapshotsByTime
       Future.successful(
-        snapshotsByTime.lastOption.map { case (latest, _) =>
-          if (recordTime > latest)
-            BulkStorageObjects.SnapshotObjects(latest, snapshotsByTime.last._2)
+        snapshots.lastOption.flatMap { case (latest, latestObjects) =>
+          if (recordTime > latest) Some(BulkStorageObjects.SnapshotObjects(latest, latestObjects))
           else {
             val grid = storageConfig.computeBulkSnapshotTimeAtOrBefore(recordTime)
-            BulkStorageObjects.SnapshotObjects(
-              grid,
-              snapshotsByTime.collectFirst { case (t, objs) if t == grid => objs }.getOrElse(Seq.empty),
-            )
+            snapshots.collectFirst {
+              case (t, objs) if t == grid => BulkStorageObjects.SnapshotObjects(grid, objs)
+            }
           }
         }
       )
+    }
   }
 
   private class RecordingCopier extends ObjectCopier {
@@ -116,49 +126,85 @@ class BulkStorageBackfillingTest
       Future.successful(copied.updateAndGet(_ ++ objects.map(_.key))).map(_ => ())
   }
 
+  private class SequenceBound(ends: BackfillEnd*) extends BackfillUpperBound {
+    private val remaining = new AtomicReference[List[BackfillEnd]](ends.toList)
+    override def end(implicit tc: TraceContext): Future[BackfillEnd] =
+      Future.successful(remaining.getAndUpdate {
+        case _ :: (rest @ (_ :: _)) => rest
+        case last => last
+      }.head)
+  }
+
   private val folders = Seq(
     folder(1, 2) -> objects(folder(1, 2), 2),
     folder(2, 3) -> objects(folder(2, 3), 2),
     folder(3, 4) -> objects(folder(3, 4), 1),
   )
-  private val snapshots = Seq(
-    ts(2) -> Seq(ObjectKeyAndChecksum(s"${folder(2, 3)}/ACS_compact_json_0.zstd", "s-2")),
-    ts(3) -> Seq(ObjectKeyAndChecksum(s"${folder(3, 4)}/ACS_compact_json_0.zstd", "s-3")),
-  )
+  private val snapshots = Seq(snapshotAt(2), snapshotAt(3), snapshotAt(4))
 
-  private def run(progress: InMemoryProgress, copier: RecordingCopier, pageSize: Int = 3) =
+  private def backfilling(
+      progress: InMemoryProgress,
+      copier: RecordingCopier,
+      listing: BulkObjectListing = new FakeListing(folders, snapshots),
+      upperBound: BackfillUpperBound = new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
+      pageSize: Int = 3,
+  ) =
+    service(progress, copier, listing, upperBound, pageSize).mksrc().runWith(Sink.seq)
+
+  private def service(
+      progress: InMemoryProgress,
+      copier: RecordingCopier,
+      listing: BulkObjectListing,
+      upperBound: BackfillUpperBound,
+      pageSize: Int,
+  ) =
     new BulkStorageBackfilling(
-      BulkStorageBackfillingConfig(enabled = true, pageSize = pageSize),
+      BulkStorageBackfillingConfig(
+        enabled = true,
+        pageSize = pageSize,
+        pollingInterval = NonNegativeFiniteDuration.ofMillis(10),
+      ),
       storageConfig,
       migrationId,
-      new FakeListing(folders, snapshots),
+      listing,
       copier,
       progress,
-      CatchUpWithPeers,
+      upperBound,
       loggerFactory,
-    ).mksrc().runWith(Sink.seq)
+    )
 
   "BulkStorageBackfilling" should {
     "copy every update object and snapshot in order, then mark completion once" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
-      run(progress, copier).map { steps =>
+      backfilling(progress, copier).map { steps =>
         copier.copied.get() shouldBe (folders.flatMap(_._2) ++ snapshots.flatMap(_._2)).map(_.key)
-        steps should contain(BulkStorageBackfilling.SnapshotSkipped(ts(1)))
         progress.updates.get() shouldBe Some(segment(3, 4))
-        progress.snapshots.get() shouldBe Some(TimestampWithMigrationId(ts(3), migrationId))
+        progress.snapshots.get() shouldBe Some(TimestampWithMigrationId(ts(4), migrationId))
         progress.complete.get() shouldBe 1
         steps.last shouldBe BulkStorageBackfilling.Completed
+      }
+    }
+
+    "start the snapshot walk at the end of the first segment" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      backfilling(progress, copier).map { steps =>
+        steps.collect { case s: BulkStorageBackfilling.SnapshotCopied =>
+          s.snapshot.timestamp
+        } shouldBe
+          Seq(ts(2), ts(3), ts(4))
+        steps.collect { case s: BulkStorageBackfilling.SnapshotSkipped => s } shouldBe empty
       }
     }
 
     "page through the update folders with the peers' page token" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
-      run(progress, copier, pageSize = 2).map { steps =>
+      backfilling(progress, copier, pageSize = 2).map { steps =>
         steps.collect { case s: BulkStorageBackfilling.UpdatesPageCopied => s.objects } shouldBe
           Seq(2, 2, 1)
-        copier.copied.get().size shouldBe 7
+        copier.copied.get().size shouldBe 8
       }
     }
 
@@ -167,8 +213,9 @@ class BulkStorageBackfillingTest
       progress.updates.set(Some(segment(2, 3)))
       progress.snapshots.set(Some(TimestampWithMigrationId(ts(2), migrationId)))
       val copier = new RecordingCopier
-      run(progress, copier).map { _ =>
-        copier.copied.get() shouldBe (folders(2)._2 ++ snapshots(1)._2).map(_.key)
+      backfilling(progress, copier).map { _ =>
+        copier.copied.get() shouldBe (folders(2)._2 ++ snapshots(1)._2 ++ snapshots(2)._2)
+          .map(_.key)
         progress.complete.get() shouldBe 1
       }
     }
@@ -177,28 +224,106 @@ class BulkStorageBackfillingTest
       val progress = new InMemoryProgress
       progress.complete.set(1)
       val copier = new RecordingCopier
-      run(progress, copier).map { steps =>
+      backfilling(progress, copier).map { steps =>
         steps shouldBe empty
         copier.copied.get() shouldBe empty
       }
     }
 
-    "finish when the peers have no objects at all" in {
+    "wait while the peers have no objects yet" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
-      new BulkStorageBackfilling(
-        BulkStorageBackfillingConfig(enabled = true),
-        storageConfig,
-        migrationId,
-        new FakeListing(Seq.empty, Seq.empty),
-        copier,
+      service(
         progress,
-        CatchUpWithPeers,
-        loggerFactory,
-      ).mksrc().runWith(Sink.seq).map { steps =>
+        copier,
+        new FakeListing(Seq.empty, Seq.empty),
+        new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
+        pageSize = 3,
+      ).mksrc().take(3).runWith(Sink.seq).map { steps =>
+        steps shouldBe Seq.fill(3)(BulkStorageBackfilling.WaitingForPeers(CantonTimestamp.MinValue))
         copier.copied.get() shouldBe empty
+        progress.complete.get() shouldBe 0
+      }
+    }
+
+    "set the marker without copying when this Scan holds history from genesis" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      val listing = new FakeListing(folders, snapshots)
+      backfilling(progress, copier, listing, new SequenceBound(BackfillEnd.HistoryComplete)).map {
+        steps =>
+          steps shouldBe Seq[BulkStorageBackfilling.Step](
+            BulkStorageBackfilling.NothingToCopy,
+            BulkStorageBackfilling.Completed,
+          )
+          copier.copied.get() shouldBe empty
+          listing.updateListings.get() shouldBe 0
+          progress.complete.get() shouldBe 1
+      }
+    }
+
+    "wait until the history start is known" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      backfilling(
+        progress,
+        copier,
+        upperBound = new SequenceBound(
+          BackfillEnd.NotYetKnown,
+          BackfillEnd.NotYetKnown,
+          BackfillEnd.HistoryComplete,
+        ),
+      ).map { steps =>
+        steps shouldBe Seq[BulkStorageBackfilling.Step](
+          BulkStorageBackfilling.WaitingForHistoryStart,
+          BulkStorageBackfilling.WaitingForHistoryStart,
+          BulkStorageBackfilling.NothingToCopy,
+          BulkStorageBackfilling.Completed,
+        )
         progress.complete.get() shouldBe 1
-        steps.last shouldBe BulkStorageBackfilling.Completed
+      }
+    }
+
+    "copy only the segments before the first own segment and the snapshots up to its start" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      backfilling(
+        progress,
+        copier,
+        upperBound = new SequenceBound(BackfillEnd.CopyUpTo(ts(3))),
+        pageSize = 10,
+      ).map { _ =>
+        copier.copied.get() shouldBe
+          (folders(0)._2 ++ folders(1)._2 ++ snapshots(0)._2 ++ snapshots(1)._2).map(_.key)
+        progress.updates.get() shouldBe Some(segment(2, 3))
+        progress.snapshots.get() shouldBe Some(TimestampWithMigrationId(ts(3), migrationId))
+        progress.complete.get() shouldBe 1
+      }
+    }
+
+    "wait for the peers when their buckets end before the first own segment" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      val updateListings = new AtomicInteger(0)
+      def caughtUp = updateListings.get() > 2
+      val listing = new FakeListing(
+        if (caughtUp) folders else folders.take(2),
+        if (caughtUp) snapshots else snapshots.take(2),
+        updateListings,
+      )
+      backfilling(
+        progress,
+        copier,
+        listing,
+        new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
+        pageSize = 10,
+      ).map { steps =>
+        steps should contain(BulkStorageBackfilling.WaitingForPeers(ts(3)))
+        copier.copied.get() shouldBe
+          (folders.flatMap(_._2) ++ snapshots.flatMap(_._2)).map(_.key)
+        progress.updates.get() shouldBe Some(segment(3, 4))
+        progress.snapshots.get() shouldBe Some(TimestampWithMigrationId(ts(4), migrationId))
+        progress.complete.get() shouldBe 1
       }
     }
   }

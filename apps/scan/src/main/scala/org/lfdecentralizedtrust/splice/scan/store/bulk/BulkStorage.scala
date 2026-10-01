@@ -38,12 +38,13 @@ import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.{
   BftBulkObjectListing,
   BulkStorageBackfilling,
-  CatchUpWithPeers,
   KvBackfillingProgress,
   PeerRotation,
   ScanPeerObjectSource,
+  UpToFirstOwnSegment,
   VerifiedObjectCopier,
 }
+import org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStart
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.duration.*
@@ -57,6 +58,7 @@ class BulkStorage(
     updateHistory: UpdateHistory,
     currentMigrationId: Long,
     kvProvider: ScanKeyValueProvider,
+    historyStart: ScanHistoryStart,
     metricsFactory: LabeledMetricsFactory,
     automationConfig: AutomationConfig,
     backoffClock: Clock,
@@ -156,7 +158,7 @@ class BulkStorage(
           loggerFactory,
         ),
         backfillingProgress,
-        CatchUpWithPeers,
+        new UpToFirstOwnSegment(historyStart, storageConfig),
         loggerFactory,
       )
     }
@@ -308,6 +310,7 @@ object BulkStorage {
       updateHistory: UpdateHistory,
       currentMigrationId: Long,
       kvProvider: ScanKeyValueProvider,
+      historyStart: ScanHistoryStart,
       metricsFactory: LabeledMetricsFactory,
       automationConfig: AutomationConfig,
       backoffClock: Clock,
@@ -342,6 +345,7 @@ object BulkStorage {
         updateHistory,
         currentMigrationId,
         kvProvider,
+        historyStart,
         metricsFactory,
         automationConfig,
         backoffClock,

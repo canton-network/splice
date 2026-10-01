@@ -5,14 +5,31 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
+import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
+import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryStart, ScanHistoryStart}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-trait BackfillUpperBound {
-  def endRecordTime(implicit tc: TraceContext): Future[CantonTimestamp]
+sealed trait BackfillEnd
+
+object BackfillEnd {
+  final case class CopyUpTo(firstOwnSegmentStart: CantonTimestamp) extends BackfillEnd
+  case object HistoryComplete extends BackfillEnd
+  case object NotYetKnown extends BackfillEnd
 }
 
-object CatchUpWithPeers extends BackfillUpperBound {
-  override def endRecordTime(implicit tc: TraceContext): Future[CantonTimestamp] =
-    Future.successful(CantonTimestamp.MaxValue)
+trait BackfillUpperBound {
+  def end(implicit tc: TraceContext): Future[BackfillEnd]
+}
+
+class UpToFirstOwnSegment(historyStart: ScanHistoryStart, storageConfig: ScanStorageConfig)(implicit
+    ec: ExecutionContext
+) extends BackfillUpperBound {
+  override def end(implicit tc: TraceContext): Future[BackfillEnd] =
+    historyStart.get.map {
+      case None => BackfillEnd.NotYetKnown
+      case Some(HistoryStart.Genesis) => BackfillEnd.HistoryComplete
+      case Some(start: HistoryStart.From) =>
+        BackfillEnd.CopyUpTo(start.firstOwnSegmentStart(storageConfig))
+    }
 }
