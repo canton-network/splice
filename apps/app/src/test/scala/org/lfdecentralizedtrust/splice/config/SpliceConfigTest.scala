@@ -442,6 +442,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       ("queue-size", "0", "must be positive"),
       ("queue-size", "-1", "must be positive"),
       ("retention", "0s", "must be positive"),
+      ("preparation-timeout", "0s", "not positive"),
     ).foreach { case (field, value, expectedError) =>
       s"reject $field = $value" in {
         val overwrite = ConfigFactory.parseString(

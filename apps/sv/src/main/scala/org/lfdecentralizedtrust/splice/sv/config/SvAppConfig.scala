@@ -748,4 +748,5 @@ final case class SvOnboardingSnapshotsConfig(
     retention: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
     parallelism: Int = 1,
     queueSize: Int = 16,
+    preparationTimeout: PositiveFiniteDuration = PositiveFiniteDuration.ofMinutes(40),
 )
