@@ -64,6 +64,7 @@ let
     python3Packages.dockerfile-parse
     python3Packages.flask
     python3Packages.gitpython
+    python3Packages.junit2html
     python3Packages.google-cloud-bigquery
     python3Packages.google-cloud-storage
     python3Packages.gql
