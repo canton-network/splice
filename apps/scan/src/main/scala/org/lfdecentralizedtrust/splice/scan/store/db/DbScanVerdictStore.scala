@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.sequencer.admin.{v30 as seqv30}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -262,6 +262,7 @@ class DbScanVerdictStore(
     with HasCloseContext
     with org.lfdecentralizedtrust.splice.store.db.AcsQueries { self =>
 
+  private implicit val dbProfile: DbStorage.Profile = storage.profile
   val profile: slick.jdbc.JdbcProfile = PostgresProfile
 
   private def historyId = updateHistory.historyId

@@ -33,7 +33,7 @@
     "dompurify": "^3.4.16",
     "eslint": "^9.39.4",
     "jose": "^4.15.9",
-    "jsondiffpatch": "^0.7.3",
+    "jsondiffpatch": "^0.7.6",
     "msw": "^2.14.2",
     "uuid": "^14.0.0",
     "xunit-viewer": "^10.6.1",

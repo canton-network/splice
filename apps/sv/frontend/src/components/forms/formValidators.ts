@@ -296,7 +296,7 @@ export const serializeSwitchOverTimes = (
 export const switchOverEntriesToConfigValue = (entries: SwitchOverEntry[]): string => {
   const normalized = serializeSwitchOverTimes(entries) ?? {};
   const sorted = Object.fromEntries(
-    Object.entries(normalized).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    Object.entries(normalized).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   );
   return Object.keys(sorted).length === 0 ? '' : JSON.stringify(sorted);
 };
@@ -345,7 +345,7 @@ export const switchOverConfigValueToDisplayEntries = (
   if (!map) return [];
   return Object.entries(map)
     .filter(([, time]) => !isDamlMinBoundTime(time))
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, time]) => {
       const t = dayjs.utc(time);
       return { key, time: t.isValid() ? `${t.format('YYYY-MM-DD HH:mm')} UTC` : time };

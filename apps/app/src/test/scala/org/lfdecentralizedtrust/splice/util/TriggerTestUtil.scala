@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.util
 
-import com.digitalasset.canton.{BaseTest, ScalaFuturesWithPatience}
+import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.scalatest.ScalaFuturesWithPatience
 import com.typesafe.scalalogging.LazyLogging
 import org.lfdecentralizedtrust.splice.automation.{Trigger, UpdateIngestionService}
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
