@@ -22,6 +22,7 @@ org.lfdecentralizedtrust.splice.scan.admin.http.GeneratedScanRouteDropNullsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodingsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringComplianceTest
 org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerTest
+org.lfdecentralizedtrust.splice.scan.automation.ScanHistoryStartTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanVerdictIngestionServiceTest
 org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest
 org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfigTest

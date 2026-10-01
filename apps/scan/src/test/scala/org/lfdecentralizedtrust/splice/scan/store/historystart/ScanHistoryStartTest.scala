@@ -8,18 +8,13 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{BaseTest, HasExecutionContext}
 import io.circe.syntax.*
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs
-import org.lfdecentralizedtrust.splice.test.HasRetryProvider
 import org.scalatest.wordspec.AsyncWordSpec
 
 import java.time.Instant
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
 
-class ScanHistoryStartTest
-    extends AsyncWordSpec
-    with BaseTest
-    with HasExecutionContext
-    with HasRetryProvider {
+class ScanHistoryStartTest extends AsyncWordSpec with BaseTest with HasExecutionContext {
 
   private val storageConfig = ScanStorageConfigs.scanStorageConfigV1
 
@@ -103,19 +98,6 @@ class ScanHistoryStartTest
       } yield {
         first shouldBe Some(HistoryStart.From(hosted))
         second shouldBe Some(HistoryStart.From(hosted))
-      }
-    }
-
-    "keep retrying in the background until the history start can be recorded" in {
-      val store = new InMemoryStore
-      val hosted = ts("2026-01-02T10:15:00Z")
-      val asked = new AtomicInteger(0)
-      val sources = new FakeSources(
-        hostedSince = if (asked.incrementAndGet() > 2) Some(hosted) else None
-      )
-      historyStart(store, sources).recordWhenKnown(testRetryProvider).map { _ =>
-        asked.get() shouldBe 3
-        store.value.get() shouldBe Some(HistoryStart.From(hosted))
       }
     }
   }
