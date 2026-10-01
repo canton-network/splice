@@ -572,7 +572,7 @@ template AmuletRules
               roundClosedAt = now
               rewardCouponTimeToLive = validatorRewardConfig.rewardCouponTimeToLive
               dryRun = False
-              kind = Some Validator
+              kind = Some RewardKind_Validator
 
           when (useTrafficBasedValidatorRewards validatorRewardConfig.dryRunVersion) $ do
             void $ create CalculateRewardsV2 with
@@ -581,7 +581,7 @@ template AmuletRules
               roundClosedAt = now
               rewardCouponTimeToLive = validatorRewardConfig.rewardCouponTimeToLive
               dryRun = True
-              kind = Some Validator
+              kind = Some RewardKind_Validator
 
         -- create the new open round
         newOpenRound <- do
@@ -1572,10 +1572,10 @@ summarizeAndConsumeInputs csum dso sender inps = do
       assertWithinDeadline "RewardCouponV2.expiresAt" coupon.expiresAt
       -- Route the amount to app-reward or validator-reward totals based on
       -- the coupon's flow-of-origin discriminator.
-      -- See 'RewardKind' doc: 'None' is the canonical app-flow value, 'Some App'
-      -- is tolerated (same routing), 'Some Validator' routes to validator totals.
+      -- See 'RewardKind' doc: 'None' is the canonical app-flow value, 'Some RewardKind_App'
+      -- is tolerated (same routing), 'Some RewardKind_Validator' routes to validator totals.
       let (appDelta, validatorDelta) = case coupon.kind of
-            Some Validator -> (0.0, coupon.amount)
+            Some RewardKind_Validator -> (0.0, coupon.amount)
             _ -> (coupon.amount, 0.0)
       return TransferInputsSummary with
         totalAmuletAmount = s.totalAmuletAmount
@@ -2336,7 +2336,7 @@ splitAndBurn eventLogCid sender amount inputs context dso developmentFundManager
   logAmuletBurn dso eventLogCid sender amount usage (toInterfaceContractId amuletCid)
   -- Gate legacy ValidatorRewardCoupon creation: skipped once the round is
   -- configured for the CIP-0120 traffic-based scheme (batches signed by
-  -- the DSO party produce RewardCouponV2 with kind = Some Validator instead).
+  -- the DSO party produce RewardCouponV2 with kind = Some RewardKind_Validator instead).
   contextMiningRound <- fetchPublicReferenceData (ForDso dso) context.openMiningRound (OpenMiningRound_Fetch dso)
   when (useAmuletBurnValidatorRewards ((.mintingVersion) <$> contextMiningRound.validatorRewardConfig)) $
     void $ create ValidatorRewardCoupon with

@@ -494,7 +494,7 @@ testMintingDelegation_AssignAndMint_mixedKinds = do
     round = openRound.round
     providerIsObserver = True
     beneficiary = None
-    kind = Some Validator
+    kind = Some RewardKind_Validator
 
   runNextIssuance app
   runNextIssuance app
@@ -541,7 +541,7 @@ testMintingDelegation_AssignAndMint_mixedKinds = do
     (extraAmounts == sort [coupon1Amount * 0.4, coupon2Amount * 0.4])
   let extraKinds = map (\(_, c) -> c.kind) extraCoupons
   require "extra-beneficiary should have a None (app-flow) coupon" (None `elem` extraKinds)
-  require "extra-beneficiary should have a Some Validator coupon" (Some Validator `elem` extraKinds)
+  require "extra-beneficiary should have a Some RewardKind_Validator coupon" (Some RewardKind_Validator `elem` extraKinds)
 
   pure ()
 
