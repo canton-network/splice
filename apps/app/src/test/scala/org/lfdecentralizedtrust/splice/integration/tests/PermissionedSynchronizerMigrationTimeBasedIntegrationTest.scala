@@ -6,17 +6,18 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.admin.api.client.data.OnboardingRestriction.RestrictedOpen
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
-import org.lfdecentralizedtrust.splice.util.{ProcessTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.util.{ProcessTestUtil, TimeTestUtil, WalletTestUtil}
 
-class PermissionedSynchronizerMigrationIntegrationTest
-    extends IntegrationTest
+class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
+    extends IntegrationTestWithIsolatedEnvironment
     with ProcessTestUtil
-    with WalletTestUtil {
+    with WalletTestUtil
+    with TimeTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4Svs(this.getClass.getSimpleName)
+      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
       .withManualStart
 
   "Migrate Network from UnrestrictedOpen to RestrictedOpen" in { implicit env =>

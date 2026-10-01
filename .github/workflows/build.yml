@@ -153,7 +153,7 @@ jobs:
     with:
       runs_on: self-hosted-k8s-medium
       test_names_file: 'test-full-class-names-permissioned-migration.log'
-      start_canton_options: -w
+      start_canton_options: -s
       parallelism: 1
       test_name: permissioned-synchronizer
       commit_sha: ${{ inputs.commit_sha }}
