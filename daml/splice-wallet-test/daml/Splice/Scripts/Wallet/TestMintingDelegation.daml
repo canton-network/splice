@@ -483,7 +483,7 @@ testMintingDelegation_AssignAndMint_mixedKinds = do
     round = openRound.round
     providerIsObserver = True
     beneficiary = None
-    kind = Some App
+    kind = None
 
   let coupon2Amount = 500.0
   coupon2Cid <- submit app.dso $ createCmd RewardCouponV2 with
@@ -540,7 +540,7 @@ testMintingDelegation_AssignAndMint_mixedKinds = do
   require "extra-beneficiary amounts should be 40% of originals"
     (extraAmounts == sort [coupon1Amount * 0.4, coupon2Amount * 0.4])
   let extraKinds = map (\(_, c) -> c.kind) extraCoupons
-  require "extra-beneficiary should have a Some App coupon" (Some App `elem` extraKinds)
+  require "extra-beneficiary should have a None (app-flow) coupon" (None `elem` extraKinds)
   require "extra-beneficiary should have a Some Validator coupon" (Some Validator `elem` extraKinds)
 
   pure ()
