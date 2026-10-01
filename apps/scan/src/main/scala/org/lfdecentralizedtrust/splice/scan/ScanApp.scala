@@ -271,6 +271,7 @@ class ScanApp(
         new KvHistoryStartStore(kvProvider),
         new ParticipantHistoryStartSources(
           config.isFirstSv,
+          config.updateHistoryBackfillEnabled && config.updateHistoryBackfillImportUpdatesEnabled,
           updateHistory,
           domainMigrationId,
           participantAdminConnection,

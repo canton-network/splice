@@ -19,7 +19,10 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.http.ProtobufJsonScanHttpEncodings
-import org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryStart
+import org.lfdecentralizedtrust.splice.scan.store.historystart.{
+  HistoryStart,
+  ParticipantHistoryStartSources,
+}
 import org.lfdecentralizedtrust.splice.scan.automation.{
   DeleteCorruptAcsSnapshotTrigger,
   ScanHistoryBackfillingTrigger,
@@ -213,8 +216,15 @@ class ScanHistoryBackfillingIntegrationTest
     }
 
     clue(
-      "Each scan records its history start: genesis on the founder, the DSO hosting time on SV2"
+      "The founder records genesis as its history start; SV2 records none while its backfill runs"
     ) {
+      eventually() {
+        sv1ScanBackend.appState.historyStart.get.futureValue shouldBe Some(HistoryStart.Genesis)
+      }
+      sv2ScanBackend.appState.historyStart.get.futureValue shouldBe None
+    }
+
+    clue("SV2 reads the DSO party hosting time its sponsor authorized") {
       val sponsorActivationTime = sv1Backend.appState.participantAdminConnection
         .getDsoPartyToParticipantTransaction(
           decentralizedSynchronizerId,
@@ -226,12 +236,20 @@ class ScanHistoryBackfillingIntegrationTest
         .value
         .base
         .validFrom
-      eventually() {
-        sv1ScanBackend.appState.historyStart.get.futureValue shouldBe Some(HistoryStart.Genesis)
-        sv2ScanBackend.appState.historyStart.get.futureValue shouldBe Some(
-          HistoryStart.From(CantonTimestamp.assertFromInstant(sponsorActivationTime))
-        )
-      }
+      val sv2UpdateHistory = sv2ScanBackend.appState.automation.updateHistory
+      val sv2Sources = new ParticipantHistoryStartSources(
+        isFoundingSv = false,
+        historyBackfillEnabled = true,
+        sv2UpdateHistory,
+        sv2UpdateHistory.domainMigrationId,
+        sv2ScanBackend.appState.participantAdminConnection,
+        sv2ScanBackend.config.globalSynchronizerAlias,
+        sv2Backend.participantClient.id,
+        dsoParty,
+      )
+      sv2Sources.dsoPartyHostedSince.futureValue shouldBe Some(
+        CantonTimestamp.assertFromInstant(sponsorActivationTime)
+      )
     }
 
     // Add another update on which we can easily synchronize the update histories of the two scans
@@ -431,6 +449,12 @@ class ScanHistoryBackfillingIntegrationTest
         sv2ScanBackend.getBackfillingStatus().complete shouldBe false
       },
     )
+
+    clue("SV2 records genesis as its history start once its backfill is complete") {
+      eventually() {
+        sv2ScanBackend.appState.historyStart.get.futureValue shouldBe Some(HistoryStart.Genesis)
+      }
+    }
 
     clue("Debug print history after backfilling") {
       env.scans.local.filter(_.is_initialized).foreach { scan =>

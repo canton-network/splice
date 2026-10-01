@@ -47,6 +47,7 @@ class ScanHistoryStartTriggerTest
   private class JoiningSvSources(hosted: AtomicReference[Option[CantonTimestamp]])
       extends HistoryStartSources {
     override val isFoundingSv = false
+    override val historyBackfillEnabled = false
     override def historyBackfilledFromGenesis(implicit tc: TraceContext) =
       Future.successful(Some(false))
     override def dsoPartyHostedSince(implicit tc: TraceContext) =

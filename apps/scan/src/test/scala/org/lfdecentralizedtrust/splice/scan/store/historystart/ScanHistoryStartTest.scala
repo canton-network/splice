@@ -30,6 +30,7 @@ class ScanHistoryStartTest extends AsyncWordSpec with BaseTest with HasExecution
 
   private class FakeSources(
       override val isFoundingSv: Boolean = false,
+      override val historyBackfillEnabled: Boolean = false,
       backfilled: => Option[Boolean] = Some(false),
       hostedSince: => Option[CantonTimestamp] = None,
   ) extends HistoryStartSources {
@@ -62,6 +63,26 @@ class ScanHistoryStartTest extends AsyncWordSpec with BaseTest with HasExecution
       val store = new InMemoryStore
       historyStart(store, new FakeSources(backfilled = Some(true))).get.map {
         _ shouldBe Some(HistoryStart.Genesis)
+      }
+    }
+
+    "record nothing while the update history backfill is enabled and not finished, then genesis" in {
+      val store = new InMemoryStore
+      val hosted = ts("2026-01-02T10:15:00Z")
+      val backfilled = new AtomicReference[Option[Boolean]](Some(false))
+      val sources = new FakeSources(
+        historyBackfillEnabled = true,
+        backfilled = backfilled.get(),
+        hostedSince = Some(hosted),
+      )
+      for {
+        whileBackfilling <- historyStart(store, sources).get
+        _ = backfilled.set(Some(true))
+        afterBackfill <- historyStart(store, sources).get
+      } yield {
+        whileBackfilling shouldBe None
+        afterBackfill shouldBe Some(HistoryStart.Genesis)
+        store.value.get() shouldBe Some(HistoryStart.Genesis)
       }
     }
 

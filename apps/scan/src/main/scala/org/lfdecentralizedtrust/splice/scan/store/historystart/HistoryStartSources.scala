@@ -15,6 +15,8 @@ import scala.concurrent.{ExecutionContext, Future}
 trait HistoryStartSources {
   def isFoundingSv: Boolean
 
+  def historyBackfillEnabled: Boolean
+
   def historyBackfilledFromGenesis(implicit tc: TraceContext): Future[Option[Boolean]]
 
   def dsoPartyHostedSince(implicit tc: TraceContext): Future[Option[CantonTimestamp]]
@@ -22,6 +24,7 @@ trait HistoryStartSources {
 
 class ParticipantHistoryStartSources(
     override val isFoundingSv: Boolean,
+    override val historyBackfillEnabled: Boolean,
     updateHistory: UpdateHistory,
     migrationId: Long,
     participantAdminConnection: ParticipantAdminConnection,

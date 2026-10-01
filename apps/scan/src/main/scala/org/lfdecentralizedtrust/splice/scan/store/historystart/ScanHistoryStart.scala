@@ -76,6 +76,7 @@ class ScanHistoryStart(
       sources.historyBackfilledFromGenesis.flatMap {
         case None => Future.successful(None)
         case Some(true) => Future.successful(Some(HistoryStart.Genesis))
+        case Some(false) if sources.historyBackfillEnabled => Future.successful(None)
         case Some(false) => sources.dsoPartyHostedSince.map(_.map(HistoryStart.From(_)))
       }
 }
