@@ -8,6 +8,8 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
+import io.grpc.Status
+import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -69,6 +71,23 @@ class ScanHistoryStart(
             }
         }
     }
+
+  def recordWhenKnown(retryProvider: RetryProvider)(implicit tc: TraceContext): Future[Unit] =
+    retryProvider
+      .retry(
+        RetryFor.WaitingOnInitDependencyLong,
+        "record_history_start",
+        "Record the history start of this Scan",
+        get.map {
+          case Some(_) => ()
+          case None =>
+            throw Status.UNAVAILABLE
+              .withDescription("The history start of this Scan is not known yet")
+              .asRuntimeException()
+        },
+        logger,
+      )
+      .recover { case _ if retryProvider.isClosing => () }
 
   private def resolve(implicit tc: TraceContext): Future[Option[HistoryStart]] =
     if (sources.isFoundingSv) Future.successful(Some(HistoryStart.Genesis))

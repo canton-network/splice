@@ -28,7 +28,6 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbScanVerdictStore}
-import org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStart
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
@@ -89,9 +88,6 @@ class ScanAutomationService(
         triggerContext,
       )
     )
-
-  def registerHistoryStartTrigger(historyStart: ScanHistoryStart): Unit =
-    registerTrigger(new ScanHistoryStartTrigger(historyStart, triggerContext))
 
   def registerPruneRewardAccountingTrigger(
       rewardsReferenceStore: ScanRewardsReferenceStore,
