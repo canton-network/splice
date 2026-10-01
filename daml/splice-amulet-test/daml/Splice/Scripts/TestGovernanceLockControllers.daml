@@ -8,12 +8,15 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.List (sort)
 import DA.Map qualified as Map
+import DA.Text qualified as Text
+import DA.TextMap qualified as TextMap
 import DA.Optional (isNone, isSome)
 import DA.Time
 
 import Daml.Script
 import Splice.Amulet (Amulet, LockedAmulet)
 import Splice.Api.Token.HoldingV1 (Holding)
+import Splice.Api.Token.MetadataV1 (Metadata(..), emptyMetadata)
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.GovernanceLock
 import Splice.Scripts.TestGovernanceLocks
@@ -21,6 +24,7 @@ import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
+import Splice.TokenStandard.Utils.Internal.Conversions (timeToMeta)
 
 -- | Controllers from the CIP example: owner A, featured app X, staking app S.
 -- Any two of the three can unlock or substitute; S or A alone can withdraw vested funds.
@@ -314,6 +318,60 @@ transferInstructionPendingParties p cid = do
   case view.status of
     V1.TransferPendingInternalWorkflow{..} -> pure $ Map.keys pendingActions
     status -> fail $ "Unexpected transfer instruction status " <> show status
+
+-- | Token standard unlocks and vesting withdraws that only record an approval, followed by ones that complete them.
+-- Only TSv2 is covered, as TSv1 can't set custom controllers or withdraw as a party other than the owner.
+testCustomControllersCompatPendingTSv2 : Script ()
+testCustomControllersCompatPendingTSv2 = do
+  env@TestEnv{..} <- setupTest
+  let ops = tsv2Operations
+      registry = registriesEnv.amuletV2
+      controllers = [[alice, charlie]]
+      controllersString = Text.intercalate ";" $ fmap (Text.intercalate "," . fmap partyToText) controllers
+      controllersMeta = Metadata $ TextMap.fromList
+        [ (unlockControllersMetaKey, controllersString)
+        , (vestingControllersMetaKey, controllersString)
+        ]
+  AmuletRegistryV2.tapFaucet registry alice 20000.0
+
+  lockCid <- expectSuccess $ ops.governanceLock env alice 20000.0 (GLK_FeaturedApp bob) controllersMeta
+  Some lock <- queryContractId alice lockCid
+  lock.specification.unlockControllers === ControllerSpecification controllers
+  lock.specification.vestingControllers === ControllerSpecification controllers
+
+  -- charlie approves the unlock first, so the unlock is pending
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  let unlockAtMeta = timeToMeta unlockAtMetaKey unlockAt emptyMetadata
+  Some pendingLockCid <- expectSuccess $ ops.pendingGovernanceUnlock env lockCid charlie unlockAtMeta
+
+  None <- queryContractId alice lockCid
+  Some pendingLock <- queryContractId alice pendingLockCid
+  Map.keys pendingLock.pendingUnlockApprovals === [charlie]
+  pendingLock.originalLockCid === Some lockCid
+  checkLockedHolding alice pendingLockCid 20000.0
+
+  -- alice completes the unlock
+  vestingCid <- expectSuccess $ ops.governanceUnlock env pendingLockCid alice unlockAtMeta
+  None <- queryContractId alice pendingLockCid
+  checkLockedHolding alice vestingCid 20000.0
+
+  -- charlie approves the vesting withdraw first, so the withdraw is pending
+  passTime (days 16)
+  -- 1/4th of the 60 day vesting period
+  let withdrawAtMeta = timeToMeta withdrawAtMetaKey (unlockAt `addRelTime` days 15) emptyMetadata
+  Some pendingVestingCid <- expectSuccess $ ops.vestingWithdraw env vestingCid charlie withdrawAtMeta
+
+  None <- queryContractId alice vestingCid
+  Some pendingVesting <- queryContractId alice pendingVestingCid
+  Map.keys pendingVesting.pendingWithdrawApprovals === [charlie]
+  pendingVesting.vestingAmount === 20000.0
+  checkLockedHolding alice pendingVestingCid 20000.0
+
+  -- alice completes the withdraw, which releases 1/4th of the 20k
+  Some remainingVestingCid <- expectSuccess $ ops.vestingWithdraw env pendingVestingCid alice withdrawAtMeta
+  Some remainingVesting <- queryContractId alice remainingVestingCid
+  remainingVesting.vestingAmount === 15000.0
+  checkLockedHolding alice remainingVestingCid 15000.0
 
 testCustomControllersTSv1Withdraw : Script ()
 testCustomControllersTSv1Withdraw = do

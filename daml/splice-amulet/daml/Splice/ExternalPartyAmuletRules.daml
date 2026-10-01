@@ -145,7 +145,7 @@ template ExternalPartyAmuletRules
         meta : Metadata
       controller owner
       do
-        (governanceLock, changeHolding) <- governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt meta
+        (_, governanceLock, changeHolding) <- governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt meta
         pure $ ExternalPartyAmuletRules_LockForGovernanceResult with
           governanceLock
           changeHolding
@@ -479,6 +479,8 @@ amulet_allocationFactoryV2_allocateImpl
   -> ContractId V2.AllocationFactory
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
+amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg
+  | isGovernanceAllocationArgument arg = governanceLock_allocationFactoryV2_allocateImpl externalAmuletRules.dso arg
 amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
   let netTransferAmount = netAmuletCreditAmount arg.allocation.authorizer arg.allocation.transferLegSides
   outputFundingAmount <- validateAmuletNextIterationFunding arg.allocation.nextIterationFunding
@@ -617,7 +619,6 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
     senderChangeCids
     output = V1.AllocationInstructionResult_Completed with allocationCid
     meta
-
 
 -- Utilities
 ------------

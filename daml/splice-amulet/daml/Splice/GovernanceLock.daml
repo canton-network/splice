@@ -11,23 +11,27 @@ import DA.Functor (($>))
 import DA.List.Total (head, minimumOn)
 import DA.Map (Map)
 import DA.Map qualified as Map
+import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
 import DA.Set qualified as Set
 import DA.Text qualified as Text
 import DA.TextMap qualified as TextMap
 import DA.Time
 import DA.Traversable (forA)
+import DA.Validation
 
 import Splice.Amulet
 import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer (holdingToTransferInputs)
 import Splice.AmuletConfig (governanceLockFeaturedAppLockVestingDuration, governanceLockMinimumLockAmount, governanceLockSearchTimeGranularity, governanceLockSuperValidatorLockVestingDuration)
 import Splice.AmuletRules
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
-import Splice.Expiry
+import Splice.Expiry hiding (maxTime)
 import Splice.Fees (relTimeToSeconds)
 import Splice.ExternalPartyConfigState
 import Splice.Round
@@ -226,12 +230,7 @@ template GovernanceLock
       transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
       transferInstruction_withdrawImpl self arg = do
           let V1.TransferInstruction_Withdraw {..} = arg
-          (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-          unlockAt <- case timeFromMeta unlockAtMetaKey extraArgs.meta of
-            Some unlockAt -> pure unlockAt
-            None -> snd <$> searchCurrentTimeBounds requestedAt state
-          -- Need to call the body of unlock directly to avoid double consumption.
-          unlockResult <- governanceLock_unlockImpl (coerceContractId self) this None unlockAt [owner] context state
+          unlockResult <- governanceLock_tokenStandard_withdrawImpl (coerceContractId self) this requestedAt [owner] extraArgs
           pure $ case unlockResult of
             GovernanceLock_UnlockResult_Pending pendingLock -> V1.TransferInstructionResult with
               output = V1.TransferInstructionResult_Pending with
@@ -248,9 +247,65 @@ template GovernanceLock
               meta = emptyMetadata
       transferInstruction_updateImpl _ _ = assertFail "Transfers representing governance locks cannot be updated"
 
-  -- TODO(canton-network/splice-sv-fa-locking#39): implement V2 Allocation interface on above. Most fields of the view are generated, as they are constants or specific presentations of the above.
+    interface instance V2.Allocation for GovernanceLock where
+      view = V2.AllocationView with
+          originalAllocationCid = coerceContractId <$> originalLockCid
+          settlement = V2.SettlementInfo with
+            executors = [dso]
+            id = fst $ governanceLockKindToTypeAndSubject specification.kind
+            cid = None
+            meta = emptyMetadata
+          allocation = V2.AllocationSpecification with
+            admin = dso
+            authorizer = basicAccount owner
+            transferLegSides = []
+            settlementDeadline = Some maxComparableTime
+            nextIterationFunding = Some $ TextMap.singleton amuletInstrumentIdName amount
+            committed = False
+            meta = reasonToMeta encodedReason meta
+          holdingCids = [toInterfaceContractId lockedAmulet]
+          createdAt = requestedAt
+          numIterations = 0
+          expiresAt = Some maxBound
+          availableActions = Map.fromList [(V2.AA_Withdraw, specification.unlockControllers.controllers)]
+          meta = emptyMetadata
+        where
+          (_, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
+      allocation_settleImpl _ _ = assertFail "Allocations representing governance locks cannot be settled"
+      allocation_cancelImpl _ _ = assertFail "Allocations representing governance locks cannot be cancelled"
+      allocation_withdrawImpl self V2.Allocation_Withdraw{..} = do
+        -- `Allocation_Withdraw` is nonconsuming so we need to archive here
+        -- `governanceLock_unlockImpl` creates a new `GovernanceLock` or `VestingLock` when necessary
+        potentiallyUnsafeArchive self
+        unlockResult <- governanceLock_tokenStandard_withdrawImpl (coerceContractId self) this requestedAt actors extraArgs
+        let resultMeta = simpleHoldingTxMeta TxKind_Unlock (Some "unlock governance lock") None
+        pure $ case unlockResult of
+          GovernanceLock_UnlockResult_Pending pendingLock -> V2.AllocationResult with
+            output = V2.AllocationResult_Pending with
+              allocationCid = toInterfaceContractId pendingLock
+            authorizerHoldingCids = TextMap.empty
+            meta = resultMeta
+          GovernanceLock_UnlockResult_Completed vestingLock _ unlockedAmulet -> V2.AllocationResult with
+            output = case vestingLock of
+              Some vestingLock -> V2.AllocationResult_Pending with allocationCid = toInterfaceContractId vestingLock
+              None -> V2.AllocationResult_Withdrawn
+            authorizerHoldingCids = case unlockedAmulet of
+              Some unlockedAmulet -> TextMap.singleton amuletInstrumentIdName [coerceContractId unlockedAmulet]
+              None -> TextMap.empty
+            meta = resultMeta
+
+      allocation_settleExtraObservers _ = observer this
+      allocation_cancelExtraObservers _ = observer this
+      allocation_withdrawExtraObservers _ = observer this
+
   -- TODO(canton-network/splice-sv-fa-locking#39): substitution, probably with a loose function for implementation sharing.
 
+governanceLock_tokenStandard_withdrawImpl : ContractId GovernanceLock -> GovernanceLock -> Time -> [Party] -> ExtraArgs -> Update GovernanceLock_UnlockResult
+governanceLock_tokenStandard_withdrawImpl self this requestedAt actors extraArgs = do
+  (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext this.dso extraArgs.context
+  unlockAt <- getUnlockAtTime requestedAt extraArgs.meta state
+  unlockAmount <- getUnlockAmount extraArgs.meta
+  governanceLock_unlockImpl self this unlockAmount unlockAt actors context state
 
 governanceLock_unlockImpl : ContractId GovernanceLock -> GovernanceLock -> Optional Decimal -> Time -> [Party] -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
 governanceLock_unlockImpl self this@(GovernanceLock {..}) unlockAmount unlockAt actors context state
@@ -377,6 +432,20 @@ searchCurrentTimeBounds_impl isTimeGE assertDeadlineExceeded' assertWithinDeadli
          else Left (seek + 1, nextBasis)
     seekToGranularity seek = convertMicrosecondsToRelTime $ 2 ^ seek * convertRelTimeToMicroseconds granularity
 
+getUnlockAtTime : Time -> Metadata -> ExternalPartyConfigState -> Update Time
+getUnlockAtTime requestedAt meta state =
+  case timeFromMeta unlockAtMetaKey meta of
+    Some unlockAt -> pure unlockAt
+    None -> snd <$> searchCurrentTimeBounds requestedAt state
+
+getUnlockAmount : CanAssert m => Metadata -> m (Optional Decimal)
+getUnlockAmount = assertParsed "unlockAmount" unlockAmountParser
+
+getWithdrawRequestedAtTime : Time -> RelTime -> Metadata -> ExternalPartyConfigState -> Update Time
+getWithdrawRequestedAtTime endTime vestingPeriod meta state =
+  case timeFromMeta withdrawAtMetaKey meta of
+    Some withdrawAt -> pure withdrawAt
+    None -> fst <$> searchCurrentTimeBounds (endTime `addRelTime` (- vestingPeriod)) state
 
 data GovernanceLock_UnlockResult
   = GovernanceLock_UnlockResult_Pending with
@@ -468,11 +537,7 @@ template VestingLock
       transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
       transferInstruction_withdrawImpl self arg = do
         let V1.TransferInstruction_Withdraw {..} = arg
-        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-        requestedAt <- case timeFromMeta withdrawAtMetaKey extraArgs.meta of
-          Some withdrawAt -> pure withdrawAt
-          None -> fst <$> searchCurrentTimeBounds (endTime `addRelTime` (- vestingPeriod)) state
-        withdrawResult <- vestingLock_withdrawImpl (coerceContractId self) this requestedAt [owner] context
+        withdrawResult <- vestingLock_tokenStandard_withdrawImpl (coerceContractId self) this [owner] extraArgs
         pure $ case withdrawResult of
           VestingLock_WithdrawResult_Pending pendingLock -> V1.TransferInstructionResult with
             output = V1.TransferInstructionResult_Pending with
@@ -491,9 +556,61 @@ template VestingLock
             meta = emptyMetadata
       transferInstruction_updateImpl _ _ = assertFail "Transfers representing governance locks cannot be updated"
 
-  -- TODO(canton-network/splice-sv-fa-locking#39): implement V2 Allocation interface on above. Most fields of the view are generated, as they are constants or specific presentations of the above.
+    interface instance V2.Allocation for VestingLock where
+      view = V2.AllocationView with
+          originalAllocationCid = coerceContractId <$> originalLockCid
+          settlement = V2.SettlementInfo with
+            executors = [dso]
+            id = fst $ governanceLockKindToTypeAndSubject specification.kind
+            cid = None
+            meta = emptyMetadata
+          allocation = V2.AllocationSpecification with
+            admin = dso
+            authorizer = basicAccount owner
+            transferLegSides = []
+            settlementDeadline = Some maxComparableTime
+            nextIterationFunding = Some $ TextMap.singleton amuletInstrumentIdName vestingAmount
+            committed = False
+            meta = reasonToMeta encodedReason meta
+          holdingCids = [toInterfaceContractId lockedAmulet]
+          createdAt = endTime `addRelTime` (- vestingPeriod)
+          numIterations = 0
+          expiresAt = Some maxBound
+          availableActions = Map.fromList [(V2.AA_Withdraw, specification.vestingControllers.controllers)]
+          meta = emptyMetadata
+        where
+          (_, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
+      allocation_settleImpl _ _ = assertFail "Allocations representing vesting locks cannot be settled"
+      allocation_cancelImpl _ _ = assertFail "Allocations representing vesting locks cannot be cancelled"
+      allocation_withdrawImpl self V2.Allocation_Withdraw{..} = do
+        -- `Allocation_Withdraw` is nonconsuming so we need to archive here
+        -- `vestingLock_withdrawImpl` creates a new `VestingLock` when necessary
+        potentiallyUnsafeArchive self
+        withdrawResult <- vestingLock_tokenStandard_withdrawImpl (coerceContractId self) this actors extraArgs
+        let resultMeta = simpleHoldingTxMeta TxKind_Unlock (Some "withdraw vested amount") None
+        pure $ case withdrawResult of
+          VestingLock_WithdrawResult_Pending pendingLock -> V2.AllocationResult with
+            output = V2.AllocationResult_Pending with allocationCid = toInterfaceContractId pendingLock
+            authorizerHoldingCids = TextMap.empty
+            meta = resultMeta
+          VestingLock_WithdrawResult_Completed vestingLock vested -> V2.AllocationResult with
+            output = case vestingLock of
+              Some vestingLock -> V2.AllocationResult_Pending with allocationCid = toInterfaceContractId vestingLock
+              None -> V2.AllocationResult_Withdrawn
+            authorizerHoldingCids = TextMap.singleton amuletInstrumentIdName [upcast vested]
+            meta = resultMeta
+
+      allocation_settleExtraObservers _ = observer this
+      allocation_cancelExtraObservers _ = observer this
+      allocation_withdrawExtraObservers _ = observer this
+
   -- TODO(canton-network/splice-sv-fa-locking#39): substitution, probably with a loose function for implementation sharing.
 
+vestingLock_tokenStandard_withdrawImpl : ContractId VestingLock -> VestingLock -> [Party] -> ExtraArgs -> Update VestingLock_WithdrawResult
+vestingLock_tokenStandard_withdrawImpl self this actors extraArgs = do
+  (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext this.dso extraArgs.context
+  requestedAt <- getWithdrawRequestedAtTime this.endTime this.vestingPeriod extraArgs.meta state
+  vestingLock_withdrawImpl self this requestedAt actors context
 
 vestingLock_withdrawImpl : ContractId VestingLock -> VestingLock -> Time -> [Party] -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
 vestingLock_withdrawImpl self this@(VestingLock {..}) requestedAt actors context
@@ -567,7 +684,7 @@ governanceLock_lockForGovernance_impl
  -> Party
  -> Time
  -> Metadata
- -> Update (ContractId GovernanceLock, Optional (ContractId Amulet))
+ -> Update (GovernanceLock, ContractId GovernanceLock, Optional (ContractId Amulet))
 governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt meta = do
   assertWithinDeadline "requestedAt + 1 day" $ requestedAt `addRelTime` days 1
   validateGovernanceLockControllers specification
@@ -577,19 +694,21 @@ governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs 
         context = describeGovernanceSpecification specification
         expiresAt = maxBound
   ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [(amount, lockProperties)] inputs context ""
-  governanceLock <- create GovernanceLock with
-    dso
-    owner
-    amount
-    lockedAmulet
-    specification
-    requestedAt
-    originalLockCid = None
-    meta
-    pendingUnlockApprovals = Map.empty
-  pure $ (governanceLock, changeHolding)
+  let governanceLock = GovernanceLock with
+        dso
+        owner
+        amount
+        lockedAmulet
+        specification
+        requestedAt
+        originalLockCid = None
+        meta
+        pendingUnlockApprovals = Map.empty
+  governanceLockCid <- create governanceLock
+  pure (governanceLock, governanceLockCid, changeHolding)
 
-  -- TODO(canton-network/splice-sv-fa-locking#39): implement V2 AllocationFactory in terms of above.
+isGovernanceAllocationArgument V2.AllocationFactory_Allocate{allocation} =
+  TextMap.member lockSubjectMetaKey allocation.meta.values
 
 governanceLockKindObservers : GovernanceLockKind -> [Party]
 governanceLockKindObservers (GLK_FeaturedApp party) = [party]
@@ -806,9 +925,37 @@ cipMetaPrefix = cipPrefix <> "/"
 -- Encoded as microseconds since the epoch.
 unlockAtMetaKey = cipMetaPrefix <> "unlock-at"
 
+-- | Metadata key of a `GovernanceLock` unlock that specifies how much to unlock.
+unlockAmountMetaKey = cipMetaPrefix <> "unlock-amount"
+
 -- | Metadata key of a `VestingLock` withdraw that sets the time up to which vested funds are withdrawn.
 -- Encoded as microseconds since the epoch.
 withdrawAtMetaKey = cipMetaPrefix <> "withdraw-at"
+
+-- | Metadata key of a `GovernanceLock` subject.
+lockSubjectMetaKey = cipMetaPrefix <> "lock-subject"
+
+-- | Metadata key that sets the `unlockControllers` of a `GovernanceLock`.
+unlockControllersMetaKey = cipMetaPrefix <> "unlock-controllers"
+
+-- | Metadata key that sets the `substitutionControllers` of a `GovernanceLock`.
+substitutionControllersMetaKey = cipMetaPrefix <> "substitution-controllers"
+
+-- | Metadata key that sets the `vestingControllers` of a `GovernanceLock`.
+vestingControllersMetaKey = cipMetaPrefix <> "vesting-controllers"
+
+getOptionalMetadata : Text -> Metadata -> Optional Text
+getOptionalMetadata key meta = TextMap.lookup key meta.values
+
+getRequiredMetadata : CanAssert m => Text -> Metadata -> m Text
+getRequiredMetadata key meta =
+  case getOptionalMetadata key meta of
+    Some v -> pure v
+    None -> assertFail $ "Missing metadata field '" <> key <> "'"
+
+removeGovernanceMetadataKeys : Metadata -> Metadata
+removeGovernanceMetadataKeys meta =
+  Metadata $ TextMap.filterWithKey (\k _ -> not (cipMetaPrefix `Text.isPrefixOf` k)) meta.values
 
 -- TSv1 support
 -- ============
@@ -819,9 +966,17 @@ cipAddressPrefix = cipPrefix <> "_"
 -- | Special "dummy" namespace used to identify special parties.
 magicNamespace = "::1220000000000000000000000000000000000000000000000000000000000000abcd"
 
-featuredAppLockTag = "fa-lock"
-provisionalFeaturedAppLockTag = "provisional-" <> featuredAppLockTag
-superValidatorLockTag = "sv-lock"
+makeLockType : Text -> Text
+makeLockType = (<>) cipAddressPrefix
+
+featuredAppLockType = makeLockType "fa-lock"
+provisionalFeaturedAppLockType = makeLockType "provisional-fa-lock"
+superValidatorLockType = makeLockType "sv-lock"
+
+governanceLockKindToTypeAndSubject : GovernanceLockKind -> (Text, Text)
+governanceLockKindToTypeAndSubject (GLK_FeaturedApp provider) = (featuredAppLockType, partyToText provider)
+governanceLockKindToTypeAndSubject (GLK_ProvisionalFeaturedApp provider) = (provisionalFeaturedAppLockType, partyToText provider)
+governanceLockKindToTypeAndSubject (GLK_SuperValidatorRightsOwner svName) = (superValidatorLockType, svName)
 
 isGovernanceLockTransferParty : Party -> Bool
 isGovernanceLockTransferParty party = isSome $ Text.stripPrefix cipAddressPrefix (partyToText party) >>= Text.stripSuffix magicNamespace
@@ -840,42 +995,147 @@ governanceLock_transferFactoryV1_transferImpl dso actors arg = do
 
   specification <- specificationFromReceiverAndReason transfer.sender transfer.receiver transfer.meta
 
-  (lockCid, changeCid) <- governanceLock_lockForGovernance_impl expectedAdmin transfer.amount transfer.inputHoldingCids specification extraArgs transfer.sender transfer.requestedAt transfer.meta
+  (_, lockCid, changeCid) <- governanceLock_lockForGovernance_impl expectedAdmin transfer.amount transfer.inputHoldingCids specification extraArgs transfer.sender transfer.requestedAt transfer.meta
   pure $ V1.TransferInstructionResult with
     output = V1.TransferInstructionResult_Pending with
       transferInstructionCid = toInterfaceContractId $ lockCid
     senderChangeCids = optionalToList $ toInterfaceContractId <$> changeCid
     meta = emptyMetadata
 
+governanceLock_allocationFactoryV2_allocateImpl : Party -> V2.AllocationFactory_Allocate -> Update V2.AllocationInstructionResult
+governanceLock_allocationFactoryV2_allocateImpl dso V2.AllocationFactory_Allocate{..} = do
+  requireMatchExpected ("admin", allocation.admin) dso
+  ensureBasicAccount "allocation.authorizer" allocation.authorizer
+  let owner = regularAccountOwner allocation.authorizer
+  checkActors actors [[owner]]
+  assertDeadlineExceeded "requestedAt" requestedAt
+
+  specification <- assertParsed "GovernanceLockSpecification" governanceLockSpecificationTSv2Parser (settlement.id, allocation.meta, owner)
+  amount <- assertParsed "allocation.nextIterationFunding" fundingAmountParser allocation.nextIterationFunding
+
+  let filteredMeta = removeGovernanceMetadataKeys allocation.meta
+  (lock, lockCid, changeCid) <- governanceLock_lockForGovernance_impl
+    dso amount (fmap downcast inputHoldingCids) specification extraArgs owner requestedAt filteredMeta
+
+  let lockAlloc = view $ toInterface @V2.Allocation lock
+      (_, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
+      expectedMeta = reasonToMeta encodedReason filteredMeta
+  requireMatchExpected ("lock settlement", lockAlloc.settlement) settlement
+  requireMatchExpected ("lock allocation", lockAlloc.allocation) allocation with meta = expectedMeta
+
+  pure V2.AllocationInstructionResult with
+    authorizerChangeCids = TextMap.fromList [(amuletInstrumentIdName, fmap toInterfaceContractId $ optionalToList changeCid)]
+    output = V2.AllocationInstructionResult_Completed with allocationCid = toInterfaceContractId lockCid
+    meta = simpleHoldingTxMeta TxKind_MergeSplit (Some "lock for governance") None
+
+governanceLockKindFromTypeAndSubject : CanAssert m => Text -> Text -> m GovernanceLockKind
+governanceLockKindFromTypeAndSubject type_ subject
+  | checkType featuredAppLockType = GLK_FeaturedApp <$> parseProvider
+  | checkType provisionalFeaturedAppLockType = GLK_ProvisionalFeaturedApp <$> parseProvider
+  | checkType superValidatorLockType = pure $ GLK_SuperValidatorRightsOwner with svName = subject
+  | otherwise = assertFail $ "Invalid lock type: " <> type_
+  where
+    checkType = (==) type_
+    parseProvider = case partyFromText subject of
+      Some p -> pure p
+      None -> assertFail $ "Invalid provider for " <> type_ <> ": " <> subject
+
 specificationFromReceiverAndReason : CanAssert m => Party -> Party -> Metadata -> m GovernanceLockSpecification
-specificationFromReceiverAndReason owner receiver meta = do
-  let operationString = Text.stripPrefix cipAddressPrefix (partyToText receiver) >>= Text.stripSuffix magicNamespace
-  let subject = Text.stripPrefix "lock-subject=" =<< reasonMetaKey `TextMap.lookup` meta.values
-  case liftA2 (,) operationString subject of
-        Some (tag, subject) | tag == superValidatorLockTag -> pure $ ownerControlledSpecification owner $ GLK_SuperValidatorRightsOwner with
-          svName = subject
-        Some (tag, subject) | tag == featuredAppLockTag, Some subject <- partyFromText subject -> pure $ ownerControlledSpecification owner $ GLK_FeaturedApp with
-          provider = subject
-        Some (tag, subject) | tag == provisionalFeaturedAppLockTag, Some subject <- partyFromText subject -> pure $ ownerControlledSpecification owner $ GLK_ProvisionalFeaturedApp with
-          provider = subject
-        _ -> assertFail "Unknown receiver or lock-subject"
+specificationFromReceiverAndReason owner receiver meta =
+  assertParsed "GovernanceLockSpecification" governanceLockSpecificationTSv1Parser (owner, receiver, meta)
 
 makeCanonicalParty : Text -> Party
-makeCanonicalParty tag = fromSome $ partyFromText $ cipAddressPrefix <> tag <> magicNamespace
+makeCanonicalParty type_ = fromSome $ partyFromText $ type_ <> magicNamespace
 
 featuredAppLockCanonicalParty : Party
-featuredAppLockCanonicalParty = makeCanonicalParty featuredAppLockTag
+featuredAppLockCanonicalParty = makeCanonicalParty featuredAppLockType
 
 provisionalFeaturedAppLockCanonicalParty : Party
-provisionalFeaturedAppLockCanonicalParty = makeCanonicalParty provisionalFeaturedAppLockTag
+provisionalFeaturedAppLockCanonicalParty = makeCanonicalParty provisionalFeaturedAppLockType
 
 superValidatorLockCanonicalParty : Party
-superValidatorLockCanonicalParty = makeCanonicalParty superValidatorLockTag
+superValidatorLockCanonicalParty = makeCanonicalParty superValidatorLockType
 
 lockTypeToCompatibilityPartyAndReason : GovernanceLockKind -> (Party, Text)
 lockTypeToCompatibilityPartyAndReason (GLK_FeaturedApp with provider) = (featuredAppLockCanonicalParty, "lock-subject=" <> partyToText provider)
 lockTypeToCompatibilityPartyAndReason (GLK_ProvisionalFeaturedApp with provider) = (provisionalFeaturedAppLockCanonicalParty, "lock-subject=" <> partyToText provider)
 lockTypeToCompatibilityPartyAndReason (GLK_SuperValidatorRightsOwner with svName) = (superValidatorLockCanonicalParty, "lock-subject=" <> svName)
+
+maxComparableTime : Time
+maxComparableTime = addRelTime maxTime $ microseconds (-1)
+
+-- Parsers
+-- =======
+
+data Parser i o = Parser (i -> Validation Text o)
+type ControllerSpecificationParser = Parser (Metadata, Party) ControllerSpecification
+
+runParser : Parser i o -> i -> Validation Text o
+runParser (Parser f) input = f input
+
+assertParsed : CanAssert m => Text -> Parser i o -> i -> m o
+assertParsed parsedType parser input =
+  case runParser parser input of
+    Success output -> pure output
+    Errors (NonEmpty.NonEmpty e []) -> assertFail e
+    Errors es -> do
+      let errorsList = NonEmpty.toList es
+      let numErrors = length errorsList
+      assertFail $ "Found " <> show numErrors <> " error" <> (if numErrors == 1 then "" else "s") <> " parsing " <> parsedType <>
+        (if length errorsList > 5 then ". First five errors" else  "") <> ":\n\n" <>
+        Text.intercalate "\n" (take 5 errorsList)
+
+controllersParser : Text -> ControllerSpecificationParser
+controllersParser key =
+    Parser \(meta, owner) ->
+      ControllerSpecification <$> optional (pure [[owner]]) (runParser partiesParser) (TextMap.lookup key meta.values)
+  where
+    partiesParser : Parser Text [[Party]]
+    partiesParser = Parser \t -> forA (Text.splitOn ";" t) \ps -> forA (Text.splitOn "," ps) (runParser partyParser)
+
+    partyParser : Parser Text Party
+    partyParser = Parser \p -> (partyFromText p) <?> ("Invalid party in metadata field '" <> key <> "': " <> p)
+
+unlockControllersParser : ControllerSpecificationParser
+unlockControllersParser = controllersParser unlockControllersMetaKey
+
+substitutionControllersParser : ControllerSpecificationParser
+substitutionControllersParser = controllersParser substitutionControllersMetaKey
+
+vestingControllersParser : ControllerSpecificationParser
+vestingControllersParser = controllersParser vestingControllersMetaKey
+
+governanceLockKindParser : Parser (Text, Metadata) GovernanceLockKind
+governanceLockKindParser = Parser \(type_, meta) ->
+  validate $ getRequiredMetadata lockSubjectMetaKey meta >>= governanceLockKindFromTypeAndSubject type_
+
+governanceLockSpecificationTSv1Parser : Parser (Party, Party, Metadata) GovernanceLockSpecification
+governanceLockSpecificationTSv1Parser = Parser \(owner, receiver, meta) ->
+  let type_ = Text.stripSuffix magicNamespace (partyToText receiver)
+      subject = Text.stripPrefix "lock-subject=" =<< reasonMetaKey `TextMap.lookup` meta.values
+  in case liftA2 (,) type_ subject of
+    Some (t, s) -> validate $ ownerControlledSpecification owner <$> governanceLockKindFromTypeAndSubject t s
+    None -> invalid "Unknown receiver or lock-subject"
+
+governanceLockSpecificationTSv2Parser : Parser (Text, Metadata, Party) GovernanceLockSpecification
+governanceLockSpecificationTSv2Parser = Parser \(type_, meta, owner) ->
+  GovernanceLockSpecification <$>
+  runParser governanceLockKindParser (type_, meta) <*>
+  runParser unlockControllersParser (meta, owner) <*>
+  runParser substitutionControllersParser (meta, owner) <*>
+  runParser vestingControllersParser (meta, owner)
+
+fundingAmountParser : Parser (Optional (TextMap.TextMap Decimal)) Decimal
+fundingAmountParser = Parser \m ->
+  case TextMap.toList <$> m of
+    Some [(instrumentId, amount)] | instrumentId == amuletInstrumentIdName -> ok amount
+    Some v@(_ :: _) -> invalid $ "Expected exactly one " <> amuletInstrumentIdName <> " value, got: " <> show v
+    _ -> invalid $ "Expected exactly one " <> amuletInstrumentIdName <> " value, got none"
+
+unlockAmountParser : Parser Metadata (Optional Decimal)
+unlockAmountParser = Parser \meta ->
+  forA (getOptionalMetadata unlockAmountMetaKey meta) \t ->
+    (Text.parseDecimal t) <?> ("Invalid decimal in " <> unlockAmountMetaKey <> " metadata field: '" <> t <> "'")
 
 -- SV Reward Coupon Helpers
 ---------------------------
