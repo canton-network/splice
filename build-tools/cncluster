@@ -158,7 +158,7 @@ function _ensure_gcloud_auth() {
     fi
 
     if [ -z "${CI:-}" ] && ! _gcloud_adc_configured; then
-        _log "Google Cloud application-default credentials required. Running gcloud auth application-default login..."
+        _info "Google Cloud application-default credentials required. Running gcloud auth application-default login..."
         gcloud auth application-default login --no-launch-browser
     fi
 }
