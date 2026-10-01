@@ -34,4 +34,8 @@ object SwitchOverTimes {
     dsoRules.config.svOperationsSwitchOverTimes.toScala
       .fold(false)(_.containsKey(PermissionedSynchronizer))
   }
+
+  def permissionedSynchronizerEnabled(clock: Clock, dsoRules: DsoRules) =
+    shouldSwitchOver(clock, dsoRules, PermissionedSynchronizer)
+
 }

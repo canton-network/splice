@@ -82,20 +82,12 @@ class ReconcileDynamicSynchronizerParametersTrigger(
         state,
         stateHistory,
       )
-
-      permissionedSynchronizerSwitchOverTime =
-        if (!SwitchOverTimes.permissionedSynchronizerScheduled(dsoRules.payload)) {
-          None
-        } else {
-          dsoRules.payload.config.svOperationsSwitchOverTimes.toScala
-            .flatMap(times => Option(times.get(SwitchOverTimes.PermissionedSynchronizer)))
-        }
-
-      targetOnboardingRestriction = permissionedSynchronizerSwitchOverTime match {
-        case Some(time) if domainTime.toInstant.compareTo(time) >= 0 =>
+      targetOnboardingRestriction =
+        if (SwitchOverTimes.permissionedSynchronizerEnabled(context.clock, dsoRules.payload)) {
           OnboardingRestriction.RestrictedOpen
-        case _ => OnboardingRestriction.UnrestrictedOpen
-      }
+        } else {
+          OnboardingRestriction.UnrestrictedOpen
+        }
 
       updatedConfig = updateDomainParameters(
         state.mapping.parameters,
