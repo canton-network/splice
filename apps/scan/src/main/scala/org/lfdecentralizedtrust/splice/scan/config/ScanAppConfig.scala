@@ -40,7 +40,7 @@ final case class BulkStorageBackfillingConfig(
     enabled: Boolean = false,
     pollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     downloadParallelism: Int = 1,
-    pageSize: Int = 100,
+    pageSize: Int = Limit.DefaultMaxPageSize,
 )
 
 final case class BulkStorageConfig(
