@@ -119,6 +119,7 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 ## Scala
 
 - Production code bans partial `Iterable` methods such as `head`, `last`, `max` and `reduce` (wartremover `IterableOps`); use `headOption`, `maxOption`, `foldLeft` etc. instead.
+  The exception is for the `NonEmpty` type, which features total versions of these such as `head1`.
 
 ## Contributing
 
