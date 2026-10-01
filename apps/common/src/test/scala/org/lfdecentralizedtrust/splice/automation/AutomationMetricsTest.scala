@@ -25,12 +25,12 @@ class AutomationMetricsTest extends AnyWordSpecLike with Matchers {
       val gauges = metricsFactory.metrics.asyncGauges(metricName)
       gauges should have size 2
       gauges.collect {
-        case (context, value)
-            if context.labels.get("trigger_type").contains("taskbased") => value()
+        case (context, gaugeValue)
+            if context.labels.get("trigger_type").contains("taskbased") => gaugeValue()
       }.toSeq shouldBe Seq(8L)
       gauges.collect {
-        case (context, value)
-            if context.labels.get("trigger_type").contains("polling") => value()
+        case (context, gaugeValue)
+            if context.labels.get("trigger_type").contains("polling") => gaugeValue()
       }.toSeq shouldBe Seq(1L)
 
       metrics.close()
