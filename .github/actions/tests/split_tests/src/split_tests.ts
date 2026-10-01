@@ -34,6 +34,8 @@ function getTestSuiteTimesFromXml(testReportsDir: string): TestTimes {
     return testTimes;
 }
 
+const PER_SUITE_OVERHEAD_SECONDS = 10;
+
 function estimateTestTimes(testTimes: TestTimes, testNames: string[]): TestTimes {
     let maxTestTime = Math.max(...Object.values(testTimes));
     // If maxTestTime is zero, i.e. no runtimes are known, we assign everything an
@@ -45,7 +47,8 @@ function estimateTestTimes(testTimes: TestTimes, testNames: string[]): TestTimes
         const known = testTimes[testName] ?? maxTestTime;
         // Scalatest actually reported occasionally test times with negative numbers,
         // so we set it to zero in that case.
-        estimatedTestTimes[testName] = Math.max(known, 0.0);
+        const testCasesTime = Math.max(known, 0.0);
+        estimatedTestTimes[testName] = testCasesTime > 0 ? testCasesTime + PER_SUITE_OVERHEAD_SECONDS : 0.0;
     });
 
     return estimatedTestTimes
