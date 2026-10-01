@@ -22,8 +22,6 @@ function getTestSuiteTimesFromXml(testReportsDir: string): TestTimes {
                     const testSuiteName = parsed.testsuite['@_name'];
                     const testSuiteTime = parseFloat(parsed.testsuite['@_time']);
                     testTimes[testSuiteName] = testSuiteTime;
-                    // FIXME: remove debug
-                    console.log(`  ${testSuiteName}: time=${testSuiteTime}s tests=${parsed.testsuite['@_tests']} timestamp=${parsed.testsuite['@_timestamp']} host=${parsed.testsuite['@_hostname']}`);
                 } catch (e) {
                     console.error(`Failed to parse xml report ${file}`)
                 }
