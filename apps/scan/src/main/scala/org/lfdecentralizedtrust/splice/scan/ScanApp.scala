@@ -8,7 +8,9 @@ import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.lifecycle.LifeCycle
-import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
+import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
+import com.digitalasset.canton.util.FutureUtil
+import org.slf4j.event.Level
 import com.digitalasset.canton.resource.{DbStorage, Storage}
 import com.digitalasset.canton.time.{Clock, WallClock}
 import com.digitalasset.canton.topology.PartyId
@@ -349,7 +351,11 @@ class ScanApp(
         amuletAppParameters.upgradesConfig,
         packageVersionSupport,
       )
-      _ = automation.registerHistoryStartTrigger(historyStart)
+      _ = FutureUtil.doNotAwait(
+        historyStart.recordWhenKnown(retryProvider),
+        "Failed to record the history start of this Scan",
+        level = Level.WARN,
+      )(ErrorLoggingContext.fromTracedLogger(logger))
       scanVerdictStore = DbScanVerdictStore(
         storage,
         updateHistory,
