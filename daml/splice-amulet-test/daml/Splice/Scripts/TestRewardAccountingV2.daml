@@ -76,7 +76,7 @@ create_and_process_reward_batches dryRun = do
 
   -- get the contract representing the pending calculation and confirmation of rewards for round 0
   [(calculateRewardsCid, calculateRewards)] <- query @CalculateRewardsV2 app.dso
-  calculateRewards.kind === Some App
+  calculateRewards.kind === None
 
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
 
@@ -88,13 +88,13 @@ create_and_process_reward_batches dryRun = do
 
   -- root ProcessRewardsV2 must carry kind forward from CalculateRewardsV2
   [(_, rootProcess)] <- query @ProcessRewardsV2 app.dso
-  rootProcess.kind === Some App
+  rootProcess.kind === None
 
   let processBatches = do
         states <- query @ProcessRewardsV2 app.dso
         forA_ states $ \(processRewardsCid, processRewards) -> do
           -- every ProcessRewardsV2 (root + BatchOfBatches recursion) carries kind
-          processRewards.kind === Some App
+          processRewards.kind === None
           let Some (b, badVettingState) = find (\(b, _) -> CryptoHash.hash b == processRewards.batchHash) batchesWithHiding
           void $ submit app.dso $ exerciseCmd processRewardsCid
             ProcessRewardsV2_ProcessBatch with
@@ -139,7 +139,7 @@ test_reward_accounting_v2 = do
           expiresAt = couponExpiryTime
           providerIsObserver = provider `notElem` [bob, dora]
           beneficiary = None
-          kind = Some App
+          kind = None
 
   actualCoupons0 <- query @RewardCouponV2 app.dso
   let actualCoupons = sortOn (.provider) $ fmap snd actualCoupons0

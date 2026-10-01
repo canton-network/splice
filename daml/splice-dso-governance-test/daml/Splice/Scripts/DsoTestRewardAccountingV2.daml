@@ -117,7 +117,7 @@ test_reward_accounting_v2 = do
           expiresAt = couponExpiryTime
           providerIsObserver = provider `notElem` [bob, dora]
           beneficiary = None
-          kind = Some App
+          kind = None
 
   actualCoupons0 <- query @RewardCouponV2 app.dso
   let actualCoupons = sortOn (.provider) $ fmap snd actualCoupons0

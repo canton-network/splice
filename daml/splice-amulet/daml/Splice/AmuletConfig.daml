@@ -112,11 +112,21 @@ useTrafficBasedValidatorRewards : Optional ValidatorRewardVersion -> Bool
 useTrafficBasedValidatorRewards = not . useAmuletBurnValidatorRewards
 
 -- | Which reward flow a reward-accounting contract belongs to.
--- Carried on 'CalculateRewardsV2', 'ProcessRewardsV2' and 'RewardCouponV2';
--- 'None' means an unlabelled write and is treated as 'App'.
+-- Carried on 'CalculateRewardsV2', 'ProcessRewardsV2', 'RewardCouponV2'.
+--
+-- Encoding for the enclosing 'Optional RewardKind' field:
+--   * App-flow writes: 'None'.
+--   * Validator-flow writes: 'Some Validator'.
+--   * 'Some App' is tolerated on reads (routed as app-flow) but not written.
+--
+-- The field was appended in splice-amulet 0.1.25 for CIP-0120, so writes must
+-- round-trip through downgrade for parties vetted only on pre-0.1.25 — hence
+-- 'None' for app-flow. 'None' and 'Some App' are semantically identical; see
+-- the dispatch in 'AmuletRules.summarizeAndConsumeInput'.
 data RewardKind
   = App
-      -- ^ App-reward flow (CIP-104 traffic-based app rewards).
+      -- ^ App-reward flow (CIP-104). Not produced by any write path; retained
+      -- so historical 'Some App' values from early-0.1.25 drafts stay decodeable.
   | Validator
       -- ^ Validator-reward flow (CIP-0120 traffic-based validator rewards).
   deriving (Eq, Show, Serializable)

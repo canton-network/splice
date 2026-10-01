@@ -550,7 +550,9 @@ template AmuletRules
               roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
               dryRun = False
-              kind = Some App
+              -- See 'RewardKind' doc: app-flow writes use 'None' for
+              -- downgrade compatibility with pre-0.1.25 vetted parties.
+              kind = None
 
           when (useTrafficBasedAppRewards rewardConfig.dryRunVersion) $ do
             void $ create CalculateRewardsV2 with
@@ -559,7 +561,7 @@ template AmuletRules
               roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
               dryRun = True
-              kind = Some App
+              kind = None
 
         -- trigger off-ledger validator-reward calculation if needed (CIP-0120)
         forA_ roundToArchive.validatorRewardConfig $ \validatorRewardConfig -> do
@@ -1569,8 +1571,9 @@ summarizeAndConsumeInputs csum dso sender inps = do
       coupon <- fetchAndArchive forOwner couponCid
       assertWithinDeadline "RewardCouponV2.expiresAt" coupon.expiresAt
       -- Route the amount to app-reward or validator-reward totals based on
-      -- the coupon's flow-of-origin discriminator. 'None' means an unlabelled
-      -- (pre-discriminator) write and is treated as 'App'.
+      -- the coupon's flow-of-origin discriminator.
+      -- See 'RewardKind' doc: 'None' is the canonical app-flow value, 'Some App'
+      -- is tolerated (same routing), 'Some Validator' routes to validator totals.
       let (appDelta, validatorDelta) = case coupon.kind of
             Some Validator -> (0.0, coupon.amount)
             _ -> (coupon.amount, 0.0)

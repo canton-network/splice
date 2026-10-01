@@ -40,7 +40,8 @@ template CalculateRewardsV2 with
     dryRun : Bool
       -- ^ Whether to only simulate the confirmation without creating any RewardCouponV2 contracts.
     kind : Optional RewardKind
-      -- ^ Which reward flow this contract belongs to; 'None' is treated as 'App'.
+      -- ^ Which reward flow this contract belongs to.
+      -- See 'RewardKind' doc for the 'None'-vs-'Some App' encoding rule.
   where
     signatory dso
 
@@ -79,7 +80,8 @@ template ProcessRewardsV2 with
     batchHash : CryptoHash.Hash
     kind : Optional RewardKind
       -- ^ Copied from 'CalculateRewardsV2'; propagated unchanged through
-      -- the 'BatchOfBatches' recursion.
+      -- the 'BatchOfBatches' recursion. See 'RewardKind' doc for the
+      -- 'None'-vs-'Some App' encoding rule.
   where
     signatory dso
 
