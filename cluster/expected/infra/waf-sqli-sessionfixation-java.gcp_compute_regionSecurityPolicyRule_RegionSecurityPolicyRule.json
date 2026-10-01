@@ -1,0 +1,19 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "action": "deny(403)",
+    "description": "WAF: SQL injection, session fixation and Java attacks",
+    "match": {
+      "expr": {
+        "expression": "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id942190-sqli', 'owasp-crs-v030301-id942240-sqli', 'owasp-crs-v030301-id942270-sqli', 'owasp-crs-v030301-id942290-sqli', 'owasp-crs-v030301-id942320-sqli', 'owasp-crs-v030301-id942350-sqli', 'owasp-crs-v030301-id942500-sqli']}) || evaluatePreconfiguredWaf('sessionfixation-v33-stable', {'sensitivity': 1}) || evaluatePreconfiguredWaf('java-v33-stable', {'sensitivity': 1})"
+      }
+    },
+    "preview": true,
+    "priority": 210,
+    "securityPolicy": "waf-whitelist-throttle-ban-mock"
+  },
+  "name": "waf-sqli-sessionfixation-java",
+  "provider": "",
+  "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+}
