@@ -143,9 +143,18 @@ class ScanAutomationService(
       snapshotStore,
       updateHistory,
       scanStorageConfigV1,
+      config.perAcsSnapshotTablesEnabled,
       triggerContext,
     )
   )
+  if (config.perAcsSnapshotTablesEnabled) {
+    registerTrigger(
+      new AcsSnapshotIndexTrigger(
+        snapshotStore,
+        triggerContext,
+      )
+    )
+  }
   // The acs snapshot backfilling trigger should not attempt to backfill snapshots unless the
   // backfilling UpdateHistory is fully enabled and complete.
   if (config.updateHistoryBackfillEnabled && config.updateHistoryBackfillImportUpdatesEnabled) {

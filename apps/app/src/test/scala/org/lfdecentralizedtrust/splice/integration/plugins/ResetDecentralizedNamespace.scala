@@ -2,7 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.plugins
 
 import org.lfdecentralizedtrust.splice.console.{ParticipantClientReference, SvAppBackendReference}
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.ConsoleMacros
 import com.digitalasset.canton.discard.Implicits.DiscardOps

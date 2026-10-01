@@ -7,6 +7,13 @@
 
 release-notes:: Upcoming
 
+    - Grafana
+
+        - The grafana dashboards will be migrated from the classic
+          format to the V2 resource format in splice 0.10.0. Please
+          upgrade to Grafana 13 to ensure you can consume updated
+          dashboards going forward before then. For more information on these formats reference the `Grafana docs <https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/view-dashboard-json-model/#v2-resource-model>`_.
+
     - SV App
 
         - The deprecated (in 0.8.0) public ``/v0/dso`` endpoint has been removed.
@@ -46,6 +53,7 @@ release-notes:: Upcoming
           by the verdict ingestion service and the traffic-based app reward calculations.
 
           The default retention period is 1 week for this automation, after which the data will be removed from the DB.
+          Scan apps might observe increased load for a short time (~30-60min) after the upgrade, as the automation that prunes intermediate app reward computation data catches up.
 
     - Validator App
 
@@ -63,4 +71,3 @@ release-notes:: Upcoming
     - Daml
 
         - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
-

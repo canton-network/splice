@@ -85,7 +85,7 @@ class DbUnavailablePartiesStore(
                 where party = any($partyArray)
                 returning party""".asUpdateReturning[PartyId],
           "removeParties",
-        )(implicitly, implicitly, _.nonEmpty)
+        )
         .map(_.toSeq)
     }
 
