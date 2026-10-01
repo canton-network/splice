@@ -124,6 +124,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   (10088-A, #7289; branch `ray/fix-fail-fast-init`). Second hit 10180 (LSU shard, bobValidatorLocal init). Signature:
   GH conclusion cancelled, `Received SIGINT` at start+60 min, no ScalaTest summary, test log ends on
   `app initialization: Initialization failed`, canton logs continue. Confirming grep: `zcat canton_network_test.clog.gz | tail -1`.
+  Third hit 10269 (LSU shard, sv2 restarted at the upgrade time, family H2 variant D).
 - 10139 cause: reference block sequencer `insert block` SQLSTATE 40001 retry storm with four sequencers on one
   Postgres until the 8-connection pools are exhausted (Canton / topology size).
 - Teardown leak cascade (10176; July run 28921009132): an exception from any plugin's `beforeEnvironmentDestroyed`
@@ -145,6 +146,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   target registration (36-0 deactivated) and 36-2 reaching Ok (~470 ms) the participant answers
   `TOPOLOGY_STORE_NOT_FOUND: No active synchronizer found` and the validator exits (family H). App fix: retry it like
   `findOwnerToKeyMappingThatUsesNamespaceSigningKey` does, NOT_FOUND is already in `retryableStatusCodes`.
+- 10269 (variant D, SV app, run 36840538827 main f2b8c468be): LsuIntegrationTest restarts sv2 at the upgrade time
+  (`LsuIntegrationTest.scala:568-570`); `JoiningNodeInitializer.scala:466` `getPhysicalSynchronizerId(global alias)` is
+  unretried and gets `NOT_FOUND: No synchronizer registered and handshaked for Synchronizer 'global'` between 36-0
+  disconnect and 36-2 connect (13 ms), then family H sys.exit. Signature: `sv2 app initialization: Initialization
+  failed, so exiting` in the job log during "upgrade synchronizer to new physical synchronizer without downtime".
+  Also 09-29 jobs 109539611384 (same NOT_FOUND) and 109544383763 (TOPOLOGY_STORE_NOT_FOUND, another unretried read).
+  App fix: retry the lookup; better, retry NOT_FOUND across SV init while mid-LSU. Packet [10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md](10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md).
 - Checking an ignore pattern: `LINE=$(zcat ... | grep -a -m1 '<text>'); echo "$LINE" | rg -c -e '<pattern>'`.
 
 ## H3. Trigger pause timeout: `Waited 5 seconds. (TriggerTestUtil.scala:93)`

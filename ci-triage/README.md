@@ -460,3 +460,25 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | Branch | Commit | Fixes | Verified here |
 |--------|--------|-------|---------------|
 | s11/fix-10238-single-forced-acs-snapshot | 8ad568a5f0 | 10238, 10247, 10257 (test forces one ACS snapshot instead of two; scan naming bug remains) | apps-app/Test/compile + scalafmt; sim-time runs: fixed 5/5 pass; baseline + injected tap fails 2/2 with 42P07, fixed + same tap passes 2/2 (10238 packet, section 10) |
+
+# CI failure triage - 2026-10-01
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10269 | 36840538827 | main f2b8c468be (#7566) | 110298744185 `logical-sync-upgrade (0)` (cancelled) | 3.6.0-snapshot.20260929.20331.0.v07b3f95b |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10269 | LsuIntegrationTest "upgrade synchronizer to new physical synchronizer without downtime": the test restarts sv2 at the upgrade time 09:20:21.788; sv2's participant disconnects 36-0 at 22.128 and connects to 36-2 from 22.141; sv2's `JoiningNodeInitializer.scala:466` `getPhysicalSynchronizerId(global)` (unretried) gets `NOT_FOUND ... handshaked for Synchronizer 'global'` at 22.141, `NodeBase` sys.exit, job cancelled at 60 min. | family H (#7289) + family H2 variant D (first in the SV app) | [10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md](10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md). App fix described (retry the lookup; NOT_FOUND is retryable). 3 of 162 LSU jobs since 09-27 (two on 09-29). No branch. |
+
+## Cross-cutting observations (2026-10-01)
+
+- Family H2 now reaches the SV app: an app restarted while its participant is mid-LSU fails init on whichever
+  unretried call lands in the disconnect/connect gap, which was 13 ms here and about 470 ms in 10180. The 09-29 hits
+  are one with this NOT_FOUND and one with 10180's TOPOLOGY_STORE_NOT_FOUND, so a per-call fix only removes one
+  window. `ray/fix-fail-fast-init` (#7289) would turn each hit into one failed test instead of a 60 min cancel.
+
