@@ -20,7 +20,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.Dat
   Available,
   Never,
   NotYet,
-  Never,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
