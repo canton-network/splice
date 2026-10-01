@@ -303,7 +303,7 @@ object BftCallExecutor {
                     msg,
                   )
                 )
-                markBftCall("not-yet", connectionMetrics)
+                markBftCall("not_yet", connectionMetrics)
 
               case None if hasDataResponses.get(NotYet).nonEmpty =>
                 val msg =
@@ -317,7 +317,19 @@ object BftCallExecutor {
                     msg,
                   )
                 )
-                markBftCall("not-yet", connectionMetrics)
+                markBftCall("not_yet", connectionMetrics)
+
+              case None if hasDataResponses.get(Available).isEmpty =>
+                val msg = "All scans have responded with 'never'. Failing with BadGateway."
+                logger.warn(msg)
+                val _ = finalResponse.tryFailure(
+                  HttpErrorWithHttpCode(
+                    StatusCodes.BadGateway,
+                    msg,
+                  )
+                )
+                markBftCall("never", connectionMetrics)
+
 
               case None =>
                 require(hasDataResponses.get(NotYet).isEmpty)
