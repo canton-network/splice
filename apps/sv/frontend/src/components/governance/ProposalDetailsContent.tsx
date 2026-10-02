@@ -700,7 +700,7 @@ const VoteItem: React.FC<VoteItemProps> = ({
             onClick={e => {
               e.stopPropagation();
               e.preventDefault();
-              navigator.clipboard.writeText(voter);
+              void navigator.clipboard.writeText(voter);
             }}
           >
             <ContentCopy sx={{ fontSize: '16px' }} />
@@ -726,7 +726,7 @@ const VoteItem: React.FC<VoteItemProps> = ({
               onClick={e => {
                 e.stopPropagation();
                 e.preventDefault();
-                navigator.clipboard.writeText(sanitizeUrl(url));
+                void navigator.clipboard.writeText(sanitizeUrl(url));
               }}
             >
               <ContentCopy sx={{ fontSize: '16px' }} />

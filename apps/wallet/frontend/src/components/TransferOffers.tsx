@@ -100,7 +100,7 @@ export const TransferOffers: React.FC = () => {
             return item;
           })
         );
-      toWalletTransferOffer(allTransfers, amuletPrice).then(setOffers);
+      void toWalletTransferOffer(allTransfers, amuletPrice).then(setOffers);
     }
   }, [amuletPrice, toWalletTransferOffer, transferOfferContracts, tokenStandardTransferContracts]);
 

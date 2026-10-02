@@ -138,7 +138,7 @@ const CopyableIdentifier: React.FC<CopyableIdentifierProps> = ({
             onClick={e => {
               e.stopPropagation();
               e.preventDefault();
-              navigator.clipboard.writeText(copyValue ?? value);
+              void navigator.clipboard.writeText(copyValue ?? value);
             }}
           >
             <ContentCopy sx={{ fontSize }} />
