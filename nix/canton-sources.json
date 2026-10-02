@@ -1,5 +1,5 @@
 {
-  "version": "3.6.0",
+  "version": "3.6.0-snapshot.20261001.20345.0.v85a9270a",
   "oss_sha256": "sha256:1i788q5x5qdxfjdh5laapwd74jiqn7i0ng6vz2fk78vz9s9h2l6r",
   "canton_base_image_sha256": "sha256:f6903fd58031deabb38ab4da2198452d79b71d28248689c40c7593942f875995",
   "canton_participant_image_sha256": "sha256:6758898f84ee3f64ea6bde92703dc2d94228a63418cb009b681e7b2e3629a06e",
