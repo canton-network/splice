@@ -103,7 +103,7 @@ def fetch_acs_snapshot_summary(base_url, migration_id, record_time, progress, ta
         try:
             resp = _request_with_retries(
                 "POST",
-                f"{base_url}/api/scan/v0/state/acs",
+                f"{base_url}/api/scan/v2/state/acs",
                 progress=progress, task_id=task_id,
                 json=payload,
             )
