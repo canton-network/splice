@@ -74,6 +74,8 @@ class VerifiedObjectCopier(
         Future.failed(new CopyFailed(obj.key, failures.reverse))
       case Some(peer) =>
         copyFromPeer(obj, peer).recoverWith {
+          case e: StagingWriteFailed =>
+            Future.failed(e)
           case e: ChecksumMismatch =>
             logger.warn(e.getMessage)
             copyFromAnyPeer(obj, peers.drop(1), s"$peer: ${e.getMessage}" :: failures)
@@ -95,22 +97,34 @@ class VerifiedObjectCopier(
         .groupedWeighted(uploadPartSize.toLong)(_.size.toLong)
         .map(chunks => chunks.foldLeft(ByteString.empty)(_ ++ _).asByteBuffer)
         .mapAsync(1) { part =>
+          // Update the digest here, in part order; never inside the upload Future.
           digest.update(part.duplicate())
-          writer.upload(writer.prepareUploadNext(part), part)
+          writeToStaging(obj.key)(writer.upload(writer.prepareUploadNext(part), part))
         }
         .runWith(Sink.ignore)
         .flatMap { _ =>
           val actual = Base64.getEncoder.encodeToString(digest.digest())
-          if (actual == obj.checksum) writer.finish()
+          if (actual == obj.checksum) writeToStaging(obj.key)(writer.finish())
           else
             Future.failed(
               new ChecksumMismatch(obj.key, peer, expected = obj.checksum, actual = actual)
             )
         }
         .recoverWith { case e =>
-          writer.abort().transformWith(_ => Future.failed(e))
+          discardFromStaging(writer).transformWith(_ => Future.failed(e))
         }
     }
+
+  private def writeToStaging[T](key: String)(write: => Future[T]): Future[T] =
+    Future.delegate(write).recoverWith { case e =>
+      Future.failed(new StagingWriteFailed(key, e))
+    }
+
+  private def discardFromStaging(writer: S3BucketConnection#AppendWriteObject): Future[Unit] =
+    writer
+      .abort()
+      .transformWith(_ => staging.deleteObject(writer.key))
+      .transformWith(_ => Future.unit)
 }
 
 object VerifiedObjectCopier {
@@ -121,6 +135,12 @@ object VerifiedObjectCopier {
   final class ChecksumMismatch(key: String, peer: String, expected: String, actual: String)
       extends RuntimeException(
         s"Checksum mismatch for object $key from peer $peer: expected $expected, got $actual"
+      )
+
+  final class StagingWriteFailed(key: String, cause: Throwable)
+      extends RuntimeException(
+        s"Could not write object $key to staging: ${cause.getMessage}",
+        cause,
       )
 
   final class CopyFailed(key: String, failures: Seq[String])
