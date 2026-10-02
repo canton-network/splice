@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChec
 import java.security.MessageDigest
 import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
 trait ObjectCopier {
   def copy(objects: Seq[ObjectKeyAndChecksum])(implicit tc: TraceContext): Future[Unit]
@@ -21,7 +22,7 @@ trait ObjectCopier {
 
 class VerifiedObjectCopier(
     source: PeerObjectSource,
-    rotation: PeerRotation,
+    peerOrder: Seq[String] => Seq[String],
     staging: S3BucketConnection,
     committed: S3BucketConnection,
     parallelism: Int,
@@ -46,7 +47,7 @@ class VerifiedObjectCopier(
       case false =>
         for {
           peers <- source.peers
-          _ <- downloadVerifiedFromAny(obj, rotation.order(peers), Nil)
+          _ <- downloadVerifiedFromAny(obj, peerOrder(peers), Nil)
         } yield ()
     }
 
@@ -115,6 +116,8 @@ class VerifiedObjectCopier(
 
 object VerifiedObjectCopier {
   val uploadPartSize: Int = 8 * 1024 * 1024
+
+  val randomPeerOrder: Seq[String] => Seq[String] = peers => Random.shuffle(peers)
 
   def sha256Base64(bytes: ByteString): String =
     Base64.getEncoder.encodeToString(

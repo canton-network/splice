@@ -12,7 +12,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.{ExecutionContext, Future}
 
 trait PeerObjectSource {
@@ -47,16 +46,5 @@ class ScanPeerObjectSource(peerConnection: PeerBftScanConnection)(implicit
         case None =>
           Future.failed(new IllegalStateException(s"Peer $peer is no longer connected"))
       }
-    }
-}
-
-class PeerRotation {
-  private val next = new AtomicInteger(0)
-
-  def order(peers: Seq[String]): Seq[String] =
-    if (peers.isEmpty) peers
-    else {
-      val offset = math.floorMod(next.getAndIncrement(), peers.size)
-      peers.drop(offset) ++ peers.take(offset)
     }
 }
