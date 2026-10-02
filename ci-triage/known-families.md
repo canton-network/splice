@@ -209,7 +209,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   10271 (simtime (3), canton 3.6.0-snapshot.20261001, SvTimeBasedRoundMgmtIntegrationTest): only globalSequencerSv1's
   own `insert block` failed (8 retries, 0.131 s to 5.612 s, 21 s) while all four drivers kept reading blocks
   1899-2019, so only submissions sent through sv1's sequencer stalled; the CalculateRewardsV2 approval missed a 20 s
-  issuing-round check. Fix `s11/fix-10271-issuing-round-wait-budget`. Packet [10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md](10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
+  issuing-round check. Fix `s11/fix-10271-issuing-round-wait-budget`. Packet [10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md](10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md).
+  10273 (frontend-wall-clock-time (2), main 4a7f355b17, SvFrontendIntegrationTest "Offboard SV"): same shape in wall-clock;
+  globalSequencerSv1's `insert block` chain 22:11:43.688-22:12:27.239 (11 retries, backoff to 8.946 s, others <= 1.224 s)
+  held sv2's castVote request 38 s, past the sv-app's 38 s HTTP timeout. In both 10271 and 10273 the stalled
+  sequencer is sv1. Packet [10273-sv-frontend-offboard-vote-sv1-sequencer-insert-block-storm.md](10273-sv-frontend-offboard-vote-sv1-sequencer-insert-block-storm.md). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
   the contention itself is Canton / test infra (fewer writers per DB, non-serializable insert, capped backoff).
 
