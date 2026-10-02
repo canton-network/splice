@@ -3312,7 +3312,6 @@ object HttpScanAppClient {
     }
   }
 
-  <<<<<<< HEAD
   object BulkStorageObjects {
     final case class SnapshotObjects(
         recordTime: CantonTimestamp,
