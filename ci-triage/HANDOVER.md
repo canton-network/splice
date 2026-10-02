@@ -14,7 +14,7 @@ every packet contains the commands that fetched them.
 | Evidence packets (65 files) | `ci-triage/<ref>-<slug>.md` | One per ref, or one per family with numbered occurrence sections (`10155-10158-...` family A, `10264-10268-...` family Q) |
 | Index | `ci-triage/README.md` | Per-date sections: ref -> run -> job mapping, one-line overview per ref, cross-cutting notes, fix-branch tables (section 3 below supersedes their status columns) |
 | Flake families A-R | `ci-triage/known-families.md` | Signature, confirming grep, parent ref, occurrences, fix per family. Check it before deep analysis |
-| Ref status check | `ci-triage/cn-test-failures-status.sh` | Lists the tracker state of every ref recorded here; see section 5 |
+| Ref status check | `ci-triage/cn-test-failures-status.py` | Lists the tracker state of every ref recorded here; see section 4 |
 | Triage skill | `.claude/skills/ci-triage/` on main (#7502) | Not on this branch any more; run `/ci-triage (<run url>, <job>, <ref>)` from a main checkout |
 | sbt without the nix dev shell | `ci-triage/sandbox-sbt-env.sh` | Only when `direnv exec . sbt` cannot realize the dev shell |
 
@@ -31,85 +31,72 @@ It carries only `[skip ci]` commits and must never be merged. Continue committin
 `git commit -s -m "[skip ci] ..."`, one subject line, ASCII only. Merge origin/main into it from time to time; nothing
 outside `ci-triage/` differs from main, so the merge is conflict-free.
 
-## 3. Fix branch status
+## 3. Open refs and what each needs
 
-Checked 2026-10-02 with `git cherry origin/main <branch>`, `gh pr list --head <branch>` and the PR authors' lists.
+Tracker state from `log/cn-test-failures-status.tsv` (2026-10-02 23:04): 29 of 98 refs open, 31 closed completed,
+36 closed duplicate, 1 not planned; 10312 is not a cn-test-failures issue (cn-internal). Branch state checked the same
+day with `git cherry origin/main <branch>` and `gh pr list --head <branch>`.
 
-Open work:
+Close now (fix merged or no code change):
 
-| Branch | Ref(s) | Upstream | Action |
+| Ref(s) | Why |
+|---|---|
+| 10184 | PR 7440 (`ray/fix-10184-mediator-pruning-backoff-ignore`) merged 09-22 |
+| 10185-10193, 10195 | GitHub 504 on a nix flake input took one run's shards; infra, rerun, no code change |
+| 10249 | CPU-saturated GKE node on cimain; infra, rerun (deployment robustness notes are in the packet) |
+
+Waiting on a PR:
+
+| Ref | Branch | Upstream | Action |
 |---|---|---|---|
-| s11/fix-10271-issuing-round-wait-budget | 10271 | PR 7618 OPEN, approved | merge, then close 10271 |
-| s11/fix-10270-tap-amulets-wait-for-tap | 10270, 10272 (family R) | PR 7619 OPEN, review required | review, merge, close 10270; 10272 then fails fast at the tap (section 4) |
-| ray/fix-10183-reset-namespace-late-proposer | 10183 | PR 7441 OPEN | review, merge |
-| s11/fix-10235-sanity-check-skip-uninitialized-scans (b63ea6493f) | 10235 cascade | not pushed | compiled; push, PR |
-| s11/fix-10204-upload-logs-after-sanitize-failure (a16e747a69) | 10204 (evidence loss) | not pushed | push, PR |
-| ray/fix-10176-sanity-check-pause-timeout (origin e59f6538c0) | 10176 | on origin, no PR | PR (local tip only adds a merge of main) |
-| ray/fix-10197-bft-read-confirmation-wait (origin 964e7df114) | 10197 | on origin, no PR | PR |
-| ray/fix-reset-topology-plugin-no-exit (origin 743babe3f0) | 10137, 10139, 10183 | on origin, no PR | PR; turns the teardown `sys.exit(1)` into a suite failure |
-| ray/fix-fail-fast-init (origin 2832e6da66, 2 commits) | 10088-A, 10180, 10269 (issue #7289, open) | on origin, no PR | PR; every family H `NodeBase` exit costs a whole shard until this lands |
-| ray/fix-topology-init-limit (origin 72dc373508) | 10140 | on origin, no PR | check whether #7426 (test ignore, merged 09-21) made it unnecessary; PR or delete |
+| 10271 | s11/fix-10271-issuing-round-wait-budget | PR 7618 OPEN, approved | merge, close |
+| 10270 (10272 closed as its dup) | s11/fix-10270-tap-amulets-wait-for-tap | PR 7619 OPEN, review required | merge, close. 10272's remainder, the validator tap retry budget (about 13.6 s) versus BFT scan lag after an AmuletRules upgrade, has no ref; raise with the validator wallet owner if it recurs |
+| 10183 | ray/fix-10183-reset-namespace-late-proposer | PR 7441 OPEN | review, merge, close |
 
-Done or obsolete:
+Fix branch exists, no PR yet:
 
-| Branch | Ref(s) | Upstream | Action |
-|---|---|---|---|
-| s11/fix-10236-scan-snapshot-before-skips-unindexed | 10236, 10237, 10241, 10242 | PR 7527 merged 09-30 | close refs |
-| s11/fix-10236-scan-snapshot-wait-for-index (7ae2e53dd4) | 10236 (test side) | superseded by 7527 | delete branch |
-| s11/fix-10238-single-forced-acs-snapshot | 10238, 10247, 10257 | PR 7548 merged 09-30 | close refs; the scan millisecond table naming stays with the #6515 owner |
-| s11/fix-10248-vite-config-import-meta-dirname | 10248 | PR 7536 merged 09-30 | close ref |
-| ray/fix-10184-mediator-pruning-backoff-ignore | 10184 | PR 7440 merged 09-22 | close ref |
-| ray/fix-summarizing-round-log-noise (2fb77e0be2) | 10121, 10142 | same fix merged as PR 7303 on 09-16 | close refs, delete branch |
-| Earlier ray fixes (see the README 2026-09-17 to 09-22 tables) | 10173, 10174, 10175, 10179, family A (10111 + 9), 8784, 10143, 9740, 10170, 10141, 10145, 10149, 10150, 10172, 10136, 10154/10166/10171, 10169 | PRs 7417, 7423, 7425, 7428, 7435, 7416, 7412, 7400, 7380, 7374, 7414, #7176, 7401/7402/7405/7406 merged 09-10 to 09-21 | close whatever is still open |
+| Ref(s) | Branch | Action |
+|---|---|---|
+| 10176 | ray/fix-10176-sanity-check-pause-timeout (origin e59f6538c0) | PR. Local tip only adds a merge of main. Upstream half (vendored `EnvironmentSetup.manualDestroyEnvironment` runs `beforeEnvironmentDestroyed` outside its `try`) is Canton |
+| 10197 (family L) | ray/fix-10197-bft-read-confirmation-wait (origin 964e7df114) | PR |
+| 10180, 10269 (family H + H2) | ray/fix-fail-fast-init (origin 2832e6da66, 2 commits; splice issue #7289 open) | PR; until it lands every `NodeBase` init exit costs a 60 min shard. The H2 cause itself (an app restarted mid-LSU hits an unretried call: `NodeInitializer.rotateOwnerToKeyMappingNotSignedByKeys` in 10180, `JoiningNodeInitializer.scala:466` in 10269) needs an app fix: retry NOT_FOUND across SV and validator init while mid-LSU |
+| 10204 | s11/fix-10204-upload-logs-after-sanitize-failure (a16e747a69, not pushed) | push, PR (evidence loss only; the slow runner itself was infra) |
+| 10235 | s11/fix-10235-sanity-check-skip-uninitialized-scans (b63ea6493f, not pushed, compiled) | push, PR for the cascade; the participant reconnect hang (family P) is Canton's |
 
-## 4. Open items without a fix branch
+No fix branch; owner outside the test code:
 
-- Family L, reference sequencer `insert block` SQLSTATE 40001 retry storm (10139, 10197, 10256, 10271, 10273): several
-  reference sequencers serialize block inserts in one Postgres. 10271 and 10273 show a new shape: only
-  globalSequencerSv1's own inserts stall (backoff to 5.6 s and 8.9 s, the others stay under 1.3 s) while ordering
-  continues. 10273 crossed the sv-app's 38 s HTTP timeout, so no test budget helps. Canton / test-infra sizing.
-- Family B / 10165 umbrella (10094, 10153, 10161, 10137, 10212, 10225): BFT 1 -> N onboarding loses quorum, sv1 is
-  blacklisted, acks wait out their 120 s deadline. Canton-side. Paste-ready issue text in `10165-issue-body.md`.
-- Family P, 10235: participant reconnect never completes after a sequencer-alias-only change (Canton
-  3.6.0-snapshot.20260928). Canton owner; the cascade half has `s11/fix-10235-...`.
-- Family H2 variants (10088-B, 10174, 10180, 10269): an app restarted while its participant is mid-LSU fails init on an
-  unretried call in the disconnect/connect gap (13 ms in 10269, about 470 ms in 10180). 10269 is the SV app
-  (`JoiningNodeInitializer.scala:466`, `getPhysicalSynchronizerId`); 3 of 162 LSU jobs since 09-27. App fix described:
-  retry NOT_FOUND across SV and validator init while mid-LSU.
-- 10272 remainder: the validator's tap retry budget (12 retries, about 13.6 s) is shorter than the BFT scan lag after an
-  AmuletRules upgrade; owner of the validator wallet. Test option: re-tap in `tapAmulets` on
-  `LOCAL_VERDICT_INACTIVE_CONTRACTS`.
-- Family Q, 10264-10268: cluster deploys fail because #7546 reads `messages.confirmationResponse`, missing from the
-  internal DevNet `sequencer-rate-limits.json`. Owner of #7546 (configs-private#3673, or tolerate absent keys).
-- 10238 product half: per-table ACS snapshot table and index names use `toEpochMilli`; two snapshots in one millisecond
-  collide. #6515 owner.
-- 10233/10234: scan serves HTTP after its DB closed during teardown (`NodeBootstrapBase.onClosed` order). App fix
-  described.
-- 10214: `DbUnavailablePartiesStore` queries are not scoped by `store_id`; deterministic when the two suites share a
-  shard. Production fix described.
-- 10176 upstream half: vendored `EnvironmentSetup.manualDestroyEnvironment` runs `beforeEnvironmentDestroyed` outside
-  its `try`. Canton test framework.
-- Infra, rerun only: 10249 (CPU-saturated GKE node on cimain; bootstrap DAR-upload timeout turns slow init into a
-  restart loop), 10185-10193/10195 (GitHub 504 on a nix flake input), 10204 (slow runner, logs lost).
-- Self-hosted docker-large runners: 6 of about 480 docker-compose/docker-no-canton jobs from 09-28 to 09-30 went silent
-  during `make docker-build -j8` and were cancelled at 45 min + 10 min (no ref filed; job list in the 2026-09-30 chat
-  only). Suspected pod OOM or eviction, unconfirmed.
-- 10147, 10084: Canton log-level questions; ignore patterns rejected. 10144: dup of cn-test-failures 9136, Canton.
+| Ref(s) | Owner | Summary |
+|---|---|---|
+| 10139, 10273 (family L) | Canton / test infra | Reference sequencers serialize `insert block` in one Postgres and retry SQLSTATE 40001 with growing backoff. 10271 and 10273 add a sv1-only shape (only globalSequencerSv1's inserts stall, backoff 5.6 s and 8.9 s, others under 1.3 s). 10273 crossed the sv-app's 38 s HTTP timeout, so no test budget helps |
+| 10165 (family B umbrella), 10227 | Canton | BFT 1 -> N onboarding loses quorum and blacklists sv1; acks wait out 120 s. 10227 adds: no sequencer failover on the topology broadcast path. Issue text in `10165-issue-body.md` |
+| 10233 | splice app (`NodeBootstrapBase.onClosed`) | Scan serves HTTP after its DB closed in teardown; close `httpAdminService` before the node |
+| 10084, 10147 | Canton | Log-level questions (IndexerState reconnect-drain WARNs; BFT P2P `Connecting (unchanged)` at shutdown); ignore patterns rejected |
+| 9136 | Canton | GetPreferredPackages metadata-view race (10144 closed as its dup) |
 
-## 5. Which refs are still open
+Branches that can be deleted: `s11/fix-10236-scan-snapshot-wait-for-index` (superseded by PR 7527),
+`ray/fix-summarizing-round-log-noise` (same fix merged as PR 7303), and every branch whose PR merged
+(`s11/fix-10236-scan-snapshot-before-skips-unindexed`, `s11/fix-10238-single-forced-acs-snapshot`,
+`s11/fix-10248-vite-config-import-meta-dirname`, `ray/fix-10184-...`). `ray/fix-reset-topology-plugin-no-exit`
+(origin 743babe3f0, no PR) and `ray/fix-topology-init-limit` (origin 72dc373508, no PR) serve closed refs (10137 dup;
+10140 completed, likely by #7426): PR them as hardening or delete.
 
-The tracker (DACH-NY/cn-test-failures) is not readable from the sandbox. On a host whose `gh` login can read it, from
-the splice repo root:
+Untracked: 6 of about 480 docker-compose/docker-no-canton jobs from 09-28 to 09-30 went silent during
+`make docker-build -j8` on `self-hosted-docker-large` runners and were cancelled at 45 min + 10 min (suspected pod OOM
+or eviction, unconfirmed; no ref filed).
+
+## 4. Rechecking the tracker
+
+The tracker is not readable from the sandbox. On a host whose `gh` login can read it, from the splice repo root:
 ```
-ci-triage/cn-test-failures-status.sh          # from a checkout of this branch, or
-log/cn-test-failures-status.sh                # the copy outside the branch
+python3 ci-triage/cn-test-failures-status.py                                      # in a checkout of this branch
+python3 <(git show app-dev/ci-triage:ci-triage/cn-test-failures-status.py)        # from any other checkout
 ```
-It takes every ref recorded here (README rows, packet names, related refs in known-families, plus any arguments),
-queries the tracker in batches of 50 through GraphQL, writes `log/cn-test-failures-status.tsv`
-(ref, state, state reason, closed at, updated at, labels, title) and prints the open refs. Needs `gh` and `python3`.
-Hand the TSV back to the assistant to prune closed refs from section 3 and 4.
+It takes every ref recorded here (README rows, packet names, known-families, plus any arguments), queries the tracker
+in batches of 50 through GraphQL, writes `log/cn-test-failures-status.tsv` (ref, state, state reason, closed at,
+updated at, labels, title; `--out` to change) and prints the open refs. Needs `gh` and `python3`. Hand the TSV back
+to update section 3.
 
-## 6. Environment notes for a fresh sandbox
+## 5. Environment notes for a fresh sandbox
 
 - Refs arrive as `(run URL, job name, ref)`. Never map refs to jobs by elimination when a run has several failed jobs.
 - CircleCI jobs (cluster deploys, preflights) are not reachable from the sandbox: the user saves the step log under
