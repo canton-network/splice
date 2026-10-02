@@ -1756,11 +1756,21 @@ lazy val `apps-common-frontend` = {
         val copyViteReports = baseDirectory.value / "../../../scripts/copy-vite-reports.sh"
         val log = streams.value.log
         runCommand(Seq(copyViteReports.toString), log, None, None)
+        val rootDir = baseDirectory.value / "../../.."
+        val testReportsDir = rootDir / "test-reports"
+        val reports = (testReportsDir * "TEST-*.xml").get.map(_.toString)
+        val mergedReport = testReportsDir / "vitest-merged.xml"
         runCommand(
-          Seq("npm", "run", "xunit-viewer", "--workspaces", "--if-present"),
+          Seq("junit2html", "--merge", mergedReport.toString) ++ reports,
           log,
           None,
-          Some(npmRootDir.value),
+          None,
+        )
+        runCommand(
+          Seq("junit2html", mergedReport.toString, (rootDir / "log/report.html").toString),
+          log,
+          None,
+          None,
         )
       },
       cleanFiles += damlTsCodegenDir.value,

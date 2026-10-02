@@ -1,4 +1,5 @@
 org.lfdecentralizedtrust.splice.admin.api.HttpRequestLoggerTest
+org.lfdecentralizedtrust.splice.admin.api.client.ApiClientRequestLoggerTest
 org.lfdecentralizedtrust.splice.auth.AuthTokenManagerTest
 org.lfdecentralizedtrust.splice.auth.SignatureVerifierTest
 org.lfdecentralizedtrust.splice.automation.RoundBasedRewardTriggerTest
@@ -22,6 +23,7 @@ org.lfdecentralizedtrust.splice.scan.admin.http.GeneratedScanRouteDropNullsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodingsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringComplianceTest
 org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerTest
+org.lfdecentralizedtrust.splice.scan.automation.ScanHistoryStartTriggerTest
 org.lfdecentralizedtrust.splice.scan.automation.ScanVerdictIngestionServiceTest
 org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest
 org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfigTest
@@ -33,6 +35,7 @@ org.lfdecentralizedtrust.splice.scan.store.QueryAcsSnapshotPaginationTokenTest
 org.lfdecentralizedtrust.splice.scan.store.ScanEventStoreTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.ZstdTest
 org.lfdecentralizedtrust.splice.scan.store.db.CheckMetaVersionsTest
+org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStartTest
 org.lfdecentralizedtrust.splice.store.DbUnavailablePartiesStoreTest
 org.lfdecentralizedtrust.splice.store.DomainTimeStoreTest
 org.lfdecentralizedtrust.splice.store.InMemorySynchronizerStoreTest
@@ -73,5 +76,6 @@ org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegenTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecProtobufTest
 org.lfdecentralizedtrust.splice.validator.store.DbValidatorConfigProviderTest
 org.lfdecentralizedtrust.splice.validator.store.DbValidatorStoreTest
+org.lfdecentralizedtrust.splice.validator.store.InMemoryPartyToParticipantStoreTest
 org.lfdecentralizedtrust.splice.wallet.util.ExtraTrafficTopupParametersTest
 org.lfdecentralizedtrust.splice.wart.ParTraverseTest

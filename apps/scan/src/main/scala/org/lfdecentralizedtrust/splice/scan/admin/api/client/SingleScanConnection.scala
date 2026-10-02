@@ -33,6 +33,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -45,6 +46,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
@@ -79,7 +81,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
-import org.apache.pekko.http.scaladsl.model.{HttpHeader, Uri}
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, StatusCodes, Uri}
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.{HttpCommand, HttpCommandException}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
@@ -1023,14 +1025,61 @@ class SingleScanConnection private[client] (
   override def getBulkObjectChecksums(
       requiredCatchupTimestamp: CantonTimestamp,
       objectKeys: Seq[String],
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.GetBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
+      HttpScanAppClient.GetBulkObjectChecksums(objectKeys),
     )
+  }
+
+  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+    )
+      .flatMap(response =>
+        SingleScanConnection.decoded(BulkStorageObjects.snapshotObjects(response)).map(Some(_))
+      )
+      .recover {
+        case e: HttpCommandException if e.status == StatusCodes.NotFound => None
+      }
+
+  override def listBulkUpdateHistoryObjects(
+      startRecordTime: CantonTimestamp,
+      endRecordTime: CantonTimestamp,
+      pageSize: Int,
+      nextPageToken: Option[String],
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.ListBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        nextPageToken,
+        pageSize,
+      ),
+    ).flatMap(response =>
+      SingleScanConnection.decoded(BulkStorageObjects.updateObjectsPage(response))
+    )
+
+  // Not intended to be called via BftScanConnection, so not defined in ScanConnection trait.
+  def getBulkObjectsProgress(
+      recordTime: CantonTimestamp
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectsProgressResponse] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectsProgress(recordTime),
+    )
+  }
 }
 
 object SingleScanConnection {
+
+  private def decoded[T](result: Either[String, T]): Future[T] =
+    result.fold(err => Future.failed(new IllegalStateException(err)), Future.successful)
 
   private[client] def httpStatusLabel(error: Throwable): String =
     error match {

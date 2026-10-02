@@ -591,6 +591,11 @@ class ValidatorApp(
           this.getClass.getSimpleName,
           loggerFactory,
         )
+      // Querying topology updates for all parties on the ledger API requires readAsAnyParty rights.
+      _ <-
+        if (config.automation.topologyMetricsPollingInterval.isDefined)
+          readOnlyLedgerConnection.grantReadAsAnyParty(config.ledgerApiUser)
+        else Future.unit
       participantAdminConnection = new ParticipantAdminConnection(
         config.participantClient.adminApi,
         amuletAppParameters.loggingConfig.api,
