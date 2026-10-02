@@ -22,6 +22,7 @@ import io.circe.syntax.*
 import org.apache.pekko.actor.ActorSystem
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.*
 import scala.math.Ordering.Implicits.*
 
 case class UpdatesSegment(
@@ -53,15 +54,20 @@ class UpdateHistorySegmentBulkStorage(
 )(implicit tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
 
-  private def getUpdatesChunk(
-      afterTs: TimestampWithMigrationId
-  )(implicit
-      actorSystem: ActorSystem
-  ): Future[Option[(TimestampWithMigrationId, Seq[TreeUpdateWithMigrationId])]] = {
+  private case class GetUpdatesResult(
+      updates: Seq[TreeUpdateWithMigrationId],
+      lastTimestamp: TimestampWithMigrationId,
+      doneWithSegment: Boolean,
+  )
+
+  private def getUpdates(
+      afterTs: TimestampWithMigrationId,
+      limit: PageLimit,
+  ): Future[GetUpdatesResult] = {
     for {
       updates <- updateHistory.getUpdatesWithoutImportUpdates(
         Some(TimestampWithMigrationId(afterTs.timestamp, afterTs.migrationId)),
-        PageLimit.tryCreate(appConfig.dbReadChunkSize),
+        limit,
       )
       updatesInSegment = updates.filter(update =>
         TimestampWithMigrationId(
@@ -70,11 +76,13 @@ class UpdateHistorySegmentBulkStorage(
         ) <= segment.toTimestamp
       )
       result <-
-        if (
-          updatesInSegment.length < updates.length || updates.length == appConfig.dbReadChunkSize
-        ) {
+        if (updates.isEmpty) {
+          logger.debug(
+            s"No updates found after record time ${afterTs.timestamp} yet, but we don't know if we're done with the segment"
+          )
+          Future.successful(GetUpdatesResult(Seq.empty, afterTs, doneWithSegment = false))
+        } else {
           if (updatesInSegment.nonEmpty) {
-            // Found enough updates to add
             logger.debug(
               s"Adding ${updatesInSegment.length} updates, between record time ${updatesInSegment.headOption
                   .map(_.update.update.recordTime)} and ${updatesInSegment.lastOption.map(_.update.update.recordTime)}"
@@ -83,11 +91,11 @@ class UpdateHistorySegmentBulkStorage(
               throw new RuntimeException("Unexpected failure")
             )
             Future.successful(
-              Some(
-                (
-                  TimestampWithMigrationId(last.update.update.recordTime, last.migrationId),
-                  updatesInSegment,
-                )
+              GetUpdatesResult(
+                updatesInSegment,
+                TimestampWithMigrationId(last.update.update.recordTime, last.migrationId),
+                // If the query result contains updates outside the segment, then we know we're done with the segment
+                doneWithSegment = updates.length > updatesInSegment.length,
               )
             )
           } else {
@@ -95,18 +103,7 @@ class UpdateHistorySegmentBulkStorage(
             logger.debug(
               "No more updates inside the segment, done dumping updates from this segment"
             )
-            Future.successful(None)
-          }
-        } else {
-          logger.debug(
-            s"Not enough updates yet (queried for ${appConfig.dbReadChunkSize}, found ${updates.length}. Last update is from ${updates.lastOption
-                .map(_.update.update.recordTime)}, migration ${updates.lastOption.map(_.migrationId)}), sleeping..."
-          )
-          after(
-            appConfig.updatesPollingInterval.underlying,
-            actorSystem.scheduler,
-          ) {
-            Future.successful(Some((afterTs, Nil)))
+            Future.successful(GetUpdatesResult(Seq.empty, afterTs, doneWithSegment = true))
           }
         }
     } yield {
@@ -133,16 +130,59 @@ class UpdateHistorySegmentBulkStorage(
     val updatesStr = encoded
       .map(u => u.asJson.noSpacesSortKeys)
     logger.debug(
-        s"Read and encoded ${encoded.length} updates from DB with encoding ${encoding.key}. Timestamps are ${updates.headOption.map(_.update.update.recordTime)} to ${updates.lastOption.map(_.update.update.recordTime)}"
+      s"Read and encoded ${encoded.length} updates from DB with encoding ${encoding.key}. Timestamps are ${updates.headOption
+          .map(_.update.update.recordTime)} to ${updates.lastOption.map(_.update.update.recordTime)}"
     )
     updatesStr
+  }
+
+  private def updatesSource(implicit
+      actorSystem: ActorSystem
+  ): Source[Seq[TreeUpdateWithMigrationId], NotUsed] = {
+
+    final case class State(
+        afterTs: TimestampWithMigrationId,
+        sleepBeforeNextFetch: Boolean,
+        done: Boolean,
+    )
+
+    Source.unfoldAsync(State(segment.fromTimestamp, sleepBeforeNextFetch = false, done = false)) {
+      state =>
+        if (state.done) {
+          logger.debug(
+            s"Done dumping updates from segment ${segment.fromTimestamp}-${segment.toTimestamp}"
+          )
+          Future.successful(None)
+        } else {
+          def call(): Future[Option[(State, Seq[TreeUpdateWithMigrationId])]] =
+            getUpdates(state.afterTs, PageLimit.tryCreate(appConfig.dbReadChunkSize))
+              .map[Option[(State, Seq[TreeUpdateWithMigrationId])]] {
+                case GetUpdatesResult(updates, nextTs, doneWithSegment) =>
+                  Some(
+                    (
+                      State(
+                        nextTs,
+                        sleepBeforeNextFetch = updates.length < appConfig.dbReadChunkSize,
+                        done = doneWithSegment,
+                      ),
+                      updates,
+                    )
+                  )
+              }
+
+          if (state.sleepBeforeNextFetch) {
+            // Previous call did not return a full page (but did not reach the end of the segment yet),
+            // so we sleep for a while before the next query
+            after(appConfig.updatesPollingInterval.underlying, actorSystem.scheduler)(call())
+          } else call()
+        }
+    }
   }
 
   private def getSource(implicit
       actorSystem: ActorSystem
   ): Source[Seq[String], NotUsed] = {
-    Source
-      .unfoldAsync(segment.fromTimestamp)(ts => getUpdatesChunk(ts))
+    updatesSource
       .map(updates => {
         historyMetrics.BulkStorage.incUpdatesCount(updates.length)
         updates
