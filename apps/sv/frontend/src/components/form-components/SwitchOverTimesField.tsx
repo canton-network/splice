@@ -82,7 +82,7 @@ export const SwitchOverTimesField = withForm({
                     name={`switchOverTimes.entries[${i}].key`}
                     listeners={{
                       // Re-validate the parent array field so the submit gate self-heals.
-                      onChange: () => form.validateField('switchOverTimes.entries', 'change'),
+                      onChange: () => void form.validateField('switchOverTimes.entries', 'change'),
                     }}
                   >
                     {field => (
@@ -97,7 +97,7 @@ export const SwitchOverTimesField = withForm({
                   <form.AppField
                     name={`switchOverTimes.entries[${i}].time`}
                     listeners={{
-                      onChange: () => form.validateField('switchOverTimes.entries', 'change'),
+                      onChange: () => void form.validateField('switchOverTimes.entries', 'change'),
                     }}
                   >
                     {field => (

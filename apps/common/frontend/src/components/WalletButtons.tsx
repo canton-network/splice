@@ -19,12 +19,18 @@ const WalletButton = <T,>(props: Props<T>, walletPage: string) => {
   const { text, createPaymentRequest, walletPath, redirectPath, ...buttonProps } = props;
   const [clicked, setClicked] = useState(false);
 
-  const onClick = async () => {
+  const onClick = () => {
     setClicked(true);
-    const cid = await createPaymentRequest();
-    const here = window.location.origin.toString();
-    const redirectTo = encodeURIComponent(here + (redirectPath || ''));
-    window.location.assign(`${walletPath}/${walletPage}/${cid}/?redirect=${redirectTo}`);
+    createPaymentRequest()
+      .then(cid => {
+        const here = window.location.origin.toString();
+        const redirectTo = encodeURIComponent(here + (redirectPath || ''));
+        window.location.assign(`${walletPath}/${walletPage}/${cid}/?redirect=${redirectTo}`);
+      })
+      .catch(err => {
+        console.error('Failed to create payment request', err);
+        setClicked(false);
+      });
   };
 
   return (
