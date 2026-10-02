@@ -65,19 +65,15 @@ class SingleAcsSnapshotBulkStorage(
 
   }
 
-  private def encodeEvents(
-      events: Vector[SpliceCreatedEvent],
+  private def encodeEvent(
+      event: SpliceCreatedEvent,
       encoding: ScanStorageConfig.Encoding,
-  ): Seq[String] = {
-    val encodings = ScanHttpEncodings.fromDamlValueEncoding(encoding.damlValueEncoding)
-    val encoded = events.map(event =>
-      encodings.javaToHttpActiveContract(event.eventId, event.recordTime, event.event)
-    )
-    val contractsStr = encoded.map(_.asJson.noSpacesSortKeys)//.mkString("\n") + "\n"
-    logger.debug(
-      s"Read ${encoded.length} contracts from ACS, with encoding ${encoding.key}"
-    )
-    contractsStr
+  ): String = {
+    ScanHttpEncodings
+      .fromDamlValueEncoding(encoding.damlValueEncoding)
+      .javaToHttpActiveContract(event.eventId, event.recordTime, event.event)
+      .asJson
+      .noSpacesSortKeys
   }
 
   private def getSource: Source[Seq[String], NotUsed] = {
@@ -91,10 +87,10 @@ class SingleAcsSnapshotBulkStorage(
         historyMetrics.BulkStorage.incContractsCount(events.length)
         events
       })
-      .filter(_.nonEmpty)
+      .mapConcat(identity)
       .via(
         MultiEncodingBulkStorageFlow(
-          encodeEvents,
+          encodeEvent,
           encoding =>
             S3ZstdObjects(
               storageConfig,
