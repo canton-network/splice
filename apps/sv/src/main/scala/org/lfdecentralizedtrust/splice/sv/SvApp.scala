@@ -252,8 +252,6 @@ class SvApp(
 
       synchronizerNodeService = new SynchronizerNodeService[LocalSynchronizerNode](
         localSynchronizerNodes,
-        participantAdminConnection,
-        config.domains.global.alias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
         retryProvider,
         loggerFactory,

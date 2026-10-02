@@ -253,8 +253,6 @@ class ScanApp(
       )
       syncService = new SynchronizerNodeService(
         syncNodes,
-        participantAdminConnection,
-        config.globalSynchronizerAlias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
         retryProvider,
         loggerFactory,

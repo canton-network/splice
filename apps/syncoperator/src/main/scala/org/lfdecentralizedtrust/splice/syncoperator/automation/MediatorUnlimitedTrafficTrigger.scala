@@ -15,6 +15,8 @@ import org.lfdecentralizedtrust.splice.automation.GrantUnlimitedTrafficTriggerBa
 }
 import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
+import org.lfdecentralizedtrust.splice.environment.SynchronizerNodeService
+import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -24,7 +26,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class MediatorUnlimitedTrafficTrigger(
     override protected val context: TriggerContext,
     synchronizerId: SynchronizerId,
-    sequencerConnection: SequencerAdminConnection,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration,
 )(implicit
     override val ec: ExecutionContext,
@@ -35,19 +37,22 @@ class MediatorUnlimitedTrafficTrigger(
   override protected def sequencerAdminConnection()(implicit
       tc: TraceContext
   ): Future[SequencerAdminConnection] =
-    Future.successful(sequencerConnection)
+    synchronizerNodeService.sequencerAdminConnection()
 
   override protected def isActiveMember(task: Task)(implicit
       tc: TraceContext
   ): Future[Boolean] =
-    activeMediators(task.synchronizerId).map(_.contains(task.memberId))
+    sequencerAdminConnection()
+      .flatMap(activeMediators(_, task.synchronizerId))
+      .map(_.contains(task.memberId))
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[Task]] = {
     for {
-      mediators <- activeMediators(synchronizerId)
-      trafficStates <- sequencerConnection.listSequencerTrafficControlState(mediators)
+      connection <- sequencerAdminConnection()
+      mediators <- activeMediators(connection, synchronizerId)
+      trafficStates <- connection.listSequencerTrafficControlState(mediators)
     } yield {
       val limitByMember = trafficStates.map(state => state.member -> state.extraTrafficLimit).toMap
       mediators.collect {
@@ -57,10 +62,13 @@ class MediatorUnlimitedTrafficTrigger(
     }
   }
 
-  private def activeMediators(synchronizer: SynchronizerId)(implicit
+  private def activeMediators(
+      connection: SequencerAdminConnection,
+      synchronizer: SynchronizerId,
+  )(implicit
       tc: TraceContext
   ): Future[Seq[MediatorId]] =
-    sequencerConnection
+    connection
       .getMediatorSynchronizerState(
         synchronizer,
         topologySnapshot = TopologySnapshot.Effective,

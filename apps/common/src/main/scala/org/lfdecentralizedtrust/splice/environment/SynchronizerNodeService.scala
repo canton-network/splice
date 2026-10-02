@@ -3,21 +3,20 @@
 
 package org.lfdecentralizedtrust.splice.environment
 
-import cats.implicits.catsSyntaxApplicativeError
-import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.caching.ScaffeineCache
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import com.github.blemale.scaffeine.Scaffeine
-import io.grpc.Status
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
 
+/** Hands out whichever synchronizer node is live, so callers keep working across an upgrade. The
+  * switch is sticky once it has happened.
+  */
 class SynchronizerNodeService[T <: SynchronizerNode](
     val nodes: SynchronizerNode.LocalSynchronizerNodes[T],
-    participantAdminConnection: ParticipantAdminConnection,
-    globalSynchronizerAlias: SynchronizerAlias,
     cacheExpiration: NonNegativeFiniteDuration,
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
@@ -40,6 +39,23 @@ class SynchronizerNodeService[T <: SynchronizerNode](
           ),
     )(logger, "successorActive")
 
+  /** The successor rejects traffic reads until the predecessor's traffic state has been transferred
+    * onto it, which is the point from which grants have to go to the successor to survive the
+    * upgrade.
+    */
+  private def successorActiveUncached()(implicit tc: TraceContext): Future[Boolean] =
+    nodes.successor match {
+      case None => Future.successful(false)
+      case Some(successor) =>
+        (for {
+          sequencerId <- successor.sequencerAdminConnection.getSequencerId
+          _ <- successor.sequencerAdminConnection.lookupSequencerTrafficControlState(sequencerId)
+        } yield true).recover { case NonFatal(err) =>
+          logger.debug(s"Successor synchronizer is not serving traffic state yet: $err")
+          false
+        }
+    }
+
   private def successorActive()(implicit tc: TraceContext): Future[Boolean] =
     if (successorActiveRef.get()) {
       Future.successful(true)
@@ -51,35 +67,6 @@ class SynchronizerNodeService[T <: SynchronizerNode](
         }
         active
       }
-    }
-
-  private def successorActiveUncached()(implicit tc: TraceContext): Future[Boolean] =
-    nodes.successor match {
-      case None => Future.successful(false)
-      case Some(successor) =>
-        for {
-          synchronizers <- participantAdminConnection.listRegisteredSynchronizers()
-          succesorInitialized <- successor.sequencerAdminConnection
-            .isNodeInitialized()
-            .attemptT
-            .getOrElse(false)
-          global = synchronizers
-            .find(
-              _._1.synchronizerAlias == globalSynchronizerAlias
-            )
-            .flatMap(_._2.toOption)
-            .getOrElse(
-              throw Status.NOT_FOUND
-                .withDescription(
-                  s"No registered synchronizer with alias $globalSynchronizerAlias that has a physical synchronizer id"
-                )
-                .asRuntimeException
-            )
-          successorPSId <-
-            if (succesorInitialized)
-              successor.sequencerAdminConnection.getPhysicalSynchronizerId().map(Some(_))
-            else Future.successful(None)
-        } yield successorPSId.map(_.serial).contains(global.serial)
     }
 
   def activeSynchronizerNode()(implicit tc: TraceContext): Future[T] =

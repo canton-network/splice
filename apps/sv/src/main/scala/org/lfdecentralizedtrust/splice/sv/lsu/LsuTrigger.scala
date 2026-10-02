@@ -3,30 +3,19 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
-import cats.implicits.{catsSyntaxOptionId, showInterpolator, toTraverseOps}
-import com.digitalasset.canton.admin.api.client.data.NodeStatus
+import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.transaction.{LsuAnnouncement, TopologyChangeOp}
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.automation.{
-  ScheduledTaskTrigger,
-  TaskOutcome,
-  TaskSuccess,
-  TriggerContext,
-  TriggerEnabledSynchronization,
-}
-import org.lfdecentralizedtrust.splice.environment.{
-  ParticipantAdminConnection,
-  StatusAdminConnection,
-}
+import org.lfdecentralizedtrust.splice.automation.{ScheduledTaskTrigger, TriggerContext}
+import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
-import org.lfdecentralizedtrust.splice.lsu.{LsuNodeInitializer, LsuStateExporter}
+import org.lfdecentralizedtrust.splice.lsu.LsuTransferTriggerBase
+import org.lfdecentralizedtrust.splice.lsu.LsuTransferTriggerBase.LsuTransferTask
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.lsu.LsuTrigger.LsuTransferTask
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState.OnboardedImmediately
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
@@ -47,77 +36,24 @@ class LsuTrigger(
     ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
-) extends ScheduledTaskTrigger[LsuTransferTask] {
-
-  private val currentSynchronizerNode = localSynchronizerNodes.current
-
-  private val exporter =
-    new LsuStateExporter(
-      dumpPath,
-      currentSynchronizerNode.sequencerAdminConnection,
-      currentSynchronizerNode.mediatorAdminConnection,
-      loggerFactory,
-    )
-
-  private val initializer =
-    new LsuNodeInitializer(
+) extends LsuTransferTriggerBase[LocalSynchronizerNode](
+      baseContext,
       localSynchronizerNodes,
       successorSynchronizerNode,
-      loggerFactory,
-      context.retryProvider,
-    )
+      dumpPath,
+    ) {
 
-  override protected lazy val context: TriggerContext =
-    baseContext.copy(triggerEnabledSync = TriggerEnabledSynchronization.Noop)
+  /** Without BFT connections the participant does not follow the upgrade on its own. */
+  override protected def additionalWorkPending(
+      now: CantonTimestamp,
+      currentPsid: PhysicalSynchronizerId,
+      announcements: Seq[LsuAnnouncement],
+  )(implicit tc: TraceContext): Future[Boolean] =
+    participantNeedsManualLsu(now, currentPsid, announcements)
 
-  protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[LsuTransferTask]] = {
-    for {
-      physicalSynchronizerId <- currentSynchronizerNode.sequencerAdminConnection
-        .getPhysicalSynchronizerId()
-      announcements <- announcements(now, physicalSynchronizerId)
-      sequencerNotInitialized <- isNodeNotInitialized(
-        successorSynchronizerNode.sequencerAdminConnection,
-        "sequencer",
-      )
-      mediatorNotInitialized <- isNodeNotInitialized(
-        successorSynchronizerNode.mediatorAdminConnection,
-        "mediator",
-      )
-      participantNeedsManualLsu <- participantNeedsManualLsu(
-        now,
-        physicalSynchronizerId,
-        announcements.map(_.mapping),
-      )
-    } yield {
-      announcements
-        .filter { _ =>
-          sequencerNotInitialized || mediatorNotInitialized || participantNeedsManualLsu
-        }
-        .map(result => LsuTransferTask(result.mapping))
-    }
-
-  }
-
-  private def isNodeNotInitialized[T <: StatusAdminConnection](
-      adminConnection: T,
-      nodeName: String,
-  )(implicit
-      tc: TraceContext
-  ): Future[Boolean] = {
-    adminConnection.getStatus(tc).map {
-      case NodeStatus.Failure(msg) =>
-        logger.error(s"Failed to get successor $nodeName status: $msg")
-        false
-      case NodeStatus.NotInitialized(_, _, _) => true
-      case NodeStatus.Success(_) => false
-    }
-  }
-
-  protected def completeTask(task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask])(implicit
-      tc: TraceContext
-  ): Future[TaskOutcome] = {
+  override protected def beforeInitialize(
+      task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask]
+  )(implicit tc: TraceContext): Future[Unit] =
     for {
       rulesAndState <- store.getDsoRulesWithSvNodeStates()
       owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
@@ -127,16 +63,12 @@ class LsuTrigger(
       _ <- successorSynchronizerNode.cometbftNode.traverse(
         _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
       )
-      state <- exporter.exportLSUState(
-        topologyExportTime = None
-      )
-      parameters <- initializer.initializeSynchronizer(
-        state,
-        task.work.announcement.successorSynchronizerId,
-        task.readyAt,
-        Some(task.work.announcement.upgradeTime),
-        ignorePsidCheck = false,
-      )
+    } yield ()
+
+  override protected def afterInitialize(
+      task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask]
+  )(implicit tc: TraceContext): Future[Unit] =
+    for {
       currentPsid <- currentSynchronizerNode.sequencerAdminConnection
         .getPhysicalSynchronizerId()
       participantPsid <- participantAdminConnection.getPhysicalSynchronizerId(
@@ -175,29 +107,7 @@ class LsuTrigger(
         currentPsid.logical,
         OnboardedImmediately,
       )
-    } yield {
-      TaskSuccess(
-        show"Initialized new synchronizer with parameters $parameters"
-      )
-    }
-  }
-
-  protected def isStaleTask(task: ScheduledTaskTrigger.ReadyTask[LsuTransferTask])(implicit
-      tc: TraceContext
-  ): Future[Boolean] = Future.successful(false)
-
-  private def announcements(now: CantonTimestamp, synchronizerId: PhysicalSynchronizerId)(implicit
-      tc: TraceContext
-  ) = {
-    currentSynchronizerNode.sequencerAdminConnection
-      .listLsuAnnouncements(synchronizerId.logical)
-      .map(_.filter { announcement =>
-        announcement.base.validFrom
-          .isBefore(
-            now.toInstant
-          ) && announcement.mapping.successorSynchronizerId.serial > synchronizerId.serial
-      })
-  }
+    } yield ()
 
   private def participantNeedsManualLsu(
       now: CantonTimestamp,
@@ -226,14 +136,5 @@ class LsuTrigger(
           }
         case None => Future.successful(false)
       }
-  }
-}
-
-object LsuTrigger {
-  case class LsuTransferTask(announcement: LsuAnnouncement) extends PrettyPrinting {
-
-    override def pretty: Pretty[this.type] = prettyOfClass(
-      param("announcement", _.announcement)
-    )
   }
 }

@@ -8,6 +8,7 @@ import com.digitalasset.canton.sequencing.TrafficControlParameters
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
@@ -15,15 +16,21 @@ import org.lfdecentralizedtrust.splice.automation.{
   SpliceAppAutomationService,
   SqlIndexInitializationTrigger,
 }
+import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.TriggerClass
+import org.lfdecentralizedtrust.splice.lsu.LsuTransferTrafficTrigger
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.{
   PackageVersionSupport,
   RetryProvider,
-  SequencerAdminConnection,
   SpliceLedgerClient,
+  SynchronizerNodeService,
 }
+import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorLsuConfig
 import org.lfdecentralizedtrust.splice.syncoperator.store.SyncOperatorStore
+
+import java.nio.file.Path
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -36,7 +43,9 @@ class SyncOperatorAutomationService(
     ledgerClient: SpliceLedgerClient,
     retryProvider: RetryProvider,
     params: SpliceParametersConfig,
-    sequencerConnection: SequencerAdminConnection,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
+    lsuConfig: Option[SyncOperatorLsuConfig],
+    lsuDumpPath: Option[Path],
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration,
     trafficControl: TrafficControlParameters,
     protected val loggerFactory: NamedLoggerFactory,
@@ -70,7 +79,7 @@ class SyncOperatorAutomationService(
     new ReconcileDedicatedSynchronizerParametersTrigger(
       triggerContext,
       store,
-      sequencerConnection,
+      synchronizerNodeService,
       trafficControl,
     )
   )
@@ -79,7 +88,7 @@ class SyncOperatorAutomationService(
     new MediatorUnlimitedTrafficTrigger(
       triggerContext,
       store.key.synchronizerId,
-      sequencerConnection,
+      synchronizerNodeService,
       trafficBalanceReconciliationDelay,
     )
   )
@@ -88,14 +97,66 @@ class SyncOperatorAutomationService(
     new ReconcileDedicatedSequencerTrafficTrigger(
       triggerContext,
       store,
-      sequencerConnection,
+      synchronizerNodeService,
       trafficBalanceReconciliationDelay,
     )
   )
+
+  registerLsuTriggers()
+
+  /** The upgrade path runs only once a successor node is configured. */
+  private def registerLsuTriggers(): Unit =
+    synchronizerNodeService.nodes.successor match {
+      case Some(successorSynchronizerNode) =>
+        lsuConfig.foreach { lsu =>
+          registerTrigger(
+            new DedicatedLsuAnnouncementTrigger(
+              triggerContext,
+              synchronizerNodeService.nodes.current.sequencerAdminConnection,
+              lsu,
+            )
+          )
+        }
+        registerTrigger(
+          new DedicatedLsuTrigger(
+            triggerContext,
+            synchronizerNodeService.nodes,
+            successorSynchronizerNode,
+            lsuDumpPath.getOrElse(
+              throw new IllegalArgumentException(
+                "lsu-dump-path must be set when a successor synchronizer node is configured"
+              )
+            ),
+          )
+        )
+        registerTrigger(
+          new LsuTransferTrafficTrigger(
+            triggerContext,
+            synchronizerNodeService.nodes.current,
+            successorSynchronizerNode,
+          )
+        )
+      case None =>
+        lsuConfig.foreach(_ =>
+          logger.warn(
+            "An upgrade is scheduled but no successor synchronizer node is configured, so it will " +
+              "not run. Configure synchronizer-nodes.successor."
+          )(TraceContext.empty)
+        )
+    }
 }
 
 object SyncOperatorAutomationService extends AutomationServiceCompanion {
+  import AutomationServiceCompanion.aTrigger
 
-  override protected[this] def expectedTriggerClasses: Seq[Nothing] =
-    Seq.empty
+  override protected[this] def expectedTriggerClasses: Seq[TriggerClass] =
+    SpliceAppAutomationService.expectedTriggerClasses ++ Seq(
+      aTrigger[SqlIndexInitializationTrigger],
+      aTrigger[ReconcileDedicatedSynchronizerParametersTrigger],
+      aTrigger[MediatorUnlimitedTrafficTrigger],
+      aTrigger[ReconcileDedicatedSequencerTrafficTrigger],
+      aTrigger[DedicatedLsuAnnouncementTrigger],
+      aTrigger[DedicatedLsuTrigger],
+      aTrigger[LsuTransferTrafficTrigger],
+    )
 }

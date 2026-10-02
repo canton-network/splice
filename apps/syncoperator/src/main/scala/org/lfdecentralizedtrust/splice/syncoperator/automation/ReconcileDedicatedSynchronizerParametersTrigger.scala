@@ -19,6 +19,8 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection
 import org.lfdecentralizedtrust.splice.syncoperator.automation.ReconcileDedicatedSynchronizerParametersTrigger.Task
 import org.lfdecentralizedtrust.splice.syncoperator.store.SyncOperatorStore
+import org.lfdecentralizedtrust.splice.environment.SynchronizerNodeService
+import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -26,7 +28,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class ReconcileDedicatedSynchronizerParametersTrigger(
     override protected val context: TriggerContext,
     store: SyncOperatorStore,
-    sequencerConnection: SequencerAdminConnection,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
     trafficControl: TrafficControlParameters,
 )(implicit
     override val ec: ExecutionContext,
@@ -39,13 +41,17 @@ class ReconcileDedicatedSynchronizerParametersTrigger(
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[Task]] =
-    isReconciled().map(if (_) Seq.empty else Seq(Task(synchronizerId)))
+    for {
+      connection <- synchronizerNodeService.sequencerAdminConnection()
+      reconciled <- isReconciled(connection)
+    } yield if (reconciled) Seq.empty else Seq(Task(synchronizerId))
 
   override protected def completeTask(task: Task)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] =
-    sequencerConnection
-      .ensureDomainParameters(task.synchronizerId, withTrafficControl)
+    synchronizerNodeService
+      .sequencerAdminConnection()
+      .flatMap(_.ensureDomainParameters(task.synchronizerId, withTrafficControl))
       .map(_ =>
         TaskSuccess(
           s"Set the traffic control parameters on ${task.synchronizerId}, " +
@@ -55,10 +61,13 @@ class ReconcileDedicatedSynchronizerParametersTrigger(
 
   override protected def isStaleTask(task: Task)(implicit
       tc: TraceContext
-  ): Future[Boolean] = isReconciled()
+  ): Future[Boolean] =
+    synchronizerNodeService.sequencerAdminConnection().flatMap(isReconciled)
 
-  private def isReconciled()(implicit tc: TraceContext): Future[Boolean] =
-    sequencerConnection
+  private def isReconciled(
+      connection: SequencerAdminConnection
+  )(implicit tc: TraceContext): Future[Boolean] =
+    connection
       .getSynchronizerParametersState(synchronizerId)
       .map(state => state.mapping.parameters == withTrafficControl(state.mapping.parameters))
 

@@ -3,9 +3,15 @@
 
 package org.lfdecentralizedtrust.splice.syncoperator.config
 
+import com.digitalasset.canton.admin.api.client.data.{
+  SequencerConnectionPoolDelays,
+  SubmissionRequestAmplification,
+  SynchronizerLimits,
+}
 import com.digitalasset.canton.config.*
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, PositiveInt}
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.sequencing.TrafficControlParameters
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.{
   AutomationConfig,
   HttpClientConfig,
@@ -15,11 +21,63 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceParametersConfig,
   SplicePostgresConfig,
 }
+import org.lfdecentralizedtrust.splice.lsu.LsuRollForwardTimestamp
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 
-// The sequencer this node grants traffic on.
+import java.nio.file.Path
+
+// The sequencer of a synchronizer node this operator runs.
 case class SyncOperatorSequencerConfig(
-    adminApi: FullClientConfig
+    adminApi: FullClientConfig,
+    // Only needed for an upgrade: the mediator reaches the sequencer here.
+    internalApi: Option[FullClientConfig] = None,
+    // Only needed for an upgrade: published as the sequencer successor, so this is the url
+    // validators reach the node on, not an address on the operator's own network.
+    externalPublicApiUrl: Option[String] = None,
+)
+
+// The mediator of a synchronizer node this operator runs. Only needed for an upgrade, which
+// initializes the successor's mediator from this one's identity.
+case class SyncOperatorMediatorConfig(
+    adminApi: FullClientConfig,
+    sequencerRequestAmplification: SubmissionRequestAmplification =
+      SubmissionRequestAmplification.NoAmplification,
+    sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
+      SequencerConnectionPoolDelays.default,
+)
+
+/** A synchronizer node this operator runs, as a sequencer and mediator pair. */
+case class SyncOperatorSynchronizerNodeConfig(
+    sequencer: SyncOperatorSequencerConfig,
+    mediator: Option[SyncOperatorMediatorConfig] = None,
+    // A dedicated synchronizer is bootstrapped at the latest protocol version, not at the version
+    // the decentralized synchronizer is pinned to.
+    protocolVersion: ProtocolVersion = ProtocolVersion.latest,
+    serial: Option[NonNegativeInt] = None,
+    // We want to be able to override this for simtime tests
+    topologyChangeDelayDuration: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofMillis(250),
+    // None leaves Canton's own defaults in place, which is what a dedicated synchronizer is
+    // bootstrapped with.
+    synchronizerLimits: Option[SynchronizerLimits] = None,
+)
+
+case class SyncOperatorSynchronizerNodesConfig(
+    current: SyncOperatorSynchronizerNodeConfig,
+    // Set once the successor's sequencer and mediator are deployed, ahead of the upgrade time.
+    successor: Option[SyncOperatorSynchronizerNodeConfig] = None,
+)
+
+/** An upgrade the operator has scheduled, mirroring the DSO's
+  * `LogicalSynchronizerUpgradeSchedule`.
+  */
+case class SyncOperatorLsuConfig(
+    // The announcement is published once this is reached, which is what freezes topology.
+    topologyFreezeTime: LsuRollForwardTimestamp,
+    upgradeTime: LsuRollForwardTimestamp,
+    newPhysicalSynchronizerSerial: NonNegativeInt,
+    // An upgrade may keep the protocol version, it cannot go back to an earlier one.
+    newPhysicalSynchronizerProtocolVersion: ProtocolVersion,
 )
 
 case class SyncOperatorAppBackendConfig(
@@ -30,7 +88,11 @@ case class SyncOperatorAppBackendConfig(
     operatorUser: String,
     participantClient: ParticipantClientConfig,
     scanClient: ScanAppClientConfig,
-    sequencer: SyncOperatorSequencerConfig,
+    synchronizerNodes: SyncOperatorSynchronizerNodesConfig,
+    // The upgrade this operator has scheduled, if any. Read by the announcement trigger.
+    lsu: Option[SyncOperatorLsuConfig] = None,
+    // Where the predecessor's synchronizer state is dumped during an upgrade.
+    lsuDumpPath: Option[Path] = None,
     override val automation: AutomationConfig = AutomationConfig(),
     parameters: SpliceParametersConfig = SpliceParametersConfig(batching = BatchingConfig()),
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration =

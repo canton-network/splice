@@ -6,16 +6,9 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
-import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
 import monocle.macros.syntax.lens.*
-import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.GovernanceParameters
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.RegisteredSynchronizer
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.topupstate.ValidatorTopUpState
-import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
-import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
@@ -25,9 +18,8 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.util.{
-  ContractWithState,
-  DisclosedContracts,
   SynchronizerFeesTestUtil,
+  SyncOperatorTestUtil,
   TriggerTestUtil,
   WalletTestUtil,
 }
@@ -36,7 +28,6 @@ import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry
 
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
-import scala.jdk.OptionConverters.*
 
 /** Buys traffic for a registered synchronizer via `AmuletRules_BuyMemberTraffic` with the
   * registration disclosed, and checks the operator grants it on that synchronizer's sequencer.
@@ -44,6 +35,7 @@ import scala.jdk.OptionConverters.*
 class SyncOperatorTrafficIntegrationTest
     extends IntegrationTest
     with SynchronizerFeesTestUtil
+    with SyncOperatorTestUtil
     with TriggerTestUtil
     with WalletTestUtil {
 
@@ -236,57 +228,6 @@ class SyncOperatorTrafficIntegrationTest
     }
   }
 
-  private def buyTraffic(
-      buyer: PartyId,
-      member: Member,
-      synchronizerId: SynchronizerId,
-      registration: ContractWithState[RegisteredSynchronizer.ContractId, RegisteredSynchronizer],
-      dsoParty: PartyId,
-      trafficAmount: Long,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val transferContext =
-      sv1ScanBackend.getTransferContextWithInstances(CantonTimestamp.now())
-    val amulets = aliceWalletClient.list().amulets.map(_.contract.contractId.contractId)
-
-    aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
-      .submitWithResult(
-        aliceValidatorBackend.config.ledgerApiUser,
-        actAs = Seq(buyer),
-        readAs = Seq(buyer),
-        update = transferContext.amuletRules.contract.contractId
-          .exerciseAmuletRules_BuyMemberTraffic(
-            amulets
-              .map[splice.amuletrules.TransferInput](cid =>
-                new splice.amuletrules.transferinput.InputAmulet(
-                  new splice.amulet.Amulet.ContractId(cid)
-                )
-              )
-              .asJava,
-            new splice.amuletrules.TransferContext(
-              transferContext.latestOpenMiningRound.contract.contractId,
-              Map.empty[Round, IssuingMiningRound.ContractId].asJava,
-              Map.empty[String, splice.amulet.ValidatorRight.ContractId].asJava,
-              None.toJava,
-            ),
-            buyer.toProtoPrimitive,
-            member.toProtoPrimitive,
-            synchronizerId.toProtoPrimitive,
-            // a registered synchronizer is pinned to migration id 0
-            0L,
-            trafficAmount,
-            Some(dsoParty.toProtoPrimitive).toJava,
-            Some(registration.contractId).toJava,
-          ),
-        disclosedContracts = DisclosedContracts
-          .forTesting(
-            transferContext.amuletRules,
-            transferContext.latestOpenMiningRound,
-            registration,
-          )
-          .toLedgerApiDisclosedContracts,
-      )
-  }
-
   // The sync-operator CI job bootstraps splitwell with traffic control and a zero base rate;
   // see start-canton.sh -t.
   private def synchronizerParameters(implicit env: SpliceTestConsoleEnvironment) =
@@ -296,15 +237,4 @@ class SyncOperatorTrafficIntegrationTest
       .mapping
       .parameters
 
-  private def trafficState(
-      member: Member
-  )(implicit env: SpliceTestConsoleEnvironment): Option[SequencerAdminConnection.TrafficState] =
-    syncOperatorBackend.appState.sequencerAdminConnection
-      .lookupSequencerTrafficControlState(member)
-      .futureValue
-
-  private def extraTrafficLimit(
-      member: Member
-  )(implicit env: SpliceTestConsoleEnvironment): Long =
-    trafficState(member).fold(0L)(_.extraTrafficLimit.value)
 }

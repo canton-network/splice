@@ -14,6 +14,8 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection
 import org.lfdecentralizedtrust.splice.syncoperator.store.SyncOperatorStore
+import org.lfdecentralizedtrust.splice.environment.SynchronizerNodeService
+import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,7 +23,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class ReconcileDedicatedSequencerTrafficTrigger(
     override protected val context: TriggerContext,
     store: SyncOperatorStore,
-    sequencerConnection: SequencerAdminConnection,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration,
 )(implicit
     ec: ExecutionContext,
@@ -35,7 +37,7 @@ class ReconcileDedicatedSequencerTrafficTrigger(
   override protected def sequencerAdminConnection()(implicit
       tc: TraceContext
   ): Future[SequencerAdminConnection] =
-    Future.successful(sequencerConnection)
+    synchronizerNodeService.sequencerAdminConnection()
 
   override protected def getTotalPurchasedMemberTraffic(memberId: Member)(implicit
       tc: TraceContext

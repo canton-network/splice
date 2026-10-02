@@ -24,7 +24,10 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
-import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorAppBackendConfig
+import org.lfdecentralizedtrust.splice.syncoperator.config.{
+  SyncOperatorAppBackendConfig,
+  SyncOperatorSynchronizerNodeConfig,
+}
 import org.lfdecentralizedtrust.splice.validator.config.{
   AnsAppExternalClientConfig,
   ValidatorAppBackendConfig,
@@ -558,8 +561,10 @@ object ConfigTransforms {
           conf
             .focus(_.participantClient)
             .modify(portTransform(bump, _))
-            .focus(_.sequencer.adminApi)
+            .focus(_.synchronizerNodes.current)
             .modify(portTransform(bump, _))
+            .focus(_.synchronizerNodes.successor)
+            .modify(_.map(portTransform(bump, _)))
         else conf
       ),
     )
@@ -913,6 +918,19 @@ object ConfigTransforms {
 
   private def portTransform(bump: Int, c: SvMediatorConfig): SvMediatorConfig =
     c.focus(_.adminApi).modify(portTransform(bump, _))
+
+  private def portTransform(
+      bump: Int,
+      c: SyncOperatorSynchronizerNodeConfig,
+  ): SyncOperatorSynchronizerNodeConfig =
+    c.focus(_.sequencer.adminApi)
+      .modify(portTransform(bump, _))
+      .focus(_.sequencer.internalApi)
+      .modify(_.map(portTransform(bump, _)))
+      .focus(_.sequencer.externalPublicApiUrl)
+      .modify(_.map(bumpUrl(bump, _)))
+      .focus(_.mediator)
+      .modify(_.map(_.focus(_.adminApi).modify(portTransform(bump, _))))
 
   private def portTransform(
       bump: Int,

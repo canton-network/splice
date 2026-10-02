@@ -21,16 +21,22 @@ import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.environment.{
   BaseLedgerConnection,
+  MediatorAdminConnection,
   Node,
   PackageVersionSupport,
   ParticipantAdminConnection,
   RetryFor,
   SequencerAdminConnection,
   SpliceLedgerClient,
+  SynchronizerNode,
+  SynchronizerNodeService,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.syncoperator.automation.SyncOperatorAutomationService
-import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorAppBackendConfig
+import org.lfdecentralizedtrust.splice.syncoperator.config.{
+  SyncOperatorAppBackendConfig,
+  SyncOperatorSynchronizerNodeConfig,
+}
 import org.lfdecentralizedtrust.splice.syncoperator.metrics.SyncOperatorAppMetrics
 import org.lfdecentralizedtrust.splice.syncoperator.store.SyncOperatorStore
 import org.lfdecentralizedtrust.splice.util.HasHealth
@@ -104,15 +110,24 @@ class SyncOperatorApp(
       }
       // Scan may still be initializing when this app starts, so wait for it rather than failing.
       dsoParty <- appInitStep("Get DSO party id") { scanConnection.getDsoPartyIdWithRetries() }
-      sequencerAdminConnection = new SequencerAdminConnection(
-        config.sequencer.adminApi,
-        appParameters.loggingConfig.api,
-        loggerFactory,
-        metrics.grpcClientMetrics,
-        retryProvider,
+      synchronizerNodes = SynchronizerNode.LocalSynchronizerNodes(
+        current = synchronizerNode(config.synchronizerNodes.current),
+        successor = config.synchronizerNodes.successor.map(synchronizerNode),
+        legacy = None,
+        additionalLegacy = Seq.empty,
       )
+      synchronizerNodeService = new SynchronizerNodeService(
+        synchronizerNodes,
+        config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
+        retryProvider,
+        loggerFactory,
+      )
+      sequencerAdminConnection = synchronizerNodes.current.sequencerAdminConnection
       synchronizerId <- appInitStep("Get the synchronizer id from the sequencer") {
         servedSynchronizerId(sequencerAdminConnection)
+      }
+      _ <- appInitStep("Check the configured synchronizer has not already been upgraded") {
+        requireCurrentNodeIsLive(synchronizerNodes)
       }
       _ <- appInitStep("Check the synchronizer runs traffic control") {
         requireTrafficControl(sequencerAdminConnection, synchronizerId)
@@ -155,7 +170,9 @@ class SyncOperatorApp(
         ledgerClient,
         retryProvider,
         config.parameters,
-        sequencerAdminConnection,
+        synchronizerNodeService,
+        config.lsu,
+        config.lsuDumpPath,
         config.trafficBalanceReconciliationDelay,
         TrafficControlParameters(
           maxBaseTrafficAmount = config.baseTrafficAmount,
@@ -175,12 +192,66 @@ class SyncOperatorApp(
         store,
         scanConnection,
         participantAdminConnection,
-        sequencerAdminConnection,
+        synchronizerNodes,
         loggerFactory.getTracedLogger(SyncOperatorApp.State.getClass),
         timeouts,
       )
     }
   }
+
+  private def synchronizerNode(
+      nodeConfig: SyncOperatorSynchronizerNodeConfig
+  ): SyncOperatorSynchronizerNode =
+    new SyncOperatorSynchronizerNode(
+      new SequencerAdminConnection(
+        nodeConfig.sequencer.adminApi,
+        appParameters.loggingConfig.api,
+        loggerFactory,
+        metrics.grpcClientMetrics,
+        retryProvider,
+      ),
+      nodeConfig.mediator.map(mediator =>
+        new MediatorAdminConnection(
+          mediator.adminApi,
+          appParameters.loggingConfig.api,
+          loggerFactory,
+          metrics.grpcClientMetrics,
+          retryProvider,
+        )
+      ),
+      nodeConfig,
+      loggerFactory.getTracedLogger(classOf[SyncOperatorSynchronizerNode]),
+    )
+
+  /** An upgraded node still reports the same logical synchronizer id, so without a successor to
+    * switch to this app would grant traffic on a synchronizer nobody is connected to. The
+    * announcement alone is enough to refuse: it is only ever published with a successor configured.
+    */
+  private def requireCurrentNodeIsLive(
+      nodes: SynchronizerNode.LocalSynchronizerNodes[SyncOperatorSynchronizerNode]
+  )(implicit traceContext: TraceContext): Future[Unit] =
+    if (nodes.successor.isDefined) Future.unit
+    else
+      for {
+        psid <- nodes.current.sequencerAdminConnection.getPhysicalSynchronizerId()
+        announcements <- nodes.current.sequencerAdminConnection
+          .listLsuAnnouncements(psid.logical)
+        superseded = announcements.filter(
+          _.mapping.successorSynchronizerId.serial > psid.serial
+        )
+        _ <- superseded.headOption.fold(Future.unit) { announcement =>
+          Future.failed(
+            Status.FAILED_PRECONDITION
+              .withDescription(
+                s"The configured synchronizer node is at $psid but is upgraded to " +
+                  s"${announcement.mapping.successorSynchronizerId} at " +
+                  s"${announcement.mapping.upgradeTime}. Set synchronizer-nodes.successor, or " +
+                  "point synchronizer-nodes.current at the successor once the upgrade has landed."
+              )
+              .asRuntimeException()
+          )
+        }
+      } yield ()
 
   /** This app adjusts traffic control but never turns it on, which would strand members that have
     * no traffic yet.
@@ -236,21 +307,31 @@ object SyncOperatorApp {
       store: SyncOperatorStore,
       scanConnection: ScanConnection,
       participantAdminConnection: ParticipantAdminConnection,
-      sequencerAdminConnection: SequencerAdminConnection,
+      synchronizerNodes: SynchronizerNode.LocalSynchronizerNodes[SyncOperatorSynchronizerNode],
       logger: TracedLogger,
       timeouts: ProcessingTimeout,
   ) extends AutoCloseable
       with HasHealth {
+
+    /** The configured current node's sequencer. Automation follows the successor across an
+      * upgrade, see `SynchronizerNodeService`.
+      */
+    def sequencerAdminConnection: SequencerAdminConnection =
+      synchronizerNodes.current.sequencerAdminConnection
+
     override def isHealthy: Boolean = storage.isActive
 
-    override def close(): Unit =
-      LifeCycle.close(
-        automation,
-        storage,
-        store,
-        scanConnection,
-        participantAdminConnection,
-        sequencerAdminConnection,
-      )(logger)
+    override def close(): Unit = {
+      val instances =
+        Seq[AutoCloseable](
+          automation,
+          storage,
+          store,
+          scanConnection,
+          participantAdminConnection,
+          synchronizerNodes.current,
+        ) ++ synchronizerNodes.successor.toList
+      LifeCycle.close(instances*)(logger)
+    }
   }
 }
