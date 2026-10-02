@@ -1727,6 +1727,32 @@ paths:
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
 
+  /v0/history/bulk/progress:
+    get:
+      tags: [ internal, pre-alpha, scan ]
+      x-jvm-package: scan
+      operationId: "getBulkObjectsProgress"
+      description: |
+        **Under Development, do not use in production yet** Query whether bulk storage object creation has advanced to a certain record time.
+        Meant for internal use only, as part of the processing pipeline of bulk objects.
+      parameters:
+        - name: "record_time"
+          in: "query"
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetBulkObjectsProgressResponse"
+        "501":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
+
+
 
 components:
   schemas:
@@ -3991,15 +4017,8 @@ components:
     GetBulkObjectChecksumsRequest:
       type: object
       required:
-        - required_catchup_timestamp
         - object_keys
       properties:
-        required_catchup_timestamp:
-          description: |
-            If bulk storage is not caught up to this timestamp, the request must fail with a 404 error.
-            This is to differentiate between "The data is not available yet" and "The data is not available at all".
-          type: string
-          format: date-time
         object_keys:
           description: |
             The list of keys of the bulk storage objects for which checksums are requested.
@@ -4037,6 +4056,14 @@ components:
           description: |
             The sha256 digest of the bulk storage object, for verification of integrity and consistency across SVs.
           type: string
+
+    GetBulkObjectsProgressResponse:
+      type: object
+      required:
+        - beyond_requested_record_time
+      properties:
+        beyond_requested_record_time:
+          type: boolean
 
     GetRewardAccountingEarliestAvailableRoundResponse:
       type: object
