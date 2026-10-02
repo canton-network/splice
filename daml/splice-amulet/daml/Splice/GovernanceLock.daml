@@ -216,12 +216,11 @@ template GovernanceLock
             requestedAt
             executeBefore = maxBound
             inputHoldingCids = []
-            meta = reasonToMeta encodedReason meta
+            meta = reasonToMeta encodedReason $ encodeGovernanceLockMetadata this
           status = V1.TransferPendingInternalWorkflow with
             pendingActions = Map.fromList
               [ (p, "withdraw transfer instruction to approve unlock")
-              | p <- Set.toList $ allControllers specification.unlockControllers
-              , not (Map.member p pendingUnlockApprovals)
+              | p <- Set.toList $ allControllers (governanceLockRemainingUnlockControllers this)
               ]
           meta = emptyMetadata
         where
@@ -262,12 +261,12 @@ template GovernanceLock
             settlementDeadline = Some maxComparableTime
             nextIterationFunding = Some $ TextMap.singleton amuletInstrumentIdName amount
             committed = False
-            meta = reasonToMeta encodedReason meta
+            meta = reasonToMeta encodedReason $ encodeGovernanceLockMetadata this
           holdingCids = [toInterfaceContractId lockedAmulet]
           createdAt = requestedAt
           numIterations = 0
           expiresAt = Some maxBound
-          availableActions = Map.fromList [(V2.AA_Withdraw, specification.unlockControllers.controllers)]
+          availableActions = Map.singleton V2.AA_Withdraw (governanceLockRemainingUnlockControllers this).controllers
           meta = emptyMetadata
         where
           (_, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
@@ -527,8 +526,7 @@ template VestingLock
           status = V1.TransferPendingInternalWorkflow with
             pendingActions = Map.fromList $
               [ (p, "withdraw vested amounts")
-              | p <- Set.toList $ allControllers specification.vestingControllers
-              , not (Map.member p pendingWithdrawApprovals)
+              | p <- Set.toList $ allControllers (vestingLockRemainingWithdrawControllers this)
               ]
           meta = emptyMetadata
         where
@@ -576,7 +574,7 @@ template VestingLock
           createdAt = endTime `addRelTime` (- vestingPeriod)
           numIterations = 0
           expiresAt = Some maxBound
-          availableActions = Map.fromList [(V2.AA_Withdraw, specification.vestingControllers.controllers)]
+          availableActions = Map.singleton V2.AA_Withdraw (vestingLockRemainingWithdrawControllers this).controllers
           meta = emptyMetadata
         where
           (_, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
@@ -735,6 +733,18 @@ validateControllers : CanAssert m => [(Text, ControllerSpecification)] -> m ()
 validateControllers = mapA_ \(controllerType, ControllerSpecification{controllers}) -> do
   require (controllerType <> "Controllers must not be empty") (not $ null controllers)
   require (controllerType <> "Controllers must not contain an empty controller set") (all (not . null) controllers)
+
+remainingControllers : Map.Map Party a -> ControllerSpecification -> ControllerSpecification
+remainingControllers pendingApprovals controllers =
+  ControllerSpecification $ filter (not . null) $ fmap (filter (\p -> not $ Map.member p pendingApprovals)) controllers.controllers
+
+governanceLockRemainingUnlockControllers : GovernanceLock -> ControllerSpecification
+governanceLockRemainingUnlockControllers GovernanceLock{specification, pendingUnlockApprovals} =
+  remainingControllers pendingUnlockApprovals specification.unlockControllers
+
+vestingLockRemainingWithdrawControllers : VestingLock -> ControllerSpecification
+vestingLockRemainingWithdrawControllers VestingLock{specification, pendingWithdrawApprovals} =
+  remainingControllers pendingWithdrawApprovals specification.vestingControllers
 
 -- | Updates approvals for a GovernanceLock unlock
 governanceLock_updateUnlockApprovals : GovernanceLock -> Optional Decimal -> Time -> [Party] -> Update (Either (Map.Map Party UnlockApproval) Time)
@@ -957,6 +967,28 @@ removeGovernanceMetadataKeys : Metadata -> Metadata
 removeGovernanceMetadataKeys meta =
   Metadata $ TextMap.filterWithKey (\k _ -> not (cipMetaPrefix `Text.isPrefixOf` k)) meta.values
 
+encodeControllerSpecification : ControllerSpecification -> Text
+encodeControllerSpecification ControllerSpecification{controllers} =
+  Text.intercalate ";" $ fmap (Text.intercalate "," . fmap partyToText) controllers
+
+encodeGovernanceLockMetadata : GovernanceLock -> Metadata
+encodeGovernanceLockMetadata (GovernanceLock
+  _dso
+  _owner
+  _amount
+  _lockedAmulet
+  (GovernanceLockSpecification kind unlockControllers substitutionControllers vestingControllers)
+  _originalLockCid
+  _requestedAt
+  meta
+  _pendingUnlockApprovals) =
+    Metadata $ TextMap.union meta.values $ TextMap.fromList $
+      (lockSubjectMetaKey, snd (governanceLockKindToTypeAndSubject kind)) ::
+        fmap (\(k, cs) -> (k, encodeControllerSpecification cs))
+          [ (unlockControllersMetaKey, unlockControllers)
+          , (substitutionControllersMetaKey, substitutionControllers)
+          , (vestingControllersMetaKey, vestingControllers) ]
+
 -- TSv1 support
 -- ============
 
@@ -993,7 +1025,7 @@ governanceLock_transferFactoryV1_transferImpl dso actors arg = do
   -- validate call to factory and retrieve context
   requireMatchExpected ("admin", arg.expectedAdmin) dso
 
-  specification <- specificationFromReceiverAndReason transfer.sender transfer.receiver transfer.meta
+  specification <- parseGovernanceLockSpecificationTSv1 transfer.sender transfer.receiver transfer.meta
 
   (_, lockCid, changeCid) <- governanceLock_lockForGovernance_impl expectedAdmin transfer.amount transfer.inputHoldingCids specification extraArgs transfer.sender transfer.requestedAt transfer.meta
   pure $ V1.TransferInstructionResult with
@@ -1010,16 +1042,15 @@ governanceLock_allocationFactoryV2_allocateImpl dso V2.AllocationFactory_Allocat
   checkActors actors [[owner]]
   assertDeadlineExceeded "requestedAt" requestedAt
 
-  specification <- assertParsed "GovernanceLockSpecification" governanceLockSpecificationTSv2Parser (settlement.id, allocation.meta, owner)
+  specification <- parseGovernanceLockSpecification allocation.meta (\m -> (settlement.id, m, owner)) governanceLockSpecificationParser
   amount <- assertParsed "allocation.nextIterationFunding" fundingAmountParser allocation.nextIterationFunding
 
-  let filteredMeta = removeGovernanceMetadataKeys allocation.meta
   (lock, lockCid, changeCid) <- governanceLock_lockForGovernance_impl
-    dso amount (fmap downcast inputHoldingCids) specification extraArgs owner requestedAt filteredMeta
+    dso amount (fmap downcast inputHoldingCids) specification extraArgs owner requestedAt (removeGovernanceMetadataKeys allocation.meta)
 
   let lockAlloc = view $ toInterface @V2.Allocation lock
       (_, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
-      expectedMeta = reasonToMeta encodedReason filteredMeta
+      expectedMeta = reasonToMeta encodedReason $ encodeGovernanceLockMetadata lock
   requireMatchExpected ("lock settlement", lockAlloc.settlement) settlement
   requireMatchExpected ("lock allocation", lockAlloc.allocation) allocation with meta = expectedMeta
 
@@ -1032,17 +1063,16 @@ governanceLockKindFromTypeAndSubject : CanAssert m => Text -> Text -> m Governan
 governanceLockKindFromTypeAndSubject type_ subject
   | checkType featuredAppLockType = GLK_FeaturedApp <$> parseProvider
   | checkType provisionalFeaturedAppLockType = GLK_ProvisionalFeaturedApp <$> parseProvider
-  | checkType superValidatorLockType = pure $ GLK_SuperValidatorRightsOwner with svName = subject
+  | checkType superValidatorLockType = GLK_SuperValidatorRightsOwner <$> parseSvName
   | otherwise = assertFail $ "Invalid lock type: " <> type_
   where
     checkType = (==) type_
     parseProvider = case partyFromText subject of
       Some p -> pure p
       None -> assertFail $ "Invalid provider for " <> type_ <> ": " <> subject
-
-specificationFromReceiverAndReason : CanAssert m => Party -> Party -> Metadata -> m GovernanceLockSpecification
-specificationFromReceiverAndReason owner receiver meta =
-  assertParsed "GovernanceLockSpecification" governanceLockSpecificationTSv1Parser (owner, receiver, meta)
+    parseSvName
+      | Text.isPred (\c -> c == "-" || Text.isAlphaNum c) subject = pure subject
+      | otherwise = assertFail $ "Invalid SV name for " <> type_ <> ": " <> subject
 
 makeCanonicalParty : Text -> Party
 makeCanonicalParty type_ = fromSome $ partyFromText $ type_ <> magicNamespace
@@ -1085,6 +1115,14 @@ assertParsed parsedType parser input =
         (if length errorsList > 5 then ". First five errors" else  "") <> ":\n\n" <>
         Text.intercalate "\n" (take 5 errorsList)
 
+-- | Parse a URL-style key value string 'key1=value1&...&key2=value2' into a key-value map.
+keyValueParser : Parser Text (TextMap.TextMap Text)
+keyValueParser = Parser \keyValues ->
+  TextMap.fromList <$> forA (Text.splitOn "&" keyValues) \keyValue ->
+    case Text.splitOn "=" keyValue of
+      [k, v] -> ok (k, v)
+      l -> invalid $ "Unable to map a key value pair, from list: " <> show l
+
 controllersParser : Text -> ControllerSpecificationParser
 controllersParser key =
     Parser \(meta, owner) ->
@@ -1109,21 +1147,47 @@ governanceLockKindParser : Parser (Text, Metadata) GovernanceLockKind
 governanceLockKindParser = Parser \(type_, meta) ->
   validate $ getRequiredMetadata lockSubjectMetaKey meta >>= governanceLockKindFromTypeAndSubject type_
 
+governanceLockMetadataParser : Parser Metadata Metadata
+governanceLockMetadataParser = Parser \meta ->
+  case TextMap.lookup reasonMetaKey meta.values of
+    Some reason ->
+      let
+        -- Prefix all parsed keys with the CIP prefix to avoid clashes
+        -- with metadata keys from other namespaces.
+        adjustPrefix k = cipMetaPrefix <> k
+        textMapMapKeys f = TextMap.fromList . fmap (\(k, v) -> (f k, v)) . TextMap.toList
+        parsedReasonMeta = textMapMapKeys adjustPrefix <$> runParser keyValueParser reason
+      in
+        -- Prefer the original metadata keys to avoid users overwriting
+        -- metadata that is already set via their "memo" tag.
+        -- Delete the parsed reason as it will be repopulated when
+        -- encoding the governance lock via the token standard interface.
+        Metadata . TextMap.union (TextMap.delete reasonMetaKey meta.values) <$> parsedReasonMeta
+
+    None -> ok meta
+
+governanceLockSpecificationParser : Parser (Text, Metadata, Party) GovernanceLockSpecification
+governanceLockSpecificationParser = Parser \(type_, meta, owner) ->
+  GovernanceLockSpecification <$>
+    runParser governanceLockKindParser (type_, meta) <*>
+    runParser unlockControllersParser (meta, owner) <*>
+    runParser substitutionControllersParser (meta, owner) <*>
+    runParser vestingControllersParser (meta, owner)
+
 governanceLockSpecificationTSv1Parser : Parser (Party, Party, Metadata) GovernanceLockSpecification
 governanceLockSpecificationTSv1Parser = Parser \(owner, receiver, meta) ->
-  let type_ = Text.stripSuffix magicNamespace (partyToText receiver)
-      subject = Text.stripPrefix "lock-subject=" =<< reasonMetaKey `TextMap.lookup` meta.values
-  in case liftA2 (,) type_ subject of
-    Some (t, s) -> validate $ ownerControlledSpecification owner <$> governanceLockKindFromTypeAndSubject t s
-    None -> invalid "Unknown receiver or lock-subject"
+  case Text.stripSuffix magicNamespace (partyToText receiver) of
+    Some type_ -> runParser governanceLockSpecificationParser (type_, meta, owner)
+    None -> invalid $ "Invalid receiver: " <> show receiver
 
-governanceLockSpecificationTSv2Parser : Parser (Text, Metadata, Party) GovernanceLockSpecification
-governanceLockSpecificationTSv2Parser = Parser \(type_, meta, owner) ->
-  GovernanceLockSpecification <$>
-  runParser governanceLockKindParser (type_, meta) <*>
-  runParser unlockControllersParser (meta, owner) <*>
-  runParser substitutionControllersParser (meta, owner) <*>
-  runParser vestingControllersParser (meta, owner)
+parseGovernanceLockSpecification : CanAssert m => Metadata -> (Metadata -> i) -> Parser i GovernanceLockSpecification -> m GovernanceLockSpecification
+parseGovernanceLockSpecification rawMeta makeInput parser = do
+  meta <- assertParsed "metadata" governanceLockMetadataParser rawMeta
+  assertParsed "GovernanceLockSpecification" parser (makeInput meta)
+
+parseGovernanceLockSpecificationTSv1 : CanAssert m => Party -> Party -> Metadata -> m GovernanceLockSpecification
+parseGovernanceLockSpecificationTSv1 owner receiver meta =
+  parseGovernanceLockSpecification meta (\m -> (owner, receiver, m)) governanceLockSpecificationTSv1Parser
 
 fundingAmountParser : Parser (Optional (TextMap.TextMap Decimal)) Decimal
 fundingAmountParser = Parser \m ->

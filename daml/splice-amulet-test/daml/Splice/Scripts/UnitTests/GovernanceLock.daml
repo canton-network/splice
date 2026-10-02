@@ -50,21 +50,6 @@ test_searchCurrentTimeBounds = do
       require (granularityDescription <> " before afterTime must be before trueTime") $
         trueTime > (beforeTime `addRelTime` convertMicrosecondsToRelTime (-(convertRelTimeToMicroseconds granularity)))
 
--- | Fully explicit test case for specificationFromReceiverAndReason, to ensure that the specification lines up.
-test_specificationFromReceiverAndReason : Script ()
-test_specificationFromReceiverAndReason = do
-    assertEq
-      (specificationFromReceiverAndReason testOwner (fromSome $ partyFromText "cip-0105_sv-lock::1220000000000000000000000000000000000000000000000000000000000000abcd") $ Metadata $ TextMap.singleton "splice.lfdecentralizedtrust.org/reason" "lock-subject=someSv")
-      $ Right @Text $ ownerControlledSpecification testOwner $ GLK_SuperValidatorRightsOwner with
-                 svName = "someSv"
-    assertEq
-      (Left "Unknown receiver or lock-subject")
-      (specificationFromReceiverAndReason testOwner featuredAppLockCanonicalParty emptyMetadata)
-    -- Re-enable after character check implementation.
-    -- assertEq
-    --  (Left "Unknown receiver or lock-subject")
-    --  (specificationFromReceiverAndReason superValidatorLockCanonicalParty $ reasonToMeta "lock-subject=invalid*supervalidator*name" emptyMetadata)
-
 -- | Fully explicit test case for lockTypeToCompatibilityPartyAndReason, to ensure that the specification lines up.
 test_lockTypeToCompatibilityPartyAndReason : Script ()
 test_lockTypeToCompatibilityPartyAndReason = do
@@ -82,7 +67,7 @@ test_governanceLockSpecificationTSv1_roundTrip = do
                  provider = fromSome $ partyFromText "some-other-sv"
     assertRoundTrip parseThenSerialize $ (featuredAppLockCanonicalParty, "lock-subject=someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab")
   where
-    specificationFromReceiverAndReason' (party, reason) = specificationFromReceiverAndReason testOwner party $ Metadata $ TextMap.singleton reasonMetaKey reason
+    specificationFromReceiverAndReason' (party, reason) = parseGovernanceLockSpecificationTSv1 testOwner party $ Metadata $ TextMap.singleton reasonMetaKey reason
     serializeThenParse : GovernanceLockSpecification -> Script GovernanceLockSpecification
     serializeThenParse = specificationFromReceiverAndReason' . lockTypeToCompatibilityPartyAndReason . (.kind)
     parseThenSerialize : (Party, Text) -> Script (Party, Text)

@@ -13,7 +13,7 @@ import DA.Validation
 
 import Daml.Script
 
-import Splice.Amulet.TokenApiUtils (amuletInstrumentIdName)
+import Splice.Amulet.TokenApiUtils (amuletInstrumentIdName, reasonMetaKey)
 import Splice.Api.Token.MetadataV1
 import Splice.GovernanceLock
 
@@ -41,6 +41,9 @@ testProvider = testParty "provider"
 -- | Text that `partyFromText` rejects.
 invalidParty : Text
 invalidParty = "bad$party"
+
+invalidSVName : Text
+invalidSVName = "bad$SV"
 
 mkMeta : [(Text, Text)] -> Metadata
 mkMeta = Metadata . TextMap.fromList
@@ -149,12 +152,86 @@ test_governanceLockKindParser = do
   expectErrors ["Invalid provider for " <> provisionalFeaturedAppLockType <> ": " <> invalidParty] $
     run provisionalFeaturedAppLockType (subject invalidParty)
 
+  -- The subject of an SV lock must only contain alphanumeric characters or hyphens
+  expectErrors ["Invalid SV name for " <> superValidatorLockType <> ": " <> invalidSVName] $
+    run superValidatorLockType (subject invalidSVName)
+
+-- Metadata parser
+------------------
+
+test_governanceLockMetadataParser : Script ()
+test_governanceLockMetadataParser = do
+  let run entries = runParser governanceLockMetadataParser (mkMeta entries)
+      reason r = (reasonMetaKey, r)
+      otherEntry = ("other-key", "other-value")
+      pairError l = "Unable to map a key value pair, from list: " <> show l
+      dropMetaPrefix = Text.dropPrefix cipMetaPrefix
+      lockSubjectMetaKeyNoPrefix = dropMetaPrefix lockSubjectMetaKey
+      unlockControllersMetaKeyNoPrefix = dropMetaPrefix unlockControllersMetaKey
+
+  -- Without a reason field, the metadata is returned unchanged
+  expectSuccess (mkMeta []) $ run []
+  expectSuccess (mkMeta [otherEntry, (lockSubjectMetaKey, "provider")]) $ run [otherEntry, (lockSubjectMetaKey, "provider")]
+
+  -- A single pair is prefixed with `cipMetaPrefix` and added to the metadata, and the reason field is removed
+  expectSuccess (mkMeta [(lockSubjectMetaKey, "provider")]) $
+    run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider"]
+
+  -- Keys that already contain `cipMetaPrefix` are prefixed again
+  expectSuccess (mkMeta [(cipMetaPrefix <> lockSubjectMetaKey, "provider")]) $
+    run [reason $ lockSubjectMetaKey <> "=provider"]
+
+  -- `&` separates the pairs, and the other metadata fields are kept
+  expectSuccess
+    (mkMeta
+      [ otherEntry
+      , (lockSubjectMetaKey, "provider")
+      , (unlockControllersMetaKey, "alice,bob")
+      , (vestingControllersMetaKey, "alice;charlie")
+      ])
+    $ run
+        [ otherEntry
+        , reason $ lockSubjectMetaKeyNoPrefix <>
+          "=provider&" <> unlockControllersMetaKeyNoPrefix <> "=alice,bob&vesting-controllers=alice;charlie"
+        ]
+
+  -- An empty value is allowed
+  expectSuccess (mkMeta [(lockSubjectMetaKey, "")]) $
+    run [reason $ lockSubjectMetaKeyNoPrefix <> "="]
+
+  -- The fields of the original metadata take precedence over the fields in the reason
+  expectSuccess (mkMeta [(lockSubjectMetaKey, "provider"), (unlockControllersMetaKey, "bob")]) $
+    run
+      [ (lockSubjectMetaKey, "provider")
+      , reason $ lockSubjectMetaKeyNoPrefix <> "=someSv&" <> unlockControllersMetaKeyNoPrefix <> "=bob"
+      ]
+
+  -- A pair without `=`
+  expectErrors [pairError [lockSubjectMetaKeyNoPrefix]] $ run [reason lockSubjectMetaKeyNoPrefix]
+
+  -- A pair with more than one `=`
+  expectErrors [pairError [lockSubjectMetaKeyNoPrefix, "provider", "x"]] $
+    run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider=x"]
+
+  -- An empty reason, and an empty pair after a trailing `&`
+  expectErrors [pairError [""]] $ run [reason ""]
+  expectErrors [pairError [""]] $ run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider&"]
+
+  -- All invalid pairs are reported
+  expectErrors [pairError ["a"], pairError ["b", "c", "d"]] $
+    run [reason $ "a&" <> lockSubjectMetaKeyNoPrefix <> "=provider&b=c=d"]
+
 -- Lock specification parser
 ----------------------------
 
-test_governanceLockSpecificationTSv2Parser : Script ()
-test_governanceLockSpecificationTSv2Parser = do
-  let run lockType entries = runParser governanceLockSpecificationTSv2Parser (lockType, mkMeta entries, testOwner)
+-- TODO(canton-network/splice-sv-fa-locking#68) test character check implementation
+
+test_governanceLockSpecificationParser'
+  :  (Text -> [(Text, Text)] -> i)
+  -> Parser i GovernanceLockSpecification
+  -> Script ()
+test_governanceLockSpecificationParser' mkInput parser = do
+  let run lockType entries = runParser parser $ mkInput lockType entries
 
   let fullSpecification = GovernanceLockSpecification with
         kind = GLK_FeaturedApp testProvider
@@ -192,6 +269,18 @@ test_governanceLockSpecificationTSv2Parser = do
         , (substitutionControllersMetaKey, "bob")
         , (vestingControllersMetaKey, "bad$vesting")
         ]
+
+test_governanceLockSpecificationParser : Script ()
+test_governanceLockSpecificationParser =
+  test_governanceLockSpecificationParser'
+    (\lockType -> \entries -> (lockType, mkMeta entries, testOwner))
+    governanceLockSpecificationParser
+
+test_governanceLockSpecificationTSv1Parser : Script ()
+test_governanceLockSpecificationTSv1Parser =
+  test_governanceLockSpecificationParser'
+    (\lockType -> \entries -> (testOwner, fromSome (partyFromText (lockType <> magicNamespace)), mkMeta entries))
+    governanceLockSpecificationTSv1Parser
 
 -- Funding amount parser
 ------------------------
