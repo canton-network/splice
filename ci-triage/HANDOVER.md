@@ -113,12 +113,8 @@ to update section 3.
   `nix-collect-garbage`.
 - Builds are allowed for fixes and repros, one at a time:
   `flock <repo>/log/build.lock bash -l -c 'cd <worktree> && direnv exec . <cmd>'`.
-- Do not touch `/Users/stephencompall/ide/splice-pr7600` or session `63c6c576`'s scratchpad (the 7600 review).
 - Job logs: GitHub masks `{` and `}` as `***`; ignored checkErrors lines carry the suffix
   `(ignore this line in check-sbt-output.sh)`, the real problems are the `@timestamp` lines without it.
 - Fix branches: one branch per PR off `origin/main` (or the release line for a backport, `cherry-pick -x -s`), named
   `<user>/fix-<ref>-<slug>` in a separate worktree. Commits: one subject with `[ci]` (`[static]` for docs only, never
   `[skip ci]` on a PR branch), `-s`, and the user's `Assisted-by:` trailer; no code comments.
-- Secret scan of this branch (2026-10-02, detect-secrets plus credential-format regexes over every version of every
-  file and the commit messages): no secrets. Non-secret identifiers present: one Auth0 test-user subject (10270) and
-  the public commit metadata of #7546 (10264-10268).
