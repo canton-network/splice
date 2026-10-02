@@ -38,11 +38,11 @@ class S3ZstdObjects(
 
   private def getFlow(
       getObjectKey: Int => String
-  ): Flow[Seq[String], String, NotUsed] =
-    Flow[Seq[String]]
-      .mapConcat(identity)
-      // Regardless of which bulk sizes were used for fetching and encoding the data, we must regroup into chunks
-      // of storageConfig.bulkChunkSize, which is consistent across the SVs, to guarantee BFT equality of the resulting S3 objects across all SVs.
+  ): Flow[String, String, NotUsed] =
+    Flow[String]
+      // Group into chunks of storageConfig.bulkChunkSize, which is consistent across the SVs,
+      // to guarantee BFT equality of the resulting S3 objects across all SVs.
+      // FIXME: group by weight instead of by count, to avoid creating too large chunks when the updates are large.
       .grouped(storageConfig.bulkChunkSize)
       .map(strings => {
         val updatesStr = strings.mkString("\n") + "\n"
@@ -80,6 +80,6 @@ object S3ZstdObjects {
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
-  ): Flow[Seq[String], String, NotUsed] =
+  ): Flow[String, String, NotUsed] =
     new S3ZstdObjects(config, appConfig, s3Connection, loggerFactory).getFlow(getObjectKey)
 }

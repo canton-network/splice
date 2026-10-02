@@ -23,8 +23,8 @@ object MultiEncodingBulkStorageFlow {
   private lazy val numEncodings = encodings.length
 
   def apply[A](
-      encode: (A, ScanStorageConfig.Encoding) => Seq[String],
-      uploadFlow: ScanStorageConfig.Encoding => Flow[Seq[String], String, ?],
+      encode: (A, ScanStorageConfig.Encoding) => String,
+      uploadFlow: ScanStorageConfig.Encoding => Flow[String, String, ?],
       incObjects: ScanStorageConfig.Encoding => Unit,
   ): Flow[A, String, NotUsed] = {
     Flow.fromGraph(GraphDSL.create() { implicit b =>

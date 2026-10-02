@@ -111,29 +111,26 @@ class UpdateHistorySegmentBulkStorage(
     }
   }
 
-  private def encodeUpdates(
-      updates: Seq[TreeUpdateWithMigrationId],
+  private def encodeUpdate(
+      update: TreeUpdateWithMigrationId,
       encoding: ScanStorageConfig.Encoding,
-  ): Seq[String] = {
-    val encoded = updates.toList.map(update =>
-      ScanHttpEncodings.encodeUpdateV2(
-        update,
-        encoding.damlValueEncoding,
-        ScanHttpEncodings.V1,
-      )
+  ): String = {
+    logger.trace(
+      s"encoding an update from DB with encoding ${encoding.key}, with timestamp ${update.update.update.recordTime}"
     )
     // Import custom encoders that omit null OmitNullString fields.
     // When we add new optional OmitNullString fields, they will be None until a coordinated
     // switching point.  The custom encoders ensure the null keys are absent from the JSON so that
     // SVs adopting a new version asynchronously do not break BFT guarantees.
     import ScanJsonSupport.*
-    val updatesStr = encoded
-      .map(u => u.asJson.noSpacesSortKeys)
-    logger.debug(
-      s"Read and encoded ${encoded.length} updates from DB with encoding ${encoding.key}. Timestamps are ${updates.headOption
-          .map(_.update.update.recordTime)} to ${updates.lastOption.map(_.update.update.recordTime)}"
-    )
-    updatesStr
+    ScanHttpEncodings
+      .encodeUpdateV2(
+        update,
+        encoding.damlValueEncoding,
+        ScanHttpEncodings.V1,
+      )
+      .asJson
+      .noSpacesSortKeys
   }
 
   private def updatesSource(implicit
@@ -187,10 +184,10 @@ class UpdateHistorySegmentBulkStorage(
         historyMetrics.BulkStorage.incUpdatesCount(updates.length)
         updates
       })
-      .filter(_.nonEmpty)
+      .mapConcat(identity)
       .via(
         MultiEncodingBulkStorageFlow(
-          encodeUpdates,
+          encodeUpdate,
           encoding =>
             // We use lazyFlow, so that in the case where no updates are emitted, we don't instantiate the S3ZstdObjects at all,
             // since it assumes that it gets at least one chunk to write.
