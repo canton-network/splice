@@ -11,8 +11,12 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.S3BucketConnectionForUnit
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests, StoreTestBase}
 
+import software.amazon.awssdk.services.s3.model.ListMultipartUploadsRequest
+
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters.*
+import scala.jdk.FutureConverters.*
 import scala.util.Random
 
 class BulkStorageVerifiedObjectCopierTest
@@ -116,6 +120,29 @@ class BulkStorageVerifiedObjectCopierTest
       } yield {
         result.failed.get shouldBe a[VerifiedObjectCopier.CopyFailed]
         exists shouldBe false
+      }
+    }
+
+    "abort the upload and stage nothing when a multi-part download does not match" in {
+      val big = ByteString(Random.nextBytes(3 * VerifiedObjectCopier.uploadPartSize + 12345))
+      val bigKey = "2026-01-03T00:00:00Z~2026-01-04T00:00:00Z/updates_compact_json_0.zstd"
+      for {
+        digest <- putOnPeers(bigKey, big)
+        result <- loggerFactory.assertLogs(
+          copier(new BucketPeers(corrupt = Set("peer1", "peer2")))
+            .copy(Seq(ObjectKeyAndChecksum(bigKey, digest)))
+            .transform(t => scala.util.Success(t)),
+          _.warningMessage should include("from peer peer1"),
+          _.warningMessage should include("from peer peer2"),
+        )
+        exists <- localBucket("staging").doesObjectExist(bigKey)
+        pendingUploads <- localBucket("staging").s3Client
+          .listMultipartUploads(ListMultipartUploadsRequest.builder().bucket("staging").build())
+          .asScala
+      } yield {
+        result.failed.get shouldBe a[VerifiedObjectCopier.CopyFailed]
+        exists shouldBe false
+        pendingUploads.uploads().asScala shouldBe empty
       }
     }
 
