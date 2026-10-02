@@ -83,7 +83,7 @@ class PermissionedSynchronizerIntegrationTest
         .fees
         .minTopupAmount
         .toLong,
-      1_000_000L,
+      7000000L,
     )
 
     val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)

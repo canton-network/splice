@@ -5,15 +5,16 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.admin.api.client.data.OnboardingRestriction.RestrictedOpen
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTest,
+  SpliceTestConsoleEnvironment,
+}
 import org.lfdecentralizedtrust.splice.util.{
   ProcessTestUtil,
   SwitchOverTimes,
   SynchronizerFeesTestUtil,
-  TimeTestUtil,
   WalletTestUtil,
 }
-import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRulesConfig,
   DsoRules_SetConfig,
@@ -22,23 +23,20 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_SetConfig
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.SynchronizerPermissionState
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
-
-import java.time.Duration
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
+import scala.concurrent.duration.*
 
-class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
-    extends IntegrationTestWithIsolatedEnvironment
+class PermissionedSynchronizerMigrationIntegrationTest
+    extends IntegrationTest
     with ProcessTestUtil
     with WalletTestUtil
-    with TimeTestUtil
     with SynchronizerFeesTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology4Svs(this.getClass.getSimpleName)
       .withManualStart
 
   "Migrate Network from UnrestrictedOpen to RestrictedOpen" in { implicit env =>
@@ -68,7 +66,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
           .fees
           .minTopupAmount
           .toLong,
-        1_000_000L,
+        7000000L,
       )
 
       val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
@@ -85,7 +83,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       }
     }
 
-    clue("Start alice and buy traffic via sv1") {
+    clue("Start Alice and buy traffic via sv1") {
       aliceValidatorBackend.startSync()
       buyMemberTraffic(aliceValidatorBackend)
     }
@@ -94,14 +92,10 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       bobValidatorBackend.startSync()
     }
 
-    val permissionSwitchOverTime = CantonTimestamp.assertFromInstant(
-      getLedgerTime.toInstant.plus(Duration.ofMinutes(10))
-    )
+    clue("Vote for a switch-over-time in the future for permissionedSynchronizer") {
+      setPermissionedSynchronizerSwitchOverTime()
 
-    clue("Vote in a switch-over time in the future") {
-      setPermissionedSynchronizerSwitchOverTime(permissionSwitchOverTime)
-
-      eventually() {
+      eventually(40.seconds) {
         sv1ScanBackend
           .getDsoInfo()
           .dsoRules
@@ -121,8 +115,6 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       }
     }
 
-    advanceTime(Duration.ofMinutes(2))
-
     clue("Verify SVs and Alice have permissions granted, but not Bob") {
       Seq(
         sv1ValidatorBackend,
@@ -134,7 +126,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
         clue(
           s"Checking PermissionSynchronizerPermission for ${app.participantClient.id.toProtoPrimitive}"
         ) {
-          eventually() {
+          eventually(40.seconds) {
             val permissionAssigned = sv1ScanBackend.getParticipantSynchronizerPermission(
               decentralizedSynchronizerId.toProtoPrimitive,
               app.participantClient.id.toProtoPrimitive,
@@ -151,10 +143,8 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       }
     }
 
-    clue("Fast forward time and assert RestrictedOpen is set") {
-      advanceTime(Duration.ofMinutes(20))
-
-      eventually() {
+    clue("Assert RestrictedOpen is set") {
+      eventually(40.seconds) {
         val currentParams = sv1ValidatorBackend.participantClient.topology.synchronizer_parameters
           .get_dynamic_synchronizer_parameters(decentralizedSynchronizerId)
         currentParams.onboardingRestriction shouldBe RestrictedOpen
@@ -170,7 +160,7 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
     }
 
     clue("Bob now has ParticipantSynchronizerPermission") {
-      eventually() {
+      eventually(40.seconds) {
         sv1ScanBackend.getParticipantSynchronizerPermission(
           decentralizedSynchronizerId.toProtoPrimitive,
           bobValidatorBackend.participantClient.id.toProtoPrimitive,
@@ -178,12 +168,13 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       }
     }
     clue("Bob can onboard a user") {
+      bobValidatorBackend.stop()
+      bobValidatorBackend.startSync()
       bobValidatorBackend.onboardUser("bob-user")
     }
   }
 
   private def setPermissionedSynchronizerSwitchOverTime(
-      switchOverTime: CantonTimestamp
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val config = sv1Backend.getDsoInfo().dsoRules.payload.config
     val newConfig = new DsoRulesConfig(
@@ -201,8 +192,12 @@ class PermissionedSynchronizerMigrationTimeBasedIntegrationTest
       config.voteCooldownTime,
       config.nextScheduledLogicalSynchronizerUpgrade,
       Optional.of(
-        (config.svOperationsSwitchOverTimes.toScala.map(_.asScala.toMap).getOrElse(Map.empty) +
-          (SwitchOverTimes.PermissionedSynchronizer -> switchOverTime.toInstant)).asJava
+        (config.svOperationsSwitchOverTimes.toScala
+          .map(_.asScala.toMap)
+          .getOrElse(Map.empty[String, java.time.Instant]) +
+          (SwitchOverTimes.PermissionedSynchronizer -> env.environment.clock.now
+            .plusSeconds(10)
+            .toInstant)).asJava
       ),
     )
     sv1Backend.createVoteRequest(
