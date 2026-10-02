@@ -489,16 +489,21 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | My ref | GH run | Branch / sha | Failed job | Canton |
 |--------|--------|--------------|------------|--------|
 | 10271 | 37013108911 | main 76624c8cf4 | 110857707106 `simtime (3)` | 3.6.0-snapshot.20261001.20345.0.v85a9270a |
+| 10270 | CircleCI build 510043 (step 149) | ciperiodic, splice not printed (main 6bb1630d34 at run time) | `preflight_validator_runbook_after_upgrade` / Run Validator preflight tests | n/a |
+| 10272 | CircleCI build 510902 (step 147) | ciperiodic, splice not printed (main 43064cab80 at run time) | `preflight_after_daml_upgrade` / sbt testOnly (4 preflight suites) | n/a |
 
 ## Overview
 
 | My ref | Failure (one line) | Duplicate of | Resolution / status |
 |--------|--------------------|--------------|---------------------|
 | 10271 | SvTimeBasedRoundMgmtIntegrationTest "doubled tickDuration", clue "advance to OpenMiningRound 5": `List(0) was not equal to List(0, 1)` after the 20 s `eventually()` (13:41:51.223-13:42:11.242). sv1's CalculateRewardsV2 approval (sent 13:41:53.882) waited in globalSequencerSv1 while its `insert block` failed with 40001 eight times (backoff to 5.612 s) until 13:42:14.925; other sequencers kept writing blocks 1899-2019. | family L (10139, 10197, 10256) | [10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md](10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md). Fix `s11/fix-10271-issuing-round-wait-budget` (180cae90f8): `assertTickDurationOfIssuingRound` waits 90 s. scalafmtCheck only. |
+| 10270 | RunbookValidatorPreflightIntegrationTest (ciperiodic, 2026-10-01): bob's page never shows alice's transfer (20 s). Alice's transfer hit the validator at 19:57:19.997, 1.5 s into her tap (19:57:18.470-21.284), and failed with 400 `At least one holding must be provided`. `tapAmulets` returns at once when no error is shown (`find(...).map` since #3920, 12f7b48ba7). | new (family R) | [10270-runbook-preflight-transfer-before-tap-completes-tapamulets-no-wait.md](10270-runbook-preflight-transfer-before-tap-completes-tapamulets-no-wait.md). Fix `s11/fix-10270-tap-amulets-wait-for-tap` (bc178c54a8). |
+| 10272 | Validator1PreflightIntegrationTest "Name Service UI" (ciperiodic, 2026-10-02, after Daml upgrade): ANS success page not shown in 200 s. AmuletRules re-created on a new package at 19:50:10.813; alice's tap (19:50:12.858) got the archived contract from the BFT scan consensus (only sv-1 had the new one, to at least 19:50:23), LOCAL_VERDICT_INACTIVE_CONTRACTS x12, 404 at 19:50:26.454; meanwhile the test (family R) accepted the ANS subscription, ITR_InsufficientFunds, 400. | family R (10270) + AmuletRules upgrade race | [10272-validator1-preflight-ans-tap-against-archived-amuletrules-after-daml-upgrade.md](10272-validator1-preflight-ans-tap-against-archived-amuletrules-after-daml-upgrade.md). Same fix branch makes it fail fast at the tap; validator tap retry vs scan lag described for the owner. |
 
 ## Fix branches written 2026-10-02 (unpushed)
 
 | Branch | Commit | Fixes | Verified here |
 |--------|--------|-------|---------------|
 | s11/fix-10271-issuing-round-wait-budget | 180cae90f8 | 10271 (90 s budget for the issuing-round check, family L) | `apps-app/Test/scalafmtCheck`; not compiled, not run |
+| s11/fix-10270-tap-amulets-wait-for-tap | bc178c54a8 | 10270, 10272 (`tapAmulets` waits for the tap row when no error is shown, family R) | `apps-app/Test/scalafmtCheck`; `apps-app/Test/compile` aborted (sandbox disk full), not compiled, not run |
 

@@ -318,3 +318,16 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Fix state: open, owner #7546. Private config key (configs-private#3673) or tolerate absent message types.
 - Not family J: family J deploy failures (10249) are Helm readiness timeouts after the full 600 s wait with no program
   exception; family Q aborts within minutes, well before the 600 s Helm wait.
+
+## R. Frontend `tapAmulets` returns before the tap is processed (since #3920, 2026-02-11)
+- Signature: a wallet-UI test fails on the step AFTER `tapAmulets`, for lack of funds: a transfer that never
+  appears, `At least one holding must be provided`, `ITR_InsufficientFunds`, or an ANS/subscription page that never
+  loads. On the validator, the spending request arrives before `POST /api/validator/v0/wallet/tap` has responded.
+- Confirm: in the validator-app log, list `HTTP POST /api/validator/v0/(wallet/tap|wallet/token-standard/transfers|entry/create|wallet/subscription-requests)`
+  received/responding lines for the test user's window; the spend's `received request` falls between the tap's.
+- Mechanism: `WalletFrontendTestUtil.tapAmulets` "Making sure the tap has been processed" is
+  `eventually { find(errorElement).map { ... } }`; with no error element it asserts nothing (12f7b48ba7, #3920).
+- Occurrences: 10270 (runbook validator preflight, tap 2.8 s), 10272 (validator1 preflight; the tap itself failed
+  against an AmuletRules just re-created by the Daml upgrade).
+- Fix: `s11/fix-10270-tap-amulets-wait-for-tap` (`case None => assertTapResultIsVisible()`).
+
