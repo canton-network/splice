@@ -102,9 +102,12 @@ export const UserProvider: React.FC<{
 
   const signoutFromIdp = useCallback(() => {
     if (auth === undefined || !auth.isAuthenticated) return;
-    void auth.removeUser().finally(() => {
-      window.location.href = window.location.origin;
-    });
+    auth
+      .removeUser()
+      .catch(e => console.warn('Failed to remove user on signout', e))
+      .finally(() => {
+        window.location.href = window.location.origin;
+      });
   }, [auth]);
 
   const signoutOnExpiry = useCallback(() => {
@@ -116,7 +119,7 @@ export const UserProvider: React.FC<{
   useEffect(() => onAuthExpired(signoutOnExpiry), [signoutOnExpiry]);
 
   useEffect(() => {
-    async function f(user: User) {
+    function f(user: User) {
       const { access_token } = user;
       const access_token_sub = tryDecodeTokenSub(access_token);
 
@@ -129,7 +132,7 @@ export const UserProvider: React.FC<{
     }
 
     if (auth?.isAuthenticated && auth.user) {
-      void f(auth.user);
+      f(auth.user);
     } else if (authMethod === 'sst') {
       const storedUserId = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
       const secret = getHs256UnsafeSecret(authConf);
