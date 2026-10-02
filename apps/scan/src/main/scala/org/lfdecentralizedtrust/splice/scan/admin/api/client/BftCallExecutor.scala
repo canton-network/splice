@@ -330,7 +330,6 @@ object BftCallExecutor {
                 )
                 markBftCall("never", connectionMetrics)
 
-
               case None =>
                 require(hasDataResponses.get(NotYet).isEmpty)
                 val msg =

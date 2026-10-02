@@ -77,8 +77,7 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
             "consensus_not_reached (responses did not agree), " +
             "transport_error (all underlying calls failed), " +
             "not_yet (not enough scans have the data yet, but eventually may succeed), " +
-            "never (all scans have indicated they will never have the data)"
-          ),
+            "never (all scans have indicated they will never have the data)"),
         ),
       )
     )
