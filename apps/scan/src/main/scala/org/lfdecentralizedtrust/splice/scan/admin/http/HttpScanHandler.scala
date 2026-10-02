@@ -2677,7 +2677,7 @@ class HttpScanHandler(
       extracted: TraceContext
   ): scala.concurrent.Future[ScanResource.GetBulkObjectsProgressResponse] = {
     implicit val tc = extracted
-    withSpan(s"$workflowId.getBulkObjectChecksums") { _ => _ =>
+    withSpan(s"$workflowId.getBulkObjectProgress") { _ => _ =>
       bulkStorage.fold(
         Future.failed[ScanResource.GetBulkObjectsProgressResponse](
           Status.UNIMPLEMENTED
