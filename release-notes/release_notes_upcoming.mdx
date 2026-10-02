@@ -18,6 +18,15 @@
 
       - `/v0/admin/sv/voterequest`: `vote_request_contract_ids`
 
+    - Joining SVs now download the DSO party ACS and sequencer onboarding snapshots from their sponsor
+      as files instead of receiving them in memory. This supports large snapshots and resumable downloads.
+      SVs that restrict which endpoints other SVs can reach must allow the new
+      `/api/sv/v0/onboard/sv/party-migration/prepare`, `/api/sv/v0/onboard/sv/sequencer/prepare` and
+      `/api/sv/v0/onboard/sv/download/*` paths to sponsor new SVs;
+      allowlists generated from their `x-external-audience: svs` annotation include them automatically.
+      Sponsoring SVs must upgrade before onboarding SVs on this version.
+      See "Configure storage for SV onboarding snapshots" in the SV operations docs for disk usage and configuration.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
