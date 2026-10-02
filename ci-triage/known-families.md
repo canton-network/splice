@@ -205,7 +205,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
   20 s test budget). 10256 (simtime (1), canton 3.6.0-snapshot.20260929, 17.8 s without a global block, backoff
   to 5.583 s): surfaces as `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... but on Set(splitwell...)` on wallet onboarding, like 10227
-  (family B); tell them apart by the global synchronizer's driver (reference `insert block` retries vs BFT blacklisting). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
+  (family B); tell them apart by the global synchronizer's driver (reference `insert block` retries vs BFT blacklisting).
+  10271 (simtime (3), canton 3.6.0-snapshot.20261001, SvTimeBasedRoundMgmtIntegrationTest): only globalSequencerSv1's
+  own `insert block` failed (8 retries, 0.131 s to 5.612 s, 21 s) while all four drivers kept reading blocks
+  1899-2019, so only submissions sent through sv1's sequencer stalled; the CalculateRewardsV2 approval missed a 20 s
+  issuing-round check. Fix `s11/fix-10271-issuing-round-wait-budget`. Packet [10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md](10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
   the contention itself is Canton / test infra (fewer writers per DB, non-serializable insert, capped backoff).
 

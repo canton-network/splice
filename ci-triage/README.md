@@ -482,3 +482,23 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
   are one with this NOT_FOUND and one with 10180's TOPOLOGY_STORE_NOT_FOUND, so a per-call fix only removes one
   window. `ray/fix-fail-fast-init` (#7289) would turn each hit into one failed test instead of a 60 min cancel.
 
+# CI failure triage - 2026-10-02
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10271 | 37013108911 | main 76624c8cf4 | 110857707106 `simtime (3)` | 3.6.0-snapshot.20261001.20345.0.v85a9270a |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10271 | SvTimeBasedRoundMgmtIntegrationTest "doubled tickDuration", clue "advance to OpenMiningRound 5": `List(0) was not equal to List(0, 1)` after the 20 s `eventually()` (13:41:51.223-13:42:11.242). sv1's CalculateRewardsV2 approval (sent 13:41:53.882) waited in globalSequencerSv1 while its `insert block` failed with 40001 eight times (backoff to 5.612 s) until 13:42:14.925; other sequencers kept writing blocks 1899-2019. | family L (10139, 10197, 10256) | [10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md](10271-round-mgmt-issuing-round-wait-sv1-sequencer-insert-block-storm.md). Fix `s11/fix-10271-issuing-round-wait-budget` (180cae90f8): `assertTickDurationOfIssuingRound` waits 90 s. scalafmtCheck only. |
+
+## Fix branches written 2026-10-02 (unpushed)
+
+| Branch | Commit | Fixes | Verified here |
+|--------|--------|-------|---------------|
+| s11/fix-10271-issuing-round-wait-budget | 180cae90f8 | 10271 (90 s budget for the issuing-round check, family L) | `apps-app/Test/scalafmtCheck`; not compiled, not run |
+
