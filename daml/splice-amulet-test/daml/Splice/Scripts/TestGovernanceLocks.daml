@@ -919,20 +919,6 @@ governanceLockV2 env owner amount kind meta = do
     V2.AllocationInstructionResult_Completed cid -> Right $ fromInterfaceContractId cid
     o -> Left $ UnknownError $ "Unexpected AllocationInstructionResult: " <> show o
 
-withdrawViaTokenStandard
-  :  forall i c r o t1 t2. (Choice i c r, HasField "output" r o, HasToInterface t1 i, HasFromInterface t2 i)
-  => ([Party] -> ExtraArgs -> c)
-  -> (o -> Optional (ContractId i))
-  -> TestEnv
-  -> ContractId t1
-  -> Party
-  -> Metadata
-  -> Script (Either SubmitError (Optional (ContractId t2)))
-withdrawViaTokenStandard choice getCid env cid actor meta = do
-  result <- submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor)
-    \context -> exerciseCmd (toInterfaceContractId @i cid) $ choice [actor] ExtraArgs with context; meta
-  pure $ (fmap (fromInterfaceContractId @t2) . getCid . (.output)) <$> result
-
 withdrawTransferInstructionV1
   :  forall t1 t2. (HasToInterface t1 V1.TransferInstruction, HasFromInterface t2 V1.TransferInstruction)
   => TestEnv
@@ -940,11 +926,9 @@ withdrawTransferInstructionV1
   -> Party
   -> Metadata
   -> Script (Either SubmitError (Optional (ContractId t2)))
-withdrawTransferInstructionV1 = withdrawViaTokenStandard
-  (\_ extraArgs -> V1.TransferInstruction_Withdraw with extraArgs)
-  (\case
-    V1.TransferInstructionResult_Pending cid -> Some cid
-    _ -> None)
+withdrawTransferInstructionV1 env cid actor meta = do
+  result <- WalletClientV2.tryWithdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid) meta
+  pure $ fmap fromInterfaceContractId <$> result
 
 withdrawAllocationV2
   :  forall t1 t2. (HasToInterface t1 V2.Allocation, HasFromInterface t2 V2.Allocation)
@@ -953,11 +937,13 @@ withdrawAllocationV2
   -> Party
   -> Metadata
   -> Script (Either SubmitError (Optional (ContractId t2)))
-withdrawAllocationV2 = withdrawViaTokenStandard
-  (\actors extraArgs -> V2.Allocation_Withdraw with actors; extraArgs)
-  (\case
-    V2.AllocationResult_Pending cid -> Some cid
-    _ -> None)
+withdrawAllocationV2 env cid actor meta = do
+  result <- WalletClientV2.tryWithdrawAllocationV2Result env.registries actor env.instrId.admin (toInterfaceContractId cid) meta
+  pure $ fmap
+    (\case
+      V2.AllocationResult{output = V2.AllocationResult_Pending cid} -> Some $ fromInterfaceContractId cid
+      _ -> None)
+    result
 
 getExtraArgsForRounds : ChoiceContext -> ContractId IssuingMiningRound -> ContractId OpenMiningRound -> ExtraArgs
 getExtraArgsForRounds context issuingMiningRoundCid openRoundCid = ExtraArgs with

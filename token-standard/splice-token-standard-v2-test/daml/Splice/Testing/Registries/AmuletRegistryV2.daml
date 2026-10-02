@@ -56,6 +56,7 @@ import Splice.Amulet.TokenApiUtils
 import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
 import Splice.Expiry
+import Splice.GovernanceLock (GovernanceLock, VestingLock)
 import Splice.ExternalPartyConfigState
 import Splice.ExternalPartyAmuletRules
 import Splice.Fees
@@ -88,8 +89,10 @@ instance RegistryApi AmuletRegistry where
   getTransferFactory = registryApi_getTransferFactory
   getAllocationFactory = registryApi_getAllocationFactory
   getSettlementFactory = registryApi_getSettlementFactory
-  getAllocation_WithdrawContext app cid _meta =
-    registryApi_getAllocation_abortTwoStepTransferContext app cid
+  getAllocation_WithdrawContext app cid _meta = do
+    abortCtx <- registryApi_getAllocation_abortTwoStepTransferContext app cid
+    lockCtx <- registryApi_getAllocation_governanceLockContext app cid
+    pure $ abortCtx <> lockCtx
   getAllocation_CancelContext app cid _meta = registryApi_getAllocation_abortTwoStepTransferContext app cid
   -- Amulet does not have AllocationInstructions.
   getAllocationInstruction_WithdrawContext _ _ _ = error "unimplemented"
@@ -353,6 +356,15 @@ registryApi_getAllocation_abortTwoStepTransferContext registry instrCid = do
         else
           pure expireLockC
 
+-- | Governance and vesting locks need the external party config state to unlock their amulets.
+registryApi_getAllocation_governanceLockContext
+  : AmuletRegistry -> ContractId Allocation -> Script OpenApiChoiceContext
+registryApi_getAllocation_governanceLockContext registry allocCid = do
+  isGovernanceLock <- isSome . lookup (fromInterfaceContractId @GovernanceLock allocCid) <$> query @GovernanceLock registry.dso
+  isVestingLock <- isSome . lookup (fromInterfaceContractId @VestingLock allocCid) <$> query @VestingLock registry.dso
+  if isGovernanceLock || isVestingLock
+    then getExternalPartyConfigStateContext registry
+    else pure emptyOpenApiChoiceContext
 
 -- Internal functions
 ---------------------

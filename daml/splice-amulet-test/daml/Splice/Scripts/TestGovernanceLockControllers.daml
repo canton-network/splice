@@ -326,7 +326,7 @@ testCustomControllersCompatPendingTSv2 = do
   env@TestEnv{..} <- setupTest
   let ops = tsv2Operations
       registry = registriesEnv.amuletV2
-      controllers = [[alice, charlie]]
+      controllers = [[alice, bob]]
       controllersString = Text.intercalate ";" $ fmap (Text.intercalate "," . fmap partyToText) controllers
       controllersMeta = Metadata $ TextMap.fromList
         [ (unlockControllersMetaKey, controllersString)
@@ -339,14 +339,14 @@ testCustomControllersCompatPendingTSv2 = do
   lock.specification.unlockControllers === ControllerSpecification controllers
   lock.specification.vestingControllers === ControllerSpecification controllers
 
-  -- charlie approves the unlock first, so the unlock is pending
+  -- bob approves the unlock first, so the unlock is pending
   unlockAt <- (`addRelTime` hours 1) <$> getTime
   let unlockAtMeta = timeToMeta unlockAtMetaKey unlockAt emptyMetadata
-  Some pendingLockCid <- expectSuccess $ ops.pendingGovernanceUnlock env lockCid charlie unlockAtMeta
+  Some pendingLockCid <- expectSuccess $ ops.pendingGovernanceUnlock env lockCid bob unlockAtMeta
 
   None <- queryContractId alice lockCid
   Some pendingLock <- queryContractId alice pendingLockCid
-  Map.keys pendingLock.pendingUnlockApprovals === [charlie]
+  Map.keys pendingLock.pendingUnlockApprovals === [bob]
   pendingLock.originalLockCid === Some lockCid
   checkLockedHolding alice pendingLockCid 20000.0
 
@@ -355,15 +355,15 @@ testCustomControllersCompatPendingTSv2 = do
   None <- queryContractId alice pendingLockCid
   checkLockedHolding alice vestingCid 20000.0
 
-  -- charlie approves the vesting withdraw first, so the withdraw is pending
+  -- bob approves the vesting withdraw first, so the withdraw is pending
   passTime (days 16)
   -- 1/4th of the 60 day vesting period
   let withdrawAtMeta = timeToMeta withdrawAtMetaKey (unlockAt `addRelTime` days 15) emptyMetadata
-  Some pendingVestingCid <- expectSuccess $ ops.vestingWithdraw env vestingCid charlie withdrawAtMeta
+  Some pendingVestingCid <- expectSuccess $ ops.vestingWithdraw env vestingCid bob withdrawAtMeta
 
   None <- queryContractId alice vestingCid
   Some pendingVesting <- queryContractId alice pendingVestingCid
-  Map.keys pendingVesting.pendingWithdrawApprovals === [charlie]
+  Map.keys pendingVesting.pendingWithdrawApprovals === [bob]
   pendingVesting.vestingAmount === 20000.0
   checkLockedHolding alice pendingVestingCid 20000.0
 
