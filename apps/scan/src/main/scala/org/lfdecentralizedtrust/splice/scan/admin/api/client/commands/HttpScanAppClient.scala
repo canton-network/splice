@@ -3215,7 +3215,7 @@ object HttpScanAppClient {
     }
   }
 
-  case class GetBulkAcsSnapshot(
+  case class ListBulkAcsSnapshotObjects(
       atOrBeforeTimestamp: CantonTimestamp
   ) extends InternalBaseCommand[
         http.ListBulkAcsSnapshotObjectsResponse,
@@ -3246,7 +3246,7 @@ object HttpScanAppClient {
     }
   }
 
-  case class GetBulkUpdateHistory(
+  case class ListBulkUpdateHistoryObjects(
       startRecordTime: CantonTimestamp,
       endRecordTime: CantonTimestamp,
       nextPageToken: Option[String],

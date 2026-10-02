@@ -457,7 +457,7 @@ class ScanTimeBasedIntegrationTest
 
       val getSnapshotResponse = eventuallySucceeds() {
         val getSnapshotResponse = sv1ScanBackend
-          .getBulkAcsSnapshot(CantonTimestamp.assertFromInstant(lastMidnight))
+          .listBulkAcsSnapshotObjects(CantonTimestamp.assertFromInstant(lastMidnight))
         getSnapshotResponse.recordTime should be(lastMidnight.atOffset(java.time.ZoneOffset.UTC))
         getSnapshotResponse
       }
@@ -506,7 +506,7 @@ class ScanTimeBasedIntegrationTest
         recordTime <= CantonTimestamp.assertFromInstant(lastMidnight)
       }
 
-      val updateObjsResponse = sv1ScanBackend.getBulkUpdateHistory(
+      val updateObjsResponse = sv1ScanBackend.listBulkUpdateHistoryObjects(
         startTime,
         CantonTimestamp.assertFromInstant(lastMidnight),
         None,

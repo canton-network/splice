@@ -821,17 +821,17 @@ abstract class ScanAppReference(
   }
 
   @Help.Summary("List all objects in bulk storage for an ACS snapshot")
-  def getBulkAcsSnapshot(
+  def listBulkAcsSnapshotObjects(
       timestamp: CantonTimestamp
   ): definitions.ListBulkAcsSnapshotObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkAcsSnapshot(timestamp)
+        HttpScanAppClient.ListBulkAcsSnapshotObjects(timestamp)
       )
     }
 
   @Help.Summary("List all objects in bulk storage with updates between given timestamps")
-  def getBulkUpdateHistory(
+  def listBulkUpdateHistoryObjects(
       startTimestamp: CantonTimestamp,
       endTimestamp: CantonTimestamp,
       nextPageToken: Option[String],
@@ -839,7 +839,7 @@ abstract class ScanAppReference(
   ): definitions.ListBulkUpdateHistoryObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkUpdateHistory(
+        HttpScanAppClient.ListBulkUpdateHistoryObjects(
           startTimestamp,
           endTimestamp,
           nextPageToken,
