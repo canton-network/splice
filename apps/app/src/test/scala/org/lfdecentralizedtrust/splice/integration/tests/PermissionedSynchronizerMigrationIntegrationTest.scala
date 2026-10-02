@@ -37,6 +37,7 @@ class PermissionedSynchronizerMigrationIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
+      .withTrafficTopupsDisabled
       .withManualStart
 
   "Migrate Network from UnrestrictedOpen to RestrictedOpen" in { implicit env =>
@@ -66,7 +67,7 @@ class PermissionedSynchronizerMigrationIntegrationTest
           .fees
           .minTopupAmount
           .toLong,
-        7000000L,
+        1_000_000L,
       )
 
       val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
