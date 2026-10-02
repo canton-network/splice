@@ -100,9 +100,10 @@ trait WalletFrontendTestUtil extends WalletTestUtil { self: FrontendTestCommon =
       // This will have to change if we add a reload button here instead of auto-refreshing transactions.
       // The long eventually makes this robust against `StaleElementReferenceException` errors
       eventually(timeUntilSuccess = 2.minute) {
-        find(className(errorDisplayElementClass)).map { errElem =>
-          (
-            errElem.text.trim,
+        find(className(errorDisplayElementClass)) match {
+          case None =>
+            assertTapResultIsVisible()
+          case Some(errElem) =>
             find(className(errorDetailsElementClass)).map(_.text.trim) match {
               case Some(errDetails) if errDetails.contains("UNABLE_TO_GET_TOPOLOGY_SNAPSHOT") =>
                 tap()
@@ -130,8 +131,7 @@ trait WalletFrontendTestUtil extends WalletTestUtil { self: FrontendTestCommon =
                 fail(s"Tap failed: ${errElem.text.trim} ($errDetails)")
               case None =>
                 assertTapResultIsVisible()
-            },
-          )
+            }
         }
       }
     }
