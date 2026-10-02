@@ -100,4 +100,4 @@ this helper has looked healthy since February.
   `tapAmulets` is exposed when a tap takes longer than the next UI steps. 10272 is a second hit, with a failing tap.
 - Fix `s11/fix-10270-tap-amulets-wait-for-tap` (bc178c54a8): `find(errorElement) match { case None =>
   assertTapResultIsVisible(); case Some(errElem) => <the existing error cases> }`, which restores the pre-#3920 wait.
-- Verified: `sbt apps-app/Test/scalafmtCheck` passes. Not verified: `apps-app/Test/compile` was aborted when the sandbox disk filled, and nothing was run against a cluster.
+- Verified: `sbt apps-app/Test/scalafmtCheck` and `apps-app/Test/compile` pass. Not verified: no frontend integration test or cluster preflight was run with the fix.

@@ -505,5 +505,5 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | Branch | Commit | Fixes | Verified here |
 |--------|--------|-------|---------------|
 | s11/fix-10271-issuing-round-wait-budget | 180cae90f8 | 10271 (90 s budget for the issuing-round check, family L) | `apps-app/Test/scalafmtCheck`; not compiled, not run |
-| s11/fix-10270-tap-amulets-wait-for-tap | bc178c54a8 | 10270, 10272 (`tapAmulets` waits for the tap row when no error is shown, family R) | `apps-app/Test/scalafmtCheck`; `apps-app/Test/compile` aborted (sandbox disk full), not compiled, not run |
+| s11/fix-10270-tap-amulets-wait-for-tap | bc178c54a8 | 10270, 10272 (`tapAmulets` waits for the tap row when no error is shown, family R) | `apps-app/Test/scalafmtCheck` and `apps-app/Test/compile` pass (2026-10-02 21:31); no frontend test run |
 
