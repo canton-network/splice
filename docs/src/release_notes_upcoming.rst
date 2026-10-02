@@ -56,3 +56,26 @@ release-notes:: Upcoming
 
         - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
 
+        - **Implement traffic purchases via token standard transfers:** a V1 or V2 token standard transfer to the receiver party
+          ``cip-xxx_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd``
+          with the memo set to ``memberId=<member>&synchronizerId=<synchronizer>&migrationId=<int>&trafficAmount=<int>``
+          burns the traffic cost and creates the ``MemberTraffic`` contract instead of transferring amulet.
+          The transfer ``amount`` is the most amulet the sender is willing to burn; if the traffic costs more,
+          the transfer fails with ``splice.lfdecentralizedtrust.org/traffic-cost-exceeds-amount``.
+
+        - Traffic purchases, including those made through ``AmuletRules_BuyMemberTraffic``, now include the memo in the
+          ``splice.lfdecentralizedtrust.org/reason`` of their burn and transaction metadata:
+          ``traffic purchase: memberId=<member>&synchronizerId=<synchronizer>&migrationId=<int>&trafficAmount=<int>``
+
+        - Added three new fields: ``trafficPrice``, ``supportedSynchronizerIds`` and
+          ``minTrafficTopupAmount`` to ``ExternalPartyConfigState``. 
+
+          .. important::
+
+              **Action required from validator operators:** 
+              
+              Upgrade to this release, which vets ``splice-amulet 0.1.25`` **before** the SVs vote to adopt it.
+              After that vote, new ``ExternalPartyConfigState`` contracts will set the new fields and can no longer 
+              be downgraded to an older ``splice-amulet`` version. Validators that are not upgraded will no longer 
+              process Token Standard transfers and CC allocations.
+
