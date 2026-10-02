@@ -40,8 +40,7 @@ BASE_URLS = [
     "https://scan.sv-1.global.canton.network.sync.global",
     "https://scan.sv-1.global.canton.network.orb1lp.mpch.io",
     "https://scan.sv-1.global.canton.network.fivenorth.io",
-    "https://scan.sv-1.global.canton.network.cumberland.io",
-    "https://scan.sv-2.global.canton.network.digitalasset.com"
+    "https://scan.sv-1.global.canton.network.cumberland.io"
 ]
 
 MIGRATIONS = range(0, 5)
