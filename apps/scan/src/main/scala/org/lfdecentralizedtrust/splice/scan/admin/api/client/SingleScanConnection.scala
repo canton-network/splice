@@ -1034,7 +1034,10 @@ class SingleScanConnection private[client] (
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
-    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetBulkAcsSnapshot(atOrBeforeRecordTime))
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+    )
       .flatMap(response =>
         SingleScanConnection.decoded(BulkStorageObjects.snapshotObjects(response)).map(Some(_))
       )
@@ -1050,7 +1053,7 @@ class SingleScanConnection private[client] (
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.GetBulkUpdateHistory(
+      HttpScanAppClient.ListBulkUpdateHistoryObjects(
         startRecordTime,
         endRecordTime,
         nextPageToken,
