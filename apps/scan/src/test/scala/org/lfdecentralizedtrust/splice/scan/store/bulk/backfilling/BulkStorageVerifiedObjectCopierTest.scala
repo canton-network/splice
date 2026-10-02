@@ -9,12 +9,18 @@ import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.lfdecentralizedtrust.splice.scan.store.bulk.S3BucketConnectionForUnitTests
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
-import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests, StoreTestBase}
+import org.lfdecentralizedtrust.splice.store.{
+  HasS3Mock,
+  S3BucketConnection,
+  S3BucketConnectionForTests,
+  StoreTestBase,
+}
 
 import software.amazon.awssdk.services.s3.model.ListMultipartUploadsRequest
 
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
 import scala.util.Random
@@ -64,11 +70,32 @@ class BulkStorageVerifiedObjectCopierTest
     }
   }
 
-  private def copier(source: PeerObjectSource) =
+  private class FailingStaging(failPartUpload: Boolean, failAfterCompleting: Boolean)
+      extends S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory) {
+    override def newAppendWriteObject(key: String)(implicit
+        ec: ExecutionContext
+    ): AppendWriteObject =
+      new AppendWriteObject(key) {
+        override def upload(partNumber: Int, content: ByteBuffer): Future[Unit] =
+          if (failPartUpload) Future.failed(new RuntimeException("part upload failed"))
+          else super.upload(partNumber, content)
+        override def finish(): Future[Unit] =
+          if (failAfterCompleting)
+            super
+              .finish()
+              .flatMap(_ => Future.failed(new RuntimeException("failed after completing")))
+          else super.finish()
+      }
+  }
+
+  private def copier(
+      source: PeerObjectSource,
+      staging: S3BucketConnection = localBucket("staging"),
+  ) =
     new VerifiedObjectCopier(
       source,
       identity,
-      localBucket("staging"),
+      staging,
       localBucket("committed"),
       parallelism = 1,
       loggerFactory,
@@ -143,6 +170,48 @@ class BulkStorageVerifiedObjectCopierTest
         result.failed.get shouldBe a[VerifiedObjectCopier.CopyFailed]
         exists shouldBe false
         pendingUploads.uploads().asScala shouldBe empty
+      }
+    }
+
+    "fail without trying the next peer when writing to staging fails" in {
+      val peers = new BucketPeers(Set.empty)
+      for {
+        digest <- putOnPeers(objectKey, content)
+        result <- copier(
+          peers,
+          new FailingStaging(failPartUpload = true, failAfterCompleting = false),
+        )
+          .copy(Seq(ObjectKeyAndChecksum(objectKey, digest)))
+          .transform(t => scala.util.Success(t))
+        exists <- localBucket("staging").doesObjectExist(objectKey)
+        pendingUploads <- localBucket("staging").s3Client
+          .listMultipartUploads(ListMultipartUploadsRequest.builder().bucket("staging").build())
+          .asScala
+      } yield {
+        result.failed.get shouldBe a[VerifiedObjectCopier.StagingWriteFailed]
+        peers.opens.get() shouldBe 1
+        exists shouldBe false
+        pendingUploads.uploads().asScala shouldBe empty
+      }
+    }
+
+    "delete an object completed in staging when the copy then fails, so the next copy starts clean" in {
+      val peers = new BucketPeers(Set.empty)
+      for {
+        digest <- putOnPeers(objectKey, content)
+        result <- copier(
+          peers,
+          new FailingStaging(failPartUpload = false, failAfterCompleting = true),
+        )
+          .copy(Seq(ObjectKeyAndChecksum(objectKey, digest)))
+          .transform(t => scala.util.Success(t))
+        existsAfterFailure <- localBucket("staging").doesObjectExist(objectKey)
+        _ <- copier(peers).copy(Seq(ObjectKeyAndChecksum(objectKey, digest)))
+        checksums <- localBucket("staging").getChecksums(Seq(objectKey))
+      } yield {
+        result.failed.get shouldBe a[VerifiedObjectCopier.StagingWriteFailed]
+        existsAfterFailure shouldBe false
+        checksums.map(_.checksum) shouldBe Seq(digest)
       }
     }
 
