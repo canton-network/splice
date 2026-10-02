@@ -36,13 +36,17 @@ class BulkStorageObjectsTest extends AnyWordSpec with BaseTest {
     }
 
     "reject urls without a download path, with an empty key or with anything after the key" in {
-      Seq(
-        "https://scan.example.com/other/path",
-        "https://scan.example.com/api/scan/v0/history/bulk/download/",
-        s"https://scan.example.com/api/scan/v0/history/bulk/download/$encodedKey?sig=abc",
-        s"https://scan.example.com/api/scan/v0/history/bulk/download/$encodedKey/extra",
-      ).foreach { url =>
-        BulkStorageObjects.objectKeyFromDownloadUrl(url).isLeft shouldBe true
+      forAll(
+        Seq(
+          "https://scan.example.com/other/path",
+          "https://scan.example.com/api/scan/v0/history/bulk/download/",
+          s"https://scan.example.com/api/scan/v0/history/bulk/download/$encodedKey?sig=abc",
+          s"https://scan.example.com/api/scan/v0/history/bulk/download/$encodedKey/extra",
+        )
+      ) { url =>
+        inside(BulkStorageObjects.objectKeyFromDownloadUrl(url)) { case Left(error) =>
+          error should include(url)
+        }
       }
     }
 
