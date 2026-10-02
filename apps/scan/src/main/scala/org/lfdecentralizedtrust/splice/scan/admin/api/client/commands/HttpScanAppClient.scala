@@ -106,6 +106,7 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.jdk.OptionConverters.*
 import scala.util.Try
+import scala.util.matching.Regex
 
 object HttpScanAppClient {
   import http.ScanClient as ScanClient
@@ -3323,8 +3324,7 @@ object HttpScanAppClient {
         nextPageToken: Option[String],
     )
 
-    private val DownloadUrl =
-      s".*${scala.util.matching.Regex.quote("/api/scan/v0/history/bulk/download/")}([^/?]+)".r
+    private val DownloadUrl: Regex = """.*/api/scan/v0/history/bulk/download/([^/?]+)""".r
 
     def objectKeyFromDownloadUrl(url: String): Either[String, String] =
       url match {
