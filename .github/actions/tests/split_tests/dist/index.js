@@ -23084,15 +23084,13 @@ function getTestSuiteTimesFromXml(testReportsDir) {
   }
   return testTimes;
 }
-var PER_SUITE_OVERHEAD_SECONDS = 10;
 function estimateTestTimes(testTimes, testNames) {
   let maxTestTime = Math.max(...Object.values(testTimes));
   maxTestTime = Math.max(maxTestTime, 1);
   const estimatedTestTimes = {};
   testNames.forEach((testName) => {
     const known = testTimes[testName] ?? maxTestTime;
-    const testCasesTime = Math.max(known, 0);
-    estimatedTestTimes[testName] = testCasesTime > 0 ? testCasesTime + PER_SUITE_OVERHEAD_SECONDS : 0;
+    estimatedTestTimes[testName] = Math.max(known, 0);
   });
   return estimatedTestTimes;
 }
