@@ -7,6 +7,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.time.Clock
 import java.time.Instant
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
+import scala.jdk.OptionConverters.*
 
 object SwitchOverTimes {
 
@@ -26,4 +27,15 @@ object SwitchOverTimes {
     shouldSwitchOver(clock, dsoRules, NoFeaturedAppChoiceContext)
 
   val NoFeaturedAppChoiceContext = "no-featured-app-choice-context"
+
+  val PermissionedSynchronizer = "permissioned-synchronizer"
+
+  def permissionedSynchronizerScheduled(dsoRules: DsoRules): Boolean = {
+    dsoRules.config.svOperationsSwitchOverTimes.toScala
+      .fold(false)(_.containsKey(PermissionedSynchronizer))
+  }
+
+  def permissionedSynchronizerEnabled(clock: Clock, dsoRules: DsoRules) =
+    shouldSwitchOver(clock, dsoRules, PermissionedSynchronizer)
+
 }
