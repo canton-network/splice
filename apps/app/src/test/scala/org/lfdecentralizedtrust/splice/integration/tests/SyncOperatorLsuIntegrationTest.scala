@@ -172,7 +172,7 @@ class SyncOperatorLsuIntegrationTest
 
       actAndCheck(
         "alice buys traffic for the operator's synchronizer",
-        buyTraffic(aliceParty, member, synchronizerId, registration, dsoParty, purchase),
+        buyTraffic(aliceParty, member, synchronizerId, Some(registration), dsoParty, purchase),
       )(
         "the operator grants it on the synchronizer it is about to upgrade",
         _ => extraTrafficLimit(member) shouldBe purchase,
@@ -266,7 +266,7 @@ class SyncOperatorLsuIntegrationTest
 
           actAndCheck(10.minutes)(
             "alice buys traffic again once the upgrade has landed",
-            buyTraffic(aliceParty, member, synchronizerId, registration, dsoParty, purchase),
+            buyTraffic(aliceParty, member, synchronizerId, Some(registration), dsoParty, purchase),
           )(
             "the operator grants it on the successor's sequencer, so it switched over too",
             _ =>

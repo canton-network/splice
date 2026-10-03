@@ -31,10 +31,14 @@ trait SyncOperatorTestUtil extends TestCommon {
       buyer: PartyId,
       member: Member,
       synchronizerId: SynchronizerId,
-      registration: ContractWithState[RegisteredSynchronizer.ContractId, RegisteredSynchronizer],
+      registration: Option[
+        ContractWithState[RegisteredSynchronizer.ContractId, RegisteredSynchronizer]
+      ],
       dsoParty: PartyId,
       trafficAmount: Long,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+  )(implicit
+      env: SpliceTestConsoleEnvironment
+  ): splice.amuletrules.AmuletRules_BuyMemberTrafficResult = {
     val transferContext =
       sv1ScanBackend.getTransferContextWithInstances(CantonTimestamp.now())
     val amulets = aliceWalletClient.list().amulets.map(_.contract.contractId.contractId)
@@ -66,16 +70,16 @@ trait SyncOperatorTestUtil extends TestCommon {
             0L,
             trafficAmount,
             Some(dsoParty.toProtoPrimitive).toJava,
-            Some(registration.contractId).toJava,
+            registration.map(_.contractId).toJava,
           ),
         disclosedContracts = DisclosedContracts
           .forTesting(
             transferContext.amuletRules,
-            transferContext.latestOpenMiningRound,
-            registration,
+            (Seq[ContractWithState[?, ?]](transferContext.latestOpenMiningRound) ++ registration)*
           )
           .toLedgerApiDisclosedContracts,
       )
+      .exerciseResult
   }
 
   protected def trafficState(
