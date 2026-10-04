@@ -100,6 +100,21 @@ class SyncOperatorTrafficIntegrationTest
         synchronizerParameters.trafficControl.map(_.maxBaseTrafficAmount.value) shouldBe Some(0L)
       }
 
+      clue("the synchronizer charges traffic the way the global synchronizer does") {
+        val participant = aliceValidatorBackend.participantClientWithAdminToken
+        val globalSynchronizerId =
+          participant.synchronizers.id_of(SynchronizerAlias.tryCreate("global")).logical
+        eventually() {
+          val global = participant.topology.synchronizer_parameters
+            .get_dynamic_synchronizer_parameters(globalSynchronizerId)
+            .trafficControl
+            .value
+          val dedicated = synchronizerParameters.trafficControl.value
+          dedicated.readVsWriteScalingFactor shouldBe global.readVsWriteScalingFactor
+          dedicated.freeConfirmationResponses shouldBe global.freeConfirmationResponses
+        }
+      }
+
       clue("the mediator is granted unlimited traffic") {
         val mediator = syncOperatorBackend.appState.sequencerAdminConnection
           .getMediatorSynchronizerState(

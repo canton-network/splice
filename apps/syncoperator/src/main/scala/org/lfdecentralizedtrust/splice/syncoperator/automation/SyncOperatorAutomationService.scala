@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.syncoperator.automation
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
-import com.digitalasset.canton.sequencing.TrafficControlParameters
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
@@ -25,6 +24,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
   SynchronizerNodeService,
 }
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorLsuConfig
@@ -44,10 +44,10 @@ class SyncOperatorAutomationService(
     retryProvider: RetryProvider,
     params: SpliceParametersConfig,
     synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
+    scanConnection: ScanConnection,
     lsuConfig: Option[SyncOperatorLsuConfig],
     lsuDumpPath: Option[Path],
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration,
-    trafficControl: TrafficControlParameters,
     protected val loggerFactory: NamedLoggerFactory,
     packageVersionSupport: PackageVersionSupport,
 )(implicit
@@ -80,7 +80,7 @@ class SyncOperatorAutomationService(
       triggerContext,
       store,
       synchronizerNodeService,
-      trafficControl,
+      scanConnection,
     )
   )
 
