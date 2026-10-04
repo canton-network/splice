@@ -61,7 +61,11 @@ class GrantExistingValidatorPermissionTrigger(
                 }
             }
 
-            unpermissionedParticipants <- onboardedParticipants.parFilterA { participantId =>
+            allowedParticipants <- onboardedParticipants.parFilterA { participantId =>
+              store.listValidatorUnpermissions(participantId.toProtoPrimitive).map(_.isEmpty)
+            }
+
+            unpermissionedParticipants <- allowedParticipants.parFilterA { participantId =>
               participantAdminConnection
                 .listParticipantSynchronizerPermission(
                   synchronizerId,
