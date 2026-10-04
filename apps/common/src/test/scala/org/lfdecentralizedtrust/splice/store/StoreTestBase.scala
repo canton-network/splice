@@ -36,6 +36,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   validatorlicense as validatorLicenseCodegen,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight,
+  LockedAmulet,
   cryptohash as cryptoHashCodegen,
   rewardaccountingv2 as rewardAccountingCodegen,
 }
@@ -67,7 +70,6 @@ import com.digitalasset.daml.lf.data.Numeric
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.{RewardState, SvRewardState}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
@@ -93,7 +95,6 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSin
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.Transfer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.LockedAmulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
   AllocationSpecification,
@@ -718,11 +719,14 @@ abstract class StoreTestBase
       providerParty: PartyId,
       contractId: String = nextCid(),
       activityWeight: Option[BigDecimal] = None,
+      opsParties: Option[Seq[String]] = None,
   ) = {
     val template = new FeaturedAppRight(
       dsoParty.toProtoPrimitive,
       providerParty.toProtoPrimitive,
       activityWeight.map(_.bigDecimal).toJava,
+      Option.empty[FeaturedAppKind].toJava,
+      opsParties.map(_.asJava).toJava,
     )
     contract(
       FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,

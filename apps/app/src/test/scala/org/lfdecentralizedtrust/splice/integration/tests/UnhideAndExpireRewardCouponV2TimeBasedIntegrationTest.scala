@@ -8,8 +8,12 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageVersion}
+
 import java.time.Duration
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
   RewardBeneficiary,
   RewardCoupon,
@@ -524,6 +528,8 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             dsoParty.toProtoPrimitive,
             aliceParty.toProtoPrimitive,
             java.util.Optional.empty(),
+            Option.empty[FeaturedAppKind].toJava,
+            Option.empty[java.util.List[String]].toJava,
           ).create,
         ),
     )(

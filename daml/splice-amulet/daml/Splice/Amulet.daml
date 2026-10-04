@@ -147,6 +147,9 @@ data DevelopmentFundCoupon_DsoExpireResult = DevelopmentFundCoupon_DsoExpireResu
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
     deriving (Serializable)
 
+data FeaturedAppKind = FAK_General | FAK_AssetMoving | FAK_Asset
+  deriving (Eq, Show, Serializable)
+
 -- | A amulet, which can be locked and whose amount expires over time.
 --
 -- The expiry serves to charge an inactivity fee, and thereby ensures that the
@@ -307,6 +310,8 @@ template FeaturedAppRight with
       -- ^ Weight of the this provider's app activity in the computation of traffic-based app rewards.
       --
       -- If not set, the default weight of 1.0 is used.
+    kind : Optional FeaturedAppKind
+    opsParties: Optional [Party]
   where
     signatory dso
     observer provider
@@ -316,11 +321,15 @@ template FeaturedAppRight with
       with
         reason : Text
         newActivityWeight : Decimal
+        newKind : Optional FeaturedAppKind
+        newOpsParties : Optional [Party]
       controller dso
       do
         featuredAppRightCid <- create this with
           -- use `None` for the default to maximize SCU compatibility
           activityWeight = if newActivityWeight == defaultAppActivityWeight then None else Some newActivityWeight
+          kind = newKind
+          opsParties = newOpsParties
         return FeaturedAppRight_UpdateResult with
           featuredAppRightCid
 
