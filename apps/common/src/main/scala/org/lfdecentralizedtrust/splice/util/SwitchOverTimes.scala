@@ -8,6 +8,7 @@ import com.digitalasset.canton.time.Clock
 import java.time.Instant
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import scala.jdk.OptionConverters.*
+import scala.jdk.CollectionConverters.*
 
 object SwitchOverTimes {
 
@@ -37,5 +38,10 @@ object SwitchOverTimes {
 
   def permissionedSynchronizerEnabled(clock: Clock, dsoRules: DsoRules) =
     shouldSwitchOver(clock, dsoRules, PermissionedSynchronizer)
+
+  def getPermissionedSynchronizerSwitchOverTime(dsoRules: DsoRules): Option[Instant] = {
+    dsoRules.config.svOperationsSwitchOverTimes.toScala
+      .flatMap(_.asScala.get(PermissionedSynchronizer))
+  }
 
 }

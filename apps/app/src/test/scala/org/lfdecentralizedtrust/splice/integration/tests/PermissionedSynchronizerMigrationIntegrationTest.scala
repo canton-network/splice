@@ -21,8 +21,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_SetConfig
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.SynchronizerPermissionState
+
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -38,12 +40,21 @@ class PermissionedSynchronizerMigrationIntegrationTest
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
       .withTrafficTopupsDisabled
+      .addConfigTransforms((_, config) =>
+        ConfigTransforms.updateAllValidatorConfigs { case (name, c) =>
+          if (name == "bobValidator") {
+            c.copy(permissionedSynchronizer = true)
+          } else {
+            c
+          }
+        }(config)
+      )
       .withManualStart
 
   "Migrate Network from UnrestrictedOpen to RestrictedOpen" in { implicit env =>
     initDso()
 
-    clue("Initially no participant id has ParticipantSynchronizerPermission") {
+    clue("Initially no participant has ParticipantSynchronizerPermission") {
       Seq(
         sv1ValidatorBackend,
         sv2ValidatorBackend,
@@ -84,13 +95,8 @@ class PermissionedSynchronizerMigrationIntegrationTest
       }
     }
 
-    clue("Start Alice and buy traffic via sv1") {
+    clue("Start Alice validator") {
       aliceValidatorBackend.startSync()
-      buyMemberTraffic(aliceValidatorBackend)
-    }
-
-    clue("Start bob") {
-      bobValidatorBackend.startSync()
     }
 
     clue("Vote for a switch-over-time in the future for permissionedSynchronizer") {
@@ -116,7 +122,7 @@ class PermissionedSynchronizerMigrationIntegrationTest
       }
     }
 
-    clue("Verify SVs and Alice have permissions granted, but not Bob") {
+    clue("Verify SVs and Alice have permissions granted") {
       Seq(
         sv1ValidatorBackend,
         sv2ValidatorBackend,
@@ -136,12 +142,6 @@ class PermissionedSynchronizerMigrationIntegrationTest
           }
         }
       }
-      eventually() {
-        sv1ScanBackend.getParticipantSynchronizerPermission(
-          decentralizedSynchronizerId.toProtoPrimitive,
-          bobValidatorBackend.participantClient.id.toProtoPrimitive,
-        ) shouldBe None
-      }
     }
 
     clue("Assert RestrictedOpen is set") {
@@ -156,9 +156,11 @@ class PermissionedSynchronizerMigrationIntegrationTest
       aliceValidatorBackend.onboardUser("alice-user")
     }
 
-    clue("DevNet tap bob") {
-      sv1Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
+    clue("Start Bob") {
+      bobValidatorBackend.start()
     }
+
+    buyMemberTraffic(bobValidatorBackend)
 
     clue("Bob now has ParticipantSynchronizerPermission") {
       eventually(40.seconds) {
@@ -169,8 +171,7 @@ class PermissionedSynchronizerMigrationIntegrationTest
       }
     }
     clue("Bob can onboard a user") {
-      bobValidatorBackend.stop()
-      bobValidatorBackend.startSync()
+      bobValidatorBackend.waitForInitialization()
       bobValidatorBackend.onboardUser("bob-user")
     }
   }
