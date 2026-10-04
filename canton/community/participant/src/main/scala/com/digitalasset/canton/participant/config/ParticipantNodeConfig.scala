@@ -151,7 +151,8 @@ final case class RemoteParticipantConfig(
     adminApi: FullClientConfig,
     ledgerApi: FullClientConfig,
     ledgerJsonApi: Option[JsonClientConfig] = None,
-    token: Option[String] = None,
+    ledgerApiToken: Option[String] = None,
+    adminApiToken: Option[String] = None,
     httpHealth: Option[HttpHealthServerConfig] = None,
 ) extends BaseParticipantConfig {
   override def clientAdminApi: ClientConfig = adminApi
