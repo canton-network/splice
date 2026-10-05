@@ -1709,8 +1709,8 @@ abstract class TopologyAdminConnection(
     runCmd(VaultAdminCommands.ImportKeyPair(ByteString.copyFrom(keyPair), name, password = None))
   }
 
-  def listSynchronizerTrustCertificate(synchronizerId: SynchronizerId, member: Member)(implicit
-      tc: TraceContext
+  def listSynchronizerTrustCertificate(synchronizerId: SynchronizerId, member: Option[Member])(
+      implicit tc: TraceContext
   ): Future[Seq[TopologyResult[SynchronizerTrustCertificate]]] =
     runCmd(
       TopologyAdminCommands.Read.ListSynchronizerTrustCertificate(
@@ -1722,12 +1722,12 @@ abstract class TopologyAdminConnection(
           filterSigningKey = "",
           protocolVersion = None,
         ),
-        member.filterString,
+        member.fold("")(_.filterString),
       )
     ).map(
       // TODO(#720) Canton currently compares member IDs by string prefix instead of strict equality of
       // member IDs in ListSynchronizerTrustCertificate, so we apply another filter for equality of the member ID
-      _.filter(r => r.item.participantId.member.filterString == member.filterString)
+      _.filter(r => member.forall(m => r.item.participantId.member.filterString == m.filterString))
         .map(r =>
           TopologyResult(
             r.context,
@@ -1743,7 +1743,7 @@ abstract class TopologyAdminConnection(
     ensureTopologyMappingRemoved(
       s"Remove domain trust certificate for $member on $synchronizerId",
       synchronizerId,
-      listSynchronizerTrustCertificate(synchronizerId, member).map {
+      listSynchronizerTrustCertificate(synchronizerId, Some(member)).map {
         case Seq() => None
         case Seq(cert) => Some(cert)
         case certs =>

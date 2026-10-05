@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.sv.automation
 
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
 import com.digitalasset.canton.topology.transaction.ParticipantPermission.Submission
 import com.digitalasset.canton.tracing.TraceContext
@@ -36,47 +35,58 @@ class GrantExistingValidatorPermissionTrigger(
       tc: TraceContext
   ): Future[Seq[GrantExistingValidatorPermissionTrigger.Task]] = {
     import cats.implicits.*
-    import com.digitalasset.canton.util.FutureInstances.*
-
+    import com.digitalasset.canton.util.MonadUtil
     for {
       dsoRules <- store.getDsoRules()
-      tasks <- SwitchOverTimes.getPermissionedSynchronizerSwitchOverTime(dsoRules.payload) match {
-        case None =>
+      tasks <-
+        if (!SwitchOverTimes.permissionedSynchronizerScheduled(dsoRules.payload)) {
           Future.successful(Seq.empty)
-        case Some(switchOverInstant) =>
-          val synchronizerId = SynchronizerId.tryFromString(
-            dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
-          )
-          for {
-            allPtp <- participantAdminConnection.listPartyToParticipant(
-              store = Some(TopologyStoreId.Synchronizer(synchronizerId))
-            )
-            allParticipants = allPtp.flatMap(_.mapping.participantIds).distinct
-
-            onboardedParticipants <- allParticipants.toList.parFilterA { participantId =>
-              participantAdminConnection
-                .listSynchronizerTrustCertificate(synchronizerId, participantId)
-                .map { certs =>
-                  certs.exists(_.base.validFrom.isBefore(switchOverInstant))
-                }
-            }
-
-            allowedParticipants <- onboardedParticipants.parFilterA { participantId =>
-              store.listValidatorUnpermissions(participantId.toProtoPrimitive).map(_.isEmpty)
-            }
-
-            unpermissionedParticipants <- allowedParticipants.parFilterA { participantId =>
-              participantAdminConnection
-                .listParticipantSynchronizerPermission(
+        } else {
+          SwitchOverTimes.getPermissionedSynchronizerSwitchOverTime(dsoRules.payload) match {
+            case None =>
+              Future.successful(Seq.empty)
+            case Some(switchOverInstant) =>
+              val synchronizerId = SynchronizerId.tryFromString(
+                dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
+              )
+              for {
+                allCerts <- participantAdminConnection.listSynchronizerTrustCertificate(
                   synchronizerId,
-                  participantId.filterString,
+                  None,
                 )
-                .map(permissions => !permissions.exists(_.mapping.permission == Submission))
-            }
-          } yield unpermissionedParticipants.map(p =>
-            GrantExistingValidatorPermissionTrigger.Task(p.toProtoPrimitive)
-          )
-      }
+                onboardedParticipants = allCerts
+                  .filter(_.base.validFrom.isBefore(switchOverInstant))
+                  .map(_.mapping.participantId)
+                  .distinct
+
+                allowedParticipants <- MonadUtil
+                  .sequentialTraverse(onboardedParticipants.toList) { participantId =>
+                    store.listValidatorUnpermissions(participantId.toProtoPrimitive).map {
+                      unpermissions =>
+                        Option.when(unpermissions.isEmpty)(participantId)
+                    }
+                  }
+                  .map(_.flatten)
+
+                unpermissionedParticipants <- MonadUtil
+                  .sequentialTraverse(allowedParticipants) { participantId =>
+                    participantAdminConnection
+                      .listParticipantSynchronizerPermission(
+                        synchronizerId,
+                        participantId.filterString,
+                      )
+                      .map { permissions =>
+                        Option.when(!permissions.exists(_.mapping.permission == Submission))(
+                          participantId
+                        )
+                      }
+                  }
+                  .map(_.flatten)
+              } yield unpermissionedParticipants.map(p =>
+                GrantExistingValidatorPermissionTrigger.Task(p.toProtoPrimitive)
+              )
+          }
+        }
     } yield tasks
   }
 
