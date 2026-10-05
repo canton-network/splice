@@ -208,8 +208,11 @@ class ScanIntegrationTest
       ),
       ContractState.InFlight,
     )
-    val voteRequestCids =
-      Seq.fill(tooMany)(new VoteRequest.ContractId(openRound.contractId.contractId))
+    // contract ID type doesn't matter for this test
+    val fakeVoteRequestCids = {
+      val cid = new VoteRequest.ContractId(openRound.contractId.contractId)
+      Seq.fill(tooMany)(cid)
+    }
 
     val cases: Seq[(String, String, () => Any)] = Seq(
       (
@@ -240,11 +243,10 @@ class ScanIntegrationTest
           sv1ScanBackend.getAcsSnapshotAtV2(
             at,
             migrationId,
-            templates = Some(
-              Vector.fill(tooMany)(
-                PackageQualifiedName.fromJavaCodegenCompanion(AmuletRules.COMPANION)
-              )
-            ),
+            templates = Some {
+              val pqn = PackageQualifiedName fromJavaCodegenCompanion AmuletRules.COMPANION
+              Vector.fill(tooMany)(pqn)
+            },
           ),
       ),
       (
@@ -265,13 +267,13 @@ class ScanIntegrationTest
       (
         "/api/scan/v0/voterequest",
         "vote_request_contract_ids",
-        () => sv1ScanBackend.listVoteRequestsByTrackingCid(voteRequestCids),
+        () => sv1ScanBackend.listVoteRequestsByTrackingCid(fakeVoteRequestCids),
       ),
       // technically an sv endpoint test, but an outlier and otherwise identical
       (
         "/api/sv/v0/admin/sv/voterequest",
         "vote_request_contract_ids",
-        () => sv1Backend.listVoteRequestsByTrackingCid(voteRequestCids),
+        () => sv1Backend.listVoteRequestsByTrackingCid(fakeVoteRequestCids),
       ),
     )
 
