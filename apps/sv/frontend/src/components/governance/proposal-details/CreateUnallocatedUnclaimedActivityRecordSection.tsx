@@ -5,7 +5,7 @@ import { Box, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { formatDatetimeWithOffset } from '../../../utils/dateFormat';
 import { DetailItem } from './DetailItem';
-import { MemberIdentifier } from '../../beta';
+import { MemberIdentifier } from '../../ui';
 
 interface CreateUnallocatedUnclaimedActivityRecordSectionProps {
   beneficiary: string;

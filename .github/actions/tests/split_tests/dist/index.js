@@ -23089,8 +23089,8 @@ function estimateTestTimes(testTimes, testNames) {
   maxTestTime = Math.max(maxTestTime, 1);
   const estimatedTestTimes = {};
   testNames.forEach((testName) => {
-    estimatedTestTimes[testName] = testTimes[testName] || maxTestTime;
-    estimatedTestTimes[testName] = Math.max(estimatedTestTimes[testName], 0);
+    const known = testTimes[testName] ?? maxTestTime;
+    estimatedTestTimes[testName] = Math.max(known, 0);
   });
   return estimatedTestTimes;
 }

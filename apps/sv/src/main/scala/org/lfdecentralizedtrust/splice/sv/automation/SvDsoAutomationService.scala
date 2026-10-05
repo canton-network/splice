@@ -690,6 +690,7 @@ class SvDsoAutomationService(
         synchronizerNodeService,
         config.participantClient.sequencerRequestAmplification.toInternal,
         config.participantClient.sequencerConnectionPoolDelays.toInternal,
+        config.participantClient.subscriptionLivenessLimits.toInternal,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
         useInternalSequencerApi = config.useInternalSequencerApi,
@@ -727,7 +728,6 @@ class SvDsoAutomationService(
   registerTrigger(
     new CreateBootstrapExternalPartyConfigStateInstructionTrigger(
       triggerContext,
-      packageVersionSupport,
       dsoStore,
       connection(SpliceLedgerConnectionPriority.Low),
     )
