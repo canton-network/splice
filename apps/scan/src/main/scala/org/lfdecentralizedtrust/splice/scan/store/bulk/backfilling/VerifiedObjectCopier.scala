@@ -24,7 +24,7 @@ trait ObjectCopier {
 
 class VerifiedObjectCopier(
     source: PeerObjectSource,
-    peerOrder: Seq[Uri] => Seq[Uri],
+    anyPeer: Seq[Uri] => Uri,
     staging: S3BucketConnection,
     committed: S3BucketConnection,
     parallelism: Int,
@@ -46,8 +46,7 @@ class VerifiedObjectCopier(
       if (present) {
         logger.debug(s"Object ${obj.key} is already present with the expected checksum, skipping")
         Future.unit
-      } else
-        source.peers.flatMap(peers => copyFromAnyPeer(obj, peerOrder(peers), Nil))
+      } else copyFromAnyPeer(obj)
     }
 
   private def alreadyPresent(obj: ObjectKeyAndChecksum)(implicit
@@ -62,28 +61,30 @@ class VerifiedObjectCopier(
       .getChecksums(Seq(obj.key))(ec, mat.system, tc)
       .map(_.exists(_.checksum == obj.checksum))
 
-  private def copyFromAnyPeer(
-      obj: ObjectKeyAndChecksum,
-      peers: Seq[Uri],
-      failures: List[String],
-  )(implicit tc: TraceContext): Future[Unit] =
-    peers.headOption match {
-      case None =>
-        Future.failed(new CopyFailed(obj.key, failures.reverse))
-      case Some(peer) =>
+  private def copyFromAnyPeer(obj: ObjectKeyAndChecksum)(implicit
+      tc: TraceContext
+  ): Future[Unit] = {
+    def tryRemaining(remaining: Seq[Uri], failures: List[String]): Future[Unit] =
+      if (remaining.isEmpty) Future.failed(new CopyFailed(obj.key, failures.reverse))
+      else {
+        val peer = anyPeer(remaining)
+        def tryOthers(e: Throwable) =
+          tryRemaining(remaining.filterNot(_ == peer), s"$peer: ${e.getMessage}" :: failures)
         copyFromPeer(obj, peer).recoverWith {
           case e: StagingWriteFailed =>
             Future.failed(e)
           case e: ChecksumMismatch =>
             logger.warn(e.getMessage)
-            copyFromAnyPeer(obj, peers.drop(1), s"$peer: ${e.getMessage}" :: failures)
+            tryOthers(e)
           case e =>
             logger.info(
               s"Failed to obtain object ${obj.key} from peer $peer, trying the next: ${e.getMessage}"
             )
-            copyFromAnyPeer(obj, peers.drop(1), s"$peer: ${e.getMessage}" :: failures)
+            tryOthers(e)
         }
-    }
+      }
+    source.peers.flatMap(peers => tryRemaining(peers, Nil))
+  }
 
   private def copyFromPeer(obj: ObjectKeyAndChecksum, peer: Uri)(implicit
       tc: TraceContext
@@ -128,7 +129,7 @@ class VerifiedObjectCopier(
 object VerifiedObjectCopier {
   val uploadPartSize: Int = 8 * 1024 * 1024
 
-  val randomPeerOrder: Seq[Uri] => Seq[Uri] = peers => Random.shuffle(peers)
+  val randomPeer: Seq[Uri] => Uri = peers => peers(Random.nextInt(peers.size))
 
   final class ChecksumMismatch(key: String, peer: Uri, expected: String, actual: String)
       extends RuntimeException(

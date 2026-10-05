@@ -98,7 +98,7 @@ class BulkStorageVerifiedObjectCopierTest
   ) =
     new VerifiedObjectCopier(
       source,
-      identity,
+      _.head,
       staging,
       localBucket("committed"),
       parallelism = 1,
@@ -265,11 +265,11 @@ class BulkStorageVerifiedObjectCopierTest
       }
     }
 
-    "order peers randomly without dropping or repeating any" in {
+    "pick a random peer among the remaining ones" in {
       val peers = (1 to 20).map(i => peerUri(s"peer$i"))
-      val orders = (1 to 20).map(_ => VerifiedObjectCopier.randomPeerOrder(peers))
-      forAll(orders)(_ should contain theSameElementsAs peers)
-      orders.distinct.size should be > 1
+      val picks = (1 to 20).map(_ => VerifiedObjectCopier.randomPeer(peers))
+      forAll(picks)(peers should contain(_))
+      picks.distinct.size should be > 1
     }
   }
 }
