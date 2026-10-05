@@ -169,8 +169,8 @@ def main():
             move_upcoming_notes()
             commit_branch_and_push(cf_docs_repo, f"Splice release notes for {new_version}")
             create_pr(cf_docs_repo, f"Splice release notes for {new_version}")
-            commit_branch_and_push(repo, f"Reset upcoming release notes after {new_version} [static]")
-            create_pr(repo, f"Reset upcoming release notes after {new_version} [static]")
+            commit_branch_and_push(repo, f"[static] Reset upcoming release notes after {new_version}")
+            create_pr(repo, f"Reset upcoming release notes after {new_version}")
             break
         elif choice == "2":
             open_in_editor(upcoming_notes_filename)
