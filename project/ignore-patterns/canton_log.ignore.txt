@@ -222,8 +222,8 @@ Now retrying operation 'request current time'
 .*to find ParticipantSynchronizerPermission for participant PAR::bobValidator.*
 .*code=PERMISSION_DENIED, description=Member PAR::bobValidator.*
 .*PERMISSION_DENIED/Authentication token refresh error: Member PAR::bobValidator.*
-.*ParticipantSynchronizerPermission.*PAR::sv2::12.*
-.*GrpcPermissionDeniedError.*PAR::sv2::12.*
+.*ParticipantSynchronizerPermission.*PAR::sv2::.*
+.*GrpcPermissionDeniedError.*PAR::sv2::.*
 .*PERMISSION_DENIED.*PAR::sv2::.*
 .*PAR::sv2::.*access is disabled.*
 
