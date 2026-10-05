@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChec
 
 import java.security.MessageDigest
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
@@ -93,13 +94,17 @@ class VerifiedObjectCopier(
     source.open(peer, obj.key).flatMap { download =>
       val writer = staging.newAppendWriteObject(obj.key)
       val digest = MessageDigest.getInstance("SHA-256")
+      val lastUpload = new AtomicReference[Future[Unit]](Future.unit)
       download
         .groupedWeighted(uploadPartSize.toLong)(_.size.toLong)
         .map(chunks => chunks.foldLeft(ByteString.empty)(_ ++ _).asByteBuffer)
         .mapAsync(1) { part =>
-          // Update the digest here, in part order; never inside the upload Future.
+          // Update the digests here, in part order; never inside the upload Future.
           digest.update(part.duplicate())
-          writeToStaging(obj.key)(writer.upload(writer.prepareUploadNext(part), part))
+          val partNumber = writer.prepareUploadNext(part)
+          val upload = writeToStaging(obj.key)(writer.upload(partNumber, part))
+          lastUpload.set(upload)
+          upload
         }
         .runWith(Sink.ignore)
         .flatMap { _ =>
@@ -111,7 +116,10 @@ class VerifiedObjectCopier(
             )
         }
         .recoverWith { case e =>
-          discardFromStaging(writer).transformWith(_ => Future.failed(e))
+          lastUpload
+            .get()
+            .transformWith(_ => discardFromStaging(writer))
+            .transformWith(_ => Future.failed(e))
         }
     }
 

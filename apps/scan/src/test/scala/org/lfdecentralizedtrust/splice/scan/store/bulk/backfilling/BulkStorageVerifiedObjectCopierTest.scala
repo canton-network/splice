@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.http.scaladsl.model.Uri
@@ -21,7 +22,9 @@ import org.lfdecentralizedtrust.splice.store.{
 import software.amazon.awssdk.services.s3.model.ListMultipartUploadsRequest
 
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
@@ -90,6 +93,45 @@ class BulkStorageVerifiedObjectCopierTest
               .finish()
               .flatMap(_ => Future.failed(new RuntimeException("failed after completing")))
           else super.finish()
+      }
+  }
+
+  private class DownloadFailingAfterOnePart extends PeerObjectSource {
+    override def peers(implicit tc: TraceContext): Future[Seq[Uri]] =
+      Future.successful(Seq(peerUri("peer1")))
+    override def open(peer: Uri, key: String)(implicit
+        tc: TraceContext
+    ): Future[Source[ByteString, Any]] =
+      Future.successful(
+        Source
+          .single(ByteString(Random.nextBytes(VerifiedObjectCopier.uploadPartSize)))
+          .concat(
+            Source.future(
+              org.apache.pekko.pattern.after(100.millis, actorSystem.scheduler)(
+                Future.failed[ByteString](new RuntimeException("download broke"))
+              )
+            )
+          )
+      )
+  }
+
+  private class SlowUploadStaging(events: ConcurrentLinkedQueue[String])
+      extends S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory) {
+    override def newAppendWriteObject(key: String)(implicit
+        ec: ExecutionContext
+    ): AppendWriteObject =
+      new AppendWriteObject(key) {
+        override def upload(partNumber: Int, content: ByteBuffer): Future[Unit] =
+          org.apache.pekko.pattern
+            .after(500.millis, actorSystem.scheduler)(super.upload(partNumber, content))
+            .transform { result =>
+              events.add(s"part $partNumber upload finished").discard
+              result
+            }
+        override def abort(): Future[Unit] = {
+          events.add("abort").discard
+          super.abort()
+        }
       }
   }
 
@@ -199,6 +241,22 @@ class BulkStorageVerifiedObjectCopierTest
         result.failed.get.getCause.getMessage shouldBe "part upload failed"
         peers.opens.get() shouldBe 1
         exists shouldBe false
+        pendingUploads.uploads().asScala shouldBe empty
+      }
+    }
+
+    "abort the upload only after the part still uploading has finished when the download fails" in {
+      val events = new ConcurrentLinkedQueue[String]()
+      for {
+        result <- copier(new DownloadFailingAfterOnePart, new SlowUploadStaging(events))
+          .copy(Seq(ObjectKeyAndChecksum(objectKey, "unused")))
+          .transform(t => scala.util.Success(t))
+        pendingUploads <- localBucket("staging").s3Client
+          .listMultipartUploads(ListMultipartUploadsRequest.builder().bucket("staging").build())
+          .asScala
+      } yield {
+        result.failed.get shouldBe a[VerifiedObjectCopier.CopyFailed]
+        events.asScala.toSeq shouldBe Seq("part 1 upload finished", "abort")
         pendingUploads.uploads().asScala shouldBe empty
       }
     }
