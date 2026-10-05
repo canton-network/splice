@@ -3,7 +3,9 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -11,9 +13,11 @@ import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules, VoteRequest}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.PerClientIpRateLimitConfig
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
   ConfigurableApp,
@@ -24,6 +28,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.config.CantonBftPeerConfig
+import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
   ExpireIssuingMiningRoundTrigger,
@@ -32,6 +37,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 
+import java.util.Optional
 import scala.concurrent.{blocking, Future}
 import scala.util.{Success, Try}
 
@@ -169,6 +175,114 @@ class ScanIntegrationTest
               "Invalid timestamp: Text 'Invalid' could not be parsed at index 0"
             )
         }
+    }
+  }
+
+  "reject request arrays longer than maxItems with 400" in { implicit env =>
+    val maxItems = HttpRequestLimits.MaxRequestArrayItems
+    val tooMany = maxItems + 1
+    // The bound is checked before any snapshot lookup, so neither needs to exist.
+    val at = CantonTimestamp.now()
+    val migrationId = 0L
+    // dsoParty queries scan on each use, so look it up only once.
+    val dso = dsoParty
+    val parties = Vector.fill(tooMany)(dso)
+    val openRound = sv1ScanBackend.getOpenAndIssuingMiningRounds()._1.headOption.value
+    // Only the contract IDs of cached rounds go on the wire, and this suite pauses round
+    // advancement, so stand in for an issuing round rather than wait for one.
+    val issuingRound = ContractWithState(
+      Contract(
+        IssuingMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
+        new IssuingMiningRound.ContractId(openRound.contractId.contractId),
+        new IssuingMiningRound(
+          dso.toProtoPrimitive,
+          openRound.payload.round,
+          SpliceUtil.damlDecimal(1.0),
+          SpliceUtil.damlDecimal(1.0),
+          SpliceUtil.damlDecimal(1.0),
+          SpliceUtil.damlDecimal(1.0),
+          openRound.payload.opensAt,
+          openRound.payload.targetClosesAt,
+          Optional.empty(),
+        ),
+        ByteString.EMPTY,
+        openRound.contract.createdAt,
+      ),
+      ContractState.InFlight,
+    )
+    val voteRequestCids =
+      Seq.fill(tooMany)(new VoteRequest.ContractId(openRound.contractId.contractId))
+
+    val cases: Seq[(String, String, () => Any)] = Seq(
+      (
+        "/api/scan/v0/open-and-issuing-mining-rounds",
+        "cached_open_mining_round_contract_ids",
+        () =>
+          sv1ScanBackend.getOpenAndIssuingMiningRounds(cachedOpenRounds =
+            Seq.fill(tooMany)(openRound)
+          ),
+      ),
+      (
+        "/api/scan/v0/open-and-issuing-mining-rounds",
+        "cached_issuing_round_contract_ids",
+        () =>
+          sv1ScanBackend.getOpenAndIssuingMiningRounds(cachedIssuingRounds =
+            Seq.fill(tooMany)(issuingRound)
+          ),
+      ),
+      (
+        "/api/scan/v2/state/acs",
+        "party_ids",
+        () => sv1ScanBackend.getAcsSnapshotAtV2(at, migrationId, partyIds = Some(parties)),
+      ),
+      (
+        "/api/scan/v2/state/acs",
+        "templates",
+        () =>
+          sv1ScanBackend.getAcsSnapshotAtV2(
+            at,
+            migrationId,
+            templates = Some(
+              Vector.fill(tooMany)(
+                PackageQualifiedName.fromJavaCodegenCompanion(AmuletRules.COMPANION)
+              )
+            ),
+          ),
+      ),
+      (
+        "/api/scan/v2/holdings/state",
+        "owner_party_ids",
+        () => sv1ScanBackend.getHoldingsStateAtV2(at, migrationId, parties),
+      ),
+      (
+        "/api/scan/v0/holdings/summary",
+        "owner_party_ids",
+        () => sv1ScanBackend.getHoldingsSummaryAt(at, migrationId, parties),
+      ),
+      (
+        "/api/scan/v1/holdings/summary",
+        "owner_party_ids",
+        () => sv1ScanBackend.getHoldingsSummaryAtV1(at, migrationId, parties),
+      ),
+      (
+        "/api/scan/v0/voterequest",
+        "vote_request_contract_ids",
+        () => sv1ScanBackend.listVoteRequestsByTrackingCid(voteRequestCids),
+      ),
+      (
+        "/api/sv/v0/admin/sv/voterequest",
+        "vote_request_contract_ids",
+        () => sv1Backend.listVoteRequestsByTrackingCid(voteRequestCids),
+      ),
+    )
+
+    forEvery(cases) { case (path, field, call) =>
+      assertThrowsAndLogsCommandFailures(
+        call(),
+        _.errorMessage should (include(s"HTTP 400 Bad Request POST at '$path'") and include(
+          s"Expected '$field' to contain at most $maxItems items, but contained $tooMany."
+        )),
+      )
     }
   }
 
