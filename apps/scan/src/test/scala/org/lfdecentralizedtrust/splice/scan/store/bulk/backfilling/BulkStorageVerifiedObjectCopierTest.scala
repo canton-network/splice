@@ -8,6 +8,7 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.http.scaladsl.model.Uri
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
+import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.scan.store.bulk.S3BucketConnectionForUnitTests
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{
@@ -150,6 +151,7 @@ class BulkStorageVerifiedObjectCopierTest
         exists <- localBucket("staging").doesObjectExist(objectKey)
       } yield {
         result.failed.get shouldBe a[VerifiedObjectCopier.CopyFailed]
+        result.failed.get shouldBe a[QuietNonRetryableException]
         exists shouldBe false
       }
     }
@@ -193,6 +195,8 @@ class BulkStorageVerifiedObjectCopierTest
           .asScala
       } yield {
         result.failed.get shouldBe a[VerifiedObjectCopier.StagingWriteFailed]
+        result.failed.get shouldBe a[QuietNonRetryableException]
+        result.failed.get.getCause.getMessage shouldBe "part upload failed"
         peers.opens.get() shouldBe 1
         exists shouldBe false
         pendingUploads.uploads().asScala shouldBe empty

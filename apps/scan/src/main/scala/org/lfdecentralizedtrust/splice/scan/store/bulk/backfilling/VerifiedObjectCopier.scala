@@ -10,6 +10,7 @@ import org.apache.pekko.http.scaladsl.model.Uri
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
+import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 
@@ -137,13 +138,14 @@ object VerifiedObjectCopier {
       )
 
   final class StagingWriteFailed(key: String, cause: Throwable)
-      extends RuntimeException(
-        s"Could not write object $key to staging: ${cause.getMessage}",
-        cause,
-      )
+      extends QuietNonRetryableException(
+        s"Could not write object $key to staging: ${cause.getMessage}"
+      ) {
+    initCause(cause)
+  }
 
   final class CopyFailed(key: String, failures: Seq[String])
-      extends RuntimeException(
+      extends QuietNonRetryableException(
         s"Could not copy object $key from any peer: ${failures.mkString("; ")}"
       )
 }
