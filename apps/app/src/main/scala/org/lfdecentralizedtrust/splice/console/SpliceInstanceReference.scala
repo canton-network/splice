@@ -100,9 +100,6 @@ trait AppReference extends InstanceReference {
       timeout: NonNegativeDuration = spliceConsoleEnvironment.commandTimeouts.bounded,
       maxBackoff: NonNegativeDuration = NonNegativeDuration.tryFromDuration(20.seconds),
   ): Unit
-
-  // Doesn't make sense for Splice
-  override def adminToken: Nothing = ???
 }
 
 trait HttpAppReference extends AppReference with HttpCommandRunner {
@@ -115,6 +112,8 @@ trait HttpAppReference extends AppReference with HttpCommandRunner {
   override def adminCommand[Result](
       grpcCommand: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result] = noGrpcError()
+
+  override def adminApiToken: Option[String] = None
 
   private def noGrpcError() = throw new NotImplementedError(
     "This app is not supposed to be used via gRPC."
@@ -276,7 +275,7 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
     RemoteParticipantConfig(
       participantClientConfig.adminApi.clientConfig,
       participantClientConfig.ledgerApi.clientConfig,
-      ledgerApiToken = maybeLedgerApiToken,
+      token = maybeLedgerApiToken,
       adminApiToken = maybeAdminApiToken,
     )
   }
@@ -284,6 +283,11 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
 
   /** Remote participant this splitwell app is configured to interact with. */
   lazy val participantClient = getParticipantClient()
+
+  // Doesn't make sense for Splice
+  override def adminToken: Nothing = ???
+
+  override def adminApiToken: Option[String] = super.adminApiToken
 }
 
 /** Subclass of participantClient that takes the config as an argument
@@ -322,6 +326,8 @@ class ParticipantClientReference(
     }
     hash
   }
+
+  override def ledgerApiToken: Option[String] = super.ledgerApiToken
 }
 
 class SequencerClientReference(

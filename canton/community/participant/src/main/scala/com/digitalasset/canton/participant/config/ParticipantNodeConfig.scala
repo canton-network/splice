@@ -145,13 +145,16 @@ final case class ParticipantFeaturesConfig()
   *   defined when the remote participant exposes a JSON API endpoint that the console should
   *   access, and left as None otherwise
   * @param token
-  *   optional bearer token to use on the ledger-api if jwt authorization is enabled
+  *   optional bearer token to use on the ledger-api and the admin-api if jwt authorization is
+  *   enabled
+  * @param adminApiToken
+  *   if defined replaces `token` in admin-api calls
   */
 final case class RemoteParticipantConfig(
     adminApi: FullClientConfig,
     ledgerApi: FullClientConfig,
     ledgerJsonApi: Option[JsonClientConfig] = None,
-    ledgerApiToken: Option[String] = None,
+    token: Option[String] = None,
     adminApiToken: Option[String] = None,
     httpHealth: Option[HttpHealthServerConfig] = None,
 ) extends BaseParticipantConfig {

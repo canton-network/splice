@@ -19,7 +19,7 @@ trait BaseParticipantClientConfig extends BaseParticipantConfig {
     RemoteParticipantConfig(
       adminApi.clientConfig,
       ledgerApi.clientConfig,
-      ledgerApiToken = ledgerApi.authConfig.adminToken,
+      token = ledgerApi.authConfig.adminToken,
       adminApiToken = adminApi.authConfig.adminToken,
     )
 }
