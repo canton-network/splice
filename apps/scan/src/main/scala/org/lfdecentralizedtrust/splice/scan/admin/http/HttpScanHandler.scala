@@ -1564,8 +1564,8 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
-    val boundedPartyIds = partyIds.map(maxSizeOrFail("party_ids", _))
-    val boundedTemplates = templates.map(maxSizeOrFail("templates", _))
+    val boundedPartyIds = maxSizeOrFail("party_ids", partyIds getOrElse Vector.empty)
+    val boundedTemplates = maxSizeOrFail("templates", templates getOrElse Vector.empty)
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .queryAcsSnapshot(
         migrationId,
@@ -1573,10 +1573,8 @@ class HttpScanHandler(
         after,
         PageLimit.tryCreate(pageSize),
         boundedPartyIds
-          .getOrElse(Seq.empty)
           .map(PartyId.tryFromProtoPrimitive),
         boundedTemplates
-          .getOrElse(Seq.empty)
           .map(_.split(":") match {
             case Array(packageName, moduleName, entityName) =>
               PackageQualifiedName(packageName, QualifiedName(moduleName, entityName))
@@ -1595,8 +1593,8 @@ class HttpScanHandler(
       toResponse,
       SnapshotQueryLabels(
         operation = operation,
-        partyFilter = Presence(partyIds.exists(_.nonEmpty)),
-        templateFilter = Presence(templates.exists(_.nonEmpty)),
+        partyFilter = Presence(boundedPartyIds.nonEmpty),
+        templateFilter = Presence(boundedTemplates.nonEmpty),
         atOrBefore = recordTimeIsAtOrBefore,
         asOfRound = AsOfRound.NotApplicable,
       ),
@@ -1667,14 +1665,15 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
-    val boundedOwnerPartyIds = maxSizeOrFail("owner_party_ids", ownerPartyIds)
+    val boundedOwnerPartyIds =
+      nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", ownerPartyIds))
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .getHoldingsState(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        nonEmptyOrFail("owner_party_ids", boundedOwnerPartyIds).map(PartyId.tryFromProtoPrimitive),
+        boundedOwnerPartyIds.map(PartyId.tryFromProtoPrimitive),
       )
 
     queryWithOptionalAtOrBefore(
@@ -1736,7 +1735,8 @@ class HttpScanHandler(
         partyIds,
         asOfRound,
       ) = body
-      val boundedPartyIds = maxSizeOrFail("owner_party_ids", partyIds)
+      val boundedPartyIds =
+        nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", partyIds))
 
       def exactQuery(recordTimeTs: CantonTimestamp) = for {
         round <- asOfRound match {
@@ -1758,7 +1758,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("owner_party_ids", boundedPartyIds).map(PartyId.tryFromProtoPrimitive),
+            boundedPartyIds.map(PartyId.tryFromProtoPrimitive),
             round,
           )
       } yield result
@@ -1821,7 +1821,8 @@ class HttpScanHandler(
         recordTimeMatch,
         partyIds,
       ) = body
-      val boundedPartyIds = maxSizeOrFail("owner_party_ids", partyIds)
+      val boundedPartyIds =
+        nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", partyIds))
 
       // The asOfRound parameter is only consumed by SpliceUtil.holdingFee, which feeds the
       // accumulated*HoldingFees* and totalAvailableCoin fields on HoldingsSummary. The v1
@@ -1833,7 +1834,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("owner_party_ids", boundedPartyIds).map(PartyId.tryFromProtoPrimitive),
+            boundedPartyIds.map(PartyId.tryFromProtoPrimitive),
             0L,
           )
 

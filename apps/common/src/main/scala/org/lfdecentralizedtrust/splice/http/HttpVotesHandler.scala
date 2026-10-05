@@ -32,7 +32,8 @@ trait HttpVotesHandler extends Spanning with NamedLogging {
     }
   }
 
-  def listVoteRequestsByTrackingCid(body: definitions.BatchListVotesByVoteRequestsRequest)(implicit
+  final def listVoteRequestsByTrackingCid(body: definitions.BatchListVotesByVoteRequestsRequest)(
+      implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[definitions.ListVoteRequestByTrackingCidResponse] = {

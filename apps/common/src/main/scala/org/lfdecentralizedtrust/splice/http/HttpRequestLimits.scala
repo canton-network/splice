@@ -20,7 +20,8 @@ object HttpRequestLimits {
     * @throws io.grpc.StatusRuntimeException
     *   `INVALID_ARGUMENT`, reported as HTTP 400, if `items` exceeds [[MaxRequestArrayItems]].
     */
-  def maxSizeOrFail[A](fieldName: String, items: Vector[A]): Vector[A] =
+  @throws[io.grpc.StatusRuntimeException]
+  def maxSizeOrFail(fieldName: String, items: Seq[?]): items.type =
     if (items.sizeIs > MaxRequestArrayItems)
       throw io.grpc.Status.INVALID_ARGUMENT
         .withDescription(
