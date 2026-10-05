@@ -2,11 +2,13 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_OffboardSv,
   DsoRules_RepermissionValidator,
   DsoRules_UnpermissionValidator,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_OffboardSv,
   SRARC_RepermissionValidator,
   SRARC_UnpermissionValidator,
 }
@@ -301,6 +303,66 @@ class PermissionedSynchronizerIntegrationTest
             )
           }
         }
+      }
+    }
+
+    def offboardSv(svParty: String): Unit = {
+      val action = new ARC_DsoRules(
+        new SRARC_OffboardSv(
+          new DsoRules_OffboardSv(svParty)
+        )
+      )
+
+      val (_, voteRequest) = actAndCheck(
+        s"SV1 creates vote request to offboard $svParty",
+        eventuallySucceeds() {
+          sv1Backend.createVoteRequest(
+            sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+            action,
+            "url",
+            "description",
+            sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+            None,
+          )
+        },
+      )(
+        "vote request has been created",
+        _ => sv1Backend.listVoteRequests().filter(_.payload.action == action).head,
+      )
+
+      Seq(sv3Backend, sv4Backend).foreach { sv =>
+        clue(s"${sv.participantClient.name} accepts the vote request") {
+          eventuallySucceeds() {
+            sv.castVote(
+              voteRequest.contractId,
+              isAccepted = true,
+              "url",
+              "description",
+            )
+          }
+        }
+      }
+    }
+
+    val sv2ParticipantId = sv2Backend.participantClient.id.toProtoPrimitive
+    val sv2PartyId = sv2Backend.getDsoInfo().svParty.toProtoPrimitive
+
+    clue("Stop SV2") {
+      sv2ScanBackend.stop()
+      sv2Backend.stop()
+      sv2ValidatorBackend.stop()
+    }
+
+    clue("SVs vote to offboard SV2") {
+      offboardSv(sv2PartyId)
+    }
+
+    clue("Verify SV2's ParticipantSynchronizerPermission is removed") {
+      eventually() {
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          sv2ParticipantId,
+        ) shouldBe None
       }
     }
 
