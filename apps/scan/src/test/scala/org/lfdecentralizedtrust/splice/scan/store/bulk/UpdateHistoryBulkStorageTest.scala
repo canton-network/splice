@@ -55,7 +55,7 @@ class UpdateHistoryBulkStorageTest
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
     bulkAcsSnapshotPeriodHours = 2,
-    bulkZstdBlockSize = 500L,
+    bulkZstdBlockSize = 2000L,
     bulkZstdFrameSize = 10000L,
     maxFileSize,
     zstdCompressionLevel = 3,
@@ -113,6 +113,7 @@ class UpdateHistoryBulkStorageTest
           Seq(
             s"1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/${e.storageKey("updates", 0)}",
             s"1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/${e.storageKey("updates", 1)}",
+            s"1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/${e.storageKey("updates", 2)}",
           )
         )
         val actualKeys = probe.expectNext(20.seconds)
@@ -144,8 +145,8 @@ class UpdateHistoryBulkStorageTest
             )
             .value
             .get()
-        numObjectsFromMetric(ScanStorageConfig.Encoding.CompactJson) shouldBe 2
-        numObjectsFromMetric(ScanStorageConfig.Encoding.ProtobufJson) shouldBe 2
+        numObjectsFromMetric(ScanStorageConfig.Encoding.CompactJson) shouldBe 3
+        numObjectsFromMetric(ScanStorageConfig.Encoding.ProtobufJson) shouldBe 3
       }
 
       clue("Check that the dumped content is correct") {
@@ -169,16 +170,18 @@ class UpdateHistoryBulkStorageTest
                 (
                   new CompactJsonScanHttpEncodings(identity, identity),
                   Seq(
-                    "MM+DyxPP6UgpAaSCsm99j4ZAtYIK3TIrPmxFyodBrQQ=",
-                    "2oWb5Um18xwnJTMkC4yilyrcsUADYoxtV7toJi29VsI=",
+                    "0eImmIjyazFOwY+FTTPTTz3OhIO17/M6lDLHAtIEsK4=",
+                    "7w/7yx+uWqZK8TlolFRUnvEVjNsQNv1LXfS576d4UqA=",
+                    "ZTMI/VrXRZzbrm022fpd42lazU+GW6j/7czNHorI0h8=",
                   ),
                 )
               case ScanStorageConfig.Encoding.ProtobufJson =>
                 (
                   ProtobufJsonScanHttpEncodings,
                   Seq(
-                    "9QrYwnzkSce+GIh82uzY+1JHv4ukYC+llD0Idx1GDio=",
-                    "pCOz8MG6Zoxup4NGnzBx48kFPm582cWn+GxWSZFyq+E=",
+                    "+MeeOS/qMeEWaqaf0SXscROnVNmCEac2OIcv2z+k6hc=",
+                    "Y9IX/Ku0drtxoYGAdV6t63c+Szpjuz9v0q0/Z9ybWNs=",
+                    "P/Y+o2eY+nl8p5bgxsqsRd6E6fIrZ5H7z4FZNwSRewM=",
                   ),
                 )
             }
