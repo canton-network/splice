@@ -309,8 +309,8 @@ class UpdateHistoryBulkStorageTest
         ret
       }
 
-      val objs1 = completePipeline(initialStoreSize1, dbReadChunkSize1, bucketConnection1).sorted
-      val objs2 = completePipeline(initialStoreSize2, dbReadChunkSize2, bucketConnection2).sorted
+      val objs1 = completePipeline(initialStoreSize1, dbReadChunkSize1, bucketConnection1)
+      val objs2 = completePipeline(initialStoreSize2, dbReadChunkSize2, bucketConnection2)
 
       objs1 should contain theSameElementsAs objs2
       // getChecksums has parallelism, so we should not compare the checksums with theSameElementsInOrderAs
