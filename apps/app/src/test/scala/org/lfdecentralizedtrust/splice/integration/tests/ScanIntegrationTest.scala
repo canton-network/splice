@@ -181,15 +181,13 @@ class ScanIntegrationTest
   "reject request arrays longer than maxItems with 400" in { implicit env =>
     val maxItems = HttpRequestLimits.MaxRequestArrayItems
     val tooMany = maxItems + 1
-    // The bound is checked before any snapshot lookup, so neither needs to exist.
     val at = CantonTimestamp.now()
     val migrationId = 0L
-    // dsoParty queries scan on each use, so look it up only once.
     val dso = dsoParty
     val parties = Vector.fill(tooMany)(dso)
     val openRound = sv1ScanBackend.getOpenAndIssuingMiningRounds()._1.headOption.value
-    // Only the contract IDs of cached rounds go on the wire, and this suite pauses round
-    // advancement, so stand in for an issuing round rather than wait for one.
+    // faking an IssuingRound is easier than getting one, especially in this
+    // suite, which pauses the advance trigger
     val issuingRound = ContractWithState(
       Contract(
         IssuingMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
@@ -269,6 +267,7 @@ class ScanIntegrationTest
         "vote_request_contract_ids",
         () => sv1ScanBackend.listVoteRequestsByTrackingCid(voteRequestCids),
       ),
+      // technically an sv endpoint test, but an outlier and otherwise identical
       (
         "/api/sv/v0/admin/sv/voterequest",
         "vote_request_contract_ids",

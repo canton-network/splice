@@ -781,7 +781,7 @@ abstract class ScanAppReference(
     latestVoteRequest.payload.trackingCid.toScala.getOrElse(latestVoteRequest.contractId)
   }
 
-  @Help.Summary("List vote requests by their trackingCids")
+  @Help.Summary("List vote requests with the given contract IDs")
   def listVoteRequestsByTrackingCid(
       trackingCids: Seq[VoteRequest.ContractId]
   ): Seq[Contract[VoteRequest.ContractId, VoteRequest]] = {
