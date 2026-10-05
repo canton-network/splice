@@ -44,6 +44,7 @@ class S3ZstdObjects(
         _.getBytes(StandardCharsets.UTF_8).length.toLong
       )
       .map(strings => {
+        logger.debug("Encoded object sizes: " + strings.map(_.getBytes(StandardCharsets.UTF_8).length).mkString(", "))
         val concatenatedStr = strings.mkString("\n") + "\n"
         val bytes = ByteString(concatenatedStr.getBytes(StandardCharsets.UTF_8))
         logger.debug(
