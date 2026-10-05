@@ -30,6 +30,8 @@ export function createEnvRefs(envSecretName: string, namespaceName: string): Env
     'K6_USERS_PASSWORD',
     'K6_VALIDATOR_ADMIN_PASSWORD',
     'SLACK_ACCESS_TOKEN',
+    'GHA_RUNNER_VERSION',
+    'GHA_RUNNER_DIGEST',
   ]).concat(
     isMainNet
       ? ['AUTH0_MAIN_MANAGEMENT_API_CLIENT_SECRET', 'AUTH0_MAIN_MANAGEMENT_API_CLIENT_ID']

@@ -11,6 +11,7 @@ import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
+  SubscriptionLivenessLimits,
   SynchronizerLimits,
   TransactionProtocolLimits,
 }
@@ -341,6 +342,7 @@ final case class SvParticipantClientConfig(
       SvAppBackendConfig.DefaultParticipantSequencerRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
 final case class BftSequencingParameters(
@@ -516,6 +518,10 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    // Capped exponential backoff used by the persisted unavailable parties store
+    // (used when `enablePersistedUnavailableParties` is set)
+    unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
+      UnavailablePartiesBackoffParameters(),
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
       BftSequencingParameters.default
     ),
@@ -639,6 +645,7 @@ final case class SvMediatorConfig(
       SvAppBackendConfig.DefaultMediatorSequencerRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
     pruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
@@ -727,4 +734,10 @@ final case class AmuletConversionRateFeedConfig(
 final case class RangeConfig(
     min: BigDecimal,
     max: BigDecimal,
+)
+
+final case class UnavailablePartiesBackoffParameters(
+    baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
+    // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
+    maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
 )

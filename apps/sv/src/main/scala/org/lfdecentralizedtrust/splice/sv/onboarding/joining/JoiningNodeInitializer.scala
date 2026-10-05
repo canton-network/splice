@@ -160,6 +160,8 @@ class JoiningNodeInitializer(
           config.participantClient.sequencerRequestAmplification.toInternal,
           sequencerConnectionPoolDelays =
             config.participantClient.sequencerConnectionPoolDelays.toInternal,
+          subscriptionLivenessLimits =
+            config.participantClient.subscriptionLivenessLimits.toInternal,
         ),
         // Set manualConnect = true to avoid any issues with interrupted SV onboardings.
         // This is changed to false after SV onboarding completes.

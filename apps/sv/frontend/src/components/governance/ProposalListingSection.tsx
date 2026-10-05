@@ -17,7 +17,7 @@ import {
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
 import { useNavigate } from 'react-router';
-import { CopyableIdentifier, PageSectionHeader, VoteStats } from '../../components/beta';
+import { CopyableIdentifier, PageSectionHeader, VoteStats } from '../../components/ui';
 import {
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   THRESHOLD_DEADLINE_LABEL,
