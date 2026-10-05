@@ -18,8 +18,8 @@ import subprocess
 from github import Github
 import re
 
-patch_heading = "## Upcoming for next patch release:"
-minor_heading = "## Upcoming for next minor release"
+patch_heading_re = re.compile(r"^## Upcoming for next patch release:[ \t]*$", re.MULTILINE)
+minor_heading_re = re.compile(r"^## Upcoming for next minor release\b.*$", re.MULTILINE)
 mdx_comment_re = re.compile(r"^\{/\*.*?\*/\}\n?", re.MULTILINE | re.DOTALL)
 
 upcoming_notes_filename = f"{os.environ['SPLICE_ROOT']}/release-notes/release_notes_upcoming.mdx"
@@ -101,11 +101,11 @@ def print_release_notes_and_git_log():
 
 def split_upcoming(mdx):
     """Splits the upcoming notes into (before, patch notes, after); the patch notes exclude the heading and mdx comments."""
-    start = mdx.find(patch_heading)
-    end = mdx.find(minor_heading)
-    if start == -1 or end == -1 or end < start:
+    patch = patch_heading_re.search(mdx)
+    minor = minor_heading_re.search(mdx, patch.end()) if patch else None
+    if patch is None or minor is None:
         raise RuntimeError("upcoming file missing the patch or minor release headings")
-    start += len(patch_heading)
+    start, end = patch.end(), minor.start()
     return mdx[:start], mdx_comment_re.sub("", mdx[start:end]).strip("\n"), mdx[end:]
 
 def move_upcoming_notes():
