@@ -57,6 +57,7 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, SpliceUtil}
 import org.mockito.ArgumentMatchers.{any as javaAny, eq as javaEqTo}
 import org.mockito.matchers.DefaultValueProvider
+import org.scalatest.Assertion
 import org.scalatest.wordspec.AnyWordSpec
 
 import java.time.{Instant, OffsetDateTime, ZoneOffset}
@@ -144,19 +145,19 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
     )
   }
 
-  private def assertTooManyItems[A](f: => Future[A], fieldName: String, size: Int): Unit = {
+  private def assertTooManyItems[A](f: => Future[A], fieldName: String, size: Int): Assertion = {
     // The check runs before the handler builds its Future, so it throws synchronously; the route
     // is evaluated inside HttpErrorHandler's exception handler either way.
     val ex = Try(f) match {
       case Failure(thrown) => thrown
       case Success(future) => future.failed.futureValue
     }
-    ex shouldBe a[StatusRuntimeException]
-    val grpcEx = ex.asInstanceOf[StatusRuntimeException]
-    // INVALID_ARGUMENT is what HttpErrorHandler maps to HTTP 400.
-    grpcEx.getStatus.getCode shouldBe Status.Code.INVALID_ARGUMENT
-    grpcEx.getStatus.getDescription shouldBe
-      s"Expected '$fieldName' to contain at most $maxItems items, but contained $size."
+    inside(ex) { case grpcEx: StatusRuntimeException =>
+      // INVALID_ARGUMENT is what HttpErrorHandler maps to HTTP 400.
+      grpcEx.getStatus.getCode shouldBe Status.Code.INVALID_ARGUMENT
+      grpcEx.getStatus.getDescription shouldBe
+        s"Expected '$fieldName' to contain at most $maxItems items, but contained $size."
+    }
   }
 
   private val emptySnapshotPage = QueryAcsSnapshotResult(
