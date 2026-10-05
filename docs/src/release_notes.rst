@@ -6,15 +6,13 @@
 
 
 .. NOTE:
-   We keep notes for upcoming releases in `release_notes_upcoming.rst`
+   We keep notes for upcoming releases in `release-notes/release_notes_upcoming.mdx`
    to avoid merges accidentally merging new changes into an existing release.
 
-    - add your upcoming release notes into `release_notes_upcoming.rst`
-    - upon release add the content of `release_notes_upcoming.rst` into a
-      new `..  release-notes:: x.y.z` section with the actual version number;
-      and comment out the `Upcoming` section in `release_notes_upcoming.rst`.
-
-.. .. include:: release_notes_upcoming.rst
+    - add your upcoming release notes into `release-notes/release_notes_upcoming.mdx`
+    - upon release add the content of the patch release section of
+      `release_notes_upcoming.mdx` into a new `..  release-notes:: x.y.z` section
+      with the actual version number (`build-tools/prep-release-notes.py` does this).
 
 .. _release_notes:
 
