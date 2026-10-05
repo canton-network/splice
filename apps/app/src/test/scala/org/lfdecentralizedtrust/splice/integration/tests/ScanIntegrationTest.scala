@@ -277,7 +277,7 @@ class ScanIntegrationTest
       ),
     )
 
-    forEvery(cases) { case (path, field, call) =>
+    forEvery(Table(("path", "field", "call"), cases*)) { case (path, field, call) =>
       assertThrowsAndLogsCommandFailures(
         call(),
         _.errorMessage should (include(s"HTTP 400 Bad Request POST at '$path'") and include(
