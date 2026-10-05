@@ -42,10 +42,10 @@ function estimateTestTimes(testTimes: TestTimes, testNames: string[]): TestTimes
 
     const estimatedTestTimes: TestTimes = {};
     testNames.forEach(testName => {
-        estimatedTestTimes[testName] = testTimes[testName] || maxTestTime;
+        const known = testTimes[testName] ?? maxTestTime;
         // Scalatest actually reported occasionally test times with negative numbers,
         // so we set it to zero in that case.
-        estimatedTestTimes[testName] = Math.max(estimatedTestTimes[testName], 0.0);
+        estimatedTestTimes[testName] = Math.max(known, 0.0);
     });
 
     return estimatedTestTimes

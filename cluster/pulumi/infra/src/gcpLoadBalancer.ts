@@ -5,10 +5,10 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
 import { CLUSTER_BASENAME, ExactNamespace } from '@canton-network/splice-pulumi-common';
+import { CloudArmorLoggingConfig } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import { local } from '@pulumi/command';
 
 import { CloudArmorPolicy } from './cloudArmor';
-import { CloudArmorLoggingConfig } from './config';
 
 /*
 Any cluster that uses this must first run
@@ -198,8 +198,10 @@ function attachBackendPolicy(
             drainingTimeoutSec: BACKEND_DRAINING_TIMEOUT_SECONDS,
           },
           // backend service request logging must be enabled for Cloud Armor
-          // rule decisions to show up in Cloud Logging
-          ...(config.backendLogging?.enabled
+          // rule decisions to show up in Cloud Logging. Without a policy there are no
+          // rejections, so nothing to log if only those are wanted.
+          ...(config.backendLogging?.enabled &&
+          !(config.backendLogging.excludeAcceptedRequests && !policy)
             ? {
                 logging: {
                   enabled: true,

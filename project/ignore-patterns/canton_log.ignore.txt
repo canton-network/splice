@@ -79,6 +79,8 @@ MEDIATOR_INVALID_MESSAGE.*Received a confirmation response.*with an unknown requ
 
 # TODO(#964) Investigate why Canton starts warning about this
 periodic acknowledgement failed
+UNAVAILABLE.*acknowledge-signed
+Failed to acknowledge clean timestamp
 
 # TODO(#962) Figure out where this is coming from
 Token refresh failed with Status.*UNAVAILABLE.*Health-check stream unexpectedly closed

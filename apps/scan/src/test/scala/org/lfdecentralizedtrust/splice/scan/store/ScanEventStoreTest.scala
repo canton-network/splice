@@ -13,11 +13,12 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{TrafficSummaryT, EnvelopeT}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{EnvelopeT, TrafficSummaryT}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import io.circe.Json
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 
 import scala.concurrent.Future
@@ -932,6 +933,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

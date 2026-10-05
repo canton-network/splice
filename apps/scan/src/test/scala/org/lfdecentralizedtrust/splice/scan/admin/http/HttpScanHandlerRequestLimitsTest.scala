@@ -131,6 +131,7 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
       dsoAnsResolver = mock[DsoAnsResolver],
       miningRoundsCacheTimeToLiveOverride = None,
       enableForcedAcsSnapshots = false,
+      perAcsSnapshotTablesEnabled = true,
       clock = new SimClock(loggerFactory = NamedLoggerFactory.root),
       loggerFactory = NamedLoggerFactory.root,
       packageVersionSupport = mock[PackageVersionSupport],
@@ -253,51 +254,6 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
     }
   }
 
-  "getAcsSnapshotAt" should {
-    "reject too many party_ids" in {
-      assertTooManyItems(
-        handler().getAcsSnapshotAt(ScanResource.GetAcsSnapshotAtResponse)(
-          definitions.AcsRequest(
-            migrationId = 0L,
-            recordTime = recordTime,
-            pageSize = 10,
-            partyIds = Some(partyIds(maxItems + 1)),
-          )
-        )(TraceContext.empty),
-        "party_ids",
-        maxItems + 1,
-      )
-    }
-
-    "reject too many templates" in {
-      assertTooManyItems(
-        handler().getAcsSnapshotAt(ScanResource.GetAcsSnapshotAtResponse)(
-          definitions.AcsRequest(
-            migrationId = 0L,
-            recordTime = recordTime,
-            pageSize = 10,
-            templates = Some(templates(maxItems + 1)),
-          )
-        )(TraceContext.empty),
-        "templates",
-        maxItems + 1,
-      )
-    }
-
-    "accept both arrays at exactly the limit" in {
-      val h = handler(snapshotStore = snapshotStoreReturningEmptyPage())
-      h.getAcsSnapshotAt(ScanResource.GetAcsSnapshotAtResponse)(
-        definitions.AcsRequest(
-          migrationId = 0L,
-          recordTime = recordTime,
-          pageSize = 10,
-          partyIds = Some(partyIds(maxItems)),
-          templates = Some(templates(maxItems)),
-        )
-      )(TraceContext.empty).futureValue shouldBe a[ScanResource.GetAcsSnapshotAtResponseOK]
-    }
-  }
-
   "getAcsSnapshotAtV2" should {
     "reject too many party_ids" in {
       assertTooManyItems(
@@ -339,36 +295,8 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
           partyIds = Some(partyIds(maxItems)),
           templates = Some(templates(maxItems)),
         )
-      )(TraceContext.empty).futureValue shouldBe a[ScanResource.GetAcsSnapshotAtV2ResponseOK]
-    }
-  }
-
-  "getHoldingsStateAt" should {
-    "reject too many owner_party_ids" in {
-      assertTooManyItems(
-        handler().getHoldingsStateAt(ScanResource.GetHoldingsStateAtResponse)(
-          definitions.HoldingsStateRequest(
-            migrationId = 0L,
-            recordTime = recordTime,
-            pageSize = 10,
-            ownerPartyIds = partyIds(maxItems + 1),
-          )
-        )(TraceContext.empty),
-        "owner_party_ids",
-        maxItems + 1,
-      )
-    }
-
-    "accept owner_party_ids at exactly the limit" in {
-      val h = handler(snapshotStore = snapshotStoreReturningEmptyPage())
-      h.getHoldingsStateAt(ScanResource.GetHoldingsStateAtResponse)(
-        definitions.HoldingsStateRequest(
-          migrationId = 0L,
-          recordTime = recordTime,
-          pageSize = 10,
-          ownerPartyIds = partyIds(maxItems),
-        )
-      )(TraceContext.empty).futureValue shouldBe a[ScanResource.GetHoldingsStateAtResponseOK]
+      )(TraceContext.empty)
+        .futureValue shouldBe a[ScanResource.GetAcsSnapshotAtV2ResponseOK]
     }
   }
 
@@ -397,7 +325,8 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
           pageSize = 10,
           ownerPartyIds = partyIds(maxItems),
         )
-      )(TraceContext.empty).futureValue shouldBe a[ScanResource.GetHoldingsStateAtV2ResponseOK]
+      )(TraceContext.empty)
+        .futureValue shouldBe a[ScanResource.GetHoldingsStateAtV2ResponseOK]
     }
   }
 
@@ -426,7 +355,8 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
           ownerPartyIds = partyIds(maxItems),
           asOfRound = Some(1L),
         )
-      )(TraceContext.empty).futureValue shouldBe a[ScanResource.GetHoldingsSummaryAtResponseOK]
+      )(TraceContext.empty)
+        .futureValue shouldBe a[ScanResource.GetHoldingsSummaryAtResponseOK]
     }
   }
 
@@ -453,7 +383,8 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
           recordTime = recordTime,
           ownerPartyIds = partyIds(maxItems),
         )
-      )(TraceContext.empty).futureValue shouldBe a[ScanResource.GetHoldingsSummaryAtV1ResponseOK]
+      )(TraceContext.empty)
+        .futureValue shouldBe a[ScanResource.GetHoldingsSummaryAtV1ResponseOK]
     }
   }
 
@@ -525,8 +456,7 @@ class HttpScanHandlerRequestLimitsTest extends AnyWordSpec with BaseTest {
     ()
   }
 
-  private lazy val openRound
-      : ContractWithState[OpenMiningRound.ContractId, OpenMiningRound] = {
+  private lazy val openRound: ContractWithState[OpenMiningRound.ContractId, OpenMiningRound] = {
     val opensAt = Instant.parse("2024-01-01T00:00:00Z").truncatedTo(ChronoUnit.MICROS)
     val payload = new OpenMiningRound(
       "dso::dummy",

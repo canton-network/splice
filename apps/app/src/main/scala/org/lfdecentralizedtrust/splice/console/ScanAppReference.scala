@@ -399,56 +399,6 @@ abstract class ScanAppReference(
       )
     }
 
-  def getAcsSnapshotAt(
-      at: CantonTimestamp,
-      migrationId: Long,
-      recordTimeMatch: Option[definitions.AcsRequest.RecordTimeMatch] = Some(
-        definitions.AcsRequest.RecordTimeMatch.Exact
-      ),
-      after: Option[Long] = None,
-      pageSize: Int = 100,
-      partyIds: Option[Vector[PartyId]] = None,
-      templates: Option[Vector[PackageQualifiedName]] = None,
-  ) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAcsSnapshotAt(
-          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          migrationId,
-          recordTimeMatch,
-          after,
-          pageSize,
-          partyIds,
-          templates,
-        )
-      )
-    }
-
-  def getAcsSnapshotAtV1(
-      at: CantonTimestamp,
-      migrationId: Long,
-      recordTimeMatch: Option[definitions.AcsRequest.RecordTimeMatch] = Some(
-        definitions.AcsRequest.RecordTimeMatch.Exact
-      ),
-      after: Option[Long] = None,
-      pageSize: Int = 100,
-      partyIds: Option[Vector[PartyId]] = None,
-      templates: Option[Vector[PackageQualifiedName]] = None,
-  ) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAcsSnapshotAtV1(
-          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          migrationId,
-          recordTimeMatch,
-          after,
-          pageSize,
-          partyIds,
-          templates,
-        )
-      )
-    }
-
   def getAcsSnapshotAtV2(
       at: CantonTimestamp,
       migrationId: Long,
@@ -474,42 +424,19 @@ abstract class ScanAppReference(
       )
     }
 
-  def getHoldingsStateAt(
+  def getHoldingsStateAtV2(
       at: CantonTimestamp,
       migrationId: Long,
       partyIds: Vector[PartyId],
-      recordTimeMatch: Option[definitions.HoldingsStateRequest.RecordTimeMatch] = Some(
-        definitions.HoldingsStateRequest.RecordTimeMatch.Exact
+      recordTimeMatch: Option[definitions.HoldingsStateRequestV2.RecordTimeMatch] = Some(
+        definitions.HoldingsStateRequestV2.RecordTimeMatch.Exact
       ),
-      after: Option[Long] = None,
+      after: Option[String] = None,
       pageSize: Int = 100,
   ) =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetHoldingsStateAt(
-          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          migrationId,
-          partyIds,
-          recordTimeMatch,
-          after,
-          pageSize,
-        )
-      )
-    }
-
-  def getHoldingsStateAtV1(
-      at: CantonTimestamp,
-      migrationId: Long,
-      partyIds: Vector[PartyId],
-      recordTimeMatch: Option[definitions.HoldingsStateRequest.RecordTimeMatch] = Some(
-        definitions.HoldingsStateRequest.RecordTimeMatch.Exact
-      ),
-      after: Option[Long] = None,
-      pageSize: Int = 100,
-  ) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetHoldingsStateAtV1(
+        HttpScanAppClient.GetHoldingsStateAtV2(
           at.toInstant.atOffset(java.time.ZoneOffset.UTC),
           migrationId,
           partyIds,
@@ -894,17 +821,17 @@ abstract class ScanAppReference(
   }
 
   @Help.Summary("List all objects in bulk storage for an ACS snapshot")
-  def getBulkAcsSnapshot(
+  def listBulkAcsSnapshotObjects(
       timestamp: CantonTimestamp
   ): definitions.ListBulkAcsSnapshotObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkAcsSnapshot(timestamp)
+        HttpScanAppClient.ListBulkAcsSnapshotObjects(timestamp)
       )
     }
 
   @Help.Summary("List all objects in bulk storage with updates between given timestamps")
-  def getBulkUpdateHistory(
+  def listBulkUpdateHistoryObjects(
       startTimestamp: CantonTimestamp,
       endTimestamp: CantonTimestamp,
       nextPageToken: Option[String],
@@ -912,7 +839,7 @@ abstract class ScanAppReference(
   ): definitions.ListBulkUpdateHistoryObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkUpdateHistory(
+        HttpScanAppClient.ListBulkUpdateHistoryObjects(
           startTimestamp,
           endTimestamp,
           nextPageToken,
@@ -925,12 +852,11 @@ abstract class ScanAppReference(
     "Get checksums for a list of bulk storage objects (using both staging and committed objects)"
   )
   def getBulkObjectChecksums(
-      requiredCatchupTimestamp: CantonTimestamp,
-      objectKeys: Seq[String],
+      objectKeys: Seq[String]
   ): definitions.GetBulkObjectChecksumsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkObjectChecksums(requiredCatchupTimestamp, objectKeys)
+        HttpScanAppClient.GetBulkObjectChecksums(objectKeys)
       )
     }
 

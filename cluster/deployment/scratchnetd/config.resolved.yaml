@@ -1,10 +1,15 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
-  allRulesPreviewOnly: false
+  allRulesPreviewOnly: true
   enabled: false
-  logging:
-    enabled: true
   publicEndpoints:
+    info:
+      hostPrefixRegex: 'info'
+      pathPrefix: '/'
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 10000
+        withinIntervalSeconds: 60
     publicScan:
       hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
@@ -32,10 +37,8 @@ cloudArmor:
         maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
   wafRules:
-    enabled: true
     excludedHostPrefixes:
       - 'grafana'
-    previewOnly: false
 cluster:
   nodePools:
     apps:
@@ -53,7 +56,6 @@ infra:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
-    enablePublicTokenRegistry: true
     flowControl:
       internal:
         initialConnectionWindowSize: 104857600
@@ -95,6 +97,10 @@ monitoring:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
           threshold: 100
+        throttleRejections:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 0
         wafRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0

@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequiremen
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 
 import scala.concurrent.Future
 
@@ -1213,7 +1214,7 @@ class DbAppActivityRecordStoreTest
       storage.underlying.queryAndUpdate(
         store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO, exitOnDowngrade = false),
         "test.ensureMeta",
-      )(implicitly, implicitly, _ => false)
+      )
     )
 
   private val testDomain = SynchronizerId.tryFromString("test::domain")
@@ -1238,6 +1239,7 @@ class DbAppActivityRecordStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
@@ -1271,6 +1273,7 @@ class DbAppActivityRecordStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
@@ -1340,7 +1343,7 @@ class DbAppActivityRecordStoreTest
           ) returning row_id
         """.as[Long].head,
           "test.insertVerdictRow",
-        )(implicitly, implicitly, _ => false)
+        )
     )
   }
 

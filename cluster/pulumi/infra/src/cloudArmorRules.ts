@@ -1,11 +1,12 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as _ from 'lodash';
+import { WafRuleGroup } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import {
   extractPathPrefixes,
   PerEndpointLimits,
 } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
-import { z } from 'zod';
+import { createHash } from 'crypto';
 
 // limits from https://cloud.google.com/armor/quotas#limits, in which a
 // "subexpression" is an arg to && or ||
@@ -48,6 +49,32 @@ export function ipWhitelistRuleChunks(ipRanges: string[], availablePriorities: n
   return chunks;
 }
 
+/**
+ * Picks the priority offset of the first of `ruleNames.length` consecutive rules, derived
+ * deterministically from the rule names.
+ *
+ * Cloud Armor rejects a rule whose priority is still held by another rule, and Pulumi
+ * gives no ordering guarantee between the deletes and creates of sibling rules. If
+ * priorities were plain indexes, reordering, inserting or renaming rules would move an
+ * existing priority to a different rule, so the new rule can be created while the old one
+ * still holds that priority. Seeding with the names moves the whole block to fresh,
+ * almost certainly unused, priorities whenever the set or order of the rules changes,
+ * while unchanged rules keep their priorities.
+ *
+ * @param availablePriorities how many rule priority numbers are reserved for these rules
+ */
+export function seededPriorityOffset(ruleNames: string[], availablePriorities: number): number {
+  const range = availablePriorities - ruleNames.length + 1;
+  if (range <= 0) {
+    throw new Error(
+      `${ruleNames.length} rules do not fit into ${availablePriorities} rule priorities`
+    );
+  }
+  // 48 bits are well within Number.MAX_SAFE_INTEGER
+  const hash = createHash('sha256').update(JSON.stringify(ruleNames)).digest().readUIntBE(0, 6);
+  return hash % range;
+}
+
 // the OWASP CRS version behind each Cloud Armor rule set generation, see
 // https://cloud.google.com/armor/docs/waf-rules. It is part of the opt-out rule ids,
 // and there is no way to derive it from the rule set name.
@@ -56,39 +83,7 @@ const OWASP_CRS_VERSIONS: Record<string, string> = {
   v422: 'v042200',
 };
 
-/**
- * One of Cloud Armor's preconfigured WAF rule sets (see
- * https://cloud.google.com/armor/docs/waf-rules), with the individual OWASP CRS
- * signatures we opt out of.
- */
-const WafSignatureSchema = z.object({
-  // preconfigured rule set name, e.g. 'sqli-v422-stable'
-  name: z.string(),
-  // https://cloud.google.com/armor/docs/rule-tuning#sensitivity_levels: 1 only
-  // evaluates the paranoia level 1 signatures, which are the ones least prone to
-  // false positives. If unset, Cloud Armor's default (all levels) applies.
-  sensitivity: z.number().int().min(0).max(4).optional(),
-  // numeric OWASP CRS ids of the signatures to skip, e.g. '942190' for
-  // 'owasp-crs-v042200-id942190-sqli'. These are the signatures that produced false
-  // positives on our own traffic.
-  optOutRuleIds: z.array(z.string().regex(/^[0-9]+$/, 'numeric OWASP CRS id')).default([]),
-});
-
-export const WafRuleGroupSchema = z.object({
-  name: z.string().min(1),
-  description: z.string(),
-  signatures: z.array(WafSignatureSchema).min(1),
-});
-
-export const WafRuleGroupsSchema = z
-  .array(WafRuleGroupSchema)
-  .refine(
-    groups => new Set(groups.map(g => g.name)).size === groups.length,
-    'WAF rule group names must be unique, they are used as the Cloud Armor rule names'
-  );
-
-type WafSignature = z.infer<typeof WafSignatureSchema>;
-export type WafRuleGroup = z.infer<typeof WafRuleGroupSchema>;
+type WafSignature = WafRuleGroup['signatures'][number];
 
 /**
  * Expands a numeric OWASP CRS id into the full opt-out rule id Cloud Armor expects,
