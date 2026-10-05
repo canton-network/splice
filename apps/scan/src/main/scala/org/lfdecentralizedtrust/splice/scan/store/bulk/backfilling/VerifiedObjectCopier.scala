@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.implicits.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.http.scaladsl.model.Uri
@@ -41,29 +42,25 @@ class VerifiedObjectCopier(
       .map(_ => ())
 
   private def copyOne(obj: ObjectKeyAndChecksum)(implicit tc: TraceContext): Future[Unit] =
-    alreadyPresent(obj).flatMap {
-      case true =>
+    alreadyPresent(obj).flatMap { present =>
+      if (present) {
         logger.debug(s"Object ${obj.key} is already present with the expected checksum, skipping")
         Future.unit
-      case false =>
-        for {
-          peers <- source.peers
-          _ <- copyFromAnyPeer(obj, peerOrder(peers), Nil)
-        } yield ()
+      } else
+        source.peers.flatMap(peers => copyFromAnyPeer(obj, peerOrder(peers), Nil))
     }
 
   private def alreadyPresent(obj: ObjectKeyAndChecksum)(implicit
       tc: TraceContext
-  ): Future[Boolean] = {
-    def has(bucket: S3BucketConnection) =
-      bucket
-        .getChecksums(Seq(obj.key))(ec, mat.system, tc)
-        .map(_.exists(_.checksum == obj.checksum))
-    has(staging).flatMap {
-      case true => Future.successful(true)
-      case false => has(committed)
-    }
-  }
+  ): Future[Boolean] =
+    (hasObject(staging, obj), hasObject(committed, obj)).mapN(_ || _)
+
+  private def hasObject(bucket: S3BucketConnection, obj: ObjectKeyAndChecksum)(implicit
+      tc: TraceContext
+  ): Future[Boolean] =
+    bucket
+      .getChecksums(Seq(obj.key))(ec, mat.system, tc)
+      .map(_.exists(_.checksum == obj.checksum))
 
   private def copyFromAnyPeer(
       obj: ObjectKeyAndChecksum,
