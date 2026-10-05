@@ -64,6 +64,7 @@ class UpdateHistoryBulkStorageTest
     updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
     bftCheckEnabled = false, // bft checks are tested elsewhere
   )
+  override val initialBuckets = Seq("bucket", "bucket2")
 
   "UpdateHistoryBulkStorage" should {
 
@@ -252,6 +253,72 @@ class UpdateHistoryBulkStorageTest
 
       succeed
 
+    }
+
+    "maintain BFT guarantees regardless of DB read chunk size and ingestion rate" in {
+      val bucketConnection1 = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
+      val bucketConnection2 =
+        new S3BucketConnectionForUnitTests(s3ConfigMock("bucket2"), loggerFactory)
+      val initialStoreSize1 = 100
+      val initialStoreSize2 = 10
+      val segmentSize = 160L
+      val segmentFromTimestamp = 0L
+      val fromTimestamp =
+        CantonTimestamp.tryFromInstant(Instant.ofEpochMilli(segmentFromTimestamp))
+      val toTimestamp =
+        CantonTimestamp.tryFromInstant(Instant.ofEpochMilli(segmentFromTimestamp + segmentSize))
+      val segment = UpdatesSegment(
+        TimestampWithMigrationId(fromTimestamp, 0),
+        TimestampWithMigrationId(toTimestamp, 0),
+      )
+      val dbReadChunkSize1 = 30
+      val dbReadChunkSize2 = 4
+
+      def completePipeline(
+          initialStoreSize: Int,
+          dbReadChunkSize: Int,
+          connection: S3BucketConnection,
+      ): Seq[String] = {
+        val _appConfig = BulkStorageConfig(
+          updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+          bftCheckEnabled = false, // bft checks are tested elsewhere
+          dbReadChunkSize = dbReadChunkSize,
+        )
+
+        val mockStore = new MockUpdateHistoryStore(initialStoreSize, Instant.ofEpochMilli)
+        val probe = UpdateHistorySegmentBulkStorage
+          .asSource(
+            bulkStorageTestConfig,
+            _appConfig,
+            mockStore.store,
+            connection,
+            segment,
+            new HistoryMetrics(new InMemoryMetricsFactory)(MetricsContext.Empty),
+            loggerFactory,
+          )
+          .toMat(TestSink.probe[Seq[String]])(Keep.right)
+          .run()
+
+        probe.request(1)
+        probe.expectNoMessage(20.seconds)
+        mockStore.mockIngestion(
+          segmentSize.toInt - initialStoreSize + 2
+        ) // +2 to have another update beyond the segment, so that the source completes
+        val ret = probe.expectNext(20.seconds)
+        probe.expectComplete()
+        ret
+      }
+
+      val objs1 = completePipeline(initialStoreSize1, dbReadChunkSize1, bucketConnection1)
+      val objs2 = completePipeline(initialStoreSize2, dbReadChunkSize2, bucketConnection2)
+
+      objs1 should contain theSameElementsInOrderAs objs2
+      // getChecksums has parallelism, so we should not compare the checksums with theSameElementsInOrderAs
+      bucketConnection1
+        .getChecksums(objs1)
+        .futureValue should contain theSameElementsAs bucketConnection2
+        .getChecksums(objs2)
+        .futureValue
     }
 
     "successfully dump all segments" in {

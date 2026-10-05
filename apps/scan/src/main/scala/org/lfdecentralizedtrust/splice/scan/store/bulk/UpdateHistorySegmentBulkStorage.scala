@@ -69,6 +69,9 @@ class UpdateHistorySegmentBulkStorage(
         Some(TimestampWithMigrationId(afterTs.timestamp, afterTs.migrationId)),
         limit,
       )
+      _ = logger.debug(
+        s"Fetched ${updates.length} updates from record time ${afterTs.timestamp} (limit was $limit)"
+      )
       updatesInSegment = updates.filter(update =>
         TimestampWithMigrationId(
           update.update.update.recordTime,
