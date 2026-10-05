@@ -40,17 +40,16 @@ class S3ZstdObjects(
       getObjectKey: Int => String
   ): Flow[String, String, NotUsed] =
     Flow[String]
-      // Group into chunks of storageConfig.bulkChunkSize, which is consistent across the SVs,
-      // to guarantee BFT equality of the resulting S3 objects across all SVs.
-      // FIXME: group by weight instead of by count, to avoid creating too large chunks when the updates are large.
-      .grouped(storageConfig.bulkChunkSize)
+      .groupedWeighted(storageConfig.bulkZstdBlockSize)(
+        _.getBytes(StandardCharsets.UTF_8).length.toLong
+      )
       .map(strings => {
-        val updatesStr = strings.mkString("\n") + "\n"
-        val updateBytes = ByteString(updatesStr.getBytes(StandardCharsets.UTF_8))
+        val concatenatedStr = strings.mkString("\n") + "\n"
+        val bytes = ByteString(concatenatedStr.getBytes(StandardCharsets.UTF_8))
         logger.debug(
-          s"Concatenated ${strings.length} updates from DB, to a bytestring of size ${updateBytes.length} bytes."
+          s"Concatenated ${strings.length} objects from DB (after encoding), to a bytestring of size ${bytes.length} bytes."
         )
-        updateBytes
+        bytes
       })
       .via(
         ZstdGroupedWeight(

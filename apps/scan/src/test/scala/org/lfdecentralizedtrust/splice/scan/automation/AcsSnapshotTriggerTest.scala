@@ -693,7 +693,7 @@ class AcsSnapshotTriggerTest
   private def storageConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
     bulkAcsSnapshotPeriodHours = 1, // ignored in this test
-    bulkChunkSize = 1, // ignored in this test
+    bulkZstdBlockSize = 0L, // ignored in this test
     bulkZstdFrameSize = 0L, // ignored in this test
     bulkMaxFileSize = 0L, // ignored in this test
     zstdCompressionLevel = 0, // ignored in this test

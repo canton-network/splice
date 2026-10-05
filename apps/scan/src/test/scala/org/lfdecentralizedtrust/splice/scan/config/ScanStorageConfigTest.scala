@@ -15,7 +15,7 @@ class ScanStorageConfigTest
       def mkConfig(periodHours: Int) = ScanStorageConfig(
         dbAcsSnapshotPeriodHours = periodHours,
         bulkAcsSnapshotPeriodHours = 4,
-        bulkChunkSize = 1,
+        bulkZstdBlockSize = 0L,
         bulkZstdFrameSize = 0L,
         bulkMaxFileSize = 0L,
         zstdCompressionLevel = 0,
