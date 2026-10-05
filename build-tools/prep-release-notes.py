@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
+import getpass
 import os
 import sys
 from rich.console import Console
@@ -45,7 +46,7 @@ with open(upcoming_notes_filename, "r") as f:
     release_notes = f.read()
 repo = git.Repo('.')
 cf_docs_repo = git.Repo(cf_docs_dir)
-branch_name = f"{os.getlogin()}/release-notes-{new_version}"
+branch_name = f"{getpass.getuser()}/release-notes-{new_version}"
 console = Console()
 
 def open_in_editor(filepath):
