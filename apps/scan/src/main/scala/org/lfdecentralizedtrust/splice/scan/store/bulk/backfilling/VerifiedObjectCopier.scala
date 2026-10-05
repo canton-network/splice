@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
+import org.apache.pekko.http.scaladsl.model.Uri
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
@@ -22,7 +23,7 @@ trait ObjectCopier {
 
 class VerifiedObjectCopier(
     source: PeerObjectSource,
-    peerOrder: Seq[String] => Seq[String],
+    peerOrder: Seq[Uri] => Seq[Uri],
     staging: S3BucketConnection,
     committed: S3BucketConnection,
     parallelism: Int,
@@ -66,7 +67,7 @@ class VerifiedObjectCopier(
 
   private def copyFromAnyPeer(
       obj: ObjectKeyAndChecksum,
-      peers: Seq[String],
+      peers: Seq[Uri],
       failures: List[String],
   )(implicit tc: TraceContext): Future[Unit] =
     peers.headOption match {
@@ -87,7 +88,7 @@ class VerifiedObjectCopier(
         }
     }
 
-  private def copyFromPeer(obj: ObjectKeyAndChecksum, peer: String)(implicit
+  private def copyFromPeer(obj: ObjectKeyAndChecksum, peer: Uri)(implicit
       tc: TraceContext
   ): Future[Unit] =
     source.open(peer, obj.key).flatMap { download =>
@@ -130,9 +131,9 @@ class VerifiedObjectCopier(
 object VerifiedObjectCopier {
   val uploadPartSize: Int = 8 * 1024 * 1024
 
-  val randomPeerOrder: Seq[String] => Seq[String] = peers => Random.shuffle(peers)
+  val randomPeerOrder: Seq[Uri] => Seq[Uri] = peers => Random.shuffle(peers)
 
-  final class ChecksumMismatch(key: String, peer: String, expected: String, actual: String)
+  final class ChecksumMismatch(key: String, peer: Uri, expected: String, actual: String)
       extends RuntimeException(
         s"Checksum mismatch for object $key from peer $peer: expected $expected, got $actual"
       )

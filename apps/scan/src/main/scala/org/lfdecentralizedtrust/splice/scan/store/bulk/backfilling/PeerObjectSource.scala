@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
 import com.digitalasset.canton.tracing.TraceContext
+import org.apache.pekko.http.scaladsl.model.Uri
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
@@ -15,9 +16,9 @@ import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import scala.concurrent.{ExecutionContext, Future}
 
 trait PeerObjectSource {
-  def peers(implicit tc: TraceContext): Future[Seq[String]]
+  def peers(implicit tc: TraceContext): Future[Seq[Uri]]
 
-  def open(peer: String, key: String)(implicit tc: TraceContext): Future[Source[ByteString, Any]]
+  def open(peer: Uri, key: String)(implicit tc: TraceContext): Future[Source[ByteString, Any]]
 }
 
 class ScanPeerObjectSource(peerConnection: PeerBftScanConnection)(implicit
@@ -30,19 +31,16 @@ class ScanPeerObjectSource(peerConnection: PeerBftScanConnection)(implicit
   private def openConnections(implicit tc: TraceContext) =
     peerConnection.connection.map(_.scanList.scanConnections.open)
 
-  override def peers(implicit tc: TraceContext): Future[Seq[String]] =
-    openConnections.map(_.map(_.config.adminApi.url.toString))
+  override def peers(implicit tc: TraceContext): Future[Seq[Uri]] =
+    openConnections.map(_.map(_.config.adminApi.url))
 
-  override def open(peer: String, key: String)(implicit
+  override def open(peer: Uri, key: String)(implicit
       tc: TraceContext
   ): Future[Source[ByteString, Any]] =
     openConnections.flatMap { connections =>
-      connections.find(_.config.adminApi.url.toString == peer) match {
+      connections.find(_.config.adminApi.url == peer) match {
         case Some(connection) =>
-          connection.runHttpCmd(
-            connection.config.adminApi.url,
-            HttpScanAppClient.BulkStorageDownload(key),
-          )
+          connection.runHttpCmd(peer, HttpScanAppClient.BulkStorageDownload(key))
         case None =>
           Future.failed(new IllegalStateException(s"Peer $peer is no longer connected"))
       }

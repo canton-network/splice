@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.apache.pekko.http.scaladsl.model.Uri
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.lfdecentralizedtrust.splice.scan.store.bulk.S3BucketConnectionForUnitTests
@@ -56,16 +57,19 @@ class BulkStorageVerifiedObjectCopierTest
   private def storedBytes(bucketName: String, key: String): Future[ByteString] =
     localBucket(bucketName).readObject(key).flatMap(_.runWith(Sink.fold(ByteString.empty)(_ ++ _)))
 
+  private def peerUri(bucketName: String) = Uri(s"http://$bucketName")
+
   private class BucketPeers(corrupt: Set[String]) extends PeerObjectSource {
     val opens = new AtomicInteger(0)
-    override def peers(implicit tc: TraceContext): Future[Seq[String]] =
-      Future.successful(Seq("peer1", "peer2"))
-    override def open(peer: String, key: String)(implicit
+    override def peers(implicit tc: TraceContext): Future[Seq[Uri]] =
+      Future.successful(Seq(peerUri("peer1"), peerUri("peer2")))
+    override def open(peer: Uri, key: String)(implicit
         tc: TraceContext
     ): Future[Source[ByteString, Any]] = {
       opens.incrementAndGet()
-      localBucket(peer).readObject(key).map[Source[ByteString, Any]] { src =>
-        if (corrupt.contains(peer)) src.map(bs => bs ++ ByteString("x")) else src
+      val bucketName = peer.authority.host.address
+      localBucket(bucketName).readObject(key).map[Source[ByteString, Any]] { src =>
+        if (corrupt.contains(bucketName)) src.map(bs => bs ++ ByteString("x")) else src
       }
     }
   }
@@ -140,8 +144,8 @@ class BulkStorageVerifiedObjectCopierTest
           copier(new BucketPeers(corrupt = Set("peer1", "peer2")))
             .copy(Seq(ObjectKeyAndChecksum(objectKey, digest)))
             .transform(t => scala.util.Success(t)),
-          _.warningMessage should include("from peer peer1"),
-          _.warningMessage should include("from peer peer2"),
+          _.warningMessage should include("from peer http://peer1"),
+          _.warningMessage should include("from peer http://peer2"),
         )
         exists <- localBucket("staging").doesObjectExist(objectKey)
       } yield {
@@ -159,8 +163,8 @@ class BulkStorageVerifiedObjectCopierTest
           copier(new BucketPeers(corrupt = Set("peer1", "peer2")))
             .copy(Seq(ObjectKeyAndChecksum(bigKey, digest)))
             .transform(t => scala.util.Success(t)),
-          _.warningMessage should include("from peer peer1"),
-          _.warningMessage should include("from peer peer2"),
+          _.warningMessage should include("from peer http://peer1"),
+          _.warningMessage should include("from peer http://peer2"),
         )
         exists <- localBucket("staging").doesObjectExist(bigKey)
         pendingUploads <- localBucket("staging").s3Client
@@ -262,7 +266,7 @@ class BulkStorageVerifiedObjectCopierTest
     }
 
     "order peers randomly without dropping or repeating any" in {
-      val peers = (1 to 20).map(i => s"peer$i")
+      val peers = (1 to 20).map(i => peerUri(s"peer$i"))
       val orders = (1 to 20).map(_ => VerifiedObjectCopier.randomPeerOrder(peers))
       forAll(orders)(_ should contain theSameElementsAs peers)
       orders.distinct.size should be > 1
