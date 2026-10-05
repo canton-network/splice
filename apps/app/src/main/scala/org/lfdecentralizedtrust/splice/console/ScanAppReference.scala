@@ -240,12 +240,19 @@ abstract class ScanAppReference(
   @Help.Summary(
     "List the latest open mining round and all issuing mining rounds."
   )
-  def getOpenAndIssuingMiningRounds(): (
+  def getOpenAndIssuingMiningRounds(
+      cachedOpenRounds: Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]] = Seq(),
+      cachedIssuingRounds: Seq[
+        ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]
+      ] = Seq(),
+  ): (
       Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]],
       Seq[ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]],
   ) = {
     val result = consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetSortedOpenAndIssuingMiningRounds(Seq(), Seq()))
+      httpCommand(
+        HttpScanAppClient.GetSortedOpenAndIssuingMiningRounds(cachedOpenRounds, cachedIssuingRounds)
+      )
     }
     (
       result._1.sortBy(_.payload.round.number),
@@ -772,6 +779,17 @@ abstract class ScanAppReference(
         throw new RuntimeException("No latest vote request found")
       )
     latestVoteRequest.payload.trackingCid.toScala.getOrElse(latestVoteRequest.contractId)
+  }
+
+  @Help.Summary("List vote requests with the given contract IDs")
+  def listVoteRequestsByTrackingCid(
+      trackingCids: Seq[VoteRequest.ContractId]
+  ): Seq[Contract[VoteRequest.ContractId, VoteRequest]] = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.ListVoteRequestsByTrackingCid(trackingCids)
+      )
+    }
   }
 
   @Help.Summary("Lookup vote request")
