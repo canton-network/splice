@@ -62,8 +62,8 @@ release-notes:: Upcoming
         - The following request fields now have a ``maxItems`` bound of 1000; requests exceeding it are rejected with 400:
 
           - ``/v0/open-and-issuing-mining-rounds``: ``cached_open_mining_round_contract_ids``, ``cached_issuing_round_contract_ids``
-          - ``/v0/state/acs``, ``/v1/state/acs``, ``/v2/state/acs``: ``party_ids``, ``templates``
-          - ``/v0/holdings/state``, ``/v1/holdings/state``, ``/v2/holdings/state``: ``owner_party_ids``
+          - ``/v2/state/acs``: ``party_ids``, ``templates``
+          - ``/v2/holdings/state``: ``owner_party_ids``
           - ``/v0/holdings/summary``, ``/v1/holdings/summary``: ``owner_party_ids``
           - ``/v0/voterequest``: ``vote_request_contract_ids``
 
