@@ -24,8 +24,7 @@ import software.amazon.awssdk.services.s3.model.ListMultipartUploadsRequest
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.duration.*
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
 import scala.util.Random
@@ -96,7 +95,12 @@ class BulkStorageVerifiedObjectCopierTest
       }
   }
 
-  private class DownloadFailingAfterOnePart extends PeerObjectSource {
+  private class UploadGate {
+    val uploadStarted: Promise[Unit] = Promise()
+    val releaseUpload: Promise[Unit] = Promise()
+  }
+
+  private class DownloadFailingWhileUploading(gate: UploadGate) extends PeerObjectSource {
     override def peers(implicit tc: TraceContext): Future[Seq[Uri]] =
       Future.successful(Seq(peerUri("peer1")))
     override def open(peer: Uri, key: String)(implicit
@@ -105,29 +109,28 @@ class BulkStorageVerifiedObjectCopierTest
       Future.successful(
         Source
           .single(ByteString(Random.nextBytes(VerifiedObjectCopier.uploadPartSize)))
-          .concat(
-            Source.future(
-              org.apache.pekko.pattern.after(100.millis, actorSystem.scheduler)(
-                Future.failed[ByteString](new RuntimeException("download broke"))
-              )
-            )
-          )
+          .concat(Source.future(gate.uploadStarted.future.flatMap { _ =>
+            gate.releaseUpload.trySuccess(()).discard
+            Future.failed[ByteString](new RuntimeException("download broke"))
+          }))
       )
   }
 
-  private class SlowUploadStaging(events: ConcurrentLinkedQueue[String])
+  private class GatedUploadStaging(gate: UploadGate, events: ConcurrentLinkedQueue[String])
       extends S3BucketConnectionForTests(s3ConfigMock("staging"), loggerFactory) {
     override def newAppendWriteObject(key: String)(implicit
         ec: ExecutionContext
     ): AppendWriteObject =
       new AppendWriteObject(key) {
-        override def upload(partNumber: Int, content: ByteBuffer): Future[Unit] =
-          org.apache.pekko.pattern
-            .after(500.millis, actorSystem.scheduler)(super.upload(partNumber, content))
+        override def upload(partNumber: Int, content: ByteBuffer): Future[Unit] = {
+          gate.uploadStarted.trySuccess(()).discard
+          gate.releaseUpload.future
+            .flatMap(_ => super.upload(partNumber, content))
             .transform { result =>
               events.add(s"part $partNumber upload finished").discard
               result
             }
+        }
         override def abort(): Future[Unit] = {
           events.add("abort").discard
           super.abort()
@@ -247,8 +250,12 @@ class BulkStorageVerifiedObjectCopierTest
 
     "abort the upload only after the part still uploading has finished when the download fails" in {
       val events = new ConcurrentLinkedQueue[String]()
+      val gate = new UploadGate
       for {
-        result <- copier(new DownloadFailingAfterOnePart, new SlowUploadStaging(events))
+        result <- copier(
+          new DownloadFailingWhileUploading(gate),
+          new GatedUploadStaging(gate, events),
+        )
           .copy(Seq(ObjectKeyAndChecksum(objectKey, "unused")))
           .transform(t => scala.util.Success(t))
         pendingUploads <- localBucket("staging").s3Client
