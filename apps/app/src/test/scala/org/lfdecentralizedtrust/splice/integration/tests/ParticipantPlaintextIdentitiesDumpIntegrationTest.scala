@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAllScanAppConfigs,
   updateAllSvAppConfigs,
   updateAllValidatorConfigs,
+  useSelfSignedTokensForParticipantAdminApiAuth,
 }
 import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesDump
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -67,6 +68,7 @@ class ParticipantPlaintextIdentitiesIntegrationTest
         (_, config) => ensureNovelDamlNames()(config),
         (_, config) => ConfigTransforms.withPausedSvDomainComponentsOffboardingTriggers()(config),
         (_, config) => useSelfSignedTokensForLongRunningLedgerApiAuth("test", config),
+        (_, config) => useSelfSignedTokensForParticipantAdminApiAuth("test", "participant")(config),
         (_, config) =>
           updateAllValidatorConfigs { case (name, c) =>
             if (name == "aliceValidatorLocal") {
