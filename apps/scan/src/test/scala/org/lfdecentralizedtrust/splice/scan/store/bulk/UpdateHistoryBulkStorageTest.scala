@@ -312,8 +312,9 @@ class UpdateHistoryBulkStorageTest
       val objs1 = completePipeline(initialStoreSize1, dbReadChunkSize1, bucketConnection1)
       val objs2 = completePipeline(initialStoreSize2, dbReadChunkSize2, bucketConnection2)
 
+      // The results interleave objects from both encodings in non-deterministic order, so we should not compare with theSameElementsInOrderAs
       objs1 should contain theSameElementsAs objs2
-      // getChecksums has parallelism, so we should not compare the checksums with theSameElementsInOrderAs
+      // getChecksums has parallelism, so we should not compare the checksums with theSameElementsInOrderAs either
       bucketConnection1
         .getChecksums(objs1)
         .futureValue should contain theSameElementsAs bucketConnection2
