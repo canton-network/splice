@@ -440,6 +440,65 @@ git grep -n -E 'appDars:|SPLICE_APP_INITIALIZATION_TIMEOUT_MINUTES' $R -- cluste
 6b4c166b71:cluster/pulumi/validator1/src/validator1.ts:105:    appDars: splitwellDarPaths,
 ```
 
+## 8. The OOM kills on k48f: splitwell-app at its 1536Mi limit, not validator1 (added 2026-10-06)
+
+Section 6's OOM filter does not check the node. The kernel events, as shown by Cloud Logging for node k48f (supplied by
+the user, 2026-10-06), are three container kills, each logged as tini (the container's PID 1), the java process, and
+one JVM thread with identical memory figures:
+
+```
+2026-09-29 18:24:38.000 gke-cn-cimainnet-cn-apps-node-pool-hd-1465684f-k48f
+Memory cgroup out of memory: Killed process 12613 (java) total-vm:3157824kB, anon-rss:1566888kB, file-rss:25936kB, shmem-rss:0kB, UID:1001 pgtables:3436kB oom_score_adj:953
+Memory cgroup out of memory: Killed process 12598 (tini) total-vm:2548kB, anon-rss:0kB, file-rss:1412kB, shmem-rss:0kB, UID:1001 pgtables:48kB oom_score_adj:953
+Memory cgroup out of memory: Killed process 12904 (canton-env-ec-6) total-vm:3157824kB, anon-rss:1566888kB, file-rss:25936kB, shmem-rss:0kB, UID:1001 pgtables:3436kB oom_score_adj:953
+2026-09-29 18:36:31.000 gke-cn-cimainnet-cn-apps-node-pool-hd-1465684f-k48f
+Memory cgroup out of memory: Killed process 14077 (java) total-vm:3136072kB, anon-rss:1566940kB, file-rss:25572kB, shmem-rss:0kB, UID:1001 pgtables:3452kB oom_score_adj:953
+Memory cgroup out of memory: Killed process 14065 (tini) total-vm:2548kB, anon-rss:0kB, file-rss:1412kB, shmem-rss:0kB, UID:1001 pgtables:52kB oom_score_adj:953
+Memory cgroup out of memory: Killed process 14091 (VM Periodic Tas) total-vm:3136072kB, anon-rss:1566940kB, file-rss:25572kB, shmem-rss:0kB, UID:1001 pgtables:3452kB oom_score_adj:953
+2026-09-29 18:41:39.000 gke-cn-cimainnet-cn-apps-node-pool-hd-1465684f-k48f
+Memory cgroup out of memory: Killed process 14859 (java) total-vm:3134748kB, anon-rss:1566804kB, file-rss:25532kB, shmem-rss:0kB, UID:1001 pgtables:3456kB oom_score_adj:953
+Memory cgroup out of memory: Killed process 14805 (tini) total-vm:2548kB, anon-rss:0kB, file-rss:1284kB, shmem-rss:0kB, UID:1001 pgtables:44kB oom_score_adj:953
+Memory cgroup out of memory: Killed process 14900 (C1 CompilerThre) total-vm:3134748kB, anon-rss:1566804kB, file-rss:25532kB, shmem-rss:0kB, UID:1001 pgtables:3456kB oom_score_adj:953
+```
+
+anon-rss is 1530 MiB each time, just under a 1536 MiB cgroup limit. Of the JVM pods placed on k48f (section 6), only
+splitwell-app has that limit; validator-app and the sv-da-1 sequencer and mediator have 8Gi. The pulumi stack does not
+override splitwell-app's resources:
+
+```
+$ for c in splice-splitwell-app splice-validator splice-global-domain; do echo "== $c"; git show 6b4c166b71:cluster/helm/$c/values-template.yaml | grep -n -A5 "^resources:"; done
+== splice-splitwell-app
+8:resources:
+9-  limits:
+10-    memory: 1536Mi
+11-  requests:
+12-    cpu: "0.2"
+13-    memory: 1536Mi
+== splice-validator
+17:resources:
+18-  limits:
+19-    memory: 8Gi
+20-  requests:
+21-    cpu: 1
+22-    memory: 4Gi
+== splice-global-domain
+14:resources:
+15-  limits:
+16-    memory: 8Gi
+17-  requests:
+18-    cpu: "2"
+19-    memory: 3Gi
+$ git show 6b4c166b71:cluster/pulumi/splitwell/src/splitwell.ts | grep -n -i -E "resources|memory"; echo "exit=$?"
+exit=1
+```
+
+`oom_score_adj:953` agrees: for a Burstable pod Kubernetes sets 1000 - 1000 * memory request / node memory, and a
+1536Mi request gives 953 on a node of about 32 GiB (a 4Gi validator-app request would give about 875 there).
+validator1's validator-app is not the victim: its log (section 2) continues through all three kills (18:26:35.946 after
+18:24:38, 18:39:40.511 after 18:36:31, 18:43:20.074 after 18:41:39), and its restarts at 18:22:38 and 18:39:41 are the
+bootstrap timeout. The kills start 40 min after k48f saturated (17:45) and after attempts 1-3 had failed, so they are
+not a cause of this failure; at most three JVM restarts added startup CPU to the saturated node.
+
 ## Verdict
 
 - New, infra (family J). Not a code regression: identical build, normal on node dkj9, 25-35x slower on node k48f,
@@ -458,7 +517,8 @@ git grep -n -E 'appDars:|SPLICE_APP_INITIALIZATION_TIMEOUT_MINUTES' $R -- cluste
   (`cluster/helm/splice-validator/templates/validator.yaml:299`) in `cluster/pulumi/validator1/src/validator1.ts`;
   (2) spread validator-apps across nodes (topology spread or anti-affinity) or raise their CPU request to match startup use.
 - Not verified: why the slow validator-apps consumed 20-40 core-minutes where normal boots use about 1.5 (contention
-  alone does not add CPU time; GC or JIT behaviour under contention is a guess); which java process was OOM-killed on
-  k48f at 18:24:38, 18:36:31 and 18:41:39 (1.5 GB RSS, container not identified); k48f's machine type; what exactly the
+  alone does not add CPU time; GC or JIT behaviour under contention is a guess); the pod name of the three OOM kills on k48f (section 8
+  attributes them to splitwell-app by its 1536Mi limit; the kernel lines carry no pod name), and whether splitwell-app also
+  OOMs on unloaded nodes; k48f's machine type; what exactly the
   console `main` thread waited on (the simultaneous release suggests the same lazy-val or class-init lock, but there is no
   thread dump); which earlier deploy left the "interrupted while creating" pending operations seen in attempt 1.
