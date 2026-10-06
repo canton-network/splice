@@ -92,12 +92,23 @@ class BulkStorageBackfilling(
       case Some(copied) => copySegment(segmentAfter(copied))
       case None =>
         firstSegment(copyUpTo).flatMap {
-          case Some(first) => copySegment(first)
-          case None =>
+          case PeerListing.Available(Some(first), _) => copySegment(first)
+          case PeerListing.Available(None, _) | PeerListing.NotAvailableYet =>
             logger.debug(s"Not enough peers hold update objects up to $copyUpTo yet, waiting")
             waitThen(CopyUpdates, WaitingForPeers(CantonTimestamp.MinValue))
+          case PeerListing.NoPeerWillHold =>
+            noPeerHolds(CopyUpdates, CantonTimestamp.MinValue, s"update objects up to $copyUpTo")
         }
     }
+
+  private def noPeerHolds(state: State, at: CantonTimestamp, what: String)(implicit
+      tc: TraceContext
+  ): Next = {
+    logger.error(
+      s"No peer will ever hold $what, so this Scan cannot copy it from its peers; waiting"
+    )
+    waitThen(state, NoPeerHolds(at))
+  }
 
   private def segmentAfter(copied: UpdatesSegment): UpdatesSegment =
     UpdatesSegment(
@@ -110,13 +121,16 @@ class BulkStorageBackfilling(
 
   private def firstSegment(copyUpTo: CantonTimestamp)(implicit
       tc: TraceContext
-  ): Future[Option[UpdatesSegment]] =
+  ): Future[PeerListing[Option[UpdatesSegment]]] =
     listing
       .updateObjects(CantonTimestamp.MinValue, copyUpTo, config.pageSize, availableAt = copyUpTo)
       .flatMap {
-        case PeerListing.Available(page, _) =>
-          Future.fromTry(segmentsOf(page.objects)).map(_.headOption)
-        case PeerListing.NotAvailableYet => Future.successful(None)
+        case PeerListing.Available(page, holders) =>
+          Future
+            .fromTry(segmentsOf(page.objects))
+            .map(segments => PeerListing.Available(segments.headOption, holders))
+        case PeerListing.NotAvailableYet => Future.successful(PeerListing.NotAvailableYet)
+        case PeerListing.NoPeerWillHold => Future.successful(PeerListing.NoPeerWillHold)
       }
 
   private def copySegment(segment: UpdatesSegment)(implicit tc: TraceContext): Next = {
@@ -125,6 +139,8 @@ class BulkStorageBackfilling(
       case PeerListing.NotAvailableYet =>
         logger.debug(s"Not enough peers hold the update segment $from - $to yet, waiting")
         waitThen(CopyUpdates, WaitingForPeers(from))
+      case PeerListing.NoPeerWillHold =>
+        noPeerHolds(CopyUpdates, from, s"the update segment $from - $to")
       case PeerListing.Available(page, holders) =>
         for {
           _ <- copier.copy(page.objects, holders)
@@ -142,17 +158,29 @@ class BulkStorageBackfilling(
       cursor <- progress.readSnapshotsCursor
       requested <- lastRequested.orElse(cursor.map(_.timestamp)) match {
         case Some(last) =>
-          Future.successful[Option[CantonTimestamp]](
-            Some(storageConfig.computeBulkSnapshotTimeAfter(last))
+          Future.successful[PeerListing[Option[CantonTimestamp]]](
+            PeerListing.Available(Some(storageConfig.computeBulkSnapshotTimeAfter(last)), Seq.empty)
           )
-        case None => firstSegment(copyUpTo).map(_.map(_.toTimestamp.timestamp))
+        case None =>
+          firstSegment(copyUpTo).map[PeerListing[Option[CantonTimestamp]]] {
+            case PeerListing.Available(first, holders) =>
+              PeerListing.Available(first.map(_.toTimestamp.timestamp), holders)
+            case PeerListing.NotAvailableYet => PeerListing.NotAvailableYet
+            case PeerListing.NoPeerWillHold => PeerListing.NoPeerWillHold
+          }
       }
       result <- requested match {
-        case None =>
+        case PeerListing.Available(None, _) | PeerListing.NotAvailableYet =>
           logger.debug("The peers list no update segment yet, waiting before walking the snapshots")
           waitThen(CopySnapshots(lastRequested), WaitingForPeers(CantonTimestamp.MinValue))
-        case Some(ts) if ts > copyUpTo => next(Finish, SnapshotsCopied)
-        case Some(ts) =>
+        case PeerListing.NoPeerWillHold =>
+          noPeerHolds(
+            CopySnapshots(lastRequested),
+            CantonTimestamp.MinValue,
+            s"update objects up to $copyUpTo",
+          )
+        case PeerListing.Available(Some(ts), _) if ts > copyUpTo => next(Finish, SnapshotsCopied)
+        case PeerListing.Available(Some(ts), _) =>
           def nothingNewer(reason: String): Next = {
             logger.debug(s"$reason, waiting for the snapshot at $ts")
             waitThen(CopySnapshots(lastRequested), WaitingForPeers(ts))
@@ -160,6 +188,8 @@ class BulkStorageBackfilling(
           listing.snapshotObjectsAtOrBefore(ts).flatMap {
             case PeerListing.NotAvailableYet =>
               nothingNewer(s"Not enough peers hold the snapshot at $ts yet")
+            case PeerListing.NoPeerWillHold =>
+              noPeerHolds(CopySnapshots(lastRequested), ts, s"the snapshot at $ts")
             case PeerListing.Available(None, _) =>
               nothingNewer(s"The peers have no committed snapshot at $ts")
             case PeerListing.Available(Some(snapshot), _)
@@ -263,6 +293,7 @@ object BulkStorageBackfilling {
   final case class SnapshotCopied(snapshot: TimestampWithMigrationId, objects: Int) extends Step
   case object SnapshotsCopied extends Step
   final case class WaitingForPeers(at: CantonTimestamp) extends Step
+  final case class NoPeerHolds(at: CantonTimestamp) extends Step
   case object WaitingForHistoryStart extends Step
   case object NothingToCopy extends Step
   case object Completed extends Step

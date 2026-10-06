@@ -7,6 +7,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.NoScanWillHaveData
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
@@ -17,6 +18,7 @@ sealed trait PeerListing[+T]
 
 object PeerListing {
   case object NotAvailableYet extends PeerListing[Nothing]
+  case object NoPeerWillHold extends PeerListing[Nothing]
   final case class Available[T](objects: T, holders: Seq[Uri]) extends PeerListing[T]
 }
 
@@ -69,7 +71,9 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
   private def fromHolders[T](call: Future[(T, List[Uri])]): Future[PeerListing[T]] =
     call
       .map[PeerListing[T]] { case (objects, holders) => PeerListing.Available(objects, holders) }
-      .recover { case HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, _) =>
-        PeerListing.NotAvailableYet
+      .recover {
+        case HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, _) =>
+          PeerListing.NotAvailableYet
+        case _: NoScanWillHaveData => PeerListing.NoPeerWillHold
       }
 }

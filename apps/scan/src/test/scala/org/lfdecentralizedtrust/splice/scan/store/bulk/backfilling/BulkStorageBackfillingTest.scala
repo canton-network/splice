@@ -6,10 +6,13 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.http.scaladsl.model.Uri
+import org.apache.pekko.pattern
 import org.apache.pekko.stream.scaladsl.Sink
+import org.slf4j.event.Level
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.{
   BulkStorageBackfillingConfig,
@@ -92,6 +95,7 @@ class BulkStorageBackfillingTest
       folders: () => Seq[(String, Seq[ObjectKeyAndChecksum])],
       snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
       val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
+      noPeerWillHold: Boolean = false,
   ) extends BulkObjectListing {
 
     override def updateObjects(
@@ -104,7 +108,8 @@ class BulkStorageBackfillingTest
     ): Future[PeerListing[BulkStorageObjects.UpdateObjectsPage]] = {
       updateListingsCallCount.incrementAndGet()
       val held = folders()
-      if (!held.lastOption.exists { case (name, _) => folderRange(name)._2 >= availableAt })
+      if (noPeerWillHold) Future.successful(PeerListing.NoPeerWillHold)
+      else if (!held.lastOption.exists { case (name, _) => folderRange(name)._2 >= availableAt })
         Future.successful(PeerListing.NotAvailableYet)
       else {
         val inRange = held.filter { case (name, _) =>
@@ -296,6 +301,37 @@ class BulkStorageBackfillingTest
         copier.copied.get() shouldBe empty
         progress.complete.get() shouldBe 0
       }
+    }
+
+    "log an error and wait when no peer will ever hold the objects it needs" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      loggerFactory
+        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+          service(
+            progress,
+            copier,
+            new FakeListing(() => folders, () => snapshots, noPeerWillHold = true),
+            new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
+            pageSize = 3,
+          ).mksrc()
+            .take(2)
+            .runWith(Sink.seq)
+            .flatMap(steps =>
+              pattern.after(500.millis, actorSystem.scheduler)(Future.successful(steps))
+            ),
+          logEntries => {
+            logEntries.size should be >= 2
+            forAll(logEntries)(
+              _.errorMessage should include("No peer will ever hold update objects up to")
+            )
+          },
+        )
+        .map { steps =>
+          steps shouldBe Seq.fill(2)(BulkStorageBackfilling.NoPeerHolds(CantonTimestamp.MinValue))
+          copier.copied.get() shouldBe empty
+          progress.complete.get() shouldBe 0
+        }
     }
 
     "set the marker without copying when this Scan holds history from genesis" in {
