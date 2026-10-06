@@ -240,12 +240,19 @@ abstract class ScanAppReference(
   @Help.Summary(
     "List the latest open mining round and all issuing mining rounds."
   )
-  def getOpenAndIssuingMiningRounds(): (
+  def getOpenAndIssuingMiningRounds(
+      cachedOpenRounds: Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]] = Seq(),
+      cachedIssuingRounds: Seq[
+        ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]
+      ] = Seq(),
+  ): (
       Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]],
       Seq[ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]],
   ) = {
     val result = consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetSortedOpenAndIssuingMiningRounds(Seq(), Seq()))
+      httpCommand(
+        HttpScanAppClient.GetSortedOpenAndIssuingMiningRounds(cachedOpenRounds, cachedIssuingRounds)
+      )
     }
     (
       result._1.sortBy(_.payload.round.number),
@@ -774,6 +781,17 @@ abstract class ScanAppReference(
     latestVoteRequest.payload.trackingCid.toScala.getOrElse(latestVoteRequest.contractId)
   }
 
+  @Help.Summary("List vote requests with the given contract IDs")
+  def listVoteRequestsByTrackingCid(
+      trackingCids: Seq[VoteRequest.ContractId]
+  ): Seq[Contract[VoteRequest.ContractId, VoteRequest]] = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.ListVoteRequestsByTrackingCid(trackingCids)
+      )
+    }
+  }
+
   @Help.Summary("Lookup vote request")
   def lookupVoteRequest(
       trackingCid: VoteRequest.ContractId
@@ -852,12 +870,11 @@ abstract class ScanAppReference(
     "Get checksums for a list of bulk storage objects (using both staging and committed objects)"
   )
   def getBulkObjectChecksums(
-      requiredCatchupTimestamp: CantonTimestamp,
-      objectKeys: Seq[String],
+      objectKeys: Seq[String]
   ): definitions.GetBulkObjectChecksumsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkObjectChecksums(requiredCatchupTimestamp, objectKeys)
+        HttpScanAppClient.GetBulkObjectChecksums(objectKeys)
       )
     }
 

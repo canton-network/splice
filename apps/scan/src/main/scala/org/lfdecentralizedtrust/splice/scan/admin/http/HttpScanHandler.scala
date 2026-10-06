@@ -64,6 +64,7 @@ import org.lfdecentralizedtrust.splice.http.{
   HttpVotesHandler,
   UrlValidator,
 }
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequestV2,
@@ -245,6 +246,12 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[v0.ScanResource.GetOpenAndIssuingMiningRoundsResponse] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getOpenAndIssuingMiningRounds") { _ => _ =>
+      val cachedOpenMiningRoundContractIds = maxSizeOrFail(
+        "cached_open_mining_round_contract_ids",
+        body.cachedOpenMiningRoundContractIds,
+      )
+      val cachedIssuingRoundContractIds =
+        maxSizeOrFail("cached_issuing_round_contract_ids", body.cachedIssuingRoundContractIds)
       for {
         issuingRounds <- store.multiDomainAcsStore
           .listContracts(IssuingMiningRound.COMPANION)
@@ -252,8 +259,8 @@ class HttpScanHandler(
           .listContracts(OpenMiningRound.COMPANION)
         summarizingRounds <- store.multiDomainAcsStore
           .listContracts(SummarizingMiningRound.COMPANION)
-        issuingRoundsCachedByClient = body.cachedIssuingRoundContractIds.toSet
-        openRoundsCachedByClient = body.cachedOpenMiningRoundContractIds.toSet
+        issuingRoundsCachedByClient = cachedIssuingRoundContractIds.toSet
+        openRoundsCachedByClient = cachedOpenMiningRoundContractIds.toSet
         issuingRoundsResponseMap = selectRoundsToRespondWith(
           issuingRounds,
           issuingRoundsCachedByClient,
@@ -1557,17 +1564,17 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
+    val boundedPartyIds = maxSizeOrFail("party_ids", partyIds getOrElse Vector.empty)
+    val boundedTemplates = maxSizeOrFail("templates", templates getOrElse Vector.empty)
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .queryAcsSnapshot(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        partyIds
-          .getOrElse(Seq.empty)
+        boundedPartyIds
           .map(PartyId.tryFromProtoPrimitive),
-        templates
-          .getOrElse(Seq.empty)
+        boundedTemplates
           .map(_.split(":") match {
             case Array(packageName, moduleName, entityName) =>
               PackageQualifiedName(packageName, QualifiedName(moduleName, entityName))
@@ -1586,8 +1593,8 @@ class HttpScanHandler(
       toResponse,
       SnapshotQueryLabels(
         operation = operation,
-        partyFilter = Presence(partyIds.exists(_.nonEmpty)),
-        templateFilter = Presence(templates.exists(_.nonEmpty)),
+        partyFilter = Presence(boundedPartyIds.nonEmpty),
+        templateFilter = Presence(boundedTemplates.nonEmpty),
         atOrBefore = recordTimeIsAtOrBefore,
         asOfRound = AsOfRound.NotApplicable,
       ),
@@ -1658,13 +1665,15 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
+    val boundedOwnerPartyIds =
+      nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", ownerPartyIds))
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .getHoldingsState(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        nonEmptyOrFail("ownerPartyIds", ownerPartyIds).map(PartyId.tryFromProtoPrimitive),
+        boundedOwnerPartyIds.map(PartyId.tryFromProtoPrimitive),
       )
 
     queryWithOptionalAtOrBefore(
@@ -1726,6 +1735,8 @@ class HttpScanHandler(
         partyIds,
         asOfRound,
       ) = body
+      val boundedPartyIds =
+        nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", partyIds))
 
       def exactQuery(recordTimeTs: CantonTimestamp) = for {
         round <- asOfRound match {
@@ -1747,7 +1758,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            boundedPartyIds.map(PartyId.tryFromProtoPrimitive),
             round,
           )
       } yield result
@@ -1810,6 +1821,8 @@ class HttpScanHandler(
         recordTimeMatch,
         partyIds,
       ) = body
+      val boundedPartyIds =
+        nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", partyIds))
 
       // The asOfRound parameter is only consumed by SpliceUtil.holdingFee, which feeds the
       // accumulated*HoldingFees* and totalAvailableCoin fields on HoldingsSummary. The v1
@@ -1821,7 +1834,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            boundedPartyIds.map(PartyId.tryFromProtoPrimitive),
             0L,
           )
 
@@ -2659,21 +2672,38 @@ class HttpScanHandler(
         )
       ) { bulkStorage =>
         for {
-          progress <- bulkStorage.getStagingProgressTimestamp()
-          _ = if (
-            progress < CantonTimestamp.tryFromInstant(body.requiredCatchupTimestamp.toInstant)
-          ) {
-            throw Status.NOT_FOUND
-              .withDescription(
-                s"Bulk storage is not caught up to the required timestamp ${body.requiredCatchupTimestamp}. Current progress: $progress"
-              )
-              .asRuntimeException()
-          }
           checksums <- bulkStorage.getObjectChecksums(body.objectKeys)
         } yield {
           ScanResource.GetBulkObjectChecksumsResponse.OK(
             definitions.GetBulkObjectChecksumsResponse(
               checksums.map(definitions.GetBulkObjectChecksumsResponse.Checksums(_)).toVector
+            )
+          )
+        }
+      }
+    }
+  }
+
+  override def getBulkObjectsProgress(respond: ScanResource.GetBulkObjectsProgressResponse.type)(
+      atOrBeforeRecordTime: java.time.OffsetDateTime
+  )(
+      extracted: TraceContext
+  ): scala.concurrent.Future[ScanResource.GetBulkObjectsProgressResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getBulkObjectProgress") { _ => _ =>
+      bulkStorage.fold(
+        Future.failed[ScanResource.GetBulkObjectsProgressResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage is not configured")
+            .asRuntimeException()
+        )
+      ) { bulkStorage =>
+        for {
+          progress <- bulkStorage.getStagingProgressTimestamp()
+        } yield {
+          ScanResource.GetBulkObjectsProgressResponse.OK(
+            definitions.GetBulkObjectsProgressResponse(
+              progress >= CantonTimestamp.tryFromInstant(atOrBeforeRecordTime.toInstant)
             )
           )
         }

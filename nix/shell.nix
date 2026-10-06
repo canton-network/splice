@@ -82,7 +82,6 @@ let
     python3Packages.requests
     python3Packages.rich
     python3Packages.pulumi
-    python3Packages.pypandoc
     python3Packages.google-cloud-storage
     python3Packages.requests-toolbelt
     python3Packages.semver
@@ -128,6 +127,7 @@ let
     jq
     nodejs
     openapi-generator-cli
+    pigz
     pre-commit
     python3
     python3Packages.dockerfile-parse

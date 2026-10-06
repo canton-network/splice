@@ -29,6 +29,7 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
   GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -88,6 +89,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse
 import org.lfdecentralizedtrust.tokenstandard.{
   allocation,
   allocationinstruction,
@@ -943,12 +945,24 @@ class BftScanConnection(
   override def getBulkObjectChecksums(
       requiredCatchupTimestamp: CantonTimestamp,
       objectKeys: Seq[String],
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
-    bftCall(
-      _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
-      "getBulkObjectChecksums",
-      consensusFailureLogLevel = Level.DEBUG,
-    )
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
+    BftCallExecutor
+      .bftCallForEventualConsistencyEndpoints(
+        scanList.scanConnections,
+        connectionMetrics,
+        retryProvider,
+        logger,
+        hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp).map {
+          case GetBulkObjectsProgressResponse(progress) if progress =>
+            DataAvailabilityResponse.Available
+          case _ => DataAvailabilityResponse.NotYet
+        },
+        getData = _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
+        endpoint = "getBulkObjectChecksums",
+        callConfig = BftCallConfig.default(scanList.scanConnections),
+      )
+      .map(_._1)
+  }
 
   override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
       ec: ExecutionContext,

@@ -36,6 +36,13 @@ final case class MediatorVerdictIngestionConfig(
     batchSize: Int = 50
 )
 
+final case class BulkStorageBackfillingConfig(
+    enabled: Boolean = false,
+    pollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    downloadParallelism: Int = 1,
+    pageSize: Int = 100,
+)
+
 final case class BulkStorageConfig(
     /** When new snapshot is not yet available, how long to wait for a new one. */
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
@@ -63,6 +70,7 @@ final case class BulkStorageConfig(
       * Should typically be used in test environments only.
       */
     debugObjectsToNotCommit: Seq[String] = Seq.empty,
+    backfilling: BulkStorageBackfillingConfig = BulkStorageBackfillingConfig(),
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!
