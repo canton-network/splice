@@ -184,6 +184,12 @@ runs:
           echo "No scala test tags configured"
         fi
         echo "RUN_SPLITTED_TESTS_CMD=\"testOnly $(cat /tmp/tests) -- $tags\"" >> "$GITHUB_OUTPUT"
+        # `testOnly` without test names runs every test, so an empty batch must skip sbt instead
+        count=$(wc -w < /tmp/tests)
+        if [[ "$count" == "0" ]]; then
+          echo "No tests assigned to runner ${{ inputs.runner_index }}, skipping the test run"
+        fi
+        echo "test_count=$count" >> "$GITHUB_OUTPUT"
 
     # webpack uses inotify to watch for changes, and we need to increase the limit
     - name: increase inotify limit
@@ -238,6 +244,7 @@ runs:
         fi
 
     - name: Run tests
+      if: ${{ steps.list_tests.outputs.test_count != '0' }}
       uses: ./.github/actions/sbt/execute_sbt_command
       with:
         extra_env_vars: "POSTGRES_DB=postgres POSTGRES_HOST=localhost POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres INITIAL_PACKAGE_VERSIONS=${{ steps.daml_package_versions.outputs.initial_package_versions }} PROTOCOL_VERSION=${{ inputs.protocol_version }}"
@@ -267,6 +274,7 @@ runs:
           fi
 
     - name: Check logs for errors
+      if: ${{ steps.list_tests.outputs.test_count != '0' }}
       uses: ./.github/actions/sbt/execute_sbt_command
       with:
         # we don't care if some integration test happened to make the repo dirty
