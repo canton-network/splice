@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.{
   AnalyzableTimeWindowConfig,
+  BulkStorageBackfillingConfig,
   BulkStorageConfig,
   CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
@@ -520,6 +521,8 @@ object SpliceConfig {
     implicit val tokenStandardSettlementConfigReader
         : ConfigReader[TokenStandardConfig.SettlementConfig] =
       deriveReader[TokenStandardConfig.SettlementConfig]
+    implicit val bulkStorageBackfillingConfigReader: ConfigReader[BulkStorageBackfillingConfig] =
+      deriveReader[BulkStorageBackfillingConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig]
     implicit val S3ConfigReader: ConfigReader[S3Config] =
@@ -1081,6 +1084,8 @@ object SpliceConfig {
     implicit val tokenStandardSettlementConfigWriter
         : ConfigWriter[TokenStandardConfig.SettlementConfig] =
       deriveWriter[TokenStandardConfig.SettlementConfig]
+    implicit val bulkStorageBackfillingConfigWriter: ConfigWriter[BulkStorageBackfillingConfig] =
+      deriveWriter[BulkStorageBackfillingConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =
