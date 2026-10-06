@@ -45,6 +45,10 @@ class VerifiedObjectCopier(
 
   private def copyOne(obj: ObjectKeyAndChecksum)(implicit tc: TraceContext): Future[Unit] =
     (storedChecksum(staging, obj.key), storedChecksum(committed, obj.key)).tupled.flatMap {
+      case (_, Some(actual)) if actual != obj.checksum =>
+        val error = new CommittedObjectDiffers(obj.key, expected = obj.checksum, actual = actual)
+        logger.error(error.getMessage)
+        Future.failed(error)
       case (inStaging, inCommitted) =>
         if (inStaging.contains(obj.checksum) || inCommitted.contains(obj.checksum)) {
           logger.debug(s"Object ${obj.key} is already present with the expected checksum, skipping")
@@ -154,6 +158,11 @@ object VerifiedObjectCopier {
       ) {
     initCause(cause)
   }
+
+  final class CommittedObjectDiffers(key: String, expected: String, actual: String)
+      extends QuietNonRetryableException(
+        s"Committed holds object $key with checksum $actual instead of the agreed $expected; only an operator can replace it"
+      )
 
   final class CopyFailed(key: String, failures: Seq[String])
       extends QuietNonRetryableException(

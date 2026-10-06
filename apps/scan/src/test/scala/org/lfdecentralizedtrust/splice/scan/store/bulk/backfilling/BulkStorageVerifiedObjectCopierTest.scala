@@ -341,6 +341,26 @@ class BulkStorageVerifiedObjectCopierTest
       }
     }
 
+    "fail without copying when committed holds the object with a different checksum" in {
+      val peers = new BucketPeers(Set.empty)
+      for {
+        digest <- putOnPeers(objectKey, content)
+        _ <- putInLocal("committed", objectKey, ByteString("stale"))
+        result <- loggerFactory.assertLogs(
+          copier(peers)
+            .copy(Seq(ObjectKeyAndChecksum(objectKey, digest)))
+            .transform(t => scala.util.Success(t)),
+          _.errorMessage should include(s"Committed holds object $objectKey with checksum"),
+        )
+        exists <- localBucket("staging").doesObjectExist(objectKey)
+      } yield {
+        result.failed.get shouldBe a[VerifiedObjectCopier.CommittedObjectDiffers]
+        result.failed.get shouldBe a[QuietNonRetryableException]
+        peers.opens.get() shouldBe 0
+        exists shouldBe false
+      }
+    }
+
     "upload objects larger than one part" in {
       val big = ByteString(Random.nextBytes(VerifiedObjectCopier.uploadPartSize + 12345))
       val bigKey = "2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/updates_compact_json_0.zstd"
