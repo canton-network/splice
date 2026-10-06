@@ -797,51 +797,6 @@ template AmuletRules
 
         return AmuletRules_StartProcessingRewardsV2Result {}
 
-    nonconsuming choice AmuletRules_StartProcessingExtensionRewardsV2 : AmuletRules_StartProcessingExtensionRewardsV2Result
-      -- ^ PoC (extension reward reporting): start reward processing for a registered synchronizer's
-      -- reported activity. Consumes the operator's report and creates the root ProcessRewardsV2
-      -- with the operator as expander and the issuance rate computed by DSO automation; the
-      -- operator then expands its committed batches into RewardCouponV2 contracts. The rate
-      -- computation (app-reward tranche split by burn share, the voted per-synchronizer weight,
-      -- and the reported-vs-purchased cap) happens off-ledger in the SV apps before this action
-      -- is confirmed.
-      with
-        reportCid : ContractId ExtensionActivityReport
-        registeredSynchronizerCid : ContractId RegisteredSynchronizer
-          -- ^ the live registration the report was filed under; processing requires it to match
-          -- the report's synchronizer id and operator, so offboarding (archiving the
-          -- registration) closes the reward path the same way it closes the buy path
-        issuancePerActivityUnit : Decimal -- ^ Amulet minted per unit of reported activity weight
-        purchasedTotal : Int
-          -- ^ total traffic ever purchased for the synchronizer (bytes), computed off-ledger
-          -- by DSO automation and attested by the confirming vote; bounds the synchronizer's
-          -- total reported activity
-        rewardCouponTimeToLive : RelTime
-        dryRun : Bool
-      controller dso
-      do
-        require "issuance rate is positive" (issuancePerActivityUnit > 0.0)
-        report <- fetchAndArchive (ForDso with dso) reportCid
-        registration <- fetchChecked (ForDso with dso) registeredSynchronizerCid
-        require "report is for the registered synchronizer and its operator"
-          (registration.synchronizerId == report.synchronizerId
-            && registration.operator == report.operator)
-        require "total reported activity does not exceed purchased traffic"
-          (report.totalActivityReported <= intToDecimal purchasedTotal)
-        now <- getTime
-        create ProcessRewardsV2 with
-          dso
-          round = report.round
-          roundClosedAt = now
-          dryRun
-          rewardCouponTimeToLive
-          batchHash = report.activityRootHash
-          expander = Some report.operator
-          issuancePerActivityUnit = Some issuancePerActivityUnit
-          weightBudget = Some report.totalActivity
-
-        return AmuletRules_StartProcessingExtensionRewardsV2Result {}
-
     -- batch conversion of coupons not yet observable by their providers
     nonconsuming choice AmuletRules_UnhideRewardCouponsV2 : AmuletRules_UnhideRewardCouponsV2Result
       with

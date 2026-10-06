@@ -32,7 +32,7 @@ import Splice.Wallet.Subscriptions
 -- itself lives in splice-amulet because AmuletRules must be able to fetch it.
 import Splice.DecentralizedSynchronizer (MemberTraffic, RegisteredSynchronizer(..),
   GovernanceParameters, RegisteredSynchronizer_SetGovernanceParameters,
-  RegisteredSynchronizer_SetGovernanceParametersResult, DedicatedSynchronizerState(..))
+  RegisteredSynchronizer_SetGovernanceParametersResult)
 
 import qualified Splice.CometBft as CometBft
 import Splice.Ans
@@ -99,10 +99,6 @@ data AmuletRules_ActionRequiringConfirmation
     -- ^ Voted action to change the `AmuletConfig`. Not idempotent.
   | CRARC_StartProcessingRewardsV2 AmuletRules_StartProcessingRewardsV2
     -- ^ Automated action to start the processing of rewards where the minting allowances were computed off-ledger.
-  | CRARC_StartProcessingExtensionRewardsV2 AmuletRules_StartProcessingExtensionRewardsV2
-    -- ^ PoC (extension reward reporting): voted action to start reward processing for a registered
-    --   synchronizer's reported activity, consuming the operator's report and creating the
-    --   ProcessRewardsV2 the operator expands.
   deriving (Eq, Show, Serializable)
 
 data DsoRules_ActionRequiringConfirmation
@@ -408,7 +404,6 @@ data DsoRules_CreateUnallocatedUnclaimedActivityRecordResult = DsoRules_CreateUn
 -- | Result of `DsoRules_RegisterSynchronizer`: the cid of the created registration.
 data DsoRules_RegisterSynchronizerResult = DsoRules_RegisterSynchronizerResult with
     registeredSynchronizerCid : ContractId RegisteredSynchronizer
-    dedicatedSynchronizerStateCid : ContractId DedicatedSynchronizerState
   deriving (Serializable)
 
 data DsoRules_SetSynchronizerGovernanceParametersResult = DsoRules_SetSynchronizerGovernanceParametersResult with
@@ -1790,14 +1785,6 @@ template DsoRules with
       do
         require "synchronizerId is non-empty" (not (T.isEmpty synchronizerId))
         registeredSynchronizerCid <- create RegisteredSynchronizer with dso; synchronizerId; operator; governanceParameters
-        -- reporting state for the extension reward flow (see DedicatedSynchronizerState),
-        -- created at registration so the operator can report from its first round
-        dedicatedSynchronizerStateCid <- create DedicatedSynchronizerState with
-          dso
-          synchronizerId
-          operator
-          lastReportedRound = None
-          totalActivityReported = 0.0
         pure $ DsoRules_RegisterSynchronizerResult with ..
 
     nonconsuming choice DsoRules_SetSynchronizerGovernanceParameters : DsoRules_SetSynchronizerGovernanceParametersResult
@@ -1951,7 +1938,6 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
           CRARC_RemoveFutureAmuletConfigSchedule choiceArg -> void $ exercise amuletRulesCid choiceArg
           CRARC_UpdateFutureAmuletConfigSchedule choiceArg -> void $ exercise amuletRulesCid choiceArg
           CRARC_StartProcessingRewardsV2 choiceArg -> void $ exercise amuletRulesCid choiceArg
-          CRARC_StartProcessingExtensionRewardsV2 choiceArg -> void $ exercise amuletRulesCid choiceArg
   ARC_DsoRules with .. -> do
     void $ fetchChecked (ForDso with dso) dsoRulesCid
     case dsoAction of
@@ -2025,7 +2011,6 @@ actionRequiringConfirmationEffectiveAt action =
         CRARC_MiningRound_Archive _ -> None
         CRARC_MiningRound_StartIssuing _ -> None
         CRARC_StartProcessingRewardsV2 _ -> None
-        CRARC_StartProcessingExtensionRewardsV2 _ -> None
     ARC_DsoRules with .. -> None
     ARC_AnsEntryContext with .. -> None
     ExtActionRequiringConformation _dummyUnitField ->
