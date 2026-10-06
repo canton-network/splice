@@ -418,6 +418,7 @@ class DbScanVerdictStore(
   private def insertVerdictAndTransactionViewsDBIO(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])]
   )(implicit tc: TraceContext): DBIO[Map[CantonTimestamp, Long]] = {
+    // Defense in-depth: this should never happen, but if it did we'd want to learn about it ASAP.
     val outOfOrder = items.zip(items.drop(1)).find { case ((a, _), (b, _)) =>
       Ordering[Option[Long]].gt(a.roundNumber, b.roundNumber)
     }
