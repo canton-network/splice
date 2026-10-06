@@ -151,6 +151,25 @@ class DbAppActivityRecordStoreTest
         countAfter shouldBe (countBefore + 1)
       }
     }
+
+    "reject a batch whose round numbers are not monotonically increasing" in {
+      for {
+        (_, verdictStore) <- newStores()
+        baseTs = CantonTimestamp.now()
+        v1 = mkVerdict(verdictStore, "ooo-1", baseTs, roundNumber = Some(11L))
+        v2 = mkVerdict(verdictStore, "ooo-2", baseTs.plusSeconds(1), roundNumber = Some(10L))
+        result <- verdictStore
+          .insertVerdictAndTransactionViews(Seq(v1 -> noViews, v2 -> noViews))
+          .failed
+      } yield {
+        result match {
+          case e: io.grpc.StatusRuntimeException =>
+            e.getStatus.getCode shouldBe io.grpc.Status.Code.INTERNAL
+          case other => fail(s"expected StatusRuntimeExecption, ogt $other")
+        }
+        result.getMessage should include("not monotonically increasing")
+      }
+    }
   }
 
   "insertVerdictsWithAppActivityRecords" should {
@@ -160,8 +179,13 @@ class DbAppActivityRecordStoreTest
         (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
 
-        verdict1 = mkVerdict(verdictStore, "update-combined-1", baseTs)
-        verdict2 = mkVerdict(verdictStore, "update-combined-2", baseTs.plusSeconds(1L))
+        verdict1 = mkVerdict(verdictStore, "update-combined-1", baseTs, roundNumber = Some(10L))
+        verdict2 = mkVerdict(
+          verdictStore,
+          "update-combined-2",
+          baseTs.plusSeconds(1L),
+          roundNumber = Some(11L),
+        )
 
         appActivityRecords = Seq(
           baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L)),
@@ -188,6 +212,10 @@ class DbAppActivityRecordStoreTest
       } yield {
         v1 shouldBe defined
         v2 shouldBe defined
+        v1.value.roundNumber shouldBe Some(10L)
+        v1.value.roundNumber shouldBe Some(r1.value.roundNumber)
+        v2.value.roundNumber shouldBe Some(11L)
+        v2.value.roundNumber shouldBe Some(r2.value.roundNumber)
 
         r1.value.verdictRowId shouldBe v1.value.rowId
         r1.value.roundNumber shouldBe 10L
@@ -1303,6 +1331,7 @@ class DbAppActivityRecordStoreTest
       updateId: String,
       recordTs: CantonTimestamp,
       verdictResult: Short = DbScanVerdictStore.VerdictResultDbValue.Accepted,
+      roundNumber: Option[Long] = None,
   ): verdictStore.VerdictT =
     new verdictStore.VerdictT(
       rowId = 0L,
@@ -1317,7 +1346,7 @@ class DbAppActivityRecordStoreTest
       submittingParties = Seq.empty,
       transactionRootViews = Seq.empty,
       trafficSummaryO = None,
-      roundNumber = None,
+      roundNumber = roundNumber,
     )
 
   private val noViews: Long => Seq[DbScanVerdictStore.TransactionViewT] = _ => Seq.empty
