@@ -466,8 +466,9 @@ class ValidatorApp(
           case Some(oc) =>
             for {
               dsoRules <- scanConnection.getDsoRules()
-              isPermissionedSynchronizer = SwitchOverTimes.permissionedSynchronizerScheduled(
-                dsoRules.payload
+              isPermissionedSynchronizer = SwitchOverTimes.permissionedSynchronizerEnabled(
+                clock,
+                dsoRules.payload,
               )
               _ <-
                 if (isPermissionedSynchronizer) {
