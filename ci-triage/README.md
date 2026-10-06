@@ -522,6 +522,8 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | 10283 | 37351458092 | main 073e1872f0 (#7637) | 111903622596 `wall-clock-time (0)` | 3.6.1 |
 | 10285 | 37434381333 | main 08e28cbf6a (#7638) | 112173680724 `roll-forward-lsu (0)` | 3.6.1 |
 | 10286 | 37434381333 | main 08e28cbf6a (#7638) | 112173680751 `roll-forward-lsu (1)` | 3.6.1 |
+| 10288 | 37449833406 | main 2eb5b5360e (#7643) | 112223866626 `simtime (0)` | 3.6.1 |
+| 10289 | 37461645814 | main a901c0d918 (#7598) | 112262881363 `wall-clock-time (6)` | 3.6.1 |
 
 ## Overview
 
@@ -534,6 +536,8 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | 10283 | Same as 10279 on canton 3.6.1: ValidatorIntegrationTest 4-SV initDso, epoch 26 steps 1 -> 4 at 18:23:02.754111, sv1 blacklisted epochs 27-29, mediator ack rejected at +1 ms (18:23:04.595) and answered 403 ms after the 120 s client cancel (18:25:04.699) | family B (10165), signature (1) | [packet](10283-mediator-ack-stall-bft-1-to-4-canton-3-6-1.md); first hit on 3.6.1, the bump does not fix B; no branch |
 | 10285 | RollForwardLsuDRIntegrationTest `startAllSync` timed out (08:31:44.690). The split put both roll-forward suites in shard 0 (cached times 0, `split_tests.ts` since #7591); after RollForwardLsuIntegrationTest, the DR suite's sv1 re-proposed SynchronizerParametersState serial 1 on the shared sv1Participant (`SV1Initializer.scala:529-532`), got TOPOLOGY_MAPPING_ALREADY_EXISTS from 08:27:04.871 and retried it 75 times | new | [packet](10285-roll-forward-lsu-dr-shares-shard-sv1-bootstrap-mapping-already-exists.md); CI fix described (time <= 0 is unknown in `split_tests.ts`, or separate jobs); app: reuse an identical existing mapping; rerun |
 | 10286 | Shard 1 of the same split got an empty list, built `testOnly   -- `, ran every test in the build (1030 ok, 5 failed) until `Killed SBT after timeout 40m` | same incident as 10285 | [packet](10286-roll-forward-lsu-empty-shard-testonly-runs-all-tests-sbt-timeout.md); CI fix described (10285 fix, plus fail fast on 0 tests in `scala_test/action.yml`) |
+| 10288 | simtime (0) `Killed SBT after timeout 40m`, no failing test (23 of 26 suites done). The split read `/cache/test-reports` at 10:28:00.67 just after the four failing `simtime (N)` shards of PR run 37447204670 ("Start consuming 3.7") copied sub-second times there (10:23:08-10:27:44); 23 suites summed 18.5 s instead of 1991.7 s, so one bucket got 26 of 32 suites | new, same class as 10285 / 10286 (family T) | [packet](10288-simtime-shard-26-suites-split-on-pr-poisoned-test-report-cache-sbt-timeout.md); CI fix described (only main runs write the cache, ignore implausible times in `split_tests.ts`); rerun; no branch |
+| 10289 | sv1Participant `acknowledge-signed` DEADLINE_EXCEEDED after 120 s (12:26:43.448), all 22 tests pass. SvInitializationIntegrationTest "start and restart cleanly" 4-SV initDso: epoch 15 steps 1 -> 4 at 12:23:35.372116, sv1 blacklisted epochs 16-18 (12:23:57.672-12:25:06.913); ack sent 12:24:43.444 and rejected at +1 ms with `currently blacklisted, rejecting` (not `P2P connectivity is not ready`), answered 84 ms after the client cancel | family B (10165), signature (1) | [packet](10289-sv1-participant-ack-rejected-while-sv1-blacklisted-bft-1-to-4.md); the stuck call follows any mempool rejection, so the exposure is the whole ~69 s blacklist period; flake, Canton-side, no branch |
 
 ## Cross-cutting observations (2026-10-05/06)
 
@@ -541,6 +545,10 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
   ms after > 1 s. Once as a checkErrors WARN, once as a 10 s ledger deadline. Neither can be taken further without the
   Postgres server log in the scala_test jobs.
 - Family B twice within 5 h in the same ValidatorIntegrationTest step, and the first hit on canton 3.6.1 (10283).
+- Family B via the blacklist rejection branch (10289): a request sent 68 s after the 1 -> 4 step still hangs 120 s, so
+  the exposure window is the whole blacklist period, not only the few seconds of quorum loss.
+- Shared test-report cache (10285 / 10286, 10288): PR runs write `/cache/test-reports`, and main splits trust it; a
+  failing PR run's sub-second times unbalance the next main split.
 - checkErrors stops at the first failing log file (`build.sbt:2305`); standalone and test logs after it are not checked
   (10276 section 8). One flagged line does not mean one problem.
 - 10269 (2026-10-01) is fixed on main by #7638 (08e28cbf6a): `JoiningNodeInitializer` now retries

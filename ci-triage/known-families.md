@@ -48,6 +48,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10283 (run 37351458092, wall-clock-time (0), main 073e1872f0, canton 3.6.1): same test step as 10279; epoch 26 steps
   1 -> 4 at 18:23:02.754111, sv1 blacklisted epochs 27-29, ack rejected at +1 ms and answered 403 ms after the 120 s
   client cancel. First hit on 3.6.1: the bump does not fix family B. No splice mitigation on main yet.
+- 10289 (run 37461645814, wall-clock-time (6), main a901c0d918, canton 3.6.1): signature (1) on sv1Participant from
+  SvInitializationIntegrationTest "start and restart cleanly" 4-SV initDso; epoch 15 steps 1 -> 4 (activation
+  12:23:35.372116), sv1 blacklisted epochs 16-18. Different rejection branch: the ack was sent 68 s after the step,
+  after the P2P gap had closed, and the mempool rejected it with `this node is currently blacklisted, rejecting`; the
+  call still stayed open to the 120 s client deadline. The hanging call follows every mempool rejection branch, so the
+  exposure window is the whole blacklist period (~69 s, 438 rejections), not only the quorum gap. Confirming grep
+  for this branch: `currently blacklisted, rejecting` on the ack's trace id.
 - Signature (3): a participant's topology broadcast is refused by the blacklisted sequencer and the party never
   reaches that synchronizer, surfacing as `INVALID_PRESCRIBED_SYNCHRONIZER_ID(9,...): Not all informees are on the
   specified synchronizer: <target>, but on Set(<other synchronizer>)` on a wallet/app-install command. 10227
@@ -394,3 +401,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   in `scala_test/action.yml`; or run the two roll-forward suites in separate jobs. App: `SV1Initializer.bootstrapDomain`
   could accept an identical existing mapping. Not known: why both cached report times were 0.
 - Packets [10285-roll-forward-lsu-dr-shares-shard-sv1-bootstrap-mapping-already-exists.md](10285-roll-forward-lsu-dr-shares-shard-sv1-bootstrap-mapping-already-exists.md), [10286-roll-forward-lsu-empty-shard-testonly-runs-all-tests-sbt-timeout.md](10286-roll-forward-lsu-empty-shard-testonly-runs-all-tests-sbt-timeout.md).
+- Related writer, same class (10288, run 37449833406, simtime (0), main 2eb5b5360e, canton 3.6.1): not zero but
+  sub-second times. `.github/actions/sbt/post_sbt/action.yml:53-62` copies every job's reports, PR runs included, into
+  the shared `/cache/test-reports`; the four failing `simtime (N)` shards of PR run 37447204670 wrote 23 sub-second
+  times minutes before the main split read them, so one bucket got 26 of 32 suites and hit `Killed SBT after timeout
+  40m` with no failing test. Signature: `We are running N tests in this batch` far above the other buckets, then
+  `Killed SBT after timeout 40m` without a `Tests:` line. Fix (CI, described): only main runs write the cache, and
+  `split_tests.ts` ignores implausible times. Packet
+  [10288-simtime-shard-26-suites-split-on-pr-poisoned-test-report-cache-sbt-timeout.md](10288-simtime-shard-26-suites-split-on-pr-poisoned-test-report-cache-sbt-timeout.md).
