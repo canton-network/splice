@@ -24,7 +24,7 @@ class FlushingBuffer(
   }
 
   def read(): ByteString = {
-    flushBuffer(tmpBuffer)
+    val _ = flushBuffer(tmpBuffer)
     val result = drained
     drained = ByteString.empty
     result
@@ -37,11 +37,9 @@ class FlushingBuffer(
 
 object FlushingBuffer {
 
-  val zstdTmpBufferSize = 10 * 1024 * 1024;
-
-  def apply(compressionLevel: Int): FlushingBuffer = {
+  def apply(compressionLevel: Int, tmpBufferSize: Int): FlushingBuffer = {
     val bufferAllocator = PooledByteBufAllocator.DEFAULT
-    val tmpBuffer = bufferAllocator.directBuffer(zstdTmpBufferSize)
+    val tmpBuffer = bufferAllocator.directBuffer(tmpBufferSize)
     try {
       val nioBuffer = tmpBuffer.nioBuffer(0, tmpBuffer.capacity())
       new FlushingBuffer(tmpBuffer, nioBuffer, compressionLevel)

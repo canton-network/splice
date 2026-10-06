@@ -3,13 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.store.bulk
 
-import com.github.luben.zstd.ZstdDirectBufferCompressingStreamNoFinalizer
 import io.grpc.netty.shaded.io.netty.buffer.PooledByteBufAllocator
 import org.apache.pekko.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import org.apache.pekko.stream.{Attributes, FlowShape, Inlet, Outlet}
 import org.apache.pekko.util.ByteString
-
-import scala.util.control.NonFatal
 
 /** A Pekko GraphStage that zstd-compresses a stream of bytestrings, and splits the output into zstd objects of size (minWeight + delta).
   * Somewhat similar to Pekko's built-in GroupedWeight, but outputs valid zstd compressed objects.
@@ -17,6 +14,7 @@ import scala.util.control.NonFatal
 case class ZstdGroupedWeight(
     compressionLevel: Int,
     minSize: Long,
+    tmpBufferSize: Int = 10 * 1024 * 1024,
 ) extends GraphStage[FlowShape[ByteString, ByteString]] {
   require(minSize > 0, "minSize must be greater than 0")
 
@@ -46,7 +44,7 @@ case class ZstdGroupedWeight(
   ) extends AutoCloseable {
 
     val bufferAllocator = PooledByteBufAllocator.DEFAULT
-    val compressingStream = FlushingBuffer(compressionLevel)
+    val compressingStream = FlushingBuffer(compressionLevel, tmpBufferSize)
 
     def compress(input: ByteString): ByteString = {
       val inputBB = bufferAllocator.directBuffer(input.size)

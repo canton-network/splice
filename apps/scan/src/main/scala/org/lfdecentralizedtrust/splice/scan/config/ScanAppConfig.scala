@@ -55,6 +55,7 @@ final case class BulkStorageConfig(
     staging: Option[S3Config] = None,
     committed: Option[S3Config] = None,
     bftCheckEnabled: Boolean = true,
+    tmpBufferSize: Int = 1024 * 1024 * 10, // temporary buffer size for zstd compression, safe to modify locally
     /** When enabled, the app will reset all progress markers thus force recomputing data from genesis.
       * Note that this does not delete any existing data, you usually would want to do that before setting
       * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back
