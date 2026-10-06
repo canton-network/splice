@@ -40,6 +40,14 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   AcknowledgeSigned call stayed open until the 120 s client deadline (`cancelled`, then `sending response`
   114 ms later): the 120 s timeout comes from the rejection not completing the call, not from a 120 s outage
   (rejections lasted 15:42:14.206-15:42:18.110).
+- 10279 (run 37315295211, wall-clock-time (0), main a3132ebe27, canton 3.6.0-snapshot.20261001.20345): signature (1)
+  on globalMediatorSv1 from ValidatorIntegrationTest "validator apps connect to all DSO sequencers" 4-SV initDso;
+  sv2-sv4 `onboard/sv/sequencer` within 2.3 s, epoch 26 steps 1 -> 4 (activation 13:44:56.087187, ack clean
+  timestamp 1 us earlier as in 10212), sv1 blacklisted epochs 27-29; mempool rejection at +1 ms, call answered only
+  after the 120 s client cancel, as in 10225.
+- 10283 (run 37351458092, wall-clock-time (0), main 073e1872f0, canton 3.6.1): same test step as 10279; epoch 26 steps
+  1 -> 4 at 18:23:02.754111, sv1 blacklisted epochs 27-29, ack rejected at +1 ms and answered 403 ms after the 120 s
+  client cancel. First hit on 3.6.1: the bump does not fix family B. No splice mitigation on main yet.
 - Signature (3): a participant's topology broadcast is refused by the blacklisted sequencer and the party never
   reaches that synchronizer, surfacing as `INVALID_PRESCRIBED_SYNCHRONIZER_ID(9,...): Not all informees are on the
   specified synchronizer: <target>, but on Set(<other synchronizer>)` on a wallet/app-install command. 10227
@@ -152,7 +160,8 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   disconnect and 36-2 connect (13 ms), then family H sys.exit. Signature: `sv2 app initialization: Initialization
   failed, so exiting` in the job log during "upgrade synchronizer to new physical synchronizer without downtime".
   Also 09-29 jobs 109539611384 (same NOT_FOUND) and 109544383763 (TOPOLOGY_STORE_NOT_FOUND, another unretried read).
-  App fix: retry the lookup; better, retry NOT_FOUND across SV init while mid-LSU. Packet [10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md](10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md).
+  Fixed on main by #7638 (08e28cbf6a, 2026-10-06): the call is retried. Still open: the 09-29 TOPOLOGY_STORE_NOT_FOUND
+  call site and the family H exit (#7289). Earlier note: App fix: retry the lookup; better, retry NOT_FOUND across SV init while mid-LSU. Packet [10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md](10269-sv2-restart-at-lsu-time-get-physical-synchronizer-id-not-found-sys-exit.md).
 - Checking an ignore pattern: `LINE=$(zcat ... | grep -a -m1 '<text>'); echo "$LINE" | rg -c -e '<pattern>'`.
 
 ## H3. Trigger pause timeout: `Waited 5 seconds. (TriggerTestUtil.scala:93)`
@@ -239,6 +248,20 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `Getting BFT scan connection started` then 13-21 min silence, then `Timeout while waiting for initialization`.
   Confirm: per-node `kubernetes.io/node/cpu/allocatable_utilization` and the `Scheduled` events for validator-app pods
   (queries in the packet). Resolution: rerun; bootstrap.sc 5 min DAR-upload wait turns slow init into a restart loop.
+  OOM kills on k48f in that hour (18:24:38, 18:36:31, 18:41:39) are splitwell-app at its 1536Mi limit, not validator1
+  (10249 packet section 8); they start after the failure was established.
+- Runner Postgres stall, server-wide (10276, 10281; class of 10176). Signature: several canton nodes on separate
+  pools (often in separate processes) finish one pending write in the same few ms after > 1 s. 10276 (run 37267521986,
+  resource-intensive (1)): checkErrors flags `SequencerRuntime ... Sequencer is unhealthy, so disconnecting all members.
+  Can't connect to database` about 2 s after an ignored `DB_CONNECTION_LOST ... Connection is not available`. 10281
+  (run 37325889948, wall-clock-time (0)): a 10 s SubmitAndWaitForTransaction deadline (wallet HTTP 500), the transaction
+  commits 197 ms later; `DbLock.runLockCheck ... LockCheckRejected` jumps from single digits to 20-50 per minute.
+  Confirming grep: pair `Storing delivery events from` (or `Storing an ordered request`) with the next `Successfully
+  stored` / `Stored batch of requests` per node and look for same-ms completions; rule out family L (`insert block`
+  retries) and B. The Postgres server log is not collected, so the stall cause is unknown. Do not ignore the WARN: the
+  same pair is the family L pool-exhaustion signal in 10139. Resolution: rerun; collect the postgres service log.
+- checkErrors reports only the first failing log file (`build.sbt:2305`); later canton, standalone and test logs are
+  not checked. Before calling a shard "one flagged line", re-run `check-logs.sh` on the remaining files (10276 section 8).
 - 10248 (not infra, listed here as a build-output check item): `Found problems in the sbt output:` with only
   ``[info] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.``; vite >= 8.2.0 advisory for CommonJS
   globals in a vite config. Fix the config (`import.meta.dirname`), do not ignore the line. Fix `s11/fix-10248-vite-config-import-meta-dirname`.
@@ -335,3 +358,28 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   against an AmuletRules just re-created by the Daml upgrade).
 - Fix: `s11/fix-10270-tap-amulets-wait-for-tap` (`case None => assertTapResultIsVisible()`).
 
+## S. CometBFT `broadcast_tx_commit` timeout in network-config reconciliation (cometbft shard)
+- Signature (canton_network_test log WARN): `ReconcileCometBftNetworkConfigWithDsoRulesTrigger ... failed with a
+  non-transient error ... statusCode=INTERNAL ... "timed out waiting for tx to be included in a block"`, all tests pass.
+- Confirm: `Applying CometBft network change` exactly 10 s before the WARN for the same SV; global sequencers'
+  `Block N ... has been fetched` intervals of several seconds around it (normal 0.2-1 s).
+- Mechanism (10280, run 37325190212, SvCometBftIntegrationTest after the sv3 governance-key switch): CometBFT slowed
+  for about 14 s (heights 377 -> 380); two SVs' votes left the mempool uncommitted, so their commit wait hit 10 s.
+  `CometBftClient.cometBftErrorToGrpcStatus` maps the HTTP 200 / JSON-RPC -32603 timeout to INTERNAL, so one hit WARNs.
+  Slowdown cause unknown: cometbft service-container logs are not collected on k8s runners.
+- Fix: app, map the commit timeout to DEADLINE_EXCEEDED (PollingTrigger still WARNs after > 3 consecutive failures);
+  infra, collect cometbft container logs. Do not add an ignore pattern. Packet [10280-cometbft-reconcile-broadcast-tx-commit-timeout-during-block-slowdown.md](10280-cometbft-reconcile-broadcast-tx-commit-timeout-during-block-slowdown.md).
+
+## T. Test split with zero cached times (roll-forward-lsu)
+- Signature: the split step logs `bucket 0: 2 tests, total time: 0` / `bucket 1: 0 tests`; the empty shard logs `We
+  are running 0 tests in this batch` and builds `cmd: "testOnly   -- "`.
+- Mechanism: since #7591 (567cd541b6, 2026-10-01) `split_tests.ts` keeps a cached time of 0 instead of falling back to
+  the longest known time, so both suites land in one bucket. Two consequences in one run (37434381333, main 08e28cbf6a,
+  canton 3.6.1): 10285, RollForwardLsuDRIntegrationTest runs after RollForwardLsuIntegrationTest on the same Canton and
+  sv1's bootstrap re-proposes SynchronizerParametersState serial 1 on the shared sv1Participant
+  (TOPOLOGY_MAPPING_ALREADY_EXISTS, retried 75 times, `startAllSync` 5 min timeout); 10286, the empty shard's `testOnly`
+  without names runs every test in the build until `Killed SBT after timeout 40m`.
+- Fix (CI, described): treat a time <= 0 as unknown in `split_tests.ts` (rebuild `dist/index.js`); fail fast on 0 tests
+  in `scala_test/action.yml`; or run the two roll-forward suites in separate jobs. App: `SV1Initializer.bootstrapDomain`
+  could accept an identical existing mapping. Not known: why both cached report times were 0.
+- Packets [10285-roll-forward-lsu-dr-shares-shard-sv1-bootstrap-mapping-already-exists.md](10285-roll-forward-lsu-dr-shares-shard-sv1-bootstrap-mapping-already-exists.md), [10286-roll-forward-lsu-empty-shard-testonly-runs-all-tests-sbt-timeout.md](10286-roll-forward-lsu-empty-shard-testonly-runs-all-tests-sbt-timeout.md).

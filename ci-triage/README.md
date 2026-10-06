@@ -509,3 +509,40 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | s11/fix-10271-issuing-round-wait-budget | 180cae90f8 | 10271 (90 s budget for the issuing-round check, family L) | `apps-app/Test/scalafmtCheck`; not compiled, not run |
 | s11/fix-10270-tap-amulets-wait-for-tap | bc178c54a8 | 10270, 10272 (`tapAmulets` waits for the tap row when no error is shown, family R) | `apps-app/Test/scalafmtCheck` and `apps-app/Test/compile` pass (2026-10-02 21:31); no frontend test run |
 
+# CI failure triage - 2026-10-05/06
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10276 | 37267521986 | main 4a7f355b17 (scheduled, mainnet Daml version) | 111627797282 `resource-intensive (1)` | 3.6.0-snapshot.20261001.20345.0.v85a9270a |
+| 10279 | 37315295211 | main a3132ebe27 (#7633) | 111781648386 `wall-clock-time (0)` | 3.6.0-snapshot.20261001.20345.0.v85a9270a |
+| 10280 | 37325190212 | main f9bba5fea7 (#7618) | 111814423032 `cometbft (0)` | 3.6.0-snapshot.20261001.20345.0.v85a9270a |
+| 10281 | 37325889948 | main 9e1c06863e (#7273) | 111816892945 `wall-clock-time (0)` | 3.6.0-snapshot.20261001.20345.0.v85a9270a |
+| 10283 | 37351458092 | main 073e1872f0 (#7637) | 111903622596 `wall-clock-time (0)` | 3.6.1 |
+| 10285 | 37434381333 | main 08e28cbf6a (#7638) | 112173680724 `roll-forward-lsu (0)` | 3.6.1 |
+| 10286 | 37434381333 | main 08e28cbf6a (#7638) | 112173680751 `roll-forward-lsu (1)` | 3.6.1 |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10276 | checkErrors, all tests pass: splitwellUpgradeSequencer `Sequencer is unhealthy, so disconnecting all members. Can't connect to database` at 05:36:29.826 during SvReonboardingIntegrationTest setup. Server-wide runner Postgres stall: three sequencers in two JVMs on three DBs completed pending writes in the same ms at 26.860/29.574/35.029/35.820; a fourth (sv1StandaloneSequencer, pool exhausted) logged the same WARN at 39.588 in a file checkErrors never reached. Not family L. | new (class of 10176: runner Postgres latency) | [packet](10276-splitwell-upgrade-sequencer-unhealthy-runner-postgres-stall.md); rerun; infra: collect Postgres server log; ignore option left to owners |
+| 10279 | globalMediatorSv1 `acknowledge-signed` DEADLINE_EXCEEDED after 120 s (flagged 13:46:58.908), all 31 tests pass. ValidatorIntegrationTest "validator apps connect to all DSO sequencers" 4-SV initDso: sv2-sv4 onboard within 2.3 s; epoch 26 steps 1 -> 4 at 13:44:56.087187; sv1 below weak quorum, mempool rejects 56.272-59.854, blacklisted epochs 27-29; ack rejected at 58.908, answered only after the client cancel at 13:46:58.906 | family B (10165), signature (1) | [packet](10279-mediator-ack-stall-bft-1-to-4.md); flake, Canton-side, no branch |
+| 10280 | SvCometBftIntegrationTest, all tests pass; sv4/sv1 `ReconcileCometBftNetworkConfigWithDsoRulesTrigger` WARN `timed out waiting for tx to be included in a block` at 14:41:17.209/17.491: votes sent 07.201/07.488 never included while CometBFT blocks 378-380 took 2.4/3.6/7.6 s; change converged by 14:41:23.012. App maps the JSON-RPC -32603 commit timeout to INTERNAL (WARN on first hit) | new (family S) | [packet](10280-cometbft-reconcile-broadcast-tx-commit-timeout-during-block-slowdown.md); flake; app fix described (DEADLINE_EXCEEDED in `CometBftClient.cometBftErrorToGrpcStatus`); infra: collect cometbft logs; no branch |
+| 10281 | TokenStandardTransferIntegrationTest "support create, list, accept, reject and withdraw": third createTokenStandardTransfer (14:59:59.025) HTTP 500 after 10.011 s, aliceParticipant SubmitAndWaitForTransaction DEADLINE_EXCEEDED at 15:00:09.034; committed at 09.231. Postgres write stalls across all canton nodes (same-ms completions at 15:00:05.128-.168, 09.212-.216, 11.186-.189 after 1.2-1.4 s). Not family B/L | new (same class as 10276) | [packet](10281-token-standard-transfer-submit-deadline-runner-postgres-stall.md); flake, infra; rerun; no branch |
+| 10283 | Same as 10279 on canton 3.6.1: ValidatorIntegrationTest 4-SV initDso, epoch 26 steps 1 -> 4 at 18:23:02.754111, sv1 blacklisted epochs 27-29, mediator ack rejected at +1 ms (18:23:04.595) and answered 403 ms after the 120 s client cancel (18:25:04.699) | family B (10165), signature (1) | [packet](10283-mediator-ack-stall-bft-1-to-4-canton-3-6-1.md); first hit on 3.6.1, the bump does not fix B; no branch |
+| 10285 | RollForwardLsuDRIntegrationTest `startAllSync` timed out (08:31:44.690). The split put both roll-forward suites in shard 0 (cached times 0, `split_tests.ts` since #7591); after RollForwardLsuIntegrationTest, the DR suite's sv1 re-proposed SynchronizerParametersState serial 1 on the shared sv1Participant (`SV1Initializer.scala:529-532`), got TOPOLOGY_MAPPING_ALREADY_EXISTS from 08:27:04.871 and retried it 75 times | new | [packet](10285-roll-forward-lsu-dr-shares-shard-sv1-bootstrap-mapping-already-exists.md); CI fix described (time <= 0 is unknown in `split_tests.ts`, or separate jobs); app: reuse an identical existing mapping; rerun |
+| 10286 | Shard 1 of the same split got an empty list, built `testOnly   -- `, ran every test in the build (1030 ok, 5 failed) until `Killed SBT after timeout 40m` | same incident as 10285 | [packet](10286-roll-forward-lsu-empty-shard-testonly-runs-all-tests-sbt-timeout.md); CI fix described (10285 fix, plus fail fast on 0 tests in `scala_test/action.yml`) |
+
+## Cross-cutting observations (2026-10-05/06)
+
+- Runner Postgres stalls (10276, 10281): several canton nodes on separate pools finish pending writes in the same few
+  ms after > 1 s. Once as a checkErrors WARN, once as a 10 s ledger deadline. Neither can be taken further without the
+  Postgres server log in the scala_test jobs.
+- Family B twice within 5 h in the same ValidatorIntegrationTest step, and the first hit on canton 3.6.1 (10283).
+- checkErrors stops at the first failing log file (`build.sbt:2305`); standalone and test logs after it are not checked
+  (10276 section 8). One flagged line does not mean one problem.
+- 10269 (2026-10-01) is fixed on main by #7638 (08e28cbf6a): `JoiningNodeInitializer` now retries
+  `getPhysicalSynchronizerId`. Open: the 09-29 TOPOLOGY_STORE_NOT_FOUND call site and the family H exit (#7289).
+- 10249 (2026-09-29): the three OOM kills on k48f are splitwell-app at its 1536Mi limit, not validator1 (packet section 8).
