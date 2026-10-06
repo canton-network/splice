@@ -414,7 +414,7 @@ class DbScanVerdictStore(
     * Returns a map from verdict record_time to its generated row_id, which can be used
     * to insert related records (e.g., app activity records) that reference the verdict by row_id.
     */
-  def insertVerdictAndTransactionViewsDBIO(
+  private def insertVerdictAndTransactionViewsDBIO(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])]
   )(implicit tc: TraceContext): DBIO[Map[CantonTimestamp, Long]] = {
     NonEmpty.from(items) match {

@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.rewards
 
+import io.grpc.Status
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
@@ -113,10 +114,12 @@ class AppActivityComputation(
               } yield {
                 if (svParticipantIds.isEmpty) {
                   // We should never hit this; as we have round info in store and must have DsoRules also
-                  logger.error(
-                    s"No DsoRules data found as of roundOpensAt=$roundOpensAt, skipping activity record computation for sequencingTime=${summary.sequencingTime}"
-                  )
-                  (summary, verdict, None, Some(roundNumber))
+                  throw Status.INTERNAL
+                    .withDescription(
+                      s"Round info present as of roundOpensAt=$roundOpensAt, " +
+                        s"but no DsoRules/Sv participant found"
+                    )
+                    .asRuntimeException()
                 } else if (svParticipantIds.contains(verdict.submittingParticipantUid)) {
                   // SV-submitted transactions don't burn traffic, so they
                   // must not contribute to app activity.
