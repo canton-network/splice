@@ -11,7 +11,7 @@ import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.logging.{SuppressingLogger, SuppressionRule}
 import com.digitalasset.canton.protocol.LfContractId
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.WallClock
@@ -25,11 +25,7 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2
-import org.lfdecentralizedtrust.splice.scan.admin.http.{
-  CompactJsonScanHttpEncodings,
-  ProtobufJsonScanHttpEncodings,
-  ScanHttpEncodings,
-}
+import org.lfdecentralizedtrust.splice.scan.admin.http.{CompactJsonScanHttpEncodings, ProtobufJsonScanHttpEncodings, ScanHttpEncodings}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -100,10 +96,11 @@ class UpdateHistoryBulkStorageTest
 
       probe.request(1)
 
+
       clue(
         "Initially, 1000 updates will be ready, but the segment will not be complete, so no output is expected"
       ) {
-        probe.expectNoMessage(20.seconds)
+        assertSegmentNotComplete(loggerFactory)
       }
 
       clue(
@@ -300,7 +297,7 @@ class UpdateHistoryBulkStorageTest
           .run()
 
         probe.request(1)
-        probe.expectNoMessage(20.seconds)
+        assertSegmentNotComplete(loggerFactory)
         mockStore.mockIngestion(
           segmentSize.toInt - initialStoreSize + 2
         ) // +2 to have another update beyond the segment, so that the source completes
@@ -728,6 +725,13 @@ class UpdateHistoryBulkStorageTest
       loggerFactory,
     ).map(new ScanKeyValueProvider(_, loggerFactory))
   }
+
+  def assertSegmentNotComplete(loggerFactory: SuppressingLogger) =
+    loggerFactory.assertEventuallyLogsSeq_(SuppressionRule.Level(Level.DEBUG))(entries =>
+      forAtLeast(1, entries)(entry =>
+        entry.message should include("we don't know if we're done with the segment")
+      )
+    )
 
   override protected def cleanDb(
       storage: DbStorage

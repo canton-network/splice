@@ -44,7 +44,7 @@ class S3ZstdObjects(
       .groupedWeighted(storageConfig.bulkZstdBlockSize)(_.length.toLong)
       .map(group => {
         val bytes = ByteString(group.flatten)
-        logger.debug(
+        logger.trace(
           s"Concatenated ${group.length} objects from DB (after encoding), to a bytestring of size ${bytes.length} bytes."
         )
         bytes
