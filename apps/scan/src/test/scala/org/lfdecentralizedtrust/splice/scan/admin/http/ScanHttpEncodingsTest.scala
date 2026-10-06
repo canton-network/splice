@@ -804,6 +804,16 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
         includeRound = false,
       )
     encodedRejected.verdictResult shouldBe httpApi.VerdictResult.VerdictResultRejected
+
+    val withRound = verdictBase.copy(roundNumber = Some(11L))
+
+    ScanHttpEncodings
+      .encodeVerdict(withRound, viewsIn, includeRound = true)
+      .roundNumber shouldBe Some(11L)
+
+    ScanHttpEncodings
+      .encodeVerdict(withRound, viewsIn, includeRound = false)
+      .roundNumber shouldBe None
   }
 
   "encode traffic summary" in {
