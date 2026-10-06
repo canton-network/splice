@@ -1,6 +1,6 @@
-# 10281 - TokenStandardTransferIntegrationTest "support create, list, accept, reject and withdraw": third createTokenStandardTransfer times out after 10 s on aliceParticipant's SubmitAndWaitForTransaction during a server-wide Postgres write stall (run 37325889948)
+# 10281 - TokenStandardTransferIntegrationTest "support create, list, accept, reject and withdraw": third createTokenStandardTransfer times out after 10 s on aliceParticipant's SubmitAndWaitForTransaction while database writes of all canton nodes stall together, cause unknown (run 37325889948)
 
-New ref; same class as 10276 (runner Postgres stall, server-wide), here surfacing as a hard test failure instead of a
+New ref; same pattern as 10276 (database writes of all canton nodes stall together; cause unknown, see Verdict), here surfacing as a hard test failure instead of a
 checkErrors WARN. main 9e1c06863e, job 111816892945 `ci / scala_test_wall_clock_time / wall-clock-time (0)`, canton
 3.6.0-snapshot.20261001.20345.0.v85a9270a (the run predates the 3.6.1 bump #7635). 34 tests passed, 1 failed;
 checkErrors was skipped because the test step failed. The test creates four token-standard transfer offers in a row;
@@ -9,17 +9,17 @@ checkErrors was skipped because the test step failed. The test creates four toke
 test-only: the integration-test config sets the wallet treasury's `grpcDeadline` to 10 s, production has none
 (section 10). The transaction
 itself was approved by the mediators at 15:00:05.219 and committed on aliceParticipant at 15:00:09.231, 197 ms after
-the deadline. Every hop of the confirmation round trip was slow because Postgres writes stalled for 1.2-1.4 s at a
+the deadline. Every hop of the confirmation round trip was slow because database writes stalled for 1.2-1.4 s at a
 time across all canton nodes: seven nodes with their own connection pools finished one sequenced-event write within
 4 ms of each other at 15:00:09.212-09.216 (and again at 15:00:05.128-05.168 and 15:00:11.186-11.189). Not family B
 (no ordering-topology change, no blacklisting, no mempool rejections) and not family L (no `insert block` retries).
-Flake, infra cause, failing a test-only deadline; no fix branch.
+Flake, cause of the write stalls unknown (section 11), failing a test-only deadline; no fix branch.
 
 - Run: https://github.com/canton-network/splice/actions/runs/37325889948, main 9e1c06863e ("make cache actions
   compatible w/ custom runners (#7273)"), job 111816892945 `ci / scala_test_wall_clock_time / wall-clock-time (0)`.
   Only failed job in the run.
 - Runtime canton: 3.6.0-snapshot.20261001.20345.0.v85a9270a (`git show 9e1c06863e:nix/canton-sources.json`).
-- Component: infra (Postgres service shared by all canton nodes); surfaced through the wallet treasury's test-only
+- Component: unknown (database writes of all canton nodes, one Postgres server, one canton JVM); surfaced through the wallet treasury's test-only
   10 s submission deadline (`treasury.grpcDeadline`, set by `ConfigTransforms.setDefaultGrpcDeadlineForTreasuryService`
   in `ConfigTransforms.defaults`; default `None` in production; observed 9.999877156 s). See section 10.
 - Artifact: `logs-wall-clock-time-0` in `log/10281/logs-wall-clock-time-0/`. In the commands below
@@ -134,7 +134,7 @@ CO_BuyMemberTraffic
 Over the whole shard, 4 of 720 `SubmitAndWait*` calls from the apps took over 5 s; three are in this 12 s window
 (section 8).
 
-## 5. The cause: sequenced-event store writes stall for 1.2-1.4 s, server-wide
+## 5. The mechanism: sequenced-event store writes stall for 1.2-1.4 s on all nodes at once
 
 `DbSequencedEventStore` writes ("Storing delivery events" to "Successfully stored") take 1-2 ms on average for the
 whole shard; in 14:59-15:00 they go up to 1.39 s. Nodes with their own HikariCP pools (`max-connections = 8` each,
@@ -322,27 +322,60 @@ $ git show 9e1c06863e:apps/app/src/main/scala/org/lfdecentralizedtrust/splice/co
 An earlier version of this packet attributed the deadline to `LedgerClient.scala:130` (`timeouts.default`); that is
 `withGrpcContext`'s default parameter, which `submitAndWait` overrides with `timeouts.unbounded` (line 395).
 
+## 11. Every canton write type stops in the stall seconds; pod and node metrics show no pressure
+
+Not only the sequenced-event store: BFT block and batch persistence, traffic accounting, sequenced-event writes and the
+participants' indexer all complete nothing in 15:00:04, :08 and :10 (inside the three stalls), then catch up, while
+the JVM keeps logging every second. Caveat: an empty second can also mean nothing to write downstream of a stalled
+BFT write; the direct evidence of waiting writes stays the paired 1.2-1.4 s writes of section 5.
+
+```
+$ zcat $C | grep -a -E '"@timestamp":"2026-10-05T15:00:(0[0-9]|1[0-3])' | python3 -c '<count per second of: "OrderedBlockStored: DB stored block", "LocalDissemination.(Remote|Local)Batch(es)?Stored:", "^Stored N traffic consumed entries", "^Successfully stored N events", "^Storing at offset=", any line>'
+15:00:SS             00 01 02 03 04 05 06 07 08 09 10 11 12 13
+BFT block stored (DB) 16  . 20 16  . 32 16  8  . 44  . 27 57 36
+BFT batch persisted  13  3  8  4  . 16 12  4  . 28  .  8  8 16
+traffic stored        .  .  4  .  .  4  1  7  .  8  .  8 16  8
+seq events stored     1  .  3 11  . 13  .  2  . 22  . 13 49  4
+indexer storing       .  .  2  .  .  2  .  .  . 34  . 14 19  2
+any line             ++ ++ ++ ++ ++ ++ ++ ++ ++ ++ ++ ++ ++ ++
+```
+
+Infra metrics, 1-minute resolution, user-supplied screenshots read by hand (Grafana Kubernetes dashboards for pod
+`self-hosted-k8s-large-4p78d-runner-gthlx-workflow` and node `gke-cn-splicenet-cn-apps-node-pool-2--f261a6dd-9nkn`;
+GCP Metrics Explorer, project da-cn-splice). Values are approximate:
+
+- Pod CPU: `job` about 2 of 8 cores at 14:59-15:01 (peak about 4.8 at 14:45-14:47); `postgres` 0.1-0.2 cores all run.
+  `job` throttling about 5-10% at 15:00 (75% at 14:43, about 30% at 14:47-14:48). Memory: `job` about 21-22 GiB of
+  36 GiB, `postgres` about 2.5 GiB.
+- Pod disk: `postgres` write IOPS about 850-920 at the 15:00-15:01 points (about 450 before), at a few MB/s; the pod's
+  own setup peak was about 3.6K IOPS / 190 MB/s at 14:40-14:41 without trouble. Not distinctive.
+- Node: at most about 8 of 32 cores busy; memory dropped by about 25-30 GiB at 14:58-14:59 when another CI job's
+  `-workflow` pod left the node (identified by the user; which job was not established).
+- Node persistent disk (PromQL in Metrics Explorer, `instance_name` = the node): `instance_disk_write_ops_count` has
+  data; `instance_disk_throttled_write_ops_count` and `instance_disk_throttled_write_bytes_count` have none, so no PD
+  throttling. Boot-disk write IOPS rose from about 750 (14:59) to about 1,600-1,980 at 15:00-15:04, back to about 400
+  at 15:05-15:08; but this node reaches 1,500-2,500 regularly (about 13:20, 13:50, 14:30-14:32, 15:19, 15:40, 16:20),
+  and the 14:46 stall cluster of this run happened at about 400. Not distinctive.
+
 ## Verdict
 
-- New ref, not a duplicate of a catalogued family. Same class as 10276 (and 10176's Postgres commit-latency outlier):
-  the runner's Postgres server stalls for over a second at a time, here 15:00:03.9-05.2 and 15:00:07.8-09.2, and every
-  canton node waits on it at once. In 10276 it cost a checkErrors WARN; here it stretched one confirmation round trip
-  (four sequencing hops plus two participant writes) to 10.2 s, just past the 10 s treasury deadline that the
-  integration-test config sets (section 10). In production, with no deadline, the transfer would have completed at
-  15:00:09.231.
-- Flake, infra cause; resolution: rerun. Test-side option, left to the owners: raise
-  `setDefaultGrpcDeadlineForTreasuryService` above 10 s. The deadline exists so that tests cancel and retry submissions
-  around synchronizer reconnects (TODO canton-network-node#11501), so a larger value trades that off; no branch
-  written. The stall itself (10 s ledger latency on the runner) remains an infra problem either way.
-- Follow-up, the same as 10276 and left to the owners: the Postgres server log exists in Cloud Logging (section 9) but
-  checkpoints are the only thing it records here; enable `log_min_duration_statement`, `log_lock_waits` and
-  `track_io_timing` in the CI Postgres so the next stall shows which statements waited and on what. Next check for this
-  run: GKE node metrics (disk write latency / IOPS, CPU steal) for gke-cn-splicenet-cn-apps-node-pool-2--f261a6dd-9nkn
-  at 14:59-15:01.
-- Ruled out (section 9): a canton JVM pause, and the 14:57:33-15:02:07 checkpoint (paced writes, 0.6 s sync after the
-  stalls).
-- Not verified: what stalled Postgres (node disk I/O latency or a lock wait remain; no node metrics, no statement or
-  lock-wait logging); whether the splice apps' own database
-  (`splice_apps`, same server) stalled in the same windows; why phase 1 of the traffic top-up took 1.015 s (section 7
-  only shows a lock check rejected inside that second, not which DB call phase 1 waited on); whether canton 3.6.1 (main
-  since #7635) changes any of this.
+- New ref, not a duplicate of a catalogued family. Same pattern as 10276: database writes of all canton nodes stall
+  together for over a second at a time, here 14:59:28, 14:59:51, 15:00:03.9-05.2, 15:00:07.8-09.2 and
+  15:00:10.0-11.2, while the JVM keeps running. Here it stretched one confirmation round trip (four sequencing hops
+  plus two participant writes) to 10.2 s, just past the 10 s treasury deadline that the integration-test config sets
+  (section 10). In production, with no deadline, the transfer would have completed at 15:00:09.231.
+- Cause unknown. Ruled out: a canton JVM pause, the Postgres checkpoint (section 9), persistent-disk throttling, CPU
+  starvation of the pod or the node, memory pressure (section 11). The node's disk writes were elevated at 15:00-15:04
+  (a neighbouring CI pod left at 14:58-14:59) but within that node's normal range, and there is no write-latency
+  metric. Remaining candidates: a wait inside Postgres (lock or internal), per-write disk latency without throttling,
+  or something shared inside the canton JVM; none is observable with the current CI settings.
+- Flake; resolution: rerun. Test-side options, left to the owners: retry `createTokenStandardTransfer` with the same
+  `trackingId` (safe: `recoverAcceptedDuplicates = true`, `HttpWalletHandler.scala:886-895`), or have the treasury
+  retry DEADLINE_EXCEEDED for dedup'd operations as `TreasuryConfig` documents, or raise
+  `setDefaultGrpcDeadlineForTreasuryService` (trades off the reconnect cancel-and-retry, TODO
+  canton-network-node#11501). No branch written.
+- Follow-up so the next occurrence is attributable: add `-c log_min_duration_statement=1000 -c log_lock_waits=on -c
+  track_io_timing=on` to the CI Postgres (`build.scala_test.yml` `postgres_init_args`).
+- Not verified: whether the splice apps' own database (`splice_apps`, same server) stalled in the same windows (the
+  scan endpoints measured are served through `CachingScanStore`); why phase 1 of the traffic top-up took 1.015 s
+  (section 7); whether canton 3.6.1 (main since #7635) changes any of this.

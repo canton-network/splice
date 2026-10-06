@@ -250,7 +250,8 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   (queries in the packet). Resolution: rerun; bootstrap.sc 5 min DAR-upload wait turns slow init into a restart loop.
   OOM kills on k48f in that hour (18:24:38, 18:36:31, 18:41:39) are splitwell-app at its 1536Mi limit, not validator1
   (10249 packet section 8); they start after the failure was established.
-- Runner Postgres stall, server-wide (10276, 10281; class of 10176). Signature: several canton nodes on separate
+- Simultaneous DB write stalls across canton nodes, cause unknown (10276, 10281; class of 10176; called "runner Postgres
+  stall" before the 10281 infra checks). Signature: several canton nodes on separate
   pools (often in separate processes) finish one pending write in the same few ms after > 1 s. 10276 (run 37267521986,
   resource-intensive (1)): checkErrors flags `SequencerRuntime ... Sequencer is unhealthy, so disconnecting all members.
   Can't connect to database` about 2 s after an ignored `DB_CONNECTION_LOST ... Connection is not available`. 10281
@@ -262,9 +263,14 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   stored` / `Stored batch of requests` per node and look for same-ms completions; rule out family L (`insert block`
   retries) and B. Rule out a JVM pause: both JVMs must keep logging in every 200 ms window of the stall. The Postgres
   server log is in Cloud Logging (runner pod, container `postgres`) but only records checkpoints; for 10281 the
-  14:57:33-15:02:07 timed checkpoint is ruled out (paced writes, 0.6 s sync after the stalls), so the cause is still
-  unknown (node disk I/O or a lock wait). Do not ignore the WARN: the same pair is the family L pool-exhaustion signal
-  in 10139. Resolution: rerun; enable `log_min_duration_statement`, `log_lock_waits`, `track_io_timing` in the CI Postgres.
+  14:57:33-15:02:07 timed checkpoint is ruled out (paced writes, 0.6 s sync after the stalls). Also ruled out for
+  10281 (packet section 11): persistent-disk throttling (`throttled_write_ops_count` / `throttled_write_bytes_count`
+  empty for the node), CPU starvation of the `-workflow` pod or the node, memory pressure; the node's disk writes were
+  elevated at the stall but within its normal range. The cause is unknown (a wait inside Postgres, per-write disk
+  latency without throttling, or something shared in the canton JVM). Infra checks: pod and node are the runner's
+  `-workflow` pod and the node in the postgres container's Cloud Logging labels. Do not ignore the WARN: the same pair is
+  the family L pool-exhaustion signal in 10139. Resolution: rerun; enable `log_min_duration_statement`, `log_lock_waits`,
+  `track_io_timing` in the CI Postgres.
 - checkErrors reports only the first failing log file (`build.sbt:2305`); later canton, standalone and test logs are
   not checked. Before calling a shard "one flagged line", re-run `check-logs.sh` on the remaining files (10276 section 8).
 - 10248 (not infra, listed here as a build-output check item): `Found problems in the sbt output:` with only
