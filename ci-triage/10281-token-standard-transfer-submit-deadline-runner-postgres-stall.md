@@ -4,21 +4,24 @@ New ref; same class as 10276 (runner Postgres stall, server-wide), here surfacin
 checkErrors WARN. main 9e1c06863e, job 111816892945 `ci / scala_test_wall_clock_time / wall-clock-time (0)`, canton
 3.6.0-snapshot.20261001.20345.0.v85a9270a (the run predates the 3.6.1 bump #7635). 34 tests passed, 1 failed;
 checkErrors was skipped because the test step failed. The test creates four token-standard transfer offers in a row;
-#1 and #2 took 3.3 s and 2.1 s, #3 (sent 14:59:59.025) hit the 10 s deadline of the validator's
-`SubmitAndWaitForTransaction` to aliceParticipant at 15:00:09.034 and the wallet returned HTTP 500. The transaction
+#1 and #2 took 3.3 s and 2.1 s, #3 (sent 14:59:59.025) hit the 10 s client deadline on its
+`SubmitAndWaitForTransaction` to aliceParticipant at 15:00:09.034 and the wallet returned HTTP 500. That deadline is
+test-only: the integration-test config sets the wallet treasury's `grpcDeadline` to 10 s, production has none
+(section 10). The transaction
 itself was approved by the mediators at 15:00:05.219 and committed on aliceParticipant at 15:00:09.231, 197 ms after
 the deadline. Every hop of the confirmation round trip was slow because Postgres writes stalled for 1.2-1.4 s at a
 time across all canton nodes: seven nodes with their own connection pools finished one sequenced-event write within
 4 ms of each other at 15:00:09.212-09.216 (and again at 15:00:05.128-05.168 and 15:00:11.186-11.189). Not family B
 (no ordering-topology change, no blacklisting, no mempool rejections) and not family L (no `insert block` retries).
-Flake, infra; no test-side fix branch.
+Flake, infra cause, failing a test-only deadline; no fix branch.
 
 - Run: https://github.com/canton-network/splice/actions/runs/37325889948, main 9e1c06863e ("make cache actions
   compatible w/ custom runners (#7273)"), job 111816892945 `ci / scala_test_wall_clock_time / wall-clock-time (0)`.
   Only failed job in the run.
 - Runtime canton: 3.6.0-snapshot.20261001.20345.0.v85a9270a (`git show 9e1c06863e:nix/canton-sources.json`).
-- Component: infra (Postgres service shared by all canton nodes); surfaced through the validator's 10 s ledger-call
-  deadline (`LedgerClient.scala:130`, `timeout = Some(timeouts.default)`, observed 9.9999 s).
+- Component: infra (Postgres service shared by all canton nodes); surfaced through the wallet treasury's test-only
+  10 s submission deadline (`treasury.grpcDeadline`, set by `ConfigTransforms.setDefaultGrpcDeadlineForTreasuryService`
+  in `ConfigTransforms.defaults`; default `None` in production; observed 9.999877156 s). See section 10.
 - Artifact: `logs-wall-clock-time-0` in `log/10281/logs-wall-clock-time-0/`. In the commands below
   `T=log/10281/logs-wall-clock-time-0/canton_network_test.clog.gz`, `C=log/10281/logs-wall-clock-time-0/canton.clog.gz`,
   and `F` is the generic line formatter from the skill recipes (section 4).
@@ -238,18 +241,108 @@ total 720 over5s 4
 The global synchronizer runs the BFT orderer with an unchanged ordering topology (epochs 114-116, nobody blacklisted)
 and no `insert block` retries: neither family B nor family L.
 
+## 9. Not a JVM pause, and not the Postgres checkpoint
+
+All nodes of section 5 run in one canton JVM, so a stop-the-world pause or a starved runner would also make them finish
+together. Both JVMs (canton and the sbt test JVM) kept logging in every 200 ms window across the 15:00:07.8-09.2 stall;
+the canton burst at 09.2 is the backlog draining when the writes return. Only the DB writes stopped.
+
+```
+$ for f in canton.clog.gz canton_network_test.clog.gz; do echo "== $f"; zcat log/10281/logs-wall-clock-time-0/$f | grep -a -oE '^\{"@timestamp":"2026-10-05T15:00:0[789]\.[0-9]' | grep -oE '0[789]\.[0-9]$' | awk '{s=substr($1,1,2); d=substr($1,4,1); print s "." int(d/2)*2}' | sort | uniq -c | awk '{printf "%s:%s ", $2, $1} END{print ""}'; done
+== canton.clog.gz
+07.0:55 07.2:24 07.4:636 07.6:36 07.8:859 08.0:69 08.2:59 08.4:49 08.6:26 08.8:74 09.0:201 09.2:2589 09.4:40 09.6:29 09.8:3244
+== canton_network_test.clog.gz
+07.0:37 07.2:62 07.4:48 07.6:65 07.8:87 08.0:47 08.2:72 08.4:48 08.6:53 08.8:96 09.0:65 09.2:156 09.4:49 09.6:62 09.8:217
+```
+
+The Postgres server log is not in the artifact. A Cloud Logging export for the runner pod's `postgres` container was
+supplied by the user (container stderr, so Cloud Logging tags it severity ERROR; Postgres level is LOG). The pod is
+this job's runner:
+
+```
+$ gh api repos/canton-network/splice/actions/jobs/111816892945 --jq '"\(.runner_name) \(.started_at) \(.completed_at)"'
+self-hosted-k8s-large-4p78d-runner-gthlx 2026-10-05T14:37:23Z 2026-10-05T15:03:55Z
+
+[user-supplied, resource.labels.pod_name self-hosted-k8s-large-4p78d-runner-gthlx-workflow, container postgres,
+ node gke-cn-splicenet-cn-apps-node-pool-2--f261a6dd-9nkn]
+2026-10-05 14:57:33.425 UTC [70] LOG:  checkpoint starting: time
+2026-10-05 15:02:07.657 UTC [70] LOG:  checkpoint complete: wrote 2541 buffers (15.5%), wrote 19 SLRU buffers; 0 WAL file(s) added, 0 removed, 27 recycled; write=269.666 s, sync=0.601 s, total=274.232 s; sync files=2300, longest=0.132 s, average=0.001 s; distance=429727 kB, estimate=464145 kB; lsn=0/69CD51A0, redo lsn=0/5A327010
+```
+
+The only checkpoint around the stalls is a timed one, and it is unremarkable. Its write phase (14:57:33-~15:02:03)
+covers all stall windows, but it is paced: 269.7 s is 0.9 x the default 300 s `checkpoint_timeout`, i.e. the default
+`checkpoint_completion_target` spreading 2541 buffers (about 20 MB) over the interval. Its sync phase, where checkpoint
+fsync storms stall commits, took 0.601 s in total (longest file 0.132 s) and ran at ~15:02:03-07, after the last stall.
+So the checkpoint is ruled out as the cause. The supplied export contains only these two lines; whether the container
+logged anything else in 14:59-15:01 was not checked. Slow statements and lock waits are not logged with the CI
+Postgres settings. The WAL volume, 430 MB over the checkpoint
+interval (about 1.4 MB/s), shows the shard's write load.
+
+## 10. Where the 10 s deadline comes from: the test config's treasury `grpcDeadline`
+
+The wallet handler does not submit the transfer itself; it enqueues it on the user's treasury, which submits with
+`treasuryConfig.grpcDeadline` (line 839; line 673 is the batch path, which the `CO_BuyMemberTraffic` top-up of
+section 4 takes, hence its 10 s failure too). `LedgerClient.submitAndWait` builds the stub with `timeouts.unbounded`
+and applies only that deadline. The config field defaults to `None` and is documented as test-only; every integration
+test sets it to 10 s through `ConfigTransforms.defaults`.
+
+```
+$ git show 9e1c06863e:apps/wallet/src/main/scala/org/lfdecentralizedtrust/splice/wallet/admin/http/HttpWalletHandler.scala | grep -n "treasury.enqueueTokenStandardTransferOperationV1"
+897:        result <- userWallet.treasury.enqueueTokenStandardTransferOperationV1(
+$ git show 9e1c06863e:apps/wallet/src/main/scala/org/lfdecentralizedtrust/splice/wallet/treasury/TreasuryService.scala | grep -n "treasuryConfig.grpcDeadline"
+673:        deadline = treasuryConfig.grpcDeadline,
+839:          treasuryConfig.grpcDeadline,
+$ git show 9e1c06863e:apps/common/src/main/scala/org/lfdecentralizedtrust/splice/environment/ledger/api/LedgerClient.scala | sed -n "395,401p"
+      stubWithCredsAndTraceContext <- withGrpcContext(commandServiceStub, Some(timeouts.unbounded))
+      stub = deadline
+        .map(duration =>
+          stubWithCredsAndTraceContext
+            .withDeadlineAfter(duration.asJava.toMillis(), TimeUnit.MILLISECONDS)
+        )
+        .getOrElse(stubWithCredsAndTraceContext)
+$ git show 9e1c06863e:apps/wallet/src/main/scala/org/lfdecentralizedtrust/splice/wallet/config/TreasuryConfig.scala | sed -n "28,33p"
+      * This is used to set the deadline for grpc calls to the participant.
+      * If the call takes longer than this, it will be cancelled and retried.
+      * This is only intended for testing purposes.
+      * TODO(DACH-NY/canton-network-node#11501) block and unblock submissions on domain reconnect
+      */
+    grpcDeadline: Option[NonNegativeFiniteDuration] = None,
+$ git show 9e1c06863e:apps/app/src/main/scala/org/lfdecentralizedtrust/splice/config/ConfigTransforms.scala | sed -n "195p;204p;300,306p"
+  def defaults(testId: Option[String] = None): Seq[ConfigTransform] = {
+      setDefaultGrpcDeadlineForTreasuryService(),
+  def setDefaultGrpcDeadlineForTreasuryService(): ConfigTransform =
+    ConfigTransforms.updateAllValidatorAppConfigs_(c =>
+      c.copy(treasury =
+        c.treasury.copy(
+          grpcDeadline = Some(NonNegativeFiniteDuration.ofSeconds(10))
+        )
+      )
+```
+
+An earlier version of this packet attributed the deadline to `LedgerClient.scala:130` (`timeouts.default`); that is
+`withGrpcContext`'s default parameter, which `submitAndWait` overrides with `timeouts.unbounded` (line 395).
+
 ## Verdict
 
 - New ref, not a duplicate of a catalogued family. Same class as 10276 (and 10176's Postgres commit-latency outlier):
   the runner's Postgres server stalls for over a second at a time, here 15:00:03.9-05.2 and 15:00:07.8-09.2, and every
   canton node waits on it at once. In 10276 it cost a checkErrors WARN; here it stretched one confirmation round trip
-  (four sequencing hops plus two participant writes) to 10.2 s, just past the validator's 10 s ledger deadline.
-- Flake, infra; resolution: rerun. No test-side fix branch: the test's step is a single wallet call, and retrying it
-  would hide a real 10 s ledger latency. Retrying with the same `tracking_id` would also run into the command
-  deduplication the wallet sets up, which was not checked.
-- Follow-up, the same as 10276 and left to the owners: collect the Postgres server log (or enable `log_checkpoints` /
-  `log_autovacuum_min_duration` / `log_min_duration_statement`) in the scala_test jobs, so the stall can be attributed.
-- Not verified: what stalled Postgres (no server log, no runner metrics); whether the splice apps' own database
+  (four sequencing hops plus two participant writes) to 10.2 s, just past the 10 s treasury deadline that the
+  integration-test config sets (section 10). In production, with no deadline, the transfer would have completed at
+  15:00:09.231.
+- Flake, infra cause; resolution: rerun. Test-side option, left to the owners: raise
+  `setDefaultGrpcDeadlineForTreasuryService` above 10 s. The deadline exists so that tests cancel and retry submissions
+  around synchronizer reconnects (TODO canton-network-node#11501), so a larger value trades that off; no branch
+  written. The stall itself (10 s ledger latency on the runner) remains an infra problem either way.
+- Follow-up, the same as 10276 and left to the owners: the Postgres server log exists in Cloud Logging (section 9) but
+  checkpoints are the only thing it records here; enable `log_min_duration_statement`, `log_lock_waits` and
+  `track_io_timing` in the CI Postgres so the next stall shows which statements waited and on what. Next check for this
+  run: GKE node metrics (disk write latency / IOPS, CPU steal) for gke-cn-splicenet-cn-apps-node-pool-2--f261a6dd-9nkn
+  at 14:59-15:01.
+- Ruled out (section 9): a canton JVM pause, and the 14:57:33-15:02:07 checkpoint (paced writes, 0.6 s sync after the
+  stalls).
+- Not verified: what stalled Postgres (node disk I/O latency or a lock wait remain; no node metrics, no statement or
+  lock-wait logging); whether the splice apps' own database
   (`splice_apps`, same server) stalled in the same windows; why phase 1 of the traffic top-up took 1.015 s (section 7
   only shows a lock check rejected inside that second, not which DB call phase 1 waited on); whether canton 3.6.1 (main
   since #7635) changes any of this.

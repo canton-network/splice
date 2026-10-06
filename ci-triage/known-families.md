@@ -254,12 +254,17 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   pools (often in separate processes) finish one pending write in the same few ms after > 1 s. 10276 (run 37267521986,
   resource-intensive (1)): checkErrors flags `SequencerRuntime ... Sequencer is unhealthy, so disconnecting all members.
   Can't connect to database` about 2 s after an ignored `DB_CONNECTION_LOST ... Connection is not available`. 10281
-  (run 37325889948, wall-clock-time (0)): a 10 s SubmitAndWaitForTransaction deadline (wallet HTTP 500), the transaction
-  commits 197 ms later; `DbLock.runLockCheck ... LockCheckRejected` jumps from single digits to 20-50 per minute.
+  (run 37325889948, wall-clock-time (0)): the wallet treasury's 10 s SubmitAndWaitForTransaction deadline (wallet HTTP
+  500), the transaction commits 197 ms later; that deadline is test-only (`ConfigTransforms.defaults` ->
+  `setDefaultGrpcDeadlineForTreasuryService`, production has none). `DbLock.runLockCheck ... LockCheckRejected` jumps
+  from single digits to 20-50 per minute.
   Confirming grep: pair `Storing delivery events from` (or `Storing an ordered request`) with the next `Successfully
   stored` / `Stored batch of requests` per node and look for same-ms completions; rule out family L (`insert block`
-  retries) and B. The Postgres server log is not collected, so the stall cause is unknown. Do not ignore the WARN: the
-  same pair is the family L pool-exhaustion signal in 10139. Resolution: rerun; collect the postgres service log.
+  retries) and B. Rule out a JVM pause: both JVMs must keep logging in every 200 ms window of the stall. The Postgres
+  server log is in Cloud Logging (runner pod, container `postgres`) but only records checkpoints; for 10281 the
+  14:57:33-15:02:07 timed checkpoint is ruled out (paced writes, 0.6 s sync after the stalls), so the cause is still
+  unknown (node disk I/O or a lock wait). Do not ignore the WARN: the same pair is the family L pool-exhaustion signal
+  in 10139. Resolution: rerun; enable `log_min_duration_statement`, `log_lock_waits`, `track_io_timing` in the CI Postgres.
 - checkErrors reports only the first failing log file (`build.sbt:2305`); later canton, standalone and test logs are
   not checked. Before calling a shard "one flagged line", re-run `check-logs.sh` on the remaining files (10276 section 8).
 - 10248 (not infra, listed here as a build-output check item): `Found problems in the sbt output:` with only
