@@ -57,7 +57,7 @@ final case class BulkStorageConfig(
     bftCheckEnabled: Boolean = true,
     tmpBufferSize: Int =
       1024 * 1024 * 10, // temporary buffer size for zstd compression, safe to modify locally
-    dbReadChunkSize: Int = 1000,
+    dbReadChunkSize: Int = 100,
     /** When enabled, the app will reset all progress markers thus force recomputing data from genesis.
       * Note that this does not delete any existing data, you usually would want to do that before setting
       * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back

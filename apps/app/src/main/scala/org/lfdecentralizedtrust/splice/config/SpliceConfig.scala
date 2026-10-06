@@ -524,7 +524,15 @@ object SpliceConfig {
     implicit val bulkStorageBackfillingConfigReader: ConfigReader[BulkStorageBackfillingConfig] =
       deriveReader[BulkStorageBackfillingConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
-      deriveReader[BulkStorageConfig]
+      deriveReader[BulkStorageConfig].emap { conf =>
+        Either.cond(
+          conf.dbReadChunkSize > 0,
+          conf,
+          ConfigValidationFailed(
+            s"dbReadChunkSize must be positive, but was ${conf.dbReadChunkSize}"
+          ),
+        )
+      }
     implicit val S3ConfigReader: ConfigReader[S3Config] =
       deriveReader[S3Config]
     implicit val cacheConfigReader: ConfigReader[SpliceCacheConfig] =
