@@ -40,14 +40,12 @@ class S3ZstdObjects(
       getObjectKey: Int => String
   ): Flow[String, String, NotUsed] =
     Flow[String]
-      .groupedWeighted(storageConfig.bulkZstdBlockSize)(
-        _.getBytes(StandardCharsets.UTF_8).length.toLong
-      )
-      .map(strings => {
-        val concatenatedStr = strings.mkString("\n") + "\n"
-        val bytes = ByteString(concatenatedStr.getBytes(StandardCharsets.UTF_8))
+      .map(str => (str + "\n").getBytes(StandardCharsets.UTF_8))
+      .groupedWeighted(storageConfig.bulkZstdBlockSize)(_.length.toLong)
+      .map(group => {
+        val bytes = ByteString(group.flatten)
         logger.debug(
-          s"Concatenated ${strings.length} objects from DB (after encoding), to a bytestring of size ${bytes.length} bytes."
+          s"Concatenated ${group.length} objects from DB (after encoding), to a bytestring of size ${bytes.length} bytes."
         )
         bytes
       })
