@@ -51,11 +51,6 @@ class PermissionedSynchronizerIntegrationTest
           )
         })(config)
       )
-      .addConfigTransforms((_, config) =>
-        ConfigTransforms.updateAllValidatorConfigs { case (_, c) =>
-          c.copy(permissionedSynchronizer = true)
-        }(config)
-      )
       .withManualStart
 
   "Onboard network in RestrictedOpen mode" in { implicit env =>

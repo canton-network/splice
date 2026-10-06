@@ -21,7 +21,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_SetConfig
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.SynchronizerPermissionState
 
@@ -40,15 +39,6 @@ class PermissionedSynchronizerMigrationIntegrationTest
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
       .withTrafficTopupsDisabled
-      .addConfigTransforms((_, config) =>
-        ConfigTransforms.updateAllValidatorConfigs { case (name, c) =>
-          if (name == "bobValidator") {
-            c.copy(permissionedSynchronizer = true)
-          } else {
-            c
-          }
-        }(config)
-      )
       .withManualStart
 
   "Migrate Network from UnrestrictedOpen to RestrictedOpen" in { implicit env =>
