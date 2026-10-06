@@ -21,6 +21,7 @@ import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  BulkObjectsAvailability,
   BulkStorageBucket,
   GetBulkObjectChecksumsResponse,
   GetBulkObjectsProgressResponse,
@@ -39,7 +40,7 @@ import org.scalatest.Assertion
 
 import java.security.MessageDigest
 import java.util.Base64
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
@@ -124,6 +125,26 @@ class BulkStorageCommitFromStagingTest
       val mockScanConnections = new MockScanConnections(objsWithDigests)
       Seq.range(0, mockScanConnections.nrResponses).foreach { i =>
         mockScanConnections.scanAgrees(i)
+      }
+
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
+      )
+
+      triggerCopyFlowAndAssertCompletion(flow)
+
+      assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+    }
+
+    "commit on its own checksums when every peer will never have the objects" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
+      Seq.range(0, mockScanConnections.nrResponses).foreach { i =>
+        mockScanConnections.scanWillNeverHaveData(i)
       }
 
       val flow = newCopyFlow(
@@ -351,6 +372,8 @@ class BulkStorageCommitFromStagingTest
         Seq.fill(nrResponses)(
           new AtomicReference[Option[(Boolean, GetBulkObjectChecksumsResponse)]](None)
         )
+      private val neverHaveData: Seq[AtomicBoolean] =
+        Seq.fill(nrResponses)(new AtomicBoolean(false))
 
       private val singleScanConnections: Seq[SingleScanConnection] =
         Seq.range(0, nrResponses).map { i =>
@@ -388,6 +411,10 @@ class BulkStorageCommitFromStagingTest
             )
           ).thenAnswer(
             responses(i).get() match {
+              case _ if neverHaveData(i).get() =>
+                Future.successful(
+                  GetBulkObjectsProgressResponse(false, Some(BulkObjectsAvailability.Never))
+                )
               case Some((hasData, _)) =>
                 Future.successful(new GetBulkObjectsProgressResponse(hasData))
               case None =>
@@ -419,6 +446,9 @@ class BulkStorageCommitFromStagingTest
             (false, new GetBulkObjectChecksumsResponse(Vector.empty))
           )
         )
+
+      def scanWillNeverHaveData(idx: Integer): Unit =
+        neverHaveData(idx).set(true)
 
       def scanAgrees(idx: Integer): Unit =
         setChecksumsResponse(idx, objsWithDigests.map(obj => Some(obj.checksum)))

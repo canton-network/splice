@@ -275,7 +275,7 @@ class BftCallExecutorTest
       ret.head.idx shouldBe 0
     }
 
-    "fail with BadGateway when all scans will never have the data" in {
+    "fail with NoScanWillHaveData when all scans will never have the data" in {
       val mocks = new Mocks[DataAvailabilityResponse](
         Seq(
           Future.successful(Never: DataAvailabilityResponse),
@@ -288,12 +288,8 @@ class BftCallExecutorTest
         .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 3)
         .failed
         .futureValue
-      inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
-        code shouldBe StatusCodes.BadGateway
-        msg should include(
-          "All scans have responded with 'never'. Failing with BadGateway."
-        )
-      }
+      failure shouldBe a[BftCallExecutor.NoScanWillHaveData]
+      failure.getMessage should include("All scans have responded with 'never'.")
     }
 
     "return scans with data if there are enough" in {

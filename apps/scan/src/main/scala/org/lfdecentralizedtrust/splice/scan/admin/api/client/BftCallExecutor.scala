@@ -15,6 +15,7 @@ import org.apache.pekko.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.environment.{BaseAppConnection, RetryProvider}
+import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse.{
   Available,
@@ -42,6 +43,8 @@ object BftCallExecutor {
     case object NotYet extends DataAvailabilityResponse
     case object Never extends DataAvailabilityResponse
   }
+
+  final class NoScanWillHaveData(msg: String) extends QuietNonRetryableException(msg)
 
   /*
   A two-phase approach for endpoints for which eventual consistency is expected.
@@ -321,14 +324,9 @@ object BftCallExecutor {
                 markBftCall("not_yet", connectionMetrics)
 
               case None if hasDataResponses.get(Available).isEmpty =>
-                val msg = "All scans have responded with 'never'. Failing with BadGateway."
-                logger.warn(msg)
-                val _ = finalResponse.tryFailure(
-                  HttpErrorWithHttpCode(
-                    StatusCodes.BadGateway,
-                    msg,
-                  )
-                )
+                val msg = "All scans have responded with 'never'."
+                logger.info(msg)
+                val _ = finalResponse.tryFailure(new NoScanWillHaveData(msg))
                 markBftCall("never", connectionMetrics)
 
               case None =>
