@@ -2545,7 +2545,8 @@ updateTestConfigForParallelRuns := {
   def isWithDockerWithoutCantonTest(name: String): Boolean =
     name.contains("LocalNet") || name.contains("BulkStorage") || name.contains("S3Upload")
   def isWithDockerWithSimtimeCantonTest(name: String): Boolean =
-    name contains "ScanTimeBasedIntegrationTest"
+    Seq("ScanTimeBasedIntegrationTest", "ScanNewNetworkBackfillingTimeBasedIntegrationTest")
+      .exists(name.contains)
   def isCometBftTest(name: String): Boolean =
     name contains "CometBft"
   def isDynamicSynchronizerParamsReconciliationTest(name: String): Boolean =
