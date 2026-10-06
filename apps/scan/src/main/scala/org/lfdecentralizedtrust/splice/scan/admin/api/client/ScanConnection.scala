@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
-import cats.data.OptionT
+import cats.data.{NonEmptyList, OptionT}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
@@ -38,7 +38,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.config.{ScanAppClientConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
@@ -365,7 +365,10 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[GetBulkObjectChecksumsResponse]
 
-  def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]]
@@ -375,6 +378,7 @@ trait ScanConnection
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,

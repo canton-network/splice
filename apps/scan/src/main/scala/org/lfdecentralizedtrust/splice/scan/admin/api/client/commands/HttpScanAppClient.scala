@@ -4,7 +4,8 @@
 package org.lfdecentralizedtrust.splice.scan.admin.api.client.commands
 
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes, Uri}
-import cats.data.EitherT
+import cats.data.{EitherT, NonEmptyList}
+import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.daml.ledger.api.v2.CommandsOuterClass
@@ -3218,7 +3219,8 @@ object HttpScanAppClient {
   }
 
   case class ListBulkAcsSnapshotObjects(
-      atOrBeforeTimestamp: CantonTimestamp
+      atOrBeforeTimestamp: CantonTimestamp,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
   ) extends InternalBaseCommand[
         http.ListBulkAcsSnapshotObjectsResponse,
         definitions.ListBulkAcsSnapshotObjectsResponse,
@@ -3229,6 +3231,7 @@ object HttpScanAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], ListBulkAcsSnapshotObjectsResponse] =
       client.listBulkAcsSnapshotObjects(
         atOrBeforeTimestamp.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        Some(encodings.map(_.damlValueEncoding).toList.toVector),
         headers,
       )
 
@@ -3253,6 +3256,7 @@ object HttpScanAppClient {
       endRecordTime: CantonTimestamp,
       nextPageToken: Option[String],
       limit: Int,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
   ) extends InternalBaseCommand[
         http.ListBulkUpdateHistoryObjectsResponse,
         definitions.ListBulkUpdateHistoryObjectsResponse,
@@ -3267,6 +3271,7 @@ object HttpScanAppClient {
           endRecordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
           nextPageToken,
           limit,
+          Some(encodings.map(_.damlValueEncoding).toList.toVector),
         ),
         headers,
       )

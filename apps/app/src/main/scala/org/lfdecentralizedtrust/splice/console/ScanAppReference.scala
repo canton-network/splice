@@ -33,7 +33,12 @@ import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
-import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanAppClientConfig}
+import cats.data.NonEmptyList
+import org.lfdecentralizedtrust.splice.scan.config.{
+  ScanAppBackendConfig,
+  ScanAppClientConfig,
+  ScanStorageConfig,
+}
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   ChoiceContextWithDisclosures,
@@ -840,11 +845,13 @@ abstract class ScanAppReference(
 
   @Help.Summary("List all objects in bulk storage for an ACS snapshot")
   def listBulkAcsSnapshotObjects(
-      timestamp: CantonTimestamp
+      timestamp: CantonTimestamp,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding] =
+        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
   ): definitions.ListBulkAcsSnapshotObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.ListBulkAcsSnapshotObjects(timestamp)
+        HttpScanAppClient.ListBulkAcsSnapshotObjects(timestamp, encodings)
       )
     }
 
@@ -854,6 +861,8 @@ abstract class ScanAppReference(
       endTimestamp: CantonTimestamp,
       nextPageToken: Option[String],
       limit: Int,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding] =
+        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
   ): definitions.ListBulkUpdateHistoryObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
@@ -862,6 +871,7 @@ abstract class ScanAppReference(
           endTimestamp,
           nextPageToken,
           limit,
+          encodings,
         )
       )
     }

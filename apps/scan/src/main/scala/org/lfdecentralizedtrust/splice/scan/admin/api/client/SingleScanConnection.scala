@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
-import cats.data.OptionT
+import cats.data.{NonEmptyList, OptionT}
 import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
@@ -44,7 +44,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   MigrationSchedule,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.config.{ScanAppClientConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
@@ -1032,13 +1032,16 @@ class SingleScanConnection private[client] (
     )
   }
 
-  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  override def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime, encodings),
     )
       .flatMap(response =>
         SingleScanConnection.decoded(BulkStorageObjects.snapshotObjects(response)).map(Some(_))
@@ -1052,6 +1055,7 @@ class SingleScanConnection private[client] (
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     runHttpCmd(
       config.adminApi.url,
@@ -1060,6 +1064,7 @@ class SingleScanConnection private[client] (
         endRecordTime,
         nextPageToken,
         pageSize,
+        encodings,
       ),
     ).flatMap(response =>
       SingleScanConnection.decoded(BulkStorageObjects.updateObjectsPage(response))

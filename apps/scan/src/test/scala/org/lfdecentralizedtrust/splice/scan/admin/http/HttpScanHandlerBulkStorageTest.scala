@@ -3,7 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
@@ -35,9 +37,12 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.{
   UpdateHistoryBulkStoragePersistentProgress,
   UpdatesSegment,
 }
+import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
+import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
 import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
+  PageLimit,
   S3BucketConnection,
   TimestampWithMigrationId,
   UpdateHistory,
@@ -216,6 +221,83 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
         value.beyondRequestedRecordTime shouldBe false
       }
+    }
+
+    "list update history objects in compact_json unless other encodings are requested" in {
+      val reader = mock[BulkStorageReader]
+      when(
+        reader.getCommittedUpdatesBetweenDates(
+          any[CantonTimestamp],
+          any[CantonTimestamp],
+          any[PageLimit],
+          any[Option[String]],
+          any[NonEmptyList[ScanStorageConfig.Encoding]],
+        )(any[TraceContext], any[ExecutionContext])
+      ).thenReturn(Future.successful(UpdateHistoryObjectsResponse(Seq.empty, None)))
+      val h = handler(bulkStorage = Some(reader), publicUrlO = Some(Uri("http://scan.example.com")))
+      def list(encodings: Option[Vector[definitions.DamlValueEncoding]]) =
+        h.listBulkUpdateHistoryObjects(ScanResource.ListBulkUpdateHistoryObjectsResponse)(
+          definitions.ListBulkUpdateHistoryObjectsRequest(
+            startRecordTime = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC),
+            endRecordTime = Instant.parse("2024-01-02T00:00:00Z").atOffset(ZoneOffset.UTC),
+            pageSize = 10,
+            damlValueEncodings = encodings,
+          )
+        )(TraceContext.empty)
+          .futureValue
+
+      list(None)
+      list(
+        Some(
+          Vector(
+            definitions.DamlValueEncoding.ProtobufJson,
+            definitions.DamlValueEncoding.CompactJson,
+          )
+        )
+      )
+
+      verify(reader).getCommittedUpdatesBetweenDates(
+        any[CantonTimestamp],
+        any[CantonTimestamp],
+        any[PageLimit],
+        any[Option[String]],
+        eqTo(NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson)),
+      )(any[TraceContext], any[ExecutionContext])
+      verify(reader).getCommittedUpdatesBetweenDates(
+        any[CantonTimestamp],
+        any[CantonTimestamp],
+        any[PageLimit],
+        any[Option[String]],
+        eqTo(
+          NonEmptyList.of[ScanStorageConfig.Encoding](
+            ScanStorageConfig.Encoding.ProtobufJson,
+            ScanStorageConfig.Encoding.CompactJson,
+          )
+        ),
+      )(any[TraceContext], any[ExecutionContext])
+    }
+
+    "list ACS snapshot objects in the requested encodings" in {
+      val reader = mock[BulkStorageReader]
+      val snapshotTime = CantonTimestamp.assertFromInstant(Instant.parse("2024-01-01T00:00:00Z"))
+      when(
+        reader.getCommittedObjectsForAcsSnapshotAtOrBefore(
+          any[CantonTimestamp],
+          any[NonEmptyList[ScanStorageConfig.Encoding]],
+        )(any[TraceContext], any[ExecutionContext])
+      ).thenReturn(Future.successful(AcsSnapshotObjects(snapshotTime, Seq.empty)))
+      val h = handler(bulkStorage = Some(reader), publicUrlO = Some(Uri("http://scan.example.com")))
+
+      h.listBulkAcsSnapshotObjects(ScanResource.ListBulkAcsSnapshotObjectsResponse)(
+        snapshotTime.toInstant.atOffset(ZoneOffset.UTC),
+        Some(Vector(definitions.DamlValueEncoding.ProtobufJson)),
+      )(TraceContext.empty)
+        .futureValue
+
+      verify(reader).getCommittedObjectsForAcsSnapshotAtOrBefore(
+        any[CantonTimestamp],
+        eqTo(NonEmptyList.one(ScanStorageConfig.Encoding.ProtobufJson)),
+      )(any[TraceContext], any[ExecutionContext])
     }
 
     "GetBulkObjectsProgress returns false when progress is not initialized" in {

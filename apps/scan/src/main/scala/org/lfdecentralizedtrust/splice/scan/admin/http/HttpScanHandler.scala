@@ -90,7 +90,11 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
-import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
+import org.lfdecentralizedtrust.splice.scan.config.{
+  CantonBftPeerConfig,
+  ScanRollForwardLsuConfig,
+  ScanStorageConfig,
+}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics.{
@@ -2596,7 +2600,8 @@ class HttpScanHandler(
   override def listBulkAcsSnapshotObjects(
       respond: ScanResource.ListBulkAcsSnapshotObjectsResponse.type
   )(
-      atOrBeforeRecordTime: OffsetDateTime
+      atOrBeforeRecordTime: OffsetDateTime,
+      damlValueEncodings: Option[Vector[definitions.DamlValueEncoding]],
   )(extracted: TraceContext): Future[ScanResource.ListBulkAcsSnapshotObjectsResponse] = {
     implicit val tc = extracted
     import cats.implicits.*
@@ -2609,15 +2614,19 @@ class HttpScanHandler(
         )
       ) { case (bulkStorage, publicUrl) =>
         val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
-          case AcsSnapshotObjects(ts, objects) =>
+        bulkStorage
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(
+            recordTimeTs,
+            ScanStorageConfig.Encoding.requested(damlValueEncodings),
+          )
+          .map { case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
               definitions.ListBulkAcsSnapshotObjectsResponse(
                 Codec.encode(ts),
                 encodeBulkStorageObjects(objects, publicUrl),
               )
             )
-        }
+          }
       }
 
     }
@@ -2646,6 +2655,7 @@ class HttpScanHandler(
             upToTs,
             PageLimit.tryCreate(body.pageSize),
             body.nextPageToken,
+            ScanStorageConfig.Encoding.requested(body.damlValueEncodings),
           )
           .map { case UpdateHistoryObjectsResponse(objects, nextPageToken) =>
             ScanResource.ListBulkUpdateHistoryObjectsResponse.OK(

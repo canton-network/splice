@@ -45,7 +45,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.config.{ScanAppClientConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
@@ -964,12 +964,15 @@ class BftScanConnection(
       .map(_._1)
   }
 
-  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  override def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
     bftCall(
-      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, encodings),
       "listBulkAcsSnapshotObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
@@ -979,9 +982,16 @@ class BftScanConnection(
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      encodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     bftCall(
-      _.listBulkUpdateHistoryObjects(startRecordTime, endRecordTime, pageSize, nextPageToken),
+      _.listBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        pageSize,
+        nextPageToken,
+        encodings,
+      ),
       "listBulkUpdateHistoryObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
