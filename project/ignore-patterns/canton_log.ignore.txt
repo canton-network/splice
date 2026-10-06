@@ -214,7 +214,7 @@ INTERNAL/Missing package-id.*in package metadata view
 # We can get temporarily blacklisted during onboarding triggering a retry for this.
 Now retrying operation 'request current time'
 
-# Ignore synchronizer permission issues in PermissionedSynchronizerIntegrationTest.
+# Ignore synchronizer permission log errors in PermissionedSynchronizerIntegrationTest. Happens when nodes are offboarded.
 .*ParticipantSynchronizerPermission for participant PAR::bobValidator.*
 .*code=PERMISSION_DENIED, description=Member PAR::bobValidator.*
 .*Member PAR::bobValidator.*access is disabled.*
