@@ -3,12 +3,15 @@
 
 package org.lfdecentralizedtrust.splice.console
 
+import cats.instances.future.*
+import cats.syntax.apply.*
 import org.apache.pekko.http.scaladsl.model.HttpHeader
 import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import com.digitalasset.daml.lf.archive.DarParser
 import org.lfdecentralizedtrust.splice.admin.api.client.HttpAdminAppClient
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
 import org.lfdecentralizedtrust.splice.config.{
+  AuthTokenSourceConfig,
   BaseParticipantClientConfig,
   NetworkAppClientConfig,
   SpliceBackendConfig,
@@ -49,7 +52,7 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 
 import java.io.File
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.*
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -258,18 +261,10 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
       participantClientConfig: BaseParticipantClientConfig
   )(implicit ec: ExecutionContext): RemoteParticipantConfig = {
     val (maybeLedgerApiToken, maybeAdminApiToken) = Await.result(
-      {
-        val maybeLedgerApiTokenF = spliceConsoleEnvironment.httpClient
-          .getToken(participantClientConfig.ledgerApi.authConfig)
-          .map(_.map(_.accessToken))
-        val maybeAdminApiTokenF = spliceConsoleEnvironment.httpClient
-          .getToken(participantClientConfig.adminApi.authConfig)
-          .map(_.map(_.accessToken))
-        for {
-          maybeLedgerApiToken <- maybeLedgerApiTokenF
-          maybeAdminApiToken <- maybeAdminApiTokenF
-        } yield (maybeLedgerApiToken, maybeAdminApiToken)
-      },
+      (
+        getAccessToken(participantClientConfig.ledgerApi.authConfig),
+        getAccessToken(participantClientConfig.adminApi.authConfig),
+      ).tupled, // Future eagerness makes this parallel
       30.seconds,
     )
     RemoteParticipantConfig(
@@ -279,6 +274,13 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
       adminApiToken = maybeAdminApiToken,
     )
   }
+
+  private def getAccessToken(
+      authConfig: AuthTokenSourceConfig
+  ): Future[Option[String]] = for {
+    maybeToken <- spliceConsoleEnvironment.httpClient.getToken(authConfig)
+  } yield maybeToken.map(_.accessToken)
+
   implicit val ec: ExecutionContext = executionContext
 
   /** Remote participant this splitwell app is configured to interact with. */

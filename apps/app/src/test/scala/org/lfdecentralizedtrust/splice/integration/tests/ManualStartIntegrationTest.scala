@@ -434,8 +434,8 @@ class ManualStartIntegrationTest
           Some(
             AuthToken(
               AuthUtil.CantonAdminApi.testToken(
-                secret = "test",
-                audience = "participant",
+                secret = AuthUtil.testSecret,
+                audience = AuthUtil.testParticipantAdminApiAudience,
               )
             )
           )

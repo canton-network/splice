@@ -196,8 +196,11 @@ object ConfigTransforms {
     Seq(
       makeAllTimeoutsBounded,
       ensureNovelDamlNames(testId),
-      useSelfSignedTokensForLedgerApiAuth("test"),
-      useSelfSignedTokensForParticipantAdminApiAuth("test", "participant"),
+      useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret),
+      useSelfSignedTokensForParticipantAdminApiAuth(
+        AuthUtil.testSecret,
+        AuthUtil.testParticipantAdminApiAudience,
+      ),
       reducePollingInterval,
       withPausedSvDomainComponentsOffboardingTriggers(),
       disableOnboardingParticipantPromotionDelay(),
@@ -950,44 +953,44 @@ object ConfigTransforms {
   def useSelfSignedTokensForParticipantAdminApiAuth(
       secret: String,
       audience: String,
-  ): ConfigTransform = { config =>
-    modifyAllParticipantAdminApiConfigs { (adminApi, _) =>
+  ): ConfigTransform =
+    modifyAllParticipantAdminApiConfigs { adminApi =>
       adminApi.copy(
         authConfig = AuthTokenSourceConfig.Static(
           token = AuthUtil.CantonAdminApi.testToken(secret, audience),
+          // We use a JWT instead of a Canton Admin token as port mapping for the token file seems broken in most tests.
           adminToken = Some(AuthUtil.CantonAdminApi.testToken(secret, audience)),
         )
       )
-    }(config)
-  }
+    }
 
   private def modifyAllParticipantAdminApiConfigs(
-      modify: (ClientConfigWithAuth, BaseParticipantClientConfig) => ClientConfigWithAuth
+      modify: ClientConfigWithAuth => ClientConfigWithAuth
   ): ConfigTransform =
     combineAllTransforms(
       updateAllValidatorConfigs_(
         _.focus(_.participantClient).modify(participantClient =>
-          participantClient.copy(adminApi = modify(participantClient.adminApi, participantClient))
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
         )
       ),
       updateAllSvAppConfigs_(
         _.focus(_.participantClient).modify(participantClient =>
-          participantClient.copy(adminApi = modify(participantClient.adminApi, participantClient))
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
         )
       ),
       updateAllScanAppConfigs_(
         _.focus(_.participantClient).modify(participantClient =>
-          participantClient.copy(adminApi = modify(participantClient.adminApi, participantClient))
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
         )
       ),
       updateAllSplitwellAppConfigs_(
         _.focus(_.participantClient).modify(participantClient =>
-          participantClient.copy(adminApi = modify(participantClient.adminApi, participantClient))
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
         )
       ),
       updateAllRemoteSplitwellAppConfigs_(
         _.focus(_.participantClient).modify(participantClient =>
-          participantClient.copy(adminApi = modify(participantClient.adminApi, participantClient))
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
         )
       ),
     )

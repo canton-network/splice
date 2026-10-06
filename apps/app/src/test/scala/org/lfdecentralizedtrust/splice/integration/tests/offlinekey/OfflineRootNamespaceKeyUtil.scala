@@ -72,7 +72,10 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
           RemoteParticipantConfig(
             adminApiConfig,
             FullClientConfig(port = Port.tryCreate(27701)),
-            adminApiToken = Some(AuthUtil.CantonAdminApi.testToken("test", "participant")),
+            adminApiToken = Some(
+              AuthUtil.CantonAdminApi
+                .testToken(AuthUtil.testSecret, AuthUtil.testParticipantAdminApiAudience)
+            ),
           ),
         )
       offlineParticipantClient.health.wait_for_ready_for_id()

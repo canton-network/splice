@@ -88,7 +88,7 @@ abstract class TopologyAdminConnection(
     override protected[this] val retryProvider: RetryProvider,
     getToken: () => Future[Option[AuthToken]] = () => Future.successful(None),
 )(implicit ec: ExecutionContextExecutor, tracer: Tracer)
-    extends AppConnection(
+    extends AdminConnection(
       config,
       apiLoggingConfig,
       loggerFactory,
