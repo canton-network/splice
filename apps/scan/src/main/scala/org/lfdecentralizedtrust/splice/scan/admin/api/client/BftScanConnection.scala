@@ -48,7 +48,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.config.{ScanAppClientConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
@@ -971,11 +971,9 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
-    bftCall(
-      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding),
-      "listBulkAcsSnapshotObjects",
-      consensusFailureLogLevel = Level.DEBUG,
-    )
+    committedBulkCall(atOrBeforeRecordTime, "listBulkAcsSnapshotObjects")(
+      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding)
+    ).map(_._1)
 
   override def listBulkUpdateHistoryObjects(
       startRecordTime: CantonTimestamp,
@@ -984,16 +982,60 @@ class BftScanConnection(
       nextPageToken: Option[String],
       damlValueEncoding: Option[DamlValueEncoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
-    bftCall(
+    committedBulkCall(endRecordTime, "listBulkUpdateHistoryObjects")(
       _.listBulkUpdateHistoryObjects(
         startRecordTime,
         endRecordTime,
         pageSize,
         nextPageToken,
         damlValueEncoding,
-      ),
-      "listBulkUpdateHistoryObjects",
-      consensusFailureLogLevel = Level.DEBUG,
+      )
+    ).map(_._1)
+
+  def listBulkAcsSnapshotObjectsWithHolders(
+      atOrBeforeRecordTime: CantonTimestamp,
+      encoding: ScanStorageConfig.Encoding,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[(Option[BulkStorageObjects.SnapshotObjects], List[Uri])] =
+    committedBulkCall(atOrBeforeRecordTime, "listBulkAcsSnapshotObjects")(
+      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, Some(encoding.damlValueEncoding))
+    )
+
+  def listBulkUpdateHistoryObjectsWithHolders(
+      startRecordTime: CantonTimestamp,
+      endRecordTime: CantonTimestamp,
+      pageSize: Int,
+      availableAt: CantonTimestamp,
+      encoding: ScanStorageConfig.Encoding,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[(BulkStorageObjects.UpdateObjectsPage, List[Uri])] =
+    committedBulkCall(availableAt, "listBulkUpdateHistoryObjects")(
+      _.listBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        pageSize,
+        None,
+        Some(encoding.damlValueEncoding),
+      )
+    )
+
+  private def committedBulkCall[T](availableAt: CantonTimestamp, endpoint: String)(
+      call: SingleScanConnection => Future[T]
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[(T, List[Uri])] =
+    BftCallExecutor.bftCallForEventualConsistencyEndpoints(
+      scanList.scanConnections,
+      connectionMetrics,
+      retryProvider,
+      logger,
+      hasData = _.getBulkObjectsProgress(availableAt, BulkStorageBucket.Committed)
+        .map(BftScanConnection.dataAvailability),
+      getData = call,
+      endpoint = endpoint,
+      callConfig = BftCallConfig.default(scanList.scanConnections),
     )
 
   private def bftCall[T](
