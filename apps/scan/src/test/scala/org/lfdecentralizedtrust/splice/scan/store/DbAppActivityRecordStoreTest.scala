@@ -1331,7 +1331,7 @@ class DbAppActivityRecordStoreTest
       updateId: String,
       recordTs: CantonTimestamp,
       verdictResult: Short = DbScanVerdictStore.VerdictResultDbValue.Accepted,
-      roundNumber: Option[Long] = None,
+      roundNumber: Option[Long],
   ): verdictStore.VerdictT =
     new verdictStore.VerdictT(
       rowId = 0L,
