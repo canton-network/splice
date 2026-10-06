@@ -172,7 +172,7 @@ class BulkStorageBackfilling(
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] =
     listing
-      .updateObjectsPage(CantonTimestamp.MinValue, end, 1, None)
+      .updateObjectsPage(CantonTimestamp.MinValue, end, config.pageSize, None)
       .flatMap(page =>
         Future.fromTry(segmentsOf(page.objects)).map(_.headOption.map(_.toTimestamp.timestamp))
       )

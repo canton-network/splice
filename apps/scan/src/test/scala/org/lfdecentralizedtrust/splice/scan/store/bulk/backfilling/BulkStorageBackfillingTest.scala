@@ -98,9 +98,11 @@ class BulkStorageBackfillingTest
       val afterToken = nextPageToken.fold(inRange)(token => inRange.filter(_._1 > token))
       val cumulative = afterToken.scanLeft(0)(_ + _._2.size).drop(1)
       val fitting = afterToken.zip(cumulative).takeWhile { case (_, total) => total <= pageSize }
-      val page = if (fitting.isEmpty) afterToken.take(1) else fitting.map(_._1)
+      val page = fitting.map(_._1)
       val token = if (page.size < afterToken.size) page.lastOption.map(_._1) else None
-      Future.successful(BulkStorageObjects.UpdateObjectsPage(page.flatMap(_._2), token))
+      if (page.isEmpty && afterToken.nonEmpty)
+        Future.failed(new IllegalArgumentException("Limit too low for a single folder"))
+      else Future.successful(BulkStorageObjects.UpdateObjectsPage(page.flatMap(_._2), token))
     }
 
     override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
