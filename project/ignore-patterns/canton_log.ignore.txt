@@ -222,10 +222,12 @@ Now retrying operation 'request current time'
 .*to find ParticipantSynchronizerPermission for participant PAR::bobValidator.*
 .*code=PERMISSION_DENIED, description=Member PAR::bobValidator.*
 .*PERMISSION_DENIED/Authentication token refresh error: Member PAR::bobValidator.*
+.*Failed to establish subscription.*PAR::bobValidator.*
 .*ParticipantSynchronizerPermission.*PAR::sv2::.*
 .*GrpcPermissionDeniedError.*PAR::sv2::.*
 .*PERMISSION_DENIED.*PAR::sv2::.*
 .*PAR::sv2::.*access is disabled.*
+.*Failed to establish subscription.*PAR::sv2::.*
 
 # TODO(DACH-NY/cn-test-failures#9445) remove once Canton stops failing the whole
 # GetConnectedSynchronizers call for one synchronizer that is mid-reconnect.
