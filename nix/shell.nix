@@ -7,7 +7,7 @@ let
   ghaRunnerSources = builtins.fromJSON (builtins.readFile ./gha-runner-sources.json);
 
   # No macOS support for firefox
-  linuxOnly = if stdenv.isDarwin then [ ] else with pkgs; [ firefox iproute2 rust-parallel util-linux ];
+  linuxOnly = if stdenv.hostPlatform.isDarwin then [ ] else with pkgs; [ firefox iproute2 rust-parallel util-linux ];
 
   standard_packages = with pkgs; [
 
@@ -159,7 +159,7 @@ in pkgs.mkShell {
   GHA_RUNNER_DIGEST = "${ghaRunnerSources.digest}";
   PULUMI_HOME = "${pkgs.pulumi-bin}";
   # Avoid sbt-assembly falling over. See https://github.com/sbt/sbt-assembly/issues/496
-  LC_ALL = if stdenv.isDarwin then "" else "C.UTF-8";
+  LC_ALL = if stdenv.hostPlatform.isDarwin then "" else "C.UTF-8";
   # Avoid "warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)"
   # warnings in damlc.
   LOCALE_ARCHIVE_2_27 = if pkgs.stdenv.hostPlatform.libc == "glibc"
