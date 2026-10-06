@@ -135,7 +135,7 @@ class AppActivityComputation(
               // This can happen for freshly onboarded SVs if the reward
               // reference store does not have the data for any of the
               // sequencingTime(s) in this batch.
-              // OTOH this cannot happen after ingestion starts because
+              // OTOH this cannot happen after app activity record ingestion started because
               // lookupActiveOpenMiningRounds blocks until the reference store
               // has caught up to all the sequencingTime(s) in this batch.
               logger.debug(
