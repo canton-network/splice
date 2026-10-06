@@ -44,24 +44,27 @@ class VerifiedObjectCopier(
       .map(_ => ())
 
   private def copyOne(obj: ObjectKeyAndChecksum)(implicit tc: TraceContext): Future[Unit] =
-    alreadyPresent(obj).flatMap { present =>
-      if (present) {
-        logger.debug(s"Object ${obj.key} is already present with the expected checksum, skipping")
-        Future.unit
-      } else copyFromAnyPeer(obj)
+    (storedChecksum(staging, obj.key), storedChecksum(committed, obj.key)).tupled.flatMap {
+      case (inStaging, inCommitted) =>
+        if (inStaging.contains(obj.checksum) || inCommitted.contains(obj.checksum)) {
+          logger.debug(s"Object ${obj.key} is already present with the expected checksum, skipping")
+          Future.unit
+        } else {
+          inStaging.foreach(actual =>
+            logger.error(
+              s"Staging holds object ${obj.key} with checksum $actual instead of the agreed ${obj.checksum}, overwriting it"
+            )
+          )
+          copyFromAnyPeer(obj)
+        }
     }
 
-  private def alreadyPresent(obj: ObjectKeyAndChecksum)(implicit
+  private def storedChecksum(bucket: S3BucketConnection, key: String)(implicit
       tc: TraceContext
-  ): Future[Boolean] =
-    (hasObject(staging, obj), hasObject(committed, obj)).mapN(_ || _)
-
-  private def hasObject(bucket: S3BucketConnection, obj: ObjectKeyAndChecksum)(implicit
-      tc: TraceContext
-  ): Future[Boolean] =
+  ): Future[Option[String]] =
     bucket
-      .getChecksums(Seq(obj.key))(ec, mat.system, tc)
-      .map(_.exists(_.checksum == obj.checksum))
+      .getChecksums(Seq(key))(ec, mat.system, tc)
+      .map(_.find(_.key == key).map(_.checksum))
 
   private def copyFromAnyPeer(obj: ObjectKeyAndChecksum)(implicit
       tc: TraceContext

@@ -57,6 +57,13 @@ class BulkStorageVerifiedObjectCopierTest
     } yield checksums.head.checksum
   }
 
+  private def putInLocal(bucketName: String, key: String, bytes: ByteString): Future[Unit] = {
+    val writer = localBucket(bucketName).newAppendWriteObject(key)
+    val part = bytes.asByteBuffer
+    writer.prepareUploadNext(part)
+    writer.upload(1, part).flatMap(_ => writer.finish())
+  }
+
   private def storedBytes(bucketName: String, key: String): Future[ByteString] =
     localBucket(bucketName).readObject(key).flatMap(_.runWith(Sink.fold(ByteString.empty)(_ ++ _)))
 
@@ -284,6 +291,22 @@ class BulkStorageVerifiedObjectCopierTest
       } yield {
         result.failed.get shouldBe a[VerifiedObjectCopier.StagingWriteFailed]
         existsAfterFailure shouldBe false
+        checksums.map(_.checksum) shouldBe Seq(digest)
+      }
+    }
+
+    "overwrite an object that staging holds with a different checksum, logging an error" in {
+      val peers = new BucketPeers(Set.empty)
+      for {
+        digest <- putOnPeers(objectKey, content)
+        _ <- putInLocal("staging", objectKey, ByteString("stale"))
+        _ <- loggerFactory.assertLogs(
+          copier(peers).copy(Seq(ObjectKeyAndChecksum(objectKey, digest))),
+          _.errorMessage should include(s"Staging holds object $objectKey with checksum"),
+        )
+        checksums <- localBucket("staging").getChecksums(Seq(objectKey))
+      } yield {
+        peers.opens.get() shouldBe 1
         checksums.map(_.checksum) shouldBe Seq(digest)
       }
     }
