@@ -1746,6 +1746,11 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: "bucket"
+          in: "query"
+          required: false
+          schema:
+            $ref: "#/components/schemas/BulkStorageBucket"
       responses:
         "200":
           description: ok
@@ -4077,6 +4082,28 @@ components:
       properties:
         beyond_requested_record_time:
           type: boolean
+        availability:
+          $ref: "#/components/schemas/BulkObjectsAvailability"
+
+    BulkStorageBucket:
+      type: string
+      description: |
+        Which bulk storage bucket a progress query refers to. Defaults to "staging".
+      enum:
+        - "staging"
+        - "committed"
+
+    BulkObjectsAvailability:
+      type: string
+      description: |
+        "available": the bucket holds the objects up to the requested record time.
+        "not_yet": it does not yet, but will.
+        "never": it never will, because the requested record time lies before the first segment this Scan produces
+        itself and it does not hold that data.
+      enum:
+        - "available"
+        - "not_yet"
+        - "never"
 
     GetRewardAccountingEarliestAvailableRoundResponse:
       type: object

@@ -21,6 +21,7 @@ import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  BulkStorageBucket,
   GetBulkObjectChecksumsResponse,
   GetBulkObjectsProgressResponse,
 }
@@ -381,7 +382,7 @@ class BulkStorageCommitFromStagingTest
             }
           }
           when(
-            mockConn.getBulkObjectsProgress(any[CantonTimestamp])(
+            mockConn.getBulkObjectsProgress(any[CantonTimestamp], any[BulkStorageBucket])(
               any[ExecutionContext],
               any[TraceContext],
             )

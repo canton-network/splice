@@ -94,6 +94,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         bulkStorageTestConfig,
         stagingConnection,
         committedConnection,
+        () => Future.successful(None),
         loggerFactory,
       )
 

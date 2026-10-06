@@ -110,7 +110,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   TxLogEntry,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
+import org.lfdecentralizedtrust.splice.scan.store.bulk.{BulkObjectsAvailability, BulkStorageReader}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   IncrementalAcsSnapshotTable,
   QueryAcsSnapshotResult,
@@ -2704,7 +2704,8 @@ class HttpScanHandler(
   }
 
   override def getBulkObjectsProgress(respond: ScanResource.GetBulkObjectsProgressResponse.type)(
-      atOrBeforeRecordTime: java.time.OffsetDateTime
+      atOrBeforeRecordTime: java.time.OffsetDateTime,
+      bucket: Option[definitions.BulkStorageBucket],
   )(
       extracted: TraceContext
   ): scala.concurrent.Future[ScanResource.GetBulkObjectsProgressResponse] = {
@@ -2717,12 +2718,23 @@ class HttpScanHandler(
             .asRuntimeException()
         )
       ) { bulkStorage =>
+        val requested = CantonTimestamp.tryFromInstant(atOrBeforeRecordTime.toInstant)
         for {
-          progress <- bulkStorage.getStagingProgressTimestamp()
+          progress <- bucket match {
+            case Some(definitions.BulkStorageBucket.members.Committed) =>
+              bulkStorage.getCommittedProgressTimestamp()
+            case _ => bulkStorage.getStagingProgressTimestamp()
+          }
+          firstOwnSegmentStart <- bulkStorage.getFirstOwnSegmentStart()
         } yield {
           ScanResource.GetBulkObjectsProgressResponse.OK(
             definitions.GetBulkObjectsProgressResponse(
-              progress >= CantonTimestamp.tryFromInstant(atOrBeforeRecordTime.toInstant)
+              progress >= requested,
+              Some(
+                HttpScanHandler.toHttpAvailability(
+                  BulkObjectsAvailability.of(progress, requested, firstOwnSegmentStart)
+                )
+              ),
             )
           )
         }
@@ -2965,6 +2977,15 @@ class HttpScanHandler(
 }
 
 object HttpScanHandler {
+  private def toHttpAvailability(
+      availability: BulkObjectsAvailability
+  ): definitions.BulkObjectsAvailability =
+    availability match {
+      case BulkObjectsAvailability.Available => definitions.BulkObjectsAvailability.Available
+      case BulkObjectsAvailability.NotYet => definitions.BulkObjectsAvailability.NotYet
+      case BulkObjectsAvailability.Never => definitions.BulkObjectsAvailability.Never
+    }
+
   // We expect a handful at most but want to somewhat guard against attacks
   // so we just hardcode a limit of 100.
   private val MAX_TRANSFER_COMMAND_CONTRACTS: Int = 100

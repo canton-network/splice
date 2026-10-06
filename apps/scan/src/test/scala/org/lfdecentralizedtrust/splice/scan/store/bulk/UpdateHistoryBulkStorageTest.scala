@@ -499,7 +499,8 @@ class UpdateHistoryBulkStorageTest
         stagingS3Connection = bucketConnection,
         committedS3Connection =
           bucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
-        loggerFactory,
+        firstOwnSegmentStart = () => Future.successful(None),
+        loggerFactory = loggerFactory,
       )
 
       def makeObjectKeys(dates: String, prefix: String = "updates"): Seq[String] =

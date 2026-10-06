@@ -28,6 +28,8 @@ import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, Spl
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
+  BulkObjectsAvailability,
+  BulkStorageBucket,
   DamlValueEncoding,
   GetBulkObjectChecksumsResponse,
   GetBulkObjectsProgressResponse,
@@ -953,11 +955,8 @@ class BftScanConnection(
         connectionMetrics,
         retryProvider,
         logger,
-        hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp).map {
-          case GetBulkObjectsProgressResponse(progress) if progress =>
-            DataAvailabilityResponse.Available
-          case _ => DataAvailabilityResponse.NotYet
-        },
+        hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp, BulkStorageBucket.Staging)
+          .map(BftScanConnection.dataAvailability),
         getData = _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
         endpoint = "getBulkObjectChecksums",
         callConfig = BftCallConfig.default(scanList.scanConnections),
@@ -1052,6 +1051,16 @@ class BftScanConnection(
 }
 
 object BftScanConnection {
+
+  def dataAvailability(response: GetBulkObjectsProgressResponse): DataAvailabilityResponse =
+    response.availability match {
+      case Some(BulkObjectsAvailability.members.Available) => DataAvailabilityResponse.Available
+      case Some(BulkObjectsAvailability.members.NotYet) => DataAvailabilityResponse.NotYet
+      case Some(BulkObjectsAvailability.members.Never) => DataAvailabilityResponse.Never
+      case None =>
+        if (response.beyondRequestedRecordTime) DataAvailabilityResponse.Available
+        else DataAvailabilityResponse.NotYet
+    }
 
   /** Configuration for a BFT call.
     * Normally a BFT call requires f+1 agreeing responses from 2f+1 requests,
