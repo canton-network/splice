@@ -152,22 +152,27 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "reject a batch whose round numbers are not monotonically increasing" in {
-      for {
-        (_, verdictStore) <- newStores()
-        baseTs = CantonTimestamp.now()
-        v1 = mkVerdict(verdictStore, "ooo-1", baseTs, roundNumber = Some(11L))
-        v2 = mkVerdict(verdictStore, "ooo-2", baseTs.plusSeconds(1), roundNumber = Some(10L))
-        result <- verdictStore
-          .insertVerdictAndTransactionViews(Seq(v1 -> noViews, v2 -> noViews))
-          .failed
-      } yield {
-        result match {
-          case e: io.grpc.StatusRuntimeException =>
-            e.getStatus.getCode shouldBe io.grpc.Status.Code.INTERNAL
-          case other => fail(s"expected StatusRuntimeExecption, ogt $other")
+    Seq(
+      "decreasing" -> Some(10L),
+      "Some to None" -> Option.empty[Long],
+    ).foreach { case (label, secondRound) =>
+      s"reject a batch whose round numbers go from ... ($label)" in {
+        for {
+          (_, verdictStore) <- newStores()
+          baseTs = CantonTimestamp.now()
+          v1 = mkVerdict(verdictStore, "ooo-1", baseTs, roundNumber = Some(11L))
+          v2 = mkVerdict(verdictStore, "ooo-2", baseTs.plusSeconds(1), roundNumber = secondRound)
+          result <- verdictStore
+            .insertVerdictAndTransactionViews(Seq(v1 -> noViews, v2 -> noViews))
+            .failed
+        } yield {
+          result match {
+            case e: io.grpc.StatusRuntimeException =>
+              e.getStatus.getCode shouldBe io.grpc.Status.Code.INTERNAL
+            case other => fail(s"expected StatusRuntimeExecption, ogt $other")
+          }
+          result.getMessage should include("not monotonically increasing")
         }
-        result.getMessage should include("not monotonically increasing")
       }
     }
   }
@@ -229,6 +234,33 @@ class DbAppActivityRecordStoreTest
         meta.value.startedIngestingAt shouldBe baseTs.toMicros
         meta.value.earliestIngestedRound shouldBe 10L
         meta.value.lastArchivedRound shouldBe Some(9L)
+      }
+    }
+
+    "inserting verdicts with no round number should be persisted with no round number" in {
+      for {
+        (_, verdictStore) <- newStores()
+        baseTs = CantonTimestamp.now()
+
+        verdict = mkVerdict(
+          verdictStore,
+          "no-round-number",
+          baseTs.plusSeconds(1L),
+          roundNumber = None,
+        )
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(verdict -> noViews),
+          Seq.empty,
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
+          lastArchivedRoundO = Some(9L),
+        )
+
+        v <- verdictStore.getVerdictByUpdateId("no-round-number")
+      } yield {
+        v shouldBe defined
+        v.value.roundNumber shouldBe None
       }
     }
 
@@ -1331,7 +1363,7 @@ class DbAppActivityRecordStoreTest
       updateId: String,
       recordTs: CantonTimestamp,
       verdictResult: Short = DbScanVerdictStore.VerdictResultDbValue.Accepted,
-      roundNumber: Option[Long],
+      roundNumber: Option[Long] = None,
   ): verdictStore.VerdictT =
     new verdictStore.VerdictT(
       rowId = 0L,
