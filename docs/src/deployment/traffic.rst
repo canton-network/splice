@@ -179,6 +179,11 @@ Traffic top-ups; how does one "buy" traffic?
    thereby ensuring that paid traffic fees are translated into actual traffic balance increases.
    Sequencers also update the in-sequencer traffic state themselves, whenever traffic is consumed (see :ref:`traffic_accounting`).
 
+.. _traffic_topup_validator_automation:
+
+Buying traffic with the validator app's top-up automation
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 The validator app contains built-in top-up automation that automatically buys traffic to meet preconfigured throughput needs.
 Operators configure a target throughput (bytes per second) and a minimum top-up interval (seconds);
 the automation buys ``target throughput × minimum top-up interval`` bytes whenever both of the following conditions are met:
@@ -198,7 +203,65 @@ the validator app will
 
 For configuring the built-in top-up automation, please refer to the :ref:`Kubernetes validator deployment guide <helm_validator_topup>`
 or the corresponding :ref:`Docker-compose one<compose_validator_topup>`.
-Configuring alternative methods for buying traffic, e.g., using third-party services, exceeds the scope of this documentation.
+
+.. _traffic_topup_token_standard:
+
+Buying traffic with a standard token transfer
++++++++++++++++++++++++++++++++++++++++++++++
+
+Any party that holds CC can buy extra traffic for any synchronizer member with a standard CC transfer.
+This lets wallets and external parties buy traffic without dedicated support for the ``AmuletRules_BuyMemberTraffic`` choice.
+
+To buy traffic, create a CC transfer with these values:
+
+- **Receiver:** the traffic purchase party
+  ``cip-0128_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd``.
+- **Amount:** the total amount of CC that you want to spend on traffic.
+- **Memo:** the ``splice.lfdecentralizedtrust.org/reason`` metadata value, in this format:
+
+  .. code-block:: text
+
+     cip-0128/memo:memberId=<member>&synchronizerId=<synchronizer>&migrationId=<int>
+
+  - ``memberId``: the party id for synchronizer member that receives the traffic, for example ``PAR::...``.
+  - ``synchronizerId``: the ID of the synchronizer. 
+  - ``migrationId``: the current migration ID of the synchronizer.
+
+  The memo must start with ``cip-0128/memo:`` and contain all three keys in any order.
+
+The transfer completes immediately. It burns the full amount and adds the purchased traffic to the ``MemberTraffic`` contract of the member.
+The purchased traffic in bytes is:
+
+.. code-block:: text
+
+   floor(amount × CC price in USD × 1,000,000 / extra traffic price in USD per MB)
+
+For example, at a CC price of 0.50 USD and an extra traffic price of 1 USD/MB, a transfer of 10 CC buys 5,000,000 bytes.
+
+The CC price and the extra traffic price come from the ``ExternalPartyConfigState`` contract that the transfer references.
+These values can be slightly older than the values on the latest ``OpenMiningRound`` contract.
+
+The transfer fails, and burns no CC, if:
+
+- the memo has an incorrect format,
+- the synchronizer is not a synchronizer on which traffic can be bought (``splice.lfdecentralizedtrust.org/unknown-synchronizer``), or
+- the purchased traffic is less than ``minTopupAmount`` (``splice.lfdecentralizedtrust.org/insufficient-topup-amount``).
+  Use an amount that buys at least ``minTopupAmount`` bytes.
+
+The ``splice.lfdecentralizedtrust.org/reason`` metadata of the transfer result and of the burn shows the purchased traffic, for example:
+
+.. code-block:: text
+
+   traffic purchase: memberId=PAR::...&synchronizerId=...&migrationId=0, purchased traffic amount: 5000000 bytes
+
+Traffic purchases with a token standard transfer do not create validator reward coupons.
+
+.. _traffic_topup_alternatives:
+
+Other methods for buying traffic
+++++++++++++++++++++++++++++++++++++++
+
+Configuring other methods for buying traffic, e.g., using third-party services, exceeds the scope of this documentation.
 
 .. _traffic_wasted:
 
