@@ -504,6 +504,8 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
+        "429":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/429"
   /v0/devnet/onboard/validator/prepare:
     post:
       tags: [sv]
