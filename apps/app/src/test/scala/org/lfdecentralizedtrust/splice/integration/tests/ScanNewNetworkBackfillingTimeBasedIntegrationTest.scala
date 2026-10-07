@@ -88,10 +88,18 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
 
   private def isSnapshot(key: String): Boolean = key.contains("/ACS_")
 
-  private def isBefore(firstOwnSegmentStart: CantonTimestamp)(key: String): Boolean = {
-    val (from, to) = folderRange(key)
-    if (isSnapshot(key)) from <= firstOwnSegmentStart else to <= firstOwnSegmentStart
-  }
+  private def snapshotTime(key: String): CantonTimestamp = folderRange(key)._1
+
+  private def segmentEnd(key: String): CantonTimestamp = folderRange(key)._2
+
+  private def updatesBefore(firstOwnSegmentStart: CantonTimestamp)(key: String): Boolean =
+    !isSnapshot(key) && segmentEnd(key) <= firstOwnSegmentStart
+
+  private def snapshotAtOrBefore(firstOwnSegmentStart: CantonTimestamp)(key: String): Boolean =
+    isSnapshot(key) && snapshotTime(key) <= firstOwnSegmentStart
+
+  private def copiedByBackfill(firstOwnSegmentStart: CantonTimestamp)(key: String): Boolean =
+    updatesBefore(firstOwnSegmentStart)(key) || snapshotAtOrBefore(firstOwnSegmentStart)(key)
 
   "copy the founder's first segments to an SV that joins inside the first segment" in {
     implicit env =>
@@ -126,27 +134,31 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
         (1L to hours).foreach(_ => advanceTime(Duration.ofHours(1)))
       }
 
-      val beforeFirstOwnSegment =
-        clue("sv1 commits the segments before sv2's first own segment, its only peer sv2 answering never") {
+      val toCopy =
+        clue(
+          "sv1 commits the segments before sv2's first own segment, its only peer sv2 answering never"
+        ) {
           eventually(timeUntilSuccess = 2.minutes) {
             val committed =
               objectsIn(bucket("sv1Scan", "committed")).filter { case (key, _) =>
-                isBefore(firstOwnSegmentStart)(key)
+                copiedByBackfill(firstOwnSegmentStart)(key)
               }
-            committed.keys.exists(key => !isSnapshot(key)) shouldBe true
+            committed.keys.exists(updatesBefore(firstOwnSegmentStart)) shouldBe true
             committed.keys.exists(key =>
-              isSnapshot(key) && folderRange(key)._1 == firstOwnSegmentStart
+              isSnapshot(key) && snapshotTime(key) == firstOwnSegmentStart
             ) shouldBe true
             committed
           }
         }
 
-      clue("sv2 copies exactly those objects into its staging bucket and marks the backfill complete") {
+      clue(
+        "sv2 copies exactly those objects into its staging bucket and marks the backfill complete"
+      ) {
         eventually(timeUntilSuccess = 2.minutes) {
           sv2ScanBackend.appState.bulkStorage.value.backfillingProgress.isComplete.futureValue shouldBe true
           objectsIn(bucket("sv2Scan", "staging")).filter { case (key, _) =>
-            isBefore(firstOwnSegmentStart)(key)
-          } shouldBe beforeFirstOwnSegment
+            copiedByBackfill(firstOwnSegmentStart)(key)
+          } shouldBe toCopy
         }
       }
   }
