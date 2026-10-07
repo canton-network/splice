@@ -81,7 +81,9 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
   }
 
   private def folderRange(key: String): (CantonTimestamp, CantonTimestamp) =
-    scanStorageConfigV1.getStartAndEndTimestampsForFolder(key.takeWhile(_ != '/')) match {
+    scanStorageConfigV1.getStartAndEndTimestampsForFolder(
+      scanStorageConfigV1.getSegmentFolderOfObjectKey(key)
+    ) match {
       case Right(range) => range
       case Left(err) => fail(s"Unexpected object key $key: $err")
     }
