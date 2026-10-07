@@ -409,3 +409,18 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `Killed SBT after timeout 40m` without a `Tests:` line. Fix (CI, described): only main runs write the cache, and
   `split_tests.ts` ignores implausible times. Packet
   [10288-simtime-shard-26-suites-split-on-pr-poisoned-test-report-cache-sbt-timeout.md](10288-simtime-shard-26-suites-split-on-pr-poisoned-test-report-cache-sbt-timeout.md).
+
+## U. Two sbt servers boot concurrently under `make docker-build -j8` (docker-compose shards)
+- Signature: no `Tests:` line; in the "Run bash command" step two `sbt --client` lines (DARs and
+  `party-allocator/npmBuild`) and two `starting sbt server in the background` in the same ms, then
+  `java.lang.NoClassDefFoundError: $<hash>$` at `build.sbt:<line>` and `Project loading failed: (r)etry`; every later
+  attempt prints `sbt server is booting up` plus the whole boot log within ms and `sbt server did not start within 300
+  seconds`; the step ends after 6 attempts (~30 min).
+- Confirming grep: the two `loading settings for project root from build.sbt` lines are seconds apart (two JVMs). If
+  they are within 1 ms, one server booted and both clients followed it (the passing case).
+- Mechanism: the two Makefile rules are independent, so `make -j8` runs both `sbt --client` from a cold checkout;
+  the two servers compile `project/` and `build.sbt` into the same `project/target`. The hung server keeps blocking
+  the retries in `.github/actions/nix/run`. Present since `$(party-allocator)` got its sbt rule (#2231, 2025-09-12).
+- Fix (infra, described): order-only prerequisite `$(party-allocator): | $(canton-amulet-dar) $(wallet-payments-dar)`
+  or boot the server once before `make`; stop sbt servers between retry attempts. Resolution until fixed: rerun.
+- Packet [10301-docker-compose-two-sbt-servers-boot-concurrently-build-load-fails.md](10301-docker-compose-two-sbt-servers-boot-concurrently-build-load-fails.md) (10301, run 37627325417, main 8e8821d75e).

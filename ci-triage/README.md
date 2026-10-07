@@ -554,3 +554,17 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 - 10269 (2026-10-01) is fixed on main by #7638 (08e28cbf6a): `JoiningNodeInitializer` now retries
   `getPhysicalSynchronizerId`. Open: the 09-29 TOPOLOGY_STORE_NOT_FOUND call site and the family H exit (#7289).
 - 10249 (2026-09-29): the three OOM kills on k48f are splitwell-app at its 1536Mi limit, not validator1 (packet section 8).
+
+# CI failure triage - 2026-10-07
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10301 | 37627325417 | main 8e8821d75e (#7653) | 112812648466 `docker-compose (0)` | 3.6.1 (not involved) |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10301 | No test ran. `make docker-build -j8` started two `sbt --client` (DARs, party-allocator) at 13:48:48.64; both booted a server, both loaded build.sbt (13:49:13.40 / 14.74), one failed `NoClassDefFoundError: $0e4c0d00b4672e54c705$` (13:49:21.09) and hung on the `(r)etry` prompt. Attempts 2-6 replayed its boot log and timed out after 300 s each (step 1838 s). Sibling `docker-compose (1)` booted one server and passed | new, family U | [packet](10301-docker-compose-two-sbt-servers-boot-concurrently-build-load-fails.md). Infra flake; fix described (serialize the sbt targets in `Makefile`, stop sbt between retries), no branch. Rerun |
