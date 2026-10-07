@@ -53,8 +53,8 @@ object BftCallExecutor {
   This function first calls `hasData` on all provided Scan connections, to find `callConfig.requestsToDo`
   scans that have the required data already, and then `getData` on those (and then the standard bft comparison among them).
 
-  The returned future will fail with `ServiceUnavailable (503)` if not enough scans have the data, but some have responded to `hasData` with `NotYet`.
-  It will fail with `BadGateway (502)` if not enough of them responded with `Available` or `NotYet`, and too many responded with `Never`.
+  The returned future fails with `ServiceUnavailable (503)` if not enough scans have the data, but some have responded to `hasData` with `NotYet`,
+  with `NoScanWillHaveData` if all scans responded to `hasData` with `Never`, and with `BadGateway (502)` if the scans that have the data disagree.
    */
   def bftCallForEventualConsistencyEndpoints[T](
       connections: ScanConnections,
