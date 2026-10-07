@@ -4,7 +4,12 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, LifeCycle}
+import com.digitalasset.canton.lifecycle.{
+  AsyncOrSyncCloseable,
+  FlagCloseableAsync,
+  LifeCycle,
+  SyncCloseable,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
@@ -288,10 +293,9 @@ class BulkStorage(
     }
   }
 
-  final override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    LifeCycle.close(scanConnection)(logger)
-    services.flatMap(_.closeAsync())
-  }
+  final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
+    services.flatMap(_.closeAsync()) :+
+      SyncCloseable("peer scan connection", LifeCycle.close(scanConnection)(logger))
 }
 
 object BulkStorage {
