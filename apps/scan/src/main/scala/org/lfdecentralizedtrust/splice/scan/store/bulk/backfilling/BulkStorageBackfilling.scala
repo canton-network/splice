@@ -45,12 +45,11 @@ class BulkStorageBackfilling(
     mksrc().concat(Source.never)
 
   private[backfilling] def mksrc()(implicit tc: TraceContext): Source[Step, NotUsed] =
-    Source.future(progress.isComplete).flatMapConcat {
-      case true =>
+    Source.future(progress.isComplete).flatMapConcat { complete =>
+      if (complete) {
         logger.info("Bulk storage backfilling from peers already complete, nothing to do")
         Source.empty
-      case false =>
-        Source.unfoldAsync[State, Step](CopyUpdates(None))(s => step(s))
+      } else Source.unfoldAsync[State, Step](CopyUpdates(None))(s => step(s))
     }
 
   private def step(state: State)(implicit tc: TraceContext): Next =
