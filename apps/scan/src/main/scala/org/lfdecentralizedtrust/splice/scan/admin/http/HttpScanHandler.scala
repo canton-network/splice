@@ -2589,6 +2589,14 @@ class HttpScanHandler(
     }
   }
 
+  private def getStorageEncodings(
+      damlValueEncoding: Option[DamlValueEncoding]
+  ): NonEmptyList[ScanStorageConfig.Encoding] =
+    NonEmptyList.one(
+      ScanStorageConfig.Encoding
+        .fromDamlValueEncoding(damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson))
+    )
+
   private def encodeBulkStorageObjects(objects: Seq[ObjectKeyAndChecksum], publicUrl: Uri) =
     objects.map { case ObjectKeyAndChecksum(key, digest) =>
       val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
@@ -2618,10 +2626,7 @@ class HttpScanHandler(
         bulkStorage
           .getCommittedObjectsForAcsSnapshotAtOrBefore(
             recordTimeTs,
-            NonEmptyList.one(
-              ScanStorageConfig.Encoding
-                .fromDamlValueEncoding(damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson))
-            ),
+            getStorageEncodings(damlValueEncoding),
           )
           .map { case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
@@ -2659,11 +2664,7 @@ class HttpScanHandler(
             upToTs,
             PageLimit.tryCreate(body.pageSize),
             body.nextPageToken,
-            NonEmptyList.one(
-              ScanStorageConfig.Encoding.fromDamlValueEncoding(
-                body.damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson)
-              )
-            ),
+            getStorageEncodings(body.damlValueEncoding),
           )
           .map { case UpdateHistoryObjectsResponse(objects, nextPageToken) =>
             ScanResource.ListBulkUpdateHistoryObjectsResponse.OK(
