@@ -4098,8 +4098,9 @@ components:
       description: |
         "available": the bucket holds the objects up to the requested record time.
         "not_yet": it does not yet, but will.
-        "never": it never will, because the requested record time lies before the first segment this Scan produces
-        itself and it does not hold that data.
+        "never": this Scan does not produce the objects itself, because the requested record time lies before its
+        first own segment, and it does not hold them now. A Scan that later copies them from its peers answers
+        "available" from then on.
       enum:
         - "available"
         - "not_yet"
