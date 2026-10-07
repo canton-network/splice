@@ -562,9 +562,11 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | My ref | GH run | Branch / sha | Failed job | Canton |
 |--------|--------|--------------|------------|--------|
 | 10301 | 37627325417 | main 8e8821d75e (#7653) | 112812648466 `docker-compose (0)` | 3.6.1 (not involved) |
+| 10302 | 37634008083 | main d8b78a11ca (#7660) | 112836149816 `docker-compose (1)` | 3.6.1 |
 
 ## Overview
 
 | My ref | Failure (one line) | Duplicate of | Resolution / status |
 |--------|--------------------|--------------|---------------------|
 | 10301 | No test ran. `make docker-build -j8` started two `sbt --client` (DARs, party-allocator) at 13:48:48.64; both booted a server, both loaded build.sbt (13:49:13.40 / 14.74), one failed `NoClassDefFoundError: $0e4c0d00b4672e54c705$` (13:49:21.09) and hung on the `(r)etry` prompt. Attempts 2-6 replayed its boot log and timed out after 300 s each (step 1838 s). Sibling `docker-compose (1)` booted one server and passed | new, family U | [packet](10301-docker-compose-two-sbt-servers-boot-concurrently-build-load-fails.md). Infra flake; fix described (serialize the sbt targets in `Makefile`, stop sbt between retries), no branch. Rerun |
+| 10302 | All tests pass; checkErrors flags `DbLockedConnection:mediator=globalMediatorSv2/connId=pool-1 Locked connection was lost, trying to rebuild` (14:39:55.691), during Canton startup, 8.5 min before the suite. The read-only probe of the connection health check got `NoConnectionAvailable` three periods in a row (14:39:44.574, 49.873, 55.689) because the DB lock check took the same single `KeepAliveConnection` in the same ms; 3 Indeterminate = `maxInconclusiveReadOnlyChecks` (3.6.1 `DbLockedConnection.scala:429-432`). Rebuilt in 80 ms | new, family V | [packet](10302-docker-compose-mediator-locked-connection-lost-read-only-check-races-lock-check.md). Canton-side flake; fix described for Canton (one `markInUse` across `isValid` and the read-only probe, or treat `NoConnectionAvailable` as in use). No splice change, log-ignore rejected. Rerun. |

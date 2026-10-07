@@ -424,3 +424,19 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Fix (infra, described): order-only prerequisite `$(party-allocator): | $(canton-amulet-dar) $(wallet-payments-dar)`
   or boot the server once before `make`; stop sbt servers between retry attempts. Resolution until fixed: rerun.
 - Packet [10301-docker-compose-two-sbt-servers-boot-concurrently-build-load-fails.md](10301-docker-compose-two-sbt-servers-boot-concurrently-build-load-fails.md) (10301, run 37627325417, main 8e8821d75e).
+
+## V. `Locked connection was lost` after three read-only probes collide with the DB lock check (Canton `DbLockedConnection`)
+- Signature: checkErrors flags one WARN `c.d.c.r.DbLockedConnection:<node>/connId=pool-N Locked connection was lost,
+  trying to rebuild`, all tests pass, rebuild `Successfully rebuilt connection` within ~100 ms. Preceded by three DEBUG
+  `Failed to check if connection ...KeepAliveConnection@... is read-only: ... NoConnectionAvailable: No free
+  connection available` on the same connId, 5 s apart.
+- Confirming grep: each of those DEBUG lines comes within a few ms after `Running queued action:
+  com.digitalasset.canton.resource.DbLockPostgres: checking lock` on the same node (10302 packet section 4). Rule out
+  family J: no `DB_CONNECTION_LOST`, no `LockCheckRejected` spike.
+- Mechanism (Canton 3.6.1, also in the 3.6.0 snapshots of 2026-09-29 and 10-01): `checkConnection` marks the
+  connection free after `isValid` and then runs the read-only probe, which needs the connection again; the DB lock
+  check uses the same `KeepAliveConnection` on the same 5 s period. `NoConnectionAvailable` is `Indeterminate`, and
+  `maxInconclusiveReadOnlyChecks` (default 3) in a row calls `onConnectionLost`. Single collisions are silent (two in 10302).
+- Fix (Canton, described): one `markInUse` across `isValid` and the probe, or treat `NoConnectionAvailable` like the
+  existing "connection is in use" skip. Do not ignore the WARN (it is the real connection-loss signal). Resolution: rerun.
+- Packet [10302-docker-compose-mediator-locked-connection-lost-read-only-check-races-lock-check.md](10302-docker-compose-mediator-locked-connection-lost-read-only-check-races-lock-check.md) (10302, run 37634008083, main d8b78a11ca, globalMediatorSv2 pool-1).
