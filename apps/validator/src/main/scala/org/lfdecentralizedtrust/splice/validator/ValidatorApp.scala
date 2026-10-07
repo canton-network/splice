@@ -464,30 +464,39 @@ class ValidatorApp(
       case _ =>
         onboardingConfig match {
           case Some(oc) =>
-            if (config.permissionedSynchronizer) {
-              logger.info(
-                "ValidatorLicense not found, permissioned synchronizer is enabled. Submitting ValidatorLicenseRequest to the ledger."
+            for {
+              dsoRules <- scanConnection.getDsoRules()
+              isPermissionedSynchronizer = SwitchOverTimes.permissionedSynchronizerEnabled(
+                clock,
+                dsoRules.payload,
               )
-              for {
-                _ <- waitForTopologyPermission(scanConnection, synchronizerId, participantId)
-                _ <- submitValidatorLicenceRequest(
-                  validatorParty,
-                  store.key.dsoParty,
-                  ledgerConnection,
-                  dedupDuration,
-                  synchronizerId,
-                )
-                _ <- waitForValidatorLicense(store)
-              } yield ()
-            } else {
-              logger.info(
-                "ValidatorLicense not found, onboarding is configured. Requesting onboarding with configured secret"
-              )
-              for {
-                _ <- requestOnboarding(oc.svClient.adminApi, validatorParty, oc.secret)
-                _ <- waitForValidatorLicense(store)
-              } yield ()
-            }
+              _ <-
+                if (isPermissionedSynchronizer) {
+                  logger.info(
+                    "ValidatorLicense not found, permissioned synchronizer is enabled. Submitting ValidatorLicenseRequest to the ledger."
+                  )
+                  for {
+                    _ <- waitForTopologyPermission(scanConnection, synchronizerId, participantId)
+                    _ <- submitValidatorLicenceRequest(
+                      validatorParty,
+                      store.key.dsoParty,
+                      ledgerConnection,
+                      dedupDuration,
+                      synchronizerId,
+                    )
+                    _ <- waitForValidatorLicense(store)
+                  } yield ()
+                } else {
+                  logger.info(
+                    "ValidatorLicense not found, onboarding is configured. Requesting onboarding with configured secret"
+                  )
+                  for {
+                    _ <- requestOnboarding(oc.svClient.adminApi, validatorParty, oc.secret)
+                    _ <- waitForValidatorLicense(store)
+                  } yield ()
+                }
+            } yield ()
+
           case None =>
             logger.info(
               "ValidatorLicense not found, onboarding is not configured. Wait for the ValidatorLicense"
