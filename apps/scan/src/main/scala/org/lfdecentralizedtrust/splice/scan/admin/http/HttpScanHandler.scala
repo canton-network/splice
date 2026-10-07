@@ -491,7 +491,8 @@ class HttpScanHandler(
     withSpan(s"$workflowId.listFeaturedAppRightsByProvider") { _ => _ =>
       for {
         rights <- store.listFeaturedAppRightsByProvider(
-          PartyId.tryFromProtoPrimitive(providerPartyId)
+          PartyId.tryFromProtoPrimitive(providerPartyId),
+          store.defaultLimit,
         )
       } yield {
         definitions.ListFeaturedAppRightsResponse(
