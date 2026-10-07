@@ -25,7 +25,11 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2
-import org.lfdecentralizedtrust.splice.scan.admin.http.{CompactJsonScanHttpEncodings, ProtobufJsonScanHttpEncodings, ScanHttpEncodings}
+import org.lfdecentralizedtrust.splice.scan.admin.http.{
+  CompactJsonScanHttpEncodings,
+  ProtobufJsonScanHttpEncodings,
+  ScanHttpEncodings,
+}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -95,7 +99,6 @@ class UpdateHistoryBulkStorageTest
         .run()
 
       probe.request(1)
-
 
       clue(
         "Initially, 1000 updates will be ready, but the segment will not be complete, so no output is expected"
