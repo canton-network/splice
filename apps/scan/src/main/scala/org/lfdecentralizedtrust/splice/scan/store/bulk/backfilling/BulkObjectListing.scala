@@ -85,7 +85,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
         val available = listings.collect { case PeerListing.Available(objects, holders) =>
           (objects, holders)
         }
-        if (listings.contains(PeerListing.NoPeerWillHold)) PeerListing.NoPeerWillHold
+        if (listings.forall(_ == PeerListing.NoPeerWillHold)) PeerListing.NoPeerWillHold
         else if (available.size < listings.size) PeerListing.NotAvailableYet
         else
           merge(available.map(_._1)).fold[PeerListing[T]](PeerListing.NotAvailableYet)(

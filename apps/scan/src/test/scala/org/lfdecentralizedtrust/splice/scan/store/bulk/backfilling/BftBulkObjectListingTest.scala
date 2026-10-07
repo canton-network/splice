@@ -8,6 +8,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.NoScanWillHaveData
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig.Encoding
@@ -29,6 +30,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
   private val at = CantonTimestamp.Epoch
   private def obj(key: String) = ObjectKeyAndChecksum(key, s"checksum-of-$key")
   private val notYet = HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, "not yet")
+  private val noneEver = new NoScanWillHaveData("never")
 
   private def listingOver(connection: BftScanConnection): BftBulkObjectListing = {
     val peerConnection = mock[PeerBftScanConnection]
@@ -99,6 +101,24 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
 
       listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
         PeerListing.NotAvailableYet
+    }
+
+    "wait when one encoding has no holder yet and the other no holder ever" in {
+      val connection = mock[BftScanConnection]
+      updatesIn(connection, Encoding.CompactJson, Future.failed(notYet))
+      updatesIn(connection, Encoding.ProtobufJson, Future.failed(noneEver))
+
+      listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
+        PeerListing.NotAvailableYet
+    }
+
+    "report that no peer will hold the objects only when every encoding says so" in {
+      val connection = mock[BftScanConnection]
+      updatesIn(connection, Encoding.CompactJson, Future.failed(noneEver))
+      updatesIn(connection, Encoding.ProtobufJson, Future.failed(noneEver))
+
+      listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
+        PeerListing.NoPeerWillHold
     }
 
     "list a snapshot in every encoding" in {
