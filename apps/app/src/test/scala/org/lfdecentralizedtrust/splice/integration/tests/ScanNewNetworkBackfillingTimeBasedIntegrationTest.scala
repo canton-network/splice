@@ -107,9 +107,10 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
         startAllSync(sv1ScanBackend, sv1Backend, sv1ValidatorBackend)
       }
 
-      clue("sv1 records genesis as its history start") {
+      clue("sv1 records genesis as its history start and completes its backfill without copying") {
         eventually() {
           sv1ScanBackend.appState.historyStart.get.futureValue shouldBe Some(HistoryStart.Genesis)
+          sv1ScanBackend.appState.bulkStorage.value.backfillingProgress.isComplete.futureValue shouldBe true
         }
       }
 
