@@ -71,8 +71,8 @@ class AcsSnapshotBulkStorageWriterFromDbTest
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 3,
     bulkAcsSnapshotPeriodHours = 24,
-    bulkDbReadChunkSize = 1000,
-    bulkZstdFrameSize = 10000L,
+    bulkZstdBlockSize = 4000L,
+    bulkZstdFrameSize = 20000L,
     bulkMaxFileSize = 50000L,
     zstdCompressionLevel = 3,
   )
@@ -121,36 +121,51 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                 (
                   new CompactJsonScanHttpEncodings(identity, identity),
                   Seq(
-                    "n6CV6dF9zpleq66YiXmCG96hw1BBakp1I8JjC5lf5n0=",
-                    "bJDalSmiVKCk9QSc6sAWdahJNZQqVn51WmkFbQI6wkA=",
-                    "noZU+He8HnCM38MujtpEle4NNGwnE7wN8z96V+HTdK0=",
-                    "rwak+Y4JcInTiEa2yUKf8rjO3RD7ay/D2hmQG4BAa54=",
-                    "YM7SNxHrU3xYyNOjgEqowitAvgsiX1f7tq0pCaD/OhQ=",
-                    "Mb3D2ZOVQclMwuYEqLuTKhGqnUHCio6K61FBTXgt5Vs=",
-                    "+5iW2M9Vz5y9sCtEWyrS3m+EUqnD50dXRVIMQAMSgBY=",
+                    "0WSNhAAj6bT8k+U8zRyKxZWf1UGi39JcZwCNTsEhwyw=",
+                    "pU4VHpq4B7mEkVeqq8dYtkx7c2q59oHFmUZKy2ZymgM=",
+                    "Je6fyr9Q0VbAcPupMdJ4i9l7N1VfRqMdaIVIRjP1IEk=",
+                    "2KkRlMIHhccycmKMdioobNXDf9rgFJKLru0OUgpkdWw=",
+                    "rrMB8Zjl+QMoa1MifgIcvJbmeo+Wpy73Qes8WgWKndk=",
+                    "O3D8NcYS6UxbfH9ahLonKLjS8XxMShAjvue7HvK4BUk=",
+                    "ml4eJRZDu8/L+SocfGTR78fr9YrNmnlMZmCju05WwDI=",
+                    "5BsR5nZj9EiabZkKH+X56gSlfFeE3YEZMZN1ImXXeNU=",
+                    "NVjKR3wSk4pcjymL65acvvp9Rhhvx+W7Qsp8Ct/YvuA=",
+                    "ZPiWc4C64H19fO1Wk06zuyAFu6T7mC9nWcinRarDx1w=",
+                    "r2kvpv122uaKVAfCoSxr0vvvQRmRwsNcJZM78dqH2Oo=",
+                    "9t2rduH6EfB9JkGmDMP9MC7mPu82IP4aH3Dfb8mJgNY=",
                   ),
                 )
               case ScanStorageConfig.Encoding.ProtobufJson =>
                 (
                   ProtobufJsonScanHttpEncodings,
                   Seq(
-                    "NDdxcBFCRqz5hXHXqJkD9qqzc1C9t0PWZgHq2F9xsUA=",
-                    "hluFPPWS1V2djExfppU+aiPqYx18s/qxZe83nFjthV0=",
-                    "5D3k/XWBw/OhN5wus7XMuesHKhQwlktDFMFcO9lAI5g=",
-                    "sov3P/ekZ1CRQUPYVMcA7tn2yO4EV+XYtlWc5NF2FP0=",
-                    "tYYPDCgkg/s+dbJD9i6kxBHiMIKq2RB/D0+Fc5gzlAI=",
-                    "CjQBhKAQ+KU7it/OCAkyDtKLNHJmWu2nsU4x1TcT+us=",
-                    "ZonY8bJ5NA2b1Y/gOU2eeUF6lVsQqijKWDjP8kKWvhU=",
-                    "G7eAcDOxoCsxpC9Qwo61IZFUFD0sZnqPf3/dolF9nXQ=",
+                    "Q95yH0Uu+C5LZe8FRF6cyPafjrjPpOd9G+MK671c41I=",
+                    "ALq5hDfPJGw0L9DGGC9TxLWNrinCkwZIK82Ij/j4XnY=",
+                    "Oqr/CoMwXQBpv/EN7LMpNYj5mNafl7g2X/tNPLFQBKA=",
+                    "Z27oeKANd3jRKI3KhsXjKH3K0+D2yLldMplDsMs5syg=",
+                    "0k6FOdvZ5YwhTdSqo+MhOjzUgh+g310tejKT9ldXyWk=",
+                    "WTA4JOkq0l4CZZ7IvAJmTgLNo1MZv8gNgaeBZJ83b40=",
+                    "hA2DDFmYO0NiE9ttOEQMwyDP+KDIAS/tN9ygbv6MVkM=",
+                    "AsArKIbUFn/NTLGichdhn+NJT0VsHKOcyxuUH2Z4JJ8=",
+                    "5CICA0sm6z4P66XnGl3ysRB7MGLu4i8nllfrK2liTV4=",
+                    "HLTy9EtFCSxEnGw43IqsnqKijFlpNGw2nTBNFwQK6/Q=",
+                    "MVselLUvB3xCmC8ZOMcs2fB1a39VvkFTX3EtXvxg43g=",
+                    "VWhtLyuY5SZXpc+G7mYyyOM+iJ/8B1v2r5pWH4C23Ps=",
+                    "nMOuy1YOx7nw6uuT+0CtpEKkdz71ZF7i4Erqlz1OyqI=",
                   ),
                 )
             }
           val objectKeys = s3Objects.contents.asScala
             .map(_.key())
-            .sorted
             .filter(
               encoding.storageKeyRegex("ACS").matches
             )
+            .sortBy { key =>
+              """_(\d+)\.zstd$""".r
+                .findFirstMatchIn(key)
+                .map(_.group(1).toInt)
+                .getOrElse(fail(s"Unexpected object key format: $key"))
+            }
           objectKeys should have length expectedDigests.length.toLong
           objectKeys.foreach(
             _ should startWith(s"2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/ACS_${encoding.key}")
@@ -179,6 +194,10 @@ class AcsSnapshotBulkStorageWriterFromDbTest
               io.circe.parser.decode[httpApi.ActiveContract],
             )
           )
+          allContracts.length shouldBe allContractsFromS3.length
+          allContracts.zip(allContractsFromS3).foreach { case (c1, c2) =>
+            encodings.javaToHttpActiveContract(c1.eventId, c1.recordTime, c1.event) shouldBe c2
+          }
           allContracts.map(c =>
             encodings.javaToHttpActiveContract(c.eventId, c.recordTime, c.event)
           ) should contain theSameElementsInOrderAs allContractsFromS3
@@ -263,7 +282,13 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       ) = {
         val getObjectsResult =
           reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
-        getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
+        val objectKeys = getObjectsResult.objects.map(_.key).sortBy { key =>
+          """_(\d+)\.zstd$""".r
+            .findFirstMatchIn(key)
+            .map(_.group(1).toInt)
+            .getOrElse(fail(s"Unexpected object key format: $key"))
+        }
+        objectKeys should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
             s"$expectedTs~${expectedTs
                 .add(1.days)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}"
@@ -295,7 +320,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             persistedTs1 shouldBe Some(TimestampWithMigrationId(ts1, 0))
           }
           assertLatestSnapshotInMetrics(ts1)
-          assertGetObjects(ts1, ts1, 7)
+          assertGetObjects(ts1, ts1, 12)
         }
 
         clue(
@@ -313,7 +338,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             },
           )
           assertLatestSnapshotInMetrics(ts1)
-          assertGetObjects(ts2, ts1, 7)
+          assertGetObjects(ts2, ts1, 12)
         }
 
         clue("Add one more snapshot to the store, at the end of the period") {
@@ -324,7 +349,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             persistedTs3.value shouldBe TimestampWithMigrationId(ts3, 0)
           }
           assertLatestSnapshotInMetrics(ts3)
-          assertGetObjects(ts3, ts3, 7)
+          assertGetObjects(ts3, ts3, 12)
         }
 
         val ex1 = reader
