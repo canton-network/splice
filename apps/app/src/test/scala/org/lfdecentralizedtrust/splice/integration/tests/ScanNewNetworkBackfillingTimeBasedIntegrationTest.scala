@@ -137,31 +137,29 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
         (1L to hours).foreach(_ => advanceTime(Duration.ofHours(1)))
       }
 
-      val toCopy =
-        clue(
-          "sv1 commits the segments before sv2's first own segment, its only peer sv2 answering never"
-        ) {
-          eventually(timeUntilSuccess = 2.minutes) {
-            val committed =
-              objectsIn(bucket("sv1Scan", "committed")).filter { case (key, _) =>
-                copiedByBackfill(firstOwnSegmentStart)(key)
-              }
-            committed.keys.exists(updatesBefore(firstOwnSegmentStart)) shouldBe true
-            committed.keys.exists(key =>
-              isSnapshot(key) && snapshotTime(key) == firstOwnSegmentStart
-            ) shouldBe true
-            committed
-          }
+      def toCopyIn(bucketName: String): Map[String, String] =
+        objectsIn(bucketName).filter { case (key, _) =>
+          copiedByBackfill(firstOwnSegmentStart)(key)
         }
 
       clue(
-        "sv2 copies exactly those objects into its staging bucket and marks the backfill complete"
+        "sv1 commits the segments before sv2's first own segment, its only peer sv2 answering never"
+      ) {
+        eventually(timeUntilSuccess = 2.minutes) {
+          val committed = toCopyIn(bucket("sv1Scan", "committed"))
+          committed.keys.exists(updatesBefore(firstOwnSegmentStart)) shouldBe true
+          committed.keys.exists(key =>
+            isSnapshot(key) && snapshotTime(key) == firstOwnSegmentStart
+          ) shouldBe true
+        }
+      }
+
+      clue(
+        "sv2 copies exactly the objects sv1 committed into its staging bucket and marks the backfill complete"
       ) {
         eventually(timeUntilSuccess = 2.minutes) {
           sv2ScanBackend.appState.bulkStorage.value.backfillingProgress.isComplete.futureValue shouldBe true
-          objectsIn(bucket("sv2Scan", "staging")).filter { case (key, _) =>
-            copiedByBackfill(firstOwnSegmentStart)(key)
-          } shouldBe toCopy
+          toCopyIn(bucket("sv2Scan", "staging")) shouldBe toCopyIn(bucket("sv1Scan", "committed"))
         }
       }
   }
