@@ -115,6 +115,9 @@ case class ScanStorageConfig(
     s"$segmentStartTimestamp~$endTimestamp"
   }
 
+  def getSegmentFolderOfObjectKey(objectKey: String): String =
+    objectKey.takeWhile(_ != '/')
+
   def getStartAndEndTimestampsForFolder(
       folder: String
   ): Either[String, (CantonTimestamp, CantonTimestamp)] = {

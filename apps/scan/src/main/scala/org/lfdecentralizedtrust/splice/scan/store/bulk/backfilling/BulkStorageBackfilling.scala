@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.syntax.traverse.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
@@ -22,6 +23,7 @@ import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChec
 import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 class BulkStorageBackfilling(
     config: BulkStorageBackfillingConfig,
@@ -176,22 +178,24 @@ class BulkStorageBackfilling(
         Future.fromTry(segmentsOf(page.objects)).map(_.headOption.map(_.toTimestamp.timestamp))
       )
 
-  private def segmentsOf(objects: Seq[ObjectKeyAndChecksum]): scala.util.Try[Seq[UpdatesSegment]] =
-    scala.util.Try {
-      objects
-        .map(_.key.takeWhile(_ != '/'))
-        .distinct
-        .map { folder =>
-          storageConfig.getStartAndEndTimestampsForFolder(folder) match {
-            case Right((from, to)) =>
-              UpdatesSegment(
-                TimestampWithMigrationId(from, currentMigrationId),
-                TimestampWithMigrationId(to, currentMigrationId),
-              )
-            case Left(err) => throw new IllegalStateException(err)
-          }
-        }
-        .sortBy(_.fromTimestamp)
+  private def segmentsOf(objects: Seq[ObjectKeyAndChecksum]): Try[Seq[UpdatesSegment]] =
+    objects
+      .map(obj => storageConfig.getSegmentFolderOfObjectKey(obj.key))
+      .distinct
+      .toList
+      .traverse(segmentOfFolder)
+      .map(_.sortBy(_.fromTimestamp))
+
+  private def segmentOfFolder(folder: String): Try[UpdatesSegment] =
+    storageConfig.getStartAndEndTimestampsForFolder(folder) match {
+      case Right((from, to)) =>
+        Success(
+          UpdatesSegment(
+            TimestampWithMigrationId(from, currentMigrationId),
+            TimestampWithMigrationId(to, currentMigrationId),
+          )
+        )
+      case Left(err) => Failure(new IllegalStateException(err))
     }
 
   override def asPekkoRetryingService(
