@@ -271,7 +271,9 @@ class DbAppActivityRecordStoreTest
 
         // First batch with activity records creates the meta row
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          NonEmptyList.of(mkVerdict(verdictStore, "update-mono-1", baseTs) -> noViews),
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-mono-1", baseTs, roundNumber = None) -> noViews
+          ),
           Seq(baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
           hasTrafficSummaries = true,
           firstActiveRoundO = Some(10L),
@@ -280,7 +282,12 @@ class DbAppActivityRecordStoreTest
         // A later batch without activity records still advances the round
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(
-            mkVerdict(verdictStore, "update-mono-2", baseTs.plusSeconds(1L)) -> noViews
+            mkVerdict(
+              verdictStore,
+              "update-mono-2",
+              baseTs.plusSeconds(1L),
+              roundNumber = None,
+            ) -> noViews
           ),
           Seq.empty,
           hasTrafficSummaries = true,
@@ -300,7 +307,9 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-no-meta", baseTs, roundNumber = None) -> noViews
+          ),
           Seq.empty,
           hasTrafficSummaries = true,
           firstActiveRoundO = Some(7L),
@@ -322,7 +331,9 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-no-meta", baseTs, roundNumber = None) -> noViews
+          ),
           Seq.empty,
           hasTrafficSummaries = false,
           lastArchivedRoundO = Some(7L),
@@ -343,7 +354,9 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
 
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
-          NonEmptyList.of(mkVerdict(verdictStore, "update-firstsv-2", baseTs) -> noViews),
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-firstsv-2", baseTs, roundNumber = None) -> noViews
+          ),
           Seq.empty,
           hasTrafficSummaries = false,
         )
@@ -354,7 +367,12 @@ class DbAppActivityRecordStoreTest
         // A later batch with traffic summaries creates the meta row.
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(
-            mkVerdict(verdictStore, "update-firstsv-3", baseTs.plusSeconds(1L)) -> noViews
+            mkVerdict(
+              verdictStore,
+              "update-firstsv-3",
+              baseTs.plusSeconds(1L),
+              roundNumber = None,
+            ) -> noViews
           ),
           Seq.empty,
           hasTrafficSummaries = true,
@@ -374,7 +392,7 @@ class DbAppActivityRecordStoreTest
         (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
 
-        verdict = mkVerdict(verdictStore, "update-no-activity", baseTs)
+        verdict = mkVerdict(verdictStore, "update-no-activity", baseTs, roundNumber = None)
 
         // firstActiveRoundO is None, as reward reference store began ingestion after baseTx
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
@@ -402,9 +420,19 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
 
         // Three verdicts, but only the first and third have activity records
-        verdict1 = mkVerdict(verdictStore, "update-with-1", baseTs)
-        verdict2 = mkVerdict(verdictStore, "update-without", baseTs.plusSeconds(1L))
-        verdict3 = mkVerdict(verdictStore, "update-with-2", baseTs.plusSeconds(2L))
+        verdict1 = mkVerdict(verdictStore, "update-with-1", baseTs, roundNumber = None)
+        verdict2 = mkVerdict(
+          verdictStore,
+          "update-without",
+          baseTs.plusSeconds(1L),
+          roundNumber = None,
+        )
+        verdict3 = mkVerdict(
+          verdictStore,
+          "update-with-2",
+          baseTs.plusSeconds(2L),
+          roundNumber = None,
+        )
 
         appActivityRecords = Seq(
           baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L)),
@@ -450,7 +478,7 @@ class DbAppActivityRecordStoreTest
         (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
 
-        verdict = mkVerdict(verdictStore, "update-mismatch", baseTs)
+        verdict = mkVerdict(verdictStore, "update-mismatch", baseTs, roundNumber = None)
 
         // Activity record has a timestamp that doesn't match any verdict
         unmatchedTs = baseTs.plusSeconds(999L)
@@ -485,12 +513,14 @@ class DbAppActivityRecordStoreTest
           updateId,
           ts1,
           DbScanVerdictStore.VerdictResultDbValue.Accepted,
+          roundNumber = None,
         )
         rejected = mkVerdict(
           verdictStore,
           updateId,
           ts2,
           DbScanVerdictStore.VerdictResultDbValue.Rejected,
+          roundNumber = None,
         )
         // First batch with the accepted verdict and its activity record
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
@@ -531,12 +561,14 @@ class DbAppActivityRecordStoreTest
           updateId,
           ts1,
           DbScanVerdictStore.VerdictResultDbValue.Rejected,
+          roundNumber = None,
         )
         accepted = mkVerdict(
           verdictStore,
           updateId,
           ts2,
           DbScanVerdictStore.VerdictResultDbValue.Accepted,
+          roundNumber = None,
         )
         // First batch with the rejection and its activity record
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
@@ -1363,7 +1395,7 @@ class DbAppActivityRecordStoreTest
       updateId: String,
       recordTs: CantonTimestamp,
       verdictResult: Short = DbScanVerdictStore.VerdictResultDbValue.Accepted,
-      roundNumber: Option[Long] = None,
+      roundNumber: Option[Long],
   ): verdictStore.VerdictT =
     new verdictStore.VerdictT(
       rowId = 0L,
