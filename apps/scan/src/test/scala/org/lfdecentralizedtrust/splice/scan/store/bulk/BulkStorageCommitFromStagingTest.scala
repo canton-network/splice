@@ -413,10 +413,15 @@ class BulkStorageCommitFromStagingTest
             responses(i).get() match {
               case _ if neverHaveData(i).get() =>
                 Future.successful(
-                  GetBulkObjectsProgressResponse(false, Some(BulkObjectsAvailability.Never))
+                  GetBulkObjectsProgressResponse(BulkObjectsAvailability.Backfilling)
                 )
               case Some((hasData, _)) =>
-                Future.successful(new GetBulkObjectsProgressResponse(hasData))
+                Future.successful(
+                  GetBulkObjectsProgressResponse(
+                    if (hasData) BulkObjectsAvailability.Available
+                    else BulkObjectsAvailability.Processing
+                  )
+                )
               case None =>
                 Future.failed[GetBulkObjectsProgressResponse](
                   new IllegalStateException(s"No response configured for scan_$i")

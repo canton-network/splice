@@ -3374,7 +3374,7 @@ object HttpScanAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], http.GetBulkObjectsProgressResponse] =
       client.getBulkObjectsProgress(
         recordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
-        Some(bucket),
+        bucket,
         headers,
       )
 

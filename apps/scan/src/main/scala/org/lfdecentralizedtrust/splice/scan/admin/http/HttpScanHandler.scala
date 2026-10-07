@@ -2705,7 +2705,7 @@ class HttpScanHandler(
 
   override def getBulkObjectsProgress(respond: ScanResource.GetBulkObjectsProgressResponse.type)(
       atOrBeforeRecordTime: java.time.OffsetDateTime,
-      bucket: Option[definitions.BulkStorageBucket],
+      bucket: definitions.BulkStorageBucket,
   )(
       extracted: TraceContext
   ): scala.concurrent.Future[ScanResource.GetBulkObjectsProgressResponse] = {
@@ -2721,20 +2721,18 @@ class HttpScanHandler(
         val requested = CantonTimestamp.tryFromInstant(atOrBeforeRecordTime.toInstant)
         for {
           progress <- bucket match {
-            case Some(definitions.BulkStorageBucket.members.Committed) =>
+            case definitions.BulkStorageBucket.members.Committed =>
               bulkStorage.getCommittedProgressTimestamp()
-            case _ => bulkStorage.getStagingProgressTimestamp()
+            case definitions.BulkStorageBucket.members.Staging =>
+              bulkStorage.getStagingProgressTimestamp()
           }
           firstOwnSegmentStart <- bulkStorage.getFirstOwnSegmentStart()
         } yield {
           ScanResource.GetBulkObjectsProgressResponse.OK(
             definitions.GetBulkObjectsProgressResponse(
-              progress >= requested,
-              Some(
-                HttpScanHandler.toHttpAvailability(
-                  BulkObjectsAvailability.of(progress, requested, firstOwnSegmentStart)
-                )
-              ),
+              HttpScanHandler.toHttpAvailability(
+                BulkObjectsAvailability.of(progress, requested, firstOwnSegmentStart)
+              )
             )
           )
         }
@@ -2982,8 +2980,8 @@ object HttpScanHandler {
   ): definitions.BulkObjectsAvailability =
     availability match {
       case BulkObjectsAvailability.Available => definitions.BulkObjectsAvailability.Available
-      case BulkObjectsAvailability.NotYet => definitions.BulkObjectsAvailability.NotYet
-      case BulkObjectsAvailability.Never => definitions.BulkObjectsAvailability.Never
+      case BulkObjectsAvailability.Processing => definitions.BulkObjectsAvailability.Processing
+      case BulkObjectsAvailability.Backfilling => definitions.BulkObjectsAvailability.Backfilling
     }
 
   // We expect a handful at most but want to somewhat guard against attacks

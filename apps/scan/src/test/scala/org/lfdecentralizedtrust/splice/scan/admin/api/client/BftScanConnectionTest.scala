@@ -36,7 +36,6 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   BulkObjectsAvailability,
-  BulkStorageBucket,
   ErrorResponse,
   GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
@@ -355,36 +354,13 @@ class BftScanConnectionTest
 
   "BftScanConnection" should {
 
-    "map bulk progress answers to data availability, falling back to the boolean for older Scans" in {
-      def availability(beyond: Boolean, answer: Option[BulkObjectsAvailability]) =
-        BftScanConnection.dataAvailability(
-          GetBulkObjectsProgressResponse(beyond, answer),
-          BulkStorageBucket.Staging,
-        )
+    "map bulk progress answers to data availability" in {
+      def availability(answer: BulkObjectsAvailability) =
+        BftScanConnection.dataAvailability(GetBulkObjectsProgressResponse(answer))
 
-      availability(true, Some(BulkObjectsAvailability.Available)) shouldBe
-        DataAvailabilityResponse.Available
-      availability(false, Some(BulkObjectsAvailability.NotYet)) shouldBe
-        DataAvailabilityResponse.NotYet
-      availability(false, Some(BulkObjectsAvailability.Never)) shouldBe
-        DataAvailabilityResponse.Never
-      availability(true, None) shouldBe DataAvailabilityResponse.Available
-      availability(false, None) shouldBe DataAvailabilityResponse.NotYet
-    }
-
-    "treat an older Scan's answer for the committed bucket as not yet, since it only reports staging progress" in {
-      def committedAvailability(beyond: Boolean, answer: Option[BulkObjectsAvailability]) =
-        BftScanConnection.dataAvailability(
-          GetBulkObjectsProgressResponse(beyond, answer),
-          BulkStorageBucket.Committed,
-        )
-
-      committedAvailability(true, None) shouldBe DataAvailabilityResponse.NotYet
-      committedAvailability(false, None) shouldBe DataAvailabilityResponse.NotYet
-      committedAvailability(true, Some(BulkObjectsAvailability.Available)) shouldBe
-        DataAvailabilityResponse.Available
-      committedAvailability(false, Some(BulkObjectsAvailability.Never)) shouldBe
-        DataAvailabilityResponse.Never
+      availability(BulkObjectsAvailability.Available) shouldBe DataAvailabilityResponse.Available
+      availability(BulkObjectsAvailability.Processing) shouldBe DataAvailabilityResponse.NotYet
+      availability(BulkObjectsAvailability.Backfilling) shouldBe DataAvailabilityResponse.Never
     }
 
     "return the agreed response when all agree" in {

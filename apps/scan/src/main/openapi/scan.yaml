@@ -1748,7 +1748,7 @@ paths:
             format: date-time
         - name: "bucket"
           in: "query"
-          required: false
+          required: true
           schema:
             $ref: "#/components/schemas/BulkStorageBucket"
       responses:
@@ -4078,17 +4078,16 @@ components:
     GetBulkObjectsProgressResponse:
       type: object
       required:
-        - beyond_requested_record_time
+        - availability
       properties:
-        beyond_requested_record_time:
-          type: boolean
         availability:
           $ref: "#/components/schemas/BulkObjectsAvailability"
 
     BulkStorageBucket:
       type: string
       description: |
-        Which bulk storage bucket a progress query refers to. Defaults to "staging".
+        The bulk storage bucket a progress query refers to: "staging" holds the objects this Scan has written or
+        copied but not yet verified against its peers, "committed" the objects that passed that check.
       enum:
         - "staging"
         - "committed"
@@ -4096,15 +4095,19 @@ components:
     BulkObjectsAvailability:
       type: string
       description: |
-        "available": the bucket holds the objects up to the requested record time.
-        "not_yet": it does not yet, but will.
-        "never": this Scan does not produce the objects itself, because the requested record time lies before its
-        first own segment, and it does not hold them now. A Scan that later copies them from its peers answers
-        "available" from then on.
+        Whether the requested bucket of this Scan holds all bulk storage objects (update segments and ACS snapshots)
+        up to the requested record time.
+        "available": it does.
+        "processing": it does not yet. The record time lies within this Scan's own history, so it produces the
+        objects itself from its own data; they appear once its dump (staging) or its check against the peers
+        (committed) has reached the record time.
+        "backfilling": it does not, and will not produce them itself, because the record time lies before this
+        Scan's own history (it joined after the network started). It copies these objects from its peers instead,
+        and answers "available" once that copy has reached the record time.
       enum:
         - "available"
-        - "not_yet"
-        - "never"
+        - "processing"
+        - "backfilling"
 
     GetRewardAccountingEarliestAvailableRoundResponse:
       type: object

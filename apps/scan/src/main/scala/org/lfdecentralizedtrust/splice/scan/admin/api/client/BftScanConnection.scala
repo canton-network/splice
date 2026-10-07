@@ -956,7 +956,7 @@ class BftScanConnection(
         retryProvider,
         logger,
         hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp, BulkStorageBucket.Staging)
-          .map(BftScanConnection.dataAvailability(_, BulkStorageBucket.Staging)),
+          .map(BftScanConnection.dataAvailability),
         getData = _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
         endpoint = "getBulkObjectChecksums",
         callConfig = BftCallConfig.default(scanList.scanConnections),
@@ -1052,18 +1052,11 @@ class BftScanConnection(
 
 object BftScanConnection {
 
-  def dataAvailability(
-      response: GetBulkObjectsProgressResponse,
-      bucket: BulkStorageBucket,
-  ): DataAvailabilityResponse =
+  def dataAvailability(response: GetBulkObjectsProgressResponse): DataAvailabilityResponse =
     response.availability match {
-      case Some(BulkObjectsAvailability.members.Available) => DataAvailabilityResponse.Available
-      case Some(BulkObjectsAvailability.members.NotYet) => DataAvailabilityResponse.NotYet
-      case Some(BulkObjectsAvailability.members.Never) => DataAvailabilityResponse.Never
-      case None if bucket == BulkStorageBucket.Committed => DataAvailabilityResponse.NotYet
-      case None =>
-        if (response.beyondRequestedRecordTime) DataAvailabilityResponse.Available
-        else DataAvailabilityResponse.NotYet
+      case BulkObjectsAvailability.members.Available => DataAvailabilityResponse.Available
+      case BulkObjectsAvailability.members.Processing => DataAvailabilityResponse.NotYet
+      case BulkObjectsAvailability.members.Backfilling => DataAvailabilityResponse.Never
     }
 
   /** Configuration for a BFT call.

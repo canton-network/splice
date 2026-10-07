@@ -166,7 +166,7 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
   private def progressResponse(
       bulkStorage: BulkStorageReader,
       recordTime: String,
-      bucket: Option[definitions.BulkStorageBucket] = None,
+      bucket: definitions.BulkStorageBucket = definitions.BulkStorageBucket.Staging,
   ): definitions.GetBulkObjectsProgressResponse =
     inside(
       handler(bulkStorage = Some(bulkStorage))
@@ -192,45 +192,42 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       )
     }
 
-    "GetBulkObjectsProgress returns true when enough progress was made" in {
+    "GetBulkObjectsProgress answers available when enough progress was made" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
       val response = progressResponse(
         bulkStorageReader(Some(snapshotProgress), Some(updateRange)),
         "2023-12-31T00:00:00Z",
       )
-      response.beyondRequestedRecordTime shouldBe true
-      response.availability shouldBe Some(definitions.BulkObjectsAvailability.Available)
+      response.availability shouldBe definitions.BulkObjectsAvailability.Available
     }
 
-    "GetBulkObjectsProgress returns false when snapshot progress is behind the required catch-up timestamp" in {
+    "GetBulkObjectsProgress answers processing when snapshot progress is behind the requested record time" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
       val response = progressResponse(
         bulkStorageReader(Some(snapshotProgress), Some(updateRange)),
         "2024-01-01T00:00:00Z",
       )
-      response.beyondRequestedRecordTime shouldBe false
-      response.availability shouldBe Some(definitions.BulkObjectsAvailability.NotYet)
+      response.availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
 
-    "GetBulkObjectsProgress returns false when updates progress is behind the required catch-up timestamp" in {
+    "GetBulkObjectsProgress answers processing when updates progress is behind the requested record time" in {
       val snapshotProgress = snapshotProgressAt("2024-01-02T00:00:00Z")
       val updateRange = updateProgress("2023-12-30T00:00:00Z", "2023-12-31T00:00:00Z")
       val response = progressResponse(
         bulkStorageReader(Some(snapshotProgress), Some(updateRange)),
         "2024-01-01T00:00:00Z",
       )
-      response.beyondRequestedRecordTime shouldBe false
+      response.availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
 
-    "GetBulkObjectsProgress returns false when progress is not initialized" in {
+    "GetBulkObjectsProgress answers processing when progress is not initialized" in {
       val response = progressResponse(bulkStorageReader(None, None), "2024-01-01T00:00:00Z")
-      response.beyondRequestedRecordTime shouldBe false
-      response.availability shouldBe Some(definitions.BulkObjectsAvailability.NotYet)
+      response.availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
 
-    "GetBulkObjectsProgress answers never before the first own segment when the data is not held" in {
+    "GetBulkObjectsProgress answers backfilling before the first own segment when the data is not held" in {
       val response = progressResponse(
         bulkStorageReader(
           None,
@@ -240,8 +237,7 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
         ),
         "2024-01-01T00:00:00Z",
       )
-      response.beyondRequestedRecordTime shouldBe false
-      response.availability shouldBe Some(definitions.BulkObjectsAvailability.Never)
+      response.availability shouldBe definitions.BulkObjectsAvailability.Backfilling
     }
 
     "GetBulkObjectsProgress answers available before the first own segment once the data is held" in {
@@ -254,7 +250,7 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
         ),
         "2024-01-01T00:00:00Z",
       )
-      response.availability shouldBe Some(definitions.BulkObjectsAvailability.Available)
+      response.availability shouldBe definitions.BulkObjectsAvailability.Available
     }
 
     "GetBulkObjectsProgress answers from the committed progress for the committed bucket" in {
@@ -266,12 +262,12 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
           Some(updateProgress("2023-12-30T00:00:00Z", "2023-12-31T00:00:00Z")),
       )
       progressResponse(reader, "2024-01-01T00:00:00Z").availability shouldBe
-        Some(definitions.BulkObjectsAvailability.Available)
+        definitions.BulkObjectsAvailability.Available
       progressResponse(
         reader,
         "2024-01-01T00:00:00Z",
-        Some(definitions.BulkStorageBucket.Committed),
-      ).availability shouldBe Some(definitions.BulkObjectsAvailability.NotYet)
+        definitions.BulkStorageBucket.Committed,
+      ).availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
   }
 }

@@ -9,8 +9,8 @@ sealed trait BulkObjectsAvailability
 
 object BulkObjectsAvailability {
   case object Available extends BulkObjectsAvailability
-  case object NotYet extends BulkObjectsAvailability
-  case object Never extends BulkObjectsAvailability
+  case object Processing extends BulkObjectsAvailability
+  case object Backfilling extends BulkObjectsAvailability
 
   def of(
       progress: CantonTimestamp,
@@ -18,6 +18,6 @@ object BulkObjectsAvailability {
       firstOwnSegmentStart: Option[CantonTimestamp],
   ): BulkObjectsAvailability =
     if (progress >= requested) Available
-    else if (firstOwnSegmentStart.exists(requested <= _)) Never
-    else NotYet
+    else if (firstOwnSegmentStart.exists(requested <= _)) Backfilling
+    else Processing
 }
