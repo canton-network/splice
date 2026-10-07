@@ -492,12 +492,13 @@ class ScanTimeBasedIntegrationTest
           io.circe.parser.decode[definitions.ActiveContract],
         )
 
-        (acsObjKey, acsAtMidnightFromS3)
+        acsAtMidnightFromS3
       }
 
-      val (acsObjKey, acsAtMidnightFromS3) =
-        checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.CompactJson)
-      checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.ProtobufJson)
+      val acsAtMidnightFromS3 = checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.CompactJson)
+      val protobufAcsAtMidnightFromS3 =
+        checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.ProtobufJson)
+      protobufAcsAtMidnightFromS3.map(_.contractId) shouldBe acsAtMidnightFromS3.map(_.contractId)
 
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well
