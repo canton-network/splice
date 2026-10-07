@@ -365,9 +365,13 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
   });
 }
 
+export function getBigqueryProdDatasetId(scanBigQuery: ScanBigQueryConfig): string {
+  return `${scanBigQuery.dataset}_prod`;
+}
+
 function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(`${scanBigQuery.dataset}-prod`, {
-    datasetId: `${scanBigQuery.dataset}_prod`,
+    datasetId: getBigqueryProdDatasetId(scanBigQuery),
     friendlyName: `${scanBigQuery.dataset} Production Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: false,

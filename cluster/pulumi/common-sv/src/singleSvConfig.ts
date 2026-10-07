@@ -104,6 +104,7 @@ export const ScanBigQueryConfigSchema = z
     dataset: z.string(),
     prefix: z.string(),
     functionsDataset: z.string().optional(),
+    useProdForDashboards: z.boolean().default(false),
     silverDataset: z.string().optional(),
     goldDataset: z.string().optional(),
     enableLegacyDatastream: z.boolean().default(true),
