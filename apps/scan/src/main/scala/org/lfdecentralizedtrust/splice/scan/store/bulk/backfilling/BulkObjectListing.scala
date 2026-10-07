@@ -44,29 +44,54 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
       pageSize: Int,
       availableAt: CantonTimestamp,
   )(implicit tc: TraceContext): Future[PeerListing[BulkStorageObjects.UpdateObjectsPage]] =
-    fromHolders(
+    inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
         _.listBulkUpdateHistoryObjectsWithHolders(
           startRecordTime,
           endRecordTime,
           pageSize,
           availableAt,
-          ScanStorageConfig.Encoding.CompactJson,
+          encoding,
         )
       )
-    )
+    )(pages => Some(BulkStorageObjects.UpdateObjectsPage(pages.flatMap(_.objects), None)))
 
   override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[PeerListing[Option[BulkStorageObjects.SnapshotObjects]]] =
-    fromHolders(
+    inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
-        _.listBulkAcsSnapshotObjectsWithHolders(
-          recordTime,
-          ScanStorageConfig.Encoding.CompactJson,
-        )
+        _.listBulkAcsSnapshotObjectsWithHolders(recordTime, encoding)
       )
-    )
+    )(sameSnapshot)
+
+  private def sameSnapshot(
+      snapshots: Seq[Option[BulkStorageObjects.SnapshotObjects]]
+  ): Option[Option[BulkStorageObjects.SnapshotObjects]] =
+    snapshots.flatten match {
+      case Seq() => Some(None)
+      case found @ (first +: _)
+          if found.size == snapshots.size && found.forall(_.recordTime == first.recordTime) =>
+        Some(Some(BulkStorageObjects.SnapshotObjects(first.recordTime, found.flatMap(_.objects))))
+      case _ => None
+    }
+
+  private def inEveryEncoding[T](list: ScanStorageConfig.Encoding => Future[(T, List[Uri])])(
+      merge: Seq[T] => Option[T]
+  ): Future[PeerListing[T]] =
+    Future
+      .traverse(ScanStorageConfig.Encoding.all.toList)(encoding => fromHolders(list(encoding)))
+      .map { listings =>
+        val available = listings.collect { case PeerListing.Available(objects, holders) =>
+          (objects, holders)
+        }
+        if (listings.contains(PeerListing.NoPeerWillHold)) PeerListing.NoPeerWillHold
+        else if (available.size < listings.size) PeerListing.NotAvailableYet
+        else
+          merge(available.map(_._1)).fold[PeerListing[T]](PeerListing.NotAvailableYet)(
+            PeerListing.Available(_, available.flatMap(_._2).distinct)
+          )
+      }
 
   private def fromHolders[T](call: Future[(T, List[Uri])]): Future[PeerListing[T]] =
     call
