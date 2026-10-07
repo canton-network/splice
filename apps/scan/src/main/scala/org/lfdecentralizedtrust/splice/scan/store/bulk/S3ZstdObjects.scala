@@ -43,7 +43,10 @@ class S3ZstdObjects(
       .map(str => (str + "\n").getBytes(StandardCharsets.UTF_8))
       .groupedWeighted(storageConfig.bulkZstdBlockSize)(_.length.toLong)
       .map(group => {
-        val bytes = ByteString(group.flatten)
+        val builder = ByteString.newBuilder
+        builder.sizeHint(group.iterator.map(_.length).sum)
+        group.foreach(builder.putBytes)
+        val bytes = builder.result()
         logger.trace(
           s"Concatenated ${group.length} objects from DB (after encoding), to a bytestring of size ${bytes.length} bytes."
         )
