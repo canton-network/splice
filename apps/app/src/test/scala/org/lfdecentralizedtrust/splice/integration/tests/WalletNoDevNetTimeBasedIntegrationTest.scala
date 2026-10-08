@@ -1,0 +1,125 @@
+package org.lfdecentralizedtrust.splice.integration.tests
+
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  updateAutomationConfig,
+}
+import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
+import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.util.{
+  SvTestUtil,
+  SynchronizerFeesTestUtil,
+  WalletTestUtil,
+  TimeTestUtil,
+}
+import org.lfdecentralizedtrust.splice.validator.automation.{
+  ReceiveFaucetCouponTrigger,
+  TopupMemberTrafficTrigger,
+}
+import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry
+import com.digitalasset.canton.HasExecutionContext
+
+import java.time.Duration
+import java.util.UUID
+
+class WalletNoDevNetTimeBasedIntegrationTest
+    extends IntegrationTest
+    with HasExecutionContext
+    with WalletTestUtil
+    with SynchronizerFeesTestUtil
+    with SvTestUtil
+    with TimeTestUtil {
+
+  override def environmentDefinition: EnvironmentDefinition = {
+    EnvironmentDefinition
+      // Simulated time: needed to advance rounds so that sv1 earns CC.
+      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
+      // 1. Leave DevNet mode, so that hasSufficientFundsForTopup really compares
+      //    the wallet balance with the top-up cost.
+      .addConfigTransform((_, config) => ConfigTransforms.noDevNet(config))
+      // 2. Turn top-ups ON (targetThroughput > 0) for non-SV validators,
+      //    which also makes the reserved traffic apply.
+      .withTrafficTopupsEnabled
+      // 3. Pause the triggers that would buy traffic or give aliceValidator CC.
+      .addConfigTransform((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Validator)(
+          _.withPausedTrigger[TopupMemberTrafficTrigger]
+            .withPausedTrigger[ReceiveFaucetCouponTrigger]
+        )(config)
+      )
+      // 4. Read the traffic balance fresh on every command.
+      .withTrafficBalanceCacheDisabled
+  }
+
+  "A validator wallet" should {
+
+    "accept a transfer offer with high priority when it cannot afford a top-up" in { implicit env =>
+      // There is no tap outside DevNet, so sv1 earns CC through SV rewards.
+      actAndCheck(
+        "Advance enough rounds for SV1 to claim rewards", {
+          (0 to 3).foreach { _ =>
+            advanceTimeForRewardAutomationToRunForCurrentRound
+            eventually() {
+              ensureSvRewardCouponReceivedForCurrentRound(sv1ScanBackend, sv1WalletClient)
+            }
+            advanceRoundsToNextRoundOpening
+          }
+        },
+      )(
+        "Wait for SV rewards to be collected",
+        _ => sv1WalletClient.balance().unlockedQty should be > BigDecimal(0),
+      )
+
+      val now = env.environment.clock.now
+
+      clue("Precondition: aliceValidator cannot afford one top-up") {
+        val topupAmount = getTopupParameters(aliceValidatorBackend, now).topupAmount
+        val (_, topupCostCc) = computeSynchronizerFees(topupAmount)
+        aliceValidatorWalletClient.balance().unlockedQty should be < topupCostCc
+      }
+
+      clue(
+        "Precondition: aliceValidator's traffic is at or below the reserve (a Low priority command would be refused)"
+      ) {
+        val reserved = aliceValidatorBackend.config.domains.global.reservedTraffic.value
+        val remainder =
+          getTrafficState(aliceValidatorBackend, activeSynchronizerId).extraTrafficRemainder
+        remainder should be <= reserved
+      }
+
+      val trackingId = UUID.randomUUID.toString
+      val (offerCid, _) = actAndCheck(
+        "sv1 offers some CC to aliceValidator",
+        sv1WalletClient.createTransferOffer(
+          aliceValidatorBackend.getValidatorPartyId(),
+          BigDecimal(100),
+          "high priority test",
+          now.plus(Duration.ofMinutes(10)),
+          trackingId,
+        ),
+      )(
+        "the offer shows up in aliceValidator's wallet",
+        cid =>
+          forExactly(1, aliceValidatorWalletClient.listTransferOffers())(
+            _.contractId shouldBe cid
+          ),
+      )
+
+      actAndCheck(
+        "aliceValidator accepts the offer (priority High, so the reserve does not block it)",
+        aliceValidatorWalletClient.acceptTransferOffer(offerCid),
+      )(
+        "the offer completes and the balance goes up",
+        _ => {
+          inside(sv1WalletClient.getTransferOfferStatus(trackingId)) {
+            case d0.GetTransferOfferStatusResponse.members.TransferOfferCompletedResponse(r) =>
+              r.status shouldBe TxLogEntry.Http.TransferOfferStatus.Completed
+          }
+          aliceValidatorWalletClient.balance().unlockedQty should be > BigDecimal(0)
+        },
+      )
+    }
+  }
+}
