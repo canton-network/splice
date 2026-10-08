@@ -544,6 +544,39 @@ trait AcsSnapshotStoreTest
         }
       }
 
+      "paginate without duplicates when contracts match several parties" in {
+        val contracts = (1 to 5).map(n => openMiningRound(dsoParty, n.toLong, 1.0))
+        val onlyParty1 = openMiningRound(dsoParty, 6L, 1.0)
+        for {
+          updateHistory <- mkUpdateHistory()
+          store = mkStore(updateHistory)
+          _ <- MonadUtil.sequentialTraverse(contracts.zipWithIndex) { case (contract, i) =>
+            ingestCreate(
+              updateHistory,
+              contract,
+              timestamp1.minusSeconds(100L - i.toLong),
+              signatories = Seq(providerParty(1), dsoParty, providerParty(2)),
+            )
+          }
+          _ <- ingestCreate(
+            updateHistory,
+            onlyParty1,
+            timestamp1.minusSeconds(1L),
+            signatories = Seq(providerParty(1), dsoParty),
+          )
+          _ <- store.insertNewSnapshot(nextTable, DefaultMigrationId, timestamp1)
+          result <- queryRecursive(
+            store,
+            None,
+            Vector.empty,
+            Seq(providerParty(1), providerParty(2)),
+            Seq.empty,
+          )
+        } yield {
+          result should be((contracts :+ onlyParty1).map(_.contractId.contractId))
+        }
+      }
+
     }
 
     "getHoldingsState" should {
