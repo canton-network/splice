@@ -4162,7 +4162,6 @@ components:
         total_asset_activity_weight:
           type: integer
           format: int64
-          nullable: true
         active_parties_count:
           type: integer
           format: int64
@@ -4171,15 +4170,12 @@ components:
           format: int64
         total_app_reward:
           type: string
-          nullable: true
           description: The total of all rewards from app activity for this round, including thresholded.
         total_asset_reward:
           type: string
-          nullable: true
           description: The total of all rewards from asset activity for this round, including thresholded.
         issuance_per_featured_asset_activity:
           type: string
-          nullable: true
           description: The issuance of rewards for a unit of asset activity in this round.
         total_app_reward_minting_allowance:
           type: string
