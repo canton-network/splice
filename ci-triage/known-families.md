@@ -55,6 +55,17 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   call still stayed open to the 120 s client deadline. The hanging call follows every mempool rejection branch, so the
   exposure window is the whole blacklist period (~69 s, 438 rejections), not only the quorum gap. Confirming grep
   for this branch: `currently blacklisted, rejecting` on the ack's trace id.
+- Signature (4): checkErrors WARN `AvailabilityModule:sequencer=globalSequencerSvN Received a message from 'SEQ::svM'
+  ... cannot be verified in the currently known dissemination topology Map(...), dropping it`, all tests pass. The Map
+  lacks svM. Confirm: svM joined the ordering topology in a later step than svN (staggered 1 -> 3 -> 4), svN shows
+  `blacklisted nodes = List(SEQ::svN...)` in the epochs covering the WARNs, and svN's last `updating active ordering
+  topology to` before the WARNs has the older size. Mechanism (3.6.1 bytecode): `updateActiveMembership` runs only from
+  consensus `CreateProposal`/state transfer, so a blacklisted node keeps the stale membership. Its output fetch uses the
+  epoch topology and asks svM. `RemoteBatchDataFetched` replies from svM are dropped at WARN, while other
+  availability messages are dropped at INFO. Harmless: another PoA signer answers within ms. Fix is Canton's (refresh on
+  every new epoch). Do not ignore the WARN, because it is the key/topology-mismatch signal. 10303 (run 37646424017,
+  wall-clock-time (2), main 8b37552a4e, canton 3.6.1, ValidatorSequencerConnectionIntegrationTest, sv4 blacklisted
+  epochs 78-82), packet [10303-sv4-availability-drops-sv2-fetch-replies-while-blacklisted-bft-1-to-3-to-4.md](10303-sv4-availability-drops-sv2-fetch-replies-while-blacklisted-bft-1-to-3-to-4.md).
 - Signature (3): a participant's topology broadcast is refused by the blacklisted sequencer and the party never
   reaches that synchronizer, surfacing as `INVALID_PRESCRIBED_SYNCHRONIZER_ID(9,...): Not all informees are on the
   specified synchronizer: <target>, but on Set(<other synchronizer>)` on a wallet/app-install command. 10227
