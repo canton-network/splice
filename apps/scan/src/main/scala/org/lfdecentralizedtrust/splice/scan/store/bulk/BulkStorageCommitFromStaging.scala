@@ -10,6 +10,7 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.scaladsl.{Flow, Source}
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.NoScanWillHaveData
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
@@ -41,7 +42,7 @@ class BulkStorageCommitFromStaging[T](
       s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")} (requires catchup to $requiredCatchupTimestamp)"
     )
     if (appConfig.bftCheckEnabled) {
-      for {
+      (for {
         connection <- scanConnection.connection
         bft <- connection
           .getBulkObjectChecksums(requiredCatchupTimestamp, objects.map(_.key))
@@ -138,6 +139,11 @@ class BulkStorageCommitFromStaging[T](
             // No consensus yet
             false
         }
+      }).recover { case _: NoScanWillHaveData =>
+        logger.info(
+          s"No peer will ever hold objects ${objects.map(_.key).mkString(", ")}, committing them on this Scan's own checksums"
+        )
+        true
       }
     } else {
       logger.trace("BFT check is disabled, skipping BFT agreement check")

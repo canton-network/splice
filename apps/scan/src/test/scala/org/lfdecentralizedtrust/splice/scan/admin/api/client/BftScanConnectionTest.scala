@@ -35,7 +35,9 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  BulkObjectsAvailability,
   ErrorResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -48,6 +50,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   RewardAccountingRootHashUndetermined,
 }
 
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.Bft
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
   DomainScans,
@@ -350,6 +353,15 @@ class BftScanConnectionTest
     when(mock.getRewardAccountingBatch(round, hash)).thenReturn(Future.failed(failure))
 
   "BftScanConnection" should {
+
+    "map bulk progress answers to data availability" in {
+      def availability(answer: BulkObjectsAvailability) =
+        BftScanConnection.dataAvailability(GetBulkObjectsProgressResponse(answer))
+
+      availability(BulkObjectsAvailability.Available) shouldBe DataAvailabilityResponse.Available
+      availability(BulkObjectsAvailability.Processing) shouldBe DataAvailabilityResponse.NotYet
+      availability(BulkObjectsAvailability.Backfilling) shouldBe DataAvailabilityResponse.Never
+    }
 
     "return the agreed response when all agree" in {
       val connections = getMockedConnections(n = 4)

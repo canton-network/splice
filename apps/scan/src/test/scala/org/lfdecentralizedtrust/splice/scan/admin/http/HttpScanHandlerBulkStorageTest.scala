@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
 import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
@@ -124,36 +125,57 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       toTimestamp = snapshotProgressAt(toInstant),
     )
 
+  private def snapshotsProgress(
+      progressO: Option[TimestampWithMigrationId]
+  ): AcsSnapshotBulkStoragePersistentProgress = {
+    val progress = mock[AcsSnapshotBulkStoragePersistentProgress]
+    when(
+      progress.readLatestProcessedSnapshotTimestamp(any[TraceContext], any[ExecutionContext])
+    ).thenReturn(Future.successful(progressO))
+    progress
+  }
+
+  private def updatesProgress(
+      progressO: Option[UpdatesSegment]
+  ): UpdateHistoryBulkStoragePersistentProgress = {
+    val progress = mock[UpdateHistoryBulkStoragePersistentProgress]
+    when(progress.readLatestProcessedSegment(any[TraceContext], any[ExecutionContext]))
+      .thenReturn(Future.successful(progressO))
+    progress
+  }
+
   private def bulkStorageReader(
       snapshotProgressO: Option[TimestampWithMigrationId],
       updateProgressO: Option[UpdatesSegment],
-  ): BulkStorageReader = {
-    val acsSnapshotStagingProgress = mock[AcsSnapshotBulkStoragePersistentProgress]
-    val updateHistoryStagingProgress = mock[UpdateHistoryBulkStoragePersistentProgress]
-    when(
-      acsSnapshotStagingProgress.readLatestProcessedSnapshotTimestamp(
-        any[TraceContext],
-        any[ExecutionContext],
-      )
-    ).thenReturn(Future.successful(snapshotProgressO))
-    when(
-      updateHistoryStagingProgress.readLatestProcessedSegment(
-        any[TraceContext],
-        any[ExecutionContext],
-      )
-    ).thenReturn(Future.successful(updateProgressO))
-
+      committedSnapshotProgressO: Option[TimestampWithMigrationId] = None,
+      committedUpdateProgressO: Option[UpdatesSegment] = None,
+      firstOwnSegmentStart: Option[CantonTimestamp] = None,
+  ): BulkStorageReader =
     new BulkStorageReader(
-      acsSnapshotStagingProgress = acsSnapshotStagingProgress,
-      acsSnapshotCommittedProgress = mock[AcsSnapshotBulkStoragePersistentProgress],
-      updateHistoryStagingProgress = updateHistoryStagingProgress,
-      updateHistoryCommittedProgress = mock[UpdateHistoryBulkStoragePersistentProgress],
+      acsSnapshotStagingProgress = snapshotsProgress(snapshotProgressO),
+      acsSnapshotCommittedProgress = snapshotsProgress(committedSnapshotProgressO),
+      updateHistoryStagingProgress = updatesProgress(updateProgressO),
+      updateHistoryCommittedProgress = updatesProgress(committedUpdateProgressO),
       storageConfig = mock[ScanStorageConfig],
       stagingS3Connection = mock[S3BucketConnection],
       committedS3Connection = mock[S3BucketConnection],
+      firstOwnSegmentStart = () => Future.successful(firstOwnSegmentStart),
       loggerFactory = NamedLoggerFactory.root,
     )
-  }
+
+  private def progressResponse(
+      bulkStorage: BulkStorageReader,
+      recordTime: String,
+      bucket: definitions.BulkStorageBucket = definitions.BulkStorageBucket.Staging,
+  ): definitions.GetBulkObjectsProgressResponse =
+    inside(
+      handler(bulkStorage = Some(bulkStorage))
+        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
+          Instant.parse(recordTime).atOffset(ZoneOffset.UTC),
+          bucket,
+        )(TraceContext.empty)
+        .futureValue
+    ) { case ScanResource.GetBulkObjectsProgressResponseOK(value) => value }
 
   "HttpScanHandler bulk-storage endpoints" should {
     "return UNIMPLEMENTED when bulk storage is not configured for checksum lookups" in {
@@ -170,66 +192,82 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       )
     }
 
-    "GetBulkObjectsProgress returns true when enough progress was made" in {
+    "GetBulkObjectsProgress answers available when enough progress was made" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
-      val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
-      val h = handler(bulkStorage = Some(bulkStorage))
-      val requiredCatchupTimestamp = Instant.parse("2023-12-31T00:00:00Z").atOffset(ZoneOffset.UTC)
-      val response = h
-        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
-          requiredCatchupTimestamp
-        )(TraceContext.empty)
-        .futureValue
-      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
-        value.beyondRequestedRecordTime shouldBe true
-      }
+      val response = progressResponse(
+        bulkStorageReader(Some(snapshotProgress), Some(updateRange)),
+        "2023-12-31T00:00:00Z",
+      )
+      response.availability shouldBe definitions.BulkObjectsAvailability.Available
     }
 
-    "GetBulkObjectsProgress returns false when snapshot progress is behind the required catch-up timestamp" in {
+    "GetBulkObjectsProgress answers processing when snapshot progress is behind the requested record time" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
-      val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
-      val h = handler(bulkStorage = Some(bulkStorage))
-      val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
-      val response = h
-        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
-          requiredCatchupTimestamp
-        )(TraceContext.empty)
-        .futureValue
-      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
-        value.beyondRequestedRecordTime shouldBe false
-      }
+      val response = progressResponse(
+        bulkStorageReader(Some(snapshotProgress), Some(updateRange)),
+        "2024-01-01T00:00:00Z",
+      )
+      response.availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
 
-    "GetBulkObjectsProgress returns false when updates progress is behind the required catch-up timestamp" in {
+    "GetBulkObjectsProgress answers processing when updates progress is behind the requested record time" in {
       val snapshotProgress = snapshotProgressAt("2024-01-02T00:00:00Z")
       val updateRange = updateProgress("2023-12-30T00:00:00Z", "2023-12-31T00:00:00Z")
-      val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
-      val h = handler(bulkStorage = Some(bulkStorage))
-      val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
-      val response = h
-        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
-          requiredCatchupTimestamp
-        )(TraceContext.empty)
-        .futureValue
-      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
-        value.beyondRequestedRecordTime shouldBe false
-      }
+      val response = progressResponse(
+        bulkStorageReader(Some(snapshotProgress), Some(updateRange)),
+        "2024-01-01T00:00:00Z",
+      )
+      response.availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
 
-    "GetBulkObjectsProgress returns false when progress is not initialized" in {
-      val bulkStorage = bulkStorageReader(None, None)
-      val h = handler(bulkStorage = Some(bulkStorage))
-      val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
-      val response = h
-        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
-          requiredCatchupTimestamp
-        )(TraceContext.empty)
-        .futureValue
-      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
-        value.beyondRequestedRecordTime shouldBe false
-      }
+    "GetBulkObjectsProgress answers processing when progress is not initialized" in {
+      val response = progressResponse(bulkStorageReader(None, None), "2024-01-01T00:00:00Z")
+      response.availability shouldBe definitions.BulkObjectsAvailability.Processing
+    }
+
+    "GetBulkObjectsProgress answers backfilling before the first own segment when the data is not held" in {
+      val response = progressResponse(
+        bulkStorageReader(
+          None,
+          None,
+          firstOwnSegmentStart =
+            Some(CantonTimestamp.assertFromInstant(Instant.parse("2024-01-02T00:00:00Z"))),
+        ),
+        "2024-01-01T00:00:00Z",
+      )
+      response.availability shouldBe definitions.BulkObjectsAvailability.Backfilling
+    }
+
+    "GetBulkObjectsProgress answers available before the first own segment once the data is held" in {
+      val response = progressResponse(
+        bulkStorageReader(
+          Some(snapshotProgressAt("2024-01-01T00:00:00Z")),
+          Some(updateProgress("2023-12-31T00:00:00Z", "2024-01-01T00:00:00Z")),
+          firstOwnSegmentStart =
+            Some(CantonTimestamp.assertFromInstant(Instant.parse("2024-01-02T00:00:00Z"))),
+        ),
+        "2024-01-01T00:00:00Z",
+      )
+      response.availability shouldBe definitions.BulkObjectsAvailability.Available
+    }
+
+    "GetBulkObjectsProgress answers from the committed progress for the committed bucket" in {
+      val reader = bulkStorageReader(
+        Some(snapshotProgressAt("2024-01-02T00:00:00Z")),
+        Some(updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")),
+        committedSnapshotProgressO = Some(snapshotProgressAt("2023-12-31T00:00:00Z")),
+        committedUpdateProgressO =
+          Some(updateProgress("2023-12-30T00:00:00Z", "2023-12-31T00:00:00Z")),
+      )
+      progressResponse(reader, "2024-01-01T00:00:00Z").availability shouldBe
+        definitions.BulkObjectsAvailability.Available
+      progressResponse(
+        reader,
+        "2024-01-01T00:00:00Z",
+        definitions.BulkStorageBucket.Committed,
+      ).availability shouldBe definitions.BulkObjectsAvailability.Processing
     }
   }
 }

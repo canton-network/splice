@@ -260,7 +260,8 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         bulkStorageTestConfig,
         s3BucketConnection,
         s3BucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
-        loggerFactory,
+        firstOwnSegmentStart = () => Future.successful(None),
+        loggerFactory = loggerFactory,
       )
 
       def assertLatestSnapshotInMetrics(ts: CantonTimestamp) = {

@@ -33,6 +33,7 @@ org.lfdecentralizedtrust.splice.scan.store.DbAppActivityRecordStoreTest
 org.lfdecentralizedtrust.splice.scan.store.DbScanAppRewardsStoreTest
 org.lfdecentralizedtrust.splice.scan.store.QueryAcsSnapshotPaginationTokenTest
 org.lfdecentralizedtrust.splice.scan.store.ScanEventStoreTest
+org.lfdecentralizedtrust.splice.scan.store.bulk.BulkObjectsAvailabilityTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.ZstdTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.KvBackfillingProgressTest
 org.lfdecentralizedtrust.splice.scan.store.db.CheckMetaVersionsTest
