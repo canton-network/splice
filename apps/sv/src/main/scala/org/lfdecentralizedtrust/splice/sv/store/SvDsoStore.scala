@@ -1195,6 +1195,10 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
+  def findConflictingOpsParties(
+      proposed: Seq[PartyId],
+      excludeRightCid: Option[String],
+  )(implicit tc: TraceContext): Future[Seq[PartyId]]
 }
 
 object SvDsoStore {
