@@ -572,8 +572,24 @@ trait AcsSnapshotStoreTest
             Seq(providerParty(1), providerParty(2)),
             Seq.empty,
           )
+          resultWithDso <- queryRecursive(
+            store,
+            None,
+            Vector.empty,
+            Seq(providerParty(1), dsoParty, providerParty(2)),
+            Seq.empty,
+          )
+          resultWithDsoOnly <- queryRecursive(
+            store,
+            None,
+            Vector.empty,
+            Seq(dsoParty),
+            Seq.empty,
+          )
         } yield {
           result should be((contracts :+ onlyParty1).map(_.contractId.contractId))
+          result should be(resultWithDso)
+          result should be(resultWithDsoOnly)
         }
       }
 
@@ -1513,6 +1529,48 @@ trait AcsSnapshotStoreTest
 
 class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
   override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.Next
+
+  "same-contract rows have consecutive row_ids" in {
+    import storage.api.jdbcProfile.api.*
+
+    val contracts = (1 to 20).map(n =>
+      amulet(providerParty(n), n, n.toLong, 0.1) -> Seq(
+        providerParty(n - 1),
+        providerParty(n),
+        dsoParty,
+        providerParty(n + 1),
+      )
+    )
+    for {
+      updateHistory <- mkUpdateHistory()
+      store = mkStore(updateHistory)
+      _ <- MonadUtil.sequentialTraverse(contracts.zipWithIndex) {
+        case ((contract, stakeholders), i) =>
+          ingestCreate(
+            updateHistory,
+            contract,
+            timestamp1.minusSeconds(i.toLong),
+            signatories = stakeholders,
+          )
+      }
+      _ <- store.insertNewSnapshot(IncrementalAcsSnapshotTable.Next, DefaultMigrationId, timestamp1)
+      rowIds <- storage
+        .query(
+          sql"select create_id, row_id from acs_snapshot_data".as[(Int, Int)],
+          "get_row_ids",
+        )
+        .failOnShutdown
+    } yield {
+      rowIds should have size 20*4
+      forAll(rowIds.groupBy(_._1).values) { rows =>
+        val sortedRowIds = rows.map(_._2).sorted
+        forAll(sortedRowIds.zip(sortedRowIds.drop(1))) { case (first, second) =>
+          second shouldBe first + 1
+        }
+      }
+    }
+  }
+
 }
 
 class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
