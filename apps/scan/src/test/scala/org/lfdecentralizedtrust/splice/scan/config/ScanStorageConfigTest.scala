@@ -40,6 +40,18 @@ class ScanStorageConfigTest
         config.computeDbSnapshotTimeAfter(prev) shouldBe next
       }
     }
+
+    "find the segment folder of an object key and parse it back to the segment" in {
+      val config = ScanStorageConfigs.scanStorageConfigV1
+      val from = cantonTimestamp("2007-12-03T00:00:00.00Z")
+      val to = cantonTimestamp("2007-12-04T00:00:00.00Z")
+      val folder = config.getSegmentFolder(from, Some(to))
+      val key = s"$folder/${ScanStorageConfig.Encoding.ProtobufJson.storageKey("updates", 3)}"
+
+      config.getSegmentFolderOfObjectKey(key) shouldBe folder
+      config.getStartAndEndTimestampsForFolder(config.getSegmentFolderOfObjectKey(key)) shouldBe
+        Right((from, to))
+    }
   }
 
   private def cantonTimestamp(isoStr: String) =
