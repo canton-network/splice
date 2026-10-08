@@ -34,29 +34,21 @@ class WalletNoDevNetTimeBasedIntegrationTest
 
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
-      // Simulated time: needed to advance rounds so that sv1 earns CC.
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
-      // 1. Leave DevNet mode, so that hasSufficientFundsForTopup really compares
-      //    the wallet balance with the top-up cost.
       .addConfigTransform((_, config) => ConfigTransforms.noDevNet(config))
-      // 2. Turn top-ups ON (targetThroughput > 0) for non-SV validators,
-      //    which also makes the reserved traffic apply.
       .withTrafficTopupsEnabled
-      // 3. Pause the triggers that would buy traffic or give aliceValidator CC.
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[TopupMemberTrafficTrigger]
             .withPausedTrigger[ReceiveFaucetCouponTrigger]
         )(config)
       )
-      // 4. Read the traffic balance fresh on every command.
       .withTrafficBalanceCacheDisabled
   }
 
   "A validator wallet" should {
 
     "accept a transfer offer with high priority when it cannot afford a top-up" in { implicit env =>
-      // There is no tap outside DevNet, so sv1 earns CC through SV rewards.
       actAndCheck(
         "Advance enough rounds for SV1 to claim rewards", {
           (0 to 3).foreach { _ =>
