@@ -274,17 +274,15 @@ class ScanVerdictIngestionService(
           // Compute app activity records (before DB transaction).
           // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
           // the store resolves actual row_ids during insertion.
-          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO, roundByTime) <- {
+          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO) <- {
             val recordTimes =
               verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
             for {
-              computed <- appActivityComputation.computeActivities(summariesWithVerdicts)
-              records = computed.flatMap { case (summary, _, recordO, _) =>
-                recordO.map(summary.sequencingTime -> _)
+              records <- appActivityComputation.computeActivities(summariesWithVerdicts).map {
+                _.flatMap { case (summary, _, recordO) =>
+                  recordO.map(summary.sequencingTime -> _)
+                }
               }
-              roundByTime = computed.collect { case (summary, _, _, Some(round)) =>
-                summary.sequencingTime -> round
-              }.toMap
               firstActiveRoundO <- recordTimes.minOption match {
                 case Some(minRecordTime) =>
                   appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
@@ -295,17 +293,12 @@ class ScanVerdictIngestionService(
                   appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
                 case None => Future.successful(None)
               }
-            } yield (records, firstActiveRoundO, lastArchivedRoundO, roundByTime)
+            } yield (records, firstActiveRoundO, lastArchivedRoundO)
           }
 
           _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
-
-          itemsWithRounds = items.map { case (v, mkViews) =>
-            (v.copy(roundNumber = roundByTime.get(v.recordTime)), mkViews)
-          }
-
           _ <- store.insertVerdictsWithAppActivityRecords(
-            itemsWithRounds,
+            items,
             appActivityRecords,
             hasTrafficSummaries = summaryByTime.nonEmpty,
             firstActiveRoundO = firstActiveRoundO,
