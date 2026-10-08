@@ -45,7 +45,6 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.{
   BulkStorageBackfilling,
   KvBackfillingProgress,
   ScanPeerObjectSource,
-  UpToFirstOwnSegment,
   VerifiedObjectCopier,
 }
 import org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStart
@@ -162,7 +161,7 @@ class BulkStorage(
           loggerFactory,
         ),
         backfillingProgress,
-        new UpToFirstOwnSegment(historyStart, storageConfig),
+        new BulkStorageBackfilling.UpToFirstOwnSegment(historyStart, storageConfig),
         loggerFactory,
       )
     }

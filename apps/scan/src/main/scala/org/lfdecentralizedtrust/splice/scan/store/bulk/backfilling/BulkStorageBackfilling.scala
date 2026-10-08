@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageBackfillingConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdatesSegment
+import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryStart, ScanHistoryStart}
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 
@@ -32,7 +33,7 @@ class BulkStorageBackfilling(
     listing: BulkObjectListing,
     copier: ObjectCopier,
     progress: BackfillingProgress,
-    upperBound: BackfillUpperBound,
+    upperBound: BulkStorageBackfilling.BackfillUpperBound,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
@@ -218,6 +219,34 @@ class BulkStorageBackfilling(
 
 object BulkStorageBackfilling {
   val description = "BulkStorageBackfilling"
+
+  /** How far this Scan has to copy from its peers: up to its first own segment start, nothing (its history starts at
+    * genesis), or not known yet (its history start is not recorded).
+    */
+  sealed trait BackfillEnd
+
+  object BackfillEnd {
+    final case class CopyUpTo(firstOwnSegmentStart: CantonTimestamp) extends BackfillEnd
+    case object HistoryComplete extends BackfillEnd
+    case object NotYetKnown extends BackfillEnd
+  }
+
+  trait BackfillUpperBound {
+    def end(implicit tc: TraceContext): Future[BackfillEnd]
+  }
+
+  /** Derives the [[BackfillEnd]] from the recorded history start. */
+  class UpToFirstOwnSegment(historyStart: ScanHistoryStart, storageConfig: ScanStorageConfig)(
+      implicit ec: ExecutionContext
+  ) extends BackfillUpperBound {
+    override def end(implicit tc: TraceContext): Future[BackfillEnd] =
+      historyStart.get.map {
+        case None => BackfillEnd.NotYetKnown
+        case Some(HistoryStart.Genesis) => BackfillEnd.HistoryComplete
+        case Some(start: HistoryStart.From) =>
+          BackfillEnd.CopyUpTo(start.firstOwnSegmentStart(storageConfig))
+      }
+  }
 
   private sealed trait State
   private final case class CopyUpdates(nextPageToken: Option[String]) extends State

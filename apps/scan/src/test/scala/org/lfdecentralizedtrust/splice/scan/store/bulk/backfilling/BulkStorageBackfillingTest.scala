@@ -15,6 +15,10 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanStorageConfigs,
 }
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdatesSegment
+import org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.BulkStorageBackfilling.{
+  BackfillEnd,
+  BackfillUpperBound,
+}
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 import org.scalatest.wordspec.AsyncWordSpec
@@ -76,9 +80,9 @@ class BulkStorageBackfillingTest
   }
 
   private class FakeListing(
-      folders: => Seq[(String, Seq[ObjectKeyAndChecksum])],
-      snapshotsByTime: => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
-      val updateListings: AtomicInteger = new AtomicInteger(0),
+      folders: () => Seq[(String, Seq[ObjectKeyAndChecksum])],
+      snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
+      val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
   ) extends BulkObjectListing {
 
     override def updateObjectsPage(
@@ -87,8 +91,8 @@ class BulkStorageBackfillingTest
         pageSize: Int,
         nextPageToken: Option[String],
     )(implicit tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] = {
-      updateListings.incrementAndGet()
-      val inRange = folders.filter { case (name, _) =>
+      updateListingsCallCount.incrementAndGet()
+      val inRange = folders().filter { case (name, _) =>
         val (from, to) = storageConfig.getStartAndEndTimestampsForFolder(name) match {
           case Right(range) => range
           case Left(err) => throw new IllegalStateException(err)
@@ -108,7 +112,7 @@ class BulkStorageBackfillingTest
     override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
         tc: TraceContext
     ): Future[Option[BulkStorageObjects.SnapshotObjects]] = {
-      val snapshots = snapshotsByTime
+      val snapshots = snapshotsByTime()
       Future.successful(
         snapshots.lastOption.flatMap { case (latest, latestObjects) =>
           if (recordTime > latest) Some(BulkStorageObjects.SnapshotObjects(latest, latestObjects))
@@ -148,7 +152,7 @@ class BulkStorageBackfillingTest
   private def backfilling(
       progress: InMemoryProgress,
       copier: RecordingCopier,
-      listing: BulkObjectListing = new FakeListing(folders, snapshots),
+      listing: BulkObjectListing = new FakeListing(() => folders, () => snapshots),
       upperBound: BackfillUpperBound = new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
       pageSize: Int = 3,
   ) =
@@ -229,7 +233,7 @@ class BulkStorageBackfillingTest
       service(
         progress,
         copier,
-        new FakeListing(folders, snapshots),
+        new FakeListing(() => folders, () => snapshots),
         new SequenceBound(BackfillEnd.HistoryComplete),
         pageSize = 3,
       ).serviceSource()
@@ -258,7 +262,7 @@ class BulkStorageBackfillingTest
       service(
         progress,
         copier,
-        new FakeListing(Seq.empty, Seq.empty),
+        new FakeListing(() => Seq.empty, () => Seq.empty),
         new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
         pageSize = 3,
       ).mksrc().take(3).runWith(Sink.seq).map { steps =>
@@ -271,7 +275,7 @@ class BulkStorageBackfillingTest
     "set the marker without copying when this Scan holds history from genesis" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
-      val listing = new FakeListing(folders, snapshots)
+      val listing = new FakeListing(() => folders, () => snapshots)
       backfilling(progress, copier, listing, new SequenceBound(BackfillEnd.HistoryComplete)).map {
         steps =>
           steps shouldBe Seq[BulkStorageBackfilling.Step](
@@ -279,7 +283,7 @@ class BulkStorageBackfillingTest
             BulkStorageBackfilling.Completed,
           )
           copier.copied.get() shouldBe empty
-          listing.updateListings.get() shouldBe 0
+          listing.updateListingsCallCount.get() shouldBe 0
           progress.complete.get() shouldBe 1
       }
     }
@@ -326,12 +330,12 @@ class BulkStorageBackfillingTest
     "wait for the peers when their buckets end before the first own segment" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
-      val updateListings = new AtomicInteger(0)
-      def caughtUp = updateListings.get() > 2
+      val updateListingsCallCount = new AtomicInteger(0)
+      def caughtUp = updateListingsCallCount.get() > 2
       val listing = new FakeListing(
-        if (caughtUp) folders else folders.take(2),
-        if (caughtUp) snapshots else snapshots.take(2),
-        updateListings,
+        () => if (caughtUp) folders else folders.take(2),
+        () => if (caughtUp) snapshots else snapshots.take(2),
+        updateListingsCallCount,
       )
       backfilling(
         progress,
