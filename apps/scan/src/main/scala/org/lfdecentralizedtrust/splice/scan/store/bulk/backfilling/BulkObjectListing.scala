@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
+import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -33,11 +34,22 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
       nextPageToken: Option[String],
   )(implicit tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     peerConnection.connection.flatMap(
-      _.listBulkUpdateHistoryObjects(startRecordTime, endRecordTime, pageSize, nextPageToken)
+      _.listBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        pageSize,
+        nextPageToken,
+        Some(ScanStorageConfig.Encoding.CompactJson.damlValueEncoding),
+      )
     )
 
   override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
-    peerConnection.connection.flatMap(_.listBulkAcsSnapshotObjects(recordTime))
+    peerConnection.connection.flatMap(
+      _.listBulkAcsSnapshotObjects(
+        recordTime,
+        Some(ScanStorageConfig.Encoding.CompactJson.damlValueEncoding),
+      )
+    )
 }
