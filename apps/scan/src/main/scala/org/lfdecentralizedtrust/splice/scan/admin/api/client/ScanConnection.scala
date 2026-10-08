@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  DamlValueEncoding,
   GetBulkObjectChecksumsResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
@@ -365,7 +366,10 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[GetBulkObjectChecksumsResponse]
 
-  def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]]
@@ -375,6 +379,7 @@ trait ScanConnection
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,

@@ -28,6 +28,7 @@ import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, Spl
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
+  DamlValueEncoding,
   GetBulkObjectChecksumsResponse,
   GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
@@ -964,12 +965,15 @@ class BftScanConnection(
       .map(_._1)
   }
 
-  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  override def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
     bftCall(
-      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding),
       "listBulkAcsSnapshotObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
@@ -979,9 +983,16 @@ class BftScanConnection(
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     bftCall(
-      _.listBulkUpdateHistoryObjects(startRecordTime, endRecordTime, pageSize, nextPageToken),
+      _.listBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        pageSize,
+        nextPageToken,
+        damlValueEncoding,
+      ),
       "listBulkUpdateHistoryObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
