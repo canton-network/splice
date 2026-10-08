@@ -105,13 +105,6 @@ class PermissionedSynchronizerMigrationIntegrationTest
       }
     }
 
-    clue("Restart all svApps to trigger ParticipantSynchronizerPermission submission") {
-      Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach { sv =>
-        sv.stop()
-        sv.startSync()
-      }
-    }
-
     clue("Verify SVs and Alice have permissions granted") {
       Seq(
         sv1ValidatorBackend,
