@@ -1561,7 +1561,7 @@ class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
         )
         .failOnShutdown
     } yield {
-      rowIds should have size 20*4
+      rowIds should have size 20 * 4
       forAll(rowIds.groupBy(_._1).values) { rows =>
         val sortedRowIds = rows.map(_._2).sorted
         forAll(sortedRowIds.zip(sortedRowIds.drop(1))) { case (first, second) =>
