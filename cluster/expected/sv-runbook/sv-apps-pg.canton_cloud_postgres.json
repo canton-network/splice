@@ -6,7 +6,7 @@
     "alias": "apps-pg",
     "cloudSqlConfig": {
       "databaseVersion": "POSTGRES_18",
-      "enableAutoBackups": false,
+      "enableAutoBackups": true,
       "enabled": true,
       "enterprisePlus": false,
       "flags": {
