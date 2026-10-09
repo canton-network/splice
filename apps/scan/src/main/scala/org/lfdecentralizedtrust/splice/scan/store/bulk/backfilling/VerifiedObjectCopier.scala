@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 trait ObjectCopier {
-  def copy(objects: Seq[ObjectKeyAndChecksum], holders: Seq[Uri])(implicit
+  def copy(objects: Seq[ObjectKeyAndChecksum], peers: Seq[Uri])(implicit
       tc: TraceContext
   ): Future[Unit]
 }
@@ -39,15 +39,15 @@ class VerifiedObjectCopier(
 
   import VerifiedObjectCopier.*
 
-  override def copy(objects: Seq[ObjectKeyAndChecksum], holders: Seq[Uri])(implicit
+  override def copy(objects: Seq[ObjectKeyAndChecksum], peers: Seq[Uri])(implicit
       tc: TraceContext
   ): Future[Unit] =
     Source(objects.toList)
-      .mapAsync(math.max(1, parallelism))(obj => copyOne(obj, holders))
+      .mapAsync(math.max(1, parallelism))(obj => copyOne(obj, peers))
       .runWith(Sink.ignore)
       .map(_ => ())
 
-  private def copyOne(obj: ObjectKeyAndChecksum, holders: Seq[Uri])(implicit
+  private def copyOne(obj: ObjectKeyAndChecksum, peers: Seq[Uri])(implicit
       tc: TraceContext
   ): Future[Unit] =
     (storedChecksum(staging, obj.key), storedChecksum(committed, obj.key)).tupled.flatMap {
@@ -65,7 +65,7 @@ class VerifiedObjectCopier(
               s"Staging holds object ${obj.key} with checksum $actual instead of the agreed ${obj.checksum}, overwriting it"
             )
           )
-          copyFromAnyPeer(obj, holders)
+          copyFromAnyPeer(obj, peers)
         }
     }
 
@@ -76,7 +76,7 @@ class VerifiedObjectCopier(
       .getChecksums(Seq(key))(ec, mat.system, tc)
       .map(_.find(_.key == key).map(_.checksum))
 
-  private def copyFromAnyPeer(obj: ObjectKeyAndChecksum, holders: Seq[Uri])(implicit
+  private def copyFromAnyPeer(obj: ObjectKeyAndChecksum, peers: Seq[Uri])(implicit
       tc: TraceContext
   ): Future[Unit] = {
     def tryRemaining(remaining: Seq[Uri], failures: List[String]): Future[Unit] =
@@ -98,7 +98,7 @@ class VerifiedObjectCopier(
             tryOthers(e)
         }
       }
-    tryRemaining(holders, Nil)
+    tryRemaining(peers, Nil)
   }
 
   private def copyFromPeer(obj: ObjectKeyAndChecksum, peer: Uri)(implicit

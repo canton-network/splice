@@ -82,7 +82,7 @@ class BulkStorageBackfillingTest
       Future.successful(complete.set(0))
   }
 
-  private val holders = Seq(Uri("http://holder-1"), Uri("http://holder-2"))
+  private val peers = Seq(Uri("http://peer-1"), Uri("http://peer-2"))
 
   private def folderRange(name: String): (CantonTimestamp, CantonTimestamp) =
     storageConfig.getStartAndEndTimestampsForFolder(name) match {
@@ -95,7 +95,7 @@ class BulkStorageBackfillingTest
       snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
       val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
       noPeerWillHold: Boolean = false,
-      peersPerEncoding: Seq[Seq[Uri]] = Seq(holders),
+      peersPerEncoding: Seq[Seq[Uri]] = Seq(peers),
   ) extends BulkObjectListing {
 
     private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): Seq[ObjectsOnPeers] =
@@ -159,13 +159,13 @@ class BulkStorageBackfillingTest
 
   private class RecordingCopier extends ObjectCopier {
     val copied = new AtomicReference[Vector[String]](Vector.empty)
-    val holdersSeen = new AtomicReference[Vector[Seq[Uri]]](Vector.empty)
-    val copiesWithHolders = new AtomicReference[Vector[(Seq[String], Seq[Uri])]](Vector.empty)
-    override def copy(objects: Seq[ObjectKeyAndChecksum], holders: Seq[Uri])(implicit
+    val peersSeen = new AtomicReference[Vector[Seq[Uri]]](Vector.empty)
+    val copiesWithPeers = new AtomicReference[Vector[(Seq[String], Seq[Uri])]](Vector.empty)
+    override def copy(objects: Seq[ObjectKeyAndChecksum], peers: Seq[Uri])(implicit
         tc: TraceContext
     ) = {
-      holdersSeen.updateAndGet(_ :+ holders)
-      copiesWithHolders.updateAndGet(_ :+ (objects.map(_.key) -> holders))
+      peersSeen.updateAndGet(_ :+ peers)
+      copiesWithPeers.updateAndGet(_ :+ (objects.map(_.key) -> peers))
       Future.successful(copied.updateAndGet(_ ++ objects.map(_.key))).map(_ => ())
     }
   }
@@ -251,27 +251,27 @@ class BulkStorageBackfillingTest
         } shouldBe
           Seq(segment(1, 2) -> 2, segment(2, 3) -> 2, segment(3, 4) -> 1)
         copier.copied.get().size shouldBe 8
-        forAll(copier.holdersSeen.get())(_ shouldBe holders)
+        forAll(copier.peersSeen.get())(_ shouldBe peers)
       }
     }
 
     "copy each encoding only from the peers that agreed on that encoding" in {
-      val compactJsonHolders = Seq(Uri("http://compact-json-holder"))
-      val protobufJsonHolders = Seq(Uri("http://protobuf-json-holder"))
+      val compactJsonPeers = Seq(Uri("http://compact-json-peer"))
+      val protobufJsonPeers = Seq(Uri("http://protobuf-json-peer"))
       val copier = new RecordingCopier
       val listing = new FakeListing(
         () => folders,
         () => snapshots,
-        peersPerEncoding = Seq(compactJsonHolders, protobufJsonHolders),
+        peersPerEncoding = Seq(compactJsonPeers, protobufJsonPeers),
       )
       backfilling(new InMemoryProgress, copier, listing).map { _ =>
-        val holdersPerCopy = copier.copiesWithHolders.get().map(_._2)
-        holdersPerCopy.distinct should contain theSameElementsAs Seq(
-          compactJsonHolders,
-          protobufJsonHolders,
+        val peersPerCopy = copier.copiesWithPeers.get().map(_._2)
+        peersPerCopy.distinct should contain theSameElementsAs Seq(
+          compactJsonPeers,
+          protobufJsonPeers,
         )
-        holdersPerCopy.count(_ == compactJsonHolders) shouldBe
-          holdersPerCopy.count(_ == protobufJsonHolders)
+        peersPerCopy.count(_ == compactJsonPeers) shouldBe
+          peersPerCopy.count(_ == protobufJsonPeers)
       }
     }
 

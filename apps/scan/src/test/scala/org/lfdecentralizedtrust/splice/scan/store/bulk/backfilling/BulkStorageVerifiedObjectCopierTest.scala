@@ -141,17 +141,17 @@ class BulkStorageVerifiedObjectCopierTest
       }
   }
 
-  private class CopierFromHolders(underlying: VerifiedObjectCopier, holders: Seq[Uri]) {
+  private class CopierFromPeers(underlying: VerifiedObjectCopier, peers: Seq[Uri]) {
     def copy(objects: Seq[ObjectKeyAndChecksum]): Future[Unit] =
-      underlying.copy(objects, holders)
+      underlying.copy(objects, peers)
   }
 
   private def copier(
       source: PeerObjectSource,
       staging: S3BucketConnection = localBucket("staging"),
-      holders: Seq[Uri] = Seq(peerUri("peer1"), peerUri("peer2")),
+      peers: Seq[Uri] = Seq(peerUri("peer1"), peerUri("peer2")),
   ) =
-    new CopierFromHolders(
+    new CopierFromPeers(
       new VerifiedObjectCopier(
         source,
         _.head,
@@ -160,7 +160,7 @@ class BulkStorageVerifiedObjectCopierTest
         parallelism = 1,
         loggerFactory,
       ),
-      holders,
+      peers,
     )
 
   private val content = ByteString(Random.nextBytes(1000))
@@ -267,7 +267,7 @@ class BulkStorageVerifiedObjectCopierTest
         result <- copier(
           new DownloadFailingWhileUploading(gate),
           new GatedUploadStaging(gate, events),
-          holders = Seq(peerUri("peer1")),
+          peers = Seq(peerUri("peer1")),
         )
           .copy(Seq(ObjectKeyAndChecksum(objectKey, "unused")))
           .transform(t => scala.util.Success(t))

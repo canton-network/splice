@@ -992,7 +992,7 @@ class BftScanConnection(
       )
     ).map(_._1)
 
-  def listBulkAcsSnapshotObjectsWithHolders(
+  def listBulkAcsSnapshotObjectsWithPeers(
       atOrBeforeRecordTime: CantonTimestamp,
       encoding: ScanStorageConfig.Encoding,
   )(implicit
@@ -1003,7 +1003,7 @@ class BftScanConnection(
       _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, Some(encoding.damlValueEncoding))
     )
 
-  def listBulkUpdateHistoryObjectsWithHolders(
+  def listBulkUpdateHistoryObjectsWithPeers(
       startRecordTime: CantonTimestamp,
       endRecordTime: CantonTimestamp,
       pageSize: Int,

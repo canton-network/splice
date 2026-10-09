@@ -51,7 +51,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
   )(implicit tc: TraceContext): Future[PeerListing[Seq[ObjectsOnPeers]]] =
     inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
-        _.listBulkUpdateHistoryObjectsWithHolders(
+        _.listBulkUpdateHistoryObjectsWithPeers(
           startRecordTime,
           endRecordTime,
           pageSize,
@@ -70,14 +70,15 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
   ): Future[PeerListing[Option[SnapshotOnPeers]]] =
     inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
-        _.listBulkAcsSnapshotObjectsWithHolders(recordTime, encoding)
+        _.listBulkAcsSnapshotObjectsWithPeers(recordTime, encoding)
       )
     )(sameSnapshotInEveryEncoding)
 
   private def sameSnapshotInEveryEncoding(
       perEncoding: Seq[(Option[BulkStorageObjects.SnapshotObjects], Seq[Uri])]
-  ): PeerListing[Option[SnapshotOnPeers]] =
-    perEncoding.map(_._1.map(_.recordTime)).distinct match {
+  ): PeerListing[Option[SnapshotOnPeers]] = {
+    val recordTimes = perEncoding.map { case (snapshot, _) => snapshot.map(_.recordTime) }
+    recordTimes.distinct match {
       case Seq(None) => PeerListing.Available(None)
       case Seq(Some(recordTime)) =>
         val objectsOnPeers = perEncoding.collect { case (Some(snapshot), peers) =>
@@ -86,6 +87,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
         PeerListing.Available(Some(SnapshotOnPeers(recordTime, objectsOnPeers)))
       case _ => PeerListing.NotAvailableYet
     }
+  }
 
   private def inEveryEncoding[T, U](list: ScanStorageConfig.Encoding => Future[(T, List[Uri])])(
       merge: Seq[(T, Seq[Uri])] => PeerListing[U]

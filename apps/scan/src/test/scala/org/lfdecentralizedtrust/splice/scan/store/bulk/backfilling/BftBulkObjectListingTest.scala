@@ -44,7 +44,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       result: Future[(BulkStorageObjects.UpdateObjectsPage, List[Uri])],
   ) =
     when(
-      connection.listBulkUpdateHistoryObjectsWithHolders(
+      connection.listBulkUpdateHistoryObjectsWithPeers(
         any[CantonTimestamp],
         any[CantonTimestamp],
         any[Int],
@@ -59,7 +59,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       result: Future[(Option[BulkStorageObjects.SnapshotObjects], List[Uri])],
   ) =
     when(
-      connection.listBulkAcsSnapshotObjectsWithHolders(any[CantonTimestamp], eqTo(encoding))(
+      connection.listBulkAcsSnapshotObjectsWithPeers(any[CantonTimestamp], eqTo(encoding))(
         any[ExecutionContext],
         any[TraceContext],
       )
@@ -105,7 +105,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
         PeerListing.NotAvailableYet
     }
 
-    "wait when one encoding has no holder yet and the other no holder ever" in {
+    "wait when no peer holds one encoding yet and no peer ever will hold the other" in {
       val connection = mock[BftScanConnection]
       updatesIn(connection, Encoding.CompactJson, Future.failed(notYet))
       updatesIn(connection, Encoding.ProtobufJson, Future.failed(noneEver))
