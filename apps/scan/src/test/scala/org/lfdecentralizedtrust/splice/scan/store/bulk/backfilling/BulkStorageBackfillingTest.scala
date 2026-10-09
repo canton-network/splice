@@ -101,6 +101,17 @@ class BulkStorageBackfillingTest
     private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): Seq[ObjectsOnPeers] =
       peersPerEncoding.map(ObjectsOnPeers(objects, _))
 
+    private def wholeFoldersWithin(
+        pageSize: Int,
+        folders: Seq[(String, Seq[ObjectKeyAndChecksum])],
+    ): Seq[(String, Seq[ObjectKeyAndChecksum])] = {
+      val objectsUpToEachFolder = folders.map(_._2.size).scanLeft(0)(_ + _).tail
+      folders
+        .zip(objectsUpToEachFolder)
+        .takeWhile { case (_, objectsSoFar) => objectsSoFar <= pageSize }
+        .map { case (folder, _) => folder }
+    }
+
     override def updateObjects(
         startRecordTime: CantonTimestamp,
         endRecordTime: CantonTimestamp,
@@ -119,12 +130,11 @@ class BulkStorageBackfillingTest
           val (from, to) = folderRange(name)
           to > startRecordTime && from < endRecordTime
         }
-        val cumulative = inRange.scanLeft(0)(_ + _._2.size).drop(1)
-        val page = inRange.zip(cumulative).takeWhile { case (_, total) => total <= pageSize }
+        val page = wholeFoldersWithin(pageSize, inRange)
         if (page.isEmpty && inRange.nonEmpty)
           Future.failed(new IllegalArgumentException("Limit too low for a single folder"))
         else
-          Future.successful(PeerListing.Available(perEncoding(page.flatMap(_._1._2))))
+          Future.successful(PeerListing.Available(perEncoding(page.flatMap(_._2))))
       }
     }
 
