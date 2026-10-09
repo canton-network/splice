@@ -3,11 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.data.NonEmptyList
 import cats.syntax.traverse.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
+import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
@@ -89,7 +91,7 @@ class BulkStorageBackfilling(
         val upTo = copied.toTimestamp.timestamp
         logger.info(s"Update objects are copied up to $upTo, where this Scan's own segments start")
         next(CopySnapshots(None), UpdatesCopied(upTo))
-      case Some(copied) => copySegment(segmentAfter(copied))
+      case Some(copied) => copySegment(nextSegment(copied))
       case None =>
         firstSegment(copyUpTo).flatMap {
           case PeerListing.Available(Some(first)) => copySegment(first)
@@ -105,12 +107,15 @@ class BulkStorageBackfilling(
       tc: TraceContext
   ): Next = {
     logger.error(
-      s"No peer will ever hold $what, so this Scan cannot copy it from its peers; waiting"
+      s"No peer will ever hold $what, so this Scan cannot copy it from its peers; " +
+        s"checking again in ${config.noPeerWillHoldRetryInterval}"
     )
-    waitThen(state, NoPeerHolds(at))
+    after(config.noPeerWillHoldRetryInterval.underlying, actorSystem.scheduler)(
+      next(state, NoPeerHolds(at))
+    )
   }
 
-  private def segmentAfter(copied: UpdatesSegment): UpdatesSegment =
+  private def nextSegment(copied: UpdatesSegment): UpdatesSegment =
     UpdatesSegment(
       copied.toTimestamp,
       TimestampWithMigrationId(
@@ -123,11 +128,16 @@ class BulkStorageBackfilling(
       tc: TraceContext
   ): Future[PeerListing[Option[UpdatesSegment]]] =
     listing
-      .updateObjects(CantonTimestamp.MinValue, copyUpTo, config.pageSize, availableAt = copyUpTo)
+      .updateObjectsPage(
+        CantonTimestamp.MinValue,
+        copyUpTo,
+        config.pageSize,
+        availableAt = copyUpTo,
+      )
       .flatMap {
         case PeerListing.Available(objectsOnPeers) =>
           Future
-            .fromTry(segmentsOf(objectsOnPeers.flatMap(_.objects)))
+            .fromTry(segmentsOf(ObjectsOnPeers.objectsIn(objectsOnPeers)))
             .map(segments => PeerListing.Available(segments.headOption))
         case PeerListing.NotAvailableYet => Future.successful(PeerListing.NotAvailableYet)
         case PeerListing.NoPeerWillHold => Future.successful(PeerListing.NoPeerWillHold)
@@ -135,7 +145,7 @@ class BulkStorageBackfilling(
 
   private def copySegment(segment: UpdatesSegment)(implicit tc: TraceContext): Next = {
     val (from, to) = (segment.fromTimestamp.timestamp, segment.toTimestamp.timestamp)
-    listing.updateObjects(from, to, config.pageSize, availableAt = to).flatMap {
+    listing.updateObjectsPage(from, to, config.pageSize, availableAt = to).flatMap {
       case PeerListing.NotAvailableYet =>
         logger.debug(s"Not enough peers hold the update segment $from - $to yet, waiting")
         waitThen(CopyUpdates, WaitingForPeers(from))
@@ -145,17 +155,20 @@ class BulkStorageBackfilling(
         for {
           _ <- copyFromPeers(objectsOnPeers)
           _ <- progress.persistUpdatesCursor(segment)
-          step <- next(CopyUpdates, SegmentCopied(segment, objectsOnPeers.map(_.objects.size).sum))
+          step <- next(
+            CopyUpdates,
+            SegmentCopied(segment, ObjectsOnPeers.objectsIn(objectsOnPeers).size),
+          )
         } yield step
     }
   }
 
-  private def copyFromPeers(objectsOnPeers: Seq[ObjectsOnPeers])(implicit
+  private def copyFromPeers(objectsOnPeers: NonEmptyList[ObjectsOnPeers])(implicit
       tc: TraceContext
   ): Future[Unit] =
-    Future
-      .traverse(objectsOnPeers)(onPeers => copier.copy(onPeers.objects, onPeers.peers))
-      .map(_ => ())
+    MonadUtil.sequentialTraverse_(objectsOnPeers.toList)(onPeers =>
+      copier.copy(onPeers.objects, onPeers.peers)
+    )
 
   private def copyNextSnapshot(
       lastRequested: Option[CantonTimestamp],
@@ -212,7 +225,7 @@ class BulkStorageBackfilling(
                 _ <- progress.persistSnapshotsCursor(copied)
                 step <- next(
                   CopySnapshots(Some(snapshot.recordTime)),
-                  SnapshotCopied(copied, snapshot.perEncoding.map(_.objects.size).sum),
+                  SnapshotCopied(copied, ObjectsOnPeers.objectsIn(snapshot.perEncoding).size),
                 )
               } yield step
           }

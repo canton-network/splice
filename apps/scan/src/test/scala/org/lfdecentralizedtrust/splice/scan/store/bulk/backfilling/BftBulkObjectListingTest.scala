@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
@@ -35,7 +36,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
   private def listingOver(connection: BftScanConnection): BftBulkObjectListing = {
     val peerConnection = mock[PeerBftScanConnection]
     when(peerConnection.connection(any[TraceContext])).thenReturn(Future.successful(connection))
-    new BftBulkObjectListing(peerConnection)
+    new BftBulkObjectListing(peerConnection, loggerFactory)
   }
 
   private def updatesIn(
@@ -83,9 +84,9 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
         Future.successful((page("s/updates_protobuf_json_0.zstd"), List(sv2, sv3))),
       )
 
-      listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
+      listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
         PeerListing.Available(
-          Seq(
+          NonEmptyList.of(
             ObjectsOnPeers(Seq(obj("s/updates_compact_json_0.zstd")), Seq(sv1, sv2)),
             ObjectsOnPeers(Seq(obj("s/updates_protobuf_json_0.zstd")), Seq(sv2, sv3)),
           )
@@ -101,7 +102,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       )
       updatesIn(connection, Encoding.ProtobufJson, Future.failed(notYet))
 
-      listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
+      listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
         PeerListing.NotAvailableYet
     }
 
@@ -110,7 +111,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       updatesIn(connection, Encoding.CompactJson, Future.failed(notYet))
       updatesIn(connection, Encoding.ProtobufJson, Future.failed(noneEver))
 
-      listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
+      listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
         PeerListing.NotAvailableYet
     }
 
@@ -119,7 +120,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       updatesIn(connection, Encoding.CompactJson, Future.failed(noneEver))
       updatesIn(connection, Encoding.ProtobufJson, Future.failed(noneEver))
 
-      listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
+      listingOver(connection).updateObjectsPage(at, at, 10, at).futureValue shouldBe
         PeerListing.NoPeerWillHold
     }
 
@@ -141,7 +142,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
           Some(
             SnapshotOnPeers(
               at,
-              Seq(
+              NonEmptyList.of(
                 ObjectsOnPeers(Seq(obj("s/ACS_compact_json_0.zstd")), Seq(sv1, sv2)),
                 ObjectsOnPeers(Seq(obj("s/ACS_protobuf_json_0.zstd")), Seq(sv2, sv3)),
               ),
@@ -150,7 +151,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
         )
     }
 
-    "wait when the encodings list different snapshots" in {
+    "warn and wait when the encodings list different snapshots" in {
       val connection = mock[BftScanConnection]
       snapshotIn(
         connection,
@@ -163,8 +164,11 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
         Future.successful((snapshot(at, "s/ACS_protobuf_json_0.zstd"), List(sv1))),
       )
 
-      listingOver(connection).snapshotObjectsAtOrBefore(at).futureValue shouldBe
-        PeerListing.NotAvailableYet
+      loggerFactory.assertLogs(
+        listingOver(connection).snapshotObjectsAtOrBefore(at).futureValue shouldBe
+          PeerListing.NotAvailableYet,
+        _.warningMessage should include("The encodings list different snapshots"),
+      )
     }
   }
 }

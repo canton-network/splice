@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
@@ -95,10 +96,10 @@ class BulkStorageBackfillingTest
       snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
       val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
       noPeerWillHold: Boolean = false,
-      peersPerEncoding: Seq[Seq[Uri]] = Seq(peers),
+      peersPerEncoding: NonEmptyList[Seq[Uri]] = NonEmptyList.one(peers),
   ) extends BulkObjectListing {
 
-    private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): Seq[ObjectsOnPeers] =
+    private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): NonEmptyList[ObjectsOnPeers] =
       peersPerEncoding.map(ObjectsOnPeers(objects, _))
 
     private def wholeFoldersWithin(
@@ -112,14 +113,14 @@ class BulkStorageBackfillingTest
         .map { case (folder, _) => folder }
     }
 
-    override def updateObjects(
+    override def updateObjectsPage(
         startRecordTime: CantonTimestamp,
         endRecordTime: CantonTimestamp,
         pageSize: Int,
         availableAt: CantonTimestamp,
     )(implicit
         tc: TraceContext
-    ): Future[PeerListing[Seq[ObjectsOnPeers]]] = {
+    ): Future[PeerListing[NonEmptyList[ObjectsOnPeers]]] = {
       updateListingsCallCount.incrementAndGet()
       val held = folders()
       if (noPeerWillHold) Future.successful(PeerListing.NoPeerWillHold)
@@ -207,6 +208,7 @@ class BulkStorageBackfillingTest
         enabled = true,
         pageSize = pageSize,
         pollingInterval = NonNegativeFiniteDuration.ofMillis(10),
+        noPeerWillHoldRetryInterval = NonNegativeFiniteDuration.ofMillis(10),
       ),
       storageConfig,
       migrationId,
@@ -262,7 +264,7 @@ class BulkStorageBackfillingTest
       val listing = new FakeListing(
         () => folders,
         () => snapshots,
-        peersPerEncoding = Seq(compactJsonPeers, protobufJsonPeers),
+        peersPerEncoding = NonEmptyList.of(compactJsonPeers, protobufJsonPeers),
       )
       backfilling(new InMemoryProgress, copier, listing).map { _ =>
         val peersPerCopy = copier.copiesWithPeers.get().map(_._2)
