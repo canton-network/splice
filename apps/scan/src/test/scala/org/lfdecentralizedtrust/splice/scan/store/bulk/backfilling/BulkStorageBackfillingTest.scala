@@ -95,11 +95,11 @@ class BulkStorageBackfillingTest
       snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
       val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
       noPeerWillHold: Boolean = false,
-      holdersPerEncoding: Seq[Seq[Uri]] = Seq(holders),
+      peersPerEncoding: Seq[Seq[Uri]] = Seq(holders),
   ) extends BulkObjectListing {
 
-    private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): Seq[HeldObjects] =
-      holdersPerEncoding.map(HeldObjects(objects, _))
+    private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): Seq[ObjectsOnPeers] =
+      peersPerEncoding.map(ObjectsOnPeers(objects, _))
 
     override def updateObjects(
         startRecordTime: CantonTimestamp,
@@ -108,7 +108,7 @@ class BulkStorageBackfillingTest
         availableAt: CantonTimestamp,
     )(implicit
         tc: TraceContext
-    ): Future[PeerListing[Seq[HeldObjects]]] = {
+    ): Future[PeerListing[Seq[ObjectsOnPeers]]] = {
       updateListingsCallCount.incrementAndGet()
       val held = folders()
       if (noPeerWillHold) Future.successful(PeerListing.NoPeerWillHold)
@@ -130,7 +130,7 @@ class BulkStorageBackfillingTest
 
     override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
         tc: TraceContext
-    ): Future[PeerListing[Option[HeldSnapshot]]] = {
+    ): Future[PeerListing[Option[SnapshotOnPeers]]] = {
       val snapshots = snapshotsByTime()
       if (!snapshots.lastOption.exists(_._1 >= recordTime))
         Future.successful(PeerListing.NotAvailableYet)
@@ -139,7 +139,7 @@ class BulkStorageBackfillingTest
         Future.successful(
           PeerListing.Available(
             snapshots.collectFirst {
-              case (t, objs) if t == grid => HeldSnapshot(grid, perEncoding(objs))
+              case (t, objs) if t == grid => SnapshotOnPeers(grid, perEncoding(objs))
             }
           )
         )
@@ -252,7 +252,7 @@ class BulkStorageBackfillingTest
       val listing = new FakeListing(
         () => folders,
         () => snapshots,
-        holdersPerEncoding = Seq(compactJsonHolders, protobufJsonHolders),
+        peersPerEncoding = Seq(compactJsonHolders, protobufJsonHolders),
       )
       backfilling(new InMemoryProgress, copier, listing).map { _ =>
         val holdersPerCopy = copier.copiesWithHolders.get().map(_._2)

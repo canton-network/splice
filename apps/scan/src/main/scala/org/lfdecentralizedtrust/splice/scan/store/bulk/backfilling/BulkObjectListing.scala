@@ -23,9 +23,9 @@ object PeerListing {
   final case class Available[T](value: T) extends PeerListing[T]
 }
 
-final case class HeldObjects(objects: Seq[ObjectKeyAndChecksum], holders: Seq[Uri])
+final case class ObjectsOnPeers(objects: Seq[ObjectKeyAndChecksum], peers: Seq[Uri])
 
-final case class HeldSnapshot(recordTime: CantonTimestamp, encodings: Seq[HeldObjects])
+final case class SnapshotOnPeers(recordTime: CantonTimestamp, perEncoding: Seq[ObjectsOnPeers])
 
 trait BulkObjectListing {
   def updateObjects(
@@ -33,11 +33,11 @@ trait BulkObjectListing {
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       availableAt: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[PeerListing[Seq[HeldObjects]]]
+  )(implicit tc: TraceContext): Future[PeerListing[Seq[ObjectsOnPeers]]]
 
   def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
       tc: TraceContext
-  ): Future[PeerListing[Option[HeldSnapshot]]]
+  ): Future[PeerListing[Option[SnapshotOnPeers]]]
 }
 
 class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: ExecutionContext)
@@ -48,7 +48,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       availableAt: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[PeerListing[Seq[HeldObjects]]] =
+  )(implicit tc: TraceContext): Future[PeerListing[Seq[ObjectsOnPeers]]] =
     inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
         _.listBulkUpdateHistoryObjectsWithHolders(
@@ -60,14 +60,14 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
         )
       )
     )(perEncoding =>
-      PeerListing.Available(perEncoding.map { case (page, holders) =>
-        HeldObjects(page.objects, holders)
+      PeerListing.Available(perEncoding.map { case (page, peers) =>
+        ObjectsOnPeers(page.objects, peers)
       })
     )
 
   override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
       tc: TraceContext
-  ): Future[PeerListing[Option[HeldSnapshot]]] =
+  ): Future[PeerListing[Option[SnapshotOnPeers]]] =
     inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
         _.listBulkAcsSnapshotObjectsWithHolders(recordTime, encoding)
@@ -76,14 +76,14 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
 
   private def sameSnapshotInEveryEncoding(
       perEncoding: Seq[(Option[BulkStorageObjects.SnapshotObjects], Seq[Uri])]
-  ): PeerListing[Option[HeldSnapshot]] =
+  ): PeerListing[Option[SnapshotOnPeers]] =
     perEncoding.map(_._1.map(_.recordTime)).distinct match {
       case Seq(None) => PeerListing.Available(None)
       case Seq(Some(recordTime)) =>
-        val encodings = perEncoding.collect { case (Some(snapshot), holders) =>
-          HeldObjects(snapshot.objects, holders)
+        val objectsOnPeers = perEncoding.collect { case (Some(snapshot), peers) =>
+          ObjectsOnPeers(snapshot.objects, peers)
         }
-        PeerListing.Available(Some(HeldSnapshot(recordTime, encodings)))
+        PeerListing.Available(Some(SnapshotOnPeers(recordTime, objectsOnPeers)))
       case _ => PeerListing.NotAvailableYet
     }
 
@@ -91,7 +91,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
       merge: Seq[(T, Seq[Uri])] => PeerListing[U]
   ): Future[PeerListing[U]] =
     Future
-      .traverse(ScanStorageConfig.Encoding.all.toList)(encoding => withHolders(list(encoding)))
+      .traverse(ScanStorageConfig.Encoding.all.toList)(encoding => withPeers(list(encoding)))
       .map { listings =>
         val available = listings.collect { case PeerListing.Available(listed) => listed }
         if (listings.forall(_ == PeerListing.NoPeerWillHold)) PeerListing.NoPeerWillHold
@@ -99,10 +99,10 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
         else merge(available)
       }
 
-  private def withHolders[T](call: Future[(T, List[Uri])]): Future[PeerListing[(T, Seq[Uri])]] =
+  private def withPeers[T](call: Future[(T, List[Uri])]): Future[PeerListing[(T, Seq[Uri])]] =
     call
-      .map[PeerListing[(T, Seq[Uri])]] { case (value, holders) =>
-        PeerListing.Available((value, holders))
+      .map[PeerListing[(T, Seq[Uri])]] { case (value, peers) =>
+        PeerListing.Available((value, peers))
       }
       .recover {
         case HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, _) =>

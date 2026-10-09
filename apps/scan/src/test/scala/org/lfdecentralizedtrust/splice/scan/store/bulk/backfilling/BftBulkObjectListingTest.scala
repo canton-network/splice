@@ -86,8 +86,8 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
         PeerListing.Available(
           Seq(
-            HeldObjects(Seq(obj("s/updates_compact_json_0.zstd")), Seq(sv1, sv2)),
-            HeldObjects(Seq(obj("s/updates_protobuf_json_0.zstd")), Seq(sv2, sv3)),
+            ObjectsOnPeers(Seq(obj("s/updates_compact_json_0.zstd")), Seq(sv1, sv2)),
+            ObjectsOnPeers(Seq(obj("s/updates_protobuf_json_0.zstd")), Seq(sv2, sv3)),
           )
         )
     }
@@ -139,11 +139,11 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       listingOver(connection).snapshotObjectsAtOrBefore(at).futureValue shouldBe
         PeerListing.Available(
           Some(
-            HeldSnapshot(
+            SnapshotOnPeers(
               at,
               Seq(
-                HeldObjects(Seq(obj("s/ACS_compact_json_0.zstd")), Seq(sv1, sv2)),
-                HeldObjects(Seq(obj("s/ACS_protobuf_json_0.zstd")), Seq(sv2, sv3)),
+                ObjectsOnPeers(Seq(obj("s/ACS_compact_json_0.zstd")), Seq(sv1, sv2)),
+                ObjectsOnPeers(Seq(obj("s/ACS_protobuf_json_0.zstd")), Seq(sv2, sv3)),
               ),
             )
           )

@@ -125,9 +125,9 @@ class BulkStorageBackfilling(
     listing
       .updateObjects(CantonTimestamp.MinValue, copyUpTo, config.pageSize, availableAt = copyUpTo)
       .flatMap {
-        case PeerListing.Available(held) =>
+        case PeerListing.Available(objectsOnPeers) =>
           Future
-            .fromTry(segmentsOf(held.flatMap(_.objects)))
+            .fromTry(segmentsOf(objectsOnPeers.flatMap(_.objects)))
             .map(segments => PeerListing.Available(segments.headOption))
         case PeerListing.NotAvailableYet => Future.successful(PeerListing.NotAvailableYet)
         case PeerListing.NoPeerWillHold => Future.successful(PeerListing.NoPeerWillHold)
@@ -141,17 +141,21 @@ class BulkStorageBackfilling(
         waitThen(CopyUpdates, WaitingForPeers(from))
       case PeerListing.NoPeerWillHold =>
         noPeerHolds(CopyUpdates, from, s"the update segment $from - $to")
-      case PeerListing.Available(held) =>
+      case PeerListing.Available(objectsOnPeers) =>
         for {
-          _ <- copyFromHolders(held)
+          _ <- copyFromPeers(objectsOnPeers)
           _ <- progress.persistUpdatesCursor(segment)
-          step <- next(CopyUpdates, SegmentCopied(segment, held.map(_.objects.size).sum))
+          step <- next(CopyUpdates, SegmentCopied(segment, objectsOnPeers.map(_.objects.size).sum))
         } yield step
     }
   }
 
-  private def copyFromHolders(held: Seq[HeldObjects])(implicit tc: TraceContext): Future[Unit] =
-    Future.traverse(held)(encoding => copier.copy(encoding.objects, encoding.holders)).map(_ => ())
+  private def copyFromPeers(objectsOnPeers: Seq[ObjectsOnPeers])(implicit
+      tc: TraceContext
+  ): Future[Unit] =
+    Future
+      .traverse(objectsOnPeers)(onPeers => copier.copy(onPeers.objects, onPeers.peers))
+      .map(_ => ())
 
   private def copyNextSnapshot(
       lastRequested: Option[CantonTimestamp],
@@ -199,16 +203,16 @@ class BulkStorageBackfilling(
                 if cursor.exists(_.timestamp >= snapshot.recordTime) =>
               nothingNewer(s"The peers have no snapshot after ${snapshot.recordTime}")
             case PeerListing.Available(Some(snapshot))
-                if snapshot.encodings.forall(_.objects.isEmpty) =>
+                if snapshot.perEncoding.forall(_.objects.isEmpty) =>
               next(CopySnapshots(Some(snapshot.recordTime)), SnapshotSkipped(snapshot.recordTime))
             case PeerListing.Available(Some(snapshot)) =>
               val copied = TimestampWithMigrationId(snapshot.recordTime, currentMigrationId)
               for {
-                _ <- copyFromHolders(snapshot.encodings)
+                _ <- copyFromPeers(snapshot.perEncoding)
                 _ <- progress.persistSnapshotsCursor(copied)
                 step <- next(
                   CopySnapshots(Some(snapshot.recordTime)),
-                  SnapshotCopied(copied, snapshot.encodings.map(_.objects.size).sum),
+                  SnapshotCopied(copied, snapshot.perEncoding.map(_.objects.size).sum),
                 )
               } yield step
           }
