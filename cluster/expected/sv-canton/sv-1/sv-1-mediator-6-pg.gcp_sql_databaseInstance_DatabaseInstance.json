@@ -8,8 +8,8 @@
     "settings": {
       "activationPolicy": "NEVER",
       "backupConfiguration": {
-        "enabled": true,
-        "pointInTimeRecoveryEnabled": true
+        "enabled": false,
+        "pointInTimeRecoveryEnabled": false
       },
       "databaseFlags": [
         {
