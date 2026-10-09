@@ -11,6 +11,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.NoS
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
+import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -19,8 +20,12 @@ sealed trait PeerListing[+T]
 object PeerListing {
   case object NotAvailableYet extends PeerListing[Nothing]
   case object NoPeerWillHold extends PeerListing[Nothing]
-  final case class Available[T](value: T, holders: Seq[Uri]) extends PeerListing[T]
+  final case class Available[T](value: T) extends PeerListing[T]
 }
+
+final case class HeldObjects(objects: Seq[ObjectKeyAndChecksum], holders: Seq[Uri])
+
+final case class HeldSnapshot(recordTime: CantonTimestamp, encodings: Seq[HeldObjects])
 
 trait BulkObjectListing {
   def updateObjects(
@@ -28,11 +33,11 @@ trait BulkObjectListing {
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       availableAt: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[PeerListing[BulkStorageObjects.UpdateObjectsPage]]
+  )(implicit tc: TraceContext): Future[PeerListing[Seq[HeldObjects]]]
 
   def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
       tc: TraceContext
-  ): Future[PeerListing[Option[BulkStorageObjects.SnapshotObjects]]]
+  ): Future[PeerListing[Option[HeldSnapshot]]]
 }
 
 class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: ExecutionContext)
@@ -43,7 +48,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       availableAt: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[PeerListing[BulkStorageObjects.UpdateObjectsPage]] =
+  )(implicit tc: TraceContext): Future[PeerListing[Seq[HeldObjects]]] =
     inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
         _.listBulkUpdateHistoryObjectsWithHolders(
@@ -54,16 +59,15 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
           encoding,
         )
       )
-    )((pages, holders) =>
-      PeerListing.Available(
-        BulkStorageObjects.UpdateObjectsPage(pages.flatMap(_.objects), None),
-        holders,
-      )
+    )(perEncoding =>
+      PeerListing.Available(perEncoding.map { case (page, holders) =>
+        HeldObjects(page.objects, holders)
+      })
     )
 
   override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
       tc: TraceContext
-  ): Future[PeerListing[Option[BulkStorageObjects.SnapshotObjects]]] =
+  ): Future[PeerListing[Option[HeldSnapshot]]] =
     inEveryEncoding(encoding =>
       peerConnection.connection.flatMap(
         _.listBulkAcsSnapshotObjectsWithHolders(recordTime, encoding)
@@ -71,37 +75,35 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
     )(sameSnapshotInEveryEncoding)
 
   private def sameSnapshotInEveryEncoding(
-      snapshots: Seq[Option[BulkStorageObjects.SnapshotObjects]],
-      holders: Seq[Uri],
-  ): PeerListing[Option[BulkStorageObjects.SnapshotObjects]] =
-    snapshots.map(_.map(_.recordTime)).distinct match {
-      case Seq(None) => PeerListing.Available(None, holders)
+      perEncoding: Seq[(Option[BulkStorageObjects.SnapshotObjects], Seq[Uri])]
+  ): PeerListing[Option[HeldSnapshot]] =
+    perEncoding.map(_._1.map(_.recordTime)).distinct match {
+      case Seq(None) => PeerListing.Available(None)
       case Seq(Some(recordTime)) =>
-        val objects = snapshots.flatten.flatMap(_.objects)
-        PeerListing.Available(
-          Some(BulkStorageObjects.SnapshotObjects(recordTime, objects)),
-          holders,
-        )
+        val encodings = perEncoding.collect { case (Some(snapshot), holders) =>
+          HeldObjects(snapshot.objects, holders)
+        }
+        PeerListing.Available(Some(HeldSnapshot(recordTime, encodings)))
       case _ => PeerListing.NotAvailableYet
     }
 
   private def inEveryEncoding[T, U](list: ScanStorageConfig.Encoding => Future[(T, List[Uri])])(
-      merge: (Seq[T], Seq[Uri]) => PeerListing[U]
+      merge: Seq[(T, Seq[Uri])] => PeerListing[U]
   ): Future[PeerListing[U]] =
     Future
-      .traverse(ScanStorageConfig.Encoding.all.toList)(encoding => fromHolders(list(encoding)))
+      .traverse(ScanStorageConfig.Encoding.all.toList)(encoding => withHolders(list(encoding)))
       .map { listings =>
-        val available = listings.collect { case PeerListing.Available(value, holders) =>
-          (value, holders)
-        }
+        val available = listings.collect { case PeerListing.Available(listed) => listed }
         if (listings.forall(_ == PeerListing.NoPeerWillHold)) PeerListing.NoPeerWillHold
         else if (available.size < listings.size) PeerListing.NotAvailableYet
-        else merge(available.map(_._1), available.flatMap(_._2).distinct)
+        else merge(available)
       }
 
-  private def fromHolders[T](call: Future[(T, List[Uri])]): Future[PeerListing[T]] =
+  private def withHolders[T](call: Future[(T, List[Uri])]): Future[PeerListing[(T, Seq[Uri])]] =
     call
-      .map[PeerListing[T]] { case (value, holders) => PeerListing.Available(value, holders) }
+      .map[PeerListing[(T, Seq[Uri])]] { case (value, holders) =>
+        PeerListing.Available((value, holders))
+      }
       .recover {
         case HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, _) =>
           PeerListing.NotAvailableYet

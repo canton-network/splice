@@ -70,7 +70,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
     Some(BulkStorageObjects.SnapshotObjects(recordTime, keys.map(obj)))
 
   "BftBulkObjectListing" should {
-    "list update objects in every encoding, from the peers that agreed on either" in {
+    "list update objects in every encoding, each with the peers that agreed on it" in {
       val connection = mock[BftScanConnection]
       updatesIn(
         connection,
@@ -85,8 +85,10 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
 
       listingOver(connection).updateObjects(at, at, 10, at).futureValue shouldBe
         PeerListing.Available(
-          page("s/updates_compact_json_0.zstd", "s/updates_protobuf_json_0.zstd"),
-          Seq(sv1, sv2, sv3),
+          Seq(
+            HeldObjects(Seq(obj("s/updates_compact_json_0.zstd")), Seq(sv1, sv2)),
+            HeldObjects(Seq(obj("s/updates_protobuf_json_0.zstd")), Seq(sv2, sv3)),
+          )
         )
     }
 
@@ -121,7 +123,7 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
         PeerListing.NoPeerWillHold
     }
 
-    "list a snapshot in every encoding" in {
+    "list a snapshot in every encoding, each with the peers that agreed on it" in {
       val connection = mock[BftScanConnection]
       snapshotIn(
         connection,
@@ -131,13 +133,20 @@ class BftBulkObjectListingTest extends AnyWordSpec with BaseTest {
       snapshotIn(
         connection,
         Encoding.ProtobufJson,
-        Future.successful((snapshot(at, "s/ACS_protobuf_json_0.zstd"), List(sv1, sv2))),
+        Future.successful((snapshot(at, "s/ACS_protobuf_json_0.zstd"), List(sv2, sv3))),
       )
 
       listingOver(connection).snapshotObjectsAtOrBefore(at).futureValue shouldBe
         PeerListing.Available(
-          snapshot(at, "s/ACS_compact_json_0.zstd", "s/ACS_protobuf_json_0.zstd"),
-          Seq(sv1, sv2),
+          Some(
+            HeldSnapshot(
+              at,
+              Seq(
+                HeldObjects(Seq(obj("s/ACS_compact_json_0.zstd")), Seq(sv1, sv2)),
+                HeldObjects(Seq(obj("s/ACS_protobuf_json_0.zstd")), Seq(sv2, sv3)),
+              ),
+            )
+          )
         )
     }
 

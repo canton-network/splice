@@ -13,7 +13,6 @@ import org.apache.pekko.http.scaladsl.model.Uri
 import org.apache.pekko.pattern
 import org.apache.pekko.stream.scaladsl.Sink
 import org.slf4j.event.Level
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.{
   BulkStorageBackfillingConfig,
   ScanStorageConfigs,
@@ -96,7 +95,11 @@ class BulkStorageBackfillingTest
       snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
       val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
       noPeerWillHold: Boolean = false,
+      holdersPerEncoding: Seq[Seq[Uri]] = Seq(holders),
   ) extends BulkObjectListing {
+
+    private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): Seq[HeldObjects] =
+      holdersPerEncoding.map(HeldObjects(objects, _))
 
     override def updateObjects(
         startRecordTime: CantonTimestamp,
@@ -105,7 +108,7 @@ class BulkStorageBackfillingTest
         availableAt: CantonTimestamp,
     )(implicit
         tc: TraceContext
-    ): Future[PeerListing[BulkStorageObjects.UpdateObjectsPage]] = {
+    ): Future[PeerListing[Seq[HeldObjects]]] = {
       updateListingsCallCount.incrementAndGet()
       val held = folders()
       if (noPeerWillHold) Future.successful(PeerListing.NoPeerWillHold)
@@ -121,18 +124,13 @@ class BulkStorageBackfillingTest
         if (page.isEmpty && inRange.nonEmpty)
           Future.failed(new IllegalArgumentException("Limit too low for a single folder"))
         else
-          Future.successful(
-            PeerListing.Available(
-              BulkStorageObjects.UpdateObjectsPage(page.flatMap(_._1._2), None),
-              holders,
-            )
-          )
+          Future.successful(PeerListing.Available(perEncoding(page.flatMap(_._1._2))))
       }
     }
 
     override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
         tc: TraceContext
-    ): Future[PeerListing[Option[BulkStorageObjects.SnapshotObjects]]] = {
+    ): Future[PeerListing[Option[HeldSnapshot]]] = {
       val snapshots = snapshotsByTime()
       if (!snapshots.lastOption.exists(_._1 >= recordTime))
         Future.successful(PeerListing.NotAvailableYet)
@@ -141,9 +139,8 @@ class BulkStorageBackfillingTest
         Future.successful(
           PeerListing.Available(
             snapshots.collectFirst {
-              case (t, objs) if t == grid => BulkStorageObjects.SnapshotObjects(grid, objs)
-            },
-            holders,
+              case (t, objs) if t == grid => HeldSnapshot(grid, perEncoding(objs))
+            }
           )
         )
       }
@@ -153,10 +150,12 @@ class BulkStorageBackfillingTest
   private class RecordingCopier extends ObjectCopier {
     val copied = new AtomicReference[Vector[String]](Vector.empty)
     val holdersSeen = new AtomicReference[Vector[Seq[Uri]]](Vector.empty)
+    val copiesWithHolders = new AtomicReference[Vector[(Seq[String], Seq[Uri])]](Vector.empty)
     override def copy(objects: Seq[ObjectKeyAndChecksum], holders: Seq[Uri])(implicit
         tc: TraceContext
     ) = {
       holdersSeen.updateAndGet(_ :+ holders)
+      copiesWithHolders.updateAndGet(_ :+ (objects.map(_.key) -> holders))
       Future.successful(copied.updateAndGet(_ ++ objects.map(_.key))).map(_ => ())
     }
   }
@@ -243,6 +242,26 @@ class BulkStorageBackfillingTest
           Seq(segment(1, 2) -> 2, segment(2, 3) -> 2, segment(3, 4) -> 1)
         copier.copied.get().size shouldBe 8
         forAll(copier.holdersSeen.get())(_ shouldBe holders)
+      }
+    }
+
+    "copy each encoding only from the peers that agreed on that encoding" in {
+      val compactJsonHolders = Seq(Uri("http://compact-json-holder"))
+      val protobufJsonHolders = Seq(Uri("http://protobuf-json-holder"))
+      val copier = new RecordingCopier
+      val listing = new FakeListing(
+        () => folders,
+        () => snapshots,
+        holdersPerEncoding = Seq(compactJsonHolders, protobufJsonHolders),
+      )
+      backfilling(new InMemoryProgress, copier, listing).map { _ =>
+        val holdersPerCopy = copier.copiesWithHolders.get().map(_._2)
+        holdersPerCopy.distinct should contain theSameElementsAs Seq(
+          compactJsonHolders,
+          protobufJsonHolders,
+        )
+        holdersPerCopy.count(_ == compactJsonHolders) shouldBe
+          holdersPerCopy.count(_ == protobufJsonHolders)
       }
     }
 

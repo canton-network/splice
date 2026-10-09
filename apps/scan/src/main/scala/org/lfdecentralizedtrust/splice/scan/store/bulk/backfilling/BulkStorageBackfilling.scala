@@ -92,8 +92,8 @@ class BulkStorageBackfilling(
       case Some(copied) => copySegment(segmentAfter(copied))
       case None =>
         firstSegment(copyUpTo).flatMap {
-          case PeerListing.Available(Some(first), _) => copySegment(first)
-          case PeerListing.Available(None, _) | PeerListing.NotAvailableYet =>
+          case PeerListing.Available(Some(first)) => copySegment(first)
+          case PeerListing.Available(None) | PeerListing.NotAvailableYet =>
             logger.debug(s"Not enough peers hold update objects up to $copyUpTo yet, waiting")
             waitThen(CopyUpdates, WaitingForPeers(CantonTimestamp.MinValue))
           case PeerListing.NoPeerWillHold =>
@@ -125,10 +125,10 @@ class BulkStorageBackfilling(
     listing
       .updateObjects(CantonTimestamp.MinValue, copyUpTo, config.pageSize, availableAt = copyUpTo)
       .flatMap {
-        case PeerListing.Available(page, holders) =>
+        case PeerListing.Available(held) =>
           Future
-            .fromTry(segmentsOf(page.objects))
-            .map(segments => PeerListing.Available(segments.headOption, holders))
+            .fromTry(segmentsOf(held.flatMap(_.objects)))
+            .map(segments => PeerListing.Available(segments.headOption))
         case PeerListing.NotAvailableYet => Future.successful(PeerListing.NotAvailableYet)
         case PeerListing.NoPeerWillHold => Future.successful(PeerListing.NoPeerWillHold)
       }
@@ -141,14 +141,17 @@ class BulkStorageBackfilling(
         waitThen(CopyUpdates, WaitingForPeers(from))
       case PeerListing.NoPeerWillHold =>
         noPeerHolds(CopyUpdates, from, s"the update segment $from - $to")
-      case PeerListing.Available(page, holders) =>
+      case PeerListing.Available(held) =>
         for {
-          _ <- copier.copy(page.objects, holders)
+          _ <- copyFromHolders(held)
           _ <- progress.persistUpdatesCursor(segment)
-          step <- next(CopyUpdates, SegmentCopied(segment, page.objects.size))
+          step <- next(CopyUpdates, SegmentCopied(segment, held.map(_.objects.size).sum))
         } yield step
     }
   }
+
+  private def copyFromHolders(held: Seq[HeldObjects])(implicit tc: TraceContext): Future[Unit] =
+    Future.traverse(held)(encoding => copier.copy(encoding.objects, encoding.holders)).map(_ => ())
 
   private def copyNextSnapshot(
       lastRequested: Option[CantonTimestamp],
@@ -159,18 +162,18 @@ class BulkStorageBackfilling(
       requested <- lastRequested.orElse(cursor.map(_.timestamp)) match {
         case Some(last) =>
           Future.successful[PeerListing[Option[CantonTimestamp]]](
-            PeerListing.Available(Some(storageConfig.computeBulkSnapshotTimeAfter(last)), Seq.empty)
+            PeerListing.Available(Some(storageConfig.computeBulkSnapshotTimeAfter(last)))
           )
         case None =>
           firstSegment(copyUpTo).map[PeerListing[Option[CantonTimestamp]]] {
-            case PeerListing.Available(first, holders) =>
-              PeerListing.Available(first.map(_.toTimestamp.timestamp), holders)
+            case PeerListing.Available(first) =>
+              PeerListing.Available(first.map(_.toTimestamp.timestamp))
             case PeerListing.NotAvailableYet => PeerListing.NotAvailableYet
             case PeerListing.NoPeerWillHold => PeerListing.NoPeerWillHold
           }
       }
       result <- requested match {
-        case PeerListing.Available(None, _) | PeerListing.NotAvailableYet =>
+        case PeerListing.Available(None) | PeerListing.NotAvailableYet =>
           logger.debug("The peers list no update segment yet, waiting before walking the snapshots")
           waitThen(CopySnapshots(lastRequested), WaitingForPeers(CantonTimestamp.MinValue))
         case PeerListing.NoPeerWillHold =>
@@ -179,8 +182,8 @@ class BulkStorageBackfilling(
             CantonTimestamp.MinValue,
             s"update objects up to $copyUpTo",
           )
-        case PeerListing.Available(Some(ts), _) if ts > copyUpTo => next(Finish, SnapshotsCopied)
-        case PeerListing.Available(Some(ts), _) =>
+        case PeerListing.Available(Some(ts)) if ts > copyUpTo => next(Finish, SnapshotsCopied)
+        case PeerListing.Available(Some(ts)) =>
           def nothingNewer(reason: String): Next = {
             logger.debug(s"$reason, waiting for the snapshot at $ts")
             waitThen(CopySnapshots(lastRequested), WaitingForPeers(ts))
@@ -190,21 +193,22 @@ class BulkStorageBackfilling(
               nothingNewer(s"Not enough peers hold the snapshot at $ts yet")
             case PeerListing.NoPeerWillHold =>
               noPeerHolds(CopySnapshots(lastRequested), ts, s"the snapshot at $ts")
-            case PeerListing.Available(None, _) =>
+            case PeerListing.Available(None) =>
               nothingNewer(s"The peers have no committed snapshot at $ts")
-            case PeerListing.Available(Some(snapshot), _)
+            case PeerListing.Available(Some(snapshot))
                 if cursor.exists(_.timestamp >= snapshot.recordTime) =>
               nothingNewer(s"The peers have no snapshot after ${snapshot.recordTime}")
-            case PeerListing.Available(Some(snapshot), _) if snapshot.objects.isEmpty =>
+            case PeerListing.Available(Some(snapshot))
+                if snapshot.encodings.forall(_.objects.isEmpty) =>
               next(CopySnapshots(Some(snapshot.recordTime)), SnapshotSkipped(snapshot.recordTime))
-            case PeerListing.Available(Some(snapshot), holders) =>
+            case PeerListing.Available(Some(snapshot)) =>
               val copied = TimestampWithMigrationId(snapshot.recordTime, currentMigrationId)
               for {
-                _ <- copier.copy(snapshot.objects, holders)
+                _ <- copyFromHolders(snapshot.encodings)
                 _ <- progress.persistSnapshotsCursor(copied)
                 step <- next(
                   CopySnapshots(Some(snapshot.recordTime)),
-                  SnapshotCopied(copied, snapshot.objects.size),
+                  SnapshotCopied(copied, snapshot.encodings.map(_.objects.size).sum),
                 )
               } yield step
           }
