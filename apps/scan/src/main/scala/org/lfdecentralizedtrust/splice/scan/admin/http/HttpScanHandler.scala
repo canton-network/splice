@@ -141,6 +141,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DsoInfo,
   PackageQualifiedName,
   QualifiedName,
+  SwitchOverTimes,
 }
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
@@ -812,6 +813,7 @@ class HttpScanHandler(
   ): Future[Either[definitions.ErrorResponse, definitions.EventHistoryItem]] = {
     implicit val tc = extracted
     for {
+      dsoRules <- store.lookupDsoRules()
       eventO <- eventStore.getEventByUpdateId(
         updateId,
         updateHistory.domainMigrationId,
@@ -823,6 +825,8 @@ class HttpScanHandler(
           )
         case Some((verdictWithViewsO, updateO)) =>
           val verdictRowIdO = verdictWithViewsO.map { case (v, _) => v.rowId }
+          val includeRound =
+            dsoRules.exists(c => SwitchOverTimes.alwaysServeVerdictRoundNumber(clock, c.payload))
           for {
             appActivityRecordO <- verdictRowIdO match {
               case Some(rowId) =>
@@ -841,7 +845,7 @@ class HttpScanHandler(
                 )
               )
             val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-              ScanHttpEncodings.encodeVerdict(v, views)
+              ScanHttpEncodings.encodeVerdict(v, views, includeRound)
             }
             val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
               v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
@@ -894,6 +898,7 @@ class HttpScanHandler(
 
     confirmBackfillingIsCompleteThen(updateHistory) {
       for {
+        dsoRules <- store.lookupDsoRules()
         events <- eventStore.getEvents(
           afterO = afterO,
           currentMigrationId = updateHistory.domainMigrationId,
@@ -903,6 +908,8 @@ class HttpScanHandler(
           verdictWithViewsO.map { case (v, _) => v.rowId }
         }
         appActivityRecordMap <- eventStore.getAppActivityRecords(verdictRowIds)
+        includeRound =
+          dsoRules.exists(c => SwitchOverTimes.alwaysServeVerdictRoundNumber(clock, c.payload))
       } yield events.map { case (verdictWithViewsO, updateO) =>
         val encodedUpdateV2 = updateO
           .map(
@@ -915,7 +922,7 @@ class HttpScanHandler(
             )
           )
         val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-          ScanHttpEncodings.encodeVerdict(v, views)
+          ScanHttpEncodings.encodeVerdict(v, views, includeRound)
         }
         val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
           v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
