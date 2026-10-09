@@ -414,7 +414,7 @@ function buildDecentralizedSynchronizerChanges(
     return synchronizers.map
       .entriesArray()
       .map(r => r[0])
-      .sort();
+      .toSorted();
   };
 
   const beforeRequiredSynchronizers = getRequiredSynchronizers(before?.requiredSynchronizers);
@@ -422,7 +422,7 @@ function buildDecentralizedSynchronizerChanges(
 
   const allSynchronizers = [
     ...new Set([...beforeRequiredSynchronizers, ...afterRequiredSynchronizers]),
-  ].sort();
+  ].toSorted();
   const requiredSynchronizersChanges = allSynchronizers.map((sync, idx) => ({
     fieldName: `decentralizedSynchronizerRequiredSynchronizers${idx + 1}`,
     label: `(unused) Decentralized synchronizer (required synchronizer ${idx + 1})`,

@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  DamlValueEncoding,
   GetBulkObjectChecksumsResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
@@ -37,6 +38,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.util.*
@@ -363,6 +365,25 @@ trait ScanConnection
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[GetBulkObjectChecksumsResponse]
+
+  def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[BulkStorageObjects.SnapshotObjects]]
+
+  def listBulkUpdateHistoryObjects(
+      startRecordTime: CantonTimestamp,
+      endRecordTime: CantonTimestamp,
+      pageSize: Int,
+      nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[BulkStorageObjects.UpdateObjectsPage]
 }
 
 object ScanConnection {

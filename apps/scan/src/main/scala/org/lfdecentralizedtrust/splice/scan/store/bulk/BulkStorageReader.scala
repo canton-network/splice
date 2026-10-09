@@ -24,14 +24,14 @@ class BulkStorageReader(
     storageConfig: ScanStorageConfig,
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
+    firstOwnSegmentStart: () => Future[Option[CantonTimestamp]],
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
 
   def getCommittedObjectsForAcsSnapshotAtOrBefore(
       atOrBeforeTimestamp: CantonTimestamp,
-      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding] =
-        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
     for {
       snapshotTs <-
@@ -125,8 +125,7 @@ class BulkStorageReader(
       atOrBeforeRecordTime: CantonTimestamp,
       limit: PageLimit,
       nextPageTokenO: Option[String],
-      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding] =
-        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] =
     getUpdatesBetweenDatesFromBucket(
       afterRecordTime,
@@ -160,10 +159,21 @@ class BulkStorageReader(
       }
   }
 
-  def getStagingProgressTimestamp(): Future[CantonTimestamp] = {
+  def getStagingProgressTimestamp(): Future[CantonTimestamp] =
+    progressTimestamp(updateHistoryStagingProgress, acsSnapshotStagingProgress)
+
+  def getCommittedProgressTimestamp(): Future[CantonTimestamp] =
+    progressTimestamp(updateHistoryCommittedProgress, acsSnapshotCommittedProgress)
+
+  def getFirstOwnSegmentStart(): Future[Option[CantonTimestamp]] = firstOwnSegmentStart()
+
+  private def progressTimestamp(
+      updatesProgress: UpdateHistoryBulkStoragePersistentProgress,
+      snapshotsProgress: AcsSnapshotBulkStoragePersistentProgress,
+  ): Future[CantonTimestamp] = {
     for {
-      updates <- updateHistoryStagingProgress.readLatestProcessedSegment
-      snapshots <- acsSnapshotStagingProgress.readLatestProcessedSnapshotTimestamp
+      updates <- updatesProgress.readLatestProcessedSegment
+      snapshots <- snapshotsProgress.readLatestProcessedSnapshotTimestamp
     } yield {
       (updates, snapshots) match {
         case (Some(updatesSegment), Some(snapshotTs)) =>

@@ -10,6 +10,7 @@ import { createIstioIpAllowPolicies, istioIngressSelector } from './policies';
 import { readSvPublicIngressPathsByAudience } from './svPublicEndpoints';
 
 export const svOpenApiFile = `${SPLICE_ROOT}/apps/sv/src/main/openapi/sv-internal.yaml`;
+export const svStreamOpenApiFile = `${SPLICE_ROOT}/apps/sv/src/main/openapi/sv-stream-server.yaml`;
 
 function hostsFor(prefix: string): string[] {
   return allSvsToDeployBasic.flatMap(sv => [
@@ -24,7 +25,7 @@ export function configureScanAndSvAppWhitelist(
 ): pulumi.Output<pulumi.Resource[]>[] {
   const scanHosts = hostsFor('scan');
   const svHosts = hostsFor('sv');
-  const publicPaths = readSvPublicIngressPathsByAudience(svOpenApiFile);
+  const publicPaths = readSvPublicIngressPathsByAudience(svOpenApiFile, svStreamOpenApiFile);
 
   return [
     createIstioIpAllowPolicies({

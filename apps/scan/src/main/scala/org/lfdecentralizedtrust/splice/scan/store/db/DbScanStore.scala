@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{
   AsyncOrSyncCloseable,
@@ -161,6 +161,8 @@ class DbScanStore(
     with RetryProvider.Has
     with DbVotesAcsStoreQueryBuilder
     with DbVotesTxLogStoreQueryBuilder[TxLogEntry] {
+
+  override protected implicit val dbProfile: DbStorage.Profile = storage.profile
 
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
   import multiDomainAcsStore.waitUntilAcsIngested
@@ -414,7 +416,8 @@ class DbScanStore(
     }
 
   override def listFeaturedAppRightsByProvider(
-      providerPartyId: PartyId
+      providerPartyId: PartyId,
+      limit: Limit,
   )(implicit
       tc: TraceContext
   ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]] =
@@ -429,10 +432,13 @@ class DbScanStore(
             additionalWhere = sql"""
                   and featured_app_right_provider = $providerPartyId
                """,
+            orderLimit = sql"""order by event_number limit ${sqlLimit(limit)}""",
           ),
           "listFeaturedAppRightsByProvider",
         )
-      } yield rows.map(contractWithStateFromRow(FeaturedAppRight.COMPANION))
+      } yield applyLimit("listFeaturedAppRightsByProvider", limit, rows).map(
+        contractWithStateFromRow(FeaturedAppRight.COMPANION)
+      )
     }
 
   override def getAmuletConfigForRound(round: Long)(implicit

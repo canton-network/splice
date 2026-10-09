@@ -292,6 +292,7 @@ abstract class StoreTestBase
       round: Long,
       amuletPrice: Double,
       opensAt: Instant = Instant.now().truncatedTo(ChronoUnit.MICROS),
+      contractId: String = nextCid(),
   ) = {
     val template = new roundCodegen.OpenMiningRound(
       dso.toProtoPrimitive,
@@ -309,7 +310,7 @@ abstract class StoreTestBase
 
     contract(
       roundCodegen.OpenMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
-      new roundCodegen.OpenMiningRound.ContractId(round.toString),
+      new roundCodegen.OpenMiningRound.ContractId(contractId),
       template,
     )
   }
