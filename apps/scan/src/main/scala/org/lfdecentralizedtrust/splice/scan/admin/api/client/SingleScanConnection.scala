@@ -32,7 +32,10 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  BulkStorageBucket,
+  DamlValueEncoding,
   GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -1043,19 +1046,23 @@ class SingleScanConnection private[client] (
   override def getBulkObjectChecksums(
       requiredCatchupTimestamp: CantonTimestamp,
       objectKeys: Seq[String],
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.GetBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
+      HttpScanAppClient.GetBulkObjectChecksums(objectKeys),
     )
+  }
 
-  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
     runHttpCmd(
       config.adminApi.url,
-      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding),
     )
       .flatMap(response =>
         SingleScanConnection.decoded(BulkStorageObjects.snapshotObjects(response)).map(Some(_))
@@ -1069,6 +1076,7 @@ class SingleScanConnection private[client] (
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     runHttpCmd(
       config.adminApi.url,
@@ -1077,10 +1085,22 @@ class SingleScanConnection private[client] (
         endRecordTime,
         nextPageToken,
         pageSize,
+        damlValueEncoding,
       ),
     ).flatMap(response =>
       SingleScanConnection.decoded(BulkStorageObjects.updateObjectsPage(response))
     )
+
+  // Not intended to be called via BftScanConnection, so not defined in ScanConnection trait.
+  def getBulkObjectsProgress(
+      recordTime: CantonTimestamp,
+      bucket: BulkStorageBucket,
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectsProgressResponse] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectsProgress(recordTime, bucket),
+    )
+  }
 }
 
 object SingleScanConnection {

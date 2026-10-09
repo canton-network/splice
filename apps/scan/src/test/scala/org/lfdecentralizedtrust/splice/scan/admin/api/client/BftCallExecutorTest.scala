@@ -8,8 +8,15 @@ import com.daml.metrics.api.testing.{InMemoryMetricsFactory, MetricValues}
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
 import org.apache.pekko.stream.StreamTcpException
+import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.environment.BaseAppConnection
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse.{
+  Available,
+  Never,
+  NotYet,
+}
 import org.scalatest.wordspec.AsyncWordSpec
 
 import scala.concurrent.Future
@@ -206,6 +213,138 @@ class BftCallExecutorTest
         metricsReportAgreement(metrics, 1)
         metricsReportAgreement(metrics, 2)
       }
+    }
+  }
+
+  "BftCallExecutor.findScansWithAvailableData" should {
+    "throw a 503 when available + not-enough may be enough" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(NotYet: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val failure = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 2)
+        .failed
+        .futureValue
+      inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
+        code shouldBe StatusCodes.ServiceUnavailable
+        msg should include(
+          "1 scans have data, 1 have responded with 'not yet'. Together that's at least the required 2, so final result is 'not yet'"
+        )
+      }
+    }
+
+    "throw a 503 when available + not-available is not enough, but not-available is not empty" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(NotYet: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val failure = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 3)
+        .failed
+        .futureValue
+      inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
+        code shouldBe StatusCodes.ServiceUnavailable
+        msg should include(
+          "Not enough scans will ever have the data, but some indicated that they will, just not yet."
+        )
+      }
+    }
+
+    "return the available scans when all others will never have the data" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val ret = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 3)
+        .futureValue
+      ret should have size 1
+      ret.head.idx shouldBe 0
+    }
+
+    "fail with NoScanWillHaveData when all scans will never have the data" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(Never: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val failure = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 3)
+        .failed
+        .futureValue
+      failure shouldBe a[BftCallExecutor.NoScanWillHaveData]
+      failure.getMessage should include("All scans have responded with 'never'.")
+    }
+
+    "return scans with data if there are enough" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(NotYet: DataAvailabilityResponse),
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(Available: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val ret = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 2)
+        .futureValue
+      ret should have size 2
+      ret.forall(r => r.idx >= 1 && r.idx <= 3) shouldBe true
+    }
+
+    "treat all exceptions as not-yet" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          notFoundFailure,
+          tcpFailure,
+          Future.successful(Available: DataAvailabilityResponse),
+        )
+      )
+
+      val failure = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 2)
+        .failed
+        .futureValue
+      inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
+        code shouldBe StatusCodes.ServiceUnavailable
+        msg should include(
+          "1 scans have data, 2 have responded with 'not yet'. Together that's at least the required 2, so final result is 'not yet'"
+        )
+      }
+    }
+
+    "if enough scans do have data, return them despite exceptions" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          notFoundFailure,
+          tcpFailure,
+          Future.successful(Available: DataAvailabilityResponse),
+        )
+      )
+
+      BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 1)
+        .futureValue
+        .map(_.idx) shouldBe Seq(2)
+
     }
   }
 }

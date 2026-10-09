@@ -28,7 +28,11 @@ import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, Spl
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
+  BulkObjectsAvailability,
+  BulkStorageBucket,
+  DamlValueEncoding,
   GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -91,6 +95,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.DataAvailabilityResponse
 import org.lfdecentralizedtrust.tokenstandard.{
   allocation,
   allocationinstruction,
@@ -959,19 +964,31 @@ class BftScanConnection(
   override def getBulkObjectChecksums(
       requiredCatchupTimestamp: CantonTimestamp,
       objectKeys: Seq[String],
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
-    bftCall(
-      _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
-      "getBulkObjectChecksums",
-      consensusFailureLogLevel = Level.DEBUG,
-    )
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
+    BftCallExecutor
+      .bftCallForEventualConsistencyEndpoints(
+        scanList.scanConnections,
+        connectionMetrics,
+        retryProvider,
+        logger,
+        hasData = _.getBulkObjectsProgress(requiredCatchupTimestamp, BulkStorageBucket.Staging)
+          .map(BftScanConnection.dataAvailability),
+        getData = _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
+        endpoint = "getBulkObjectChecksums",
+        callConfig = BftCallConfig.default(scanList.scanConnections),
+      )
+      .map(_._1)
+  }
 
-  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+  override def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
     bftCall(
-      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding),
       "listBulkAcsSnapshotObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
@@ -981,9 +998,16 @@ class BftScanConnection(
       endRecordTime: CantonTimestamp,
       pageSize: Int,
       nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
     bftCall(
-      _.listBulkUpdateHistoryObjects(startRecordTime, endRecordTime, pageSize, nextPageToken),
+      _.listBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        pageSize,
+        nextPageToken,
+        damlValueEncoding,
+      ),
       "listBulkUpdateHistoryObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
@@ -1043,6 +1067,13 @@ class BftScanConnection(
 }
 
 object BftScanConnection {
+
+  def dataAvailability(response: GetBulkObjectsProgressResponse): DataAvailabilityResponse =
+    response.availability match {
+      case BulkObjectsAvailability.members.Available => DataAvailabilityResponse.Available
+      case BulkObjectsAvailability.members.Processing => DataAvailabilityResponse.NotYet
+      case BulkObjectsAvailability.members.Backfilling => DataAvailabilityResponse.Never
+    }
 
   /** Configuration for a BFT call.
     * Normally a BFT call requires f+1 agreeing responses from 2f+1 requests,

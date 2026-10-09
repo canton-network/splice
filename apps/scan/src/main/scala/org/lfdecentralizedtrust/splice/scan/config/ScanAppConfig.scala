@@ -36,6 +36,13 @@ final case class MediatorVerdictIngestionConfig(
     batchSize: Int = 50
 )
 
+final case class BulkStorageBackfillingConfig(
+    enabled: Boolean = false,
+    pollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    downloadParallelism: Int = 1,
+    pageSize: Int = Limit.DefaultMaxPageSize,
+)
+
 final case class BulkStorageConfig(
     /** When new snapshot is not yet available, how long to wait for a new one. */
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
@@ -48,6 +55,10 @@ final case class BulkStorageConfig(
     staging: Option[S3Config] = None,
     committed: Option[S3Config] = None,
     bftCheckEnabled: Boolean = true,
+    // temporary buffer size for zstd compression, safe to modify locally
+    tmpBufferSize: Int = 1024 * 1024 * 10,
+    // Number of elements to read from the DB at once when reading updates or snapshots for bulk storage. Safe to modify locally.
+    dbReadChunkSize: Int = 100,
     /** When enabled, the app will reset all progress markers thus force recomputing data from genesis.
       * Note that this does not delete any existing data, you usually would want to do that before setting
       * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back
@@ -63,6 +74,7 @@ final case class BulkStorageConfig(
       * Should typically be used in test environments only.
       */
     debugObjectsToNotCommit: Seq[String] = Seq.empty,
+    backfilling: BulkStorageBackfillingConfig = BulkStorageBackfillingConfig(),
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

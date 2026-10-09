@@ -3253,7 +3253,8 @@ object HttpScanAppClient {
   }
 
   case class ListBulkAcsSnapshotObjects(
-      atOrBeforeTimestamp: CantonTimestamp
+      atOrBeforeTimestamp: CantonTimestamp,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ) extends InternalBaseCommand[
         http.ListBulkAcsSnapshotObjectsResponse,
         definitions.ListBulkAcsSnapshotObjectsResponse,
@@ -3264,6 +3265,7 @@ object HttpScanAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], ListBulkAcsSnapshotObjectsResponse] =
       client.listBulkAcsSnapshotObjects(
         atOrBeforeTimestamp.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        damlValueEncoding,
         headers,
       )
 
@@ -3288,6 +3290,7 @@ object HttpScanAppClient {
       endRecordTime: CantonTimestamp,
       nextPageToken: Option[String],
       limit: Int,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ) extends InternalBaseCommand[
         http.ListBulkUpdateHistoryObjectsResponse,
         definitions.ListBulkUpdateHistoryObjectsResponse,
@@ -3302,6 +3305,7 @@ object HttpScanAppClient {
           endRecordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
           nextPageToken,
           limit,
+          damlValueEncoding,
         ),
         headers,
       )
@@ -3320,8 +3324,7 @@ object HttpScanAppClient {
   }
 
   case class GetBulkObjectChecksums(
-      requiredCatchupTimestamp: CantonTimestamp,
-      objectKeys: Seq[String],
+      objectKeys: Seq[String]
   ) extends InternalBaseCommand[
         http.GetBulkObjectChecksumsResponse,
         definitions.GetBulkObjectChecksumsResponse,
@@ -3332,8 +3335,7 @@ object HttpScanAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], GetBulkObjectChecksumsResponse] =
       client.getBulkObjectChecksums(
         definitions.GetBulkObjectChecksumsRequest(
-          requiredCatchupTimestamp.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          objectKeys.toVector,
+          objectKeys.toVector
         ),
         headers,
       )
@@ -3354,6 +3356,7 @@ object HttpScanAppClient {
         recordTime: CantonTimestamp,
         objects: Seq[ObjectKeyAndChecksum],
     )
+
     final case class UpdateObjectsPage(
         objects: Seq[ObjectKeyAndChecksum],
         nextPageToken: Option[String],
@@ -3391,6 +3394,34 @@ object HttpScanAppClient {
         response: definitions.ListBulkUpdateHistoryObjectsResponse
     ): Either[String, UpdateObjectsPage] =
       decodeObjectRefs(response.objectRefs).map(UpdateObjectsPage(_, response.nextPageToken))
+  }
+
+  case class GetBulkObjectsProgress(
+      recordTime: CantonTimestamp,
+      bucket: definitions.BulkStorageBucket,
+  ) extends InternalBaseCommand[
+        http.GetBulkObjectsProgressResponse,
+        definitions.GetBulkObjectsProgressResponse,
+      ] {
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetBulkObjectsProgressResponse] =
+      client.getBulkObjectsProgress(
+        recordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        bucket,
+        headers,
+      )
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[http.GetBulkObjectsProgressResponse, Either[
+      String,
+      definitions.GetBulkObjectsProgressResponse,
+    ]] = {
+      case http.GetBulkObjectsProgressResponse.OK(response) => Right(response)
+      case http.GetBulkObjectsProgressResponse.NotImplemented(err) => Left(err.error)
+    }
   }
 
   case class BulkStorageDownload(

@@ -18,6 +18,7 @@ import com.digitalasset.canton.config.ProcessingTimeout
 import slick.jdbc.PostgresProfile
 import io.circe.Json
 import io.circe.syntax.*
+import io.grpc.Status
 import slick.jdbc.GetResult
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.canton.SQLActionBuilder
@@ -161,6 +162,7 @@ object DbScanVerdictStore {
       submittingParties: Seq[String],
       transactionRootViews: Seq[Int],
       trafficSummaryO: Option[TrafficSummaryT],
+      roundNumber: Option[Long],
   )
 
   object VerdictResultDbValue {
@@ -211,6 +213,7 @@ object DbScanVerdictStore {
       submittingParties = verdict.submittingParties,
       transactionRootViews = transactionRootViews,
       trafficSummaryO = byTimestamp.get(recordTime),
+      roundNumber = None,
     )
 
     val mkViews: Long => Seq[TransactionViewT] = { rowId =>
@@ -321,6 +324,7 @@ class DbScanVerdictStore(
         <<?[Json],
         recordTime,
       ),
+      <<?[Long],
     )
   }
 
@@ -367,7 +371,8 @@ class DbScanVerdictStore(
         submitting_parties,
         transaction_root_views,
         total_traffic_cost,
-        envelope_traffic_costs
+        envelope_traffic_costs,
+        round_number
       ) values (
         $historyId,
         ${rowT.migrationId},
@@ -381,7 +386,8 @@ class DbScanVerdictStore(
         ${rowT.submittingParties.map(lengthLimited).toSeq},
         ${rowT.transactionRootViews.toSeq},
         ${rowT.trafficSummaryO.map(_.totalTrafficCost)},
-        ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb
+        ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb,
+        ${rowT.roundNumber}
       ) returning row_id
     """.as[Long].headOption
   }
@@ -409,61 +415,79 @@ class DbScanVerdictStore(
     * Returns a map from verdict record_time to its generated row_id, which can be used
     * to insert related records (e.g., app activity records) that reference the verdict by row_id.
     */
-  def insertVerdictAndTransactionViewsDBIO(
+  private def insertVerdictAndTransactionViewsDBIO(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])]
   )(implicit tc: TraceContext): DBIO[Map[CantonTimestamp, Long]] = {
-    NonEmpty.from(items) match {
-      case None => DBIO.successful(Map.empty)
-      case Some(items) =>
-        val checkExist = (sql"""
+    // Defense in-depth: this should never happen, but if it did we'd want to learn about it ASAP.
+    val outOfOrder = items.zip(items.drop(1)).find { case ((a, _), (b, _)) =>
+      Ordering[Option[Long]].gt(a.roundNumber, b.roundNumber)
+    }
+    outOfOrder match {
+      case Some(((a, _), (b, _))) =>
+        DBIO.failed(
+          Status.INTERNAL
+            .withDescription(
+              s"Round numbers not monotonically increasing within batch: " +
+                s"${a.updateId} (round ${a.roundNumber}) precedes ${b.updateId} (round ${b.roundNumber})"
+            )
+            .asRuntimeException()
+        )
+      case None =>
+        NonEmpty.from(items) match {
+          case None => DBIO.successful(Map.empty)
+          case Some(items) =>
+            val checkExist = (sql"""
                  select update_id
                  from #${Tables.verdicts}
                  where history_id = $historyId
                    and """ ++ DbStorage.toInClause(
-          "update_id",
-          items.map(t => lengthLimited(t._1.updateId)),
-        ))
-          .as[String]
+              "update_id",
+              items.map(t => lengthLimited(t._1.updateId)),
+            ))
+              .as[String]
 
-        for {
-          alreadyExisting <- checkExist.map(_.toSet)
-          (dropped, nonExisting) =
-            items.partition(item => alreadyExisting.contains(item._1.updateId))
-          droppedAccepts =
-            dropped.filter(_._1.verdictResult == DbScanVerdictStore.VerdictResultDbValue.Accepted)
-          nonExistingMessage = s"Non-existing: ${nonExisting.map(_._1.updateId)}."
-          _ =
-            if (droppedAccepts.nonEmpty)
-              logger.warn(
-                s"Dropping duplicate accepted verdicts: ${droppedAccepts.map(_._1.updateId)}. " +
-                  s"All dropped verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
-              )
-            else if (dropped.nonEmpty)
-              logger.info(
-                s"Dropping duplicate verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
-              )
-            else
-              logger.info(s"Already ingested verdicts: $alreadyExisting. $nonExistingMessage")
-          rowIdMap <-
-            if (nonExisting.nonEmpty) {
-              DBIO
-                .sequence(nonExisting.map { case (verdict, mkViews) =>
-                  for {
-                    idOpt <- sqlInsertVerdictReturningId(verdict)
-                    rowId <- idOpt match {
-                      case Some(id) => DBIO.successful(id)
-                      case None =>
-                        DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
-                    }
-                    views = mkViews(rowId)
-                    _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
-                  } yield verdict.recordTime -> rowId
-                })
-                .map(_.toMap)
-            } else {
-              DBIO.successful(Map.empty[CantonTimestamp, Long])
-            }
-        } yield rowIdMap
+            for {
+              alreadyExisting <- checkExist.map(_.toSet)
+              (dropped, nonExisting) =
+                items.partition(item => alreadyExisting.contains(item._1.updateId))
+              droppedAccepts =
+                dropped.filter(
+                  _._1.verdictResult == DbScanVerdictStore.VerdictResultDbValue.Accepted
+                )
+              nonExistingMessage = s"Non-existing: ${nonExisting.map(_._1.updateId)}."
+              _ =
+                if (droppedAccepts.nonEmpty)
+                  logger.warn(
+                    s"Dropping duplicate accepted verdicts: ${droppedAccepts.map(_._1.updateId)}. " +
+                      s"All dropped verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+                  )
+                else if (dropped.nonEmpty)
+                  logger.info(
+                    s"Dropping duplicate verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+                  )
+                else
+                  logger.info(s"Already ingested verdicts: $alreadyExisting. $nonExistingMessage")
+              rowIdMap <-
+                if (nonExisting.nonEmpty) {
+                  DBIO
+                    .sequence(nonExisting.map { case (verdict, mkViews) =>
+                      for {
+                        idOpt <- sqlInsertVerdictReturningId(verdict)
+                        rowId <- idOpt match {
+                          case Some(id) => DBIO.successful(id)
+                          case None =>
+                            DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
+                        }
+                        views = mkViews(rowId)
+                        _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
+                      } yield verdict.recordTime -> rowId
+                    })
+                    .map(_.toMap)
+                } else {
+                  DBIO.successful(Map.empty[CantonTimestamp, Long])
+                }
+            } yield rowIdMap
+        }
     }
   }
 
@@ -558,7 +582,8 @@ class DbScanVerdictStore(
               submitting_parties,
               transaction_root_views,
               total_traffic_cost,
-              envelope_traffic_costs
+              envelope_traffic_costs,
+              round_number
             from #${Tables.verdicts}
             where history_id = $historyId and update_id = $updateId
             limit 1
@@ -619,7 +644,8 @@ class DbScanVerdictStore(
         submitting_parties,
         transaction_root_views,
         total_traffic_cost,
-        envelope_traffic_costs
+        envelope_traffic_costs,
+        round_number
       from #${Tables.verdicts}
       where history_id = $historyId and """ ++ afterFilter ++
         sql" order by " ++ orderBy ++ sql" limit $limit)"
