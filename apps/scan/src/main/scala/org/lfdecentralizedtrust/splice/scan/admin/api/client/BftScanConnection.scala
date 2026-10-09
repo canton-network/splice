@@ -971,7 +971,7 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
-    committedBulkCall(atOrBeforeRecordTime, "listBulkAcsSnapshotObjects")(
+    bftCallOnScansCommittedUpTo(atOrBeforeRecordTime, "listBulkAcsSnapshotObjects")(
       _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding)
     ).map(_._1)
 
@@ -982,7 +982,7 @@ class BftScanConnection(
       nextPageToken: Option[String],
       damlValueEncoding: Option[DamlValueEncoding],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
-    committedBulkCall(endRecordTime, "listBulkUpdateHistoryObjects")(
+    bftCallOnScansCommittedUpTo(endRecordTime, "listBulkUpdateHistoryObjects")(
       _.listBulkUpdateHistoryObjects(
         startRecordTime,
         endRecordTime,
@@ -999,7 +999,7 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(Option[BulkStorageObjects.SnapshotObjects], List[Uri])] =
-    committedBulkCall(atOrBeforeRecordTime, "listBulkAcsSnapshotObjects")(
+    bftCallOnScansCommittedUpTo(atOrBeforeRecordTime, "listBulkAcsSnapshotObjects")(
       _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime, Some(encoding.damlValueEncoding))
     )
 
@@ -1013,7 +1013,7 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(BulkStorageObjects.UpdateObjectsPage, List[Uri])] =
-    committedBulkCall(availableAt, "listBulkUpdateHistoryObjects")(
+    bftCallOnScansCommittedUpTo(availableAt, "listBulkUpdateHistoryObjects")(
       _.listBulkUpdateHistoryObjects(
         startRecordTime,
         endRecordTime,
@@ -1023,7 +1023,7 @@ class BftScanConnection(
       )
     )
 
-  private def committedBulkCall[T](availableAt: CantonTimestamp, endpoint: String)(
+  private def bftCallOnScansCommittedUpTo[T](availableAt: CantonTimestamp, endpoint: String)(
       call: SingleScanConnection => Future[T]
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[(T, List[Uri])] =
     BftCallExecutor.bftCallForEventualConsistencyEndpoints(
