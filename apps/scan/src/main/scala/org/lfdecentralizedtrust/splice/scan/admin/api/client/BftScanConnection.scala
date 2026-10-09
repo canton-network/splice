@@ -1036,6 +1036,9 @@ class BftScanConnection(
       getData = call,
       endpoint = endpoint,
       callConfig = BftCallConfig.default(scanList.scanConnections),
+      consensusFailureLogLevel = Level.DEBUG,
+      disagreementLogLevel = Level.INFO,
+      notEnoughScansLogLevel = Level.DEBUG,
     )
 
   private def bftCall[T](
