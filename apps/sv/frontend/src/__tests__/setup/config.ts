@@ -14,8 +14,6 @@ const config = {
     token_audience: 'https://sv.example.com',
   },
 
-  permissioned: true,
-
   services: {
     sv: {
       url: 'http://localhost:5014/api/sv',

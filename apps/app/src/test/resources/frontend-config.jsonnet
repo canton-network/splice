@@ -101,12 +101,6 @@ local services(node, clusterProtocol, clusterAddress, port) =
   else
     error 'Unknown node name ' + node;
 
-local permission(app, permissioned) =
-  if (app == 'sv') then
-    { permissioned: std.parseJson(permissioned) }
-  else
-    {};
-
 function(
   authAlgorithm='rs-256',
   enableTestAuth,
@@ -117,5 +111,4 @@ function(
   clusterAddress,
   spliceInstanceNames,
   port,
-  permissioned='false',
-) auth(authAlgorithm, auth0Config) + testAuth(std.parseJson(enableTestAuth), auth0Config) + services(validatorNode, clusterProtocol, clusterAddress, port) + spliceInstanceNames + permission(app, permissioned)
+) auth(authAlgorithm, auth0Config) + testAuth(std.parseJson(enableTestAuth), auth0Config) + services(validatorNode, clusterProtocol, clusterAddress, port) + spliceInstanceNames

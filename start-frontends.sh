@@ -63,7 +63,6 @@ function start_frontend() {
     --tla-str clusterAddress="localhost" \
     --tla-str authAlgorithm="rs-256" \
     --tla-str enableTestAuth="$test_auth" \
-    --tla-str permissioned="$permissioned" \
     --tla-code auth0Config="$auth0Config" \
     --tla-str validatorNode="$node_name" \
     --tla-str app="$app" \
@@ -77,8 +76,8 @@ function start_frontend() {
 
   local log_file="${LOG_DIR}/npm-${app}-${user}.out"
 
-  # MIMALLOC_PURGE_DELAY=0: rolldown >= 1.2.7 (vite 8.3.1) links mimalloc 3.5, which no longer returns 
-  # freed memory to the OS once its worker threads go idle, so every dev server keeps ~600MiB of 
+  # MIMALLOC_PURGE_DELAY=0: rolldown >= 1.2.7 (vite 8.3.1) links mimalloc 3.5, which no longer returns
+  # freed memory to the OS once its worker threads go idle, so every dev server keeps ~600MiB of
   # dead memory resident. Purging immediately restores the old footprint at a negligible performance cost.
   tmux_cmd "${app}-${user}" "${frontend_dir}" \
     "trap \"rm -f ${config_file}\" EXIT && \
@@ -104,7 +103,6 @@ function usage() {
   echo "  -v        run frontends with a shared validator for all users"
   echo "  -s        run frontends with two super validators for Sv*IntegrationTest in CI"
   echo "  -t        start interactive/live vitest suites for frontends"
-  echo "  -p        run frontends with permissioned mode enabled"
 }
 
 # default values
@@ -113,9 +111,8 @@ enable_test_auth="true"
 shared_validator_for_users=0
 two_svs=0
 run_tests=0
-permissioned="false"
 
-while getopts "hdavstp" arg; do
+while getopts "hdavst" arg; do
   case ${arg} in
     h)
       usage
@@ -135,10 +132,6 @@ while getopts "hdavstp" arg; do
       ;;
     t)
       run_tests=1
-      ;;
-    p)
-      permissioned="true"
-      echo "Enabled permissioned mode."
       ;;
     ?)
       usage
