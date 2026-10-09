@@ -55,7 +55,6 @@ export function valuesForSvApp(
   additionalEnvVars: EnvVarConfig[];
   cometBFT?: object;
   pvc: object;
-  permissionedSynchronizer?: boolean;
 } {
   const bftSequencerConnectionEnvVars =
     !config.participant || config.participant.bftSequencerConnection
@@ -177,7 +176,6 @@ export function valuesForSvApp(
       volumeStorageClass: standardStorageClassName,
       volumeName: `sv-app-global-domain-migration-${pvcSuffix}`,
     },
-    permissionedSynchronizer: config.svApp?.permissionedSynchronizer,
     additionalEnvVars,
   };
 }

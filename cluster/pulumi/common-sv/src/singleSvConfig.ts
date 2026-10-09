@@ -85,7 +85,6 @@ const SvAppConfigSchema = z
     svIdKeyGcpSecret: z.string().optional(),
     // defaults to {svName}-cometbft-governance-key if not set
     cometBftGovernanceKeyGcpSecret: z.string().optional(),
-    permissionedSynchronizer: z.boolean().optional(),
     // Map of package name -> list of versions to explicitly unvet
     additionalPackagesToUnvet: z.record(z.string(), z.array(z.string())).optional(),
     resources: K8sResourceSchema,
