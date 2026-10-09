@@ -19,7 +19,7 @@ sealed trait PeerListing[+T]
 object PeerListing {
   case object NotAvailableYet extends PeerListing[Nothing]
   case object NoPeerWillHold extends PeerListing[Nothing]
-  final case class Available[T](objects: T, holders: Seq[Uri]) extends PeerListing[T]
+  final case class Available[T](value: T, holders: Seq[Uri]) extends PeerListing[T]
 }
 
 trait BulkObjectListing {
@@ -91,8 +91,8 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
     Future
       .traverse(ScanStorageConfig.Encoding.all.toList)(encoding => fromHolders(list(encoding)))
       .map { listings =>
-        val available = listings.collect { case PeerListing.Available(objects, holders) =>
-          (objects, holders)
+        val available = listings.collect { case PeerListing.Available(value, holders) =>
+          (value, holders)
         }
         if (listings.forall(_ == PeerListing.NoPeerWillHold)) PeerListing.NoPeerWillHold
         else if (available.size < listings.size) PeerListing.NotAvailableYet
@@ -101,7 +101,7 @@ class BftBulkObjectListing(peerConnection: PeerBftScanConnection)(implicit ec: E
 
   private def fromHolders[T](call: Future[(T, List[Uri])]): Future[PeerListing[T]] =
     call
-      .map[PeerListing[T]] { case (objects, holders) => PeerListing.Available(objects, holders) }
+      .map[PeerListing[T]] { case (value, holders) => PeerListing.Available(value, holders) }
       .recover {
         case HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, _) =>
           PeerListing.NotAvailableYet
