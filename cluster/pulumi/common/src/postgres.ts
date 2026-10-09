@@ -136,15 +136,7 @@ export class CloudPostgres
             ...(logicalDecoding ? [{ name: 'cloudsql.logical_decoding', value: 'on' }] : []),
           ],
           backupConfiguration: {
-            enabled: true,
-            pointInTimeRecoveryEnabled: true,
-            ...(spliceConfig.pulumiProjectConfig.cloudSql.backupsToRetain
-              ? {
-                  backupRetentionSettings: {
-                    retainedBackups: spliceConfig.pulumiProjectConfig.cloudSql.backupsToRetain,
-                  },
-                }
-              : {}),
+            enabled: false,
           },
           insightsConfig: {
             queryInsightsEnabled: true,
