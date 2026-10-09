@@ -30,7 +30,7 @@ $(canton-amulet-dar) $(wallet-payments-dar) &:
 $(load-tester):
 	cd "${SPLICE_ROOT}/load-tester" && npm ci && npm run build
 
-$(party-allocator):
+$(party-allocator): | $(canton-amulet-dar) $(wallet-payments-dar)
 	sbt --client --batch 'party-allocator/npmBuild'
 
 .PHONY: update-expected
