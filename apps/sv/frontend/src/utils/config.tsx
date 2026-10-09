@@ -23,7 +23,6 @@ type SvConfig = {
   spliceInstanceNames: z.infer<typeof spliceInstanceNamesSchema>;
   services: SvServicesConfig;
   pollInterval?: z.infer<typeof pollIntervalSchema>;
-  permissioned?: boolean;
 };
 
 const configScheme = z.object({
@@ -34,7 +33,6 @@ const configScheme = z.object({
   services: z.object({
     sv: serviceSchema,
   }),
-  permissioned: z.boolean().optional(),
 });
 
 export const ConfigContext = React.createContext<SvConfig | undefined>(undefined);
