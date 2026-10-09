@@ -281,6 +281,9 @@ class ScanApp(
         ),
         loggerFactory,
       )
+      _ <-
+        if (config.bulkStorage.debugReresolveHistoryStart) historyStart.forgetRecorded()
+        else Future.unit
       bulkStorage <- (config.bulkStorage.staging, config.bulkStorage.committed).tupled.traverse(_ =>
         appInitStep("Initialize bulk storage") {
           BulkStorage(
