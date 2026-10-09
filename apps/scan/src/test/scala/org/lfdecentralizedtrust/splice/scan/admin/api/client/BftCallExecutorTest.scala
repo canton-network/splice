@@ -233,7 +233,7 @@ class BftCallExecutorTest
       inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
         code shouldBe StatusCodes.ServiceUnavailable
         msg should include(
-          "1 scans have data, 1 have responded with 'not yet'. Together that's at least the required 2, so final result is 'not yet'"
+          "1 scans have data, 1 have responded with 'not yet', 0 are unreachable. Together that's at least the required 2, so final result is 'not yet'"
         )
       }
     }
@@ -254,7 +254,7 @@ class BftCallExecutorTest
       inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
         code shouldBe StatusCodes.ServiceUnavailable
         msg should include(
-          "Not enough scans will ever have the data, but some indicated that they will, just not yet."
+          "Not enough scans will ever have the data, but some indicated that they will, just not yet, or are unreachable."
         )
       }
     }
@@ -292,6 +292,25 @@ class BftCallExecutorTest
       failure.getMessage should include("All scans have responded with 'never'.")
     }
 
+    "throw a 503 when every reachable scan will never have the data but a scan is unreachable" in {
+      val mocks = new Mocks[DataAvailabilityResponse](
+        Seq(
+          Future.successful(Never: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+          Future.successful(Never: DataAvailabilityResponse),
+        )
+      )
+
+      val failure = BftCallExecutor
+        .findScansWithAvailableData(mocks.connections(), logger, mocks.call, 3, unreachable = 1)
+        .failed
+        .futureValue
+      inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
+        code shouldBe StatusCodes.ServiceUnavailable
+        msg should include("1 are unreachable")
+      }
+    }
+
     "return scans with data if there are enough" in {
       val mocks = new Mocks[DataAvailabilityResponse](
         Seq(
@@ -326,7 +345,7 @@ class BftCallExecutorTest
       inside(failure) { case HttpErrorWithHttpCode(code, msg) =>
         code shouldBe StatusCodes.ServiceUnavailable
         msg should include(
-          "1 scans have data, 2 have responded with 'not yet'. Together that's at least the required 2, so final result is 'not yet'"
+          "1 scans have data, 2 have responded with 'not yet', 0 are unreachable. Together that's at least the required 2, so final result is 'not yet'"
         )
       }
     }
