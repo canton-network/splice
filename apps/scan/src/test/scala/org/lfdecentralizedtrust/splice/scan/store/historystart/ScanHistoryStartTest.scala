@@ -26,7 +26,7 @@ class ScanHistoryStartTest extends AsyncWordSpec with BaseTest with HasExecution
     override def read(implicit tc: TraceContext) = Future.successful(value.get())
     override def recordOnce(start: HistoryStart)(implicit tc: TraceContext) =
       Future.successful(value.updateAndGet(_.orElse(Some(start))).getOrElse(start))
-    override def reset(implicit tc: TraceContext) = Future.successful(value.set(None))
+    override def reset()(implicit tc: TraceContext) = Future.successful(value.set(None))
   }
 
   private class FakeSources(

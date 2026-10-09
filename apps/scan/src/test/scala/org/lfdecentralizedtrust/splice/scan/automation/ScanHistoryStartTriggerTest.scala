@@ -42,7 +42,7 @@ class ScanHistoryStartTriggerTest
     }
     override def recordOnce(start: HistoryStart)(implicit tc: TraceContext) =
       Future.successful(value.updateAndGet(_.orElse(Some(start))).getOrElse(start))
-    override def reset(implicit tc: TraceContext) = Future.successful(value.set(None))
+    override def reset()(implicit tc: TraceContext) = Future.successful(value.set(None))
   }
 
   private class JoiningSvSources(hosted: AtomicReference[Option[CantonTimestamp]])
