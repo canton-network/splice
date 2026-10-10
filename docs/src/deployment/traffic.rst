@@ -206,7 +206,7 @@ or the corresponding :ref:`Docker-compose one<compose_validator_topup>`.
 
 .. _traffic_topup_token_standard:
 
-Buying traffic with a standard token transfer
+Buying traffic with a token standard transfer
 +++++++++++++++++++++++++++++++++++++++++++++
 
 Any party that holds CC can buy extra traffic for any synchronizer member with a standard CC transfer.
