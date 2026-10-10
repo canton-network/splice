@@ -529,6 +529,7 @@ case class SvAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
+    onboardingSnapshots: SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig(),
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
@@ -740,4 +741,12 @@ final case class UnavailablePartiesBackoffParameters(
     baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
     // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
     maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
+)
+
+final case class SvOnboardingSnapshotsConfig(
+    directory: Option[Path] = None,
+    retention: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
+    parallelism: Int = 1,
+    queueSize: Int = 16,
+    preparationTimeout: PositiveFiniteDuration = PositiveFiniteDuration.ofMinutes(40),
 )

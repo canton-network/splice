@@ -68,11 +68,11 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
 }
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 
-import java.io.SequenceInputStream
 import java.nio.file.{Files, Path}
 import java.util.{Base64, Collections}
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import scala.util.Failure
 import scala.util.control.NonFatal
 import org.lfdecentralizedtrust.splice.store.bulk.ZstdGroupedWeight
 
@@ -203,6 +203,23 @@ class SequencerAdminConnection(
       SequencerAdminCommands.OnboardingStateV2(responseObserver, sequencerIdOrTimestamp)
     ).flatMap(_ => responseObserver.resultFuture.map(_.map(_.onboardingStateForSequencer)))
   }
+
+  def getOnboardingStateToFile(
+      sequencerIdOrTimestamp: Either[SequencerId, CantonTimestamp],
+      file: Path,
+  )(implicit traceContext: TraceContext): Future[ByteString] =
+    Future {
+      blocking {
+        Sha256FileStreamObserver[OnboardingStateV2Response](
+          File(file),
+          _.onboardingStateForSequencer,
+        )
+      }
+    }.flatMap { observer =>
+      runCmd(SequencerAdminCommands.OnboardingStateV2(observer, sequencerIdOrTimestamp))
+        .andThen { case Failure(e) => observer.onError(e) }
+        .flatMap(_ => observer.result)
+    }
 
   /** Streams onboarding state from the gRPC admin service directly to a bucket without writing to memory
     */
@@ -340,14 +357,10 @@ class SequencerAdminConnection(
     )
   }
 
-  def initializeFromOnboardingState(
-      onboardingState: Seq[ByteString]
+  def initializeFromOnboardingStateFile(
+      file: Path
   )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
-    runCmd(
-      SequencerAdminCommands.InitializeFromOnboardingStateV2(
-        new SequenceInputStream(onboardingState.iterator.map(_.newInput()).asJavaEnumeration)
-      )
-    )
+    runCmd(SequencerAdminCommands.InitializeFromOnboardingStateV2(Files.newInputStream(file)))
 
   def listSequencerTrafficControlState(filterMembers: Seq[Member] = Seq.empty)(implicit
       traceContext: TraceContext
