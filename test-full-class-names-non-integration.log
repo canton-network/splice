@@ -35,6 +35,7 @@ org.lfdecentralizedtrust.splice.scan.store.QueryAcsSnapshotPaginationTokenTest
 org.lfdecentralizedtrust.splice.scan.store.ScanEventStoreTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.BulkObjectsAvailabilityTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.ZstdTest
+org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.BftBulkObjectListingTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.KvBackfillingProgressTest
 org.lfdecentralizedtrust.splice.scan.store.db.CheckMetaVersionsTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStartTest

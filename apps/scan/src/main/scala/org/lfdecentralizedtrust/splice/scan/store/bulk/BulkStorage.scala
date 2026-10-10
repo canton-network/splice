@@ -151,7 +151,7 @@ class BulkStorage(
         appConfig.backfilling,
         storageConfig,
         currentMigrationId,
-        new BftBulkObjectListing(scanConnection),
+        new BftBulkObjectListing(scanConnection, loggerFactory),
         new VerifiedObjectCopier(
           new ScanPeerObjectSource(scanConnection),
           VerifiedObjectCopier.randomPeer,

@@ -91,6 +91,7 @@ object BftCallExecutor {
         hasData,
         callConfig.requestsToDo,
         connectionMetrics,
+        unreachable = connections.failed,
       ).flatMap { scansWithData =>
         {
           executeCallWithRetries(
@@ -249,6 +250,7 @@ object BftCallExecutor {
       hasData: C => Future[DataAvailabilityResponse],
       requiredNumber: Integer,
       connectionMetrics: Option[ScanConnectionMetrics] = None,
+      unreachable: Int = 0,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -293,13 +295,11 @@ object BftCallExecutor {
           }
 
           if (nResponsesDone.incrementAndGet() == askFrom.size) { // all scans are done
+            val notYet = hasDataResponses.get(NotYet).size + unreachable
             finalResponse.future.value match {
-              case None
-                  if hasDataResponses
-                    .get(Available)
-                    .size + hasDataResponses.get(NotYet).size >= requiredNumber =>
+              case None if hasDataResponses.get(Available).size + notYet >= requiredNumber =>
                 val msg =
-                  s"Not enough scans have the data yet. ${hasDataResponses.get(Available).size} scans have data, ${hasDataResponses.get(NotYet).size} have responded with 'not yet'. Together that's at least the required $requiredNumber, so final result is 'not yet'"
+                  s"Not enough scans have the data yet. ${hasDataResponses.get(Available).size} scans have data, ${hasDataResponses.get(NotYet).size} have responded with 'not yet', $unreachable are unreachable. Together that's at least the required $requiredNumber, so final result is 'not yet'"
                 logger.debug(msg)
                 val _ = finalResponse.tryFailure(
                   HttpErrorWithHttpCode(
@@ -309,11 +309,11 @@ object BftCallExecutor {
                 )
                 markBftCall("not_yet", connectionMetrics)
 
-              case None if hasDataResponses.get(NotYet).nonEmpty =>
+              case None if notYet > 0 =>
                 val msg =
-                  s"Not enough scans will ever have the data, but some indicated that they will, just not yet. Final result is therefore 'not yet' (if not enough will ever have data, we require all those that will to actually have it first). ${hasDataResponses
+                  s"Not enough scans will ever have the data, but some indicated that they will, just not yet, or are unreachable. Final result is therefore 'not yet' (if not enough will ever have data, we require all those that will to actually have it first). ${hasDataResponses
                       .get(Available)
-                      .size} scans have data, ${hasDataResponses.get(NotYet).size} have responded with 'not yet', ${hasDataResponses.get(Never).size} have responded with 'never'."
+                      .size} scans have data, ${hasDataResponses.get(NotYet).size} have responded with 'not yet', $unreachable are unreachable, ${hasDataResponses.get(Never).size} have responded with 'never'."
                 logger.debug(msg)
                 val _ = finalResponse.tryFailure(
                   HttpErrorWithHttpCode(
@@ -330,7 +330,7 @@ object BftCallExecutor {
                 markBftCall("never", connectionMetrics)
 
               case None =>
-                require(hasDataResponses.get(NotYet).isEmpty)
+                require(notYet == 0)
                 val msg =
                   s"Not enough scans will ever have the data, but all those that will actually have it already. Returning those as the final response from phase 1. ${hasDataResponses
                       .get(Available)

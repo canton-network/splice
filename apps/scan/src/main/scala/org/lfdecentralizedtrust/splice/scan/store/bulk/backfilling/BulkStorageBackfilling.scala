@@ -3,11 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.data.NonEmptyList
 import cats.syntax.traverse.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
+import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
@@ -16,7 +18,6 @@ import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.{PekkoRetryableService, PekkoRetryingService}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageBackfillingConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdatesSegment
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryStart, ScanHistoryStart}
@@ -52,13 +53,13 @@ class BulkStorageBackfilling(
       if (complete) {
         logger.info("Bulk storage backfilling from peers already complete, nothing to do")
         Source.empty
-      } else Source.unfoldAsync[State, Step](CopyUpdates(None))(s => step(s))
+      } else Source.unfoldAsync[State, Step](CopyUpdates)(s => step(s))
     }
 
   private def step(state: State)(implicit tc: TraceContext): Next =
     state match {
-      case CopyUpdates(nextPageToken) =>
-        withBackfillEnd(state)(copyUpdatesPage(nextPageToken, _))
+      case CopyUpdates =>
+        withBackfillEnd(state)(copyNextSegment)
       case CopySnapshots(lastRequested) =>
         withBackfillEnd(state)(copyNextSnapshot(lastRequested, _))
       case Finish => progress.markComplete().flatMap(_ => next(Done, Completed))
@@ -84,47 +85,90 @@ class BulkStorageBackfilling(
   private def waitThen(state: State, step: Step): Next =
     after(config.pollingInterval.underlying, actorSystem.scheduler)(next(state, step))
 
-  private def copyUpdatesPage(
-      nextPageToken: Option[String],
-      copyUpTo: CantonTimestamp,
-  )(implicit tc: TraceContext): Next =
-    progress.readUpdatesCursor.flatMap { cursor =>
-      cursor.map(_.toTimestamp.timestamp) match {
-        case Some(upTo) if upTo >= copyUpTo =>
-          logger.info(
-            s"Update objects are copied up to $upTo, where this Scan's own segments start"
-          )
-          next(CopySnapshots(None), UpdatesCopied(upTo))
-        case copiedUpTo =>
-          val from = copiedUpTo.getOrElse(CantonTimestamp.MinValue)
-          listing
-            .updateObjectsPage(from, copyUpTo, config.pageSize, nextPageToken)
-            .flatMap { page =>
-              if (page.objects.nonEmpty) copyPage(page)
-              else {
-                logger.debug(
-                  s"The peers have no update objects after $from yet, waiting until they reach $copyUpTo"
-                )
-                waitThen(CopyUpdates(nextPageToken), WaitingForPeers(from))
-              }
-            }
-      }
+  private def copyNextSegment(copyUpTo: CantonTimestamp)(implicit tc: TraceContext): Next =
+    progress.readUpdatesCursor.flatMap {
+      case Some(copied) if copied.toTimestamp.timestamp >= copyUpTo =>
+        val upTo = copied.toTimestamp.timestamp
+        logger.info(s"Update objects are copied up to $upTo, where this Scan's own segments start")
+        next(CopySnapshots(None), UpdatesCopied(upTo))
+      case Some(copied) => copySegment(nextSegment(copied))
+      case None =>
+        firstSegment(copyUpTo).flatMap {
+          case PeerListing.Available(Some(first)) => copySegment(first)
+          case PeerListing.Available(None) | PeerListing.NotAvailableYet =>
+            logger.debug(s"Not enough peers hold update objects up to $copyUpTo yet, waiting")
+            waitThen(CopyUpdates, WaitingForPeers(CantonTimestamp.MinValue))
+          case PeerListing.NoPeerWillHold =>
+            noPeerHolds(CopyUpdates, CantonTimestamp.MinValue, s"update objects up to $copyUpTo")
+        }
     }
 
-  private def copyPage(page: BulkStorageObjects.UpdateObjectsPage)(implicit
+  private def noPeerHolds(state: State, at: CantonTimestamp, what: String)(implicit
       tc: TraceContext
-  ): Next =
-    for {
-      _ <- copier.copy(page.objects)
-      segments <- Future.fromTry(segmentsOf(page.objects))
-      _ <- segments.foldLeft(Future.unit) { (acc, segment) =>
-        acc.flatMap(_ => progress.persistUpdatesCursor(segment))
-      }
-      step <- next(
-        CopyUpdates(page.nextPageToken),
-        UpdatesPageCopied(page.objects.size, segments.lastOption),
+  ): Next = {
+    logger.error(
+      s"No peer will ever hold $what, so this Scan cannot copy it from its peers; " +
+        s"checking again in ${config.noPeerWillHoldRetryInterval}"
+    )
+    after(config.noPeerWillHoldRetryInterval.underlying, actorSystem.scheduler)(
+      next(state, NoPeerHolds(at))
+    )
+  }
+
+  private def nextSegment(copied: UpdatesSegment): UpdatesSegment =
+    UpdatesSegment(
+      copied.toTimestamp,
+      TimestampWithMigrationId(
+        storageConfig.computeBulkSnapshotTimeAfter(copied.toTimestamp.timestamp),
+        currentMigrationId,
+      ),
+    )
+
+  private def firstSegment(copyUpTo: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[PeerListing[Option[UpdatesSegment]]] =
+    listing
+      .updateObjectsPage(
+        CantonTimestamp.MinValue,
+        copyUpTo,
+        config.pageSize,
+        availableAt = copyUpTo,
       )
-    } yield step
+      .flatMap {
+        case PeerListing.Available(objectsOnPeers) =>
+          Future
+            .fromTry(segmentsOf(ObjectsOnPeers.objectsIn(objectsOnPeers)))
+            .map(segments => PeerListing.Available(segments.headOption))
+        case PeerListing.NotAvailableYet => Future.successful(PeerListing.NotAvailableYet)
+        case PeerListing.NoPeerWillHold => Future.successful(PeerListing.NoPeerWillHold)
+      }
+
+  private def copySegment(segment: UpdatesSegment)(implicit tc: TraceContext): Next = {
+    val (from, to) = (segment.fromTimestamp.timestamp, segment.toTimestamp.timestamp)
+    listing.updateObjectsPage(from, to, config.pageSize, availableAt = to).flatMap {
+      case PeerListing.NotAvailableYet =>
+        logger.debug(s"Not enough peers hold the update segment $from - $to yet, waiting")
+        waitThen(CopyUpdates, WaitingForPeers(from))
+      case PeerListing.NoPeerWillHold =>
+        noPeerHolds(CopyUpdates, from, s"the update segment $from - $to")
+      case PeerListing.Available(objectsOnPeers) =>
+        for {
+          _ <- copyFromPeers(objectsOnPeers)
+          _ <- progress.persistUpdatesCursor(segment)
+          step <- next(
+            CopyUpdates,
+            SegmentCopied(segment, ObjectsOnPeers.objectsIn(objectsOnPeers).size),
+          )
+        } yield step
+    }
+  }
+
+  private def copyFromPeers(objectsOnPeers: NonEmptyList[ObjectsOnPeers])(implicit
+      tc: TraceContext
+  ): Future[Unit] =
+    MonadUtil.sequentialTraverse_(objectsOnPeers.toList)(onPeers =>
+      copier.copy(onPeers.objects, onPeers.peers)
+    )
 
   private def copyNextSnapshot(
       lastRequested: Option[CantonTimestamp],
@@ -134,50 +178,59 @@ class BulkStorageBackfilling(
       cursor <- progress.readSnapshotsCursor
       requested <- lastRequested.orElse(cursor.map(_.timestamp)) match {
         case Some(last) =>
-          Future.successful[Option[CantonTimestamp]](
-            Some(storageConfig.computeBulkSnapshotTimeAfter(last))
+          Future.successful[PeerListing[Option[CantonTimestamp]]](
+            PeerListing.Available(Some(storageConfig.computeBulkSnapshotTimeAfter(last)))
           )
-        case None => firstSnapshotTime(copyUpTo)
+        case None =>
+          firstSegment(copyUpTo).map[PeerListing[Option[CantonTimestamp]]] {
+            case PeerListing.Available(first) =>
+              PeerListing.Available(first.map(_.toTimestamp.timestamp))
+            case PeerListing.NotAvailableYet => PeerListing.NotAvailableYet
+            case PeerListing.NoPeerWillHold => PeerListing.NoPeerWillHold
+          }
       }
       result <- requested match {
-        case None =>
+        case PeerListing.Available(None) | PeerListing.NotAvailableYet =>
           logger.debug("The peers list no update segment yet, waiting before walking the snapshots")
           waitThen(CopySnapshots(lastRequested), WaitingForPeers(CantonTimestamp.MinValue))
-        case Some(ts) if ts > copyUpTo => next(Finish, SnapshotsCopied)
-        case Some(ts) =>
+        case PeerListing.NoPeerWillHold =>
+          noPeerHolds(
+            CopySnapshots(lastRequested),
+            CantonTimestamp.MinValue,
+            s"update objects up to $copyUpTo",
+          )
+        case PeerListing.Available(Some(ts)) if ts > copyUpTo => next(Finish, SnapshotsCopied)
+        case PeerListing.Available(Some(ts)) =>
           def nothingNewer(reason: String): Next = {
             logger.debug(s"$reason, waiting for the snapshot at $ts")
             waitThen(CopySnapshots(lastRequested), WaitingForPeers(ts))
           }
           listing.snapshotObjectsAtOrBefore(ts).flatMap {
-            case None =>
+            case PeerListing.NotAvailableYet =>
+              nothingNewer(s"Not enough peers hold the snapshot at $ts yet")
+            case PeerListing.NoPeerWillHold =>
+              noPeerHolds(CopySnapshots(lastRequested), ts, s"the snapshot at $ts")
+            case PeerListing.Available(None) =>
               nothingNewer(s"The peers have no committed snapshot at $ts")
-            case Some(snapshot) if cursor.exists(_.timestamp >= snapshot.recordTime) =>
+            case PeerListing.Available(Some(snapshot))
+                if cursor.exists(_.timestamp >= snapshot.recordTime) =>
               nothingNewer(s"The peers have no snapshot after ${snapshot.recordTime}")
-            case Some(snapshot) if snapshot.objects.isEmpty =>
+            case PeerListing.Available(Some(snapshot))
+                if snapshot.perEncoding.forall(_.objects.isEmpty) =>
               next(CopySnapshots(Some(snapshot.recordTime)), SnapshotSkipped(snapshot.recordTime))
-            case Some(snapshot) =>
+            case PeerListing.Available(Some(snapshot)) =>
               val copied = TimestampWithMigrationId(snapshot.recordTime, currentMigrationId)
               for {
-                _ <- copier.copy(snapshot.objects)
+                _ <- copyFromPeers(snapshot.perEncoding)
                 _ <- progress.persistSnapshotsCursor(copied)
                 step <- next(
                   CopySnapshots(Some(snapshot.recordTime)),
-                  SnapshotCopied(copied, snapshot.objects.size),
+                  SnapshotCopied(copied, ObjectsOnPeers.objectsIn(snapshot.perEncoding).size),
                 )
               } yield step
           }
       }
     } yield result
-
-  private def firstSnapshotTime(end: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[Option[CantonTimestamp]] =
-    listing
-      .updateObjectsPage(CantonTimestamp.MinValue, end, config.pageSize, None)
-      .flatMap(page =>
-        Future.fromTry(segmentsOf(page.objects)).map(_.headOption.map(_.toTimestamp.timestamp))
-      )
 
   private def segmentsOf(objects: Seq[ObjectKeyAndChecksum]): Try[Seq[UpdatesSegment]] =
     objects
@@ -249,18 +302,19 @@ object BulkStorageBackfilling {
   }
 
   private sealed trait State
-  private final case class CopyUpdates(nextPageToken: Option[String]) extends State
+  private case object CopyUpdates extends State
   private final case class CopySnapshots(lastRequested: Option[CantonTimestamp]) extends State
   private case object Finish extends State
   private case object Done extends State
 
   sealed trait Step
-  final case class UpdatesPageCopied(objects: Int, lastSegment: Option[UpdatesSegment]) extends Step
+  final case class SegmentCopied(segment: UpdatesSegment, objects: Int) extends Step
   final case class UpdatesCopied(upTo: CantonTimestamp) extends Step
   final case class SnapshotSkipped(at: CantonTimestamp) extends Step
   final case class SnapshotCopied(snapshot: TimestampWithMigrationId, objects: Int) extends Step
   case object SnapshotsCopied extends Step
   final case class WaitingForPeers(at: CantonTimestamp) extends Step
+  final case class NoPeerHolds(at: CantonTimestamp) extends Step
   case object WaitingForHistoryStart extends Step
   case object NothingToCopy extends Step
   case object Completed extends Step

@@ -3,13 +3,17 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.apache.pekko.pattern
 import org.apache.pekko.stream.scaladsl.Sink
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
+import org.slf4j.event.Level
 import org.lfdecentralizedtrust.splice.scan.config.{
   BulkStorageBackfillingConfig,
   ScanStorageConfigs,
@@ -79,58 +83,92 @@ class BulkStorageBackfillingTest
       Future.successful(complete.set(0))
   }
 
+  private val peers = Seq(Uri("http://peer-1"), Uri("http://peer-2"))
+
+  private def folderRange(name: String): (CantonTimestamp, CantonTimestamp) =
+    storageConfig.getStartAndEndTimestampsForFolder(name) match {
+      case Right(range) => range
+      case Left(err) => throw new IllegalStateException(err)
+    }
+
   private class FakeListing(
       folders: () => Seq[(String, Seq[ObjectKeyAndChecksum])],
       snapshotsByTime: () => Seq[(CantonTimestamp, Seq[ObjectKeyAndChecksum])],
       val updateListingsCallCount: AtomicInteger = new AtomicInteger(0),
+      noPeerWillHold: Boolean = false,
+      peersPerEncoding: NonEmptyList[Seq[Uri]] = NonEmptyList.one(peers),
   ) extends BulkObjectListing {
+
+    private def perEncoding(objects: Seq[ObjectKeyAndChecksum]): NonEmptyList[ObjectsOnPeers] =
+      peersPerEncoding.map(ObjectsOnPeers(objects, _))
+
+    private def wholeFoldersWithin(
+        pageSize: Int,
+        folders: Seq[(String, Seq[ObjectKeyAndChecksum])],
+    ): Seq[(String, Seq[ObjectKeyAndChecksum])] = {
+      val objectsUpToEachFolder = folders.map(_._2.size).scanLeft(0)(_ + _).tail
+      folders
+        .zip(objectsUpToEachFolder)
+        .takeWhile { case (_, objectsSoFar) => objectsSoFar <= pageSize }
+        .map { case (folder, _) => folder }
+    }
 
     override def updateObjectsPage(
         startRecordTime: CantonTimestamp,
         endRecordTime: CantonTimestamp,
         pageSize: Int,
-        nextPageToken: Option[String],
-    )(implicit tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] = {
+        availableAt: CantonTimestamp,
+    )(implicit
+        tc: TraceContext
+    ): Future[PeerListing[NonEmptyList[ObjectsOnPeers]]] = {
       updateListingsCallCount.incrementAndGet()
-      val inRange = folders().filter { case (name, _) =>
-        val (from, to) = storageConfig.getStartAndEndTimestampsForFolder(name) match {
-          case Right(range) => range
-          case Left(err) => throw new IllegalStateException(err)
+      val held = folders()
+      if (noPeerWillHold) Future.successful(PeerListing.NoPeerWillHold)
+      else if (!held.lastOption.exists { case (name, _) => folderRange(name)._2 >= availableAt })
+        Future.successful(PeerListing.NotAvailableYet)
+      else {
+        val inRange = held.filter { case (name, _) =>
+          val (from, to) = folderRange(name)
+          to > startRecordTime && from < endRecordTime
         }
-        to > startRecordTime && from < endRecordTime
+        val page = wholeFoldersWithin(pageSize, inRange)
+        if (page.isEmpty && inRange.nonEmpty)
+          Future.failed(new IllegalArgumentException("Limit too low for a single folder"))
+        else
+          Future.successful(PeerListing.Available(perEncoding(page.flatMap(_._2))))
       }
-      val afterToken = nextPageToken.fold(inRange)(token => inRange.filter(_._1 > token))
-      val cumulative = afterToken.scanLeft(0)(_ + _._2.size).drop(1)
-      val fitting = afterToken.zip(cumulative).takeWhile { case (_, total) => total <= pageSize }
-      val page = fitting.map(_._1)
-      val token = if (page.size < afterToken.size) page.lastOption.map(_._1) else None
-      if (page.isEmpty && afterToken.nonEmpty)
-        Future.failed(new IllegalArgumentException("Limit too low for a single folder"))
-      else Future.successful(BulkStorageObjects.UpdateObjectsPage(page.flatMap(_._2), token))
     }
 
     override def snapshotObjectsAtOrBefore(recordTime: CantonTimestamp)(implicit
         tc: TraceContext
-    ): Future[Option[BulkStorageObjects.SnapshotObjects]] = {
+    ): Future[PeerListing[Option[SnapshotOnPeers]]] = {
       val snapshots = snapshotsByTime()
-      Future.successful(
-        snapshots.lastOption.flatMap { case (latest, latestObjects) =>
-          if (recordTime > latest) Some(BulkStorageObjects.SnapshotObjects(latest, latestObjects))
-          else {
-            val grid = storageConfig.computeBulkSnapshotTimeAtOrBefore(recordTime)
+      if (!snapshots.lastOption.exists(_._1 >= recordTime))
+        Future.successful(PeerListing.NotAvailableYet)
+      else {
+        val grid = storageConfig.computeBulkSnapshotTimeAtOrBefore(recordTime)
+        Future.successful(
+          PeerListing.Available(
             snapshots.collectFirst {
-              case (t, objs) if t == grid => BulkStorageObjects.SnapshotObjects(grid, objs)
+              case (t, objs) if t == grid => SnapshotOnPeers(grid, perEncoding(objs))
             }
-          }
-        }
-      )
+          )
+        )
+      }
     }
   }
 
   private class RecordingCopier extends ObjectCopier {
     val copied = new AtomicReference[Vector[String]](Vector.empty)
-    override def copy(objects: Seq[ObjectKeyAndChecksum])(implicit tc: TraceContext) =
+    val peersSeen = new AtomicReference[Vector[Seq[Uri]]](Vector.empty)
+    val copiesWithPeers = new AtomicReference[Vector[(Seq[String], Seq[Uri])]](Vector.empty)
+    override def copy(objects: Seq[ObjectKeyAndChecksum], peers: Seq[Uri])(implicit
+        tc: TraceContext
+    ) = {
+      peersSeen.updateAndGet(_ :+ peers)
+      copiesWithPeers.updateAndGet(_ :+ (objects.map(_.key) -> peers))
       Future.successful(copied.updateAndGet(_ ++ objects.map(_.key))).map(_ => ())
+    }
   }
 
   private class SequenceBound(ends: BackfillEnd*) extends BackfillUpperBound {
@@ -170,6 +208,7 @@ class BulkStorageBackfillingTest
         enabled = true,
         pageSize = pageSize,
         pollingInterval = NonNegativeFiniteDuration.ofMillis(10),
+        noPeerWillHoldRetryInterval = NonNegativeFiniteDuration.ofMillis(10),
       ),
       storageConfig,
       migrationId,
@@ -205,13 +244,36 @@ class BulkStorageBackfillingTest
       }
     }
 
-    "page through the update folders with the peers' page token" in {
+    "list one segment per call and copy it only from the peers that hold it" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
       backfilling(progress, copier, pageSize = 2).map { steps =>
-        steps.collect { case s: BulkStorageBackfilling.UpdatesPageCopied => s.objects } shouldBe
-          Seq(2, 2, 1)
+        steps.collect { case s: BulkStorageBackfilling.SegmentCopied =>
+          (s.segment, s.objects)
+        } shouldBe
+          Seq(segment(1, 2) -> 2, segment(2, 3) -> 2, segment(3, 4) -> 1)
         copier.copied.get().size shouldBe 8
+        forAll(copier.peersSeen.get())(_ shouldBe peers)
+      }
+    }
+
+    "copy each encoding only from the peers that agreed on that encoding" in {
+      val compactJsonPeers = Seq(Uri("http://compact-json-peer"))
+      val protobufJsonPeers = Seq(Uri("http://protobuf-json-peer"))
+      val copier = new RecordingCopier
+      val listing = new FakeListing(
+        () => folders,
+        () => snapshots,
+        peersPerEncoding = NonEmptyList.of(compactJsonPeers, protobufJsonPeers),
+      )
+      backfilling(new InMemoryProgress, copier, listing).map { _ =>
+        val peersPerCopy = copier.copiesWithPeers.get().map(_._2)
+        peersPerCopy.distinct should contain theSameElementsAs Seq(
+          compactJsonPeers,
+          protobufJsonPeers,
+        )
+        peersPerCopy.count(_ == compactJsonPeers) shouldBe
+          peersPerCopy.count(_ == protobufJsonPeers)
       }
     }
 
@@ -272,6 +334,37 @@ class BulkStorageBackfillingTest
       }
     }
 
+    "log an error and wait when no peer will ever hold the objects it needs" in {
+      val progress = new InMemoryProgress
+      val copier = new RecordingCopier
+      loggerFactory
+        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+          service(
+            progress,
+            copier,
+            new FakeListing(() => folders, () => snapshots, noPeerWillHold = true),
+            new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
+            pageSize = 3,
+          ).mksrc()
+            .take(2)
+            .runWith(Sink.seq)
+            .flatMap(steps =>
+              pattern.after(500.millis, actorSystem.scheduler)(Future.successful(steps))
+            ),
+          logEntries => {
+            logEntries.size should be >= 2
+            forAll(logEntries)(
+              _.errorMessage should include("No peer will ever hold update objects up to")
+            )
+          },
+        )
+        .map { steps =>
+          steps shouldBe Seq.fill(2)(BulkStorageBackfilling.NoPeerHolds(CantonTimestamp.MinValue))
+          copier.copied.get() shouldBe empty
+          progress.complete.get() shouldBe 0
+        }
+    }
+
     "set the marker without copying when this Scan holds history from genesis" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
@@ -327,7 +420,7 @@ class BulkStorageBackfillingTest
       }
     }
 
-    "wait for the peers when their buckets end before the first own segment" in {
+    "wait until the peers hold everything up to the first own segment" in {
       val progress = new InMemoryProgress
       val copier = new RecordingCopier
       val updateListingsCallCount = new AtomicInteger(0)
@@ -344,7 +437,7 @@ class BulkStorageBackfillingTest
         new SequenceBound(BackfillEnd.CopyUpTo(ts(4))),
         pageSize = 10,
       ).map { steps =>
-        steps should contain(BulkStorageBackfilling.WaitingForPeers(ts(3)))
+        steps should contain(BulkStorageBackfilling.WaitingForPeers(CantonTimestamp.MinValue))
         copier.copied.get() shouldBe
           (folders.flatMap(_._2) ++ snapshots.flatMap(_._2)).map(_.key)
         progress.updates.get() shouldBe Some(segment(3, 4))

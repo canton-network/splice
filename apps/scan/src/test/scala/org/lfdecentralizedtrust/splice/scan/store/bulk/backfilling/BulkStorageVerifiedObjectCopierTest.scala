@@ -71,8 +71,6 @@ class BulkStorageVerifiedObjectCopierTest
 
   private class BucketPeers(corrupt: Set[String]) extends PeerObjectSource {
     val opens = new AtomicInteger(0)
-    override def peers(implicit tc: TraceContext): Future[Seq[Uri]] =
-      Future.successful(Seq(peerUri("peer1"), peerUri("peer2")))
     override def open(peer: Uri, key: String)(implicit
         tc: TraceContext
     ): Future[Source[ByteString, Any]] = {
@@ -108,8 +106,6 @@ class BulkStorageVerifiedObjectCopierTest
   }
 
   private class DownloadFailingWhileUploading(gate: UploadGate) extends PeerObjectSource {
-    override def peers(implicit tc: TraceContext): Future[Seq[Uri]] =
-      Future.successful(Seq(peerUri("peer1")))
     override def open(peer: Uri, key: String)(implicit
         tc: TraceContext
     ): Future[Source[ByteString, Any]] =
@@ -145,17 +141,26 @@ class BulkStorageVerifiedObjectCopierTest
       }
   }
 
+  private class CopierFromPeers(underlying: VerifiedObjectCopier, peers: Seq[Uri]) {
+    def copy(objects: Seq[ObjectKeyAndChecksum]): Future[Unit] =
+      underlying.copy(objects, peers)
+  }
+
   private def copier(
       source: PeerObjectSource,
       staging: S3BucketConnection = localBucket("staging"),
+      peers: Seq[Uri] = Seq(peerUri("peer1"), peerUri("peer2")),
   ) =
-    new VerifiedObjectCopier(
-      source,
-      _.head,
-      staging,
-      localBucket("committed"),
-      parallelism = 1,
-      loggerFactory,
+    new CopierFromPeers(
+      new VerifiedObjectCopier(
+        source,
+        _.head,
+        staging,
+        localBucket("committed"),
+        parallelism = 1,
+        loggerFactory,
+      ),
+      peers,
     )
 
   private val content = ByteString(Random.nextBytes(1000))
@@ -262,6 +267,7 @@ class BulkStorageVerifiedObjectCopierTest
         result <- copier(
           new DownloadFailingWhileUploading(gate),
           new GatedUploadStaging(gate, events),
+          peers = Seq(peerUri("peer1")),
         )
           .copy(Seq(ObjectKeyAndChecksum(objectKey, "unused")))
           .transform(t => scala.util.Success(t))
