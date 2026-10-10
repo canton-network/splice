@@ -215,19 +215,19 @@ This lets wallets and external parties buy traffic without dedicated support for
 To buy traffic, create a CC transfer with these values:
 
 - **Receiver:** the traffic purchase party
-  ``cip-0128_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd``.
+  ``cip-128_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd``.
 - **Amount:** the total amount of CC that you want to spend on traffic.
 - **Memo:** the ``splice.lfdecentralizedtrust.org/reason`` metadata value, in this format:
 
   .. code-block:: text
 
-     cip-0128/memo:memberId=<member>&synchronizerId=<synchronizer>&migrationId=<int>
+     cip-128/memo:memberId=<member>&synchronizerId=<synchronizer>&migrationId=<int>
 
   - ``memberId``: the party id for synchronizer member that receives the traffic, for example ``PAR::...``.
   - ``synchronizerId``: the ID of the synchronizer. 
   - ``migrationId``: the current migration ID of the synchronizer.
 
-  The memo must start with ``cip-0128/memo:`` and contain all three keys in any order.
+  The memo must start with ``cip-128/memo:`` and contain all three keys in any order.
 
 The transfer completes immediately. It burns the full amount and adds the purchased traffic to the ``MemberTraffic`` contract of the member.
 The purchased traffic in bytes is:
