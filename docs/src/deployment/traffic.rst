@@ -244,7 +244,7 @@ These values can be slightly older than the values on the latest ``OpenMiningRou
 The transfer fails, and burns no CC, if:
 
 - the memo has an incorrect format,
-- the synchronizer is not a synchronizer on which traffic can be bought (``splice.lfdecentralizedtrust.org/unknown-synchronizer``), or
+- the synchronizer is not a synchronizer on which traffic can be bought (error code: ``splice.lfdecentralizedtrust.org/unknown-synchronizer``), or
 - the purchased traffic is less than ``minTopupAmount`` (``splice.lfdecentralizedtrust.org/insufficient-topup-amount``).
   Use an amount that buys at least ``minTopupAmount`` bytes.
 
