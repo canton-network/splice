@@ -252,7 +252,7 @@ The ``splice.lfdecentralizedtrust.org/reason`` metadata of the transfer result a
 
 .. code-block:: text
 
-   traffic purchase: memberId=PAR::...&synchronizerId=...&migrationId=0, purchased traffic amount: 5000000 bytes
+   purchased traffic: 5000000 bytes for memberId=PAR::...&synchronizerId=...&migrationId=0
 
 Traffic purchases with a token standard transfer do not create validator reward coupons.
 
