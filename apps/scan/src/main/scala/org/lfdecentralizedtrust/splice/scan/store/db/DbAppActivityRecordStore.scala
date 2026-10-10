@@ -32,12 +32,22 @@ object DbAppActivityRecordStore {
     * @param appProviderParties app providers for which app activity should be recorded
     * @param appActivityWeights activity weight (in bytes of traffic) for each app provider,
     *                           in one-to-one correspondence with appProviderParties
+    * @param submittingAppProvider submitting app provider for the verdict, used by TBAR v1.1
+    *                              to credit the DSO revenue share
+    * @param assetActivityProviderParties asset providers for which asset activity should be
+    *                                     recorded (TBAR v1.1)
+    * @param assetActivityWeights asset activity weight (in bytes of traffic) for each asset
+    *                             provider, in one-to-one correspondence with
+    *                             assetActivityProviderParties
     */
   final case class AppActivityRecordT(
       verdictRowId: Long,
       roundNumber: Long,
       appProviderParties: Seq[String],
       appActivityWeights: Seq[Long],
+      submittingAppProvider: Option[String] = None,
+      assetActivityProviderParties: Seq[String] = Seq.empty,
+      assetActivityWeights: Seq[Long] = Seq.empty,
   )
 
   val DUMMY_VERDICT_ROW_ID: Long = -123456789L
@@ -144,6 +154,9 @@ class DbAppActivityRecordStore(
         roundNumber = prs.<<[Long],
         appProviderParties = stringArrayGetResult(prs).toSeq,
         appActivityWeights = longArrayGetResult(prs).toSeq,
+        submittingAppProvider = prs.<<[Option[String]],
+        assetActivityProviderParties = stringSeqOptGetResult(prs).getOrElse(Seq.empty),
+        assetActivityWeights = longSeqOptGetResult(prs).getOrElse(Seq.empty),
       )
   }
 
@@ -277,7 +290,8 @@ class DbAppActivityRecordStore(
   ): Future[Option[AppActivityRecordT]] = {
     runQuerySingle(
       sql"""
-        select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+        select verdict_row_id, round_number, app_provider_parties, app_activity_weights,
+               submitting_app_provider, asset_activity_provider_parties, asset_activity_weights
         from #${Tables.appActivityRecords}
         where history_id = $historyId and verdict_row_id = $verdictRowId
         limit 1
@@ -298,7 +312,8 @@ class DbAppActivityRecordStore(
             storage
               .query(
                 (sql"""
-                select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+                select verdict_row_id, round_number, app_provider_parties, app_activity_weights,
+                       submitting_app_provider, asset_activity_provider_parties, asset_activity_weights
                 from #${Tables.appActivityRecords}
                 where history_id = $historyId and """ ++ DbStorage
                   .toInClause("verdict_row_id", verdictRowIds))
@@ -318,13 +333,16 @@ class DbAppActivityRecordStore(
       val values = sqlCommaSeparated(
         items.map { row =>
           sql"""($historyId, ${row.verdictRowId},
-                ${row.roundNumber}, ${row.appProviderParties}, ${row.appActivityWeights})"""
+                ${row.roundNumber}, ${row.appProviderParties}, ${row.appActivityWeights},
+                ${row.submittingAppProvider},
+                ${row.assetActivityProviderParties}, ${row.assetActivityWeights})"""
         }
       )
 
       (sql"""
         insert into #${Tables.appActivityRecords}(
-          history_id, verdict_row_id, round_number, app_provider_parties, app_activity_weights
+          history_id, verdict_row_id, round_number, app_provider_parties, app_activity_weights,
+          submitting_app_provider, asset_activity_provider_parties, asset_activity_weights
         ) values """ ++ values ++ sql" ON CONFLICT DO NOTHING").asUpdate
     }
   }
