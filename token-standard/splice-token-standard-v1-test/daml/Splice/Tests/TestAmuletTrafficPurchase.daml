@@ -1,0 +1,267 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Tests for buying synchronizer traffic via token standard V1 transfer compatible mode
+module Splice.Tests.TestAmuletTrafficPurchase where
+
+import DA.Assert ((===))
+import qualified DA.TextMap as TextMap
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV1 as Api.Token.TransferInstructionV1
+
+import Splice.Amulet (ValidatorRewardCoupon)
+import Splice.Amulet.TokenApiUtils (reasonMetaKey)
+import Splice.AmuletConfig (RewardConfig(..), RewardVersion(..))
+import Splice.DecentralizedSynchronizer (MemberTraffic(..))
+import Splice.ExternalPartyAmuletRules (trafficPurchaseReceiver)
+
+import Splice.Testing.Utils
+import Splice.Testing.Registries.AmuletRegistry qualified as AmuletRegistry
+import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
+import Splice.Testing.TokenStandard.RegistryApi qualified as RegistryApi
+import Splice.Testing.TokenStandard.WalletClient qualified as WalletClient
+
+oneMegabyte : Int
+oneMegabyte = 1_000_000
+
+oneMegabyteCostUsd : Decimal
+oneMegabyteCostUsd = 1.0
+
+oneMegabyteCostAmulet : Decimal
+oneMegabyteCostAmulet = 2.0
+
+initialTap : Decimal
+initialTap = 50.0
+
+testMemberId : Text
+testMemberId = "PAR::alice-participant::1220abcd"
+
+testSynchronizerId : Text
+testSynchronizerId = "decentralized-synchronizer-id-0"
+
+defaultMemoTag : Text
+defaultMemoTag =
+  "cip-128/memo:memberId=" <> testMemberId <> "&synchronizerId=" <> testSynchronizerId <> "&migrationId=0"
+
+defaultReason : Text
+defaultReason =
+  "purchased traffic: 1000000 bytes for memberId=" <> testMemberId <> "&synchronizerId=" <> testSynchronizerId <> "&migrationId=0"
+
+trafficRegistryConfig : AmuletRegistry.AmuletRegistryConfig
+trafficRegistryConfig = AmuletRegistry.defaultAmuletRegistryConfig with
+  amuletConfig = defaultAmuletConfig with
+    rewardConfig = Some RewardConfig with
+      mintingVersion = RewardVersion_FeaturedAppMarkers
+      dryRunVersion = None
+      batchSize = 100
+      rewardCouponTimeToLive = hours 36
+      appRewardCouponThreshold = 0.5
+
+data TestSetup = TestSetup with
+  registry : AmuletRegistry.AmuletRegistry
+  alice : Party
+  defaultTransfer : Api.Token.TransferInstructionV1.Transfer
+
+setupTestWith : AmuletRegistry.AmuletRegistryConfig -> Script TestSetup
+setupTestWith registryConfig = do
+  registry <- AmuletRegistry.initialize registryConfig
+  alice <- allocatePartyExact "alice"
+  AmuletRegistry.tapFaucet registry alice initialTap
+  aliceHoldingCids <- WalletClient.listHoldingCids alice registry.instrumentId
+
+  now <- getTime
+  let defaultTransfer = Api.Token.TransferInstructionV1.Transfer with
+        sender = alice
+        receiver = trafficPurchaseReceiver
+        amount = oneMegabyteCostAmulet
+        instrumentId = registry.instrumentId
+        requestedAt = now
+        executeBefore = now `addRelTime` days 1
+        inputHoldingCids = aliceHoldingCids
+        meta = memoTagMeta defaultMemoTag
+  pure TestSetup with ..
+
+setupTest : Script TestSetup
+setupTest = setupTestWith trafficRegistryConfig
+
+memoTagMeta : Text -> Metadata
+memoTagMeta memoTag = Metadata with
+  values = TextMap.fromList [(reasonMetaKey, memoTag)]
+
+buyTraffic : TestSetup -> Api.Token.TransferInstructionV1.Transfer -> Script TransferInstructionResult
+buyTraffic TestSetup{..} transfer = do
+  enrichedChoice <- transferFactoryChoice registry transfer
+  submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+buyTrafficMustFail : TestSetup -> Api.Token.TransferInstructionV1.Transfer -> Script ()
+buyTrafficMustFail TestSetup{..} transfer = do
+  enrichedChoice <- transferFactoryChoice registry transfer
+  submitWithDisclosuresMustFail' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+buyTrafficMustFailWith : FailureStatusCheck -> TestSetup -> Api.Token.TransferInstructionV1.Transfer -> Script ()
+buyTrafficMustFailWith check TestSetup{..} transfer = do
+  enrichedChoice <- transferFactoryChoice registry transfer
+  submitWithDisclosuresMustFail'' check alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+transferFactoryChoice
+  : AmuletRegistry.AmuletRegistry -> Api.Token.TransferInstructionV1.Transfer
+  -> Script (EnrichedFactoryChoice TransferFactory TransferFactory_Transfer)
+transferFactoryChoice registry transfer =
+  RegistryApi.getTransferFactory registry TransferFactory_Transfer with
+    expectedAdmin = registry.dso
+    transfer
+    extraArgs = emptyExtraArgs
+
+-- Happy
+--------
+
+test_trafficPurchase_burnsFullAmountAndCreatesMemberTraffic : Script ()
+test_trafficPurchase_burnsFullAmountAndCreatesMemberTraffic = script do
+  setup@TestSetup{..} <- setupTest
+
+  result <- buyTraffic setup defaultTransfer
+
+  TransferInstructionResult_Completed [] <- pure result.output
+  TextMap.lookup reasonMetaKey result.meta.values === Some defaultReason
+  [changeHoldingCid] <- pure result.senderChangeCids
+  WalletClient.checkHolding alice changeHoldingCid (initialTap - oneMegabyteCostAmulet)
+  WalletClient.checkBalance alice registry.instrumentId (initialTap - oneMegabyteCostAmulet)
+
+  [(_, traffic)] <- query @MemberTraffic registry.dso
+  traffic.memberId === testMemberId
+  traffic.synchronizerId === testSynchronizerId
+  traffic.migrationId === 0
+  traffic.totalPurchased === oneMegabyte
+  traffic.numPurchases === 1
+  traffic.usdSpent === oneMegabyteCostUsd
+  traffic.amuletSpent === oneMegabyteCostAmulet
+
+test_trafficPurchase_spendsEntireInputWithoutChange : Script ()
+test_trafficPurchase_spendsEntireInputWithoutChange = script do
+  setup@TestSetup{..} <- setupTest
+  result <- buyTraffic setup defaultTransfer with amount = initialTap
+  result.senderChangeCids === []
+  WalletClient.checkBalance alice registry.instrumentId 0.0
+  [(_, traffic)] <- query @MemberTraffic registry.dso
+  traffic.totalPurchased === 25_000_000
+  traffic.amuletSpent === initialTap
+  traffic.usdSpent === 25.0
+
+test_trafficPurchase_mintsNoValidatorRewardCoupon : Script ()
+test_trafficPurchase_mintsNoValidatorRewardCoupon = script do
+  setup@TestSetup{..} <- setupTest
+  _ <- buyTraffic setup defaultTransfer
+  coupons <- query @ValidatorRewardCoupon registry.dso
+  coupons === []
+
+test_trafficPurchase_acceptsMemoTagInAnyOrder : Script ()
+test_trafficPurchase_acceptsMemoTagInAnyOrder = script do
+  setup@TestSetup{..} <- setupTest
+  let memoTag =
+        "cip-128/memo:migrationId=0&synchronizerId=" <> testSynchronizerId <> "&memberId=" <> testMemberId
+  result <- buyTraffic setup defaultTransfer with meta = memoTagMeta memoTag
+  TextMap.lookup reasonMetaKey result.meta.values === Some defaultReason
+
+  [(_, traffic)] <- query @MemberTraffic registry.dso
+  traffic.memberId === testMemberId
+  traffic.totalPurchased === oneMegabyte
+
+-- Unhappy
+----------
+
+test_trafficPurchase_rejectsIncompleteMemoTag : Script ()
+test_trafficPurchase_rejectsIncompleteMemoTag = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectMessageContains "Missing key in traffic purchase memo: synchronizerId")
+    setup defaultTransfer with
+      meta = memoTagMeta ("cip-128/memo:memberId=" <> testMemberId)
+
+test_trafficPurchase_rejectsMemoTagWithoutPrefix : Script ()
+test_trafficPurchase_rejectsMemoTagWithoutPrefix = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectMessageContains "Traffic purchase memo must start with cip-128/memo:")
+    setup defaultTransfer with
+      meta = memoTagMeta ("memberId=" <> testMemberId <> "&synchronizerId=" <> testSynchronizerId <> "&migrationId=0")
+
+test_trafficPurchase_rejectsUnknownMemoKey : Script ()
+test_trafficPurchase_rejectsUnknownMemoKey = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectMessageContains "Unknown key in traffic purchase memo: trafficUnit")
+    setup defaultTransfer with
+      meta = memoTagMeta (defaultMemoTag <> "&trafficUnit=MB")
+
+test_trafficPurchase_rejectsDuplicateMemoKey : Script ()
+test_trafficPurchase_rejectsDuplicateMemoKey = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectMessageContains "Duplicate key in traffic purchase memo: migrationId")
+    setup defaultTransfer with
+      meta = memoTagMeta (defaultMemoTag <> "&migrationId=1")
+
+test_trafficPurchase_rejectsNonIntegerMigrationId : Script ()
+test_trafficPurchase_rejectsNonIntegerMigrationId = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectMessageContains "Expected an integer for migrationId")
+    setup defaultTransfer with
+      meta = memoTagMeta ("cip-128/memo:memberId=" <> testMemberId <> "&synchronizerId=" <> testSynchronizerId <> "&migrationId=latest")
+
+test_trafficPurchase_rejectsUnknownSynchronizer : Script ()
+test_trafficPurchase_rejectsUnknownSynchronizer = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectErrorId "splice.lfdecentralizedtrust.org/unknown-synchronizer")
+    setup defaultTransfer with
+      meta = memoTagMeta ("cip-128/memo:memberId=" <> testMemberId <> "&synchronizerId=unknown-synchronizer&migrationId=0")
+
+test_trafficPurchase_rejectsAmountBelowMinTopup : Script ()
+test_trafficPurchase_rejectsAmountBelowMinTopup = script do
+  setup@TestSetup{..} <- setupTest
+  buyTrafficMustFailWith
+    (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-topup-amount")
+    setup defaultTransfer with
+      amount = oneMegabyteCostAmulet - 0.000001
+
+rejectsNonPositiveTrafficPrice : Decimal -> Script ()
+rejectsNonPositiveTrafficPrice trafficPrice = script do
+  let config = trafficRegistryConfig with
+        amuletConfig = trafficRegistryConfig.amuletConfig with
+          decentralizedSynchronizer = trafficRegistryConfig.amuletConfig.decentralizedSynchronizer with
+            fees = trafficRegistryConfig.amuletConfig.decentralizedSynchronizer.fees with
+              extraTrafficPrice = trafficPrice
+  setup@TestSetup{..} <- setupTestWith config
+  buyTrafficMustFailWith
+    (expectMessageContains "Traffic price must be positive")
+    setup defaultTransfer
+
+test_trafficPurchase_rejectsZeroTrafficPrice : Script ()
+test_trafficPurchase_rejectsZeroTrafficPrice = rejectsNonPositiveTrafficPrice 0.0
+
+test_trafficPurchase_rejectsNegativeTrafficPrice : Script ()
+test_trafficPurchase_rejectsNegativeTrafficPrice = rejectsNonPositiveTrafficPrice (-1.0)
+
+test_trafficPurchase_rejectsExpiredTransfer : Script ()
+test_trafficPurchase_rejectsExpiredTransfer = script do
+  setup@TestSetup{..} <- setupTest
+  now <- getTime
+  buyTrafficMustFailWith
+    (expectMessageContains "transfer.executeBefore")
+    setup defaultTransfer with
+      executeBefore = now `addRelTime` seconds (-1)
+
+test_trafficPurchase_rejectsConfigStateWithoutTrafficPrice : Script ()
+test_trafficPurchase_rejectsConfigStateWithoutTrafficPrice = script do
+  setup@TestSetup{..} <- setupTestWith AmuletRegistry.defaultAmuletRegistryConfig
+  buyTrafficMustFailWith
+    (expectMessageContains "carries no traffic purchase configuration")
+    setup defaultTransfer
