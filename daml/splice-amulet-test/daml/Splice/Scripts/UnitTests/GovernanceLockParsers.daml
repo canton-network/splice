@@ -1,0 +1,307 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Unit tests for the parsers of the governance lock metadata.
+module Splice.Scripts.UnitTests.GovernanceLockParsers where
+
+import DA.Assert
+import DA.NonEmpty qualified as NonEmpty
+import DA.Optional
+import DA.Text qualified as Text
+import DA.TextMap qualified as TextMap
+import DA.Validation
+
+import Daml.Script
+
+import Splice.Amulet.TokenApiUtils (amuletInstrumentIdName, reasonMetaKey)
+import Splice.Api.Token.MetadataV1
+import Splice.GovernanceLock
+
+-- Test parties and helpers
+---------------------------
+
+testParty : Text -> Party
+testParty = fromSomeNote "invalid test party" . partyFromText
+
+testOwner : Party
+testOwner = testParty "some-owner"
+
+alice : Party
+alice = testParty "alice"
+
+bob : Party
+bob = testParty "bob"
+
+charlie : Party
+charlie = testParty "charlie"
+
+testProvider : Party
+testProvider = testParty "provider"
+
+-- | Text that `partyFromText` rejects.
+invalidParty : Text
+invalidParty = "bad$party"
+
+invalidSVName : Text
+invalidSVName = "bad$SV"
+
+mkMeta : [(Text, Text)] -> Metadata
+mkMeta = Metadata . TextMap.fromList
+
+expectSuccess : (Eq o, Show o) => o -> Validation Text o -> Script ()
+expectSuccess expected result = case result of
+  Success actual -> actual === expected
+  Errors errors -> fail $ "Expected success, but got errors: " <> show errors
+
+expectErrors : Show o => [Text] -> Validation Text o -> Script ()
+expectErrors expected result = case result of
+  Errors errors -> NonEmpty.toList errors === expected
+  Success actual -> fail $ "Expected errors, but got success: " <> show actual
+
+invalidPartyError : Text -> Text -> Text
+invalidPartyError key p = "Invalid party in metadata field '" <> key <> "': " <> p
+
+mkTestErrors' : Int -> [Text]
+mkTestErrors' 0 = []
+mkTestErrors' numErrors = ("e" <> show numErrors) :: mkTestErrors' (numErrors - 1)
+
+mkTestErrors : Int -> [Text]
+mkTestErrors numErrors = reverse $ mkTestErrors' numErrors
+
+testParserWithErrors : Int -> Parser () ()
+testParserWithErrors numErrors =
+  Parser \_ -> Errors $ fromSome $ NonEmpty.nonEmpty $ mkTestErrors numErrors
+
+test_assertParsed : Script ()
+test_assertParsed = do
+    run "exactly 1" (testParserWithErrors 1) === Left (errorsText 1)
+    run "less than 5" (testParserWithErrors 2) === Left ("Found 2 errors parsing less than 5:\n\n" <> errorsText 2)
+    run "exactly 5" (testParserWithErrors 5) === Left ("Found 5 errors parsing exactly 5:\n\n" <> errorsText 5)
+    run "more than 5" (testParserWithErrors 6) === Left ("Found 6 errors parsing more than 5. First five errors:\n\n" <> errorsText 5)
+  where
+    run : Text -> Parser () () -> Either Text ()
+    run parsedType parser = assertParsed parsedType parser ()
+
+    errorsText : Int -> Text
+    errorsText numErrors = Text.intercalate "\n" (mkTestErrors numErrors)
+
+-- Controller parsers
+---------------------
+
+-- | Shared cases for the parsers of the unlock, substitution and vesting controllers.
+testControllersParser : Text -> ControllerSpecificationParser -> Script ()
+testControllersParser key parser = do
+  let run entries = runParser parser (mkMeta entries, testOwner)
+      otherKey = if key == unlockControllersMetaKey then vestingControllersMetaKey else unlockControllersMetaKey
+
+  -- A missing field defaults to the owner as the only controller
+  expectSuccess (ControllerSpecification [[testOwner]]) $ run []
+
+  -- A single controller
+  expectSuccess (ControllerSpecification [[alice]]) $ run [(key, "alice")]
+
+  -- `,` separates the parties of a controller set
+  expectSuccess (ControllerSpecification [[alice, bob]]) $ run [(key, "alice,bob")]
+
+  -- `;` separates the controller sets
+  expectSuccess (ControllerSpecification [[alice], [bob, charlie]]) $ run [(key, "alice;bob,charlie")]
+
+  -- The fields of the other controllers are ignored
+  expectSuccess (ControllerSpecification [[testOwner]]) $ run [(otherKey, "alice")]
+  expectSuccess (ControllerSpecification [[bob]]) $ run [(otherKey, "alice"), (key, "bob")]
+
+  -- An invalid party is reported with the field that contains it
+  expectErrors [invalidPartyError key invalidParty] $ run [(key, invalidParty)]
+  expectErrors [invalidPartyError key invalidParty] $ run [(key, "alice;bob," <> invalidParty)]
+
+  -- All invalid parties are reported, in the order in which they occur
+  expectErrors [invalidPartyError key "bad$1", invalidPartyError key "bad$2"] $
+    run [(key, "bad$1,alice;bad$2")]
+
+test_unlockControllersParser : Script ()
+test_unlockControllersParser = testControllersParser unlockControllersMetaKey unlockControllersParser
+
+test_substitutionControllersParser : Script ()
+test_substitutionControllersParser = testControllersParser substitutionControllersMetaKey substitutionControllersParser
+
+test_vestingControllersParser : Script ()
+test_vestingControllersParser = testControllersParser vestingControllersMetaKey vestingControllersParser
+
+-- Lock kind parser
+-------------------
+
+test_governanceLockKindParser : Script ()
+test_governanceLockKindParser = do
+  let run lockType entries = runParser governanceLockKindParser (lockType, mkMeta entries)
+      subject s = [(lockSubjectMetaKey, s)]
+
+  expectSuccess (GLK_FeaturedApp testProvider) $ run featuredAppLockType (subject "provider")
+  expectSuccess (GLK_ProvisionalFeaturedApp testProvider) $ run provisionalFeaturedAppLockType (subject "provider")
+  expectSuccess (GLK_SuperValidatorRightsOwner "someSv") $ run superValidatorLockType (subject "someSv")
+
+  -- Subject is required
+  expectErrors ["Missing metadata field '" <> lockSubjectMetaKey <> "'"] $ run featuredAppLockType []
+  expectErrors ["Missing metadata field '" <> lockSubjectMetaKey <> "'"] $ run superValidatorLockType []
+
+  -- The lock type must be known
+  expectErrors ["Invalid lock type: unknown-lock"] $ run "unknown-lock" (subject "provider")
+
+  -- The subject of a featured app lock must be a party
+  expectErrors ["Invalid provider for " <> featuredAppLockType <> ": " <> invalidParty] $
+    run featuredAppLockType (subject invalidParty)
+  expectErrors ["Invalid provider for " <> provisionalFeaturedAppLockType <> ": " <> invalidParty] $
+    run provisionalFeaturedAppLockType (subject invalidParty)
+
+  -- The subject of an SV lock must only contain alphanumeric characters or hyphens
+  expectErrors ["Invalid SV name for " <> superValidatorLockType <> ": " <> invalidSVName] $
+    run superValidatorLockType (subject invalidSVName)
+
+-- Metadata parser
+------------------
+
+test_governanceLockMetadataParser : Script ()
+test_governanceLockMetadataParser = do
+  let run entries = runParser governanceLockMetadataParser (mkMeta entries)
+      reason r = (reasonMetaKey, r)
+      otherEntry = ("other-key", "other-value")
+      pairError l = "Unable to map a key value pair, from list: " <> show l
+      dropMetaPrefix = Text.dropPrefix cipMetaPrefix
+      lockSubjectMetaKeyNoPrefix = dropMetaPrefix lockSubjectMetaKey
+      unlockControllersMetaKeyNoPrefix = dropMetaPrefix unlockControllersMetaKey
+
+  -- Without a reason field, the metadata is returned unchanged
+  expectSuccess (mkMeta []) $ run []
+  expectSuccess (mkMeta [otherEntry, (lockSubjectMetaKey, "provider")]) $ run [otherEntry, (lockSubjectMetaKey, "provider")]
+
+  -- A single pair is prefixed with `cipMetaPrefix` and added to the metadata, and the reason field is removed
+  expectSuccess (mkMeta [(lockSubjectMetaKey, "provider")]) $
+    run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider"]
+
+  -- Keys that already contain `cipMetaPrefix` are prefixed again
+  expectSuccess (mkMeta [(cipMetaPrefix <> lockSubjectMetaKey, "provider")]) $
+    run [reason $ lockSubjectMetaKey <> "=provider"]
+
+  -- `&` separates the pairs, and the other metadata fields are kept
+  expectSuccess
+    (mkMeta
+      [ otherEntry
+      , (lockSubjectMetaKey, "provider")
+      , (unlockControllersMetaKey, "alice,bob")
+      , (vestingControllersMetaKey, "alice;charlie")
+      ])
+    $ run
+        [ otherEntry
+        , reason $ lockSubjectMetaKeyNoPrefix <>
+          "=provider&" <> unlockControllersMetaKeyNoPrefix <> "=alice,bob&vesting-controllers=alice;charlie"
+        ]
+
+  -- An empty value is allowed
+  expectSuccess (mkMeta [(lockSubjectMetaKey, "")]) $
+    run [reason $ lockSubjectMetaKeyNoPrefix <> "="]
+
+  -- The fields of the original metadata take precedence over the fields in the reason
+  expectSuccess (mkMeta [(lockSubjectMetaKey, "provider"), (unlockControllersMetaKey, "bob")]) $
+    run
+      [ (lockSubjectMetaKey, "provider")
+      , reason $ lockSubjectMetaKeyNoPrefix <> "=someSv&" <> unlockControllersMetaKeyNoPrefix <> "=bob"
+      ]
+
+  -- A pair without `=`
+  expectErrors [pairError [lockSubjectMetaKeyNoPrefix]] $ run [reason lockSubjectMetaKeyNoPrefix]
+
+  -- A pair with more than one `=`
+  expectErrors [pairError [lockSubjectMetaKeyNoPrefix, "provider", "x"]] $
+    run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider=x"]
+
+  -- An empty reason, and an empty pair after a trailing `&`
+  expectErrors [pairError [""]] $ run [reason ""]
+  expectErrors [pairError [""]] $ run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider&"]
+
+  -- All invalid pairs are reported
+  expectErrors [pairError ["a"], pairError ["b", "c", "d"]] $
+    run [reason $ "a&" <> lockSubjectMetaKeyNoPrefix <> "=provider&b=c=d"]
+
+-- Lock specification parser
+----------------------------
+
+-- TODO(canton-network/splice-sv-fa-locking#68) test character check implementation
+
+test_governanceLockSpecificationParser'
+  :  (Text -> [(Text, Text)] -> i)
+  -> Parser i GovernanceLockSpecification
+  -> Script ()
+test_governanceLockSpecificationParser' mkInput parser = do
+  let run lockType entries = runParser parser $ mkInput lockType entries
+
+  let fullSpecification = GovernanceLockSpecification with
+        kind = GLK_FeaturedApp testProvider
+        unlockControllers = ControllerSpecification [[alice, bob]]
+        substitutionControllers = ControllerSpecification [[bob]]
+        vestingControllers = ControllerSpecification [[alice], [charlie]]
+  expectSuccess fullSpecification $
+    run featuredAppLockType
+      [ (lockSubjectMetaKey, "provider")
+      , (unlockControllersMetaKey, "alice,bob")
+      , (substitutionControllersMetaKey, "bob")
+      , (vestingControllersMetaKey, "alice;charlie")
+      ]
+
+  -- Only the subject set, so all controllers default to the owner
+  expectSuccess (ownerControlledSpecification testOwner $ GLK_SuperValidatorRightsOwner "someSv") $
+    run superValidatorLockType [(lockSubjectMetaKey, "someSv")]
+
+  -- One invalid field
+  expectErrors [invalidPartyError substitutionControllersMetaKey invalidParty] $
+    run superValidatorLockType
+      [ (lockSubjectMetaKey, "someSv")
+      , (substitutionControllersMetaKey, invalidParty)
+      ]
+
+  -- All invalid fields are reported
+  expectErrors
+    [ "Invalid provider for " <> featuredAppLockType <> ": " <> invalidParty
+    , invalidPartyError unlockControllersMetaKey "bad$unlock"
+    , invalidPartyError vestingControllersMetaKey "bad$vesting"
+    ]
+    $ run featuredAppLockType
+        [ (lockSubjectMetaKey, invalidParty)
+        , (unlockControllersMetaKey, "alice,bad$unlock")
+        , (substitutionControllersMetaKey, "bob")
+        , (vestingControllersMetaKey, "bad$vesting")
+        ]
+
+test_governanceLockSpecificationParser : Script ()
+test_governanceLockSpecificationParser =
+  test_governanceLockSpecificationParser'
+    (\lockType -> \entries -> (lockType, mkMeta entries, testOwner))
+    governanceLockSpecificationParser
+
+test_governanceLockSpecificationTSv1Parser : Script ()
+test_governanceLockSpecificationTSv1Parser =
+  test_governanceLockSpecificationParser'
+    (\lockType -> \entries -> (testOwner, fromSome (partyFromText (lockType <> magicNamespace)), mkMeta entries))
+    governanceLockSpecificationTSv1Parser
+
+-- Funding amount parser
+------------------------
+
+test_fundingAmountParser : Script ()
+test_fundingAmountParser = do
+  let run = runParser fundingAmountParser
+      noneError = "Expected exactly one " <> amuletInstrumentIdName <> " value, got none"
+      valuesError entries = "Expected exactly one " <> amuletInstrumentIdName <> " value, got: " <> show entries
+
+  -- Exactly one Amulet amount
+  expectSuccess 10000.0 $ run (Some $ TextMap.fromList [(amuletInstrumentIdName, 10000.0)])
+
+  -- No amount
+  expectErrors [noneError] $ run None
+  expectErrors [noneError] $ run (Some TextMap.empty)
+
+  -- An amount for another instrument
+  let otherInstrument = [("OtherToken", 10000.0)]
+  expectErrors [valuesError otherInstrument] $ run (Some $ TextMap.fromList otherInstrument)
+
+  -- More than one amount
+  let twoInstruments = TextMap.fromList [(amuletInstrumentIdName, 10000.0), ("OtherToken", 5000.0)]
+  expectErrors [valuesError $ TextMap.toList twoInstruments] $ run (Some twoInstruments)

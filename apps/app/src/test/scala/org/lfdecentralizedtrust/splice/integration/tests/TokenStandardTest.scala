@@ -213,6 +213,82 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
     })
   }
 
+  private def makeLockMagicParty(kind: String): PartyId =
+    PartyId.tryFromProtoPrimitive(
+      s"cip-0105_$kind::1220000000000000000000000000000000000000000000000000000000000000abcd"
+    )
+
+  val superValidatorLockMagicParty = makeLockMagicParty("sv-lock")
+  val featuredAppLockMagicParty = makeLockMagicParty("fa-lock")
+  val provisionalFeaturedAppLockMagicParty = makeLockMagicParty("provisional-fa-lock")
+
+  def makeGovernanceLockSubject(lockSubject: String): String =
+    s"lock-subject=$lockSubject"
+
+  val governanceLockUnlockAtMetaKey = "cip-0105/unlock-at"
+  val vestingLockWithdrawAtMetaKey = "cip-0105/withdraw-at"
+
+  def createGovernanceLockViaTokenStandard(
+      participant: ParticipantClientReference,
+      owner: RichPartyId,
+      lockParty: PartyId,
+      lockSubject: String,
+      amount: BigDecimal,
+  )(implicit
+      env: SpliceTestConsoleEnvironment
+  ): transferinstructionv1.TransferInstruction.ContractId = {
+    // `owner` may already have pending instructions to `lockParty` (earlier
+    // `GovernanceLock`s or `VestingLock`s), so only look at the new one.
+    val existingInstructionCids =
+      listTransferInstructions(participant, owner.partyId).map(_._1).toSet
+    executeTransferViaTokenStandard(
+      participant,
+      owner,
+      lockParty,
+      amount,
+      transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Offer,
+      description = Some(makeGovernanceLockSubject(lockSubject)),
+    )
+    listTransferInstructions(participant, owner.partyId).collect {
+      case (cid, view)
+          if view.transfer.receiver == lockParty.toProtoPrimitive &&
+            !existingInstructionCids.contains(cid) =>
+        cid
+    }.loneElement
+  }
+
+  /** Fully unlocks a governance lock by withdrawing its transfer instruction.
+    */
+  def unlockGovernanceLockViaTokenStandard(
+      participant: ParticipantClientReference,
+      owner: RichPartyId,
+      governanceLockCid: transferinstructionv1.TransferInstruction.ContractId,
+      meta: Map[String, String] = Map.empty,
+  )(implicit env: SpliceTestConsoleEnvironment): Option[
+    (
+        transferinstructionv1.TransferInstruction.ContractId,
+        transferinstructionv1.TransferInstructionView,
+    )
+  ] =
+    actAndCheck(
+      "the owner unlocks the GovernanceLock",
+      withdrawTransferInstruction(participant, owner, governanceLockCid, meta = meta),
+    )(
+      "a VestingLock is not the pending TransferInstruction",
+      _ =>
+        listTransferInstructions(participant, owner.partyId).collect {
+          case t @ (_, view)
+              if view.originalInstructionCid.toScala.exists(
+                _.contractId == governanceLockCid.contractId
+              ) =>
+            t
+        } match {
+          case Seq() => None
+          case Seq(vestingLockCid) => Some(vestingLockCid)
+          case many => fail(s"Expected at most one VestingLock for $governanceLockCid, got $many")
+        },
+    )._2
+
   def acceptTransferInstruction(
       participant: ParticipantClientReference,
       receiver: RichPartyId,
@@ -268,6 +344,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       receiver: RichPartyId,
       instructionCid: transferinstructionv1.TransferInstruction.ContractId,
       expectedTimeBounds: Option[(CantonTimestamp, CantonTimestamp)] = None,
+      meta: Map[String, String] = Map.empty,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ) = {
@@ -279,7 +356,9 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       .submitJavaExternalOrLocal(
         receiver,
         commands = instructionCid
-          .exerciseTransferInstruction_Withdraw(choiceContext.toExtraArgs())
+          .exerciseTransferInstruction_Withdraw(
+            choiceContext.toExtraArgs(new metadatav1.Metadata(meta.asJava))
+          )
           .commands()
           .asScala
           .toSeq,

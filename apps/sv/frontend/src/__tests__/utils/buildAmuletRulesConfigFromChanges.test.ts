@@ -248,6 +248,43 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '0.5',
         newValue: '1.0',
       },
+      {
+        fieldName: 'governanceLockConfigMinimumLockAmount',
+        label: 'Governance lock config: Minimum governance lock amount in Amulet',
+        currentValue: '',
+        newValue: '20000',
+      },
+      {
+        fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
+        label: 'Governance lock config: SV lock vesting duration (microseconds)',
+        currentValue: '3600000000',
+        newValue: '7200000000',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
+        label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+        currentValue: '7200000000',
+        newValue: '3600000000',
+      },
+      {
+        fieldName: 'governanceLockConfigSearchTimeGranularity',
+        label:
+          'Governance lock config: Fallback timepoint determination granularity (microseconds)',
+        currentValue: '864000000000',
+        newValue: '43200000000',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppLockThreshold',
+        label: 'Governance lock config: Featured app lock threshold (Amulet)',
+        currentValue: '5000000',
+        newValue: '10000000',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppUnderlockGracePeriod',
+        label: 'Governance lock config: Featured app underlock grace period',
+        currentValue: '604800000000',
+        newValue: '302400000000',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -301,6 +338,15 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       batchSize: '200',
       rewardCouponTimeToLive: { microseconds: '259200000000' },
       appRewardCouponThreshold: '1.0',
+    });
+
+    expect(result.governanceLockConfig).toEqual({
+      minimumLockAmount: '20000',
+      superValidatorLockVestingDuration: { microseconds: '7200000000' },
+      featuredAppLockVestingDuration: { microseconds: '3600000000' },
+      searchTimeGranularity: { microseconds: '43200000000' },
+      featuredAppLockThreshold: '10000000',
+      featuredAppUnderlockGracePeriod: { microseconds: '302400000000' },
     });
   });
 
@@ -479,6 +525,52 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         optDevelopmentFundPercentage: '0.06',
       },
     });
+  });
+
+  test('should map empty governance lock configs to null', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'governanceLockConfigMinimumLockAmount',
+        label: 'Governance lock config: Minimum governance lock amount in Amulet',
+        currentValue: '20000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
+        label: 'Governance lock config: SV lock vesting duration (microseconds)',
+        currentValue: '7200000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
+        label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+        currentValue: '3600000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigSearchTimeGranularity',
+        label:
+          'Governance lock config: Granularity of the fallback timepoint determination (microseconds)',
+        currentValue: '864000000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppLockThreshold',
+        label: 'Governance lock config: Featured app lock threshold (Amulet)',
+        currentValue: '5000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppUnderlockGracePeriod',
+        label: 'Governance lock config: Featured app underlock grace period',
+        currentValue: '604800000000',
+        newValue: '',
+      },
+    ];
+
+    const result = buildAmuletRulesConfigFromChanges(changes);
+
+    expect(result.governanceLockConfig).toBeNull();
   });
 });
 
