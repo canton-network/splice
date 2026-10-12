@@ -241,6 +241,7 @@ abstract class UpdateHistoryTestBase
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.NeedsBackfilling,
       analyzableTimeWindowDuration: NonNegativeDuration =
         NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+      additionalIngestionSinks: Seq[UpdateHistory.AdditionalIngestionSink] = Seq.empty,
   ): UpdateHistory = {
     new UpdateHistory(
       storage,
@@ -255,6 +256,7 @@ abstract class UpdateHistoryTestBase
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
       HistoryMetrics.apply(NoOpMetricsFactory, domainMigrationId),
+      additionalIngestionSinks = additionalIngestionSinks,
     )
   }
 

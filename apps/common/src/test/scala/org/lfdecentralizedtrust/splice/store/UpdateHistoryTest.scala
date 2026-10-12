@@ -32,8 +32,10 @@ import scala.jdk.OptionConverters.*
 import UpdateHistory.UpdateHistoryResponse
 import StoreTestBase.*
 import cats.data.NonEmptyList
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.config.NonNegativeDuration
+import com.digitalasset.canton.tracing.TraceContext
 
 class UpdateHistoryTest extends UpdateHistoryTestBase {
 
@@ -85,6 +87,48 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
         } yield store.startAnalyzableTimeWindow shouldBe Some(
           time(20).minus(java.time.Duration.ofSeconds(atwSeconds))
         )
+      }
+
+      "run the additional ingestion sink actions for every update, including the first" in {
+        val executedActions = new java.util.concurrent.ConcurrentLinkedQueue[String]()
+        val sink = new UpdateHistory.AdditionalIngestionSink {
+          override def initialize(historyId: Long, currentMigrationId: Long)(implicit
+              tc: com.digitalasset.canton.tracing.TraceContext
+          ): Future[Unit] = Future.unit
+
+          override def prepareBatch(
+              updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint],
+              migrationId: Long,
+          )(implicit
+              tc: com.digitalasset.canton.tracing.TraceContext
+          ): Seq[UpdateHistory.PreparedIngestionAction] =
+            updates.toList.collect { case TreeUpdateOrOffsetCheckpoint.Update(_, _) =>
+              new UpdateHistory.PreparedIngestionAction {
+                override def action =
+                  slick.dbio.DBIO
+                    .successful(())
+                    .map(_ => executedActions.add(s"update-${executedActions.size()}").discard)(
+                      executionContext
+                    )
+                override def pretty =
+                  prettyOfString(_ => "recording action")
+              }
+            }
+
+          override def advanceLastIngestedRecordTime(
+              lastIngestedRecordTime: CantonTimestamp,
+              migrationId: Long,
+          )(implicit tc: TraceContext): Unit = ()
+        }
+        val store = mkStore(additionalIngestionSinks = Seq(sink))
+
+        for {
+          _ <- initStore(store)
+          // The first update is ingested when no offset has been stored yet
+          _ <- create(domain1, cid1, offset1, party1, store, time(10))
+          _ = executedActions.size() shouldBe 1
+          _ <- create(domain1, cid2, offset2, party1, store, time(20))
+        } yield executedActions.size() shouldBe 2
       }
 
       "handle single create and query it by contract id" in {

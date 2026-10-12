@@ -87,6 +87,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
 import org.lfdecentralizedtrust.splice.store.{
@@ -229,6 +230,12 @@ class ScanApp(
         loggerFactory,
         retryProvider.metricsFactory,
       )
+      historicalVotesStore = DbVotesStore(
+        store.acsContractFilter.ingestionFilter.primaryParty,
+        participantId,
+        storage,
+        loggerFactory,
+      )
       updateHistory = new UpdateHistory(
         storage,
         domainMigrationId,
@@ -242,6 +249,7 @@ class ScanApp(
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+        additionalIngestionSinks = Seq(historicalVotesStore.ingestionSink),
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
@@ -435,6 +443,7 @@ class ScanApp(
         appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
+        historicalVotesStore,
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
