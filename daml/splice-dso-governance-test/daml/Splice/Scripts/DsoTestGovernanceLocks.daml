@@ -323,8 +323,7 @@ setupGovernanceSubstitution = do
       governanceLockKey = GovernanceLockKey with
         dso = app.dso
         owner = alice.primaryParty
-        specification = GovernanceLockSpecification with kind = testLockKind
-      governanceSpecification = GovernanceLockSpecification with kind = testLockKind)
+        specification = GovernanceLockSpecification with kind = testLockKind)
     testVestingAmount now
   [(substitutionCid, _)] <- query @GovernanceLockSubstitution bob.primaryParty
   pure (SubstitutionEnv with .., substitutionCid)
@@ -348,9 +347,7 @@ setupVestingSubstitution = do
         owner = alice.primaryParty
         specification = vestingLock.specification
         vestingPeriod = vestingLock.vestingPeriod
-        endTime = vestingLock.endTime
-      vestingSpecification = VestingLockSpecification with
-        kind = testLockKind)
+        endTime = vestingLock.endTime)
     testVestingAmount now
   [(substitutionCid, _)] <- query @VestingLockSubstitution bob.primaryParty
   pure (SubstitutionEnv with .., substitutionCid)

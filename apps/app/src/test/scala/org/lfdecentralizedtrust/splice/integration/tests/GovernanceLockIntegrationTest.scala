@@ -179,6 +179,41 @@ class GovernanceLockIntegrationTest
       )
   }
 
+  "A GovernanceLock substitution created via TSv1 can be rejected by the owner of the target lock" in {
+    implicit env =>
+      val (alice, bob, _, targetLock) = setup(bobFunds = partialSubstitutionAmount)
+      val bobUnlockedBefore = bobWalletClient.balance().unlockedQty
+
+      val substitutionCid = substituteGovernanceLockTSv1(targetLock)(
+        bobParticipant,
+        bob,
+        lockKind,
+        lockSubject,
+        partialSubstitutionAmount,
+      )
+
+      clue("Scan serves a reject choice context for the substitution") {
+        sv1ScanBackend
+          .getTransferInstructionRejectContext(substitutionCid)
+          .disclosedContracts should not be empty
+      }
+
+      actAndCheck(
+        "alice rejects the substitution",
+        rejectTransferInstruction(aliceParticipant, alice, substitutionCid),
+      )(
+        "the substitution is gone, bob's funds are unlocked and alice's lock is unchanged",
+        _ => {
+          listTransferInstructions(bobParticipant, bob.partyId) shouldBe empty
+          bobWalletClient.balance().unlockedQty shouldBe bobUnlockedBefore
+          governanceLocksFor(bobParticipant, bob.partyId) shouldBe empty
+          BigDecimal(
+            governanceLocksFor(aliceParticipant, alice.partyId).loneElement.amount
+          ) shouldBe targetLockAmount
+        },
+      )
+  }
+
   "A VestingLock substitution created via TSv1 can be accepted by the owner of the target lock" in {
     implicit env =>
       val (alice, bob, targetLockCid, _) = setup(bobFunds = targetLockAmount)

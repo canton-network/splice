@@ -236,7 +236,7 @@ object ChoiceContextBuilder {
     Builder,
   ]](
       description: String,
-      lockedAmuletId: amulet.LockedAmulet.ContractId,
+      lockedAmuletId: Option[amulet.LockedAmulet.ContractId],
       requireLockedAmulet: Boolean,
       store: ScanStore,
       fetcher: ChoiceContextContractFetcher,
@@ -247,7 +247,9 @@ object ChoiceContextBuilder {
       tc: TraceContext,
   ): Future[ChoiceContext] = {
     for {
-      optLockedAmulet <- fetcher.lookupContractById(amulet.LockedAmulet.COMPANION)(lockedAmuletId)
+      optLockedAmulet <- lockedAmuletId.flatTraverse { id =>
+        fetcher.lookupContractById(amulet.LockedAmulet.COMPANION)(id)
+      }
       (choiceContextBuilder, _) <- getAmuletRulesTransferContext[
         DisclosedContract,
         ChoiceContext,
@@ -256,7 +258,9 @@ object ChoiceContextBuilder {
     } yield optLockedAmulet match {
       case None if requireLockedAmulet =>
         throw io.grpc.Status.NOT_FOUND
-          .withDescription(s"LockedAmulet '$lockedAmuletId' not found for $description")
+          .withDescription(
+            s"LockedAmulet '${lockedAmuletId.fold("")(_.contractId)}' not found for $description"
+          )
           .asRuntimeException()
       case _ =>
         optLockedAmulet.foreach(contract => choiceContextBuilder.disclose(contract))

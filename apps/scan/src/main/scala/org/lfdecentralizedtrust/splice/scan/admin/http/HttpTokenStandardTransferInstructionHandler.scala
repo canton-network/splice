@@ -36,6 +36,7 @@ import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2
 import java.time.ZoneOffset
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.util.{Failure, Success, Try}
 
 class HttpTokenStandardTransferInstructionHandler(
@@ -402,7 +403,7 @@ class HttpTokenStandardTransferInstructionHandler(
 
     def getGovernanceLockContext(
         tpe: String,
-        lockedAmuletId: splice.amulet.LockedAmulet.ContractId,
+        lockedAmuletId: Option[splice.amulet.LockedAmulet.ContractId],
         requireLockedAmulet: Boolean,
     ) =
       util.ChoiceContextBuilder.getGovernanceLockContext[
@@ -441,24 +442,30 @@ class HttpTokenStandardTransferInstructionHandler(
                 newBuilder,
               )
             case governanceLock: splice.governancelock.GovernanceLock =>
-              getGovernanceLockContext("GovernanceLock", governanceLock.lockedAmulet, true)
+              getGovernanceLockContext("GovernanceLock", Some(governanceLock.lockedAmulet), true)
             case vestingLock: splice.governancelock.VestingLock =>
               // A partial withdrawal (< endTime) unlocks the LockedAmulet, so it is required.
               // A full withdrawal (>= endTime) returns the holding directly, so doesn't need it.
               val requireLockedAmulet = clock.now.toInstant.isBefore(vestingLock.endTime)
               getGovernanceLockContext(
                 "VestingLock",
-                vestingLock.lockedAmulet,
+                Some(vestingLock.lockedAmulet),
                 requireLockedAmulet,
               )
+            // A substitution proposed by the target lock owner locks no funds,
+            // so it has no LockedAmulet
             case substitution: splice.governancelock.GovernanceLockSubstitution =>
               getGovernanceLockContext(
                 "GovernanceLockSubstitution",
-                substitution.lockedAmulet,
-                true,
+                substitution.lockedAmulet.toScala,
+                substitution.lockedAmulet.isPresent,
               )
             case substitution: splice.governancelock.VestingLockSubstitution =>
-              getGovernanceLockContext("VestingLockSubstitution", substitution.lockedAmulet, true)
+              getGovernanceLockContext(
+                "VestingLockSubstitution",
+                substitution.lockedAmulet.toScala,
+                substitution.lockedAmulet.isPresent,
+              )
             case _ => transferInstructionNotFound(transferInstructionId, Some(contract.identifier))
           }
         case None => transferInstructionNotFound(transferInstructionId, None)

@@ -491,9 +491,11 @@ object ScanStore {
           versionGuard = { case (pkgVersionSupport, now) =>
             (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
           },
-        )(
-          // TODO(canton-network/splice-sv-fa-locking#118): need expiresAt?
-          ScanAcsStoreRowData(_)
+        )(contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          )
         ),
         mkFilter(splice.governancelock.VestingLock.COMPANION)(
           co => co.payload.dso == dso,
@@ -511,9 +513,11 @@ object ScanStore {
           versionGuard = { case (pkgVersionSupport, now) =>
             (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
           },
-        )(
-          // TODO(canton-network/splice-sv-fa-locking#118): need expiresAt?
-          ScanAcsStoreRowData(_)
+        )(contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          )
         ),
         mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
           co => co.payload.dso == dso,

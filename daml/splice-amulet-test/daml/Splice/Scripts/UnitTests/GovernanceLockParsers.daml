@@ -403,8 +403,7 @@ test_substitutionTSv2Parser_examples = do
       governanceLockKey = GovernanceLockKey with
         dso = testAdmin
         owner = alice
-        specification = GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv"
-      governanceSpecification = GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
+        specification = GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
     $ run "sv-lock"
         [ ("cip-127/request", "substitute-lock")
         , ("cip-127/lock-subject", "someSv")
@@ -420,9 +419,7 @@ test_substitutionTSv2Parser_examples = do
         dso = testAdmin
         owner = alice
         specification = GovernanceLockSpecification with
-          kind = GLK_FeaturedApp testProvider
-      governanceSpecification = GovernanceLockSpecification with
-        kind = GLK_FeaturedApp testProvider)
+          kind = GLK_FeaturedApp testProvider)
     $ run "fa-lock"
         [ ("cip-127/request", "substitute-lock")
         -- the new lock
@@ -442,9 +439,7 @@ test_substitutionTSv2Parser_examples = do
         specification = VestingLockSpecification with
           kind = GLK_SuperValidatorRightsOwner "someSv"
         vestingPeriod = days 60
-        endTime = time (date 2026 Jan 1) 0 0 0
-      vestingSpecification = VestingLockSpecification with
-        kind = GLK_SuperValidatorRightsOwner "someSv")
+        endTime = time (date 2026 Jan 1) 0 0 0)
     $ run "sv-lock"
         [ ("cip-127/request", "substitute-lock")
         -- the new lock

@@ -258,6 +258,9 @@ trait GovernanceLockTest extends TokenStandardTest {
           substitutionAmount,
           transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Offer,
           description = Some(makeInputLockMemo(SubstituteLock, lockKind, lockSubject)(data)),
+          // A substitution proposed by the owner of the target lock locks no funds,
+          // so no input holding is archived
+          wait = owner.partyId != targetLockOwner,
         ),
       )(
         "the substitution is now a pending TransferInstruction to the owner of the target lock",
