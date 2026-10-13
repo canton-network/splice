@@ -443,7 +443,7 @@ class ScanApp(
         appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
-        historicalVotesStore,
+        store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
