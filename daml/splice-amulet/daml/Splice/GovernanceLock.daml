@@ -6,16 +6,15 @@
 module Splice.GovernanceLock where
 
 import Prelude hiding (forA)
-import DA.Action (filterA, unless)
+import DA.Action (unless)
 import DA.Assert
-import DA.Foldable (foldMap, forA_, mapA_, maximum, toList)
+import DA.Foldable (toList)
 import DA.Functor (($>))
-import DA.List.Total (head, minimumOn)
+import DA.List.Total (head)
 import DA.Map (Map)
 import DA.Map qualified as Map
 import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
-import DA.Set qualified as Set
 import DA.Text qualified as Text
 import DA.TextMap qualified as TextMap
 import DA.Time
@@ -43,14 +42,6 @@ import Splice.TokenStandard.Utils.Internal.Conversions (encodeRelTime, encodeTim
 import Splice.Types
 import Splice.Util
 
-data ControllerSpecification = ControllerSpecification with
-    controllers : [[Party]]
-      -- ^ Sets of parties that can jointly authorize an action. The action happens once all parties of any one set approve it.
-  deriving (Eq, Show, Serializable)
-
-instance Semigroup ControllerSpecification where
-  (<>) (ControllerSpecification a) (ControllerSpecification b) = ControllerSpecification $ a <> b
-
 data GovernanceLockKind
   = GLK_FeaturedApp with
       provider : Party -- ^ Featured app provider party.
@@ -63,38 +54,12 @@ data GovernanceLockKind
 data GovernanceLockSpecification
   = GovernanceLockSpecification with
       kind : GovernanceLockKind
-      unlockControllers : ControllerSpecification
-        -- ^ Controllers that can unlock the lock.
-      substitutionControllers : ControllerSpecification
-        -- ^ Controllers that can approve a substitution.
-      vestingControllers : ControllerSpecification
-        -- ^ Controllers that can withdraw vested funds once the lock is vesting. Copied to the VestingLock on unlock.
   deriving (Eq, Show, Serializable)
 
 data VestingLockSpecification
   = VestingLockSpecification with
       kind : GovernanceLockKind
-      vestingControllers : ControllerSpecification
-        -- ^ Controllers that can drive the return of vested funds to the owner.
   deriving (Eq, Show, Serializable)
-
--- | An unlock approval recorded by one unlock controller.
-data UnlockApproval = UnlockApproval with
-    unlockAmount : Decimal  -- ^ Amount to unlock.
-    vestingStartTime : Time  -- ^ Time at which the controller wants vesting to start.
-  deriving (Eq, Show, Serializable)
-
--- | Specification where the lock owner alone controls all lock actions.
--- Used for locks created via the TSv1 compatibility mode.
-ownerControlledSpecification : Party -> GovernanceLockKind -> GovernanceLockSpecification
-ownerControlledSpecification owner kind = GovernanceLockSpecification with
-  kind
-  unlockControllers = ownerControlled owner
-  substitutionControllers = ownerControlled owner
-  vestingControllers = ownerControlled owner
-
-ownerControlled : Party -> ControllerSpecification
-ownerControlled owner = ControllerSpecification [[owner]]
 
 template GovernanceLock
   with
@@ -105,13 +70,10 @@ template GovernanceLock
     specification : GovernanceLockSpecification
     originalLockCid : Optional AnyContractId
     requestedAt : Time  -- ^ Time of the request to create this lock.
-    pendingUnlockApprovals : Map.Map Party UnlockApproval
-      -- ^ Unlock approvals recorded so far, for multi-step authorization.
-      -- Cleared when converting a provisional featured app lock to a full lock.
   where
     signatory dso, owner
-    observer governanceLockKindObservers specification.kind, governanceLockControllers specification
-    ensure amount > 0.0 && either error (const True) (validateGovernanceLockControllers @(Either Text) specification)
+    observer governanceLockKindObservers specification.kind
+    ensure amount > 0.0
     key ( GovernanceLockKey with dso; owner; specification ) : GovernanceLockKey
     maintainer key.dso
 
@@ -205,7 +167,6 @@ template GovernanceLock
             create this with
               specification = specification with
                 kind = GLK_FeaturedApp with provider
-              pendingUnlockApprovals = Map.empty
             pure GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
           kind -> error $ "GovernanceLock_DsoConvertProvisionalFeaturedAppLock: cannot convert lock of kind " <> show kind
 
@@ -258,7 +219,7 @@ template GovernanceLock
           createdAt = requestedAt
           numIterations = 0
           expiresAt = Some maxBound
-          availableActions = Map.singleton V2.AA_Withdraw (governanceLockRemainingUnlockControllers this).controllers
+          availableActions = Map.singleton V2.AA_Withdraw [[owner]]
           meta = emptyMetadata
       allocation_settleImpl _ _ = assertFail "Allocations representing governance locks cannot be settled"
       allocation_cancelImpl _ _ = assertFail "Allocations representing governance locks cannot be cancelled"
@@ -271,20 +232,14 @@ template GovernanceLock
         unlockAmount <- assertParsed unlockAmountParser extraArgs.meta
         unlockResult <- governanceLock_unlockImpl (coerceContractId self) this unlockAmount vestingStartTime actors context state
         let resultMeta = simpleHoldingTxMeta TxKind_Unlock (Some "unlock governance lock") None
-        pure $ case unlockResult of
-          GovernanceLock_UnlockResult_Pending pendingLock -> V2.AllocationResult with
-            output = V2.AllocationResult_Pending with
-              allocationCid = toInterfaceContractId pendingLock
-            authorizerHoldingCids = TextMap.empty
-            meta = resultMeta
-          GovernanceLock_UnlockResult_Completed vestingLock _ unlockedAmulet -> V2.AllocationResult with
-            output = case vestingLock of
-              Some vestingLock -> V2.AllocationResult_Pending with allocationCid = toInterfaceContractId vestingLock
-              None -> V2.AllocationResult_Withdrawn
-            authorizerHoldingCids = case unlockedAmulet of
-              Some unlockedAmulet -> TextMap.singleton amuletInstrumentIdName [coerceContractId unlockedAmulet]
-              None -> TextMap.empty
-            meta = resultMeta
+        pure V2.AllocationResult with
+          output = case unlockResult.vestingLock of
+            Some vestingLock -> V2.AllocationResult_Pending with allocationCid = toInterfaceContractId vestingLock
+            None -> V2.AllocationResult_Withdrawn
+          authorizerHoldingCids = case unlockResult.unlockedAmulet of
+            Some unlockedAmulet -> TextMap.singleton amuletInstrumentIdName [coerceContractId unlockedAmulet]
+            None -> TextMap.empty
+          meta = resultMeta
 
       allocation_settleExtraObservers _ = observer this
       allocation_cancelExtraObservers _ = observer this
@@ -293,19 +248,9 @@ template GovernanceLock
 governanceLock_unlockImpl : ContractId GovernanceLock -> GovernanceLock -> Decimal -> Time -> [Party] -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
 governanceLock_unlockImpl self this@(GovernanceLock {..}) unlockAmount vestingStartTime actors context state
     = do
+        checkActors actors [[owner]]
         assertWithinDeadline "vestingStartTime" vestingStartTime
-        recorded <- governanceLock_updateUnlockApprovals this unlockAmount vestingStartTime actors
-        case recorded of
-          Left stillPending -> do
-            pendingLock <- create this with
-              pendingUnlockApprovals = stillPending
-              originalLockCid = Some $ fromOptional (toAnyContractId self) originalLockCid
-            pure GovernanceLock_UnlockResult_Pending with pendingLock
-          Right approvedUnlockAt -> governanceLock_executeUnlock self this unlockAmount approvedUnlockAt context state
-
-governanceLock_executeUnlock : ContractId GovernanceLock -> GovernanceLock -> Decimal -> Time -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
-governanceLock_executeUnlock self this@(GovernanceLock {..}) unlockAmount vestingStartTime context state
-    = do
+        assertDeadlineExceeded "vestingStartTime - 1 day" (vestingStartTime `addRelTime` days (-1))
         require' ("unlockAmount", unlockAmount) isLessOrEqualR ("amount", amount)
         let isFullUnlock = unlockAmount == amount
         require' ("unlockAmount", unlockAmount) isGreaterR ("zero", 0.0)
@@ -332,8 +277,7 @@ governanceLock_executeUnlock self this@(GovernanceLock {..}) unlockAmount vestin
         governanceLock <- forA optStillLocked (\(lockedAmulet, stillLockedAmount) -> create
           this with
             lockedAmulet
-            amount = stillLockedAmount
-            pendingUnlockApprovals = Map.empty)
+            amount = stillLockedAmount)
 
         vestingLock <- forA optVestingLockedAmulet (\(lockedAmulet, vestingAmount) -> create VestingLock with
           dso
@@ -343,18 +287,15 @@ governanceLock_executeUnlock self this@(GovernanceLock {..}) unlockAmount vestin
           endTime
           vestingAmount
           specification
-          originalLockCid = guard isFullUnlock $> coerceContractId self
-          pendingWithdrawApprovals = Map.empty)
+          originalLockCid = guard isFullUnlock $> coerceContractId self)
 
-        pure $ GovernanceLock_UnlockResult_Completed with
+        pure GovernanceLock_UnlockResult with
           vestingLock
           governanceLock
           unlockedAmulet
 
 data GovernanceLock_UnlockResult
-  = GovernanceLock_UnlockResult_Pending with
-      pendingLock : ContractId GovernanceLock -- ^ The re-created lock that holds the recorded approvals.
-  | GovernanceLock_UnlockResult_Completed with
+  = GovernanceLock_UnlockResult with
       vestingLock : Optional (ContractId VestingLock)
       governanceLock : Optional (ContractId GovernanceLock)
       unlockedAmulet : Optional (ContractId Amulet)
@@ -380,12 +321,10 @@ template VestingLock
     vestingAmount : Decimal  -- ^ The amount that is vesting.
     specification : VestingLockSpecification
     originalLockCid : Optional AnyContractId
-    pendingWithdrawApprovals : Map.Map Party Time
-      -- ^ Approved `requestedAt` per vesting controller, for multi-step authorization.
   where
     signatory dso, owner
-    observer allControllers specification.vestingControllers
-    ensure vestingAmount > 0.0 && vestingPeriod >= aunit && either error (const True) (validateVestingLockControllers @(Either Text) specification)
+    observer governanceLockKindObservers specification.kind
+    ensure vestingAmount > 0.0 && vestingPeriod >= aunit
 
     key ( VestingLockKey with dso; owner; specification; vestingPeriod; endTime ) : VestingLockKey
     maintainer key.dso
@@ -438,10 +377,7 @@ template VestingLock
             inputHoldingCids = []
             meta = reasonToMeta (encodeVestingLockCompatMemo this) (encodeVestingLockMetadata this)
           status = V1.TransferPendingInternalWorkflow with
-            pendingActions = Map.fromList $
-              [ (p, "withdraw vested amounts")
-              | p <- Set.toList $ allControllers (vestingLockRemainingWithdrawControllers this)
-              ]
+            pendingActions = Map.singleton owner "withdraw vested amounts"
           meta = emptyMetadata
       transferInstruction_acceptImpl _ _ = assertFail "Transfers representing governance locks cannot be accepted"
       transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
@@ -468,7 +404,7 @@ template VestingLock
           createdAt = endTime `addRelTime` (- vestingPeriod)
           numIterations = 0
           expiresAt = Some maxBound
-          availableActions = Map.singleton V2.AA_Withdraw (vestingLockRemainingWithdrawControllers this).controllers
+          availableActions = Map.singleton V2.AA_Withdraw [[owner]]
           meta = emptyMetadata
       allocation_settleImpl _ _ = assertFail "Allocations representing vesting locks cannot be settled"
       allocation_cancelImpl _ _ = assertFail "Allocations representing vesting locks cannot be cancelled"
@@ -480,43 +416,27 @@ template VestingLock
         requestedAt <- assertParsed vestedUntilTimeParser extraArgs.meta
         withdrawResult <- vestingLock_withdrawImpl (fromInterfaceContractId self) this requestedAt actors context
         let resultMeta = simpleHoldingTxMeta TxKind_Unlock (Some "withdraw vested amount") None
-        pure $ case withdrawResult of
-          VestingLock_WithdrawResult_Pending pendingLock -> V2.AllocationResult with
-            output = V2.AllocationResult_Pending with allocationCid = toInterfaceContractId pendingLock
-            authorizerHoldingCids = TextMap.empty
-            meta = resultMeta
-          VestingLock_WithdrawResult_Completed vestingLock vested -> V2.AllocationResult with
-            output = case vestingLock of
-              Some vestingLock -> V2.AllocationResult_Pending with allocationCid = toInterfaceContractId vestingLock
-              None -> V2.AllocationResult_Withdrawn
-            authorizerHoldingCids = TextMap.singleton amuletInstrumentIdName [upcast vested]
-            meta = resultMeta
+        pure V2.AllocationResult with
+          output = case withdrawResult.vestingLock of
+            Some vestingLock -> V2.AllocationResult_Pending with allocationCid = toInterfaceContractId vestingLock
+            None -> V2.AllocationResult_Withdrawn
+          authorizerHoldingCids = TextMap.singleton amuletInstrumentIdName [upcast withdrawResult.vested]
+          meta = resultMeta
 
       allocation_settleExtraObservers _ = observer this
       allocation_cancelExtraObservers _ = observer this
       allocation_withdrawExtraObservers _ = observer this
 
 vestingLock_withdrawImpl : ContractId VestingLock -> VestingLock -> Time -> [Party] -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
-vestingLock_withdrawImpl self this@(VestingLock {..}) requestedAt actors context
+vestingLock_withdrawImpl _self this@(VestingLock {..}) requestedAt actors context
     = do
+        checkActors actors [[owner]]
         assertDeadlineExceeded "requestedAt" requestedAt
-        recorded <- vestingLock_updateWithdrawApprovals this requestedAt actors
-        case recorded of
-          Left stillPending -> do
-            pendingLock <- create this with
-              pendingWithdrawApprovals = stillPending
-              originalLockCid = Some $ fromOptional (coerceContractId self) originalLockCid
-            pure VestingLock_WithdrawResult_Pending with pendingLock
-          Right approvedRequestedAt -> vestingLock_executeWithdraw this approvedRequestedAt context
-
-vestingLock_executeWithdraw : VestingLock -> Time -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
-vestingLock_executeWithdraw this@(VestingLock {..}) requestedAt context
-    = do
         let unvestedAmount = calculateUnvestedAmount requestedAt this
 
         case unvestedAmount of
           None -> do -- No split or partial availability, and the holding is already available, so just make a final report and archive.
-            pure VestingLock_WithdrawResult_Completed with
+            pure VestingLock_WithdrawResult with
               vestingLock = None
               vested = toInterfaceContractId lockedAmulet
           Some stillLockedAmount -> do -- We have a fraction that is not the whole being withdrawn, do a partial unlock.
@@ -526,9 +446,8 @@ vestingLock_executeWithdraw this@(VestingLock {..}) requestedAt context
             vestingLock <- forA lockedOpt (\(lockedAmulet, vestingAmount) -> create this with
               lockedAmulet
               vestingPeriod = endTime `subTime` requestedAt
-              vestingAmount
-              pendingWithdrawApprovals = Map.empty)
-            pure VestingLock_WithdrawResult_Completed with
+              vestingAmount)
+            pure VestingLock_WithdrawResult with
               vestingLock
               vested = toInterfaceContractId unlocked
 
@@ -542,9 +461,7 @@ data VestingLock_DsoExpireResult
   deriving (Serializable)
 
 data VestingLock_WithdrawResult
-  = VestingLock_WithdrawResult_Pending with
-      pendingLock : ContractId VestingLock -- ^ The re-created lock that holds the recorded approvals.
-  | VestingLock_WithdrawResult_Completed with
+  = VestingLock_WithdrawResult with
       vestingLock : Optional (ContractId VestingLock)
         -- ^ Contract ID of the continuing vesting lock with remaining funds.
       vested : ContractId Holding
@@ -570,7 +487,6 @@ governanceLock_lockForGovernance_impl
  -> Update (GovernanceLock, ContractId GovernanceLock, Optional (ContractId Amulet))
 governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt = do
   assertWithinDeadline "requestedAt + 1 day" $ requestedAt `addRelTime` days 1
-  validateGovernanceLockControllers specification
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
   requireMinimumLock state amount
   let lockProperties = LockProperties with
@@ -585,7 +501,6 @@ governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs 
         specification
         requestedAt
         originalLockCid = None
-        pendingUnlockApprovals = Map.empty
   governanceLockCid <- create governanceLock
   pure (governanceLock, governanceLockCid, changeHolding)
 
@@ -597,113 +512,9 @@ governanceLockKindObservers (GLK_FeaturedApp party) = [party]
 governanceLockKindObservers (GLK_ProvisionalFeaturedApp party) = [party]
 governanceLockKindObservers (GLK_SuperValidatorRightsOwner _) = []
 
--- | All parties that appear in any controller set.
-allControllers : ControllerSpecification -> Set.Set Party
-allControllers = Set.fromList . concat . (.controllers)
-
-governanceLockControllers : GovernanceLockSpecification -> Set.Set Party
-governanceLockControllers spec = allControllers $
-  spec.unlockControllers <> spec.substitutionControllers <> spec.vestingControllers
-
-validateGovernanceLockControllers : CanAssert m => GovernanceLockSpecification -> m ()
-validateGovernanceLockControllers spec =
-  validateControllers [("unlock", spec.unlockControllers), ("substitution", spec.substitutionControllers), ("vesting", spec.vestingControllers)]
-
-validateVestingLockControllers : CanAssert m => VestingLockSpecification -> m ()
-validateVestingLockControllers spec =
-  validateControllers [("vesting", spec.vestingControllers)]
-
-validateControllers : CanAssert m => [(Text, ControllerSpecification)] -> m ()
-validateControllers = mapA_ \(controllerType, ControllerSpecification{controllers}) -> do
-  require (controllerType <> "Controllers must not be empty") (not $ null controllers)
-  require (controllerType <> "Controllers must not contain an empty controller set") (all (not . null) controllers)
-
-remainingControllers : (a -> Bool) -> Map.Map Party a -> ControllerSpecification -> ControllerSpecification
-remainingControllers isValidApproval pendingApprovals controllers =
-  ControllerSpecification $ filter (not . null) $
-    fmap
-      (filter \p -> optional True (not . isValidApproval) (Map.lookup p pendingApprovals))
-      controllers.controllers
-
-governanceLockRemainingUnlockControllers : GovernanceLock -> ControllerSpecification
-governanceLockRemainingUnlockControllers GovernanceLock{specification, pendingUnlockApprovals} =
-  remainingControllers (const True) pendingUnlockApprovals specification.unlockControllers
-
-vestingLockRemainingWithdrawControllers : VestingLock -> ControllerSpecification
-vestingLockRemainingWithdrawControllers VestingLock{specification, pendingWithdrawApprovals} =
-  remainingControllers (const True) pendingWithdrawApprovals specification.vestingControllers
-
--- | Updates approvals for a GovernanceLock unlock
-governanceLock_updateUnlockApprovals : GovernanceLock -> Decimal -> Time -> [Party] -> Update (Either (Map.Map Party UnlockApproval) Time)
-governanceLock_updateUnlockApprovals GovernanceLock{..} unlockAmount vestingStartTime actors = do
-  result <- updateApprovals
-    specification.unlockControllers
-    actors
-    (UnlockApproval with unlockAmount; vestingStartTime)
-    pendingUnlockApprovals
-    (\approval -> approval.unlockAmount == unlockAmount)
-  forA result (effectiveVestingStartTime . fmap ((.vestingStartTime) . snd))
-
--- | Updates approvals for a VestingLock withdraw
-vestingLock_updateWithdrawApprovals : VestingLock -> Time -> [Party] -> Update (Either (Map.Map Party Time) Time)
-vestingLock_updateWithdrawApprovals VestingLock{..} requestedAt actors = do
-  result <- updateApprovals
-    specification.vestingControllers
-    actors
-    requestedAt
-    pendingWithdrawApprovals
-    (const True)
-  -- Taking the latest time over all controller sets releases the most vested funds to the owner
-  pure $ fmap (maximum . fmap snd) result
-
--- | Updates approvals to include the approval of actors and checks if the
--- updated approvals satisfy one of the sets of controllers.
---
--- A set of controllers is considered satisfied when all of its parties have a
--- value within the updated approvals for which approvalIsValid holds true.
---
--- If any controller set is satisfied, the superset of all satisfied controller
--- sets, along with their approvals, is returned as an approved Right value.
---
--- If no controller sets are satisfied, the updated approvals map is returned as
--- a still-pending Left value.
-updateApprovals
-  :  (CanAssert m, Eq a)
-  => ControllerSpecification -- ^ The sets of controllers that can authorize the current action.
-  -> [Party] -- ^ The set of actors that have authorized the current action.
-  -> a -- ^ The approval authorized by these actors.
-  -> Map.Map Party a -- ^ The pre-existing set of pending approvals.
-  -> (a -> Bool) -- ^ Whether an approval should be considered valid.
-  -> m (Either (Map.Map Party a) [(Party, a)])
-updateApprovals ControllerSpecification{controllers} actors approval approvals approvalIsValid = do
-  require "actors must not be empty" (not $ null actors)
-  forA_ actors $ \actor ->
-    require ("actor " <> partyToText actor <> " must be a controller") (any (actor `elem`) controllers)
-  -- Reject calls that change no approval; otherwise a repeated call would re-create the lock and invalidate its contract id for others
-  require "at least one actor's approval must change"
-    (any (\actor -> Map.lookup actor approvals /= Some approval) actors)
-  let updated = foldl (\m actor -> Map.insert actor approval m) approvals actors
-      approvedBy p = optional False approvalIsValid (Map.lookup p updated)
-      satisfiedControllers = ControllerSpecification $ filter (all approvedBy) controllers
-  pure $ if null satisfiedControllers.controllers
-    then Left updated
-    else Right $ mapOptional (\p -> (p,) <$> Map.lookup p updated) (Set.toList $ allControllers satisfiedControllers)
-
--- | The earliest of the approved unlock times that is still in the future.
--- It must be no more than 24h ahead, to avoid a far-future vesting start.
-effectiveVestingStartTime : [Time] -> Update Time
-effectiveVestingStartTime times = do
-  futureTimes <- filterA isLedgerTimeLT times
-  case minimumOn identity futureTimes of
-    None -> assertFail "None of the approved unlock times is in the future"
-    Some earliest -> do
-      assertDeadlineExceeded "vestingStartTime - 1 day" (earliest `addRelTime` days (-1))
-      pure earliest
-
 governanceToVestingSpecification : GovernanceLockSpecification -> VestingLockSpecification
 governanceToVestingSpecification GovernanceLockSpecification {..} = VestingLockSpecification with
   kind
-  vestingControllers
 
 describeGovernanceLockKind : GovernanceLockKind -> Text
 describeGovernanceLockKind (GLK_FeaturedApp with provider) = "Featured App party " <> partyToText provider
@@ -765,15 +576,13 @@ template GovernanceLockSubstitution with
     owner : Party -- ^ Party that proposed the substitution
     amount : Decimal -- ^ Amount being substituted
     lockedAmulet : ContractId LockedAmulet -- ^ Amulet providing the funds
-    withdrawSubstitutionControllers : ControllerSpecification  -- ^ Controllers that may withdraw the substitution proposal.
-    pendingSubstituteApprovals : Map.Map Party SubstitutionApproval
     requestedAt : Time -- ^ Time of the request to create the proposal.
     expiresAt : Time -- ^ Time after which the registry admin may withdraw the proposal.
     originalSubstitutionCid : Optional (ContractId V2.AllocationInstruction)
       -- ^ Contract id of the first proposal of this workflow. `None` for the first proposal itself.
   where
     signatory target.dso, owner
-    observer allControllers $ substitutable_substituteController target <> withdrawSubstitutionControllers
+    observer target.owner, governanceLockKindObservers target.specification.kind, governanceLockKindObservers newLockSpecification.kind
     ensure target.specification.kind == newLockSpecification.kind
 
     choice GovernanceLockSubstitution_Accept : GovernanceLockSubstitution_AcceptResult
@@ -802,28 +611,20 @@ template GovernanceLockSubstitution with
       -- Mirrors the metadata that the `GovernanceLock` created on acceptance will report through its own
       -- `V2.Allocation` view, so that `AllocationView.allocation` only loses the substitution request,
       -- the encoded target, and the accept request in the memo on acceptance.
-      view = substitution_allocationView target.dso target.specification.kind (substitutionGovernanceLockCompatMemo owner newLockSpecification)
-        owner amount (encodeGovernanceLockSpecMetadata owner newLockSpecification) requestedAt expiresAt lockedAmulet originalSubstitutionCid
-        (substitutable_substituteController target) withdrawSubstitutionControllers pendingSubstituteApprovals (encodeGovernanceLockSubstitutionTargetMetadata target)
+      view = substitution_allocationView target.dso target.owner target.specification.kind (substitutionGovernanceLockCompatMemo newLockSpecification)
+        owner amount (encodeGovernanceLockSpecMetadata newLockSpecification) requestedAt expiresAt lockedAmulet originalSubstitutionCid
+        (encodeGovernanceLockSubstitutionTargetMetadata target)
 
       allocationInstruction_acceptImpl self V2.AllocationInstruction_Accept{..} = do
         -- `AllocationInstruction_Accept` is nonconsuming, so archive here
         potentiallyUnsafeArchive self
         result <- governanceLockSubstitution_acceptImpl (coerceContractId self) this actors extraArgs
-        pure $ case result of
-          GovernanceLockSubstitution_AcceptResult_Pending substitutionCid ->
-            substitutionInstructionResult_pending (toInterfaceContractId substitutionCid) substitutionAcceptMeta
-          GovernanceLockSubstitution_AcceptResult_Complete{lockCid} ->
-            substitutionInstructionResult_completed (toInterfaceContractId lockCid)
+        pure $ substitutionInstructionResult_completed (toInterfaceContractId result.lockCid)
       allocationInstruction_withdrawImpl self V2.AllocationInstruction_Withdraw{..} = do
         -- `AllocationInstruction_Withdraw` is nonconsuming, so archive here
         potentiallyUnsafeArchive self
         result <- governanceLockSubstitution_withdrawImpl (coerceContractId self) this actors
-        pure $ case result of
-          GovernanceLockSubstitution_WithdrawResult_Pending substitutionCid ->
-            substitutionInstructionResult_pending (toInterfaceContractId substitutionCid) substitutionWithdrawMeta
-          GovernanceLockSubstitution_WithdrawResult_Withdrawn unlockedAmulet ->
-            substitutionInstructionResult_failed unlockedAmulet
+        pure $ substitutionInstructionResult_failed result.unlockedAmulet
       allocationInstruction_acceptExtraObservers _ = observer this
       allocationInstruction_withdrawExtraObservers _ = observer this
 
@@ -833,30 +634,19 @@ template GovernanceLockSubstitution with
         targetOwner = target.owner
         proposer = owner
         amount
-        meta = substitution_allocationMeta (substitutionGovernanceLockCompatMemo owner newLockSpecification)
-          (encodeGovernanceLockSpecMetadata owner newLockSpecification) (encodeGovernanceLockSubstitutionTargetMetadata target)
+        meta = substitution_allocationMeta (substitutionGovernanceLockCompatMemo newLockSpecification)
+          (encodeGovernanceLockSpecMetadata newLockSpecification) (encodeGovernanceLockSubstitutionTargetMetadata target)
         requestedAt
         lockedAmulet
         originalSubstitutionCid
-        acceptControllers = substitutable_substituteController target
-        withdrawControllers = withdrawSubstitutionControllers
-        pendingSubstituteApprovals
 
       transferInstruction_acceptImpl self V1.TransferInstruction_Accept{..} = do
         result <- governanceLockSubstitution_acceptImpl (coerceContractId self) this [target.owner] extraArgs
-        pure $ case result of
-          GovernanceLockSubstitution_AcceptResult_Pending substitutionCid ->
-            substitutionTransferResult_pending (toInterfaceContractId substitutionCid)
-          GovernanceLockSubstitution_AcceptResult_Complete{unlockedAmulet} ->
-            substitutionTransferResult_completed unlockedAmulet
+        pure $ substitutionTransferResult_completed result.unlockedAmulet
       transferInstruction_rejectImpl _ _ = assertFail substitutionTransferRejectUnsupported
       transferInstruction_withdrawImpl self _ = do
         result <- governanceLockSubstitution_withdrawImpl (coerceContractId self) this [owner]
-        pure $ case result of
-          GovernanceLockSubstitution_WithdrawResult_Pending substitutionCid ->
-            substitutionTransferResult_pending (toInterfaceContractId substitutionCid)
-          GovernanceLockSubstitution_WithdrawResult_Withdrawn unlockedAmulet ->
-            substitutionTransferResult_failed unlockedAmulet
+        pure $ substitutionTransferResult_failed result.unlockedAmulet
       transferInstruction_updateImpl _ _ = assertFail substitutionTransferUpdateUnsupported
 
 template VestingLockSubstitution with
@@ -865,15 +655,13 @@ template VestingLockSubstitution with
     owner : Party -- ^ Party that proposed the substitution
     amount : Decimal -- ^ Amount being substituted
     lockedAmulet : ContractId LockedAmulet -- ^ Amulet providing the funds
-    withdrawSubstitutionControllers : ControllerSpecification
-    pendingSubstituteApprovals : Map.Map Party SubstitutionApproval
     requestedAt : Time -- ^ Time of the request to create the proposal.
     expiresAt : Time -- ^ Time after which the registry admin may withdraw the proposal.
     originalSubstitutionCid : Optional (ContractId V2.AllocationInstruction)
       -- ^ Contract id of the first proposal of this workflow. `None` for the first proposal itself.
   where
     signatory target.dso, owner
-    observer allControllers $ substitutable_substituteController target <> withdrawSubstitutionControllers
+    observer target.owner, governanceLockKindObservers target.specification.kind, governanceLockKindObservers newLockSpecification.kind
     ensure target.specification.kind == newLockSpecification.kind
 
     choice VestingLockSubstitution_Accept : VestingLockSubstitution_AcceptResult
@@ -902,29 +690,20 @@ template VestingLockSubstitution with
       -- Mirrors the metadata that the `VestingLock` created on acceptance will report through its own
       -- `V2.Allocation` view, except for the accept request in the memo. The new lock keeps the vesting
       -- period and end time of the target.
-      view = substitution_allocationView target.dso target.specification.kind
-        (substitutionVestingLockCompatMemo owner newLockSpecification target.vestingPeriod target.endTime)
-        owner amount (encodeVestingLockSpecMetadata owner newLockSpecification target.vestingPeriod target.endTime)
-        requestedAt expiresAt lockedAmulet originalSubstitutionCid
-        (substitutable_substituteController target) withdrawSubstitutionControllers pendingSubstituteApprovals (encodeVestingLockSubstitutionTargetMetadata target)
+      view = substitution_allocationView target.dso target.owner target.specification.kind
+        (substitutionVestingLockCompatMemo newLockSpecification target.vestingPeriod target.endTime)
+        owner amount (encodeVestingLockSpecMetadata newLockSpecification target.vestingPeriod target.endTime)
+        requestedAt expiresAt lockedAmulet originalSubstitutionCid (encodeVestingLockSubstitutionTargetMetadata target)
       allocationInstruction_acceptImpl self V2.AllocationInstruction_Accept{..} = do
         -- `AllocationInstruction_Accept` is nonconsuming, so archive here
         potentiallyUnsafeArchive self
         result <- vestingLockSubstitution_acceptImpl (coerceContractId self) this actors extraArgs
-        pure $ case result of
-          VestingLockSubstitution_AcceptResult_Pending substitutionCid ->
-            substitutionInstructionResult_pending (toInterfaceContractId substitutionCid) substitutionAcceptMeta
-          VestingLockSubstitution_AcceptResult_Complete{lockCid} ->
-            substitutionInstructionResult_completed (toInterfaceContractId lockCid)
+        pure $ substitutionInstructionResult_completed (toInterfaceContractId result.lockCid)
       allocationInstruction_withdrawImpl self V2.AllocationInstruction_Withdraw{..} = do
         -- `AllocationInstruction_Withdraw` is nonconsuming, so archive here
         potentiallyUnsafeArchive self
         result <- vestingLockSubstitution_withdrawImpl (coerceContractId self) this actors
-        pure $ case result of
-          VestingLockSubstitution_WithdrawResult_Pending substitutionCid ->
-            substitutionInstructionResult_pending (toInterfaceContractId substitutionCid) substitutionWithdrawMeta
-          VestingLockSubstitution_WithdrawResult_Withdrawn unlockedAmulet ->
-            substitutionInstructionResult_failed unlockedAmulet
+        pure $ substitutionInstructionResult_failed result.unlockedAmulet
       allocationInstruction_acceptExtraObservers _ = observer this
       allocationInstruction_withdrawExtraObservers _ = observer this
 
@@ -935,42 +714,24 @@ template VestingLockSubstitution with
         proposer = owner
         amount
         meta = substitution_allocationMeta
-          (substitutionVestingLockCompatMemo owner newLockSpecification target.vestingPeriod target.endTime)
-          (encodeVestingLockSpecMetadata owner newLockSpecification target.vestingPeriod target.endTime)
+          (substitutionVestingLockCompatMemo newLockSpecification target.vestingPeriod target.endTime)
+          (encodeVestingLockSpecMetadata newLockSpecification target.vestingPeriod target.endTime)
           (encodeVestingLockSubstitutionTargetMetadata target)
         requestedAt
         lockedAmulet
         originalSubstitutionCid
-        acceptControllers = substitutable_substituteController target
-        withdrawControllers = withdrawSubstitutionControllers
-        pendingSubstituteApprovals
 
       transferInstruction_acceptImpl self V1.TransferInstruction_Accept{..} = do
         result <- vestingLockSubstitution_acceptImpl (coerceContractId self) this [target.owner] extraArgs
-        pure $ case result of
-          VestingLockSubstitution_AcceptResult_Pending substitutionCid ->
-            substitutionTransferResult_pending (toInterfaceContractId substitutionCid)
-          VestingLockSubstitution_AcceptResult_Complete{unlockedAmulet} ->
-            substitutionTransferResult_completed unlockedAmulet
+        pure $ substitutionTransferResult_completed result.unlockedAmulet
       transferInstruction_rejectImpl _ _ = assertFail substitutionTransferRejectUnsupported
       transferInstruction_withdrawImpl self _ = do
         result <- vestingLockSubstitution_withdrawImpl (coerceContractId self) this [owner]
-        pure $ case result of
-          VestingLockSubstitution_WithdrawResult_Pending substitutionCid ->
-            substitutionTransferResult_pending (toInterfaceContractId substitutionCid)
-          VestingLockSubstitution_WithdrawResult_Withdrawn unlockedAmulet ->
-            substitutionTransferResult_failed unlockedAmulet
+        pure $ substitutionTransferResult_failed result.unlockedAmulet
       transferInstruction_updateImpl _ _ = assertFail substitutionTransferUpdateUnsupported
 
-data SubstitutionApproval
-    = SubstitutionApproval_Approve
-    | SubstitutionApproval_Withdraw
-  deriving (Eq, Show, Serializable)
-
 data GovernanceLockSubstitution_AcceptResult
-  = GovernanceLockSubstitution_AcceptResult_Pending with
-      substitutionCid : ContractId GovernanceLockSubstitution
-  | GovernanceLockSubstitution_AcceptResult_Complete with
+  = GovernanceLockSubstitution_AcceptResult with
       lockCid : ContractId GovernanceLock
       remainderCid : Optional (ContractId GovernanceLock)
       unlockedAmulet : ContractId Amulet
@@ -978,17 +739,15 @@ data GovernanceLockSubstitution_AcceptResult
   deriving (Eq, Show, Serializable)
 
 data GovernanceLockSubstitution_WithdrawResult
-    = GovernanceLockSubstitution_WithdrawResult_Pending (ContractId GovernanceLockSubstitution)
-    | GovernanceLockSubstitution_WithdrawResult_Withdrawn (ContractId Amulet)
+  = GovernanceLockSubstitution_WithdrawResult with
+    unlockedAmulet : (ContractId Amulet)
   deriving (Eq, Show, Serializable)
 
 data GovernanceLockSubstitution_DsoExpireResult = GovernanceLockSubstitution_DsoExpireResult
   deriving (Serializable)
 
 data VestingLockSubstitution_AcceptResult
-  = VestingLockSubstitution_AcceptResult_Pending with
-      substitutionCid : ContractId VestingLockSubstitution
-  | VestingLockSubstitution_AcceptResult_Complete with
+  = VestingLockSubstitution_AcceptResult with
     lockCid : ContractId VestingLock
     remainderCid : Optional (ContractId VestingLock)
     unlockedAmulet : ContractId Amulet
@@ -996,8 +755,8 @@ data VestingLockSubstitution_AcceptResult
   deriving (Eq, Show, Serializable)
 
 data VestingLockSubstitution_WithdrawResult
-    = VestingLockSubstitution_WithdrawResult_Pending (ContractId VestingLockSubstitution)
-    | VestingLockSubstitution_WithdrawResult_Withdrawn (ContractId Amulet)
+  = VestingLockSubstitution_WithdrawResult with
+    unlockedAmulet : (ContractId Amulet)
   deriving (Eq, Show, Serializable)
 
 data VestingLockSubstitution_DsoExpireResult = VestingLockSubstitution_DsoExpireResult
@@ -1065,68 +824,9 @@ vestingLock_substituteImpl self this@VestingLock{..} substitutedAmount extraArgs
     GT ->
       fail $ "substituted lock has less funds (" <> show vestingAmount <> ") than the amount proposed to be substituted (" <> show substitutedAmount <> ")"
 
-class Substitutable a where
-  substitutable_substituteController : a -> ControllerSpecification
-
-instance Substitutable GovernanceLockKey where
-  substitutable_substituteController = (.specification.substitutionControllers)
-
-instance Substitutable VestingLockKey where
-  substitutable_substituteController = (.specification.vestingControllers)
-
 governanceLockSubstitution_acceptImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> ExtraArgs -> Update GovernanceLockSubstitution_AcceptResult
-governanceLockSubstitution_acceptImpl self this@GovernanceLockSubstitution{..} actors extraArgs = do
-  recorded <- updateApprovals
-    (substitutable_substituteController target)
-    actors
-    SubstitutionApproval_Approve
-    pendingSubstituteApprovals
-    (== SubstitutionApproval_Approve)
-  case recorded of
-    Left stillPending -> GovernanceLockSubstitution_AcceptResult_Pending <$> create this with
-      pendingSubstituteApprovals = stillPending
-      originalSubstitutionCid = Some $ fromOptional (toInterfaceContractId self) originalSubstitutionCid
-    Right _ -> governanceLockSubstitution_executeAccept self this $ GovernanceLockSubstitution_Accept actors extraArgs
-
-vestingLockSubstitution_acceptImpl : ContractId VestingLockSubstitution -> VestingLockSubstitution -> [Party] -> ExtraArgs -> Update VestingLockSubstitution_AcceptResult
-vestingLockSubstitution_acceptImpl self this@VestingLockSubstitution{..} actors extraArgs = do
-  recorded <- updateApprovals
-    (substitutable_substituteController target)
-    actors
-    SubstitutionApproval_Approve
-    pendingSubstituteApprovals
-    (== SubstitutionApproval_Approve)
-  case recorded of
-    Left stillPending -> VestingLockSubstitution_AcceptResult_Pending <$> create this with
-      pendingSubstituteApprovals = stillPending
-      originalSubstitutionCid = Some $ fromOptional (toInterfaceContractId self) originalSubstitutionCid
-    Right _ -> vestingLockSubstitution_executeAccept self this $ VestingLockSubstitution_Accept actors extraArgs
-
-governanceLockSubstitution_withdrawImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> Update GovernanceLockSubstitution_WithdrawResult
-governanceLockSubstitution_withdrawImpl self this actors = do
-  recorded <- updateApprovals this.withdrawSubstitutionControllers actors SubstitutionApproval_Withdraw this.pendingSubstituteApprovals (== SubstitutionApproval_Withdraw)
-  case recorded of
-    Left stillPending -> GovernanceLockSubstitution_WithdrawResult_Pending <$> create this with
-      pendingSubstituteApprovals = stillPending
-      originalSubstitutionCid = Some $ fromOptional (toInterfaceContractId self) this.originalSubstitutionCid
-    Right _ -> do
-      (unlockedAmulet, _) <- unlockAmulet (ForOwner with dso = this.target.dso; owner = this.owner) this.lockedAmulet
-      pure $ GovernanceLockSubstitution_WithdrawResult_Withdrawn unlockedAmulet
-
-vestingLockSubstitution_withdrawImpl : ContractId VestingLockSubstitution -> VestingLockSubstitution -> [Party] -> Update VestingLockSubstitution_WithdrawResult
-vestingLockSubstitution_withdrawImpl self this actors = do
-  recorded <- updateApprovals this.withdrawSubstitutionControllers actors SubstitutionApproval_Withdraw this.pendingSubstituteApprovals (== SubstitutionApproval_Withdraw)
-  case recorded of
-    Left stillPending -> VestingLockSubstitution_WithdrawResult_Pending <$> create this with
-      pendingSubstituteApprovals = stillPending
-      originalSubstitutionCid = Some $ fromOptional (toInterfaceContractId self) this.originalSubstitutionCid
-    Right _ -> do
-      (unlockedAmulet, _) <- unlockAmulet (ForOwner with dso = this.target.dso; owner = this.owner) this.lockedAmulet
-      pure $ VestingLockSubstitution_WithdrawResult_Withdrawn unlockedAmulet
-
-
-governanceLockSubstitution_executeAccept : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> GovernanceLockSubstitution_Accept -> Update GovernanceLockSubstitution_AcceptResult
-governanceLockSubstitution_executeAccept self (GovernanceLockSubstitution with ..) (GovernanceLockSubstitution_Accept with ..) = do
+governanceLockSubstitution_acceptImpl self GovernanceLockSubstitution{..} actors extraArgs = do
+  checkActors actors [[target.owner]]
   (lockCid, _lock) <- fetchByKey @GovernanceLock target
   substituteResult <- exercise lockCid GovernanceLock_DsoSubstitute with
     substitutedAmount = amount
@@ -1139,14 +839,14 @@ governanceLockSubstitution_executeAccept self (GovernanceLockSubstitution with .
     specification = newLockSpecification
     originalLockCid = Some $ toAnyContractId self
     requestedAt = requestedAt
-    pendingUnlockApprovals = mempty
-  pure GovernanceLockSubstitution_AcceptResult_Complete with
+  pure GovernanceLockSubstitution_AcceptResult with
     lockCid = newLockCid
     remainderCid = substituteResult.remainderCid
     unlockedAmulet = substituteResult.unlockedAmulet
 
-vestingLockSubstitution_executeAccept : ContractId VestingLockSubstitution -> VestingLockSubstitution -> VestingLockSubstitution_Accept -> Update VestingLockSubstitution_AcceptResult
-vestingLockSubstitution_executeAccept self (VestingLockSubstitution with ..) (VestingLockSubstitution_Accept with ..) = do
+vestingLockSubstitution_acceptImpl : ContractId VestingLockSubstitution -> VestingLockSubstitution -> [Party] -> ExtraArgs -> Update VestingLockSubstitution_AcceptResult
+vestingLockSubstitution_acceptImpl self VestingLockSubstitution{..} actors extraArgs = do
+  checkActors actors [[target.owner]]
   (lockCid, lock) <- fetchByKey @VestingLock target
   substituteResult <- exercise lockCid VestingLock_DsoSubstitute with
     substitutedAmount = amount
@@ -1160,12 +860,22 @@ vestingLockSubstitution_executeAccept self (VestingLockSubstitution with ..) (Ve
     endTime = lock.endTime
     specification = newLockSpecification
     originalLockCid = Some $ toAnyContractId self
-    pendingWithdrawApprovals = mempty
-  pure VestingLockSubstitution_AcceptResult_Complete with
+  pure VestingLockSubstitution_AcceptResult with
     lockCid = newLockCid
     remainderCid = substituteResult.remainderCid
     unlockedAmulet = substituteResult.unlockedAmulet
 
+governanceLockSubstitution_withdrawImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> Update GovernanceLockSubstitution_WithdrawResult
+governanceLockSubstitution_withdrawImpl _self this actors = do
+  checkActors actors [[this.owner]]
+  (unlockedAmulet, _) <- unlockAmulet (ForOwner with dso = this.target.dso; owner = this.owner) this.lockedAmulet
+  pure $ GovernanceLockSubstitution_WithdrawResult unlockedAmulet
+
+vestingLockSubstitution_withdrawImpl : ContractId VestingLockSubstitution -> VestingLockSubstitution -> [Party] -> Update VestingLockSubstitution_WithdrawResult
+vestingLockSubstitution_withdrawImpl _self this actors = do
+  checkActors actors [[this.owner]]
+  (unlockedAmulet, _) <- unlockAmulet (ForOwner with dso = this.target.dso; owner = this.owner) this.lockedAmulet
+  pure $ VestingLockSubstitution_WithdrawResult unlockedAmulet
 
 -- | View of a substitution proposal. `settlement` and `allocation` have the same shape as the
 -- `V2.AllocationView` of the lock that the proposal creates when it is accepted, except that
@@ -1174,6 +884,7 @@ vestingLockSubstitution_executeAccept self (VestingLockSubstitution with ..) (Ve
 -- This way `settlement` and `allocation` can be passed to `AllocationFactory_Allocate` to propose the same substitution.
 substitution_allocationView
   :  Party -- ^ Registry admin.
+  -> Party -- ^ Owner of the target lock.
   -> GovernanceLockKind
   -> Text -- ^ Memo of the proposal, set as the reason in `allocation.meta`.
   -> Party -- ^ Proposer.
@@ -1183,12 +894,9 @@ substitution_allocationView
   -> Time -- ^ Time after which the registry admin may withdraw the proposal.
   -> ContractId LockedAmulet
   -> Optional (ContractId V2.AllocationInstruction)
-  -> ControllerSpecification -- ^ Controllers that can accept.
-  -> ControllerSpecification -- ^ Controllers that can withdraw.
-  -> Map.Map Party SubstitutionApproval
   -> Metadata -- ^ Encoded target, added to `allocation.meta`.
   -> V2.AllocationInstructionView
-substitution_allocationView admin kind memo proposer amount newLockMeta requestedAt expiresAt lockedAmulet originalSubstitutionCid acceptControllers withdrawControllers pendingSubstituteApprovals targetMeta =
+substitution_allocationView admin targetOwner kind memo proposer amount newLockMeta requestedAt expiresAt lockedAmulet originalSubstitutionCid targetMeta =
   V2.AllocationInstructionView with
     originalInstructionCid = originalSubstitutionCid
     settlement = V2.SettlementInfo with
@@ -1207,11 +915,7 @@ substitution_allocationView admin kind memo proposer amount newLockMeta requeste
     requestedAt
     inputHoldingCids = [toInterfaceContractId lockedAmulet]
     expiresAt = Some expiresAt
-    -- availableActions = Map.singleton V2.AA_Withdraw (governanceLockRemainingUnlockControllers this).controllers
-    availableActions = Map.fromList
-      [ (V2.AIA_Accept, (remainingControllers (== SubstitutionApproval_Approve) pendingSubstituteApprovals acceptControllers).controllers)
-      , (V2.AIA_Withdraw, (remainingControllers (== SubstitutionApproval_Withdraw) pendingSubstituteApprovals withdrawControllers).controllers)
-      ]
+    availableActions = Map.fromList [(V2.AIA_Accept, [[targetOwner]]), (V2.AIA_Withdraw, [[proposer]])]
     meta = emptyMetadata
 
 -- | Metadata of a substitution proposal: the metadata of the new lock, plus the substitution request
@@ -1233,9 +937,6 @@ data SubstitutionTransferInstructionViewArgs = SubstitutionTransferInstructionVi
   requestedAt : Time
   lockedAmulet : ContractId LockedAmulet
   originalSubstitutionCid : Optional (ContractId V2.AllocationInstruction)
-  acceptControllers : ControllerSpecification
-  withdrawControllers : ControllerSpecification
-  pendingSubstituteApprovals : Map.Map Party SubstitutionApproval
 
 -- | TSv1 view of a substitution proposal. `transfer.meta` is equal to `allocation.meta` of the TSv2 view,
 -- so that `transfer` can be passed to `TransferFactory_Transfer` to propose the same substitution,
@@ -1257,23 +958,11 @@ substitution_transferInstructionView SubstitutionTransferInstructionViewArgs{..}
       inputHoldingCids = [toInterfaceContractId lockedAmulet]
       meta
     status = V1.TransferPendingInternalWorkflow with
-      pendingActions = Map.fromListWithR (\old new -> old <> "; " <> new) $
-        [ (p, "accept substitution")
-        | p <- Set.toList $ allControllers $ remainingControllers (== SubstitutionApproval_Approve) pendingSubstituteApprovals acceptControllers
-        ] <>
-        [ (p, "withdraw substitution")
-        | p <- Set.toList $ allControllers $ remainingControllers (== SubstitutionApproval_Withdraw) pendingSubstituteApprovals withdrawControllers
-        ]
+      pendingActions = Map.fromList [(targetOwner, "accept substitution"), (proposer, "withdraw substitution")]
     meta = emptyMetadata
 
 substitutionTransferRejectUnsupported = "Transfers representing governance lock substitutions cannot be rejected"
 substitutionTransferUpdateUnsupported = "Transfers representing governance lock substitutions cannot be updated"
-
-substitutionTransferResult_pending : ContractId V1.TransferInstruction -> V1.TransferInstructionResult
-substitutionTransferResult_pending transferInstructionCid = V1.TransferInstructionResult with
-  output = V1.TransferInstructionResult_Pending with transferInstructionCid
-  senderChangeCids = []
-  meta = emptyMetadata
 
 substitutionTransferResult_completed : ContractId Amulet -> V1.TransferInstructionResult
 substitutionTransferResult_completed unlockedAmulet = V1.TransferInstructionResult with
@@ -1296,29 +985,21 @@ substitutionAcceptRequestMetadata : Metadata
 substitutionAcceptRequestMetadata = Metadata $ TextMap.singleton requestMetaKey governanceLockRequestAcceptToSubstituteLock
 
 -- | Memo of a substitution proposal of a `GovernanceLock`: the memo of the new lock plus the accept request.
-substitutionGovernanceLockCompatMemo : Party -> GovernanceLockSpecification -> Text
-substitutionGovernanceLockCompatMemo owner spec =
-  encodeLockCompatMemo $ encodeCommonLockMetadata spec.kind LS_Locked substitutionAcceptRequestMetadata <>
-    encodeGovernanceLockSpecControllers owner spec
+substitutionGovernanceLockCompatMemo : GovernanceLockSpecification -> Text
+substitutionGovernanceLockCompatMemo spec =
+  encodeLockCompatMemo $ encodeCommonLockMetadata spec.kind LS_Locked substitutionAcceptRequestMetadata
 
 -- | Memo of a substitution proposal of a `VestingLock`: the memo of the new lock plus the accept request.
-substitutionVestingLockCompatMemo : Party -> VestingLockSpecification -> RelTime -> Time -> Text
-substitutionVestingLockCompatMemo owner spec vestingPeriod endTime =
+substitutionVestingLockCompatMemo : VestingLockSpecification -> RelTime -> Time -> Text
+substitutionVestingLockCompatMemo spec vestingPeriod endTime =
   encodeLockCompatMemo $ substitutionAcceptRequestMetadata <>
-    encodeVestingLockSpecCompatMetadata spec.kind vestingPeriod endTime <>
-    encodeVestingLockSpecControllers owner spec
+    encodeVestingLockSpecCompatMetadata spec.kind vestingPeriod endTime
 
 substitutionAcceptMeta : Metadata
 substitutionAcceptMeta = simpleHoldingTxMeta TxKind_Unlock (Some "substitute governance lock") None
 
 substitutionWithdrawMeta : Metadata
 substitutionWithdrawMeta = simpleHoldingTxMeta TxKind_Unlock (Some "withdraw governance lock substitution") None
-
-substitutionInstructionResult_pending : ContractId V2.AllocationInstruction -> Metadata -> V2.AllocationInstructionResult
-substitutionInstructionResult_pending allocationInstructionCid meta = V2.AllocationInstructionResult with
-  output = V2.AllocationInstructionResult_Pending with allocationInstructionCid
-  authorizerChangeCids = TextMap.empty
-  meta
 
 substitutionInstructionResult_completed : ContractId V2.Allocation -> V2.AllocationInstructionResult
 substitutionInstructionResult_completed allocationCid = V2.AllocationInstructionResult with
@@ -1380,8 +1061,6 @@ createSubstitution CreateSubstitutionArgs {..} = do
         owner
         amount
         lockedAmulet
-        withdrawSubstitutionControllers = ownerControlled owner
-        pendingSubstituteApprovals = mempty
         requestedAt
         expiresAt
         originalSubstitutionCid = None
@@ -1394,8 +1073,6 @@ createSubstitution CreateSubstitutionArgs {..} = do
         owner
         amount
         lockedAmulet
-        withdrawSubstitutionControllers = ownerControlled owner
-        pendingSubstituteApprovals = mempty
         requestedAt
         expiresAt
         originalSubstitutionCid = None
@@ -1483,9 +1160,6 @@ cipMetaPrefix = cipPrefix <> "/"
 removeMetaKeyPrefix : Text -> Text
 removeMetaKeyPrefix = Text.dropPrefix cipMetaPrefix
 
-updateMetaKeyPrefix : Text -> Text -> Text
-updateMetaKeyPrefix newPrefix key = newPrefix <> removeMetaKeyPrefix key
-
 -- | Prefix of the memo tag used to specify lock attributes.
 cipMemoPrefix = cipMetaPrefix <> "memo:"
 
@@ -1522,15 +1196,6 @@ lockVestingEndTimeMetaKey = cipMetaPrefix <> "lock-vesting-end-time-micros"
 -- | Metadata key that encodes a human-readable description of a `VestingLock` duration and end time.
 lockVestingInfoMetaKey = cipMetaPrefix <> "lock-vesting-info"
 
--- | Metadata key that sets the `unlockControllers` of a `GovernanceLock`.
-unlockControllersMetaKey = cipMetaPrefix <> "unlock-controllers"
-
--- | Metadata key that sets the `substitutionControllers` of a `GovernanceLock`.
-substitutionControllersMetaKey = cipMetaPrefix <> "substitution-controllers"
-
--- | Metadata key that sets the `vestingControllers` of a `GovernanceLock`.
-vestingControllersMetaKey = cipMetaPrefix <> "vesting-controllers"
-
 -- | Metadata key that specifies the new owner of a transferred lock.
 newLockOwnerMetaKey = cipMetaPrefix <> "new-lock-owner"
 
@@ -1539,11 +1204,6 @@ targetLockMetaPrefix = cipMetaPrefix <> "target-"
 
 -- | Metadata key that specifies the owner of a target lock.
 targetLockOwnerMetaKey = targetLockMetaPrefix <> "lock-owner"
-
--- | Metadata keys that set the controllers of a target lock.
-targetLockUnlockControllersMetaKey = updateMetaKeyPrefix targetLockMetaPrefix unlockControllersMetaKey
-targetLockSubstitutionControllersMetaKey = updateMetaKeyPrefix targetLockMetaPrefix substitutionControllersMetaKey
-targetLockVestingControllersMetaKey = updateMetaKeyPrefix targetLockMetaPrefix vestingControllersMetaKey
 
 getOptionalMetadata : Text -> Metadata -> Optional Text
 getOptionalMetadata key meta = TextMap.lookup key meta.values
@@ -1559,12 +1219,6 @@ getRequiredMetadata' parse key meta = case getOptionalMetadata key meta of
 getRequiredMetadata : CanAssert m => Text -> Metadata -> m Text
 getRequiredMetadata = getRequiredMetadata' pure
 
-encodeControllerSpecification : Party -> Text -> ControllerSpecification -> Metadata
-encodeControllerSpecification owner key ControllerSpecification{controllers} =
-  if controllers == [[owner]]
-  then emptyMetadata
-  else Metadata $ TextMap.singleton key $ Text.intercalate ";" $ fmap (Text.intercalate "," . fmap partyToText) controllers
-
 encodeCommonLockMetadata : GovernanceLockKind -> LockState -> Metadata -> Metadata
 encodeCommonLockMetadata kind state meta =
   let (tag, subject) = governanceLockKindToTagAndSubject kind
@@ -1574,41 +1228,24 @@ encodeCommonLockMetadata kind state meta =
     , (lockStatusMetaKey, lockStateToText state)
     ])
 
-encodeGovernanceLockSpecControllers' : Text -> Text -> Text -> Party -> GovernanceLockSpecification -> Metadata
-encodeGovernanceLockSpecControllers' unlockControllersKey substitutionControllersKey vestingControllersKey owner (GovernanceLockSpecification
-  _kind
-  unlockControllers
-  substitutionControllers
-  vestingControllers) =
-    foldMap (\(key, controllers) -> encodeControllerSpecification owner key controllers)
-      [ (unlockControllersKey, unlockControllers)
-      , (substitutionControllersKey, substitutionControllers)
-      , (vestingControllersKey, vestingControllers) ]
-
-encodeGovernanceLockSpecControllers : Party -> GovernanceLockSpecification -> Metadata
-encodeGovernanceLockSpecControllers =
-  encodeGovernanceLockSpecControllers' unlockControllersMetaKey substitutionControllersMetaKey vestingControllersMetaKey
-
-encodeGovernanceLockSpecMetadata : Party -> GovernanceLockSpecification -> Metadata
-encodeGovernanceLockSpecMetadata owner spec =
-  encodeCommonLockMetadata spec.kind LS_Locked $ encodeGovernanceLockSpecControllers owner spec
+encodeGovernanceLockSpecMetadata : GovernanceLockSpecification -> Metadata
+encodeGovernanceLockSpecMetadata spec =
+  encodeCommonLockMetadata spec.kind LS_Locked emptyMetadata
 
 encodeGovernanceLockMetadata : GovernanceLock -> Metadata
-encodeGovernanceLockMetadata GovernanceLock{owner, specification} = encodeGovernanceLockSpecMetadata owner specification
+encodeGovernanceLockMetadata GovernanceLock{specification} = encodeGovernanceLockSpecMetadata specification
 
 encodeVestingLockCompatMetadata : VestingLock -> Metadata
 encodeVestingLockCompatMetadata (VestingLock
   _dso
-  owner
+  _owner
   _lockedAmulet
   vestingPeriod
   endTime
   _vestingAmount
   specification
-  _originalLockCid
-  _pendingWithdrawApprovals) =
+  _originalLockCid) =
     encodeVestingLockSpecCompatMetadata specification.kind vestingPeriod endTime
-    <> encodeVestingLockSpecControllers owner specification
 
 encodeVestingLockSpecCompatMetadata : GovernanceLockKind -> RelTime -> Time -> Metadata
 encodeVestingLockSpecCompatMetadata kind vestingPeriod endTime =
@@ -1618,21 +1255,13 @@ encodeVestingLockSpecCompatMetadata kind vestingPeriod endTime =
     , (lockVestingInfoMetaKey, "\"vesting for " <> show (relTimeToDays vestingPeriod) <> " days until " <> show endTime <> "\"")
     ]
 
-encodeVestingLockSpecControllers' : Text -> Party -> VestingLockSpecification -> Metadata
-encodeVestingLockSpecControllers' vestingControllersKey owner (VestingLockSpecification _kind vestingControllers) =
-  encodeControllerSpecification owner vestingControllersKey vestingControllers
-
-encodeVestingLockSpecControllers : Party -> VestingLockSpecification -> Metadata
-encodeVestingLockSpecControllers = encodeVestingLockSpecControllers' vestingControllersMetaKey
-
-encodeVestingLockSpecMetadata : Party -> VestingLockSpecification -> RelTime -> Time -> Metadata
-encodeVestingLockSpecMetadata owner spec vestingPeriod endTime =
-  encodeVestingLockSpecCompatMetadata spec.kind vestingPeriod endTime <>
-    encodeVestingLockSpecControllers owner spec
+encodeVestingLockSpecMetadata : VestingLockSpecification -> RelTime -> Time -> Metadata
+encodeVestingLockSpecMetadata spec vestingPeriod endTime =
+  encodeVestingLockSpecCompatMetadata spec.kind vestingPeriod endTime
 
 encodeVestingLockMetadata : VestingLock -> Metadata
-encodeVestingLockMetadata VestingLock{owner, specification, vestingPeriod, endTime} =
-  encodeVestingLockSpecMetadata owner specification vestingPeriod endTime
+encodeVestingLockMetadata VestingLock{specification, vestingPeriod, endTime} =
+  encodeVestingLockSpecMetadata specification vestingPeriod endTime
 
 encodeLockCompatMemo : Metadata -> Text
 encodeLockCompatMemo meta =
@@ -1641,33 +1270,26 @@ encodeLockCompatMemo meta =
   in cipMemoPrefix <> Text.intercalate "&" keyValues
 
 encodeGovernanceLockCompatMemo : GovernanceLock -> Text
-encodeGovernanceLockCompatMemo GovernanceLock{owner, specification} =
+encodeGovernanceLockCompatMemo GovernanceLock{specification} =
   encodeLockCompatMemo $
     encodeCommonLockMetadata specification.kind LS_Locked emptyMetadata
-    <> encodeGovernanceLockSpecControllers owner specification
 
 encodeVestingLockCompatMemo : VestingLock -> Text
 encodeVestingLockCompatMemo lock =
   encodeLockCompatMemo $ encodeVestingLockCompatMetadata lock
 
 encodeGovernanceLockSubstitutionTargetMetadata : GovernanceLockKey -> Metadata
-encodeGovernanceLockSubstitutionTargetMetadata (GovernanceLockKey _dso owner specification) =
-  (Metadata $ TextMap.fromList $ [(targetLockOwnerMetaKey, partyToText owner), (lockStatusMetaKey, lockStateToText LS_Locked)]) <>
-    encodeGovernanceLockSpecControllers'
-      targetLockUnlockControllersMetaKey
-      targetLockSubstitutionControllersMetaKey
-      targetLockVestingControllersMetaKey
-      owner
-      specification
+encodeGovernanceLockSubstitutionTargetMetadata (GovernanceLockKey _dso owner _specification) =
+  Metadata $ TextMap.fromList $ [(targetLockOwnerMetaKey, partyToText owner), (lockStatusMetaKey, lockStateToText LS_Locked)]
 
 encodeVestingLockSubstitutionTargetMetadata : VestingLockKey -> Metadata
-encodeVestingLockSubstitutionTargetMetadata (VestingLockKey _dso owner specification vestingPeriod endTime) =
-  (Metadata $ TextMap.fromList $
+encodeVestingLockSubstitutionTargetMetadata (VestingLockKey _dso owner _specification vestingPeriod endTime) =
+  Metadata $ TextMap.fromList $
     [ (targetLockOwnerMetaKey, partyToText owner)
     , (lockStatusMetaKey, lockStateToText LS_Vesting)
     , (lockVestingDurationMetaKey, encodeRelTime vestingPeriod)
     , (lockVestingEndTimeMetaKey, encodeTime endTime)
-    ]) <> encodeVestingLockSpecControllers' targetLockVestingControllersMetaKey owner specification
+    ]
 
 -- TSv1 support
 -- ============
@@ -1712,7 +1334,7 @@ governanceLock_transferFactoryV1_transferImpl dso actors arg@V1.TransferFactory_
   assertDeadlineExceeded "transfer.requestedAt" transfer.requestedAt
   assertWithinDeadline "transfer.executeBefore" transfer.executeBefore
 
-  request <- parseGovernanceLockRequestTSv1 dso transfer.sender transfer.receiver transfer.meta
+  request <- parseGovernanceLockRequestTSv1 dso transfer.receiver transfer.meta
 
   case request of
     GLR_CreateGovernanceLock{governanceSpecification} ->
@@ -1762,20 +1384,14 @@ governanceLock_transferFactoryV1_unlockImpl dso V1.TransferFactory_Transfer{tran
     specification
   potentiallyUnsafeArchive lockCid
   result <- governanceLock_unlockImpl lockCid lock unlockAmount vestingStartTime [transfer.sender] context state
-  pure $ case result of
-    GovernanceLock_UnlockResult_Pending pendingLock -> V1.TransferInstructionResult with
-      output = V1.TransferInstructionResult_Pending with
-        transferInstructionCid = toInterfaceContractId pendingLock
-      senderChangeCids = []
-      meta = emptyMetadata
-    GovernanceLock_UnlockResult_Completed vestingLock _ unlockedAmulet -> V1.TransferInstructionResult with
-      output = case vestingLock of
-        Some vestingLock -> V1.TransferInstructionResult_Pending with
-          transferInstructionCid = toInterfaceContractId vestingLock
-        None -> V1.TransferInstructionResult_Completed with
-          receiverHoldingCids = []
-      senderChangeCids = toList $ fmap toInterfaceContractId unlockedAmulet
-      meta = emptyMetadata
+  pure V1.TransferInstructionResult with
+    output = case result.vestingLock of
+      Some vestingLock -> V1.TransferInstructionResult_Pending with
+        transferInstructionCid = toInterfaceContractId vestingLock
+      None -> V1.TransferInstructionResult_Completed with
+        receiverHoldingCids = []
+    senderChangeCids = toList $ fmap toInterfaceContractId result.unlockedAmulet
+    meta = emptyMetadata
 
 governanceLock_transferFactoryV1_transferLockImpl
   :  Party
@@ -1805,22 +1421,12 @@ governanceLock_transferFactoryV1_withdrawImpl dso V1.TransferFactory_Transfer{..
     endTime
   potentiallyUnsafeArchive lockCid
   result <- vestingLock_withdrawImpl lockCid lock vestedUntilTime [transfer.sender] context
-  pure $ case result of
-    VestingLock_WithdrawResult_Pending pendingLock -> V1.TransferInstructionResult with
-      output = V1.TransferInstructionResult_Pending with
-        transferInstructionCid = toInterfaceContractId pendingLock
-      senderChangeCids = []
-      meta = emptyMetadata
-    VestingLock_WithdrawResult_Completed (Some vestingLock) vested -> V1.TransferInstructionResult with
-      output = V1.TransferInstructionResult_Pending with
-        transferInstructionCid = toInterfaceContractId vestingLock
-      senderChangeCids = [vested]
-      meta = emptyMetadata
-    VestingLock_WithdrawResult_Completed None vested -> V1.TransferInstructionResult with
-      output = V1.TransferInstructionResult_Completed with
-        receiverHoldingCids = []
-      senderChangeCids = [vested]
-      meta = emptyMetadata
+  pure V1.TransferInstructionResult with
+    output = case result.vestingLock of
+      Some vestingLock -> V1.TransferInstructionResult_Pending with transferInstructionCid = toInterfaceContractId vestingLock
+      None -> V1.TransferInstructionResult_Completed with receiverHoldingCids = []
+    senderChangeCids = [result.vested]
+    meta = emptyMetadata
 
 governanceLock_transferFactoryV1_substituteImpl
   :  Party
@@ -1858,7 +1464,7 @@ governanceLock_allocationFactoryV2_allocateImpl dso arg@V2.AllocationFactory_All
   let owner = regularAccountOwner allocation.authorizer
   checkActors actors [[owner]]
   assertDeadlineExceeded "requestedAt" requestedAt
-  request <- parseGovernanceLockRequestTSv2 dso settlement.id owner allocation.meta
+  request <- parseGovernanceLockRequestTSv2 dso settlement.id allocation.meta
 
   case request of
     GLR_CreateGovernanceLock{governanceSpecification} ->
@@ -2008,7 +1614,6 @@ lockStateFromText = dataFromText lockStateToText [LS_Locked, LS_Vesting]
 -- `join ((\a b c -> pure . f $ E) <$> pa <*> pb <*> pc)` coming from
 -- `do { pa; pb; pc; pure . f $ E}` where `f` is itself pure.
 data Parser i o = Parser (i -> Validation Text o)
-type ControllerSpecificationParser = Party -> Parser Metadata ControllerSpecification
 
 runParser : Parser i o -> i -> Validation Text o
 runParser (Parser f) input = f input
@@ -2068,13 +1673,6 @@ iso8601TimeMetadataParser key = requiredMetadataParser key >>= iso8601TimeFromTe
 relTimeMetadataParser : Text -> Parser Metadata RelTime
 relTimeMetadataParser key = Parser \meta -> (relTimeFromMeta key meta) <?> (missingMetadataMessage key)
 
--- | Fails if any of the given keys is present.
-rejectMetadataKeysParser : Text -> [Text] -> Parser Metadata ()
-rejectMetadataKeysParser reason keys = Parser \meta ->
-  case filter (\k -> TextMap.member k meta.values) keys of
-    [] -> ok ()
-    present -> invalid $ "Metadata fields not allowed " <> reason <> ": " <> Text.intercalate ", " present
-
 -- | Parse a URL-style key value string 'key1=value1&...&key2=value2' into a key-value map.
 keyValueParser : Text -> Parser i (TextMap.TextMap Text)
 keyValueParser keyValues =
@@ -2091,22 +1689,6 @@ partyFromTextParser key party = validationParser $ (partyFromText party) <?> (in
 
 partyFromMetadataParser : Text -> Parser Metadata Party
 partyFromMetadataParser key = requiredMetadataParser key >>= partyFromTextParser key
-
-controllersParser : Text -> ControllerSpecificationParser
-controllersParser key owner =
-    ControllerSpecification <$> (optionalMetadataParser key >>= optional (pure [[owner]]) partiesParser)
-  where
-    partiesParser : Text -> Parser Metadata [[Party]]
-    partiesParser t = forA (Text.splitOn ";" t) \ps -> forA (Text.splitOn "," ps) (partyFromTextParser key)
-
-unlockControllersParser : ControllerSpecificationParser
-unlockControllersParser = controllersParser unlockControllersMetaKey
-
-substitutionControllersParser : ControllerSpecificationParser
-substitutionControllersParser = controllersParser substitutionControllersMetaKey
-
-vestingControllersParser : ControllerSpecificationParser
-vestingControllersParser = controllersParser vestingControllersMetaKey
 
 governanceLockTagParser' : Text -> Parser i GovernanceLockTag
 governanceLockTagParser' t = validationParser $ (governanceLockTagFromText t) <?> ("Invalid lock kind: '" <> t <> "'")
@@ -2145,19 +1727,13 @@ governanceLockMetadataParser = do
 parseGovernanceLockMetadata : CanAssert m => Metadata -> m Metadata
 parseGovernanceLockMetadata = assertParsed governanceLockMetadataParser
 
-governanceLockSpecificationParser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata GovernanceLockSpecification
-governanceLockSpecificationParser kindParser owner =
-  GovernanceLockSpecification <$>
-    kindParser <*>
-    unlockControllersParser owner <*>
-    substitutionControllersParser owner <*>
-    vestingControllersParser owner
+governanceLockSpecificationParser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockSpecification
+governanceLockSpecificationParser kindParser =
+  GovernanceLockSpecification <$> kindParser
 
-vestingLockSpecificationParser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata VestingLockSpecification
-vestingLockSpecificationParser kindParser owner =
-  VestingLockSpecification <$>
-    kindParser <*>
-    vestingControllersParser owner
+vestingLockSpecificationParser : Parser Metadata GovernanceLockKind -> Parser Metadata VestingLockSpecification
+vestingLockSpecificationParser kindParser =
+  VestingLockSpecification <$> kindParser
 
 governanceLockRequestCreateLock = "create-lock"
 governanceLockRequestUnlockAndStartVesting = "unlock-and-start-vesting"
@@ -2166,32 +1742,32 @@ governanceLockRequestWithdrawVestedFunds = "withdraw-vested-funds"
 governanceLockRequestSubstituteLock = "substitute-lock"
 governanceLockRequestAcceptToSubstituteLock = "accept-to-substitute-lock"
 
-glr_createGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata GovernanceLockRequest
-glr_createGovernanceLock_parser kindParser owner =
-  GLR_CreateGovernanceLock <$> governanceLockSpecificationParser kindParser owner
+glr_createGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
+glr_createGovernanceLock_parser kindParser =
+  GLR_CreateGovernanceLock <$> governanceLockSpecificationParser kindParser
 
 tsv2Unsupported op = op <> " via the TSv2 interface must be performed through the Allocation_Withdraw choice"
 tsv2UnlockRequestUnsupported = tsv2Unsupported "Governance lock unlocks"
 tsv2WithdrawRequestUnsupported = tsv2Unsupported "Vesting lock withdrawals"
 
-glr_unlockGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata GovernanceLockRequest
-glr_unlockGovernanceLock_parser kindParser owner =
+glr_unlockGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
+glr_unlockGovernanceLock_parser kindParser =
   GLR_UnlockGovernanceLock <$>
-    governanceLockSpecificationParser kindParser owner <*>
+    governanceLockSpecificationParser kindParser <*>
     unlockAmountParser <*>
     vestingStartTimeParser
 
-glr_transferGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata GovernanceLockRequest
-glr_transferGovernanceLock_parser kindParser owner =
+glr_transferGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
+glr_transferGovernanceLock_parser kindParser =
   GLR_TransferGovernanceLock <$>
-    governanceLockSpecificationParser kindParser owner <*>
+    governanceLockSpecificationParser kindParser <*>
     partyFromMetadataParser newLockOwnerMetaKey <*>
     transferAmountParser
 
-glr_withdrawVestingLock_parser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata GovernanceLockRequest
-glr_withdrawVestingLock_parser kindParser owner =
+glr_withdrawVestingLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
+glr_withdrawVestingLock_parser kindParser =
   GLR_WithdrawVestingLock <$>
-    vestingLockSpecificationParser kindParser owner <*>
+    vestingLockSpecificationParser kindParser <*>
     vestedUntilTimeParser <*>
     vestingDurationParser <*>
     vestingEndTimeParser
@@ -2202,36 +1778,22 @@ lockStateParser = optionalMetadataParser lockStatusMetaKey >>= \case
   Some t | Some state <- lockStateFromText t -> pure state
   Some t -> assertFail $ "Invalid value in " <> lockStatusMetaKey <> " metadata field: '" <> t <> "'"
 
-glr_substituteLock_parser : GovernanceLockTag -> Party -> Party -> Parser Metadata GovernanceLockRequest
-glr_substituteLock_parser tag admin proposer = do
+glr_substituteLock_parser : GovernanceLockTag -> Party -> Parser Metadata GovernanceLockRequest
+glr_substituteLock_parser tag admin = do
   targetState <- lockStateParser
   targetOwner <- partyFromMetadataParser targetLockOwnerMetaKey
   GLR_SubstituteLock <$> case targetState of
     LS_Locked -> do
       kind <- governanceLockKindParser' tag
-      newUnlock <- unlockControllersParser proposer
-      newSubstitution <- substitutionControllersParser proposer
-      newVesting <- vestingControllersParser proposer
-      targetUnlock <- controllersParser targetLockUnlockControllersMetaKey targetOwner
-      targetSubstitution <- controllersParser targetLockSubstitutionControllersMetaKey targetOwner
-      targetVesting <- controllersParser targetLockVestingControllersMetaKey targetOwner
       pure
         $ AS_Governance with
           governanceLockKey = GovernanceLockKey with
             dso = admin
             owner = targetOwner
-            specification = GovernanceLockSpecification kind targetUnlock targetSubstitution targetVesting
-          governanceSpecification = GovernanceLockSpecification kind newUnlock newSubstitution newVesting
+            specification = GovernanceLockSpecification kind
+          governanceSpecification = GovernanceLockSpecification kind
     LS_Vesting -> do
-      rejectMetadataKeysParser "for a vesting substitution target"
-            [ unlockControllersMetaKey
-            , substitutionControllersMetaKey
-            , targetLockUnlockControllersMetaKey
-            , targetLockSubstitutionControllersMetaKey
-            ]
       kind <- governanceLockKindParser' tag
-      newVesting <- vestingControllersParser proposer
-      targetVesting <- controllersParser targetLockVestingControllersMetaKey targetOwner
       vestingPeriod <- vestingDurationParser
       endTime <- vestingEndTimeParser
       pure
@@ -2239,47 +1801,47 @@ glr_substituteLock_parser tag admin proposer = do
           vestingLockKey = VestingLockKey with
             dso = admin
             owner = targetOwner
-            specification = VestingLockSpecification kind targetVesting
+            specification = VestingLockSpecification kind
             vestingPeriod
             endTime
-          vestingSpecification = VestingLockSpecification kind newVesting
+          vestingSpecification = VestingLockSpecification kind
 
-governanceLockRequestTSv1Parser : Party -> Party -> Party -> Parser Metadata GovernanceLockRequest
-governanceLockRequestTSv1Parser admin sender receiver = requiredMetadataParser requestMetaKey >>= (\tag -> checkReceiverIsLockManager *> case tag of
-    r | r == governanceLockRequestCreateLock -> do glr_createGovernanceLock_parser governanceLockKindParser sender
-    r | r == governanceLockRequestUnlockAndStartVesting -> glr_unlockGovernanceLock_parser governanceLockKindParser sender
-    r | r == governanceLockRequestTransferLock -> glr_transferGovernanceLock_parser governanceLockKindParser sender
-    r | r == governanceLockRequestWithdrawVestedFunds -> glr_withdrawVestingLock_parser governanceLockKindParser sender
-    r | r == governanceLockRequestSubstituteLock -> governanceLockTagParser >>= \tag -> glr_substituteLock_parser tag admin sender
+governanceLockRequestTSv1Parser : Party -> Party -> Parser Metadata GovernanceLockRequest
+governanceLockRequestTSv1Parser admin receiver = requiredMetadataParser requestMetaKey >>= (\tag -> checkReceiverIsLockManager *> case tag of
+    r | r == governanceLockRequestCreateLock -> do glr_createGovernanceLock_parser governanceLockKindParser
+    r | r == governanceLockRequestUnlockAndStartVesting -> glr_unlockGovernanceLock_parser governanceLockKindParser
+    r | r == governanceLockRequestTransferLock -> glr_transferGovernanceLock_parser governanceLockKindParser
+    r | r == governanceLockRequestWithdrawVestedFunds -> glr_withdrawVestingLock_parser governanceLockKindParser
+    r | r == governanceLockRequestSubstituteLock -> governanceLockTagParser >>= \tag -> glr_substituteLock_parser tag admin
     r -> assertFail $ "Invalid request: '" <> r <> "'")
   where
     checkReceiverIsLockManager : Parser Metadata ()
     checkReceiverIsLockManager =
       unless (receiver == lockManagerParty) $ assertFail ("Invalid receiver: '" <> show receiver <> "'")
 
-parseGovernanceLockRequestTSv1 : CanAssert m => Party -> Party -> Party -> Metadata -> m GovernanceLockRequest
-parseGovernanceLockRequestTSv1 admin sender receiver rawMeta = do
+parseGovernanceLockRequestTSv1 : CanAssert m => Party -> Party -> Metadata -> m GovernanceLockRequest
+parseGovernanceLockRequestTSv1 admin receiver rawMeta = do
   meta <- parseGovernanceLockMetadata rawMeta
-  assertParsed (governanceLockRequestTSv1Parser admin sender receiver) meta
+  assertParsed (governanceLockRequestTSv1Parser admin receiver) meta
 
-governanceLockRequestTSv2Parser : Party -> Text -> Party -> Parser Metadata GovernanceLockRequest
-governanceLockRequestTSv2Parser admin id owner = do
+governanceLockRequestTSv2Parser : Party -> Text -> Parser Metadata GovernanceLockRequest
+governanceLockRequestTSv2Parser admin id = do
   tag <- governanceLockTagParser' id
   let kindParser = governanceLockKindParser' tag
-      createLock = glr_createGovernanceLock_parser kindParser owner
+      createLock = glr_createGovernanceLock_parser kindParser
   optionalMetadataParser requestMetaKey >>= \case
     None -> createLock
     Some r | r == governanceLockRequestCreateLock -> createLock
     Some r | r == governanceLockRequestUnlockAndStartVesting -> assertFail tsv2UnlockRequestUnsupported
-    Some r | r == governanceLockRequestTransferLock -> glr_transferGovernanceLock_parser kindParser owner
+    Some r | r == governanceLockRequestTransferLock -> glr_transferGovernanceLock_parser kindParser
     Some r | r == governanceLockRequestWithdrawVestedFunds -> assertFail tsv2WithdrawRequestUnsupported
-    Some r | r == governanceLockRequestSubstituteLock -> glr_substituteLock_parser tag admin owner
+    Some r | r == governanceLockRequestSubstituteLock -> glr_substituteLock_parser tag admin
     Some r -> assertFail $ "Invalid request: '" <> r <> "'"
 
-parseGovernanceLockRequestTSv2 : CanAssert m => Party -> Text -> Party -> Metadata -> m GovernanceLockRequest
-parseGovernanceLockRequestTSv2 admin id owner rawMeta = do
+parseGovernanceLockRequestTSv2 : CanAssert m => Party -> Text -> Metadata -> m GovernanceLockRequest
+parseGovernanceLockRequestTSv2 admin id rawMeta = do
   meta <- parseGovernanceLockMetadata rawMeta
-  assertParsed (governanceLockRequestTSv2Parser admin id owner) meta
+  assertParsed (governanceLockRequestTSv2Parser admin id) meta
 
 fundingAmountParser : Parser (Optional (TextMap.TextMap Decimal)) Decimal
 fundingAmountParser = Parser \m ->

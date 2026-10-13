@@ -2566,14 +2566,12 @@ class DbSvDsoStoreTest
       val ownerB = userParty(2)
       val providerA = userParty(3)
       val providerB = userParty(4)
-      val controllerA = userParty(5)
       val lockA = governanceLock(
         ownerA,
         amount = BigDecimal(10),
         kind = new splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp(
           providerA.toProtoPrimitive
         ),
-        controller = Some(controllerA),
       )
       val lockB = governanceLock(
         ownerB,
@@ -2606,9 +2604,6 @@ class DbSvDsoStoreTest
         resultNoProviders <- store.listProvisionalGovernanceLocksWithFeaturedAppRightSample(
           Some(new InMemoryUnavailablePartiesStore(Set(providerA, providerB)))
         )(CantonTimestamp.now(), PageLimit.tryCreate(100))(traceContext)
-        resultNoControllerA <- store.listProvisionalGovernanceLocksWithFeaturedAppRightSample(
-          Some(new InMemoryUnavailablePartiesStore(Set(controllerA)))
-        )(CantonTimestamp.now(), PageLimit.tryCreate(100))(traceContext)
       } yield {
         result.map(_.contract.contractId) should contain theSameElementsAs Seq(
           lockA.contractId,
@@ -2622,9 +2617,6 @@ class DbSvDsoStoreTest
           lockB.contractId
         )
         resultNoProviders shouldBe empty
-        resultNoControllerA.map(_.contract.contractId) should contain theSameElementsAs Seq(
-          lockB.contractId
-        )
       }
     }
 

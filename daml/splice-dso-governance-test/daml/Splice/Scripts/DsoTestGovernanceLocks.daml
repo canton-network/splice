@@ -4,7 +4,6 @@
 module Splice.Scripts.DsoTestGovernanceLocks where
 
 import DA.Assert
-import DA.Map qualified as Map
 import DA.Optional (isNone, isSome)
 import DA.Time
 
@@ -87,9 +86,8 @@ setupVestingLock = do
         vestingPeriod = testVestingPeriod
         endTime = unlockAt `addRelTime` testVestingPeriod
         vestingAmount = testVestingAmount
-        specification = governanceToVestingSpecification (ownerControlledSpecification alice.primaryParty testLockKind)
+        specification = VestingLockSpecification with kind = testLockKind
         originalLockCid = Some (coerceContractId governanceLockCid)
-        pendingWithdrawApprovals = Map.empty
 
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
   vestingLock === expectedVestingLock
@@ -325,8 +323,8 @@ setupGovernanceSubstitution = do
       governanceLockKey = GovernanceLockKey with
         dso = app.dso
         owner = alice.primaryParty
-        specification = ownerControlledSpecification alice.primaryParty testLockKind
-      governanceSpecification = ownerControlledSpecification bob.primaryParty testLockKind)
+        specification = GovernanceLockSpecification with kind = testLockKind
+      governanceSpecification = GovernanceLockSpecification with kind = testLockKind)
     testVestingAmount now
   [(substitutionCid, _)] <- query @GovernanceLockSubstitution bob.primaryParty
   pure (SubstitutionEnv with .., substitutionCid)
@@ -352,8 +350,7 @@ setupVestingSubstitution = do
         vestingPeriod = vestingLock.vestingPeriod
         endTime = vestingLock.endTime
       vestingSpecification = VestingLockSpecification with
-        kind = testLockKind
-        vestingControllers = ControllerSpecification [[bob.primaryParty]])
+        kind = testLockKind)
     testVestingAmount now
   [(substitutionCid, _)] <- query @VestingLockSubstitution bob.primaryParty
   pure (SubstitutionEnv with .., substitutionCid)

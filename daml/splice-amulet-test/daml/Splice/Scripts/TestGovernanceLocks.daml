@@ -3,14 +3,12 @@
 
 module Splice.Scripts.TestGovernanceLocks where
 
-import Prelude hiding (forA)
 import DA.Action (unless, when)
 import DA.Assert ((===))
 import DA.Either
 import DA.Optional
 import DA.TextMap qualified as TM
 import DA.Time
-import DA.Traversable (forA)
 
 import Daml.Script
 import Splice.Amulet
@@ -61,7 +59,7 @@ testGovernanceLockHappyPathScenario ops = do
   let unlockTime = now `addRelTime` days 1
 
   -- Check that bob can't unlock for alice, even with the lock disclosed to bob
-  actionMustFail (expectMessageContains "must be a controller") $
+  actionMustFail (expectMessageContains "same elements as one of 'allowed actors'") $
     submitLockChoice alice aliceLock $ governanceUnlockRawChoiceResult registry aliceLock 80000.0 unlockTime [bob]
 
   -- Unlock 80k Amulet such that 1/8th should result in 10k Amulet withdrawable after 1/8th year.
@@ -714,7 +712,7 @@ governanceLockRawChoice registry owner amount kind = errorIfLeft =<< governanceL
 
 governanceLockRawChoice' : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockKind -> Script (Either SubmitError (ContractId GovernanceLock))
 governanceLockRawChoice' registry owner amount kind =
-  governanceLockWithSpecRawChoice' registry owner amount (ownerControlledSpecification owner kind)
+  governanceLockWithSpecRawChoice' registry owner amount (GovernanceLockSpecification kind)
 
 governanceLockWithSpecRawChoice : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockSpecification -> Script (ContractId GovernanceLock)
 governanceLockWithSpecRawChoice registry owner amount specification = errorIfLeft =<< governanceLockWithSpecRawChoice' registry owner amount specification
@@ -775,11 +773,7 @@ governanceUnlockRawChoice'
   -> Script (Either SubmitError (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet)))
 governanceUnlockRawChoice' registry cid unlockAmount unlockAt actors = do
   result <- governanceUnlockRawChoiceResult registry cid unlockAmount unlockAt actors mempty
-  forA result \case
-    GovernanceLock_UnlockResult_Completed vestingLock governanceLock unlockedAmulet ->
-      pure (vestingLock, governanceLock, unlockedAmulet)
-    GovernanceLock_UnlockResult_Pending _ ->
-      fail "Expected a completed unlock, but the unlock is pending"
+  pure $ flip fmap result \r -> (r.vestingLock, r.governanceLock, r.unlockedAmulet)
 
 governanceUnlockRawChoiceResult
   :  AmuletRegistryV2.AmuletRegistry
@@ -812,9 +806,7 @@ vestingWithdrawRawChoice'
   -> Script (Either SubmitError (ContractId V2.Holding, Optional (ContractId VestingLock)))
 vestingWithdrawRawChoice' registry cid requestedAt actors = do
   result <- vestingWithdrawRawChoiceResult registry cid requestedAt actors mempty
-  forA result \case
-    VestingLock_WithdrawResult_Completed vestingLock vested -> pure (upcast vested, vestingLock)
-    VestingLock_WithdrawResult_Pending _ -> fail "Expected a completed withdraw, but the withdraw is pending"
+  pure $ flip fmap result \r -> (upcast r.vested, r.vestingLock)
 
 vestingWithdrawRawChoiceResult
   :  AmuletRegistryV2.AmuletRegistry
@@ -896,12 +888,6 @@ data CompatGovernanceLockOperations = CompatGovernanceLockOperations with
     -> Party
     -> Metadata
     -> Script (Either SubmitError (ContractId VestingLock))
-  pendingGovernanceUnlock
-    :  TestEnv
-    -> ContractId GovernanceLock
-    -> Party
-    -> Metadata
-    -> Script (Either SubmitError (Optional (ContractId GovernanceLock)))
   vestingWithdraw
     :  TestEnv
     -> ContractId VestingLock
@@ -913,26 +899,22 @@ tsv1Operations = CompatGovernanceLockOperations with
     governanceLock
     optGovernanceUnlock
     governanceUnlock
-    pendingGovernanceUnlock
     vestingWithdraw
   where
     governanceLock = governanceLockV1
     optGovernanceUnlock = governanceUnlockV1
     governanceUnlock env cid actor meta = ((<$>) fromSome) <$> optGovernanceUnlock env cid actor meta
-    pendingGovernanceUnlock = governanceUnlockV1
     vestingWithdraw = vestingWithdrawV1
 
 tsv2Operations = CompatGovernanceLockOperations with
     governanceLock
     optGovernanceUnlock
     governanceUnlock
-    pendingGovernanceUnlock
     vestingWithdraw
   where
     governanceLock = governanceLockV2
     optGovernanceUnlock = withdrawAllocationV2
     governanceUnlock env cid actor meta = ((<$>) fromSome) <$> optGovernanceUnlock env cid actor meta
-    pendingGovernanceUnlock = withdrawAllocationV2
     vestingWithdraw = withdrawAllocationV2
 
 iso8601TimeToMeta : Text -> Time -> Metadata -> Metadata
@@ -1030,10 +1012,9 @@ vestingWithdrawV1
   -> Script (Either SubmitError (Optional (ContractId VestingLock)))
 vestingWithdrawV1 = subsequentTransferV1 @VestingLock @VestingLock \lock ->
   tsv1RequestMemo' governanceLockRequestWithdrawVestedFunds lock.specification.kind
-    (TM.toList (encodeVestingLockSpecControllers lock.owner lock.specification).values <>
-      [ (lockVestingDurationMetaKey, encodeRelTime lock.vestingPeriod)
-      , (lockVestingEndTimeMetaKey, encodeTime lock.endTime)
-      ])
+    [ (lockVestingDurationMetaKey, encodeRelTime lock.vestingPeriod)
+    , (lockVestingEndTimeMetaKey, encodeTime lock.endTime)
+    ]
 
 governanceLockV2 : TestEnv -> Party -> Decimal -> GovernanceLockKind -> Metadata -> Script (Either SubmitError (ContractId GovernanceLock))
 governanceLockV2 env owner amount kind meta = do
