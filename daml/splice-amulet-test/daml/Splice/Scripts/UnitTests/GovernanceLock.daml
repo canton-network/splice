@@ -4,14 +4,11 @@
 module Splice.Scripts.UnitTests.GovernanceLock where
 
 import DA.Assert
-import DA.Date
 import DA.Either (isLeft)
-import DA.Foldable
 import DA.Map qualified as Map
 import DA.Optional
 import DA.Set qualified as Set
 import DA.TextMap qualified as TextMap
-import DA.Time
 
 import Daml.Script
 
@@ -22,56 +19,48 @@ import Splice.TokenStandard.Utils
 testOwner : Party
 testOwner = fromSome $ partyFromText "some-owner"
 
-test_searchCurrentTimeBounds : Script ()
-test_searchCurrentTimeBounds = do
-  sequence_ $ testPasses <$> testCases
+testAdmin : Party
+testAdmin = fromSome $ partyFromText "registry-admin"
+
+-- | Fully explicit test cases for the TSv1 encoding, to ensure that the specification lines up.
+test_tsv1Encoding : Script ()
+test_tsv1Encoding = do
+    partyToText lockManagerParty === "cip-127_lock-manager::1220000000000000000000000000000000000000000000000000000000000000abcd"
+    encodeLockCompatMemo (encodeCommonLockMetadata (GLK_SuperValidatorRightsOwner "someSv") LS_Locked emptyMetadata)
+      === "cip-127/memo:lock-kind=sv-lock&lock-status=locked&lock-subject=someSv"
+    encodeLockCompatMemo (encodeCommonLockMetadata (GLK_ProvisionalFeaturedApp provider) LS_Vesting emptyMetadata)
+      === ("cip-127/memo:lock-kind=provisional-fa-lock&lock-status=vesting&lock-subject=" <> partyToText provider)
   where
-    assertDeadlineExceeded' now msg compare = require msg $ now > compare
-    assertWithinDeadline' now msg compare = require msg $ now <= compare
-    testPasses (baseTime, trueTime, granularityDescription, granularity) = do
-      foundTimes <- searchCurrentTimeBounds_impl (pure . (< trueTime)) (assertDeadlineExceeded' trueTime) (assertWithinDeadline' trueTime) baseTime granularity
-      brackets trueTime foundTimes granularityDescription granularity
-    testCases = [ (baseTime, trueTime, granularityDescription, granularity)
-                | baseTime <- times
-                , trueTime <- times, trueTime > minBound, trueTime < maxBound
-                , (granularityDescription, granularity) <- granularities ]
-    baseTime = datetime 2026 Jan 1 21 23 10
-    smallOffsets = microseconds 0 :: [ t | mag <- [microseconds 1, seconds 48, minutes 47, hours 2, days 1], t <- [negate mag, mag]]
-    -- Unfortunately, searchTimeMaximumLowerBound does not work for the _full_ range; issues appear when the exponential offsets go past the bounds.
-    -- It does work quickly for several thousand years.
-    largeOffsets = days 0 :: [ days n | mag <- [365000, 3650, 30, 1], n <- [negate mag, mag]]
-    times = [baseTime `addRelTime` (largeOffset + smallOffset)
-              | largeOffset <- largeOffsets, smallOffset <- smallOffsets ]
-    granularities = [("1 day", days 1), ("6 hours", hours 6), ("1 minute", minutes 1), ("30 seconds", seconds 30)]
-    brackets trueTime (beforeTime, afterTime) granularityDescription granularity = do
-      require "beforeTime must be before trueTime" $ trueTime > beforeTime
-      require "trueTime must be before afterTime" $ trueTime <= afterTime
-      require (granularityDescription <> " after beforeTime must be after trueTime") $ trueTime <= (beforeTime `addRelTime` granularity)
-      require (granularityDescription <> " before afterTime must be before trueTime") $
-        trueTime > (beforeTime `addRelTime` convertMicrosecondsToRelTime (-(convertRelTimeToMicroseconds granularity)))
+    provider = fromSome $ partyFromText "someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab"
 
--- | Fully explicit test case for lockTypeToCompatibilityPartyAndReason, to ensure that the specification lines up.
-test_lockTypeToCompatibilityPartyAndReason : Script ()
-test_lockTypeToCompatibilityPartyAndReason = do
-    -- Fully explicit case, to ensure that the specification lines up.
-    assertEq
-      (lockTypeToCompatibilityPartyAndReason $ GLK_SuperValidatorRightsOwner "someSv")
-      (superValidatorLockCanonicalParty, "lock-subject=someSv")
+-- | Fully explicit test case of a TSv1 memo that a wallet sends to create a lock.
+test_parseGovernanceLockRequestTSv1_memo : Script ()
+test_parseGovernanceLockRequestTSv1_memo = do
+    let memo = "cip-127/memo:request=create-lock&lock-kind=sv-lock&lock-subject=someSv&unlock-controllers=some-owner"
+    GLR_CreateGovernanceLock{governanceSpecification} <- parse $ Metadata $ TextMap.fromList [(reasonMetaKey, memo)]
+    governanceSpecification === ownerControlledSpecification testOwner (GLK_SuperValidatorRightsOwner "someSv")
+  where
+    parse = parseGovernanceLockRequestTSv1 testAdmin testOwner lockManagerParty
 
--- | Round-trip testing to cover the GovernanceLockKind space in the parsers
+-- | Round-trip testing to cover the GovernanceLockKind space in the parsers.
+-- A lock's memo, with a request added, parses back to the lock's specification.
 test_governanceLockSpecificationTSv1_roundTrip : Script ()
 test_governanceLockSpecificationTSv1_roundTrip = do
-    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner $ GLK_SuperValidatorRightsOwner with
-                 svName = "some-other-sv"
-    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner $ GLK_FeaturedApp with
-                 provider = fromSome $ partyFromText "some-other-sv"
-    assertRoundTrip parseThenSerialize $ (featuredAppLockCanonicalParty, "lock-subject=someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab")
+    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner
+      (GLK_SuperValidatorRightsOwner with svName = "some-other-sv")
+    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner
+      (GLK_FeaturedApp with provider = fromSome $ partyFromText "some-other-sv")
+    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner
+      (GLK_ProvisionalFeaturedApp with provider = fromSome $ partyFromText "someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab")
   where
-    specificationFromReceiverAndReason' (party, reason) = parseGovernanceLockSpecificationTSv1 testOwner party $ Metadata $ TextMap.singleton reasonMetaKey reason
     serializeThenParse : GovernanceLockSpecification -> Script GovernanceLockSpecification
-    serializeThenParse = specificationFromReceiverAndReason' . lockTypeToCompatibilityPartyAndReason . (.kind)
-    parseThenSerialize : (Party, Text) -> Script (Party, Text)
-    parseThenSerialize = fmap (lockTypeToCompatibilityPartyAndReason . (.kind)) . specificationFromReceiverAndReason'
+    serializeThenParse specification = do
+      let memo = encodeLockCompatMemo $ encodeCommonLockMetadata specification.kind LS_Locked $
+            Metadata $ TextMap.singleton requestMetaKey "create-lock"
+      request <- parseGovernanceLockRequestTSv1 testAdmin testOwner lockManagerParty $ Metadata $ TextMap.singleton reasonMetaKey memo
+      case request of
+        GLR_CreateGovernanceLock{governanceSpecification} -> pure governanceSpecification
+        _ -> fail "Expected GLR_CreateGovernanceLock"
 
 assertRoundTrip : (CanAssert m, Eq a, Show a) => (a -> m a) -> a -> m ()
 assertRoundTrip f a = f a >>= assertEq a

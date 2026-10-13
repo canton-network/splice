@@ -573,7 +573,6 @@ abstract class StoreTestBase
         ),
         Optional.empty(),
         Instant.now().truncatedTo(ChronoUnit.MICROS),
-        new Metadata(util.Collections.emptyMap()),
         util.Map.of[String, governancelockCodegen.UnlockApproval](),
       ),
     )
@@ -602,7 +601,6 @@ abstract class StoreTestBase
           lockControllers(owner),
         ),
         Optional.empty(),
-        new Metadata(util.Collections.emptyMap()),
         util.Map.of[String, Instant](),
       ),
     )

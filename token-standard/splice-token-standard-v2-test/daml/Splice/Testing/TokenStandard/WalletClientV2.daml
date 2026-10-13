@@ -53,8 +53,11 @@ module Splice.Testing.TokenStandard.WalletClientV2
     listAllocationsV1,
 
     allocateV2,
+    tryAllocateV2,
     acceptAllocationInstructionV2,
+    tryAcceptAllocationInstructionV2,
     withdrawAllocationInstructionV2,
+    tryWithdrawAllocationInstructionV2,
     withdrawAllocationV2,
     tryWithdrawAllocationV2Result,
 
@@ -425,6 +428,13 @@ allocateV2 registries actor settlementInfo allocation = do
   batch <- mkAllocationFactory_AllocateV2 registry actor settlementInfo allocation
   extractAllocationInstructionResultV2 <$>executeSingletonTSABatch registries actor batch
 
+tryAllocateV2
+  : MultiRegistry.MultiRegistry -> Party -> V2.SettlementInfo -> V2.AllocationSpecification -> Script (Either SubmitError V2.AllocationInstructionResult)
+tryAllocateV2 registries actor settlementInfo allocation = do
+  registry <- MultiRegistry.getRegistryApiV2 registries allocation.admin
+  batch <- mkAllocationFactory_AllocateV2 registry actor settlementInfo allocation
+  fmap extractAllocationInstructionResultV2 <$> tryExecuteSingletonTSABatch registries actor batch
+
 extractAllocationInstructionResultV2 : BatchingUtilityV2.TokenStandardActionResult -> V2.AllocationInstructionResult
 extractAllocationInstructionResultV2 (BatchingUtilityV2.TSAR_AllocationInstructionResultV2 result) = result
 extractAllocationInstructionResultV2 result = error $ "Expected a AllocationInstructionResultV2, but got: " <> show result
@@ -457,6 +467,13 @@ acceptAllocationInstructionV2 registries actor (instrCid, instrView) = do
   batch <- mkAllocationInstruction_AcceptV2 registries actor (instrCid, instrView)
   executeSingletonTSABatch registries actor batch
 
+tryAcceptAllocationInstructionV2
+  :  MultiRegistry.MultiRegistry -> Party -> Party -> ContractId V2.AllocationInstruction -> Disclosures'
+  -> Script (Either SubmitError V2.AllocationInstructionResult)
+tryAcceptAllocationInstructionV2 registries actor admin instrCid disclosures = do
+  batch <- mkAllocationInstruction_AcceptV2' registries actor admin instrCid disclosures
+  fmap extractAllocationInstructionResultV2 <$> tryExecuteSingletonTSABatch registries actor batch
+
 -- | Simulate a V2 wallet withdrawing an allocation instruction from a V2 app.
 withdrawAllocationInstructionV2
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView)
@@ -464,6 +481,13 @@ withdrawAllocationInstructionV2
 withdrawAllocationInstructionV2 registries actor (instrCid, instrView) = do
   batch <- mkAllocationInstruction_WithdrawV2 registries actor (instrCid, instrView)
   executeSingletonTSABatch registries actor batch
+
+tryWithdrawAllocationInstructionV2
+  :  MultiRegistry.MultiRegistry -> Party -> Party -> ContractId V2.AllocationInstruction
+  -> Script (Either SubmitError V2.AllocationInstructionResult)
+tryWithdrawAllocationInstructionV2 registries actor admin instrCid = do
+  batch <- mkAllocationInstruction_WithdrawV2' registries actor admin instrCid
+  fmap extractAllocationInstructionResultV2 <$> tryExecuteSingletonTSABatch registries actor batch
 
 -- | Simulate a V2 wallet withdrawing an allocation instruction from a V1 app.
 withdrawAllocationInstructionV1
@@ -767,8 +791,13 @@ mkAllocationInstruction_WithdrawV1 registries (instrCid, instrView) = do
 
 mkAllocationInstruction_WithdrawV2
   : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView) -> Script TSABatch
-mkAllocationInstruction_WithdrawV2 registries actor (instrCid, instrView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
+mkAllocationInstruction_WithdrawV2 registries actor (instrCid, instrView) =
+  mkAllocationInstruction_WithdrawV2' registries actor instrView.allocation.admin instrCid
+
+mkAllocationInstruction_WithdrawV2'
+  : MultiRegistry.MultiRegistry -> Party -> Party -> ContractId V2.AllocationInstruction -> Script TSABatch
+mkAllocationInstruction_WithdrawV2' registries actor admin instrCid = do
+  registry <- MultiRegistry.getRegistryApiV2 registries admin
   context <- V2.getAllocationInstruction_WithdrawContext registry instrCid emptyMetadata
   pure $ TSABatch with
     actions =
@@ -785,8 +814,13 @@ mkAllocationInstruction_WithdrawV2 registries actor (instrCid, instrView) = do
 
 mkAllocationInstruction_AcceptV2
   : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.AllocationInstruction, V2.AllocationInstructionView) -> Script TSABatch
-mkAllocationInstruction_AcceptV2 registries actor (instrCid, instrView) = do
-  registry <- MultiRegistry.getRegistryApiV2 registries instrView.allocation.admin
+mkAllocationInstruction_AcceptV2 registries actor (instrCid, instrView) =
+  mkAllocationInstruction_AcceptV2' registries actor instrView.allocation.admin instrCid mempty
+
+mkAllocationInstruction_AcceptV2'
+  : MultiRegistry.MultiRegistry -> Party -> Party -> ContractId V2.AllocationInstruction -> Disclosures' -> Script TSABatch
+mkAllocationInstruction_AcceptV2' registries actor admin instrCid disclosures = do
+  registry <- MultiRegistry.getRegistryApiV2 registries admin
   context <- V2.getAllocationInstruction_AcceptContext registry instrCid emptyMetadata
   pure $ TSABatch with
     actions =
@@ -798,7 +832,7 @@ mkAllocationInstruction_AcceptV2 registries actor (instrCid, instrView) = do
               context = context.choiceContext
               meta = emptyMetadata
       ]
-    disclosures = context.disclosures
+    disclosures = context.disclosures <> disclosures
     accountsAndInstruments = Set.empty
 
 mkAllocationFactory_AllocateV1

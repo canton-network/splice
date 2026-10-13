@@ -71,8 +71,7 @@ import org.lfdecentralizedtrust.splice.history.{
   DevelopmentFundCoupon_Withdraw,
   DirectTokenStandardTransfer,
   DirectTokenStandardTransferV2,
-  GovernanceLockTransferInstruction_Withdraw,
-  LockedAmuletCreate,
+  GovernanceLockSubstitutionExercise,
   LockedAmuletExpireAmulet,
   LockedAmuletExpireAmuletV2,
   LockedAmuletOwnerExpireLock,
@@ -90,7 +89,6 @@ import org.lfdecentralizedtrust.splice.history.{
   TransferPreapproval_Renew,
   TransferPreapproval_Send,
   TransferPreapproval_SendV2,
-  VestingLockTransferInstruction_Withdraw,
 }
 import org.lfdecentralizedtrust.splice.store.TxLogStore
 import org.lfdecentralizedtrust.splice.util.{
@@ -154,6 +152,12 @@ class UserWalletTxLogParser(
     root match {
       case exercised: ExercisedEvent =>
         exercised match {
+
+          // Governance lock substitutions are not shown in the wallet history. Their accept and
+          // withdraw unlock amulets without any of the choices below, so they must be matched before
+          // the generic token standard choices.
+          case GovernanceLockSubstitutionExercise(_) =>
+            now(State.empty)
 
           // ------------------------------------------------------------------
           // Treasury service
@@ -907,41 +911,24 @@ class UserWalletTxLogParser(
                 )
             }
 
-          // Withdrawing a GovernanceLock or VestingLock unlocks the underlying LockedAmulet then
-          // relocks the remaining locked amount. This emits bare amulet create/archive events, which
-          // which we have to ignore during recursion.
-          case GovernanceLockTransferInstruction_Withdraw(_) |
-              VestingLockTransferInstruction_Withdraw(_) =>
-            val start = exercised.getNodeId.intValue()
-            val end = exercised.getLastDescendantNodeId.intValue()
-            // The unlock is for the full amount, so we calculate the relocked amount and subtract
-            // it (with a call to `modifyBalanceChangeAmount` below) so wallet history shows the
-            // correct unlocked amount
-            val relockedAmount = tree.getEventsById.asScala.foldLeft(BigDecimal(0)) {
-              case (sum, (nodeId, LockedAmuletCreate(contract)))
-                  if nodeId.intValue() >= start &&
-                    nodeId.intValue() <= end &&
-                    contract.payload.amulet.owner == endUserParty.toProtoPrimitive =>
-                sum + contract.payload.amulet.amount.initialAmount
-
-              case (sum, _) => sum
-            }
-            fromTransferInstructionWithdraw(
-              tree,
-              exercised,
-              synchronizerId,
-              true,
-              _ - relockedAmount,
-            )
-
           case TransferInstruction_Withdraw(node) =>
-            fromTransferInstructionWithdraw(
-              tree,
-              exercised,
-              synchronizerId,
-              ignoreUnexpectedAmuletCreateArchive,
-              identity,
-            )
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive,
+              )
+            }.map {
+              _.ensureBalanceChangeTxLogEntry(tree, endUserParty)
+                .setBalanceChangeSubtype(
+                  BalanceChangeTransactionSubtype.TransferInstruction_Withdraw,
+                  EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
+                )
+                .setTransferInstructionCid(
+                  exercised.getContractId
+                )
+            }
 
           case TransferInstruction_Reject(node) =>
             defer {
@@ -1501,32 +1488,6 @@ class UserWalletTxLogParser(
       }
     )
   }
-
-  private def fromTransferInstructionWithdraw(
-      tree: Transaction,
-      exercised: ExercisedEvent,
-      synchronizerId: SynchronizerId,
-      ignoreUnexpectedAmuletCreateArchive: Boolean,
-      modifyChangeAmount: BigDecimal => BigDecimal,
-  )(implicit tc: TraceContext): Eval[State] =
-    Eval
-      .defer {
-        parseTrees(
-          tree,
-          tree.getChildNodeIds(exercised).asScala.toList,
-          synchronizerId,
-          ignoreUnexpectedAmuletCreateArchive,
-        )
-      }
-      .map {
-        _.modifyBalanceChangeAmount(modifyChangeAmount)
-          .ensureBalanceChangeTxLogEntry(tree, endUserParty)
-          .setBalanceChangeSubtype(
-            BalanceChangeTransactionSubtype.TransferInstruction_Withdraw,
-            EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
-          )
-          .setTransferInstructionCid(exercised.getContractId)
-      }
 }
 
 object UserWalletTxLogParser {
@@ -1597,16 +1558,6 @@ object UserWalletTxLogParser {
         entries = entries.map {
           case b: BalanceChangeTxLogEntry =>
             b.copy(subtype = Some(transactionSubtype.toProto), eventId = eventId)
-          case other => other
-        }
-      )
-    }
-
-    def modifyBalanceChangeAmount(amount: BigDecimal => BigDecimal): State = {
-      State(
-        entries = entries.map {
-          case b: BalanceChangeTxLogEntry =>
-            b.copy(amount = amount(b.amount))
           case other => other
         }
       )

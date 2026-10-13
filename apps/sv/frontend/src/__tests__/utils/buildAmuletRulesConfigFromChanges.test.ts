@@ -267,13 +267,6 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         newValue: '3600000000',
       },
       {
-        fieldName: 'governanceLockConfigSearchTimeGranularity',
-        label:
-          'Governance lock config: Fallback timepoint determination granularity (microseconds)',
-        currentValue: '864000000000',
-        newValue: '43200000000',
-      },
-      {
         fieldName: 'governanceLockConfigFeaturedAppLockThreshold',
         label: 'Governance lock config: Featured app lock threshold (Amulet)',
         currentValue: '5000000',
@@ -344,7 +337,6 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       minimumLockAmount: '20000',
       superValidatorLockVestingDuration: { microseconds: '7200000000' },
       featuredAppLockVestingDuration: { microseconds: '3600000000' },
-      searchTimeGranularity: { microseconds: '43200000000' },
       featuredAppLockThreshold: '10000000',
       featuredAppUnderlockGracePeriod: { microseconds: '302400000000' },
     });
@@ -545,13 +537,6 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
         label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
         currentValue: '3600000000',
-        newValue: '',
-      },
-      {
-        fieldName: 'governanceLockConfigSearchTimeGranularity',
-        label:
-          'Governance lock config: Granularity of the fallback timepoint determination (microseconds)',
-        currentValue: '864000000000',
         newValue: '',
       },
       {

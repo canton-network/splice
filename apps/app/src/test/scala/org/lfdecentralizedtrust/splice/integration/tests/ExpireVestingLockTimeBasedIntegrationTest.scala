@@ -42,7 +42,7 @@ class ExpireVestingLockTimeBasedIntegrationTest
     with WalletTestUtil
     with TimeTestUtil
     with TriggerTestUtil
-    with TokenStandardTest {
+    with GovernanceLockTest {
 
   private val batchSize = 2
   private val numLocks = 3
@@ -50,10 +50,8 @@ class ExpireVestingLockTimeBasedIntegrationTest
   // Sim-time budget, all of it inside one 10-minute round tick
   // (`SpliceUtil.defaultInitialTickDuration`):
   //   t0            fixture built
-  //   t0 + 1 min    unlockAt (`TransferInstruction_Withdraw` picks the first
-  //                 `requestedAt + n * granularity` point strictly after the
-  //                 ledger time; granularity = unlockDelay, see the config below)
-  //   t0 + 6 min    endTime  (= unlockAt + vestingDuration, taken from the config below)
+  //   t0 + 1 min    vestingStartTime
+  //   t0 + 6 min    endTime  (= vestingStartTime + vestingDuration, taken from the config below)
   //   t0 + 7 min    after advanceTime (strictly past endTime)
   // Advances spanning many round ticks make the round automation work through a backlog that
   // everything afterwards then races; see canton-network/splice#7223.
@@ -64,6 +62,7 @@ class ExpireVestingLockTimeBasedIntegrationTest
   // Same as `defaultGovernanceLockMinimumLockAmount` in Daml.
   private val governanceLockMinimumLockAmount = BigDecimal(10000.0)
 
+  private val lockKind = SuperValidatorLock
   private val lockAmount = governanceLockMinimumLockAmount
   private val tapAmount = numLocks * lockAmount
 
@@ -100,10 +99,10 @@ class ExpireVestingLockTimeBasedIntegrationTest
     val owner = RichPartyId.local(sv1Party)
     val participant = sv1Backend.participantClientWithAdminToken
 
-    val unlockAt = getLedgerTime.plus(unlockDelay)
-    val endTime = unlockAt.toInstant.plus(vestingDuration)
+    val vestingStartTime = getLedgerTime.plus(unlockDelay)
+    val endTime = vestingStartTime.toInstant.plus(vestingDuration)
 
-    // `createGovernanceLockViaTokenStandard` feeds all of the owner's unlocked
+    // `createGovernanceLockTSv1` feeds all of the owner's unlocked
     // holdings into the `TransferFactory_Transfer` choice. Thus, the tap has to
     // have landed before the first lock is submitted.
     actAndCheck(
@@ -117,18 +116,21 @@ class ExpireVestingLockTimeBasedIntegrationTest
     actAndCheck(
       s"Lock and unlock $numLocks times, vesting until $endTime", {
         (1 to numLocks).map { _ =>
-          val governanceLock = createGovernanceLockViaTokenStandard(
+          val governanceLock = createGovernanceLockTSv1(
             participant,
             owner,
-            superValidatorLockMagicParty,
+            lockKind,
             lockSubject = sv1Name,
             amount = lockAmount,
           )
-          unlockGovernanceLockViaTokenStandard(
+          unlockGovernanceLockTSv1(
             participant,
             owner,
+            lockKind,
+            sv1Name,
             governanceLock,
-            meta = Map(governanceLockUnlockAtMetaKey -> unlockAt.toMicros.toString),
+            unlockAmount = lockAmount,
+            vestingStartTime = vestingStartTime,
           )
         }
       },

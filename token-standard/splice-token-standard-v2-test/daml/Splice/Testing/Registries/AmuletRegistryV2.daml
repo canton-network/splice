@@ -32,6 +32,7 @@ module Splice.Testing.Registries.AmuletRegistryV2
   , convertAllFeaturedAppActivityMarkers
 
   -- ** Utilities
+  , getExtAmuletRulesWithDisclosures
   , getExternalPartyConfigStateContext
   ) where
 
@@ -56,7 +57,6 @@ import Splice.Amulet.TokenApiUtils
 import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
 import Splice.Expiry
-import Splice.GovernanceLock (GovernanceLock, VestingLock)
 import Splice.ExternalPartyConfigState
 import Splice.ExternalPartyAmuletRules
 import Splice.Fees
@@ -90,13 +90,15 @@ instance RegistryApi AmuletRegistry where
   getAllocationFactory = registryApi_getAllocationFactory
   getSettlementFactory = registryApi_getSettlementFactory
   getAllocation_WithdrawContext app cid _meta = do
-    abortCtx <- registryApi_getAllocation_abortTwoStepTransferContext app cid
-    lockCtx <- registryApi_getAllocation_governanceLockContext app cid
-    pure $ abortCtx <> lockCtx
+    abortC <- registryApi_getAllocation_abortTwoStepTransferContext app cid
+    -- Governance and vesting locks need the external party config state to unlock their amulets.
+    externalPartyC <- getExternalPartyConfigStateContext app
+    pure $ abortC <> externalPartyC
   getAllocation_CancelContext app cid _meta = registryApi_getAllocation_abortTwoStepTransferContext app cid
-  -- Amulet does not have AllocationInstructions.
-  getAllocationInstruction_WithdrawContext _ _ _ = error "unimplemented"
-  getAllocationInstruction_AcceptContext _ _ _ = error "unimplemented"
+  -- The only Amulet AllocationInstructions are governance lock substitution proposals,
+  -- which need the external party config state to unlock their amulets.
+  getAllocationInstruction_WithdrawContext app _cid _meta = getExternalPartyConfigStateContext app
+  getAllocationInstruction_AcceptContext app _cid _meta = getExternalPartyConfigStateContext app
   getTransferInstruction_AcceptContext app cid _meta = registryApi_getTransferInstruction_AcceptContext app cid
   getTransferInstruction_RejectContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
   getTransferInstruction_WithdrawContext app cid _meta = registryApi_getTransferInstruction_abortTwoStepTransferContext app cid
@@ -355,16 +357,6 @@ registryApi_getAllocation_abortTwoStepTransferContext registry instrCid = do
           pure $ withExtraDisclosures lockedAmuletD expireLockC
         else
           pure expireLockC
-
--- | Governance and vesting locks need the external party config state to unlock their amulets.
-registryApi_getAllocation_governanceLockContext
-  : AmuletRegistry -> ContractId Allocation -> Script OpenApiChoiceContext
-registryApi_getAllocation_governanceLockContext registry allocCid = do
-  isGovernanceLock <- isSome . lookup (fromInterfaceContractId @GovernanceLock allocCid) <$> query @GovernanceLock registry.dso
-  isVestingLock <- isSome . lookup (fromInterfaceContractId @VestingLock allocCid) <$> query @VestingLock registry.dso
-  if isGovernanceLock || isVestingLock
-    then getExternalPartyConfigStateContext registry
-    else pure emptyOpenApiChoiceContext
 
 -- Internal functions
 ---------------------

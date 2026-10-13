@@ -451,6 +451,14 @@ class HttpTokenStandardTransferInstructionHandler(
                 vestingLock.lockedAmulet,
                 requireLockedAmulet,
               )
+            case substitution: splice.governancelock.GovernanceLockSubstitution =>
+              getGovernanceLockContext(
+                "GovernanceLockSubstitution",
+                substitution.lockedAmulet,
+                true,
+              )
+            case substitution: splice.governancelock.VestingLockSubstitution =>
+              getGovernanceLockContext("VestingLockSubstitution", substitution.lockedAmulet, true)
             case _ => transferInstructionNotFound(transferInstructionId, Some(contract.identifier))
           }
         case None => transferInstructionNotFound(transferInstructionId, None)

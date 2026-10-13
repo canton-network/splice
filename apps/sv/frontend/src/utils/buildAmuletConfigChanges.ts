@@ -502,14 +502,6 @@ function buildGovernanceLockConfigChanges(
       description: 'Vesting duration for featured app governance locks (default: 60 days)',
     },
     {
-      fieldName: 'governanceLockConfigSearchTimeGranularity',
-      label: 'Governance lock config: Fallback timepoint determination granularity (microseconds)',
-      currentValue: before?.searchTimeGranularity?.microseconds || '',
-      newValue: after?.searchTimeGranularity?.microseconds || '',
-      description:
-        'Granularity used by the governance lock fallback timepoint determination (default: 1 day)',
-    },
-    {
       fieldName: 'governanceLockConfigFeaturedAppLockThreshold',
       label: 'Governance lock config: Featured app lock threshold (Amulet)',
       currentValue: before?.featuredAppLockThreshold || '',

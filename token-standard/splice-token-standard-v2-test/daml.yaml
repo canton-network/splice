@@ -52,7 +52,7 @@ data-dependencies:
 
 build-options:
   - --explicit-serializable=yes
-  - --target=2.1
+  - --target=2.3
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
   - -Wno-template-interface-depends-on-daml-script # This is test-only code, not intended to be uploaded to the ledger

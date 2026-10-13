@@ -11,7 +11,7 @@ import DA.Time
 import Daml.Script
 
 import Splice.Amulet (Amulet, FeaturedAppRight(..), LockedAmulet, LockedAmulet_OwnerExpireLockV2(..))
-import Splice.DsoRules (DsoRules, DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock(..), DsoRules_VestingLock_ExpireVestingLock(..))
+import Splice.DsoRules (DsoRules, DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock(..), DsoRules_GovernanceLockSubstitution_WithdrawExpired(..), DsoRules_VestingLock_ExpireVestingLock(..), DsoRules_VestingLockSubstitution_WithdrawExpired(..))
 import Splice.GovernanceLock
 import Splice.Scripts.DsoTestUtils (initDevNet)
 import Splice.Scripts.TestGovernanceLocks
@@ -75,8 +75,8 @@ setupVestingLock = do
   -- `ExternalPartyAmuletRules_LockForGovernance` -> `GovernanceLock_Unlock`
   unlockAt <- (`addRelTime` hours 1) <$> getTime
 
-  -- `unlockAmount = None` unlocks the full amount, so no `GovernanceLock` remains.
-  (Some vestingLockCid, None, None) <- governanceUnlockRawChoice registry governanceLockCid None unlockAt [alice.primaryParty]
+  -- `unlockAmount = testVestingAmount` unlocks the full amount, so no `GovernanceLock` remains.
+  (Some vestingLockCid, None, None) <- governanceUnlockRawChoice registry governanceLockCid testVestingAmount unlockAt [alice.primaryParty]
 
   [(lockedAmuletCid, lockedAmulet)] <- query @LockedAmulet alice.primaryParty
 
@@ -89,7 +89,6 @@ setupVestingLock = do
         vestingAmount = testVestingAmount
         specification = governanceToVestingSpecification (ownerControlledSpecification alice.primaryParty testLockKind)
         originalLockCid = Some (coerceContractId governanceLockCid)
-        meta = mempty
         pendingWithdrawApprovals = Map.empty
 
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
@@ -305,3 +304,124 @@ testDsoRulesConvertProvisionalFeaturedAppLockWrongFeaturedAppRight = do
 
   optLock <- queryContractId env.app.dso env.governanceLockCid
   assertMsg "the GovernanceLock is still active" (isSome optLock)
+
+-- | A DsoRules test environment holding a single substitution proposal made by bob
+-- against a lock owned by alice.
+data SubstitutionEnv = SubstitutionEnv with
+  app : AmuletApp
+  sv1 : Party
+  dsoRulesCid : ContractId DsoRules
+  bob : AmuletUser
+
+setupGovernanceSubstitution : Script (SubstitutionEnv, ContractId GovernanceLockSubstitution)
+setupGovernanceSubstitution = do
+  SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
+  bob <- setupUser app "bob" app.dso
+  _ <- tap app bob testVestingAmount
+
+  now <- getTime
+  _ <- proposeSubstitutionRawChoice registry bob.primaryParty
+    (AS_Governance with
+      governanceLockKey = GovernanceLockKey with
+        dso = app.dso
+        owner = alice.primaryParty
+        specification = ownerControlledSpecification alice.primaryParty testLockKind
+      governanceSpecification = ownerControlledSpecification bob.primaryParty testLockKind)
+    testVestingAmount now
+  [(substitutionCid, _)] <- query @GovernanceLockSubstitution bob.primaryParty
+  pure (SubstitutionEnv with .., substitutionCid)
+
+setupVestingSubstitution : Script (SubstitutionEnv, ContractId VestingLockSubstitution)
+setupVestingSubstitution = do
+  SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
+  bob <- setupUser app "bob" app.dso
+  _ <- tap app bob testVestingAmount
+
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  (Some vestingLockCid, None, None) <-
+    governanceUnlockRawChoice registry governanceLockCid testVestingAmount unlockAt [alice.primaryParty]
+  Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
+
+  now <- getTime
+  _ <- proposeSubstitutionRawChoice registry bob.primaryParty
+    (AS_Vesting with
+      vestingLockKey = VestingLockKey with
+        dso = app.dso
+        owner = alice.primaryParty
+        specification = vestingLock.specification
+        vestingPeriod = vestingLock.vestingPeriod
+        endTime = vestingLock.endTime
+      vestingSpecification = VestingLockSpecification with
+        kind = testLockKind
+        vestingControllers = ControllerSpecification [[bob.primaryParty]])
+    testVestingAmount now
+  [(substitutionCid, _)] <- query @VestingLockSubstitution bob.primaryParty
+  pure (SubstitutionEnv with .., substitutionCid)
+
+-- | Happy path: an SV withdraws an expired governance lock substitution proposal.
+testDsoRulesWithdrawExpiredGovernanceSubstitution : Script ()
+testDsoRulesWithdrawExpiredGovernanceSubstitution = do
+  (env, substitutionCid) <- setupGovernanceSubstitution
+
+  -- `expiresAt` is `requestedAt + tokenStandardMaxTTL`. The test config leaves
+  -- `tokenStandardMaxTTL` unset, so `getTokenStandardMaxTTL` falls back to 90 days.
+  passTime (days 91)
+
+  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockSubstitution_WithdrawExpired with
+      substitutionCid
+      sv = env.sv1
+
+  optSubstitution <- queryContractId env.app.dso substitutionCid
+  assertMsg "the substitution proposal has been withdrawn" (isNone optSubstitution)
+
+  -- The funds the proposer put up are unlocked back to them.
+  [(_, amulet)] <- queryFilter @Amulet env.bob.primaryParty (\a -> a.amount.initialAmount == testVestingAmount)
+  amulet.owner === env.bob.primaryParty
+
+-- | Happy path: an SV withdraws an expired vesting lock substitution proposal.
+testDsoRulesWithdrawExpiredVestingSubstitution : Script ()
+testDsoRulesWithdrawExpiredVestingSubstitution = do
+  (env, substitutionCid) <- setupVestingSubstitution
+  passTime (days 91)
+
+  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_VestingLockSubstitution_WithdrawExpired with
+      substitutionCid
+      sv = env.sv1
+
+  optSubstitution <- queryContractId env.app.dso substitutionCid
+  assertMsg "the substitution proposal has been withdrawn" (isNone optSubstitution)
+
+  -- The funds the proposer put up are unlocked back to them.
+  [(_, amulet)] <- queryFilter @Amulet env.bob.primaryParty (\a -> a.amount.initialAmount == testVestingAmount)
+  amulet.owner === env.bob.primaryParty
+
+-- | Negative: only an actual SV may drive the withdrawal.
+testDsoRulesWithdrawExpiredGovernanceSubstitutionRejectsNonSv : Script ()
+testDsoRulesWithdrawExpiredGovernanceSubstitutionRejectsNonSv = do
+  (env, substitutionCid) <- setupGovernanceSubstitution
+  passTime (days 91)
+
+  submitMustFail (actAs env.bob.primaryParty <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockSubstitution_WithdrawExpired with
+      substitutionCid
+      sv = env.bob.primaryParty
+
+  optSubstitution <- queryContractId env.app.dso substitutionCid
+  assertMsg "the substitution proposal is still live" (isSome optSubstitution)
+
+-- | Negative: the proposal has not expired yet, so there is nothing to collect.
+testDsoRulesWithdrawExpiredVestingSubstitutionNotYetExpired : Script ()
+testDsoRulesWithdrawExpiredVestingSubstitutionNotYetExpired = do
+  (env, substitutionCid) <- setupVestingSubstitution
+
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'VestingLockSubstitution.expiresAt'") do
+    r <- trySubmit (actAs env.sv1 <> readAs env.app.dso) $
+      exerciseCmd env.dsoRulesCid DsoRules_VestingLockSubstitution_WithdrawExpired with
+        substitutionCid
+        sv = env.sv1
+    pure (() <$ r)
+
+  optSubstitution <- queryContractId env.app.dso substitutionCid
+  assertMsg "the substitution proposal is still live" (isSome optSubstitution)

@@ -15,7 +15,7 @@ import org.lfdecentralizedtrust.splice.util.*
 class ProvisionalFeaturedAppLockConversionIntegrationTest
     extends IntegrationTest
     with WalletTestUtil
-    with TokenStandardTest
+    with GovernanceLockTest
     with TriggerTestUtil {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
@@ -70,17 +70,17 @@ class ProvisionalFeaturedAppLockConversionIntegrationTest
 
       actAndCheck(
         "alice locks for charlie and bob locks for alice", {
-          createGovernanceLockViaTokenStandard(
+          createGovernanceLockTSv1(
             aliceValidatorBackend.participantClientWithAdminToken,
             RichPartyId.local(alice),
-            provisionalFeaturedAppLockMagicParty,
+            lockKind = ProvisionalFeaturedAppLock,
             lockSubject = charlie.toProtoPrimitive,
             amount = lockAmount,
           )
-          createGovernanceLockViaTokenStandard(
+          createGovernanceLockTSv1(
             bobValidatorBackend.participantClientWithAdminToken,
             RichPartyId.local(bob),
-            provisionalFeaturedAppLockMagicParty,
+            lockKind = ProvisionalFeaturedAppLock,
             lockSubject = alice.toProtoPrimitive,
             amount = lockAmount,
           )

@@ -32,7 +32,7 @@ data-dependencies:
   - ../examples/splice-token-test-trading-app-v2/.daml/dist/splice-token-test-trading-app-v2-current.dar
 build-options:
   - --explicit-serializable=yes
-  - --target=2.1
+  - --target=2.3
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
 codegen:

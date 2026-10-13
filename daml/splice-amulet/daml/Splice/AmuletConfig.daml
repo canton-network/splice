@@ -229,8 +229,6 @@ data GovernanceLockConfig = GovernanceLockConfig with
       -- ^ Vesting duration for an SV governance lock. Default: 365.25 days.
     featuredAppLockVestingDuration : Optional RelTime
       -- ^ Vesting duration for an FA governance lock. Default: 60 days.
-    searchTimeGranularity : Optional RelTime
-      -- ^ Granularity of the governance lock fallback timepoint determination. Default: 1 day.
     featuredAppLockThreshold : Optional Decimal
       -- ^ Amount of amulet a featured app must keep locked to retain its right. Default: 5M.
     featuredAppUnderlockGracePeriod : Optional RelTime
@@ -249,9 +247,6 @@ governanceLockSuperValidatorLockVestingDuration = getGovernanceLockConfigValue (
 
 governanceLockFeaturedAppLockVestingDuration : Optional GovernanceLockConfig -> RelTime
 governanceLockFeaturedAppLockVestingDuration = getGovernanceLockConfigValue (days 60) (.featuredAppLockVestingDuration)
-
-governanceLockSearchTimeGranularity : Optional GovernanceLockConfig -> RelTime
-governanceLockSearchTimeGranularity = getGovernanceLockConfigValue (days 1) (.searchTimeGranularity)
 
 governanceLockFeaturedAppUnderlockGracePeriod : Optional GovernanceLockConfig -> RelTime
 governanceLockFeaturedAppUnderlockGracePeriod = getGovernanceLockConfigValue (days 7) (.featuredAppUnderlockGracePeriod)
@@ -315,6 +310,5 @@ instance Patchable GovernanceLockConfig where
     minimumLockAmount = patch new.minimumLockAmount base.minimumLockAmount current.minimumLockAmount
     superValidatorLockVestingDuration = patch new.superValidatorLockVestingDuration base.superValidatorLockVestingDuration current.superValidatorLockVestingDuration
     featuredAppLockVestingDuration = patch new.featuredAppLockVestingDuration base.featuredAppLockVestingDuration current.featuredAppLockVestingDuration
-    searchTimeGranularity = patch new.searchTimeGranularity base.searchTimeGranularity current.searchTimeGranularity
     featuredAppLockThreshold = patch new.featuredAppLockThreshold base.featuredAppLockThreshold current.featuredAppLockThreshold
     featuredAppUnderlockGracePeriod = patch new.featuredAppUnderlockGracePeriod base.featuredAppUnderlockGracePeriod current.featuredAppUnderlockGracePeriod

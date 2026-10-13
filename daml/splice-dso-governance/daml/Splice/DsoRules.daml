@@ -378,6 +378,12 @@ data DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult = DsoRules_
 data DsoRules_VestingLock_ExpireVestingLockResult = DsoRules_VestingLock_ExpireVestingLockResult with
   deriving (Serializable)
 
+data DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult = DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult with
+  deriving (Serializable)
+
+data DsoRules_VestingLockSubstitution_WithdrawExpiredResult = DsoRules_VestingLockSubstitution_WithdrawExpiredResult with
+  deriving (Serializable)
+
 data DsoRules_MiningRound_CloseResult = DsoRules_MiningRound_CloseResult with
     closedRound : ContractId ClosedMiningRound
   deriving (Serializable)
@@ -1723,6 +1729,29 @@ template DsoRules with
         _ <- getAndValidateSvParty this (Some sv)
         exercise vestingLockCid VestingLock_DsoExpire
         pure $ DsoRules_VestingLock_ExpireVestingLockResult
+
+    nonconsuming choice DsoRules_GovernanceLockSubstitution_WithdrawExpired : DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult
+      -- ^ Withdraws an expired substitution proposal, so that SVs can garbage-collect
+      -- proposals that nobody accepted or withdrew, returning the funds to their owner.
+      with
+        substitutionCid : ContractId GovernanceLockSubstitution
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        _ <- exercise substitutionCid GovernanceLockSubstitution_DsoExpire
+        pure $ DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult
+
+    nonconsuming choice DsoRules_VestingLockSubstitution_WithdrawExpired : DsoRules_VestingLockSubstitution_WithdrawExpiredResult
+      -- ^ Variant of `DsoRules_GovernanceLockSubstitution_WithdrawExpired` for vesting locks.
+      with
+        substitutionCid : ContractId VestingLockSubstitution
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        _ <- exercise substitutionCid VestingLockSubstitution_DsoExpire
+        pure $ DsoRules_VestingLockSubstitution_WithdrawExpiredResult
 
     nonconsuming choice DsoRules_MiningRound_Close : DsoRules_MiningRound_CloseResult
       with

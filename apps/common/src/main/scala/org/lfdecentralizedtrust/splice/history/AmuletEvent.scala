@@ -231,22 +231,6 @@ final object TransferInstruction_Withdraw
         splice.api.token.transferinstructionv1.TransferInstruction.CHOICE_TransferInstruction_Withdraw,
     )
 
-object GovernanceLockTransferInstruction_Withdraw
-    extends InterfaceExerciseNodeCompanion.Mk(
-      interface = splice.api.token.transferinstructionv1.TransferInstruction.INTERFACE,
-      template = splice.governancelock.GovernanceLock.COMPANION,
-      choice =
-        splice.api.token.transferinstructionv1.TransferInstruction.CHOICE_TransferInstruction_Withdraw,
-    )
-
-object VestingLockTransferInstruction_Withdraw
-    extends InterfaceExerciseNodeCompanion.Mk(
-      interface = splice.api.token.transferinstructionv1.TransferInstruction.INTERFACE,
-      template = splice.governancelock.VestingLock.COMPANION,
-      choice =
-        splice.api.token.transferinstructionv1.TransferInstruction.CHOICE_TransferInstruction_Withdraw,
-    )
-
 case class Tap(
     node: ExerciseNode[splice.amuletrules.AmuletRules_DevNet_Tap, amuletCodegen.Amulet.ContractId]
 )
@@ -382,6 +366,20 @@ object AmuletArchive {
     ) {
       Some(event)
     } else None
+}
+
+object GovernanceLockSubstitutionExercise {
+  private val substitutionTemplates = Set(
+    QualifiedName(
+      splice.governancelock.GovernanceLockSubstitution.COMPANION.getTemplateIdWithPackageId
+    ),
+    QualifiedName(
+      splice.governancelock.VestingLockSubstitution.COMPANION.getTemplateIdWithPackageId
+    ),
+  )
+
+  def unapply(event: ExercisedEvent): Option[ExercisedEvent] =
+    if (substitutionTemplates.contains(QualifiedName(event.getTemplateId))) Some(event) else None
 }
 
 object AmuletCreate {
