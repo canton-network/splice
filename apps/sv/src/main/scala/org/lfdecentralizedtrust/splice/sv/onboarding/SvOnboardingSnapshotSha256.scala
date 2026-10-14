@@ -13,6 +13,8 @@ import scala.util.Try
 
 object SvOnboardingSnapshotSha256 {
 
+  private val Sha256Member = "sha-256=:([^:]*):".r
+
   def base64OfFile(file: Path): String = {
     val digest = MessageDigest.getInstance("SHA-256")
     val in = new DigestInputStream(Files.newInputStream(file), digest)
@@ -27,4 +29,12 @@ object SvOnboardingSnapshotSha256 {
       .map(Base64.getEncoder.encodeToString)
 
   def reprDigest(sha256Base64: String): String = s"sha-256=:$sha256Base64:"
+
+  def base64FromReprDigest(reprDigest: String): Option[String] =
+    reprDigest
+      .split(',')
+      .map(_.trim)
+      .collect { case Sha256Member(encoded) => encoded }
+      .lastOption
+      .flatMap(canonicalBase64)
 }

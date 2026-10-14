@@ -10,9 +10,9 @@ import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
 import io.grpc.Status
-import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.http.scaladsl.model.{ContentRange, ResponseEntity, StatusCodes}
 import org.apache.pekko.stream.Materializer
-import org.apache.pekko.stream.scaladsl.FileIO
+import org.apache.pekko.stream.scaladsl.{FileIO, Sink}
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
@@ -21,8 +21,12 @@ import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient.{
   OnboardSvDownloadResponse
 }
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingSnapshotsConfig
-import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
+import org.lfdecentralizedtrust.splice.sv.onboarding.{
+  SvOnboardingSnapshotId,
+  SvOnboardingSnapshotSha256,
+}
 
+import java.nio.file.StandardOpenOption.{APPEND, CREATE, TRUNCATE_EXISTING, WRITE}
 import java.nio.file.{Files, NoSuchFileException, Path, StandardCopyOption}
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future, blocking}
@@ -52,67 +56,196 @@ final class SvOnboardingSnapshotDownload private (
     ()
   }
 
-  private def completedDownload(id: SvOnboardingSnapshotId): Boolean =
+  private def readMetadata(id: SvOnboardingSnapshotId): Option[DownloadMetadata] =
     Try {
       val metadata =
         decode[DownloadMetadata](Files.readString(metadataFile)).fold(throw _, identity)
-      metadata.id == id.value && Files.isRegularFile(file) && Files.size(file) == metadata.size &&
-      Instant.parse(metadata.createdAt).plus(config.retention.asJava).isAfter(Instant.now())
-    }.getOrElse(false)
+      Option.when(
+        metadata.id == id.value &&
+          metadata.sha256Base64.forall(stored =>
+            SvOnboardingSnapshotSha256.canonicalBase64(stored).contains(stored)
+          ) &&
+          Instant.parse(metadata.createdAt).plus(config.retention.asJava).isAfter(Instant.now())
+      )(metadata)
+    }.toOption.flatten
 
   def download(
       id: SvOnboardingSnapshotId,
-      downloadFrom: SvOnboardingSnapshotId => Future[OnboardSvDownloadResponse],
+      downloadFrom: (SvOnboardingSnapshotId, Long) => Future[OnboardSvDownloadResponse],
   )(implicit ec: ExecutionContext, mat: Materializer): Future[Path] =
-    Future(blocking(completedDownload(id))).flatMap {
-      case true => Future.successful(file)
-      case false =>
-        val createdAt = Instant.now().toString
-        Future(blocking {
-          Files.createDirectories(directory)
-          Files.deleteIfExists(metadataFile)
-        }).flatMap { _ =>
-          downloadFrom(id)
-            .recoverWith {
-              case error @ HttpCommandException(_, StatusCodes.NotFound | StatusCodes.Gone, _) =>
-                Future.failed(PrepareAgain(error))
-            }
-            .flatMap {
-              case OnboardSvDownloadResponse.Accepted(pending) =>
-                Future.failed(
-                  Status.UNAVAILABLE
-                    .withDescription(
-                      s"Onboarding snapshot $id is ${pending.status}, queued at ${pending.queuedAt}" +
-                        pending.startedAt.fold("")(startedAt => s", started at $startedAt")
-                    )
-                    .asRuntimeException()
-                )
-              case OnboardSvDownloadResponse.OK(entity) =>
-                entity.dataBytes
-                  .runWith(FileIO.toPath(file))
-                  .flatMap { result =>
-                    Future(blocking {
-                      if (entity.contentLengthOption.exists(_ != result.count))
-                        throw new java.io.IOException("Incomplete onboarding snapshot download")
-                      writeMetadata(DownloadMetadata(id.value, createdAt, result.count))
-                      file
-                    })
-                  }
-                  .recoverWith { case NonFatal(e) =>
-                    Future.failed(
-                      Status.UNAVAILABLE
-                        .withDescription(s"Download of onboarding snapshot was interrupted: $e")
-                        .withCause(e)
-                        .asRuntimeException()
-                    )
-                  }
-            }
+    Future(blocking {
+      val previous = readMetadata(id)
+      if (
+        previous.exists(metadata =>
+          metadata.size.exists(size => Files.isRegularFile(file) && Files.size(file) == size) &&
+            metadata.sha256Base64.contains(fileSha256Base64())
+        )
+      ) None
+      else
+        previous.filter(metadata =>
+          metadata.size.isEmpty && metadata.sha256Base64.isDefined && Files.isRegularFile(file)
+        ) match {
+          case Some(metadata) => Some(metadata -> Files.size(file))
+          case None =>
+            Files.createDirectories(directory)
+            Files.deleteIfExists(file).discard
+            val metadata = DownloadMetadata(id.value, Instant.now().toString, None, None, None)
+            writeMetadata(metadata)
+            Some(metadata -> 0L)
         }
+    }).flatMap {
+      case None => Future.successful(file)
+      case Some((previous, offset)) =>
+        downloadFrom(id, offset)
+          .recoverWith {
+            case error @ HttpCommandException(_, StatusCodes.NotFound | StatusCodes.Gone, _) =>
+              Future.failed(PrepareAgain(error))
+          }
+          .flatMap(receive(id, previous, offset, _))
+          .map(_ => file)
     }
+
+  private def receive(
+      id: SvOnboardingSnapshotId,
+      previous: DownloadMetadata,
+      offset: Long,
+      response: OnboardSvDownloadResponse,
+  )(implicit ec: ExecutionContext, mat: Materializer): Future[Unit] =
+    response match {
+      case OnboardSvDownloadResponse.Accepted(pending) =>
+        Future.failed(
+          Status.UNAVAILABLE
+            .withDescription(
+              s"Onboarding snapshot $id is ${pending.status}, queued at ${pending.queuedAt}" +
+                pending.startedAt.fold("")(startedAt => s", started at $startedAt")
+            )
+            .asRuntimeException()
+        )
+      case OnboardSvDownloadResponse.OK(entity, reprDigest) =>
+        withSha256(id, entity, reprDigest) { sha256Base64 =>
+          val metadata =
+            previous.copy(
+              sha256Base64 = Some(sha256Base64),
+              length = entity.contentLengthOption,
+              size = None,
+            )
+          writeAndVerify(entity, metadata, append = false)
+        }
+      case OnboardSvDownloadResponse.PartialContent(entity, contentRange, reprDigest) =>
+        withSha256(id, entity, reprDigest) { sha256Base64 =>
+          contentRange match {
+            case Some(ContentRange.Default(first, _, length))
+                if first == offset && previous.sha256Base64.contains(sha256Base64) &&
+                  previous.length.forall(expected => length.contains(expected)) =>
+              writeAndVerify(entity, previous.copy(length = length), append = true)
+            case _ =>
+              cancel(entity)
+              restart(
+                s"partial response with Content-Range ${contentRange.fold("missing")(_.value)} and digest $sha256Base64 does not continue the download at offset $offset"
+              )
+          }
+        }
+      case OnboardSvDownloadResponse.RangeNotSatisfiable =>
+        if (previous.sha256Base64.isDefined && previous.length.contains(offset)) verify(previous)
+        else restart(s"range from offset $offset is not satisfiable")
+    }
+
+  private def withSha256(
+      id: SvOnboardingSnapshotId,
+      entity: ResponseEntity,
+      reprDigest: Option[String],
+  )(
+      next: String => Future[Unit]
+  )(implicit mat: Materializer): Future[Unit] =
+    reprDigest.flatMap(SvOnboardingSnapshotSha256.base64FromReprDigest) match {
+      case Some(sha256Base64) => next(sha256Base64)
+      case None =>
+        cancel(entity)
+        val reason =
+          if (reprDigest.isEmpty) "is missing the required Repr-Digest header"
+          else "has an invalid SHA-256 Repr-Digest header"
+        Future.failed(
+          new RetryProvider.QuietNonRetryableException(
+            s"Sponsor response for onboarding snapshot $id $reason. Check the sponsor or proxy configuration."
+          )
+        )
+    }
+
+  private def cancel(entity: ResponseEntity)(implicit mat: Materializer): Unit =
+    entity.dataBytes.runWith(Sink.cancelled).discard
+
+  private def writeAndVerify(entity: ResponseEntity, metadata: DownloadMetadata, append: Boolean)(
+      implicit
+      ec: ExecutionContext,
+      mat: Materializer,
+  ): Future[Unit] =
+    Future(blocking(writeMetadata(metadata)))
+      .recoverWith { case NonFatal(e) =>
+        cancel(entity)
+        Future.failed(e)
+      }
+      .flatMap(_ => write(entity, append))
+      .flatMap(_ => verify(metadata))
+
+  private def write(entity: ResponseEntity, append: Boolean)(implicit
+      ec: ExecutionContext,
+      mat: Materializer,
+  ): Future[Unit] =
+    entity.dataBytes
+      .runWith(
+        FileIO.toPath(
+          file,
+          if (append) Set(WRITE, APPEND, CREATE) else Set(WRITE, TRUNCATE_EXISTING, CREATE),
+        )
+      )
+      .map(_ => ())
+      .recoverWith { case NonFatal(e) =>
+        Future.failed(
+          Status.UNAVAILABLE
+            .withDescription(s"Download of onboarding snapshot was interrupted: $e")
+            .withCause(e)
+            .asRuntimeException()
+        )
+      }
+
+  private def verify(metadata: DownloadMetadata)(implicit ec: ExecutionContext): Future[Unit] =
+    Future {
+      blocking {
+        val size = Files.size(file)
+        metadata.length.filter(_ != size).foreach { expected =>
+          throw Status.UNAVAILABLE
+            .withDescription(s"Downloaded $size bytes of onboarding snapshot, expected $expected")
+            .asRuntimeException()
+        }
+        val actual = fileSha256Base64()
+        if (!metadata.sha256Base64.contains(actual)) {
+          Files.delete(file)
+          throw Status.UNAVAILABLE
+            .withDescription(
+              s"SHA-256 $actual of onboarding snapshot does not match Repr-Digest ${metadata.sha256Base64
+                  .getOrElse("<missing>")}"
+            )
+            .asRuntimeException()
+        }
+        writeMetadata(metadata.copy(size = Some(size)))
+      }
+    }
+
+  private def fileSha256Base64(): String =
+    SvOnboardingSnapshotSha256.base64OfFile(file)
+
+  private def restart(reason: String)(implicit ec: ExecutionContext): Future[Unit] =
+    Future(blocking(Files.deleteIfExists(file).discard)).flatMap(_ =>
+      Future.failed(
+        Status.UNAVAILABLE
+          .withDescription(s"Restarting the download of the onboarding snapshot: $reason")
+          .asRuntimeException()
+      )
+    )
 
   def downloadWithRetries(
       id: SvOnboardingSnapshotId,
-      downloadFrom: SvOnboardingSnapshotId => Future[OnboardSvDownloadResponse],
+      downloadFrom: (SvOnboardingSnapshotId, Long) => Future[OnboardSvDownloadResponse],
       retryProvider: RetryProvider,
       retryFor: RetryFor,
       logger: TracedLogger,
@@ -141,7 +274,13 @@ final class SvOnboardingSnapshotDownload private (
 
 object SvOnboardingSnapshotDownload {
 
-  private final case class DownloadMetadata(id: String, createdAt: String, size: Long)
+  private final case class DownloadMetadata(
+      id: String,
+      createdAt: String,
+      sha256Base64: Option[String],
+      length: Option[Long],
+      size: Option[Long],
+  )
   private implicit val encoder: Encoder[DownloadMetadata] = deriveEncoder
   private implicit val decoder: Decoder[DownloadMetadata] = deriveDecoder
 
