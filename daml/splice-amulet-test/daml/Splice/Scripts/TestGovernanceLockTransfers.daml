@@ -4,11 +4,19 @@
 -- | Tests for the transfer of governance locks and vesting locks to a new owner.
 module Splice.Scripts.TestGovernanceLockTransfers where
 
+import DA.Action (unless)
 import DA.Assert ((===))
 import DA.Foldable (forA_)
+import DA.Map qualified as Map
+import DA.Text qualified as Text
 import DA.Time
 
 import Daml.Script
+import Splice.Amulet (LockedAmulet)
+import Splice.Amulet.TokenApiUtils (amuletInstrumentId)
+import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.MetadataV1 (emptyMetadata)
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.ExternalPartyAmuletRules
 import Splice.GovernanceLock
 import Splice.Scripts.TestGovernanceLocks
@@ -16,6 +24,7 @@ import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
+import Splice.TokenStandard.Utils (toAnyContractId)
 
 -- | Proposes, as `proposer`, a transfer of governance locks through
 -- `ExternalPartyAmuletRules_ProposeGovernanceLockTransfer`.
@@ -243,3 +252,373 @@ testLockTransferRaw_keyWithoutLock = do
   -- Nothing was locked or moved.
   checkBalances env alice (1000.0, 0.0)
   checkBalances env bob (0.0, 0.0)
+
+-- Accept, withdraw and reject of lock transfer proposals
+---------------------------------------------------------
+
+expectFailureContaining : Text -> Either SubmitError a -> Script ()
+expectFailureContaining _ (Right _) =
+  fail "Expected a failure, but the submission succeeded"
+expectFailureContaining needle (Left err) =
+  unless (needle `Text.isInfixOf` show err) $
+    fail $ "Expected a failure containing '" <> needle <> "', got: " <> show err
+
+-- | Discloses a source lock and its locked amulet, which the receiver of a transfer cannot see.
+sourceDisclosures
+  :  (Template t, HasEnsure t, HasField "lockedAmulet" t (ContractId LockedAmulet))
+  => Party -> ContractId t -> Script Disclosures'
+sourceDisclosures owner lockCid = do
+  Some lock <- queryContractId owner lockCid
+  lockDisclosure <- queryDisclosure' owner lockCid
+  amuletDisclosure <- queryDisclosure' owner lock.lockedAmulet
+  pure $ lockDisclosure <> amuletDisclosure
+
+acceptGovernanceLockTransferRaw
+  :  TestEnv -> Disclosures' -> ContractId GovernanceLockTransfer -> [Party]
+  -> Script (Either SubmitError GovernanceLockTransfer_AcceptResult)
+acceptGovernanceLockTransferRaw env disclosures cid actors =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actors <> discloseMany' disclosures) \context ->
+    exerciseCmd cid GovernanceLockTransfer_Accept with
+      actors
+      extraArgs = emptyExtraArgs with context
+
+acceptVestingLockTransferRaw
+  :  TestEnv -> Disclosures' -> ContractId VestingLockTransfer -> [Party]
+  -> Script (Either SubmitError VestingLockTransfer_AcceptResult)
+acceptVestingLockTransferRaw env disclosures cid actors =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actors <> discloseMany' disclosures) \context ->
+    exerciseCmd cid VestingLockTransfer_Accept with
+      actors
+      extraArgs = emptyExtraArgs with context
+
+withdrawGovernanceLockTransferRaw
+  :  TestEnv -> ContractId GovernanceLockTransfer -> [Party]
+  -> Script (Either SubmitError GovernanceLockTransfer_WithdrawResult)
+withdrawGovernanceLockTransferRaw env cid actors =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actors) \_ ->
+    exerciseCmd cid GovernanceLockTransfer_Withdraw with actors
+
+rejectGovernanceLockTransferRaw
+  :  TestEnv -> ContractId GovernanceLockTransfer -> [Party]
+  -> Script (Either SubmitError GovernanceLockTransfer_RejectResult)
+rejectGovernanceLockTransferRaw env cid actors =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actors) \_ ->
+    exerciseCmd cid GovernanceLockTransfer_Reject with actors
+
+withdrawVestingLockTransferRaw
+  :  TestEnv -> ContractId VestingLockTransfer -> [Party]
+  -> Script (Either SubmitError VestingLockTransfer_WithdrawResult)
+withdrawVestingLockTransferRaw env cid actors =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actors) \_ ->
+    exerciseCmd cid VestingLockTransfer_Withdraw with actors
+
+rejectVestingLockTransferRaw
+  :  TestEnv -> ContractId VestingLockTransfer -> [Party]
+  -> Script (Either SubmitError VestingLockTransfer_RejectResult)
+rejectVestingLockTransferRaw env cid actors =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actors) \_ ->
+    exerciseCmd cid VestingLockTransfer_Reject with actors
+
+-- | The TSv1 interface of a lock transfer proposal.
+asTransferInstruction : ContractId t -> ContractId V1.TransferInstruction
+asTransferInstruction = coerceContractId
+
+acceptTransferV1 : TestEnv -> Disclosures' -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
+acceptTransferV1 env disclosures cid actor =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor <> discloseMany' disclosures) \context ->
+    exerciseCmd cid V1.TransferInstruction_Accept with extraArgs = emptyExtraArgs with context
+
+withdrawTransferV1 : TestEnv -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
+withdrawTransferV1 env cid actor =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor) \context ->
+    exerciseCmd cid V1.TransferInstruction_Withdraw with extraArgs = emptyExtraArgs with context
+
+rejectTransferV1 : TestEnv -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
+rejectTransferV1 env cid actor =
+  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor) \context ->
+    exerciseCmd cid V1.TransferInstruction_Reject with extraArgs = emptyExtraArgs with context
+
+-- | Returns the holdings of the receiver of a completed transfer instruction.
+expectTransferCompleted : V1.TransferInstructionResult -> Script [ContractId V1.Holding]
+expectTransferCompleted result = case result.output of
+  V1.TransferInstructionResult_Completed receiverHoldingCids -> pure receiverHoldingCids
+  output -> fail $ "Expected TransferInstructionResult_Completed, got " <> show output
+
+-- | Returns the change holdings of a failed transfer instruction.
+expectTransferFailed : V1.TransferInstructionResult -> Script [ContractId V1.Holding]
+expectTransferFailed result = case result.output of
+  V1.TransferInstructionResult_Failed -> pure result.senderChangeCids
+  output -> fail $ "Expected TransferInstructionResult_Failed, got " <> show output
+
+-- | alice proposes to transfer `amount` of her 100000.0 SV lock to bob.
+setupGovernanceLockTransfer
+  :  Decimal
+  -> Script (TestEnv, ContractId GovernanceLock, GovernanceLock, ContractId GovernanceLockTransfer)
+setupGovernanceLockTransfer amount = do
+  env@TestEnv{..} <- setupTest
+  (lockCid, lock) <- svLock env alice 100000.0
+  transfer <- validLockTransfer (key lock) bob amount
+  transferCid <- expectSuccess $ createGovernanceLockTransferRaw env alice transfer
+  pure (env, lockCid, lock, transferCid)
+
+-- | alice proposes to transfer `amount` of her 100000.0 SV vesting lock to bob.
+setupVestingLockTransfer
+  :  Decimal
+  -> Script (TestEnv, ContractId VestingLock, VestingLock, ContractId VestingLockTransfer)
+setupVestingLockTransfer amount = do
+  env@TestEnv{..} <- setupTest
+  (lockCid, lock) <- svVestingLock env alice 100000.0
+  transfer <- validLockTransfer (key lock) bob amount
+  transferCid <- expectSuccess $ createVestingLockTransferRaw env alice transfer
+  pure (env, lockCid, lock, transferCid)
+
+testLockTransferRaw_acceptPartialGovernanceLock : Script ()
+testLockTransferRaw_acceptPartialGovernanceLock = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+  disclosures <- sourceDisclosures alice lockCid
+
+  result <- expectSuccess $ acceptGovernanceLockTransferRaw env disclosures transferCid [bob]
+
+  -- bob owns a new lock with the transferred funds and the same specification
+  Some newLock <- queryContractId bob result.lockCid
+  newLock.owner === bob
+  newLock.amount === 40000.0
+  newLock.specification === lock.specification
+  newLock.lockedAmulet === result.lockedAmulet
+  newLock.originalLockCid === Some (toAnyContractId transferCid)
+  checkLockedHolding bob result.lockCid 40000.0
+
+  -- alice keeps the rest
+  Some remainingLockCid <- pure result.remainingLockCid
+  Some remainder <- queryContractId alice remainingLockCid
+  remainder.owner === alice
+  remainder.amount === 60000.0
+  remainder.specification === lock.specification
+  checkLockedHolding alice remainingLockCid 60000.0
+
+  -- the funds moved from alice to bob, and they stay locked
+  checkBalances env alice (1000.0, 60000.0)
+  checkBalances env bob (0.0, 40000.0)
+  archivedLock <- queryContractId alice lockCid
+  archivedLock === None
+  archivedTransfer <- queryContractId alice transferCid
+  archivedTransfer === None
+
+testLockTransferRaw_acceptFullGovernanceLock : Script ()
+testLockTransferRaw_acceptFullGovernanceLock = do
+  (env@TestEnv{..}, lockCid, _, transferCid) <- setupGovernanceLockTransfer 100000.0
+  disclosures <- sourceDisclosures alice lockCid
+
+  result <- expectSuccess $ acceptGovernanceLockTransferRaw env disclosures transferCid [bob]
+
+  result.remainingLockCid === None
+  checkLockedHolding bob result.lockCid 100000.0
+  aliceLocks <- filter (\(_, l) -> l.owner == alice) <$> query @GovernanceLock alice
+  aliceLocks === []
+  checkBalances env alice (1000.0, 0.0)
+  checkBalances env bob (0.0, 100000.0)
+
+testLockTransferRaw_acceptPartialVestingLock : Script ()
+testLockTransferRaw_acceptPartialVestingLock = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupVestingLockTransfer 30000.0
+  disclosures <- sourceDisclosures alice lockCid
+
+  result <- expectSuccess $ acceptVestingLockTransferRaw env disclosures transferCid [bob]
+
+  -- bob's new lock keeps the vesting schedule of the source lock
+  Some newLock <- queryContractId bob result.lockCid
+  newLock.owner === bob
+  newLock.vestingAmount === 30000.0
+  newLock.vestingPeriod === lock.vestingPeriod
+  newLock.endTime === lock.endTime
+  newLock.specification === lock.specification
+  newLock.lockedAmulet === result.lockedAmulet
+  checkLockedHolding bob result.lockCid 30000.0
+  -- the funds stay locked until the end of the vesting period
+  Some lockedAmulet <- queryContractId bob result.lockedAmulet
+  lockedAmulet.lock.expiresAt === lock.endTime
+
+  Some remainingLockCid <- pure result.remainingLockCid
+  Some remainder <- queryContractId alice remainingLockCid
+  remainder.vestingAmount === 70000.0
+  remainder.endTime === lock.endTime
+  checkLockedHolding alice remainingLockCid 70000.0
+
+  checkBalances env alice (1000.0, 70000.0)
+  checkBalances env bob (0.0, 30000.0)
+
+testLockTransferRaw_withdraw : Script ()
+testLockTransferRaw_withdraw = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+
+  -- only the owner of the source lock can withdraw
+  expectFailureContaining "" =<< withdrawGovernanceLockTransferRaw env transferCid [bob]
+  GovernanceLockTransfer_WithdrawResult <- expectSuccess $ withdrawGovernanceLockTransferRaw env transferCid [alice]
+
+  archivedTransfer <- queryContractId alice transferCid
+  archivedTransfer === None
+  checkLockUntouched alice lockCid lock
+  checkBalances env alice (1000.0, 100000.0)
+  checkBalances env bob (0.0, 0.0)
+
+  -- the same for vesting locks
+  (vestingLockCid, vestingLock) <- svVestingLock env alice 50000.0
+  vestingTransfer <- validLockTransfer (key vestingLock) bob 20000.0
+  vestingTransferCid <- expectSuccess $ createVestingLockTransferRaw env alice vestingTransfer
+  expectFailureContaining "" =<< withdrawVestingLockTransferRaw env vestingTransferCid [bob]
+  VestingLockTransfer_WithdrawResult <- expectSuccess $ withdrawVestingLockTransferRaw env vestingTransferCid [alice]
+  checkLockUntouched alice vestingLockCid vestingLock
+
+testLockTransferRaw_reject : Script ()
+testLockTransferRaw_reject = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+
+  -- only the receiver can reject
+  expectFailureContaining "" =<< rejectGovernanceLockTransferRaw env transferCid [alice]
+  GovernanceLockTransfer_RejectResult <- expectSuccess $ rejectGovernanceLockTransferRaw env transferCid [bob]
+
+  archivedTransfer <- queryContractId alice transferCid
+  archivedTransfer === None
+  checkLockUntouched alice lockCid lock
+  checkBalances env alice (1000.0, 100000.0)
+  checkBalances env bob (0.0, 0.0)
+
+  -- the same for vesting locks
+  (vestingLockCid, vestingLock) <- svVestingLock env alice 50000.0
+  vestingTransfer <- validLockTransfer (key vestingLock) bob 20000.0
+  vestingTransferCid <- expectSuccess $ createVestingLockTransferRaw env alice vestingTransfer
+  expectFailureContaining "" =<< rejectVestingLockTransferRaw env vestingTransferCid [alice]
+  VestingLockTransfer_RejectResult <- expectSuccess $ rejectVestingLockTransferRaw env vestingTransferCid [bob]
+  checkLockUntouched alice vestingLockCid vestingLock
+
+testLockTransferRaw_acceptFailures : Script ()
+testLockTransferRaw_acceptFailures = do
+  env@TestEnv{..} <- setupTest
+  (lockCid, lock) <- svLock env alice 100000.0
+  disclosures <- sourceDisclosures alice lockCid
+
+  -- only the receiver can accept
+  transfer <- validLockTransfer (key lock) bob 40000.0
+  transferCid <- expectSuccess $ createGovernanceLockTransferRaw env alice transfer
+  expectFailureContaining "" =<< acceptGovernanceLockTransferRaw env disclosures transferCid [alice]
+
+  -- more than the source lock holds
+  tooLarge <- validLockTransfer (key lock) bob 150000.0
+  tooLargeCid <- expectSuccess $ createGovernanceLockTransferRaw env alice tooLarge
+  expectFailureContaining "transferred lock has less funds" =<<
+    acceptGovernanceLockTransferRaw env disclosures tooLargeCid [bob]
+
+  -- the remainder of 5000.0 is below the minimum lock amount of 10000.0
+  smallRemainder <- validLockTransfer (key lock) bob 95000.0
+  smallRemainingLockCid <- expectSuccess $ createGovernanceLockTransferRaw env alice smallRemainder
+  expectFailureContaining "minimum governance lock amount" =<<
+    acceptGovernanceLockTransferRaw env disclosures smallRemainingLockCid [bob]
+
+  -- no lock matches the source key
+  let noLockKey = (key lock) with specification = GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "NoSuchSV"
+  noLock <- validLockTransfer noLockKey bob 40000.0
+  noLockCid <- expectSuccess $ createGovernanceLockTransferRaw env alice noLock
+  expectFailureContaining "" =<< acceptGovernanceLockTransferRaw env disclosures noLockCid [bob]
+
+  -- proposals that cannot be accepted can still be rejected or withdrawn
+  GovernanceLockTransfer_RejectResult <- expectSuccess $ rejectGovernanceLockTransferRaw env tooLargeCid [bob]
+  GovernanceLockTransfer_WithdrawResult <- expectSuccess $ withdrawGovernanceLockTransferRaw env smallRemainingLockCid [alice]
+  GovernanceLockTransfer_WithdrawResult <- expectSuccess $ withdrawGovernanceLockTransferRaw env noLockCid [alice]
+  forA_ [tooLargeCid, smallRemainingLockCid, noLockCid] \cid -> do
+    archived <- queryContractId alice cid
+    archived === None
+
+  checkLockUntouched alice lockCid lock
+  checkBalances env alice (1000.0, 100000.0)
+  checkBalances env bob (0.0, 0.0)
+
+-- TSv1 workflows on lock transfer proposals
+--------------------------------------------
+
+testLockTransferV1_view : Script ()
+testLockTransferV1_view = do
+  (TestEnv{..}, _, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+  Some proposal <- queryContractId bob transferCid
+  Some view <- queryInterfaceContractId bob (asTransferInstruction transferCid)
+  view === V1.TransferInstructionView with
+    originalInstructionCid = None
+    transfer = V1.Transfer with
+      sender = alice
+      receiver = bob
+      amount = 40000.0
+      instrumentId = amuletInstrumentId instrId.admin
+      requestedAt = proposal.transfer.requestedAt
+      executeBefore = proposal.expiresAt
+      inputHoldingCids = []
+      meta = transferGovernanceLockMetadata lock.specification
+    status = V1.TransferPendingInternalWorkflow with
+      pendingActions = Map.fromList [(bob, "accept transfer; reject transfer"), (alice, "withdraw transfer")]
+    meta = emptyMetadata
+
+testLockTransferV1_acceptGovernanceLock : Script ()
+testLockTransferV1_acceptGovernanceLock = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+  disclosures <- sourceDisclosures alice lockCid
+
+  result <- expectSuccess $ acceptTransferV1 env disclosures (asTransferInstruction transferCid) bob
+  result.senderChangeCids === []
+  [] <- expectTransferCompleted result
+
+  [(newLockCid, newLock)] <- filter (\(_, l) -> l.owner == bob) <$> query @GovernanceLock bob
+  newLock.amount === 40000.0
+  newLock.specification === lock.specification
+  checkLockedHolding bob newLockCid 40000.0
+  checkBalances env alice (1000.0, 60000.0)
+  checkBalances env bob (0.0, 40000.0)
+
+testLockTransferV1_acceptVestingLock : Script ()
+testLockTransferV1_acceptVestingLock = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupVestingLockTransfer 30000.0
+  disclosures <- sourceDisclosures alice lockCid
+
+  result <- expectSuccess $ acceptTransferV1 env disclosures (asTransferInstruction transferCid) bob
+  result.senderChangeCids === []
+  [] <- expectTransferCompleted result
+
+  [(newLockCid, newLock)] <- filter (\(_, l) -> l.owner == bob) <$> query @VestingLock bob
+  newLock.vestingAmount === 30000.0
+  newLock.vestingPeriod === lock.vestingPeriod
+  newLock.endTime === lock.endTime
+  checkLockedHolding bob newLockCid 30000.0
+  checkBalances env alice (1000.0, 70000.0)
+  checkBalances env bob (0.0, 30000.0)
+
+testLockTransferV1_withdraw : Script ()
+testLockTransferV1_withdraw = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+
+  senderChanges <- expectTransferFailed =<< expectSuccess (withdrawTransferV1 env (asTransferInstruction transferCid) alice)
+  senderChanges === []
+
+  archivedTransfer <- queryContractId alice transferCid
+  archivedTransfer === None
+  checkLockUntouched alice lockCid lock
+  checkBalances env alice (1000.0, 100000.0)
+  checkBalances env bob (0.0, 0.0)
+
+testLockTransferV1_reject : Script ()
+testLockTransferV1_reject = do
+  (env@TestEnv{..}, lockCid, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+
+  senderChanges <- expectTransferFailed =<< expectSuccess (rejectTransferV1 env (asTransferInstruction transferCid) bob)
+  senderChanges === []
+
+  archivedTransfer <- queryContractId alice transferCid
+  archivedTransfer === None
+  checkLockUntouched alice lockCid lock
+  checkBalances env alice (1000.0, 100000.0)
+  checkBalances env bob (0.0, 0.0)
+
+testLockTransferV1_updateFails : Script ()
+testLockTransferV1_updateFails = do
+  (TestEnv{..}, _, _, transferCid) <- setupGovernanceLockTransfer 40000.0
+  expectFailureContaining transferTransferUpdateUnsupported =<<
+    submitWithTransferContext registriesEnv.amuletV2 (actAs instrId.admin) \context ->
+      exerciseCmd (asTransferInstruction transferCid) V1.TransferInstruction_Update with
+        extraActors = []
+        extraArgs = emptyExtraArgs with context
