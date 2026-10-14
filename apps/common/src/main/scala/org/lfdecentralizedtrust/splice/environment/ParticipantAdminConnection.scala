@@ -440,6 +440,7 @@ class ParticipantAdminConnection(
       newParticipant: ParticipantId,
       expectedSerial: PositiveInt,
       topologySnapshot: TopologySnapshot = TopologySnapshot.Sequenced,
+      waitForAuthorization: Boolean = true,
   )(implicit traceContext: TraceContext): Future[TopologyResult[PartyToParticipant]] = {
     ensureTopologyMapping[PartyToParticipant](
       TopologyStoreId.Synchronizer(synchronizerId),
@@ -482,6 +483,7 @@ class ParticipantAdminConnection(
       RetryFor.ClientCalls,
       isProposal = true,
       recreateOnAuthorizedStateChange = RecreateOnAuthorizedStateChange.Abort(expectedSerial),
+      waitForAuthorization = waitForAuthorization,
     )
   }
 
