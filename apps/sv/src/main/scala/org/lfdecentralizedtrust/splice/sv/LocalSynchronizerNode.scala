@@ -36,20 +36,24 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.version.ProtocolVersion
 import io.grpc.Status
-import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingUnlimitedTrafficTrigger.UnlimitedTraffic
-import org.lfdecentralizedtrust.splice.sv.config.SvSynchronizerNodeConfig
+import org.lfdecentralizedtrust.splice.sv.config.{
+  SvOnboardingSnapshotsConfig,
+  SvSynchronizerNodeConfig,
+}
+import org.lfdecentralizedtrust.splice.sv.onboarding.joining.SvOnboardingSnapshotDownload
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import java.time.Instant
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
+import scala.util.Success
+import scala.util.control.NonFatal
 
 /** Connections to the domain node (composed of sequencer + mediator) operated by the SV running this SV app.
   * Note that this is optional. An SV app can run without a dedicated domain node.
@@ -415,6 +419,7 @@ class LocalSynchronizerNode(
     */
   def onboardLocalSequencerIfRequired(
       svConnection: => Future[SvConnection],
+      onboardingSnapshotsConfig: SvOnboardingSnapshotsConfig,
       preInit: () => Future[Unit],
   )(implicit traceContext: TraceContext): Future[PhysicalSynchronizerId] =
     retryProvider
@@ -429,35 +434,47 @@ class LocalSynchronizerNode(
         case Left(NodeStatus.NotInitialized(_, _, _)) =>
           logger.info("Onboarding sequencer")
           svConnection
-            .flatMap(svConnection => preInit().flatMap(_ => onboardLocalSequencer(svConnection)))
+            .flatMap(svConnection =>
+              preInit().flatMap(_ => onboardLocalSequencer(svConnection, onboardingSnapshotsConfig))
+            )
         case Right(NodeStatus.Success(s)) =>
           logger.info("Sequencer is already onboarded")
+          val download = SvOnboardingSnapshotDownload.downloadDirectory(
+            onboardingSnapshotsConfig,
+            LocalSynchronizerNode.SnapshotDownloadName,
+          )
+          try blocking(SvOnboardingSnapshotDownload.deleteDownload(download))
+          catch {
+            case NonFatal(error) =>
+              logger.warn(s"Failed to delete sequencer snapshot download $download", error)
+          }
           Future.successful(s.synchronizerId)
       }
 
   private def onboardLocalSequencer(
-      svConnection: SvConnection
+      svConnection: SvConnection,
+      onboardingSnapshotsConfig: SvOnboardingSnapshotsConfig,
   )(implicit traceContext: TraceContext): Future[PhysicalSynchronizerId] = {
-    for {
+    val snapshotDownload =
+      SvOnboardingSnapshotDownload(
+        onboardingSnapshotsConfig,
+        LocalSynchronizerNode.SnapshotDownloadName,
+      )
+    (for {
       sequencerId <- sequencerAdminConnection.getSequencerId
       _ = logger.info(s"Onboarding sequencer $sequencerId through sponsoring SV")
-      onboardingState <- retryProvider.retry(
-        RetryFor.WaitingOnInitDependency,
+      onboardingStateFilePath <- retryProvider.retry(
+        RetryFor.WaitingOnInitDependencyLong,
         "onboarding_sequencer",
-        "Onbarding sequencer through sponsoring SV",
-        svConnection.onboardSvSequencer(sequencerId).recover {
-          // TODO(DACH-NY/canton-network-node#13410) - remove once canton returns a retryable error
-          case HttpCommandException(_, StatusCodes.BadRequest, responseBody)
-              if responseBody.message.contains("SNAPSHOT_NOT_FOUND") =>
-            throw Status.NOT_FOUND
-              .withDescription(responseBody.message)
-              .asRuntimeException()
-          case HttpCommandException(_, StatusCodes.BadRequest, responseBody)
-              if responseBody.message.contains("BLOCK_NOT_FOUND") =>
-            // ensure the request is retried as the sequencer will eventually finish processing the block
-            throw Status.NOT_FOUND
-              .withDescription(responseBody.message)
-              .asRuntimeException()
+        "Onboarding sequencer through sponsoring SV",
+        svConnection.prepareSequencerOnboardingSnapshot(sequencerId).flatMap { id =>
+          snapshotDownload.downloadWithRetries(
+            id,
+            svConnection.downloadOnboardingSnapshot,
+            retryProvider,
+            RetryFor.WaitingOnInitDependencyLong,
+            logger,
+          )
         },
         logger,
       )
@@ -472,8 +489,8 @@ class LocalSynchronizerNode(
         sequencerAdminConnection.getStatus.flatMap {
           case NodeStatus.NotInitialized(_, _, _) =>
             for {
-              _ <- sequencerAdminConnection.initializeFromOnboardingState(
-                onboardingState
+              _ <- sequencerAdminConnection.initializeFromOnboardingStateFile(
+                onboardingStateFilePath
               )
               status <- sequencerAdminConnection.getStatus
             } yield status.successOption.fold(
@@ -493,7 +510,7 @@ class LocalSynchronizerNode(
         },
         logger,
       )
-    } yield synchronizerId
+    } yield synchronizerId).andThen { case Success(_) => snapshotDownload.delete() }
   }
 
   def ensureMediatorSequencerRequestAmplification()(implicit
@@ -559,6 +576,8 @@ class LocalSynchronizerNode(
 }
 
 object LocalSynchronizerNode {
+  val SnapshotDownloadName = "sequencer"
+
   def toEndpoint(config: ClientConfig): Endpoint = Endpoint(config.address, config.port)
 
   // TODO(DACH-NY/canton-network-node#5107) Consider using something other than a ClientConfig in the config file

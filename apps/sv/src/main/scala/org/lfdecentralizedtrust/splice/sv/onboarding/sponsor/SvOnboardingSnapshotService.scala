@@ -14,7 +14,7 @@ import com.digitalasset.canton.lifecycle.{
 }
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{PartyId, SequencerId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Mutex
 import io.circe.{Decoder, Encoder}
@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingSnapshotsConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.*
+import org.lfdecentralizedtrust.splice.util.Codec
 
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.time.Instant
@@ -98,11 +99,7 @@ class SvOnboardingSnapshotService(
               Stored.Unusable("Snapshot file size has changed")
             else
               Stored.Finished(
-                SnapshotKey.Acs(
-                  SynchronizerId.tryFromString(persisted.synchronizerId),
-                  PartyId.tryFromProtoPrimitive(persisted.party),
-                  Instant.parse(persisted.activationTime),
-                ),
+                persisted.key,
                 file,
               )
           Some(Snapshot(timestamp(persisted.createdAt), stored))
@@ -327,11 +324,8 @@ class SvOnboardingSnapshotService(
               jobs.get(queued.id).foreach { job =>
                 val published = result.flatMap { _ =>
                   Try {
-                    val SnapshotKey.Acs(synchronizerId, party, activationTime) = job.key
                     val metadata = PersistedSnapshot(
-                      synchronizerId.toProtoPrimitive,
-                      party.toProtoPrimitive,
-                      activationTime.toString,
+                      job.key,
                       clock.now.toInstant.toString,
                       Files.size(queued.file),
                     )
@@ -377,6 +371,10 @@ object SvOnboardingSnapshotService {
   object SnapshotKey {
     final case class Acs(synchronizerId: SynchronizerId, party: PartyId, activationTime: Instant)
         extends SnapshotKey
+    final case class SequencerOnboardingState(
+        synchronizerId: SynchronizerId,
+        sequencerId: SequencerId,
+    ) extends SnapshotKey
   }
 
   sealed trait SnapshotState
@@ -411,11 +409,52 @@ object SvOnboardingSnapshotService {
 
   private final case class PersistedSnapshot(
       synchronizerId: String,
-      party: String,
-      activationTime: String,
+      party: Option[String],
+      activationTime: Option[String],
+      sequencerId: Option[String],
       createdAt: String,
       size: Long,
-  )
+  ) {
+    def key: SnapshotKey = {
+      val synchronizer = SynchronizerId.tryFromString(synchronizerId)
+      (party, activationTime, sequencerId) match {
+        case (Some(party), Some(activationTime), None) =>
+          SnapshotKey.Acs(
+            synchronizer,
+            PartyId.tryFromProtoPrimitive(party),
+            Instant.parse(activationTime),
+          )
+        case (None, None, Some(sequencerId)) =>
+          SnapshotKey.SequencerOnboardingState(
+            synchronizer,
+            Codec.tryDecode(Codec.Sequencer)(sequencerId),
+          )
+        case _ => throw new IllegalArgumentException("Unknown onboarding snapshot key")
+      }
+    }
+  }
+  private object PersistedSnapshot {
+    def apply(key: SnapshotKey, createdAt: String, size: Long): PersistedSnapshot = key match {
+      case SnapshotKey.Acs(synchronizerId, party, activationTime) =>
+        PersistedSnapshot(
+          synchronizerId.toProtoPrimitive,
+          Some(party.toProtoPrimitive),
+          Some(activationTime.toString),
+          None,
+          createdAt,
+          size,
+        )
+      case SnapshotKey.SequencerOnboardingState(synchronizerId, sequencerId) =>
+        PersistedSnapshot(
+          synchronizerId.toProtoPrimitive,
+          None,
+          None,
+          Some(sequencerId.toProtoPrimitive),
+          createdAt,
+          size,
+        )
+    }
+  }
   private implicit val encoder: Encoder[PersistedSnapshot] = deriveEncoder
   private implicit val decoder: Decoder[PersistedSnapshot] = deriveDecoder
 

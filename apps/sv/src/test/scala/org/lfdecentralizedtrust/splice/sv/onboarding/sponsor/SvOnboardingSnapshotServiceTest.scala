@@ -11,7 +11,7 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.time.SimClock
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{PartyId, SequencerId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.automation.{TriggerContext, TriggerEnabledSynchronization}
@@ -45,6 +45,11 @@ class SvOnboardingSnapshotServiceTest
       PartyId.tryFromProtoPrimitive(s"$name::dummy"),
       Instant.EPOCH,
     )
+
+  private def sequencerKey(name: String) = SnapshotKey.SequencerOnboardingState(
+    SynchronizerId.tryFromString("synchronizer::dummy"),
+    SequencerId(UniqueIdentifier.tryFromProtoPrimitive(s"$name::dummy")),
+  )
 
   private def writeSnapshot(result: Future[Unit]): Path => Future[Unit] = file => {
     Files.write(file, "snapshot".getBytes)
@@ -261,15 +266,15 @@ class SvOnboardingSnapshotServiceTest
         }
       }
 
-    "run at most `parallelism` exports and reject them when the queue is full" in withService(
+    "limit concurrent ACS and sequencer exports and reject a full queue" in withService(
       SvOnboardingSnapshotsConfig(_, parallelism = PositiveInt.two, queueSize = PositiveInt.one)
     ) { (service, _, _) =>
-      final class Export(name: String) {
+      final class Export(snapshotKey: SnapshotKey) {
         val started = Promise[Unit]()
         val done = Promise[Unit]()
         def prepare(): SvOnboardingSnapshotId = service
           .prepare(
-            key(name),
+            snapshotKey,
             file => {
               Files.write(file, Array[Byte](1))
               started.success(())
@@ -278,9 +283,9 @@ class SvOnboardingSnapshotServiceTest
           )
           .futureValue
       }
-      val slow = new Export("sv1")
-      val fast = new Export("sv2")
-      val queued = new Export("sv3")
+      val slow = new Export(key("sv1"))
+      val fast = new Export(sequencerKey("sv2"))
+      val queued = new Export(sequencerKey("sv3"))
       try {
         Seq(slow, fast).foreach { running =>
           running.prepare()
@@ -566,6 +571,43 @@ class SvOnboardingSnapshotServiceTest
           service.removeExpired(clock.now).futureValue shouldBe 1
           service.lookup(id.get()) shouldBe None
           service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id.get()
+        }
+      }
+
+    "recover sequencer onboarding snapshots after restart" in File.usingTemporaryDirectory() {
+      directory =>
+        val config = SvOnboardingSnapshotsConfig(directory.path)
+        val snapshotKey = sequencerKey("sequencer")
+        val id = new java.util.concurrent.atomic.AtomicReference[SvOnboardingSnapshotId]()
+        withService(_ => config) { (service, _, _) =>
+          id.set(service.prepare(snapshotKey, writeSnapshot(Future.unit)).futureValue)
+          eventually()(service.lookup(id.get()) should matchPattern {
+            case Some(SnapshotState.Ready(_)) =>
+          })
+        }
+        withService(_ => config) { (service, _, _) =>
+          service
+            .prepare(snapshotKey, _ => fail("must reuse the persisted export"))
+            .futureValue shouldBe id.get()
+          service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id.get()
+        }
+    }
+
+    "reuse ACS metadata written before sequencer snapshots were supported" in File
+      .usingTemporaryDirectory() { directory =>
+        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
+          val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
+          val exportDirectory = (directory / "exports" / id.value).createDirectories()
+          (exportDirectory / "snapshot").writeText("snapshot")
+          (exportDirectory / "metadata.json").writeText(
+            s"""{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z","createdAt":"${clock.now.toInstant}","size":8}"""
+          )
+          service
+            .prepare(key("sv1"), _ => fail("must reuse the persisted ACS export"))
+            .futureValue shouldBe id
+          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) =>
+            File(file).contentAsString shouldBe "snapshot"
+          }
         }
       }
 
