@@ -60,6 +60,18 @@ data ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult = Extern
     changeHolding : Optional (ContractId Amulet)
   deriving (Eq, Show, Serializable)
 
+data ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult =
+  ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult
+    with
+      proposal : ContractId GovernanceLockTransfer
+  deriving (Eq, Show, Serializable)
+
+data ExternalPartyAmuletRules_ProposeVestingLockTransferResult =
+  ExternalPartyAmuletRules_ProposeVestingLockTransferResult
+    with
+      proposal : ContractId VestingLockTransfer
+  deriving (Eq, Show, Serializable)
+
 -- | Rules contract that can be used in transactions that require signatures
 -- from an external party. This is intended to get archived and recreated as rarely as possible
 -- to support long delays between preparing and signing a transaction.
@@ -164,6 +176,24 @@ template ExternalPartyAmuletRules
         pure ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult with
           proposal
           changeHolding
+
+    nonconsuming choice ExternalPartyAmuletRules_ProposeGovernanceLockTransfer : ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult
+      with
+        args : LockTransferArgs GovernanceLockKey
+      controller lockKeyOwner args.transfer
+      do
+        proposal <- createGovernanceLockTransfer args
+        pure ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult with
+          proposal
+
+    nonconsuming choice ExternalPartyAmuletRules_ProposeVestingLockTransfer : ExternalPartyAmuletRules_ProposeVestingLockTransferResult
+      with
+        args : LockTransferArgs VestingLockKey
+      controller lockKeyOwner args.transfer
+      do
+        proposal <- createVestingLockTransfer args
+        pure ExternalPartyAmuletRules_ProposeVestingLockTransferResult with
+          proposal
 
     interface instance Api.Token.TransferInstructionV1.TransferFactory for ExternalPartyAmuletRules where
       view = Api.Token.TransferInstructionV1.TransferFactoryView with
