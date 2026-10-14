@@ -276,6 +276,7 @@ class JoiningNodeInitializer(
           upgradesConfig,
           dsoPartyId,
           dsoPartyHosting,
+          config.onboardingSnapshots,
           retryProvider,
           loggerFactory,
         ),
