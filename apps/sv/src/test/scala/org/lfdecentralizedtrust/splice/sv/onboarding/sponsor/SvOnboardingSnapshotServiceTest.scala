@@ -28,8 +28,9 @@ import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
 
 import java.nio.file.{Files, Path}
+import java.security.MessageDigest
 import java.time.{Duration, Instant}
-import java.util.UUID
+import java.util.{Base64, UUID}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.concurrent.{Future, Promise, blocking}
 
@@ -38,6 +39,11 @@ class SvOnboardingSnapshotServiceTest
     with BaseTest
     with HasActorSystem
     with HasExecutionContext {
+
+  private val sha256Base64 =
+    Base64.getEncoder.encodeToString(
+      MessageDigest.getInstance("SHA-256").digest("snapshot".getBytes)
+    )
 
   private def key(name: String) =
     SnapshotKey.Acs(
@@ -112,7 +118,10 @@ class SvOnboardingSnapshotServiceTest
 
         exported.success(())
         val file = eventually() {
-          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
+          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file, digest)) =>
+            digest shouldBe sha256Base64
+            file
+          }
         }
         File(file).contentAsString shouldBe "snapshot"
         Files.exists(file.getParent.resolve("metadata.json")) shouldBe true
@@ -174,16 +183,46 @@ class SvOnboardingSnapshotServiceTest
         val id =
           service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
         id should not be failedId
-        eventually()(service.lookup(id) should matchPattern { case Some(SnapshotState.Ready(_)) =>
+        eventually()(service.lookup(id) should matchPattern {
+          case Some(SnapshotState.Ready(_, _)) =>
         })
       }
+    }
+
+    "record an export whose file cannot be hashed as failed and start the next one" in withService() {
+      (service, _, _) =>
+        val failedId =
+          loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+            {
+              val id = service
+                .prepare(
+                  key("sv1"),
+                  file => {
+                    Files.createDirectory(file)
+                    Future.unit
+                  },
+                )
+                .futureValue
+              eventually()(
+                service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
+              )
+              id
+            },
+            forExactly(1, _)(_.warningMessage should include("failed")),
+          )
+
+        val id = service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
+        id should not be failedId
+        eventually()(service.lookup(id) should matchPattern {
+          case Some(SnapshotState.Ready(_, `sha256Base64`)) =>
+        })
     }
 
     "prepare a new snapshot if the ready file was deleted" in withService() { (service, _, _) =>
       val snapshotKey = key("sv1")
       val id = service.prepare(snapshotKey, writeSnapshot(Future.unit)).futureValue
       val file = eventually() {
-        inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
+        inside(service.lookup(id)) { case Some(SnapshotState.Ready(file, _)) => file }
       }
       Files.delete(file)
 
@@ -197,7 +236,7 @@ class SvOnboardingSnapshotServiceTest
       service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot file is missing"))
       Files.exists(file.resolveSibling("metadata.json")) shouldBe false
       eventually()(service.lookup(replacement) should matchPattern {
-        case Some(SnapshotState.Ready(_)) =>
+        case Some(SnapshotState.Ready(_, _)) =>
       })
       service
         .prepare(snapshotKey, writeSnapshot(Future.unit))
@@ -325,7 +364,7 @@ class SvOnboardingSnapshotServiceTest
       val ready =
         service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
       val readyFile = eventually() {
-        inside(service.lookup(ready)) { case Some(SnapshotState.Ready(file)) => file }
+        inside(service.lookup(ready)) { case Some(SnapshotState.Ready(file, _)) => file }
       }
       val exported = Promise[Unit]()
       val exporting = service.prepare(key("sv2"), writeSnapshot(exported.future)).futureValue
@@ -333,7 +372,7 @@ class SvOnboardingSnapshotServiceTest
       try {
         clock.advance(Duration.ofHours(24).minusSeconds(1))
         trigger.performWorkIfAvailable().futureValue
-        service.lookup(ready) should matchPattern { case Some(SnapshotState.Ready(_)) => }
+        service.lookup(ready) should matchPattern { case Some(SnapshotState.Ready(_, _)) => }
 
         clock.advance(Duration.ofSeconds(1))
         trigger.performWorkIfAvailable().futureValue
@@ -348,7 +387,7 @@ class SvOnboardingSnapshotServiceTest
 
         exported.success(())
         val exportedFile = eventually() {
-          inside(service.lookup(exporting)) { case Some(SnapshotState.Ready(file)) => file }
+          inside(service.lookup(exporting)) { case Some(SnapshotState.Ready(file, _)) => file }
         }
         service.removeExpired(clock.now).futureValue shouldBe 0
         service
@@ -394,7 +433,8 @@ class SvOnboardingSnapshotServiceTest
 
         val next =
           service.prepare(key("sv2"), writeSnapshot(Future.unit)).futureValue
-        eventually()(service.lookup(next) should matchPattern { case Some(SnapshotState.Ready(_)) =>
+        eventually()(service.lookup(next) should matchPattern {
+          case Some(SnapshotState.Ready(_, _)) =>
         })
 
         val child = blocker.future.futureValue
@@ -404,7 +444,7 @@ class SvOnboardingSnapshotServiceTest
         Files.exists(leftover) shouldBe false
         Files.exists(leftover.resolveSibling("failure.json")) shouldBe true
         service.lookup(failedId) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
-        service.lookup(next) should matchPattern { case Some(SnapshotState.Ready(_)) => }
+        service.lookup(next) should matchPattern { case Some(SnapshotState.Ready(_, _)) => }
 
         clock.advance(Duration.ofHours(24))
         service.removeExpired(clock.now).futureValue shouldBe 2
@@ -435,7 +475,8 @@ class SvOnboardingSnapshotServiceTest
         )
         clock.failing.set(false)
         val next = service.prepare(key("sv2"), writeSnapshot(Future.unit)).futureValue
-        eventually()(service.lookup(next) should matchPattern { case Some(SnapshotState.Ready(_)) =>
+        eventually()(service.lookup(next) should matchPattern {
+          case Some(SnapshotState.Ready(_, _)) =>
         })
       }
     }
@@ -444,7 +485,7 @@ class SvOnboardingSnapshotServiceTest
       (service, clock, _) =>
         val id = service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
         val file = eventually() {
-          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
+          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file, _)) => file }
         }
         Files.delete(file)
         loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
@@ -466,7 +507,7 @@ class SvOnboardingSnapshotServiceTest
         val second =
           service.prepare(key("sv2"), writeSnapshot(Future.unit)).futureValue
         def fileOf(id: SvOnboardingSnapshotId): Path = eventually() {
-          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
+          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file, _)) => file }
         }
         val firstFile = fileOf(first)
         val secondFile = fileOf(second)
@@ -554,23 +595,26 @@ class SvOnboardingSnapshotServiceTest
           clock.advance(Duration.ofHours(1))
           id.set(service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue)
           eventually()(service.lookup(id.get()) should matchPattern {
-            case Some(SnapshotState.Ready(_)) =>
+            case Some(SnapshotState.Ready(_, _)) =>
           })
         }
         withService(_ => config) { (service, clock, _) =>
-          inside(service.lookup(id.get())) { case Some(SnapshotState.Ready(file)) =>
+          inside(service.lookup(id.get())) { case Some(SnapshotState.Ready(file, digest)) =>
             File(file).contentAsString shouldBe "snapshot"
+            digest shouldBe sha256Base64
           }
           service
             .prepare(key("sv1"), _ => fail("must reuse the persisted export"))
             .futureValue shouldBe id.get()
           clock.advance(Duration.ofHours(24))
           service.removeExpired(clock.now).futureValue shouldBe 0
-          service.lookup(id.get()) should matchPattern { case Some(SnapshotState.Ready(_)) => }
+          service.lookup(id.get()) should matchPattern { case Some(SnapshotState.Ready(_, _)) => }
           clock.advance(Duration.ofHours(1))
           service.removeExpired(clock.now).futureValue shouldBe 1
           service.lookup(id.get()) shouldBe None
-          service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id.get()
+          service
+            .prepare(key("sv1"), writeSnapshot(Future.unit))
+            .futureValue should not be id.get()
         }
       }
 
@@ -582,31 +626,63 @@ class SvOnboardingSnapshotServiceTest
         withService(_ => config) { (service, _, _) =>
           id.set(service.prepare(snapshotKey, writeSnapshot(Future.unit)).futureValue)
           eventually()(service.lookup(id.get()) should matchPattern {
-            case Some(SnapshotState.Ready(_)) =>
+            case Some(SnapshotState.Ready(_, _)) =>
           })
         }
         withService(_ => config) { (service, _, _) =>
           service
             .prepare(snapshotKey, _ => fail("must reuse the persisted export"))
             .futureValue shouldBe id.get()
-          service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id.get()
+          service
+            .prepare(key("sv1"), writeSnapshot(Future.unit))
+            .futureValue should not be id.get()
         }
     }
 
-    "reuse ACS metadata written before sequencer snapshots were supported" in File
+    "export ACS and sequencer snapshots stored without a valid digest again" in File
       .usingTemporaryDirectory() { directory =>
         withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
-          val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
-          val exportDirectory = (directory / "exports" / id.value).createDirectories()
-          (exportDirectory / "snapshot").writeText("snapshot")
-          (exportDirectory / "metadata.json").writeText(
-            s"""{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z","createdAt":"${clock.now.toInstant}","size":8}"""
-          )
-          service
-            .prepare(key("sv1"), _ => fail("must reuse the persisted ACS export"))
-            .futureValue shouldBe id
-          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) =>
-            File(file).contentAsString shouldBe "snapshot"
+          val sequencer = sequencerKey("seq1")
+          val noDigest = "Snapshot has no SHA-256 digest"
+          Seq[(SnapshotKey, String, String)](
+            (
+              key("sv1"),
+              """"party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z"""",
+              noDigest,
+            ),
+            (
+              sequencer,
+              s""""party":null,"activationTime":null,"sequencerId":"${sequencer.sequencerId.toProtoPrimitive}"""",
+              noDigest,
+            ),
+            (
+              key("sv2"),
+              s""""party":"sv2::dummy","activationTime":"1970-01-01T00:00:00Z","sha256Base64":"${Base64.getEncoder
+                  .encodeToString("short".getBytes)}"""",
+              "Snapshot has an invalid SHA-256 digest",
+            ),
+            (
+              key("sv3"),
+              """"party":"sv3::dummy","activationTime":"1970-01-01T00:00:00Z","sha256Base64":"not-base64!"""",
+              "Snapshot has an invalid SHA-256 digest",
+            ),
+          ).foreach { case (snapshotKey, keyFields, reason) =>
+            val legacyId = SvOnboardingSnapshotId(UUID.randomUUID().toString)
+            val exportDirectory = (directory / "exports" / legacyId.value).createDirectories()
+            (exportDirectory / "snapshot").writeText("snapshot")
+            (exportDirectory / "metadata.json").writeText(
+              s"""{"synchronizerId":"synchronizer::dummy",$keyFields,"createdAt":"${clock.now.toInstant}","size":8}"""
+            )
+            val id =
+              service.prepare(snapshotKey, writeSnapshot(Future.unit)).futureValue
+            id should not be legacyId
+            loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
+              service.lookup(legacyId) shouldBe Some(SnapshotState.Failed(reason)),
+              _.warningMessage should include("is unusable"),
+            )
+            eventually()(service.lookup(id) should matchPattern {
+              case Some(SnapshotState.Ready(_, `sha256Base64`)) =>
+            })
           }
         }
       }
@@ -630,11 +706,14 @@ class SvOnboardingSnapshotServiceTest
     "not reuse an expired snapshot while waiting for cleanup" in withService() {
       (service, clock, _) =>
         val id = service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
-        eventually()(service.lookup(id) should matchPattern { case Some(SnapshotState.Ready(_)) =>
+        eventually()(service.lookup(id) should matchPattern {
+          case Some(SnapshotState.Ready(_, _)) =>
         })
         clock.advance(Duration.ofHours(24))
         service.lookup(id) shouldBe None
-        service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id
+        service
+          .prepare(key("sv1"), writeSnapshot(Future.unit))
+          .futureValue should not be id
     }
 
     "remove exports with corrupt completion metadata" in File.usingTemporaryDirectory() {
