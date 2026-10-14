@@ -210,6 +210,31 @@ class DbVotesStoreTest
         }
       }
 
+      "include the bounds, for one-sided and two-sided filters alike" in {
+        // Two accepted results are effective exactly at `bound`, one is effective before it (at 2.5 seconds)
+        val bound = base.plusSeconds(10).toString
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          accepted <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(accepted = Some(true))
+          )
+          from <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(effectiveFrom = Some(bound))
+          )
+          to <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(effectiveTo = Some(bound))
+          )
+          both <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(effectiveFrom = Some(bound), effectiveTo = Some(bound))
+          )
+        } yield {
+          from shouldBe accepted - 1
+          to shouldBe 3L
+          both shouldBe 2L
+        }
+      }
+
       "ignore dates that cannot be parsed" in {
         for {
           stores <- mkStores()

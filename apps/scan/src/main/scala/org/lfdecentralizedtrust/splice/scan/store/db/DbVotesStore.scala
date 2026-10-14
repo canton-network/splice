@@ -222,8 +222,8 @@ class DbVotesStore(
       f.requester.map(r => sql"vote_requester_name like ${lengthLimited(s"%$r%")}"),
       (f.effectiveFrom.flatMap(parseMicros), f.effectiveTo.flatMap(parseMicros)) match {
         case (Some(from), Some(to)) => Some(sql"vote_effective_at between $from and $to")
-        case (Some(from), None) => Some(sql"vote_effective_at > $from")
-        case (None, Some(to)) => Some(sql"vote_effective_at < $to")
+        case (Some(from), None) => Some(sql"vote_effective_at >= $from")
+        case (None, Some(to)) => Some(sql"vote_effective_at <= $to")
         case (None, None) => None
       },
     ).flatten.map(toSQLActionBuilderChain),
