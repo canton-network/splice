@@ -490,6 +490,13 @@ abstract class TopologyAdminConnection(
       filterNamespace = Some(id.namespace),
     ).map(_.map(_.transaction))
 
+  def generateOnboardingTopologyTransactions(protocolVersion: ProtocolVersion)(implicit
+      traceContext: TraceContext
+  ): Future[Seq[GenericSignedTopologyTransaction]] =
+    runCmd(
+      TopologyAdminCommands.Read.GenerateOnboardingTopologyTransactions(protocolVersion, None)
+    ).map(_.transactions)
+
   def listAllTransactions(
       store: TopologyStoreId,
       timeQuery: TimeQuery = TimeQuery.HeadState,

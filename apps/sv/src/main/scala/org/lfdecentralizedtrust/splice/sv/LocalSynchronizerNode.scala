@@ -224,9 +224,8 @@ class LocalSynchronizerNode(
     logger.info("Adding mediator identity transactions")
     for {
       mediatorId <- mediatorAdminConnection.getMediatorId
-      identity <- mediatorAdminConnection.getIdentityTransactions(
-        mediatorId.uid,
-        TopologyStoreId.Authorized,
+      identity <- mediatorAdminConnection.generateOnboardingTopologyTransactions(
+        config.protocolVersion
       )
       _ <- addIdentityTransactions(
         "mediator",
@@ -391,9 +390,8 @@ class LocalSynchronizerNode(
     )
     for {
       sequencerId <- sequencerAdminConnection.getSequencerId
-      identity <- sequencerAdminConnection.getIdentityTransactions(
-        sequencerId.uid,
-        TopologyStoreId.Authorized,
+      identity <- sequencerAdminConnection.generateOnboardingTopologyTransactions(
+        config.protocolVersion
       )
       _ <- addIdentityTransactions(
         "sequencer",
