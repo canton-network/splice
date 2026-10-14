@@ -1370,7 +1370,7 @@ class DbScanAppRewardsStoreTest
       for {
         (store, historyId) <- newStore()
         _ <- store.insertAppActivityPartyTotals(activities.map(_.copy(historyId = historyId)))
-        _ <- store.computeRewardTotals(roundNumber, params)
+        _ <- store.computeRewardTotals(roundNumber, params, BigDecimal(1))
         partyTotals <- store.getAppRewardPartyTotalsByRound(roundNumber)
         roundTotal <- store.getAppRewardRoundTotalByRound(roundNumber)
       } yield (partyTotals, roundTotal)
@@ -1446,6 +1446,9 @@ object DbScanAppRewardsStoreTest {
       amuletPrice = n(BigDecimal("1.0")),
       trafficPrice = n(BigDecimal("1.0")),
       appRewardCouponThreshold = n(BigDecimal("0.0")),
+      extraFeaturedAssetActivityWeight = n(BigDecimal("0.2")),
+      maxExtraFeaturedAssetActivityWeightPerAsset = n(BigDecimal("0.1")),
+      dsoAppActivityWeight = n(BigDecimal("0.1")),
     )
   }
 
