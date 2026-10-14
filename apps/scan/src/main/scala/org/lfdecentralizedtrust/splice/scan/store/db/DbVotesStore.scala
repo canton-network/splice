@@ -320,7 +320,9 @@ object DbVotesStore {
           ${voteEffectiveAt},
           ${choiceResult}::jsonb,
           ${error}
-        )"""
+        )
+        on conflict do nothing
+        """
     }
     override def pretty: Pretty[this.type] = {
       prettyOfClass(
