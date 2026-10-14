@@ -230,10 +230,13 @@ class ScanApp(
         loggerFactory,
         retryProvider.metricsFactory,
       )
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
+      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       historicalVotesStore = DbVotesStore(
         store.acsContractFilter.ingestionFilter.primaryParty,
         participantId,
         storage,
+        kvStore,
         loggerFactory,
       )
       updateHistory = new UpdateHistory(
@@ -274,8 +277,6 @@ class ScanApp(
         retryProvider,
         loggerFactory,
       )
-      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
-      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       historyStart = new ScanHistoryStart(
         new KvHistoryStartStore(kvProvider),
         new ParticipantHistoryStartSources(

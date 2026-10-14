@@ -31,9 +31,11 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
 }
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsJdbcTypes,
+  DbKeyValueStore,
   StoreDescriptor,
   StoreDescriptorStore,
 }
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
@@ -49,11 +51,12 @@ import scala.jdk.OptionConverters.*
 
 /** Historical vote results (exercised DsoRules_CloseVoteRequest choices).
   *
-  * Owns table `votes_store_results`.
+  * Owns table `votes_store_results`, and the key `first_ingested_record_time` in the key value store.
   */
 class DbVotesStore(
     storage: DbStorage,
     storeDescriptor: StoreDescriptor,
+    kvStore: DbKeyValueStore,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, closeContext: CloseContext)
     extends AcsJdbcTypes
@@ -116,7 +119,7 @@ class DbVotesStore(
         } else {
           firstTransactionRecordTime(updates) match {
             case Some(firstRecordTime) =>
-              InitializeIngestionState(storeId, firstRecordTime.toMicros) +: actions
+              SetFirstIngestedRecordTime(kvStore, firstRecordTime) +: actions
             case None =>
               actions
           }
@@ -127,9 +130,9 @@ class DbVotesStore(
           updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
       )(implicit tc: TraceContext): Unit =
         // The actions from the previous `prepareBatch` have been committed. If they included
-        // `InitializeIngestionState`, we can set the flag to avoid running it in the future.
-        // `InitializeIngestionState` itself uses `on conflict do nothing`, this is just a best-effort
-        // optimization to avoid unnecessary database writes.
+        // `SetFirstIngestedRecordTime`, we can set the flag to avoid running it in the future.
+        // `SetFirstIngestedRecordTime` itself does nothing if the value is already set, this is just
+        // a best-effort optimization to avoid unnecessary database writes.
         if (firstTransactionRecordTime(updates).isDefined) {
           ingestionStateInitialized = true
         }
@@ -143,38 +146,14 @@ class DbVotesStore(
         CantonTimestamp.assertFromInstant(tree.getRecordTime)
     }
 
-  def getIngestionState()(implicit tc: TraceContext): Future[Option[IngestionState]] = {
-    for {
-      sid <- storeIdF
-      row <- futureUnlessShutdownToFuture(
-        storage.query(
-          sql"""
-            select
-              store_id,
-              first_ingested_record_time,
-              copy_from_txlog_record_time,
-              copy_from_txlog_complete,
-              backfill_record_time,
-              backfill_complete
-            from #$table_ingestion
-            where store_id = $sid"""
-            .as[
-              (
-                  Int,
-                  CantonTimestamp,
-                  Option[CantonTimestamp],
-                  Boolean,
-                  Option[CantonTimestamp],
-                  Boolean,
-              )
-            ]
-            .headOption,
-          "DbVotesStore.getIngestionState",
-        )
-      )
-    } yield {
-      row.map((IngestionState.apply _).tupled)
-    }
+  /** The record time of the first transaction that the ingestion of this store has seen.
+    * Vote results from before that time have to be backfilled.
+    */
+  def getFirstIngestedRecordTime()(implicit tc: TraceContext): Future[Option[CantonTimestamp]] = {
+    import ScanKeyValueProvider.timestampCodec
+    kvStore
+      .readValueAndLogOnDecodingFailure[CantonTimestamp](firstIngestedRecordTimeKey)
+      .value
   }
 
   override def listVoteRequestResults(
@@ -257,6 +236,7 @@ object DbVotesStore {
       dsoParty: PartyId,
       participantId: ParticipantId,
       storage: DbStorage,
+      kvStore: DbKeyValueStore,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       ec: ExecutionContext,
@@ -271,38 +251,30 @@ object DbVotesStore {
         "dsoParty" -> dsoParty.toProtoPrimitive
       ),
     )
-    new DbVotesStore(storage, storeDescriptor, loggerFactory)
+    new DbVotesStore(storage, storeDescriptor, kvStore, loggerFactory)
   }
 
   val table = "votes_store_results"
-  val table_ingestion = "votes_store_results_ingestion"
+  val firstIngestedRecordTimeKey = "votes_store_first_ingested_record_time"
 
-  final case class IngestionState(
-      storeId: Int,
-      firstIngestedRecordTime: CantonTimestamp,
-      copyFromTxlogRecordTime: Option[CantonTimestamp],
-      copyFromTxlogComplete: Boolean,
-      backfillRecordTime: Option[CantonTimestamp],
-      backfillComplete: Boolean,
-  )
-
-  final case class InitializeIngestionState(
-      storeId: Int,
-      recordTime: Long,
+  /** Records the record time of the first transaction that the ingestion has seen, unless it is already set.
+    * Runs in the same SQL transaction as the ingestion of the votes, so the value is recorded if and only if
+    * the votes of the batch are.
+    */
+  final case class SetFirstIngestedRecordTime(
+      kvStore: DbKeyValueStore,
+      recordTime: CantonTimestamp,
   ) extends UpdateHistory.PreparedIngestionAction {
-    override def action = {
-      sqlu"""
-        insert into #$table_ingestion (store_id, first_ingested_record_time, copy_from_txlog_complete, backfill_complete)
-        values ($storeId, $recordTime, false, false)
-        on conflict (store_id) do nothing
-      """
-    }
+    import ScanKeyValueProvider.timestampCodec
+
+    override def action = kvStore.setValueIfNotExistsAction(firstIngestedRecordTimeKey, recordTime)
     override def pretty: Pretty[this.type] = {
       prettyOfClass(
         param("recordTime", _.recordTime)
       )
     }
   }
+
   final case class InsertVoteResult(
       storeId: Int,
       recordTime: Long,

@@ -44,24 +44,3 @@ create table votes_store_results
 -- Lookups by row_id and filters on the other columns scan it, no further indexes are needed.
 create index votes_store_sid_effat_rt_en
     on votes_store_results (store_id, coalesce(vote_effective_at, vote_completed_at) desc, record_time desc, event_number desc);
-
-create table votes_store_results_ingestion
-(
-    store_id                    int not null,
-
-    -- Record time of the first update processed by the vote store ingestion.
-    first_ingested_record_time  bigint not null,
-
-    -- Cursor and status of the background process that copies data from the legacy scan_txlog_store table to the new votes_store_results table.
-    copy_from_txlog_record_time bigint,
-    copy_from_txlog_complete    boolean not null,
-
-    -- Cursor and status of the background process that replicates data from peer SV nodes.
-    backfill_record_time        bigint,
-    backfill_event_number       int,
-    backfill_complete           boolean not null,
-
-    constraint votes_store_results_ingestion_pkey primary key (store_id),
-
-    constraint votes_store_results_ingestion_id_fkey foreign key (store_id) references store_descriptors(id)
-);

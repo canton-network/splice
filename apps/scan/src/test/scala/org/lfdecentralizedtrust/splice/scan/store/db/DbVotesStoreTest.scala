@@ -46,7 +46,7 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
-import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueStore, ScanStore}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
   InitializeAcsAtLatestOffset,
   InitializeAcsAtOffset,
@@ -54,7 +54,7 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.I
   UpdateHistoryInitAtLatestPrunedOffset,
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
-import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
+import org.lfdecentralizedtrust.splice.store.db.{DbKeyValueStore, SplicePostgresTest}
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
@@ -231,13 +231,13 @@ class DbVotesStoreTest
       }
     }
 
-    "ingestion state" should {
+    "first ingested record time" should {
       "be empty initially" in {
         for {
           stores <- mkStores()
-          state <- stores.votesStore.getIngestionState()
+          firstRecordTime <- stores.votesStore.getFirstIngestedRecordTime()
         } yield {
-          state shouldBe empty
+          firstRecordTime shouldBe empty
         }
       }
 
@@ -251,9 +251,9 @@ class DbVotesStoreTest
               )
             )
           )
-          state <- stores.votesStore.getIngestionState()
+          firstRecordTime <- stores.votesStore.getFirstIngestedRecordTime()
         } yield {
-          state shouldBe empty
+          firstRecordTime shouldBe empty
         }
       }
 
@@ -272,9 +272,9 @@ class DbVotesStoreTest
             appRewardCoupon(0, dsoParty, contractId = validContractId(1)),
             recordTime = recordTime.toInstant,
           )(stores.updateHistory)
-          state <- stores.votesStore.getIngestionState()
+          firstRecordTime <- stores.votesStore.getFirstIngestedRecordTime()
         } yield {
-          state.value.firstIngestedRecordTime shouldBe recordTime
+          firstRecordTime shouldBe Some(recordTime)
         }
       }
 
@@ -290,10 +290,9 @@ class DbVotesStoreTest
             appRewardCoupon(1, dsoParty, contractId = validContractId(2)),
             recordTime = recordTime.toInstant.plusSeconds(1L),
           )(stores.updateHistory)
-          state <- stores.votesStore.getIngestionState()
+          firstRecordTime <- stores.votesStore.getFirstIngestedRecordTime()
         } yield {
-          state should not be empty
-          state.value.firstIngestedRecordTime shouldBe recordTime
+          firstRecordTime shouldBe Some(recordTime)
         }
       }
     }
@@ -569,7 +568,11 @@ class DbVotesStoreTest
     go(None, Seq.empty)
   }
 
-  private def mkStores(): Future[Stores] = {
+  private def mkStores(): Future[Stores] =
+    ScanKeyValueStore(dsoParty, mkParticipantId("DbVotesStoreTest"), storage, loggerFactory)
+      .flatMap(mkStoresWith)
+
+  private def mkStoresWith(kvStore: DbKeyValueStore): Future[Stores] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
         DarResources.amulet.all ++
@@ -593,7 +596,7 @@ class DbVotesStoreTest
       None,
       None,
     )(parallelExecutionContext, implicitly, implicitly)
-    val votesStore = DbVotesStore(dsoParty, participantId, storage, loggerFactory)
+    val votesStore = DbVotesStore(dsoParty, participantId, storage, kvStore, loggerFactory)
     val updateHistory = new UpdateHistory(
       storage.underlying, // not under test
       domainMigrationId,
