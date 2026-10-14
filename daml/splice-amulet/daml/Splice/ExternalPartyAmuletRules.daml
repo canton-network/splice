@@ -17,6 +17,7 @@ import Splice.Api.Token.HoldingV1 qualified as V1
 import Splice.Api.Token.AllocationInstructionV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
@@ -56,7 +57,7 @@ data ExternalPartyAmuletRules_LockForGovernanceResult = ExternalPartyAmuletRules
 
 data ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult = ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult
   with
-    proposal : ContractId V2.AllocationInstruction
+    proposal : ContractId V1.TransferInstruction
     changeHolding : Optional (ContractId Amulet)
   deriving (Eq, Show, Serializable)
 
@@ -523,8 +524,6 @@ amulet_allocationFactoryV2_allocateImpl
   -> ContractId V2.AllocationFactory
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
-amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg
-  | isGovernanceAllocationArgument arg = governanceLock_allocationFactoryV2_allocateImpl externalAmuletRules.dso arg
 amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
   let netTransferAmount = netAmuletCreditAmount arg.allocation.authorizer arg.allocation.transferLegSides
   outputFundingAmount <- validateAmuletNextIterationFunding arg.allocation.nextIterationFunding

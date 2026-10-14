@@ -15,7 +15,7 @@ import DA.Validation
 
 import Daml.Script
 
-import Splice.Amulet.TokenApiUtils (amuletInstrumentIdName, reasonMetaKey)
+import Splice.Amulet.TokenApiUtils (reasonMetaKey)
 import Splice.Api.Token.MetadataV1
 import Splice.GovernanceLock
 
@@ -210,21 +210,12 @@ test_governanceLockSpecificationParser' run = do
   expectErrors ["Invalid provider for fa-lock: " <> invalidParty] $
     run (governanceLockTagToText GLT_FeaturedApp) [(lockSubjectMetaKey, invalidParty)]
 
--- | The lock kind is read from the `lockKindMetaKey` field, as in TSv1.
+-- | The lock kind is read from the `lockKindMetaKey` field.
 test_governanceLockSpecificationParser : Script ()
 test_governanceLockSpecificationParser =
   test_governanceLockSpecificationParser' \kind entries ->
     runParser (governanceLockSpecificationParser governanceLockKindParser)
       (mkMeta $ (lockKindMetaKey, kind) :: entries)
-
--- | The lock kind is given separately, as by the `settlement.id` in TSv2.
-test_governanceLockSpecificationParserWithTag : Script ()
-test_governanceLockSpecificationParserWithTag =
-  test_governanceLockSpecificationParser' \kind entries ->
-    runParser
-      (governanceLockTagParser' kind >>= \tag ->
-        governanceLockSpecificationParser (governanceLockKindParser' tag))
-      (mkMeta entries)
 
 -- TSv1 request parser
 ----------------------
@@ -373,10 +364,10 @@ test_governanceLockRequestTSv1Parser = do
 testAdmin : Party
 testAdmin = testParty "registry-admin"
 
--- | Parses a TSv2 request and returns its substitution.
--- Arguments: registry admin and the `settlement.id`. Input: `allocation.meta`.
-substitutionTSv2Parser : Party -> Text -> Parser Metadata AnySubstitution
-substitutionTSv2Parser admin id = governanceLockRequestTSv2Parser admin id >>= \case
+-- | Parses a substitution request and returns its substitution.
+-- Arguments: registry admin. Input: metadata to be converted to a compat mode memo.
+substitutionTSv1Parser : Party -> Parser Metadata AnySubstitution
+substitutionTSv1Parser admin = governanceLockRequestTSv1Parser admin lockManagerParty >>= \case
   GLR_SubstituteLock{substitution} -> pure substitution
   result -> assertFail $ "Expected GLR_SubstituteLock but got: " <> show result
 
@@ -387,14 +378,11 @@ substitutionRequest = (requestMetaKey, governanceLockRequestSubstituteLock)
 -- | Examples of the `allocation.meta` of an `AllocationFactory_Allocate` call that proposes a substitution.
 --
 -- The metadata keys are written out on purpose, so that these tests also serve as examples of how to call the API.
--- The second argument of `substitutionTSv2Parser` is the `settlement.id` of the call, which names the lock kind:
--- `fa-lock`, `provisional-fa-lock` or `sv-lock`.
 -- The `cip-127/request` key selects the substitution.
--- `cip-127/target-lock-owner` and `cip-127/lock-status` specify the owner and the state of the target lock.
--- Other keys without a `target-` prefix specify the new lock; keys with that prefix specify the target lock.
-test_substitutionTSv2Parser_examples : Script ()
-test_substitutionTSv2Parser_examples = do
-  let run lockType entries = runParser (substitutionTSv2Parser testAdmin lockType) (mkMeta entries)
+-- `cip-127/target-lock-owner`, `cip-127/lock-kind`, and `cip-127/lock-status` specify the owner, kind, and state of the target lock.
+test_substitutionTSv1Parser_examples : Script ()
+test_substitutionTSv1Parser_examples = do
+  let run entries = runParser (substitutionTSv1Parser testAdmin) (mkMeta entries)
 
   -- Minimal example: bob substitutes funds of the SV lock of alice for "someSv", for example a lock that alice
   -- created in compatibility mode.
@@ -404,8 +392,9 @@ test_substitutionTSv2Parser_examples = do
         dso = testAdmin
         owner = alice
         specification = GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
-    $ run "sv-lock"
+    $ run
         [ ("cip-127/request", "substitute-lock")
+        , ("cip-127/lock-kind", "sv-lock")
         , ("cip-127/lock-subject", "someSv")
         , ("cip-127/target-lock-owner", "alice")
         ]
@@ -420,11 +409,10 @@ test_substitutionTSv2Parser_examples = do
         owner = alice
         specification = GovernanceLockSpecification with
           kind = GLK_FeaturedApp testProvider)
-    $ run "fa-lock"
+    $ run
         [ ("cip-127/request", "substitute-lock")
-        -- the new lock
+        , ("cip-127/lock-kind", "fa-lock")
         , ("cip-127/lock-subject", "provider")
-        -- the target lock
         , ("cip-127/target-lock-owner", "alice")
         ]
 
@@ -440,22 +428,20 @@ test_substitutionTSv2Parser_examples = do
           kind = GLK_SuperValidatorRightsOwner "someSv"
         vestingPeriod = days 60
         endTime = time (date 2026 Jan 1) 0 0 0)
-    $ run "sv-lock"
+    $ run
         [ ("cip-127/request", "substitute-lock")
-        -- the new lock
+        , ("cip-127/lock-kind", "sv-lock")
         , ("cip-127/lock-subject", "someSv")
-        -- the target lock
         , ("cip-127/target-lock-owner", "alice")
         , ("cip-127/lock-status", "vesting")
         , ("cip-127/lock-vesting-duration-micros", "5184000000000")
         , ("cip-127/lock-vesting-end-time-micros", "1767225600000000")
         ]
 
-test_substitutionTSv2Parser_failures : Script ()
-test_substitutionTSv2Parser_failures = do
-  let run entries =
-        runParser (substitutionTSv2Parser testAdmin (governanceLockTagToText GLT_SuperValidator))
-          (mkMeta $ substitutionRequest :: entries)
+test_substitutionTSv1Parser_failures : Script ()
+test_substitutionTSv1Parser_failures = do
+  let run' entries = runParser (substitutionTSv1Parser testAdmin) (mkMeta $ substitutionRequest :: entries)
+      run entries = run' $ (lockKindMetaKey, governanceLockTagToText GLT_SuperValidator) :: entries
       subject = (lockSubjectMetaKey, "someSv")
       targetOwner = (targetLockOwnerMetaKey, "alice")
 
@@ -464,9 +450,9 @@ test_substitutionTSv2Parser_failures = do
   expectErrors [invalidPartyError targetLockOwnerMetaKey invalidParty] $
     run [subject, (targetLockOwnerMetaKey, invalidParty)]
 
-  -- The `settlement.id` must name a lock kind; the TSv1 receiver party format is not accepted
-  expectErrors ["Invalid lock kind: 'cip-127_sv-lock'"] $
-    runParser (substitutionTSv2Parser testAdmin "cip-127_sv-lock") (mkMeta [substitutionRequest, subject, targetOwner])
+  -- The kind must name a known lock kind
+  expectErrors ["Invalid lock kind: 'unknown'"] $
+    run' [(lockKindMetaKey, "unknown"), subject, targetOwner]
 
   -- The target state must be `locked` or `vesting`; an invalid state and an invalid owner are both reported
   expectErrors
@@ -484,27 +470,3 @@ test_substitutionTSv2Parser_failures = do
     , "Missing metadata field '" <> lockVestingEndTimeMetaKey <> "'"
     ]
     $ run [subject, targetOwner, (lockStatusMetaKey, lockStateToText LS_Vesting)]
-
--- Funding amount parser
-------------------------
-
-test_fundingAmountParser : Script ()
-test_fundingAmountParser = do
-  let run = runParser fundingAmountParser
-      noneError = "Expected exactly one " <> amuletInstrumentIdName <> " value, got none"
-      valuesError entries = "Expected exactly one " <> amuletInstrumentIdName <> " value, got: " <> show entries
-
-  -- Exactly one Amulet amount
-  expectSuccess 10000.0 $ run (Some $ TextMap.fromList [(amuletInstrumentIdName, 10000.0)])
-
-  -- No amount
-  expectErrors [noneError] $ run None
-  expectErrors [noneError] $ run (Some TextMap.empty)
-
-  -- An amount for another instrument
-  let otherInstrument = [("OtherToken", 10000.0)]
-  expectErrors [valuesError otherInstrument] $ run (Some $ TextMap.fromList otherInstrument)
-
-  -- More than one amount
-  let twoInstruments = TextMap.fromList [(amuletInstrumentIdName, 10000.0), ("OtherToken", 5000.0)]
-  expectErrors [valuesError $ TextMap.toList twoInstruments] $ run (Some twoInstruments)

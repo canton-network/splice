@@ -13,8 +13,6 @@ import DA.Time
 import Daml.Script
 import Splice.Amulet
 import Splice.Amulet.TokenApiUtils (issuingMiningRoundContextKey, openMiningRoundContextKey)
-import Splice.Api.Token.AllocationInstructionV2 qualified as V2
-import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
@@ -121,9 +119,6 @@ testGovernanceLockHappyPathScenario ops = do
 testGovernanceLockCompatHappyPathTSv1 : Script ()
 testGovernanceLockCompatHappyPathTSv1 = testGovernanceLockCompatHappyPathScenario tsv1Operations
 
-testGovernanceLockCompatHappyPathTSv2 : Script ()
-testGovernanceLockCompatHappyPathTSv2 = testGovernanceLockCompatHappyPathScenario tsv2Operations
-
 testGovernanceLockCompatHappyPathScenario : CompatGovernanceLockOperations -> Script ()
 testGovernanceLockCompatHappyPathScenario ops = do
   env@TestEnv{..} <- setupTest
@@ -170,9 +165,6 @@ testGovernanceLockCompatHappyPathScenario ops = do
 
 testGovernanceLockCompatTimesFromMetaTSv1 : Script ()
 testGovernanceLockCompatTimesFromMetaTSv1 = testGovernanceLockCompatTimesFromMetaScenario tsv1Operations
-
-testGovernanceLockCompatTimesFromMetaTSv2 : Script ()
-testGovernanceLockCompatTimesFromMetaTSv2 = testGovernanceLockCompatTimesFromMetaScenario tsv2Operations
 
 testGovernanceLockCompatTimesFromMetaScenario : CompatGovernanceLockOperations -> Script ()
 testGovernanceLockCompatTimesFromMetaScenario ops = do
@@ -221,9 +213,6 @@ testGovernanceLockCompatTimesFromMetaScenario ops = do
 testGovernanceLockCompatPartialUnlockFromMetaTSv1 : Script ()
 testGovernanceLockCompatPartialUnlockFromMetaTSv1 = testGovernanceLockCompatPartialUnlockFromMetaScenario tsv1Operations
 
-testGovernanceLockCompatPartialUnlockFromMetaTSv2 : Script ()
-testGovernanceLockCompatPartialUnlockFromMetaTSv2 = testGovernanceLockCompatPartialUnlockFromMetaScenario tsv2Operations
-
 testGovernanceLockCompatPartialUnlockFromMetaScenario : CompatGovernanceLockOperations -> Script ()
 testGovernanceLockCompatPartialUnlockFromMetaScenario ops = do
   env@TestEnv{..} <- setupTest
@@ -261,9 +250,6 @@ testGovernanceLockCompatPartialUnlockFromMetaScenario ops = do
 
 testGovernanceLockCompatUnlockAmountCappedTSv1 : Script ()
 testGovernanceLockCompatUnlockAmountCappedTSv1 = testGovernanceLockCompatUnlockAmountCappedScenario tsv1Operations
-
-testGovernanceLockCompatUnlockAmountCappedTSv2 : Script ()
-testGovernanceLockCompatUnlockAmountCappedTSv2 = testGovernanceLockCompatUnlockAmountCappedScenario tsv2Operations
 
 -- | An unlock amount larger than the locked amount raises an error.
 testGovernanceLockCompatUnlockAmountCappedScenario : CompatGovernanceLockOperations -> Script ()
@@ -556,9 +542,6 @@ testGovernanceLockProvisionalFullWithdrawScenario ops = do
 
 testGovernanceLockCompatProvisionalFullWithdrawTSv1 : Script ()
 testGovernanceLockCompatProvisionalFullWithdrawTSv1 = testGovernanceLockCompatProvisionalFullWithdrawScenario tsv1Operations
-
-testGovernanceLockCompatProvisionalFullWithdrawTSv2 : Script ()
-testGovernanceLockCompatProvisionalFullWithdrawTSv2 = testGovernanceLockCompatProvisionalFullWithdrawScenario tsv2Operations
 
 testGovernanceLockCompatProvisionalFullWithdrawScenario : CompatGovernanceLockOperations -> Script ()
 testGovernanceLockCompatProvisionalFullWithdrawScenario ops = do
@@ -906,17 +889,6 @@ tsv1Operations = CompatGovernanceLockOperations with
     governanceUnlock env cid actor meta = ((<$>) fromSome) <$> optGovernanceUnlock env cid actor meta
     vestingWithdraw = vestingWithdrawV1
 
-tsv2Operations = CompatGovernanceLockOperations with
-    governanceLock
-    optGovernanceUnlock
-    governanceUnlock
-    vestingWithdraw
-  where
-    governanceLock = governanceLockV2
-    optGovernanceUnlock = withdrawAllocationV2
-    governanceUnlock env cid actor meta = ((<$>) fromSome) <$> optGovernanceUnlock env cid actor meta
-    vestingWithdraw = withdrawAllocationV2
-
 iso8601TimeToMeta : Text -> Time -> Metadata -> Metadata
 iso8601TimeToMeta key t meta = Metadata $ TM.insert key (show t) meta.values
 
@@ -1015,43 +987,6 @@ vestingWithdrawV1 = subsequentTransferV1 @VestingLock @VestingLock \lock ->
     [ (lockVestingDurationMetaKey, encodeRelTime lock.vestingPeriod)
     , (lockVestingEndTimeMetaKey, encodeTime lock.endTime)
     ]
-
-governanceLockV2 : TestEnv -> Party -> Decimal -> GovernanceLockKind -> Metadata -> Script (Either SubmitError (ContractId GovernanceLock))
-governanceLockV2 env owner amount kind meta = do
-  let (tag, lockSubject) = governanceLockKindToTagAndSubject kind
-      lockMeta = Metadata $ meta.values <> TM.fromList [(lockSubjectMetaKey, lockSubject)]
-      settlementInfo = V2.SettlementInfo with
-        executors = [env.instrId.admin]
-        id = governanceLockTagToText tag
-        cid = None
-        meta = emptyMetadata
-      allocation = V2.AllocationSpecification with
-        admin = env.instrId.admin
-        authorizer = basicAccount owner
-        transferLegSides = []
-        settlementDeadline = Some maxComparableTime
-        nextIterationFunding = Some $ TM.singleton env.instrId.id amount
-        committed = False
-        meta = lockMeta
-  result <- WalletClientV2.allocateV2 env.registries owner settlementInfo allocation
-  pure $ case result.output of
-    V2.AllocationInstructionResult_Completed cid -> Right $ fromInterfaceContractId cid
-    o -> Left $ UnknownError $ "Unexpected AllocationInstructionResult: " <> show o
-
-withdrawAllocationV2
-  :  forall t1 t2. (HasToInterface t1 V2.Allocation, HasFromInterface t2 V2.Allocation)
-  => TestEnv
-  -> ContractId t1
-  -> Party
-  -> Metadata
-  -> Script (Either SubmitError (Optional (ContractId t2)))
-withdrawAllocationV2 env cid actor meta = do
-  result <- WalletClientV2.tryWithdrawAllocationV2Result env.registries actor env.instrId.admin (toInterfaceContractId cid) meta
-  pure $ fmap
-    (\case
-      V2.AllocationResult{output = V2.AllocationResult_Pending cid} -> Some $ fromInterfaceContractId cid
-      _ -> None)
-    result
 
 getExtraArgsForRounds : ChoiceContext -> ContractId IssuingMiningRound -> ContractId OpenMiningRound -> ExtraArgs
 getExtraArgsForRounds context issuingMiningRoundCid openRoundCid = ExtraArgs with
