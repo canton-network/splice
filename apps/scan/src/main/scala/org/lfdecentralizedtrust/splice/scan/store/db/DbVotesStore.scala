@@ -45,7 +45,7 @@ import slick.jdbc.{JdbcProfile, PostgresProfile}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import java.time.Instant
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -288,6 +288,7 @@ object DbVotesStore {
       voteCompletedAt: Option[Long],
       voteEffectiveAt: Option[Long],
       choiceResult: String256M,
+      error: Option[String] = None,
   ) extends UpdateHistory.PreparedIngestionAction {
     override def action = {
       sqlu"""
@@ -303,7 +304,8 @@ object DbVotesStore {
           vote_tracking_cid,
           vote_completed_at,
           vote_effective_at,
-          choice_result
+          choice_result,
+          error
         ) values (
           $storeId,
           ${recordTime},
@@ -316,7 +318,8 @@ object DbVotesStore {
           ${voteTrackingCid},
           ${voteCompletedAt},
           ${voteEffectiveAt},
-          ${choiceResult}::jsonb
+          ${choiceResult}::jsonb,
+          ${error}
         )"""
     }
     override def pretty: Pretty[this.type] = {
@@ -335,31 +338,89 @@ object DbVotesStore {
     val mapping = Trees.getLocalEventIndices(tx)
     val recordTime = CantonTimestamp.assertFromInstant(tx.getRecordTime).toMicros
     tx.getEventsById.asScala.iterator
-      .collect { case (nodeId, DsoRulesCloseVoteRequest(node)) => nodeId -> node }
-      .map { case (nodeId, node) =>
-        val result = node.result.value
-        val outcome = VoteRequestOutcome.parse(result.outcome)
-        InsertVoteResult(
-          storeId = storeId,
-          recordTime = recordTime,
-          synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
-          updateId = String2066.tryCreate(tx.getUpdateId),
-          eventNumber = mapping(nodeId).intValue,
-          voteActionName = String2066.tryCreate(actionName(result.request.action)),
-          voteRequesterName = String2066.tryCreate(result.request.requester),
-          voteAccepted = outcome match { case _: Accepted => true; case _ => false },
-          voteTrackingCid =
-            String2066.tryCreate(result.request.trackingCid.toScala.fold("")(_.contractId)),
-          voteCompletedAt = Some(toMicros(result.completedAt)),
-          voteEffectiveAt = outcome.effectiveAt.map(toMicros),
-          choiceResult = String256M.tryCreate(
-            result.toJson
-          ),
-        )
+      .flatMap { case (nodeId, event) =>
+        lazy val eventNumber = mapping(nodeId).intValue
+        // Only the nodes that are a CloseVoteRequest exercise can fail here, all other nodes are ignored.
+        Try(event match {
+          case DsoRulesCloseVoteRequest(node) =>
+            Some(toInsert(node.result.value, storeId, recordTime, tx, eventNumber))
+          case _ => None
+        }) match {
+          case Success(insert) => insert
+          case Failure(e) =>
+            // Throwing would stop the ingestion of the whole update history, which can't continue past this update.
+            // Instead, write a row that only identifies the vote, so that it can be fixed later.
+            elc.error(
+              s"Failed to decode the vote result in update ${tx.getUpdateId} at record time $recordTime. " +
+                "Ingesting a placeholder instead.",
+              e,
+            )
+            Some(placeholder(storeId, recordTime, tx, eventNumber, e.getMessage))
+        }
       }
       .toSeq
       .sortBy(_.eventNumber)
   }
+
+  private def toInsert(
+      result: DsoRules_CloseVoteRequestResult,
+      storeId: Int,
+      recordTime: Long,
+      tx: Transaction,
+      eventNumber: Int,
+  ): InsertVoteResult = {
+    val outcome = VoteRequestOutcome.parse(result.outcome)
+    InsertVoteResult(
+      storeId = storeId,
+      recordTime = recordTime,
+      synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
+      updateId = String2066.tryCreate(tx.getUpdateId),
+      eventNumber = eventNumber,
+      voteActionName = String2066.tryCreate(actionName(result.request.action)),
+      voteRequesterName = String2066.tryCreate(result.request.requester),
+      voteAccepted = outcome match { case _: Accepted => true; case _ => false },
+      voteTrackingCid =
+        String2066.tryCreate(result.request.trackingCid.toScala.fold("")(_.contractId)),
+      voteCompletedAt = Some(toMicros(result.completedAt)),
+      voteEffectiveAt = outcome.effectiveAt.map(toMicros),
+      choiceResult = String256M.tryCreate(result.toJson),
+    )
+  }
+
+  /** A row for a vote that could not be decoded. It keeps what identifies the vote, and the rest is a fake vote
+    * with placeholder values, so that it can be read like any other row.
+    *
+    * This should not happen in practice: all SVs are expected to upgrade their apps before a new Daml version
+    * is voted in, so every app can decode every vote result that is created. Throwing instead would stop the
+    * ingestion of the whole update history, which is why this only logs an error.
+    */
+  private def placeholder(
+      storeId: Int,
+      recordTime: Long,
+      tx: Transaction,
+      eventNumber: Int,
+      error: String,
+  ): InsertVoteResult = {
+    InsertVoteResult(
+      storeId = storeId,
+      recordTime = recordTime,
+      synchronizerId = String2066.tryCreate(FailedToParseVote),
+      updateId = String2066.tryCreate(tx.getUpdateId),
+      eventNumber = eventNumber,
+      voteActionName = String2066.tryCreate(FailedToParseVote),
+      voteRequesterName = String2066.tryCreate(FailedToParseVote),
+      voteAccepted = false,
+      voteTrackingCid = String2066.tryCreate(FailedToParseVote),
+      voteCompletedAt = None,
+      voteEffectiveAt = None,
+      choiceResult = String256M.tryCreate(FailedToParseVote),
+      error = Some(error.take(MaxErrorLength)),
+    )
+  }
+
+  val FailedToParseVote = "<failed to parse vote>"
+
+  private val MaxErrorLength = 1000
 
   private def toMicros(at: Instant): Long = CantonTimestamp.assertFromInstant(at).toMicros
 

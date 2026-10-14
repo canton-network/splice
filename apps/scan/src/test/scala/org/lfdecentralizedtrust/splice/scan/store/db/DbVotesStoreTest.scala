@@ -39,6 +39,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
+  VoteRequest,
   VoteRequestOutcome as VRO,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.ClosedMiningRound
@@ -185,6 +186,41 @@ class DbVotesStoreTest
           _ <- ingestAll(stores, voteFixtures.reverse)
           pages <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 2)
         } yield pages.flatten shouldBe expected
+      }
+    }
+
+    "undecodable vote results" should {
+      "be ingested as placeholders that are listed like other votes" in {
+        val good = voteFixtures.head
+        val goodVotes = good.votes
+        // The result of this vote can't be decoded
+        val bad = dsoRulesExercise(
+          DsoRulesCloseVoteRequest.choice.name,
+          mkCloseVoteRequest(new VoteRequest.ContractId(nextCid())),
+          com.daml.ledger.javaapi.data.Unit.getInstance(),
+        )
+        for {
+          stores <- mkStores()
+          _ <- loggerFactory.assertLogs(
+            dummyDomain.ingestMulti(offset =>
+              mkTx(
+                offset,
+                goodVotes.map(closeVoteRequestEvent) :+ bad,
+                dummyDomain,
+                effectiveAt = good.recordTime,
+                recordTime = good.recordTime,
+              )
+            )(Seq(stores.updateHistory)),
+            _.errorMessage should include("Ingesting a placeholder instead"),
+          )
+          count <- stores.votesStore.countVoteRequestResults(VoteResultsFilters())
+          results <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 10)
+        } yield {
+          // The other votes of the transaction are ingested, and the undecodable one is a placeholder
+          count shouldBe goodVotes.size + 1L
+          results.flatten should contain allElementsOf goodVotes
+          results.flatten.map(_.request.requester) should contain(DbVotesStore.FailedToParseVote)
+        }
       }
     }
 

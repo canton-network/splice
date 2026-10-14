@@ -32,6 +32,12 @@ create table votes_store_results
     -- Full result of the exercise choice, encoded in protobuf-json format.
     choice_result       jsonb   not null,
 
+    -- Set if the choice result could not be decoded, e.g., because of an incompatibility with a newer Daml model.
+    -- In that case the row is a placeholder: it keeps the data that identifies the vote (record time, event number,
+    -- update id, synchronizer id), and the other columns hold placeholder values.
+    -- This is not expected to happen in practice, see DbVotesStore.
+    error               text,
+
     -- Primary key identifies the DsoRules_CloseVoteRequest exercise choice,
     -- and is used for paginating backfilling requests.
     constraint votes_store_results_id_pkey primary key (store_id, record_time, event_number),
