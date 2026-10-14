@@ -163,6 +163,74 @@ class DbVotesStoreTest
       }
     }
 
+    "pagination" should {
+      "follow the sort order, not the insertion order" in {
+        // Sort key (effective date, or completed at), then record time and event number, all descending
+        def sortKey(result: DsoRules_CloseVoteRequestResult): Instant = result.outcome match {
+          case accepted: VRO_Accepted => accepted.effectiveAt
+          case _ => result.completedAt
+        }
+        val expected = voteFixtures
+          .flatMap(fixture =>
+            fixture.votes.zipWithIndex.map { case (result, index) =>
+              (sortKey(result), fixture.recordTime, index, result)
+            }
+          )
+          .sortBy { case (key, recordTime, index, _) => (key, recordTime, index) }
+          .reverse
+          .map(_._4)
+        for {
+          stores <- mkStores()
+          // Ingested in the opposite order of the record times
+          _ <- ingestAll(stores, voteFixtures.reverse)
+          pages <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 2)
+        } yield pages.flatten shouldBe expected
+      }
+    }
+
+    "filter by effective date" should {
+      "compare timestamps, not strings" in {
+        // Every accepted result is effective at least 2.5 seconds after `base`.
+        // As strings, "...:02.500Z" would sort before "...:02Z".
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          accepted <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(accepted = Some(true))
+          )
+          from <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(effectiveFrom = Some(base.plusSeconds(2).toString))
+          )
+          to <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(effectiveTo = Some(base.plusSeconds(3).toString))
+          )
+        } yield {
+          from shouldBe accepted
+          to shouldBe 1L
+        }
+      }
+
+      "ignore dates that cannot be parsed" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          all <- stores.votesStore.countVoteRequestResults(VoteResultsFilters())
+          garbage <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(effectiveFrom = Some("Invalid Date"), effectiveTo = Some(""))
+          )
+          onlyTo <- stores.votesStore.countVoteRequestResults(
+            VoteResultsFilters(
+              effectiveFrom = Some("garbage"),
+              effectiveTo = Some(base.plusSeconds(3).toString),
+            )
+          )
+        } yield {
+          garbage shouldBe all
+          onlyTo shouldBe 1L
+        }
+      }
+    }
+
     "ingestion state" should {
       "be empty initially" in {
         for {
@@ -186,6 +254,27 @@ class DbVotesStoreTest
           state <- stores.votesStore.getIngestionState()
         } yield {
           state shouldBe empty
+        }
+      }
+
+      "be non-empty after ingesting transactions following a checkpoint" in {
+        val recordTime = CantonTimestamp.now()
+        for {
+          stores <- mkStores()
+          _ <- stores.updateHistory.ingestionSink.ingestUpdateBatch(
+            NonEmptyList.of(
+              TreeUpdateOrOffsetCheckpoint.Checkpoint(
+                new com.daml.ledger.javaapi.data.OffsetCheckpoint(0, Collections.emptyList())
+              )
+            )
+          )
+          _ <- dummyDomain.create(
+            appRewardCoupon(0, dsoParty, contractId = validContractId(1)),
+            recordTime = recordTime.toInstant,
+          )(stores.updateHistory)
+          state <- stores.votesStore.getIngestionState()
+        } yield {
+          state.value.firstIngestedRecordTime shouldBe recordTime
         }
       }
 

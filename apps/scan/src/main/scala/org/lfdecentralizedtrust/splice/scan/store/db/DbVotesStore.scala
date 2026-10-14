@@ -42,7 +42,8 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 import slick.jdbc.{JdbcProfile, PostgresProfile}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.Success
+import java.time.Instant
+import scala.util.{Success, Try}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -83,7 +84,7 @@ class DbVotesStore(
 
   def ingestionSink: UpdateHistory.AdditionalIngestionSink =
     new UpdateHistory.AdditionalIngestionSink {
-      override def initialize(historyId: Long, currentMigrationId: Long)(implicit
+      override def initialize(historyId: Long)(implicit
           tc: TraceContext
       ): Future[Unit] = for {
         storeId <- StoreDescriptorStore.getStoreIdForDescriptor(
@@ -100,43 +101,46 @@ class DbVotesStore(
       }
 
       override def prepareBatch(
-          updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint],
-          migrationId: Long,
+          updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
       )(implicit
           tc: TraceContext
       ): Seq[UpdateHistory.PreparedIngestionAction] = {
         val storeId = assertStoreId
         val actions: List[UpdateHistory.PreparedIngestionAction] = updates.toList.flatMap {
           case TreeUpdateOrOffsetCheckpoint.Update(TransactionTreeUpdate(tree), _) =>
-            parseTransaction(tree, storeId, migrationId)
+            parseTransaction(tree, storeId)
           case _ => List.empty[UpdateHistory.PreparedIngestionAction]
         }
         if (ingestionStateInitialized) {
           actions
         } else {
-          val firstRecordTimeO = updates.collectFirst {
-            case TreeUpdateOrOffsetCheckpoint.Update(TransactionTreeUpdate(tree), _) =>
-              CantonTimestamp.assertFromInstant(tree.getRecordTime).toMicros
-          }
-          firstRecordTimeO match {
+          firstTransactionRecordTime(updates) match {
             case Some(firstRecordTime) =>
-              InitializeIngestionState(storeId, firstRecordTime) +: actions
+              InitializeIngestionState(storeId, firstRecordTime.toMicros) +: actions
             case None =>
               actions
           }
         }
       }
 
-      override def advanceLastIngestedRecordTime(
-          lastIngestedRecordTime: CantonTimestamp,
-          migrationId: Long,
-      )(implicit tc: TraceContext): Unit = {
-        // If this method is called, it means the database actions from the previous `prepareTreesBatch` have been committed.
-        // We can now set the flag to avoid running `InitializeIngestionState` in the future.
+      override def onTransactionCommitted(
+          updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
+      )(implicit tc: TraceContext): Unit =
+        // The actions from the previous `prepareBatch` have been committed. If they included
+        // `InitializeIngestionState`, we can set the flag to avoid running it in the future.
         // `InitializeIngestionState` itself uses `on conflict do nothing`, this is just a best-effort
         // optimization to avoid unnecessary database writes.
-        ingestionStateInitialized = true
-      }
+        if (firstTransactionRecordTime(updates).isDefined) {
+          ingestionStateInitialized = true
+        }
+    }
+
+  private def firstTransactionRecordTime(
+      updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
+  ): Option[CantonTimestamp] =
+    updates.collectFirst {
+      case TreeUpdateOrOffsetCheckpoint.Update(TransactionTreeUpdate(tree), _) =>
+        CantonTimestamp.assertFromInstant(tree.getRecordTime)
     }
 
   def getIngestionState()(implicit tc: TraceContext): Future[Option[IngestionState]] = {
@@ -180,14 +184,15 @@ class DbVotesStore(
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] =
     for {
       sid <- storeIdF
-      afterCond = after.map(a =>
-        sql"""(#$sortKey, row_id) < ((select #$sortKey from #$table where row_id = $a), $a)"""
-      )
+      // The page token is a row_id, which is only used to look up the position in the sort order.
+      afterCond = after.map(a => sql"""(#$sortKey, record_time, event_number) <
+          (select #$sortKey, record_time, event_number
+           from #$table where store_id = $sid and row_id = $a)""")
       where = and(filterConditions(sid, filters) ++ afterCond.toList.map(toSQLActionBuilderChain))
       rows <- futureUnlessShutdownToFuture(
         storage.query(
           (sql"select row_id, choice_result from #$table where " ++ where ++
-            sql" order by #$sortKey desc, row_id desc limit ${sqlLimit(limit)}").toActionBuilder
+            sql" order by #$sortKey desc, record_time desc, event_number desc limit ${sqlLimit(limit)}").toActionBuilder
             .as[(Long, String)],
           "DbVotesStore.listVoteRequestResults",
         )
@@ -218,9 +223,15 @@ class DbVotesStore(
     }
   }
 
+  /** Dates that cannot be parsed are ignored, as if the filter was not set. */
+  private def parseMicros(s: String): Option[Long] =
+    Try(Instant.parse(s)).toOption.flatMap(CantonTimestamp.fromInstant(_).toOption).map(_.toMicros)
+
   private def and(conds: NonEmptyList[SQLActionBuilderChain]) =
     conds.reduceLeft((a, b) => (a ++ sql" and " ++ b).toActionBuilder)
 
+  // No indexes support these filters: the table has one row per closed vote request,
+  // so it stays small (thousands of rows) and is scanned. Only the sort order is index-backed.
   private def filterConditions(
       storeId: Int,
       f: VoteResultsFilters,
@@ -230,11 +241,10 @@ class DbVotesStore(
       f.actionName.map(n => sql"vote_action_name like ${lengthLimited(s"%$n%")}"),
       f.accepted.map(a => sql"vote_accepted = $a"),
       f.requester.map(r => sql"vote_requester_name like ${lengthLimited(s"%$r%")}"),
-      (f.effectiveFrom, f.effectiveTo) match {
-        case (Some(from), Some(to)) =>
-          Some(sql"vote_effective_at between ${lengthLimited(from)} and ${lengthLimited(to)}")
-        case (Some(from), None) => Some(sql"vote_effective_at > ${lengthLimited(from)}")
-        case (None, Some(to)) => Some(sql"vote_effective_at < ${lengthLimited(to)}")
+      (f.effectiveFrom.flatMap(parseMicros), f.effectiveTo.flatMap(parseMicros)) match {
+        case (Some(from), Some(to)) => Some(sql"vote_effective_at between $from and $to")
+        case (Some(from), None) => Some(sql"vote_effective_at > $from")
+        case (None, Some(to)) => Some(sql"vote_effective_at < $to")
         case (None, None) => None
       },
     ).flatten.map(toSQLActionBuilderChain),
@@ -295,7 +305,6 @@ object DbVotesStore {
   }
   final case class InsertVoteResult(
       storeId: Int,
-      migrationId: Long,
       recordTime: Long,
       synchronizerId: String2066,
       updateId: String2066,
@@ -304,15 +313,14 @@ object DbVotesStore {
       voteRequesterName: String2066,
       voteAccepted: Boolean,
       voteTrackingCid: String2066,
-      voteCompletedAt: Option[String2066],
-      voteEffectiveAt: Option[String2066],
+      voteCompletedAt: Option[Long],
+      voteEffectiveAt: Option[Long],
       choiceResult: String256M,
   ) extends UpdateHistory.PreparedIngestionAction {
     override def action = {
       sqlu"""
         insert into #$table(
           store_id,
-          migration_id,
           record_time,
           synchronizer_id,
           update_id,
@@ -326,7 +334,6 @@ object DbVotesStore {
           choice_result
         ) values (
           $storeId,
-          ${migrationId},
           ${recordTime},
           ${synchronizerId},
           ${updateId},
@@ -352,7 +359,6 @@ object DbVotesStore {
   def parseTransaction(
       tx: Transaction,
       storeId: Int,
-      migrationId: Long,
   )(implicit elc: ErrorLoggingContext): Seq[InsertVoteResult] = {
     val mapping = Trees.getLocalEventIndices(tx)
     val recordTime = CantonTimestamp.assertFromInstant(tx.getRecordTime).toMicros
@@ -363,7 +369,6 @@ object DbVotesStore {
         val outcome = VoteRequestOutcome.parse(result.outcome)
         InsertVoteResult(
           storeId = storeId,
-          migrationId = migrationId,
           recordTime = recordTime,
           synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
           updateId = String2066.tryCreate(tx.getUpdateId),
@@ -373,8 +378,8 @@ object DbVotesStore {
           voteAccepted = outcome match { case _: Accepted => true; case _ => false },
           voteTrackingCid =
             String2066.tryCreate(result.request.trackingCid.toScala.fold("")(_.contractId)),
-          voteCompletedAt = Some(String2066.tryCreate(result.completedAt.toString)),
-          voteEffectiveAt = outcome.effectiveAt.map(at => String2066.tryCreate(at.toString)),
+          voteCompletedAt = Some(toMicros(result.completedAt)),
+          voteEffectiveAt = outcome.effectiveAt.map(toMicros),
           choiceResult = String256M.tryCreate(
             result.toJson
           ),
@@ -383,6 +388,8 @@ object DbVotesStore {
       .toSeq
       .sortBy(_.eventNumber)
   }
+
+  private def toMicros(at: Instant): Long = CantonTimestamp.assertFromInstant(at).toMicros
 
   private def actionName(action: ActionRequiringConfirmation): String = action match {
     case a: ARC_DsoRules => a.dsoAction.getClass.getSimpleName

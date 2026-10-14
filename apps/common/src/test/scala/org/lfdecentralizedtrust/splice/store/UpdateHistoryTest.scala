@@ -91,14 +91,14 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
 
       "run the additional ingestion sink actions for every update, including the first" in {
         val executedActions = new java.util.concurrent.ConcurrentLinkedQueue[String]()
+        val committedBatches = new java.util.concurrent.ConcurrentLinkedQueue[Int]()
         val sink = new UpdateHistory.AdditionalIngestionSink {
-          override def initialize(historyId: Long, currentMigrationId: Long)(implicit
+          override def initialize(historyId: Long)(implicit
               tc: com.digitalasset.canton.tracing.TraceContext
           ): Future[Unit] = Future.unit
 
           override def prepareBatch(
-              updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint],
-              migrationId: Long,
+              updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
           )(implicit
               tc: com.digitalasset.canton.tracing.TraceContext
           ): Seq[UpdateHistory.PreparedIngestionAction] =
@@ -115,10 +115,10 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
               }
             }
 
-          override def advanceLastIngestedRecordTime(
-              lastIngestedRecordTime: CantonTimestamp,
-              migrationId: Long,
-          )(implicit tc: TraceContext): Unit = ()
+          override def onTransactionCommitted(
+              updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
+          )(implicit tc: TraceContext): Unit =
+            committedBatches.add(updates.size).discard
         }
         val store = mkStore(additionalIngestionSinks = Seq(sink))
 
@@ -128,7 +128,11 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           _ <- create(domain1, cid1, offset1, party1, store, time(10))
           _ = executedActions.size() shouldBe 1
           _ <- create(domain1, cid2, offset2, party1, store, time(20))
-        } yield executedActions.size() shouldBe 2
+        } yield {
+          executedActions.size() shouldBe 2
+          // One notification per ingested update
+          committedBatches.size() shouldBe 2
+        }
       }
 
       "handle single create and query it by contract id" in {
