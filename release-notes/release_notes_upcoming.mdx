@@ -82,6 +82,10 @@
       snapshots. SVs that restrict SV app ingress must allow other SVs to reach the new
       `/v0/onboard/sv/party-migration/prepare`, `/v0/onboard/sv/sequencer/prepare` and
       `/v0/onboard/sv/download/{id}` endpoints, which are tagged `x-external-audience: svs`.
+      Interrupted downloads resume where they stopped. Proxies between SVs must pass through the
+      `Repr-Digest` response header, which the joining SV uses to verify the snapshot. They should also
+      pass through the `Range` and `Content-Range` headers; otherwise interrupted downloads start again
+      from the beginning.
 
   - Deployment
 
