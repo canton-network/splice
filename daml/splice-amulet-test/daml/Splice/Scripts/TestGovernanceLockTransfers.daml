@@ -4,11 +4,9 @@
 -- | Tests for the transfer of governance locks and vesting locks to a new owner.
 module Splice.Scripts.TestGovernanceLockTransfers where
 
-import DA.Action (unless)
 import DA.Assert ((===))
 import DA.Foldable (forA_)
 import DA.Map qualified as Map
-import DA.Text qualified as Text
 import DA.Time
 
 import Daml.Script
@@ -20,45 +18,47 @@ import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.ExternalPartyAmuletRules
 import Splice.GovernanceLock
 import Splice.Scripts.TestGovernanceLocks
+import Splice.Scripts.TestGovernanceLockSubstitution (expectFailureContaining)
 import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 import Splice.TokenStandard.Utils (toAnyContractId)
 
--- | Proposes, as `proposer`, a transfer of governance locks through
--- `ExternalPartyAmuletRules_ProposeGovernanceLockTransfer`.
+-- | Proposes, as `proposer`, a lock transfer through the
+-- `ExternalPartyAmuletRules_ProposeGovernanceLockTransfer` or
+-- `ExternalPartyAmuletRules_ProposeVestingLockTransfer` choice that
+-- `mkChoice` builds.
+createLockTransferRaw
+  :  ( Choice ExternalPartyAmuletRules ch result
+     , HasField "proposal" result (ContractId proposal) )
+  => TestEnv -> Party
+  -> (LockTransferArgs lockKey -> ch) -- ^ mkChoice
+  -> LockTransfer lockKey
+  -> Script (Either SubmitError (ContractId proposal))
+createLockTransferRaw env proposer mkChoice transfer = do
+  (rulesCid, disc) <-
+    AmuletRegistryV2.getExtAmuletRulesWithDisclosures env.registriesEnv.amuletV2
+  result <- submitWithTransferContext env.registriesEnv.amuletV2
+    (actAs proposer <> discloseMany' disc) \context ->
+      exerciseCmd rulesCid $ mkChoice LockTransferArgs with
+        transfer
+        extraArgs = emptyExtraArgs with context
+  pure $ fmap (.proposal) result
+
 createGovernanceLockTransferRaw
   :  TestEnv -> Party -> LockTransfer GovernanceLockKey
   -> Script (Either SubmitError (ContractId GovernanceLockTransfer))
-createGovernanceLockTransferRaw env proposer transfer = do
-  (rulesCid, disc) <-
-    AmuletRegistryV2.getExtAmuletRulesWithDisclosures env.registriesEnv.amuletV2
-  result <- submitWithTransferContext env.registriesEnv.amuletV2
-    (actAs proposer <> discloseMany' disc) \context ->
-      exerciseCmd rulesCid
-        ExternalPartyAmuletRules_ProposeGovernanceLockTransfer with
-          args = LockTransferArgs with
-            transfer
-            extraArgs = emptyExtraArgs with context
-  pure $ fmap (.proposal) result
+createGovernanceLockTransferRaw env proposer =
+  createLockTransferRaw env proposer
+    ExternalPartyAmuletRules_ProposeGovernanceLockTransfer
 
--- | Proposes, as `proposer`, a transfer of vesting locks through
--- `ExternalPartyAmuletRules_ProposeVestingLockTransfer`.
 createVestingLockTransferRaw
   :  TestEnv -> Party -> LockTransfer VestingLockKey
   -> Script (Either SubmitError (ContractId VestingLockTransfer))
-createVestingLockTransferRaw env proposer transfer = do
-  (rulesCid, disc) <-
-    AmuletRegistryV2.getExtAmuletRulesWithDisclosures env.registriesEnv.amuletV2
-  result <- submitWithTransferContext env.registriesEnv.amuletV2
-    (actAs proposer <> discloseMany' disc) \context ->
-      exerciseCmd rulesCid
-        ExternalPartyAmuletRules_ProposeVestingLockTransfer with
-          args = LockTransferArgs with
-            transfer
-            extraArgs = emptyExtraArgs with context
-  pure $ fmap (.proposal) result
+createVestingLockTransferRaw env proposer =
+  createLockTransferRaw env proposer
+    ExternalPartyAmuletRules_ProposeVestingLockTransfer
 
 -- | How long a lock transfer proposal lasts: the `tokenStandardMaxTTL` config,
 -- which the test config leaves unset, so its default of 90 days applies.
@@ -253,15 +253,60 @@ testLockTransferRaw_keyWithoutLock = do
   checkBalances env alice (1000.0, 0.0)
   checkBalances env bob (0.0, 0.0)
 
+-- Rejected lock transfer proposals
+-----------------------------------
+
+-- | Rejected proposals, each tried with a governance lock and a vesting lock of
+-- alice as source. None of the failed attempts moves funds or touches the
+-- source locks.
+testLockTransferRaw_failures : Script ()
+testLockTransferRaw_failures = do
+  env@TestEnv{..} <- setupTest
+  (lockCid, lock) <- svLock env alice 100000.0
+  (vestingLockCid, vestingLock) <- svVestingLock env alice 100000.0
+  now <- getTime
+  transfer <- validLockTransfer (key lock) bob 40000.0
+  let toVestingTransfer t = LockTransfer with
+        source = key vestingLock
+        receiver = t.receiver
+        amount = t.amount
+        requestedAt = t.requestedAt
+      mustFail proposer msg t = do
+        expectFailureContaining msg =<<
+          createGovernanceLockTransferRaw env proposer t
+        expectFailureContaining msg =<<
+          createVestingLockTransferRaw env proposer (toVestingTransfer t)
+
+  mustFail alice "'receiver' is equal to 'sender'" transfer with receiver = alice
+
+  mustFail alice "'amount' is not greater than 'zero'" transfer with amount = 0.0
+  mustFail alice "'amount' is not greater than 'zero'" transfer with amount = -1.0
+
+  -- Deadlines: `requestedAt` must be in the past, but no more than a day ago.
+  mustFail alice "Ledger time is strictly before deadline 'requestedAt'"
+    transfer with requestedAt = now `addRelTime` hours 1
+  mustFail alice "Ledger time is at or past deadline 'requestedAt + 1 day'"
+    transfer with requestedAt = now `addRelTime` days (-2)
+
+  -- The owner of the source locks must authorize the proposal.
+  mustFail charlie "requires authorizers alice" transfer
+
+  -- A source vesting lock that has fully vested cannot be transferred.
+  passTime $ (vestingLock.endTime `subTime` now) + seconds 1
+  laterTransfer <- validLockTransfer (key vestingLock) bob 40000.0
+  expectFailureContaining
+    "Ledger time is at or past deadline 'source lock endTime'" =<<
+    createVestingLockTransferRaw env alice laterTransfer
+
+  -- None of the failed attempts moved funds or touched the source locks. The
+  -- fully vested lock now counts as unlocked.
+  checkLockUntouched alice lockCid lock
+  checkLockUntouched alice vestingLockCid vestingLock
+  checkBalances env alice (101000.0, 100000.0)
+  checkBalances env bob (0.0, 0.0)
+
 -- Accept, withdraw and reject of lock transfer proposals
 ---------------------------------------------------------
-
-expectFailureContaining : Text -> Either SubmitError a -> Script ()
-expectFailureContaining _ (Right _) =
-  fail "Expected a failure, but the submission succeeded"
-expectFailureContaining needle (Left err) =
-  unless (needle `Text.isInfixOf` show err) $
-    fail $ "Expected a failure containing '" <> needle <> "', got: " <> show err
 
 -- | Discloses a source lock and its locked amulet, which the receiver of a transfer cannot see.
 sourceDisclosures
