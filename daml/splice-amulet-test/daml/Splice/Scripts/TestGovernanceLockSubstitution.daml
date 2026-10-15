@@ -339,20 +339,17 @@ setupRawSubstitution = do
 -- TSv1 on raw-created substitutions
 ------------------------------------
 
-acceptSubstitutionV1 : TestEnv -> Disclosures' -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
-acceptSubstitutionV1 env disclosures cid actor =
-  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor <> discloseMany' disclosures) \context ->
-    exerciseCmd cid V1.TransferInstruction_Accept with extraArgs = emptyExtraArgs with context
+acceptSubstitutionV1 : TestEnv -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
+acceptSubstitutionV1 env cid actor =
+  WalletClientV2.tryAcceptTransferInstructionV1Result env.registries actor cid
 
 withdrawSubstitutionV1 : TestEnv -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
 withdrawSubstitutionV1 env cid actor =
-  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor) \context ->
-    exerciseCmd cid V1.TransferInstruction_Withdraw with extraArgs = emptyExtraArgs with context
+  WalletClientV2.tryWithdrawTransferInstructionV1Result env.registries actor cid emptyMetadata
 
-rejectSubstitutionV1 : TestEnv -> Disclosures' -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
-rejectSubstitutionV1 env disclosures cid actor =
-  submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor <> discloseMany' disclosures) \context ->
-    exerciseCmd cid V1.TransferInstruction_Reject with extraArgs = emptyExtraArgs with context
+rejectSubstitutionV1 : TestEnv -> ContractId V1.TransferInstruction -> Party -> Script (Either SubmitError V1.TransferInstructionResult)
+rejectSubstitutionV1 env cid actor =
+  WalletClientV2.tryRejectTransferInstructionV1Result env.registries actor cid
 
 rejectGovernanceSubstitutionRaw
   :  TestEnv -> Disclosures' -> ContractId GovernanceLockSubstitution -> [Party]
@@ -391,9 +388,8 @@ testSubstitutionV1_rawSubstitutionView = do
 
 testSubstitutionV1_acceptRawSubstitution : Script ()
 testSubstitutionV1_acceptRawSubstitution = do
-  (env@TestEnv{..}, targetCid, newSpec, substitutionCid) <- setupRawSubstitution
-  options <- targetDisclosures alice targetCid
-  result <- expectSuccess (acceptSubstitutionV1 env options substitutionCid alice)
+  (env@TestEnv{..}, _, newSpec, substitutionCid) <- setupRawSubstitution
+  result <- expectSuccess (acceptSubstitutionV1 env substitutionCid alice)
   result.senderChangeCids === []
   [unlockedAmulet] <- expectTransferCompleted result
   WalletClientV2.checkHolding alice (coerceContractId unlockedAmulet) 20000.0
@@ -419,8 +415,7 @@ testSubstitutionV1_rejectRawSubstitution : Script ()
 testSubstitutionV1_rejectRawSubstitution = do
   (env@TestEnv{..}, targetCid, _, substitutionCid) <- setupRawSubstitution
   WalletClientV2.checkUnlockedBalance bob instrId 0.0
-  disclosures <- proposalDisclosures bob (fromInterfaceContractId substitutionCid)
-  [change] <- expectTransferFailed =<< expectSuccess (rejectSubstitutionV1 env disclosures substitutionCid alice)
+  [change] <- expectTransferFailed =<< expectSuccess (rejectSubstitutionV1 env substitutionCid alice)
   WalletClientV2.checkHolding bob (coerceContractId change) 20000.0
   WalletClientV2.checkUnlockedBalance bob instrId 20000.0
   archived <- queryInterfaceContractId bob substitutionCid
@@ -479,8 +474,7 @@ testSubstitutionV1_vestingTarget = do
         endTime = vestingLock.endTime)
     20000.0
 
-  options <- targetDisclosures alice vestingCid
-  [unlockedAmulet] <- expectTransferCompleted =<< expectSuccess (acceptSubstitutionV1 env options result.proposal alice)
+  [unlockedAmulet] <- expectTransferCompleted =<< expectSuccess (acceptSubstitutionV1 env result.proposal alice)
   WalletClientV2.checkHolding alice (coerceContractId unlockedAmulet) 20000.0
   [(_, newLock)] <- query @VestingLock bob
   newLock.owner === bob
@@ -558,7 +552,7 @@ testSelfSubstitution_fullTSv1 = do
   transferView.status === V1.TransferPendingInternalWorkflow with
     pendingActions = Map.fromList [(alice, "accept substitution; reject substitution; withdraw substitution")]
 
-  acceptResult <- expectSuccess $ acceptSubstitutionV1 env mempty result.proposal alice
+  acceptResult <- expectSuccess $ acceptSubstitutionV1 env result.proposal alice
   acceptResult.senderChangeCids === []
   receiverHoldings <- expectTransferCompleted acceptResult
   receiverHoldings === []
@@ -657,7 +651,7 @@ testSelfSubstitution_reject = do
   (env@TestEnv{..}, targetCid, targetSpec) <- setupSelfSubstitution GovernanceLockSpecification with kind = selfSubstitutionKind
 
   result <- proposeSelfSubstitution env targetSpec 20000.0
-  changes <- expectTransferFailed =<< expectSuccess (rejectSubstitutionV1 env mempty result.proposal alice)
+  changes <- expectTransferFailed =<< expectSuccess (rejectSubstitutionV1 env result.proposal alice)
   changes === []
 
   Some target <- queryContractId alice targetCid

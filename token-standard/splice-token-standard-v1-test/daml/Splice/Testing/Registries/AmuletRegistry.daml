@@ -1,6 +1,8 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 -- | Daml script functions for initializing and using an amulet registry via the
 -- token standard and the amulet specific functions.
 module Splice.Testing.Registries.AmuletRegistry
@@ -267,33 +269,20 @@ registryApi_getTransferInstruction_AcceptContext
   : AmuletRegistry -> ContractId TransferInstruction -> Script OpenApiChoiceContext
 registryApi_getTransferInstruction_AcceptContext registry instrCid = do
   transferC <- getExternalPartyConfigStateContext registry
-  Some amuletInstr <- queryContractId @AmuletTransferInstruction registry.dso (coerceContractId instrCid)
-  -- need to disclose the amulet contract, as the receiver has no visibility into it
-  lockedAmuletD <- queryDisclosure' @LockedAmulet registry.dso amuletInstr.lockedAmulet
-  pure $ withExtraDisclosures lockedAmuletD transferC
+  amuletTransferInstrC <- registryApi_getTransferFactory_optGetContext @AmuletTransferInstruction registry (coerceContractId instrCid) \amuletInstr -> do
+    -- need to disclose the amulet contract, as the receiver has no visibility into it
+    lockedAmuletD <- queryDisclosure' @LockedAmulet registry.dso amuletInstr.lockedAmulet
+    pure $ withExtraDisclosures lockedAmuletD mempty
+  governanceLockTransferC <- registryApi_getTransferInstruction_governanceLockTransfer @GovernanceLockTransfer @GovernanceLock
+    registry (coerceContractId instrCid)
+  vestingLockTransferC <- registryApi_getTransferInstruction_governanceLockTransfer @VestingLockTransfer @VestingLock
+    registry (coerceContractId instrCid)
+  pure $ transferC <> fold amuletTransferInstrC <> fold governanceLockTransferC <> fold vestingLockTransferC
 
 registryApi_getTransferInstruction_abortTwoStepTransferContext
   : AmuletRegistry -> ContractId TransferInstruction -> Script OpenApiChoiceContext
 registryApi_getTransferInstruction_abortTwoStepTransferContext registry instrCid = do
-  -- check whether the locked amulet is still active, so that aborts still work
-  -- even if the owner of the LockedAmulet expired it
-  optAmuletContext <- registryApi_getTransferInstruction_abortTwoStepTransferContextAbstract registry
-    (coerceContractId instrCid : ContractId AmuletTransferInstruction)
-  optGovernanceContext <- registryApi_getTransferInstruction_abortTwoStepTransferContextAbstract registry
-    (coerceContractId instrCid : ContractId GovernanceLock)
-  optVestingContext <- registryApi_getTransferInstruction_abortTwoStepTransferContextAbstract registry
-    (coerceContractId instrCid : ContractId VestingLock)
-  externalPartyState <- if isSome optGovernanceContext || isSome optVestingContext
-                           then getExternalPartyConfigStateContext registry
-                           else pure emptyOpenApiChoiceContext
-  pure $ fold optAmuletContext <> fold optGovernanceContext <> fold optVestingContext <> externalPartyState
-
-registryApi_getTransferInstruction_abortTwoStepTransferContextAbstract
-  : forall t. (HasEnsure t, Template t, HasToInterface t TransferInstruction, HasField "lockedAmulet" t (ContractId LockedAmulet))
-  => AmuletRegistry -> ContractId t -> Script (Optional OpenApiChoiceContext)
-registryApi_getTransferInstruction_abortTwoStepTransferContextAbstract registry instrCid = do
-  optInstr <- lookup instrCid <$> query @t registry.dso
-  forA optInstr $ \amuletInstr -> do
+  amuletTransferInstrC <- registryApi_getTransferFactory_optGetContext @AmuletTransferInstruction registry (coerceContractId instrCid) \amuletInstr -> do
     optLockedAmulet <- queryContractId @LockedAmulet registry.dso amuletInstr.lockedAmulet
     let lockedAmuletActive = isSome optLockedAmulet
     -- this can only happen if the locked amulet already expired
@@ -312,6 +301,67 @@ registryApi_getTransferInstruction_abortTwoStepTransferContextAbstract registry 
         pure $ withExtraDisclosures lockedAmuletD expireLockC
       else
         pure expireLockC
+  governanceLockSubstitutionC <- registryApi_getTransferInstruction_governanceLockSubstitution @GovernanceLockSubstitution @GovernanceLock
+    registry (coerceContractId instrCid)
+  vestingLockSubstitutionC <- registryApi_getTransferInstruction_governanceLockSubstitution @VestingLockSubstitution @VestingLock
+    registry (coerceContractId instrCid)
+  governanceLockTransferC <- registryApi_getTransferInstruction_governanceLockTransfer @GovernanceLockTransfer @GovernanceLock
+    registry (coerceContractId instrCid)
+  vestingLockTransferC <- registryApi_getTransferInstruction_governanceLockTransfer @VestingLockTransfer @VestingLock
+    registry (coerceContractId instrCid)
+  pure $ fold amuletTransferInstrC <> fold governanceLockSubstitutionC <> fold vestingLockSubstitutionC <> fold governanceLockTransferC <> fold vestingLockTransferC
+
+registryApi_getTransferFactory_optGetContext
+  :  forall t o. (HasEnsure t, Template t)
+  => AmuletRegistry
+  -> ContractId t
+  -> (t -> Script o)
+  -> Script (Optional o)
+registryApi_getTransferFactory_optGetContext registry cid f = do
+  found <- query @t registry.dso
+  forA (lookup cid found) f
+
+registryApi_getTransferInstruction_governanceLockSubstitution
+  :  forall substitution lock lockKey.
+     ( HasEnsure substitution
+     , Template substitution
+     , HasToInterface substitution TransferInstruction
+     , HasField "lockedAmulet" substitution (Optional (ContractId LockedAmulet))
+     )
+  => AmuletRegistry
+  -> ContractId substitution
+  -> Script (Optional OpenApiChoiceContext)
+registryApi_getTransferInstruction_governanceLockSubstitution registry substitutionCid = do
+  registryApi_getTransferFactory_optGetContext registry substitutionCid \substitution ->
+    case substitution.lockedAmulet of
+      None -> pure mempty
+      Some lockedAmulet -> do
+        lockedAmuletD <- queryDisclosure' @LockedAmulet registry.dso lockedAmulet
+        pure $ withExtraDisclosures lockedAmuletD mempty
+
+registryApi_getTransferInstruction_governanceLockTransfer
+  :  forall lockTransfer lock lockKey.
+     ( HasEnsure lockTransfer, Template lockTransfer, HasToInterface lockTransfer TransferInstruction, HasField "transfer" lockTransfer (LockTransfer lockKey)
+     , HasEnsure lock, Template lock, TemplateKey lock lockKey, Eq lockKey, Show lockKey, HasField "lockedAmulet" lock (ContractId LockedAmulet)
+     )
+  => AmuletRegistry
+  -> ContractId lockTransfer
+  -> Script (Optional OpenApiChoiceContext)
+registryApi_getTransferInstruction_governanceLockTransfer registry lockTransferCid =
+  registryApi_getTransferFactory_optGetContext registry lockTransferCid \lockTransfer -> do
+    -- unlocking the source lock needs the external party config state
+    transferC <- getExternalPartyConfigStateContext registry
+    -- the accept resolves the source lock by key, and the receiver has no visibility into it,
+    -- so disclose the lock and its locked amulet
+    let source = lockTransferSource lockTransfer.transfer
+    optLock <- queryByKey registry.dso source
+    lockD <- case optLock of
+      None -> assertFail $ "Failed to find lock with key " <> show source <> " originating from lock transfer " <> show lockTransferCid
+      Some (lockCid, lock) -> do
+        lockD <- queryDisclosure' @lock registry.dso lockCid
+        lockedAmuletD <- queryDisclosure' @LockedAmulet registry.dso lock.lockedAmulet
+        pure $ lockD <> lockedAmuletD
+    pure $ withExtraDisclosures lockD transferC
 
 registryApi_getAllocation_abortTwoStepTransferContext
   : AmuletRegistry -> ContractId Allocation -> Script OpenApiChoiceContext

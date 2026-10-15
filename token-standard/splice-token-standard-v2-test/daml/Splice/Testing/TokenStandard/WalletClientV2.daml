@@ -38,10 +38,14 @@ module Splice.Testing.TokenStandard.WalletClientV2
     withdrawTransferInstructionV2,
 
     transferV1,
+    tryTransferV1Result,
     acceptTransferInstructionV1,
+    tryAcceptTransferInstructionV1Result,
     rejectTransferInstructionV1,
+    tryRejectTransferInstructionV1Result,
     withdrawTransferInstructionV1,
     tryWithdrawTransferInstructionV1,
+    tryWithdrawTransferInstructionV1Result,
 
     -- * Managing allocations
     listAllocationInstructionsV2,
@@ -308,6 +312,11 @@ transferV1 registries actor transferArg = do
   batch <- mkTransferFactory_TransferV1 registries transferArg
   extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
 
+tryTransferV1Result : MultiRegistry.MultiRegistry -> Party -> V1.TransferFactory_Transfer -> Script (Either SubmitError V1.TransferInstructionResult)
+tryTransferV1Result registries actor transferArg = do
+  batch <- mkTransferFactory_TransferV1 registries transferArg
+  fmap extractTransferInstructionV1Result <$> tryExecuteSingletonTSABatch registries actor batch
+
 transferV2 : MultiRegistry.MultiRegistry -> Party -> V2.TransferFactory_Transfer -> Script (Optional (ContractId V2.TransferInstruction))
 transferV2 registries actor transferArg = do
   batch <- mkTransferFactory_TransferV2 registries transferArg
@@ -333,10 +342,20 @@ acceptTransferInstructionV1 registries actor instrCid = do
   batch <- mkTransferInstruction_AcceptV1 registries actor instrCid
   extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
 
+tryAcceptTransferInstructionV1Result : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Either SubmitError V1.TransferInstructionResult)
+tryAcceptTransferInstructionV1Result registries actor instrCid = do
+  batch <- mkTransferInstruction_AcceptV1 registries actor instrCid
+  fmap extractTransferInstructionV1Result <$> tryExecuteSingletonTSABatch registries actor batch
+
 rejectTransferInstructionV1 : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Optional (ContractId V1.TransferInstruction))
 rejectTransferInstructionV1 registries actor instrCid = do
   batch <- mkTransferInstruction_RejectV1 registries actor instrCid
   extractPendingTransferInstructionV1 <$> executeSingletonTSABatch registries actor batch
+
+tryRejectTransferInstructionV1Result : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Either SubmitError V1.TransferInstructionResult)
+tryRejectTransferInstructionV1Result registries actor instrCid = do
+  batch <- mkTransferInstruction_RejectV1 registries actor instrCid
+  fmap extractTransferInstructionV1Result <$> tryExecuteSingletonTSABatch registries actor batch
 
 withdrawTransferInstructionV1 : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Script (Optional (ContractId V1.TransferInstruction))
 withdrawTransferInstructionV1 registries actor instrCid = do
@@ -348,12 +367,20 @@ tryWithdrawTransferInstructionV1 registries actor instrCid meta = do
   batch <- mkTransferInstruction_WithdrawV1' registries actor instrCid meta
   fmap extractPendingTransferInstructionV1 <$> tryExecuteSingletonTSABatch registries actor batch
 
+tryWithdrawTransferInstructionV1Result : MultiRegistry.MultiRegistry -> Party -> ContractId V1.TransferInstruction -> Metadata -> Script (Either SubmitError V1.TransferInstructionResult)
+tryWithdrawTransferInstructionV1Result registries actor instrCid meta = do
+  batch <- mkTransferInstruction_WithdrawV1' registries actor instrCid meta
+  fmap extractTransferInstructionV1Result <$> tryExecuteSingletonTSABatch registries actor batch
+
+extractTransferInstructionV1Result : BatchingUtilityV2.TokenStandardActionResult -> V1.TransferInstructionResult
+extractTransferInstructionV1Result (BatchingUtilityV2.TSAR_TransferInstructionResultV1 result) = result
+extractTransferInstructionV1Result result = error $ "Expected a TransferInstructionResultV1, but got: " <> show result
+
 extractPendingTransferInstructionV1 : BatchingUtilityV2.TokenStandardActionResult -> Optional (ContractId V1.TransferInstruction)
-extractPendingTransferInstructionV1 (BatchingUtilityV2.TSAR_TransferInstructionResultV1 result) =
-  case result.output of
+extractPendingTransferInstructionV1 result =
+  case (extractTransferInstructionV1Result result).output of
     V1.TransferInstructionResult_Pending instrCid -> Some instrCid
     _ -> None
-extractPendingTransferInstructionV1 result = error $ "Expected a TransferInstructionResultV1, but got: " <> show result
 
 extractTransferInstructionResultV2 : BatchingUtilityV2.TokenStandardActionResult -> V2.TransferInstructionResult
 extractTransferInstructionResultV2 (BatchingUtilityV2.TSAR_TransferInstructionResultV2 result) = result

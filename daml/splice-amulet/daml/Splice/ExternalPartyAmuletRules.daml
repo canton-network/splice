@@ -183,7 +183,7 @@ template ExternalPartyAmuletRules
         args : LockTransferArgs GovernanceLockKey
       controller lockKeyOwner args.transfer
       do
-        proposal <- createGovernanceLockTransfer args
+        (proposal, _) <- createGovernanceLockTransfer args
         pure ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult with
           proposal
 
@@ -192,7 +192,7 @@ template ExternalPartyAmuletRules
         args : LockTransferArgs VestingLockKey
       controller lockKeyOwner args.transfer
       do
-        proposal <- createVestingLockTransfer args
+        (proposal, _) <- createVestingLockTransfer args
         pure ExternalPartyAmuletRules_ProposeVestingLockTransferResult with
           proposal
 
