@@ -75,17 +75,6 @@ template GovernanceLock
     key ( GovernanceLockKey with dso; owner; specification ) : GovernanceLockKey
     maintainer key.dso
 
-    choice GovernanceLock_Unlock : GovernanceLock_UnlockResult
-      with
-        unlockAmount : Decimal -- ^ Amount to unlock.
-        unlockAt : Time  -- ^ Time as of which the unlock is to be registered and vesting starts. Must be in the future.
-        extraArgs : ExtraArgs
-        actors : [Party]
-      controller actors
-      do
-        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-        governanceLock_unlockImpl self this unlockAmount unlockAt actors context state
-
     choice GovernanceLock_MergeAndTopUp : GovernanceLock_MergeAndTopUpResult
       with
         topUpAmount : Decimal
@@ -274,7 +263,6 @@ data GovernanceLock_UnlockResult
       vestingLock : Optional (ContractId VestingLock)
       governanceLock : Optional (ContractId GovernanceLock)
       unlockedAmulet : Optional (ContractId Amulet)
-  deriving (Eq, Show, Serializable)
 
 data GovernanceLock_MergeAndTopUpResult
   = GovernanceLock_MergeAndTopUpResult with
@@ -304,23 +292,11 @@ template VestingLock
     key ( VestingLockKey with dso; owner; specification; vestingPeriod; endTime ) : VestingLockKey
     maintainer key.dso
 
-    choice VestingLock_Withdraw : VestingLock_WithdrawResult
-      -- ^ Withdraw all funds that have vested since the last withdrawal
-      -- and the time of this request.
-      with
-        requestedAt : Time -- ^ Time to use for determining the funds that have vested. Must be in the past.
-        extraArgs : ExtraArgs
-        actors : [Party]
-      controller actors
-      do
-        (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-        vestingLock_withdrawImpl self this requestedAt actors context
-
     choice VestingLock_DsoExpire : VestingLock_DsoExpireResult
       -- ^ Garbage-collect a fully vested lock, so that SV nodes are not left
       -- storing locks that nobody has bothered to withdraw.
       --
-      -- There is nothing to do with `lockedAmulet`. `GovernanceLock_Unlock`
+      -- There is nothing to do with `lockedAmulet`. Unlocking a `GovernanceLock`
       -- relocks it with `expiresAt = endTime`, so at the instant the vesting
       -- period completes its time-lock has expired and wallets already treat it
       -- as a liquid holding.
@@ -421,7 +397,6 @@ data VestingLock_WithdrawResult
         -- ^ Contract ID of the continuing vesting lock with remaining funds.
       vested : ContractId Holding
         -- ^ Holding of withdrawn available funds. May be either an Amulet or an expired LockedAmulet if the vesting period has passed. May be already spent in the latter case.
-  deriving (Eq, Show, Serializable)
 
 -- | Uses `None` to represent that no amount remains.
 calculateUnvestedAmount : Time -> VestingLock -> Optional Decimal
@@ -430,7 +405,7 @@ calculateUnvestedAmount currentTime VestingLock{ .. }
     | currentTime >= endTime = None
     | otherwise = Some $ (vestingAmount * relTimeToSeconds (endTime `subTime` currentTime)) / relTimeToSeconds vestingPeriod
 
--- | Implementation for the LockForGovernance choice on ExternalPartyAmuletRules and core implementation of token standard interfaces.
+-- | Create a `GovernanceLock`, used by the core implementation of token standard interfaces.
 governanceLock_lockForGovernance_impl
   : Party
  -> Decimal
@@ -537,28 +512,6 @@ template GovernanceLockSubstitution with
     -- A proposal by the target lock owner is funded by the target lock, not by `lockedAmulet`
     ensure if owner == target.owner then isNone lockedAmulet else True
 
-    choice GovernanceLockSubstitution_Accept : GovernanceLockSubstitution_AcceptResult
-      with
-        actors : [Party]
-        extraArgs : ExtraArgs
-      controller actors
-      do
-        governanceLockSubstitution_acceptImpl self this actors extraArgs
-
-    choice GovernanceLockSubstitution_Withdraw : GovernanceLockSubstitution_WithdrawResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        governanceLockSubstitution_withdrawImpl self this actors
-
-    choice GovernanceLockSubstitution_Reject : GovernanceLockSubstitution_RejectResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        governanceLockSubstitution_rejectImpl self this actors
-
     choice GovernanceLockSubstitution_DsoExpire : GovernanceLockSubstitution_DsoExpireResult
       controller target.dso
       do
@@ -606,28 +559,6 @@ template VestingLockSubstitution with
     -- A proposal by the target lock owner is funded by the target lock, not by `lockedAmulet`
     ensure if owner == target.owner then isNone lockedAmulet else True
 
-    choice VestingLockSubstitution_Accept : VestingLockSubstitution_AcceptResult
-      with
-        actors : [Party]
-        extraArgs : ExtraArgs
-      controller actors
-      do
-        vestingLockSubstitution_acceptImpl self this actors extraArgs
-
-    choice VestingLockSubstitution_Withdraw : VestingLockSubstitution_WithdrawResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        vestingLockSubstitution_withdrawImpl self this actors
-
-    choice VestingLockSubstitution_Reject : VestingLockSubstitution_RejectResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        vestingLockSubstitution_rejectImpl self this actors
-
     choice VestingLockSubstitution_DsoExpire : VestingLockSubstitution_DsoExpireResult
       controller target.dso
       do
@@ -665,19 +596,16 @@ data GovernanceLockSubstitution_AcceptResult
       unlockedAmulet : Optional (ContractId Amulet)
         -- ^ The substituted funds, returned to the owner of the target lock.
         -- `None` if the proposer is the owner of the target lock, as no funds are then returned.
-  deriving (Eq, Show, Serializable)
 
 data GovernanceLockSubstitution_WithdrawResult
   = GovernanceLockSubstitution_WithdrawResult with
     unlockedAmulet : Optional (ContractId Amulet)
       -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
-  deriving (Eq, Show, Serializable)
 
 data GovernanceLockSubstitution_RejectResult
   = GovernanceLockSubstitution_RejectResult with
     unlockedAmulet : Optional (ContractId Amulet)
       -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
-  deriving (Eq, Show, Serializable)
 
 data GovernanceLockSubstitution_DsoExpireResult = GovernanceLockSubstitution_DsoExpireResult
   deriving (Serializable)
@@ -689,19 +617,16 @@ data VestingLockSubstitution_AcceptResult
     unlockedAmulet : Optional (ContractId Amulet)
       -- ^ The substituted funds, returned to the owner of the target lock.
       -- `None` if the proposer is the owner of the target lock, as no funds are then returned.
-  deriving (Eq, Show, Serializable)
 
 data VestingLockSubstitution_WithdrawResult
   = VestingLockSubstitution_WithdrawResult with
     unlockedAmulet : Optional (ContractId Amulet)
       -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
-  deriving (Eq, Show, Serializable)
 
 data VestingLockSubstitution_RejectResult
   = VestingLockSubstitution_RejectResult with
     unlockedAmulet : Optional (ContractId Amulet)
       -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
-  deriving (Eq, Show, Serializable)
 
 data VestingLockSubstitution_DsoExpireResult = VestingLockSubstitution_DsoExpireResult
   deriving (Serializable)
@@ -1152,28 +1077,6 @@ template GovernanceLockTransfer with
     observer transfer.receiver
     ensure isValidLockTransfer transfer
 
-    choice GovernanceLockTransfer_Accept : GovernanceLockTransfer_AcceptResult
-      with
-        actors : [Party]
-        extraArgs : ExtraArgs
-      controller actors
-      do
-        governanceLockTransfer_acceptImpl self this actors extraArgs
-
-    choice GovernanceLockTransfer_Withdraw : GovernanceLockTransfer_WithdrawResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        governanceLockTransfer_withdrawImpl this actors
-
-    choice GovernanceLockTransfer_Reject : GovernanceLockTransfer_RejectResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        governanceLockTransfer_rejectImpl this actors
-
     interface instance V1.TransferInstruction for GovernanceLockTransfer where
       view = transfer_transferInstructionView TransferTransferInstructionViewArgs with
         transfer
@@ -1217,28 +1120,6 @@ template VestingLockTransfer with
     ensure isValidLockTransfer transfer
       && expiresAt <= transfer.source.endTime
 
-    choice VestingLockTransfer_Accept : VestingLockTransfer_AcceptResult
-      with
-        actors : [Party]
-        extraArgs : ExtraArgs
-      controller actors
-      do
-        vestingLockTransfer_acceptImpl self this actors extraArgs
-
-    choice VestingLockTransfer_Withdraw : VestingLockTransfer_WithdrawResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        vestingLockTransfer_withdrawImpl this actors
-
-    choice VestingLockTransfer_Reject : VestingLockTransfer_RejectResult
-      with
-        actors : [Party]
-      controller actors
-      do
-        vestingLockTransfer_rejectImpl this actors
-
     interface instance V1.TransferInstruction for VestingLockTransfer where
       view = transfer_transferInstructionView TransferTransferInstructionViewArgs with
         transfer
@@ -1280,13 +1161,10 @@ data GovernanceLockTransfer_AcceptResult
       -- ^ The lock of the sender that keeps the funds that were not transferred, if any.
     lockedAmulet : ContractId LockedAmulet
       -- ^ The transferred funds, now locked for the owner of the new lock.
-  deriving (Serializable)
 
 data GovernanceLockTransfer_WithdrawResult = GovernanceLockTransfer_WithdrawResult
-  deriving (Serializable)
 
 data GovernanceLockTransfer_RejectResult = GovernanceLockTransfer_RejectResult
-  deriving (Serializable)
 
 data GovernanceLock_DsoTransferResult
   = GovernanceLock_DsoTransferResult with
@@ -1304,13 +1182,10 @@ data VestingLockTransfer_AcceptResult
       -- ^ The lock of the sender that keeps the funds that were not transferred, if any.
     lockedAmulet : ContractId LockedAmulet
       -- ^ The transferred funds, now locked for the owner of the new lock.
-  deriving (Serializable)
 
 data VestingLockTransfer_WithdrawResult = VestingLockTransfer_WithdrawResult
-  deriving (Serializable)
 
 data VestingLockTransfer_RejectResult = VestingLockTransfer_RejectResult
-  deriving (Serializable)
 
 data VestingLock_DsoTransferResult
   = VestingLock_DsoTransferResult with

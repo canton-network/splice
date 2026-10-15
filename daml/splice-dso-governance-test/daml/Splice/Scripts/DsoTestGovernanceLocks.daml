@@ -4,6 +4,7 @@
 module Splice.Scripts.DsoTestGovernanceLocks where
 
 import DA.Assert
+import DA.Map qualified as Map
 import DA.Optional (isNone, isSome)
 import DA.Time
 
@@ -11,18 +12,20 @@ import Daml.Script
 
 import Splice.Amulet (Amulet, FeaturedAppRight(..), LockedAmulet, LockedAmulet_OwnerExpireLockV2(..))
 import Splice.DsoRules (DsoRules, DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock(..), DsoRules_GovernanceLockSubstitution_WithdrawExpired(..), DsoRules_GovernanceLockTransfer_Expire(..), DsoRules_VestingLock_ExpireVestingLock(..), DsoRules_VestingLockSubstitution_WithdrawExpired(..), DsoRules_VestingLockTransfer_Expire(..))
-import Splice.ExternalPartyAmuletRules
 import Splice.GovernanceLock
 import Splice.Scripts.DsoTestUtils (initDevNet)
 import Splice.Scripts.TestGovernanceLocks
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
-import Splice.Testing.Utils (actionMustFail, discloseMany', emptyExtraArgs, expectMessageContains)
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.Utils (actionMustFail, expectMessageContains)
 import Splice.TokenStandard.Utils qualified as TSU
 
 data SharedLockEnv = SharedLockEnv with
   app : AmuletApp
   registry : AmuletRegistryV2.AmuletRegistry
+  registries : MultiRegistry.MultiRegistry
   sv1 : Party
   dsoRulesCid : ContractId DsoRules
   alice : AmuletUser
@@ -34,11 +37,13 @@ setupSharedLock kind = do
   [(dsoRulesCid, _)] <- query @DsoRules app.dso
 
   alice <- setupUser app "alice" app.dso
-  _ <- tap app alice (testVestingAmount + 1000.0)
+  tap app alice (testVestingAmount + 1000.0)
 
   let registry = TSU.upcast app.registry : AmuletRegistryV2.AmuletRegistry
+      registries = Map.singleton app.dso (MultiRegistry.mkRegistryApisV1V2 app.registry registry)
+  WalletClientV2.createBatchingUtility alice.primaryParty
 
-  governanceLockCid <- governanceLockRawChoice registry alice.primaryParty testVestingAmount (kind alice)
+  governanceLockCid <- lockForGovernance registries registry alice.primaryParty testVestingAmount (kind alice)
 
   pure SharedLockEnv with ..
 
@@ -54,7 +59,7 @@ data VestingLockEnv = VestingLockEnv with
   endTime : Time
 
 -- | Must be at least the default `minimumGovernanceLockAmount` of 10k Amulet,
--- otherwise `ExternalPartyAmuletRules_LockForGovernance` rejects the lock.
+-- otherwise the TSv1 lock request fails.
 testVestingAmount : Decimal
 testVestingAmount = 20000.0
 
@@ -72,11 +77,11 @@ setupVestingLock = do
   SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
 
   -- Reach the `VestingLock` the way production does:
-  -- `ExternalPartyAmuletRules_LockForGovernance` -> `GovernanceLock_Unlock`
+  -- TSv1 lock request -> TSv1 unlock request
   unlockAt <- (`addRelTime` hours 1) <$> getTime
 
   -- `unlockAmount = testVestingAmount` unlocks the full amount, so no `GovernanceLock` remains.
-  (Some vestingLockCid, None, None) <- governanceUnlockRawChoice registry governanceLockCid testVestingAmount unlockAt [alice.primaryParty]
+  (Some vestingLockCid, None, None) <- unlockGovernanceLock registries registry governanceLockCid testVestingAmount unlockAt
 
   [(lockedAmuletCid, lockedAmulet)] <- query @LockedAmulet alice.primaryParty
 
@@ -93,7 +98,7 @@ setupVestingLock = do
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
   vestingLock === expectedVestingLock
 
-  -- `GovernanceLock_Unlock` relocks the amulet with `expiresAt = endTime`.
+  -- The unlock relocks the amulet with `expiresAt = endTime`.
   lockedAmulet.lock.expiresAt === vestingLock.endTime
 
   pure VestingLockEnv with
@@ -139,7 +144,7 @@ testDsoRulesExpireVestingLock = do
 
   passVestingPeriod env
 
-  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+  submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_VestingLock_ExpireVestingLock with
       vestingLockCid = env.vestingLockCid
       sv = env.sv1
@@ -214,13 +219,13 @@ testDsoRulesExpireVestingLockWithDanglingLockedAmulet = do
 
   passVestingPeriod env
 
-  _ <- submit env.alice.primaryParty $
+  submit env.alice.primaryParty $
     exerciseCmd env.lockedAmuletCid LockedAmulet_OwnerExpireLockV2
   lockedAmuletO <- queryContractId env.alice.primaryParty env.lockedAmuletCid
   assertMsg "the underlying LockedAmulet is gone" (isNone lockedAmuletO)
 
   -- The choice never reads the `lockedAmulet`, so it is unaffected.
-  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+  submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_VestingLock_ExpireVestingLock with
       vestingLockCid = env.vestingLockCid
       sv = env.sv1
@@ -316,16 +321,16 @@ setupGovernanceSubstitution : Script (SubstitutionEnv, ContractId GovernanceLock
 setupGovernanceSubstitution = do
   SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
   bob <- setupUser app "bob" app.dso
-  _ <- tap app bob testVestingAmount
+  tap app bob testVestingAmount
+  WalletClientV2.createBatchingUtility bob.primaryParty
 
-  now <- getTime
-  _ <- proposeSubstitutionRawChoice registry bob.primaryParty
+  proposeSubstitution registries registry bob.primaryParty
     (AS_Governance with
       governanceLockKey = GovernanceLockKey with
         dso = app.dso
         owner = alice.primaryParty
         specification = GovernanceLockSpecification with kind = testLockKind)
-    testVestingAmount now
+    testVestingAmount
   [(substitutionCid, _)] <- query @GovernanceLockSubstitution bob.primaryParty
   pure (SubstitutionEnv with .., substitutionCid)
 
@@ -333,15 +338,15 @@ setupVestingSubstitution : Script (SubstitutionEnv, ContractId VestingLockSubsti
 setupVestingSubstitution = do
   SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
   bob <- setupUser app "bob" app.dso
-  _ <- tap app bob testVestingAmount
+  tap app bob testVestingAmount
+  WalletClientV2.createBatchingUtility bob.primaryParty
 
   unlockAt <- (`addRelTime` hours 1) <$> getTime
   (Some vestingLockCid, None, None) <-
-    governanceUnlockRawChoice registry governanceLockCid testVestingAmount unlockAt [alice.primaryParty]
+    unlockGovernanceLock registries registry governanceLockCid testVestingAmount unlockAt
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
 
-  now <- getTime
-  _ <- proposeSubstitutionRawChoice registry bob.primaryParty
+  proposeSubstitution registries registry bob.primaryParty
     (AS_Vesting with
       vestingLockKey = VestingLockKey with
         dso = app.dso
@@ -349,7 +354,7 @@ setupVestingSubstitution = do
         specification = vestingLock.specification
         vestingPeriod = vestingLock.vestingPeriod
         endTime = vestingLock.endTime)
-    testVestingAmount now
+    testVestingAmount
   [(substitutionCid, _)] <- query @VestingLockSubstitution bob.primaryParty
   pure (SubstitutionEnv with .., substitutionCid)
 
@@ -362,7 +367,7 @@ testDsoRulesWithdrawExpiredGovernanceSubstitution = do
   -- `tokenStandardMaxTTL` unset, so `getTokenStandardMaxTTL` falls back to 90 days.
   passTime (days 91)
 
-  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+  submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockSubstitution_WithdrawExpired with
       substitutionCid
       sv = env.sv1
@@ -380,7 +385,7 @@ testDsoRulesWithdrawExpiredVestingSubstitution = do
   (env, substitutionCid) <- setupVestingSubstitution
   passTime (days 91)
 
-  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+  submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_VestingLockSubstitution_WithdrawExpired with
       substitutionCid
       sv = env.sv1
@@ -435,21 +440,14 @@ setupGovernanceLockTransfer = do
   bob <- setupUser app "bob" app.dso
 
   now <- getTime
-  (rulesCid, disc) <- AmuletRegistryV2.getExtAmuletRulesWithDisclosures registry
-  result <- submitWithTransferContext registry
-    (actAs alice.primaryParty <> discloseMany' disc) \context ->
-      exerciseCmd rulesCid ExternalPartyAmuletRules_ProposeGovernanceLockTransfer with
-        args = LockTransferArgs with
-          transfer = LockTransfer with
-            source = GovernanceLockKey with
-              dso = app.dso
-              owner = alice.primaryParty
-              specification = GovernanceLockSpecification with kind = testLockKind
-            receiver = bob.primaryParty
-            amount = testVestingAmount
-            requestedAt = now
-          extraArgs = emptyExtraArgs with context
-  transferCid <- (.proposal) <$> errorIfLeft result
+  transferCid <- errorIfLeft =<< proposeGovernanceLockTransfer' registries registry alice.primaryParty LockTransfer with
+    source = GovernanceLockKey with
+      dso = app.dso
+      owner = alice.primaryParty
+      specification = GovernanceLockSpecification with kind = testLockKind
+    receiver = bob.primaryParty
+    amount = testVestingAmount
+    requestedAt = now
   pure (TransferEnv with .., transferCid)
 
 setupVestingLockTransfer : Script (TransferEnv, ContractId VestingLockTransfer)
@@ -459,27 +457,20 @@ setupVestingLockTransfer = do
 
   unlockAt <- (`addRelTime` hours 1) <$> getTime
   (Some vestingLockCid, None, None) <-
-    governanceUnlockRawChoice registry governanceLockCid testVestingAmount unlockAt [alice.primaryParty]
+    unlockGovernanceLock registries registry governanceLockCid testVestingAmount unlockAt
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
 
   now <- getTime
-  (rulesCid, disc) <- AmuletRegistryV2.getExtAmuletRulesWithDisclosures registry
-  result <- submitWithTransferContext registry
-    (actAs alice.primaryParty <> discloseMany' disc) \context ->
-      exerciseCmd rulesCid ExternalPartyAmuletRules_ProposeVestingLockTransfer with
-        args = LockTransferArgs with
-          transfer = LockTransfer with
-            source = VestingLockKey with
-              dso = app.dso
-              owner = alice.primaryParty
-              specification = vestingLock.specification
-              vestingPeriod = vestingLock.vestingPeriod
-              endTime = vestingLock.endTime
-            receiver = bob.primaryParty
-            amount = testVestingAmount
-            requestedAt = now
-          extraArgs = emptyExtraArgs with context
-  transferCid <- (.proposal) <$> errorIfLeft result
+  transferCid <- errorIfLeft =<< proposeVestingLockTransfer' registries registry alice.primaryParty LockTransfer with
+    source = VestingLockKey with
+      dso = app.dso
+      owner = alice.primaryParty
+      specification = vestingLock.specification
+      vestingPeriod = vestingLock.vestingPeriod
+      endTime = vestingLock.endTime
+    receiver = bob.primaryParty
+    amount = testVestingAmount
+    requestedAt = now
   pure (TransferEnv with .., transferCid)
 
 -- | Happy path: an SV expires a governance lock transfer proposal.
@@ -491,7 +482,7 @@ testDsoRulesExpireGovernanceLockTransfer = do
   -- `tokenStandardMaxTTL` unset, so `getTokenStandardMaxTTL` falls back to 90 days.
   passTime (days 91)
 
-  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+  submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockTransfer_Expire with
       transferCid
       sv = env.sv1
@@ -505,7 +496,7 @@ testDsoRulesExpireVestingLockTransfer = do
   (env, transferCid) <- setupVestingLockTransfer
   passTime (days 91)
 
-  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+  submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_VestingLockTransfer_Expire with
       transferCid
       sv = env.sv1

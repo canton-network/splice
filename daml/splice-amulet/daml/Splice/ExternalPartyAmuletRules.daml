@@ -17,7 +17,6 @@ import Splice.Api.Token.HoldingV1 qualified as V1
 import Splice.Api.Token.AllocationInstructionV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
-import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
@@ -47,30 +46,6 @@ data ExternalPartyAmuletRules_ExpireAmuletAllocationsResult = ExternalPartyAmule
 
 data ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result = ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result {}
   -- intentionally no results to save storage space in Scan
-  deriving (Eq, Show, Serializable)
-
-data ExternalPartyAmuletRules_LockForGovernanceResult = ExternalPartyAmuletRules_LockForGovernanceResult
-  with
-    governanceLock : ContractId GovernanceLock
-    changeHolding : Optional (ContractId Amulet)
-  deriving (Eq, Show, Serializable)
-
-data ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult = ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult
-  with
-    proposal : ContractId V1.TransferInstruction
-    changeHolding : Optional (ContractId Amulet)
-  deriving (Eq, Show, Serializable)
-
-data ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult =
-  ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult
-    with
-      proposal : ContractId GovernanceLockTransfer
-  deriving (Eq, Show, Serializable)
-
-data ExternalPartyAmuletRules_ProposeVestingLockTransferResult =
-  ExternalPartyAmuletRules_ProposeVestingLockTransferResult
-    with
-      proposal : ContractId VestingLockTransfer
   deriving (Eq, Show, Serializable)
 
 -- | Rules contract that can be used in transactions that require signatures
@@ -152,49 +127,6 @@ template ExternalPartyAmuletRules
            nonce
            description
          pure (ExternalPartyAmuletRules_CreateTransferCommandResult cmd)
-
-    nonconsuming choice ExternalPartyAmuletRules_LockForGovernance : ExternalPartyAmuletRules_LockForGovernanceResult
-      with
-        amount : Decimal
-        inputs : [ContractId V1.Holding]
-        specification : GovernanceLockSpecification
-        extraArgs : ExtraArgs
-        owner : Party
-        requestedAt : Time
-      controller owner
-      do
-        (_, governanceLock, changeHolding) <- governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt
-        pure $ ExternalPartyAmuletRules_LockForGovernanceResult with
-          governanceLock
-          changeHolding
-
-    nonconsuming choice ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitution : ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult
-      with
-        args : CreateSubstitutionArgs
-      controller args.owner
-      do
-        (proposal, _, changeHolding) <- createSubstitution args
-        pure ExternalPartyAmuletRules_GovernanceLocks_ProposeSubstitutionResult with
-          proposal
-          changeHolding
-
-    nonconsuming choice ExternalPartyAmuletRules_ProposeGovernanceLockTransfer : ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult
-      with
-        args : LockTransferArgs GovernanceLockKey
-      controller lockKeyOwner args.transfer
-      do
-        (proposal, _) <- createGovernanceLockTransfer args
-        pure ExternalPartyAmuletRules_ProposeGovernanceLockTransferResult with
-          proposal
-
-    nonconsuming choice ExternalPartyAmuletRules_ProposeVestingLockTransfer : ExternalPartyAmuletRules_ProposeVestingLockTransferResult
-      with
-        args : LockTransferArgs VestingLockKey
-      controller lockKeyOwner args.transfer
-      do
-        (proposal, _) <- createVestingLockTransfer args
-        pure ExternalPartyAmuletRules_ProposeVestingLockTransferResult with
-          proposal
 
     interface instance Api.Token.TransferInstructionV1.TransferFactory for ExternalPartyAmuletRules where
       view = Api.Token.TransferInstructionV1.TransferFactoryView with
