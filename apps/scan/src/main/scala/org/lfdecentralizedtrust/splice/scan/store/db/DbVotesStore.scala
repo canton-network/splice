@@ -20,10 +20,14 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
   ARC_AmuletRules,
   ARC_AnsEntryContext,
   ARC_DsoRules,
+  ExtActionRequiringConformation,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.VRO_Expired
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
   DsoRules_CloseVoteRequestResult,
+  Reason,
+  VoteRequest,
 }
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TransactionTreeUpdate,
@@ -357,7 +361,10 @@ object DbVotesStore {
                 "Ingesting a placeholder instead.",
               e,
             )
-            Some(placeholder(storeId, recordTime, tx, eventNumber, e.getMessage))
+            Some(
+              toInsert(placeholderResult(recordTime), storeId, recordTime, tx, eventNumber)
+                .copy(error = Some(e.getMessage.take(MaxErrorLength)))
+            )
         }
       }
       .toSeq
@@ -389,34 +396,30 @@ object DbVotesStore {
     )
   }
 
-  /** A row for a vote that could not be decoded. It keeps what identifies the vote, and the rest is a fake vote
-    * with placeholder values, so that it can be read like any other row.
+  /** A fake vote result for a vote that could not be decoded, so that its row can be read like any other.
+    * The row still identifies the vote (record time, update id, event number) and records the error.
     *
     * This should not happen in practice: all SVs are expected to upgrade their apps before a new Daml version
     * is voted in, so every app can decode every vote result that is created. Throwing instead would stop the
     * ingestion of the whole update history, which is why this only logs an error.
     */
-  private def placeholder(
-      storeId: Int,
-      recordTime: Long,
-      tx: Transaction,
-      eventNumber: Int,
-      error: String,
-  ): InsertVoteResult = {
-    InsertVoteResult(
-      storeId = storeId,
-      recordTime = recordTime,
-      synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
-      updateId = String2066.tryCreate(tx.getUpdateId),
-      eventNumber = eventNumber,
-      voteActionName = String2066.tryCreate(FailedToParseVote),
-      voteRequesterName = String2066.tryCreate(FailedToParseVote),
-      voteAccepted = false,
-      voteTrackingCid = String2066.tryCreate(FailedToParseVote),
-      voteCompletedAt = Some(recordTime),
-      voteEffectiveAt = Some(recordTime),
-      choiceResult = String256M.tryCreate("{}"),
-      error = Some(error.take(MaxErrorLength)),
+  private def placeholderResult(recordTime: Long): DsoRules_CloseVoteRequestResult = {
+    val at = CantonTimestamp.assertFromLong(recordTime).toInstant
+    new DsoRules_CloseVoteRequestResult(
+      new VoteRequest(
+        FailedToParseVote,
+        FailedToParseVote,
+        new ExtActionRequiringConformation(com.daml.ledger.javaapi.data.Unit.getInstance()),
+        new Reason("", FailedToParseVote),
+        at,
+        java.util.Map.of(),
+        java.util.Optional.of(new VoteRequest.ContractId(FailedToParseVote)),
+        java.util.Optional.of(at),
+      ),
+      at,
+      java.util.List.of(),
+      java.util.List.of(),
+      new VRO_Expired(com.daml.ledger.javaapi.data.Unit.getInstance()),
     )
   }
 

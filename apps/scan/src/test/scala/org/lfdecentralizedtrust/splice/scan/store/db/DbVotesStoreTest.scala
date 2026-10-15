@@ -15,6 +15,7 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -44,7 +45,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.ClosedMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
-import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
+import org.lfdecentralizedtrust.splice.environment.ledger.api.{
+  TransactionTreeUpdate,
+  TreeUpdateOrOffsetCheckpoint,
+}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueStore, ScanStore}
@@ -54,6 +58,7 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.I
   ResumeAtOffset,
   UpdateHistoryInitAtLatestPrunedOffset,
 }
+import org.lfdecentralizedtrust.splice.store.StoreTestBase.IngestSingleElementSink
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.db.{DbKeyValueStore, SplicePostgresTest}
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
@@ -68,6 +73,7 @@ import org.lfdecentralizedtrust.splice.store.{
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
+import org.slf4j.event.Level
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -199,19 +205,23 @@ class DbVotesStoreTest
           mkCloseVoteRequest(new VoteRequest.ContractId(nextCid())),
           com.daml.ledger.javaapi.data.Unit.getInstance(),
         )
+        val tx = mkTx(
+          nextOffset(),
+          goodVotes.map(closeVoteRequestEvent) :+ bad,
+          dummyDomain,
+          effectiveAt = good.recordTime,
+          recordTime = good.recordTime,
+        )
         for {
           stores <- mkStores()
-          _ <- loggerFactory.assertLogs(
-            dummyDomain.ingestMulti(offset =>
-              mkTx(
-                offset,
-                goodVotes.map(closeVoteRequestEvent) :+ bad,
-                dummyDomain,
-                effectiveAt = good.recordTime,
-                recordTime = good.recordTime,
-              )
-            )(Seq(stores.updateHistory)),
-            _.errorMessage should include("Ingesting a placeholder instead"),
+          // Ingests through the raw sink: the `testIngestionSink` used by `ingestMulti` fails on any error log.
+          // Decoding the result logs an internal error before the store logs that it ingests a placeholder.
+          _ <- loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.ERROR))(
+            stores.updateHistory.ingestionSink.ingestUpdate(dummyDomain, TransactionTreeUpdate(tx)),
+            entries =>
+              forExactly(1, entries)(
+                _.errorMessage should include("Ingesting a placeholder instead")
+              ),
           )
           count <- stores.votesStore.countVoteRequestResults(VoteResultsFilters())
           results <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 10)
