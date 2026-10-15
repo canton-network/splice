@@ -20,6 +20,7 @@ import IntervalDisplay from './IntervalDisplay';
 import Loading from './Loading';
 import Login from './Login';
 import LoginFailed from './LoginFailed';
+import NetworkBanner from './NetworkBanner';
 import PartyId from './PartyId';
 import { computeDiff, PrettyJsonDiff } from './PrettyJsonDiff';
 import QueryDevtools from './QueryDevtools';
@@ -68,6 +69,7 @@ export {
   Loading,
   Login,
   LoginFailed,
+  NetworkBanner,
   PartyId,
   PrettyJsonDiff,
   QueryDevtools,
