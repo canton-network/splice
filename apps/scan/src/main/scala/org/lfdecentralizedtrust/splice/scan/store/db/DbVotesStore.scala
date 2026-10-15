@@ -406,16 +406,16 @@ object DbVotesStore {
     InsertVoteResult(
       storeId = storeId,
       recordTime = recordTime,
-      synchronizerId = String2066.tryCreate(FailedToParseVote),
+      synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
       updateId = String2066.tryCreate(tx.getUpdateId),
       eventNumber = eventNumber,
       voteActionName = String2066.tryCreate(FailedToParseVote),
       voteRequesterName = String2066.tryCreate(FailedToParseVote),
       voteAccepted = false,
       voteTrackingCid = String2066.tryCreate(FailedToParseVote),
-      voteCompletedAt = None,
-      voteEffectiveAt = None,
-      choiceResult = String256M.tryCreate(FailedToParseVote),
+      voteCompletedAt = Some(recordTime),
+      voteEffectiveAt = Some(recordTime),
+      choiceResult = String256M.tryCreate("{}"),
       error = Some(error.take(MaxErrorLength)),
     )
   }
