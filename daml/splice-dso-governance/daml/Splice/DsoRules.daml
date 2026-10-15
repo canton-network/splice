@@ -384,6 +384,12 @@ data DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult = DsoRules_Govern
 data DsoRules_VestingLockSubstitution_WithdrawExpiredResult = DsoRules_VestingLockSubstitution_WithdrawExpiredResult with
   deriving (Serializable)
 
+data DsoRules_GovernanceLockTransfer_ExpireResult = DsoRules_GovernanceLockTransfer_ExpireResult
+  deriving (Serializable)
+
+data DsoRules_VestingLockTransfer_ExpireResult = DsoRules_VestingLockTransfer_ExpireResult
+  deriving (Serializable)
+
 data DsoRules_MiningRound_CloseResult = DsoRules_MiningRound_CloseResult with
     closedRound : ContractId ClosedMiningRound
   deriving (Serializable)
@@ -1752,6 +1758,29 @@ template DsoRules with
         _ <- getAndValidateSvParty this (Some sv)
         _ <- exercise substitutionCid VestingLockSubstitution_DsoExpire
         pure $ DsoRules_VestingLockSubstitution_WithdrawExpiredResult
+
+    nonconsuming choice DsoRules_GovernanceLockTransfer_Expire : DsoRules_GovernanceLockTransfer_ExpireResult
+      -- ^ Expires a lock transfer proposal that the receiver never accepted, so
+      -- that SVs can garbage-collect proposals left behind by their senders.
+      with
+        transferCid : ContractId GovernanceLockTransfer
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        _ <- exercise transferCid GovernanceLockTransfer_DsoExpire
+        pure $ DsoRules_GovernanceLockTransfer_ExpireResult
+
+    nonconsuming choice DsoRules_VestingLockTransfer_Expire : DsoRules_VestingLockTransfer_ExpireResult
+      -- ^ Variant of `DsoRules_GovernanceLockTransfer_Expire` for vesting locks.
+      with
+        transferCid : ContractId VestingLockTransfer
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        _ <- exercise transferCid VestingLockTransfer_DsoExpire
+        pure $ DsoRules_VestingLockTransfer_ExpireResult
 
     nonconsuming choice DsoRules_MiningRound_Close : DsoRules_MiningRound_CloseResult
       with

@@ -1195,8 +1195,13 @@ template GovernanceLockTransfer with
 
       transferInstruction_updateImpl _ _ = assertFail transferTransferUpdateUnsupported
 
-    -- TODO(canton-network/splice-sv-fa-locking#109): add an expiry choice
-    -- controlled by the DSO party.
+    choice GovernanceLockTransfer_DsoExpire : GovernanceLockTransfer_DsoExpireResult
+      -- ^ Garbage-collect proposal that receiver never accepted, so SV nodes
+      -- are not left storing it forever.
+      controller lockKeyDso transfer
+      do
+        assertDeadlineExceeded "GovernanceLockTransfer.expiresAt" expiresAt
+        pure GovernanceLockTransfer_DsoExpireResult
 
 -- | A proposal by the owner of `VestingLock`s to transfer all or part of them
 -- to a new owner. The proposal holds no funds: on accept, the locks matching
@@ -1255,8 +1260,18 @@ template VestingLockTransfer with
 
       transferInstruction_updateImpl _ _ = assertFail transferTransferUpdateUnsupported
 
-    -- TODO(canton-network/splice-sv-fa-locking#109): add an expiry choice
-    -- controlled by the DSO party.
+    choice VestingLockTransfer_DsoExpire : VestingLockTransfer_DsoExpireResult
+      -- ^ Variant of `GovernanceLockTransfer_DsoExpire` for vesting locks.
+      controller lockKeyDso transfer
+      do
+        assertDeadlineExceeded "VestingLockTransfer.expiresAt" expiresAt
+        pure VestingLockTransfer_DsoExpireResult
+
+data GovernanceLockTransfer_DsoExpireResult = GovernanceLockTransfer_DsoExpireResult
+  deriving (Serializable)
+
+data VestingLockTransfer_DsoExpireResult = VestingLockTransfer_DsoExpireResult
+  deriving (Serializable)
 
 data GovernanceLockTransfer_AcceptResult
   = GovernanceLockTransfer_AcceptResult with

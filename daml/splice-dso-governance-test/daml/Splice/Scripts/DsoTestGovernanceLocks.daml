@@ -10,13 +10,14 @@ import DA.Time
 import Daml.Script
 
 import Splice.Amulet (Amulet, FeaturedAppRight(..), LockedAmulet, LockedAmulet_OwnerExpireLockV2(..))
-import Splice.DsoRules (DsoRules, DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock(..), DsoRules_GovernanceLockSubstitution_WithdrawExpired(..), DsoRules_VestingLock_ExpireVestingLock(..), DsoRules_VestingLockSubstitution_WithdrawExpired(..))
+import Splice.DsoRules (DsoRules, DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock(..), DsoRules_GovernanceLockSubstitution_WithdrawExpired(..), DsoRules_GovernanceLockTransfer_Expire(..), DsoRules_VestingLock_ExpireVestingLock(..), DsoRules_VestingLockSubstitution_WithdrawExpired(..), DsoRules_VestingLockTransfer_Expire(..))
+import Splice.ExternalPartyAmuletRules
 import Splice.GovernanceLock
 import Splice.Scripts.DsoTestUtils (initDevNet)
 import Splice.Scripts.TestGovernanceLocks
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
-import Splice.Testing.Utils (actionMustFail, expectMessageContains)
+import Splice.Testing.Utils (actionMustFail, discloseMany', emptyExtraArgs, expectMessageContains)
 import Splice.TokenStandard.Utils qualified as TSU
 
 data SharedLockEnv = SharedLockEnv with
@@ -419,3 +420,124 @@ testDsoRulesWithdrawExpiredVestingSubstitutionNotYetExpired = do
 
   optSubstitution <- queryContractId env.app.dso substitutionCid
   assertMsg "the substitution proposal is still live" (isSome optSubstitution)
+
+-- | A DsoRules test environment holding a single lock transfer proposal from
+-- alice to bob.
+data TransferEnv = TransferEnv with
+  app : AmuletApp
+  sv1 : Party
+  dsoRulesCid : ContractId DsoRules
+  bob : AmuletUser
+
+setupGovernanceLockTransfer : Script (TransferEnv, ContractId GovernanceLockTransfer)
+setupGovernanceLockTransfer = do
+  SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
+  bob <- setupUser app "bob" app.dso
+
+  now <- getTime
+  (rulesCid, disc) <- AmuletRegistryV2.getExtAmuletRulesWithDisclosures registry
+  result <- submitWithTransferContext registry
+    (actAs alice.primaryParty <> discloseMany' disc) \context ->
+      exerciseCmd rulesCid ExternalPartyAmuletRules_ProposeGovernanceLockTransfer with
+        args = LockTransferArgs with
+          transfer = LockTransfer with
+            source = GovernanceLockKey with
+              dso = app.dso
+              owner = alice.primaryParty
+              specification = GovernanceLockSpecification with kind = testLockKind
+            receiver = bob.primaryParty
+            amount = testVestingAmount
+            requestedAt = now
+          extraArgs = emptyExtraArgs with context
+  transferCid <- (.proposal) <$> errorIfLeft result
+  pure (TransferEnv with .., transferCid)
+
+setupVestingLockTransfer : Script (TransferEnv, ContractId VestingLockTransfer)
+setupVestingLockTransfer = do
+  SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
+  bob <- setupUser app "bob" app.dso
+
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  (Some vestingLockCid, None, None) <-
+    governanceUnlockRawChoice registry governanceLockCid testVestingAmount unlockAt [alice.primaryParty]
+  Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
+
+  now <- getTime
+  (rulesCid, disc) <- AmuletRegistryV2.getExtAmuletRulesWithDisclosures registry
+  result <- submitWithTransferContext registry
+    (actAs alice.primaryParty <> discloseMany' disc) \context ->
+      exerciseCmd rulesCid ExternalPartyAmuletRules_ProposeVestingLockTransfer with
+        args = LockTransferArgs with
+          transfer = LockTransfer with
+            source = VestingLockKey with
+              dso = app.dso
+              owner = alice.primaryParty
+              specification = vestingLock.specification
+              vestingPeriod = vestingLock.vestingPeriod
+              endTime = vestingLock.endTime
+            receiver = bob.primaryParty
+            amount = testVestingAmount
+            requestedAt = now
+          extraArgs = emptyExtraArgs with context
+  transferCid <- (.proposal) <$> errorIfLeft result
+  pure (TransferEnv with .., transferCid)
+
+-- | Happy path: an SV expires a governance lock transfer proposal.
+testDsoRulesExpireGovernanceLockTransfer : Script ()
+testDsoRulesExpireGovernanceLockTransfer = do
+  (env, transferCid) <- setupGovernanceLockTransfer
+
+  -- `expiresAt` is `requestedAt + tokenStandardMaxTTL`. The test config leaves
+  -- `tokenStandardMaxTTL` unset, so `getTokenStandardMaxTTL` falls back to 90 days.
+  passTime (days 91)
+
+  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockTransfer_Expire with
+      transferCid
+      sv = env.sv1
+
+  optTransfer <- queryContractId env.app.dso transferCid
+  assertMsg "the transfer proposal has been expired" (isNone optTransfer)
+
+-- | Happy path: an SV expires a vesting lock transfer proposal.
+testDsoRulesExpireVestingLockTransfer : Script ()
+testDsoRulesExpireVestingLockTransfer = do
+  (env, transferCid) <- setupVestingLockTransfer
+  passTime (days 91)
+
+  _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_VestingLockTransfer_Expire with
+      transferCid
+      sv = env.sv1
+
+  optTransfer <- queryContractId env.app.dso transferCid
+  assertMsg "the transfer proposal has been expired" (isNone optTransfer)
+
+-- | Negative: only an actual SV may drive the expiry.
+testDsoRulesExpireGovernanceLockTransferRejectsNonSv : Script ()
+testDsoRulesExpireGovernanceLockTransferRejectsNonSv = do
+  (env, transferCid) <- setupGovernanceLockTransfer
+  passTime (days 91)
+
+  submitMustFail (actAs env.bob.primaryParty <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockTransfer_Expire with
+      transferCid
+      sv = env.bob.primaryParty
+
+  optTransfer <- queryContractId env.app.dso transferCid
+  assertMsg "the transfer proposal is still live" (isSome optTransfer)
+
+-- | Negative: the proposal has not expired yet, so there is nothing to collect.
+testDsoRulesExpireVestingLockTransferNotYetExpired : Script ()
+testDsoRulesExpireVestingLockTransferNotYetExpired = do
+  (env, transferCid) <- setupVestingLockTransfer
+
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'VestingLockTransfer.expiresAt'") do
+    r <- trySubmit (actAs env.sv1 <> readAs env.app.dso) $
+      exerciseCmd env.dsoRulesCid DsoRules_VestingLockTransfer_Expire with
+        transferCid
+        sv = env.sv1
+    pure (() <$ r)
+
+  optTransfer <- queryContractId env.app.dso transferCid
+  assertMsg "the transfer proposal is still live" (isSome optTransfer)
