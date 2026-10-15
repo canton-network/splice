@@ -3746,6 +3746,13 @@ components:
         app_activity_records:
           $ref: "#/components/schemas/EventHistoryAppActivityRecords"
           nullable: true
+        asset_activity_records:
+          $ref: "#/components/schemas/EventHistoryAssetActivityRecords"
+          nullable: true
+        submitting_app_provider:
+          description: |
+            The submitting app provider party identifier, present only when the submitter is a featured-app.
+          type: string
     EventLatestRecordTimeResponse:
       type: object
       required:
