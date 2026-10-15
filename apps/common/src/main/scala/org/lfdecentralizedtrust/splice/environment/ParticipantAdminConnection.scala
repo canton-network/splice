@@ -55,7 +55,6 @@ import com.digitalasset.canton.topology.transaction.{
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.auth.AuthTokenProvider
@@ -177,22 +176,6 @@ class ParticipantAdminConnection(
     }
   }
 
-  def exportPartyAcs(
-      party: PartyId,
-      synchronizerId: SynchronizerId,
-      targetParticipantId: ParticipantId,
-      activationTime: Instant,
-  )(implicit
-      traceContext: TraceContext
-  ): Future[Seq[ByteString]] =
-    startExportPartyAcs(
-      party,
-      synchronizerId,
-      targetParticipantId,
-      activationTime,
-      () => new SeqAccumulatingObserver[ExportPartyAcsResponse],
-    ).flatMap(_.resultFuture).map(_.map(_.chunk))
-
   def exportPartyAcsToFile(
       party: PartyId,
       synchronizerId: SynchronizerId,
@@ -202,23 +185,6 @@ class ParticipantAdminConnection(
   )(implicit
       traceContext: TraceContext
   ): Future[Unit] =
-    startExportPartyAcs(
-      party,
-      synchronizerId,
-      targetParticipantId,
-      activationTime,
-      () => new OutputFileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk),
-    ).flatMap(_.result)
-
-  private def startExportPartyAcs[O <: StreamObserver[ExportPartyAcsResponse]](
-      party: PartyId,
-      synchronizerId: SynchronizerId,
-      targetParticipantId: ParticipantId,
-      activationTime: Instant,
-      createObserver: () => O,
-  )(implicit
-      traceContext: TraceContext
-  ): Future[O] =
     for {
       // The current ExportPartyAcs requires us to pass an offset that is right before the topology tx
       // in which the participant started hosing `partyId`.
@@ -230,7 +196,9 @@ class ParticipantAdminConnection(
       _ = logger.info(
         show"Exporting ACS snapshot for party $party from domain $synchronizerId at offset $beforeActivationOffset"
       )
-      observer <- Future(blocking(createObserver()))
+      observer <- Future(
+        blocking(new OutputFileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk))
+      )
       _ <- runCmd(
         ParticipantAdminCommands.PartyManagement.ExportPartyAcs(
           party,
@@ -241,7 +209,8 @@ class ParticipantAdminConnection(
           observer,
         )
       ).andThen { case Failure(e) => observer.onError(e) }
-    } yield observer
+      result <- observer.result
+    } yield result
 
   def downloadAcsSnapshotNonChunked(
       parties: Set[PartyId],
