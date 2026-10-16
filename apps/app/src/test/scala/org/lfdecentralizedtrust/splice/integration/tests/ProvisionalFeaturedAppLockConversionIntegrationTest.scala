@@ -37,21 +37,22 @@ class ProvisionalFeaturedAppLockConversionIntegrationTest
   private def lockKindFor(
       provider: PartyId
   )(implicit env: SpliceTestConsoleEnvironment): governancelock.GovernanceLockKind =
-    sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
-      .filterJava(governancelock.GovernanceLock.COMPANION)(
-        dsoParty,
-        _.data.specification.kind match {
-          case kind: governancelock.governancelockkind.GLK_ProvisionalFeaturedApp =>
-            kind.provider == provider.toProtoPrimitive
-          case kind: governancelock.governancelockkind.GLK_FeaturedApp =>
-            kind.provider == provider.toProtoPrimitive
-          case _ => false
-        },
-      )
-      .loneElement
-      .data
-      .specification
-      .kind
+    GovernanceLockUtil.getGovernanceLockKind(
+      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .filterJava(governancelock.GovernanceLock.COMPANION)(
+          dsoParty,
+          c =>
+            GovernanceLockUtil.getGovernanceLockKind(c.data) match {
+              case kind: governancelock.governancelockkind.GLK_ProvisionalFeaturedApp =>
+                kind.provider == provider.toProtoPrimitive
+              case kind: governancelock.governancelockkind.GLK_FeaturedApp =>
+                kind.provider == provider.toProtoPrimitive
+              case _ => false
+            },
+        )
+        .loneElement
+        .data
+    )
 
   private def provisionalFor(provider: PartyId): governancelock.GovernanceLockKind =
     new governancelock.governancelockkind.GLK_ProvisionalFeaturedApp(provider.toProtoPrimitive)

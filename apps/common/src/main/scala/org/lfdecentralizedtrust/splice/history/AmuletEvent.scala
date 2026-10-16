@@ -369,17 +369,12 @@ object AmuletArchive {
 }
 
 object GovernanceLockSubstitutionExercise {
-  private val substitutionTemplates = Set(
-    QualifiedName(
-      splice.governancelock.GovernanceLockSubstitution.COMPANION.getTemplateIdWithPackageId
-    ),
-    QualifiedName(
-      splice.governancelock.VestingLockSubstitution.COMPANION.getTemplateIdWithPackageId
-    ),
+  private val substitutionTemplate = QualifiedName(
+    splice.governancelock.GovernanceLockSubstitution.COMPANION.getTemplateIdWithPackageId
   )
 
   def unapply(event: ExercisedEvent): Option[ExercisedEvent] =
-    if (substitutionTemplates.contains(QualifiedName(event.getTemplateId))) Some(event) else None
+    if (QualifiedName(event.getTemplateId) == substitutionTemplate) Some(event) else None
 }
 
 object AmuletCreate {

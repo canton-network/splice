@@ -31,8 +31,8 @@ test_tsv1Encoding = do
 test_parseGovernanceLockRequestTSv1_memo : Script ()
 test_parseGovernanceLockRequestTSv1_memo = do
     let memo = "cip-127/memo:request=create-lock&lock-kind=sv-lock&lock-subject=someSv"
-    GLR_CreateGovernanceLock{governanceSpecification} <- parse $ Metadata $ TextMap.fromList [(reasonMetaKey, memo)]
-    governanceSpecification === GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv"
+    GLR_CreateGovernanceLock{fullSpecification} <- parse $ Metadata $ TextMap.fromList [(reasonMetaKey, memo)]
+    fullSpecification === FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv"
   where
     parse = parseGovernanceLockRequestTSv1 testAdmin lockManagerParty
 
@@ -40,20 +40,20 @@ test_parseGovernanceLockRequestTSv1_memo = do
 -- A lock's memo, with a request added, parses back to the lock's specification.
 test_governanceLockSpecificationTSv1_roundTrip : Script ()
 test_governanceLockSpecificationTSv1_roundTrip = do
-    assertRoundTrip serializeThenParse $ GovernanceLockSpecification with
+    assertRoundTrip serializeThenParse $ FullLockSpecification with
       kind = GLK_SuperValidatorRightsOwner with svName = "some-other-sv"
-    assertRoundTrip serializeThenParse $ GovernanceLockSpecification with
+    assertRoundTrip serializeThenParse $ FullLockSpecification with
       kind = GLK_FeaturedApp with provider = fromSome $ partyFromText "some-other-sv"
-    assertRoundTrip serializeThenParse $ GovernanceLockSpecification with
+    assertRoundTrip serializeThenParse $ FullLockSpecification with
       kind = GLK_ProvisionalFeaturedApp with provider = fromSome $ partyFromText "someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab"
   where
-    serializeThenParse : GovernanceLockSpecification -> Script GovernanceLockSpecification
+    serializeThenParse : FullLockSpecification -> Script FullLockSpecification
     serializeThenParse specification = do
       let memo = encodeLockCompatMemo $ encodeCommonLockMetadata specification.kind LS_Locked $
             Metadata $ TextMap.singleton requestMetaKey "create-lock"
       request <- parseGovernanceLockRequestTSv1 testAdmin lockManagerParty $ Metadata $ TextMap.singleton reasonMetaKey memo
       case request of
-        GLR_CreateGovernanceLock{governanceSpecification} -> pure governanceSpecification
+        GLR_CreateGovernanceLock{fullSpecification} -> pure fullSpecification
         _ -> fail "Expected GLR_CreateGovernanceLock"
 
 assertRoundTrip : (CanAssert m, Eq a, Show a) => (a -> m a) -> a -> m ()

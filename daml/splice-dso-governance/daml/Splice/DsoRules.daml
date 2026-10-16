@@ -375,19 +375,13 @@ data DsoRules_ExpireDevelopmentFundCouponResult = DsoRules_ExpireDevelopmentFund
 data DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult = DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult
   deriving (Serializable)
 
-data DsoRules_VestingLock_ExpireVestingLockResult = DsoRules_VestingLock_ExpireVestingLockResult with
+data DsoRules_GovernanceLock_DsoExpireResult = DsoRules_GovernanceLock_DsoExpireResult with
   deriving (Serializable)
 
 data DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult = DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult with
   deriving (Serializable)
 
-data DsoRules_VestingLockSubstitution_WithdrawExpiredResult = DsoRules_VestingLockSubstitution_WithdrawExpiredResult with
-  deriving (Serializable)
-
 data DsoRules_GovernanceLockTransfer_ExpireResult = DsoRules_GovernanceLockTransfer_ExpireResult
-  deriving (Serializable)
-
-data DsoRules_VestingLockTransfer_ExpireResult = DsoRules_VestingLockTransfer_ExpireResult
   deriving (Serializable)
 
 data DsoRules_MiningRound_CloseResult = DsoRules_MiningRound_CloseResult with
@@ -1724,17 +1718,17 @@ template DsoRules with
         exercise governanceLockCid GovernanceLock_DsoConvertProvisionalFeaturedAppLock with featuredAppRightCid
         pure DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult
 
-    nonconsuming choice DsoRules_VestingLock_ExpireVestingLock : DsoRules_VestingLock_ExpireVestingLockResult
-      -- ^ Expires a fully vested `VestingLock`, so that SVs can garbage-collect
+    nonconsuming choice DsoRules_GovernanceLock_DsoExpire : DsoRules_GovernanceLock_DsoExpireResult
+      -- ^ Expires a fully vested `GovernanceLock`, so that SVs can garbage-collect
       -- locks that nobody has bothered to withdraw.
       with
-        vestingLockCid : ContractId VestingLock
+        governanceLockCid : ContractId GovernanceLock
         sv : Party
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
-        exercise vestingLockCid VestingLock_DsoExpire
-        pure $ DsoRules_VestingLock_ExpireVestingLockResult
+        exercise governanceLockCid GovernanceLock_DsoExpire
+        pure $ DsoRules_GovernanceLock_DsoExpireResult
 
     nonconsuming choice DsoRules_GovernanceLockSubstitution_WithdrawExpired : DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult
       -- ^ Withdraws an expired substitution proposal, so that SVs can garbage-collect
@@ -1748,17 +1742,6 @@ template DsoRules with
         _ <- exercise substitutionCid GovernanceLockSubstitution_DsoExpire
         pure $ DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult
 
-    nonconsuming choice DsoRules_VestingLockSubstitution_WithdrawExpired : DsoRules_VestingLockSubstitution_WithdrawExpiredResult
-      -- ^ Variant of `DsoRules_GovernanceLockSubstitution_WithdrawExpired` for vesting locks.
-      with
-        substitutionCid : ContractId VestingLockSubstitution
-        sv : Party
-      controller sv
-      do
-        _ <- getAndValidateSvParty this (Some sv)
-        _ <- exercise substitutionCid VestingLockSubstitution_DsoExpire
-        pure $ DsoRules_VestingLockSubstitution_WithdrawExpiredResult
-
     nonconsuming choice DsoRules_GovernanceLockTransfer_Expire : DsoRules_GovernanceLockTransfer_ExpireResult
       -- ^ Expires a lock transfer proposal that the receiver never accepted, so
       -- that SVs can garbage-collect proposals left behind by their senders.
@@ -1770,17 +1753,6 @@ template DsoRules with
         _ <- getAndValidateSvParty this (Some sv)
         _ <- exercise transferCid GovernanceLockTransfer_DsoExpire
         pure $ DsoRules_GovernanceLockTransfer_ExpireResult
-
-    nonconsuming choice DsoRules_VestingLockTransfer_Expire : DsoRules_VestingLockTransfer_ExpireResult
-      -- ^ Variant of `DsoRules_GovernanceLockTransfer_Expire` for vesting locks.
-      with
-        transferCid : ContractId VestingLockTransfer
-        sv : Party
-      controller sv
-      do
-        _ <- getAndValidateSvParty this (Some sv)
-        _ <- exercise transferCid VestingLockTransfer_DsoExpire
-        pure $ DsoRules_VestingLockTransfer_ExpireResult
 
     nonconsuming choice DsoRules_MiningRound_Close : DsoRules_MiningRound_CloseResult
       with

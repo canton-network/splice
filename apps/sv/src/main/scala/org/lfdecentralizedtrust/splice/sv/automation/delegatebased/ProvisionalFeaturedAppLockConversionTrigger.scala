@@ -15,6 +15,7 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
+import org.lfdecentralizedtrust.splice.util.GovernanceLockUtil
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -120,7 +121,7 @@ class ProvisionalFeaturedAppLockConversionTrigger(
     } yield res
 
   private def providerOf(payload: splice.governancelock.GovernanceLock): Option[PartyId] =
-    payload.specification.kind match {
+    GovernanceLockUtil.getGovernanceLockKind(payload) match {
       case kind: splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp =>
         Some(PartyId.tryFromProtoPrimitive(kind.provider))
       case _ => None
@@ -138,12 +139,10 @@ object ProvisionalFeaturedAppLockConversionTrigger
   ]
 
   override def informees(payload: splice.governancelock.GovernanceLock): Seq[String] =
-    (payload.owner +: extraObservers(payload.specification)).distinct
+    (payload.owner +: extraObservers(payload)).distinct
 
-  private def extraObservers(
-      spec: splice.governancelock.GovernanceLockSpecification
-  ): Seq[String] =
-    spec.kind match {
+  private def extraObservers(payload: splice.governancelock.GovernanceLock): Seq[String] =
+    GovernanceLockUtil.getGovernanceLockKind(payload) match {
       case kind: splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp =>
         Seq(kind.provider)
       case kind: splice.governancelock.governancelockkind.GLK_FeaturedApp =>

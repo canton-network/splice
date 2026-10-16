@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.util.GovernanceLockUtil
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction
 
 import java.time.Instant
@@ -122,6 +123,14 @@ trait GovernanceLockTest extends TokenStandardTest {
       })
       .toMap
 
+  def isVestingLock(lock: governancelock.GovernanceLock): Boolean =
+    GovernanceLockUtil.getVestingLockSpecification(lock).isDefined
+
+  def vestingLockSpecification(
+      lock: governancelock.GovernanceLock
+  ): governancelock.VestingLockSpecification =
+    GovernanceLockUtil.getVestingLockSpecification(lock).value
+
   def compareLockMemo(actual: String, expected: String) = {
     val actualEntries = extractLockMemoEntries(actual)
     val expectedEntries = extractLockMemoEntries(expected)
@@ -139,7 +148,7 @@ trait GovernanceLockTest extends TokenStandardTest {
       env: SpliceTestConsoleEnvironment
   ): transferinstructionv1.TransferInstruction.ContractId = {
     // `owner` may already have pending instructions to `lockManagerParty` (earlier
-    // `GovernanceLock`s or `VestingLock`s), so only look at the new one.
+    // `GovernanceLock`s), so only look at the new one.
     val existingInstructionCids =
       listTransferInstructions(participant, owner.partyId).map(_._1).toSet
 
@@ -196,7 +205,7 @@ trait GovernanceLockTest extends TokenStandardTest {
         wait = false,
       ),
     )(
-      "a VestingLock is now the pending TransferInstruction",
+      "a GovernanceLock is now the pending TransferInstruction",
       _ =>
         listTransferInstructions(participant, owner.partyId).collect {
           case t @ (_, view)
@@ -207,7 +216,8 @@ trait GovernanceLockTest extends TokenStandardTest {
         } match {
           case Seq() => None
           case Seq(vestingLockCid) => Some(vestingLockCid)
-          case many => fail(s"Expected at most one VestingLock for $governanceLockCid, got $many")
+          case many =>
+            fail(s"Expected at most one GovernanceLock for $governanceLockCid, got $many")
         },
     )._2
 
@@ -217,7 +227,7 @@ trait GovernanceLockTest extends TokenStandardTest {
       owner: RichPartyId,
       lockKind: LockKind,
       lockSubject: String,
-      vestingLock: governancelock.VestingLock,
+      vestingLock: governancelock.GovernanceLock,
       vestedUntilTime: CantonTimestamp,
   )(implicit env: SpliceTestConsoleEnvironment): Unit =
     executeTransferViaTokenStandard(
@@ -228,7 +238,11 @@ trait GovernanceLockTest extends TokenStandardTest {
       transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Offer,
       description = Some(
         makeInputLockMemo(WithdrawVestedFunds, lockKind, lockSubject)(
-          (vestedUntilTime, vestingLock.vestingPeriod, vestingLock.endTime)
+          (
+            vestedUntilTime,
+            vestingLockSpecification(vestingLock).vestingPeriod,
+            vestingLockSpecification(vestingLock).endTime,
+          )
         )
       ),
       wait = false,
@@ -279,14 +293,14 @@ trait GovernanceLockTest extends TokenStandardTest {
   def substituteGovernanceLockTSv1(lock: governancelock.GovernanceLock) =
     new SubstituteLockTSv1((Locked, PartyId.tryFromProtoPrimitive(lock.owner), None, None))
 
-  /** Propose a substitution of a VestingLock */
-  def substituteVestingLockTSv1(lock: governancelock.VestingLock) =
+  /** Propose a substitution of a vesting GovernanceLock */
+  def substituteVestingLockTSv1(lock: governancelock.GovernanceLock) =
     new SubstituteLockTSv1(
       (
         Vesting,
         PartyId.tryFromProtoPrimitive(lock.owner),
-        Some(lock.vestingPeriod),
-        Some(lock.endTime),
+        Some(vestingLockSpecification(lock).vestingPeriod),
+        Some(vestingLockSpecification(lock).endTime),
       )
     )
 }

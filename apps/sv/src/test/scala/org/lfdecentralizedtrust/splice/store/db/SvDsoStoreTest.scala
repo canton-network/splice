@@ -157,18 +157,24 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     "listExpiredVestingLocks" should {
 
       "return locks past their endTime, and never those of another DSO" in {
-        val dsoLock =
-          vestingLock(userParty(1), vestingAmount = BigDecimal(10), endTime = time(2).toInstant)
-        val laterDsoLock =
-          vestingLock(userParty(2), vestingAmount = BigDecimal(20), endTime = time(4).toInstant)
+        val dsoLock = governanceLock(
+          userParty(1),
+          amount = BigDecimal(10),
+          vestingEndTime = Some(time(2).toInstant),
+        )
+        val laterDsoLock = governanceLock(
+          userParty(2),
+          amount = BigDecimal(20),
+          vestingEndTime = Some(time(4).toInstant),
+        )
         // 'dso' party of 'otherDsoLock' is different than the one used in
         // 'mkStore()' below. Thus, 'otherDsoLock' should never be ingested and
         // must not be discoverable using listExpiredVestingLocks even than time
         // is greater than 'otherDsoLock(endTime)'.
-        val otherDsoLock = vestingLock(
+        val otherDsoLock = governanceLock(
           userParty(3),
-          vestingAmount = BigDecimal(30),
-          endTime = time(2).toInstant,
+          amount = BigDecimal(30),
+          vestingEndTime = Some(time(2).toInstant),
           dso = userParty(4),
         )
         for {
@@ -197,9 +203,9 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         val party1 = userParty(1)
         val party2 = userParty(2)
         val party1Lock =
-          vestingLock(party1, vestingAmount = BigDecimal(10), endTime = time(2).toInstant)
+          governanceLock(party1, amount = BigDecimal(10), vestingEndTime = Some(time(2).toInstant))
         val party2Lock =
-          vestingLock(party2, vestingAmount = BigDecimal(20), endTime = time(2).toInstant)
+          governanceLock(party2, amount = BigDecimal(20), vestingEndTime = Some(time(2).toInstant))
         for {
           store <- mkStore()
           _ <- MonadUtil.sequentialTraverse(Seq(party1Lock, party2Lock))(

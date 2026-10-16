@@ -10,7 +10,12 @@ import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.sv.config.InitialGovernanceLockConfig
-import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TokenStandardMetadata, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  GovernanceLockUtil,
+  TimeTestUtil,
+  TokenStandardMetadata,
+  WalletTestUtil,
+}
 
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -44,7 +49,7 @@ class GovernanceLockTimeBasedIntegrationTest
       case other => fail(s"Expected GLK_SuperValidatorRightsOwner kind, found: $other")
     }
 
-  "SV GovernanceLock created via TSv1 compatibility interface can be unlocked into a VestingLock" in {
+  "SV GovernanceLock created via TSv1 compatibility interface can be unlocked into a vesting GovernanceLock" in {
     implicit env =>
       val lockAmount = BigDecimal(10000)
       val lockKind = SuperValidatorLock
@@ -74,7 +79,7 @@ class GovernanceLockTimeBasedIntegrationTest
             )
             .loneElement
             .data
-        matchSVKind(governanceLock.specification.kind)
+        matchSVKind(GovernanceLockUtil.getGovernanceLockKind(governanceLock))
       }
 
       clue("the GovernanceLock is as a pending TransferInstruction to the magic party") {
@@ -101,7 +106,7 @@ class GovernanceLockTimeBasedIntegrationTest
       // Advance sim-time past the lock's requestedAt time
       advanceTimeAndWaitForRoundOpening
 
-      // Withdraw the governance lock; it's relocked as a VestingLock and funds remain locked
+      // Withdraw the governance lock; it's relocked as a vesting GovernanceLock and funds remain locked
       val vestingStartTime = getLedgerTime.plusSeconds(1)
       val (vestingLockCid, vestingLockView) = unlockGovernanceLockTSv1(
         aliceValidatorBackend.participantClientWithAdminToken,
@@ -114,7 +119,7 @@ class GovernanceLockTimeBasedIntegrationTest
       ).value
       val vestingLock =
         aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-          .filterJava(governancelock.VestingLock.COMPANION)(
+          .filterJava(governancelock.GovernanceLock.COMPANION)(
             ownerParty,
             predicate = _.id.contractId == vestingLockCid.contractId,
           )
@@ -123,12 +128,12 @@ class GovernanceLockTimeBasedIntegrationTest
       vestingLockCid.contractId should not be governanceLockCid.contractId
       vestingLockView.transfer.sender shouldBe ownerParty.toProtoPrimitive
       vestingLockView.transfer.receiver shouldBe lockManagerParty.toProtoPrimitive
-      matchSVKind(vestingLock.specification.kind)
-      vestingLock.endTime
-        .minus(vestingLock.vestingPeriod.microseconds, ChronoUnit.MICROS) shouldBe
+      matchSVKind(GovernanceLockUtil.getGovernanceLockKind(vestingLock))
+      val vestingSpec = vestingLockSpecification(vestingLock)
+      vestingSpec.endTime.minus(vestingSpec.vestingPeriod.microseconds, ChronoUnit.MICROS) shouldBe
         vestingStartTime.toInstant
 
-      clue("Scan serves a withdraw choice context for the VestingLock") {
+      clue("Scan serves a withdraw choice context for the vesting lock") {
         sv1ScanBackend
           .getTransferInstructionWithdrawContext(vestingLockCid)
           .disclosedContracts should not be empty
@@ -143,7 +148,7 @@ class GovernanceLockTimeBasedIntegrationTest
       advanceTime(Duration.ofSeconds(31))
 
       val (_, (remainingVestingLock, remainingVestingAmount)) = actAndCheck(
-        "the owner withdraws the VestingLock mid-vesting",
+        "the owner withdraws the vesting lock mid-vesting",
         withdrawVestingLockTSv1(
           aliceValidatorBackend.participantClientWithAdminToken,
           owner,
@@ -153,7 +158,7 @@ class GovernanceLockTimeBasedIntegrationTest
           vestedUntilTime = vestingStartTime.plusSeconds(30),
         ),
       )(
-        "a new VestingLock remains with half of the total vesting amount",
+        "a new vesting lock remains with half of the total vesting amount",
         _ => {
           val (cid, view) = listTransferInstructions(
             aliceValidatorBackend.participantClientWithAdminToken,
@@ -161,7 +166,7 @@ class GovernanceLockTimeBasedIntegrationTest
           ).loneElement
           val remainingVestingLock =
             aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .filterJava(governancelock.VestingLock.COMPANION)(
+              .filterJava(governancelock.GovernanceLock.COMPANION)(
                 ownerParty,
                 predicate = _.id.contractId == cid.contractId,
               )
@@ -170,8 +175,8 @@ class GovernanceLockTimeBasedIntegrationTest
           cid.contractId should not be vestingLockCid.contractId
           view.transfer.sender shouldBe ownerParty.toProtoPrimitive
           view.transfer.receiver shouldBe lockManagerParty.toProtoPrimitive
-          matchSVKind(remainingVestingLock.specification.kind)
-          val remainingVestingAmount = BigDecimal(remainingVestingLock.vestingAmount)
+          matchSVKind(GovernanceLockUtil.getGovernanceLockKind(remainingVestingLock))
+          val remainingVestingAmount = BigDecimal(remainingVestingLock.amount)
           // The explicit withdraw time vests exactly 1/4 of the total lock amount
           val expectedLockAmount = lockAmount / 4 * 3
           remainingVestingAmount shouldBe expectedLockAmount
@@ -185,8 +190,8 @@ class GovernanceLockTimeBasedIntegrationTest
       advanceTime(Duration.ofSeconds(90))
 
       actAndCheck(
-        "the owner withdraws the fully-vested VestingLock",
-        // The remaining VestingLock has the same end time as the original, but a new vesting
+        "the owner withdraws the fully-vested lock",
+        // The remaining GovernanceLock has the same end time as the original, but a new vesting
         // period computed from the previous withdraw time
         withdrawVestingLockTSv1(
           aliceValidatorBackend.participantClientWithAdminToken,
@@ -197,14 +202,17 @@ class GovernanceLockTimeBasedIntegrationTest
           vestedUntilTime = vestingStartTime.plusSeconds(120),
         ),
       )(
-        "the VestingLock is archived and no pending TransferInstruction remains",
+        "the lock is archived and no pending TransferInstruction remains",
         _ => {
           listTransferInstructions(
             aliceValidatorBackend.participantClientWithAdminToken,
             ownerParty,
           ) shouldBe empty
           aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-            .filterJava(governancelock.VestingLock.COMPANION)(ownerParty, _ => true) shouldBe empty
+            .filterJava(governancelock.GovernanceLock.COMPANION)(
+              ownerParty,
+              c => isVestingLock(c.data),
+            ) shouldBe empty
         },
       )
 

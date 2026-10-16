@@ -13,7 +13,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
-import org.lfdecentralizedtrust.splice.util.WalletTestUtil
+import org.lfdecentralizedtrust.splice.util.{GovernanceLockUtil, WalletTestUtil}
 
 class GovernanceLockIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -39,15 +39,15 @@ class GovernanceLockIntegrationTest
     participant.ledger_api_extensions.acs
       .filterJava(governancelock.GovernanceLock.COMPANION)(
         owner,
-        predicate = _.data.owner == owner.toProtoPrimitive,
+        predicate = c => c.data.owner == owner.toProtoPrimitive && !isVestingLock(c.data),
       )
       .map(_.data)
 
   private def vestingLocksFor(participant: ParticipantClientReference, owner: PartyId) =
     participant.ledger_api_extensions.acs
-      .filterJava(governancelock.VestingLock.COMPANION)(
+      .filterJava(governancelock.GovernanceLock.COMPANION)(
         owner,
-        predicate = _.data.owner == owner.toProtoPrimitive,
+        predicate = c => c.data.owner == owner.toProtoPrimitive && isVestingLock(c.data),
       )
       .map(_.data)
 
@@ -134,7 +134,8 @@ class GovernanceLockIntegrationTest
 
           val bobLock = governanceLocksFor(bobParticipant, bob.partyId).loneElement
           BigDecimal(bobLock.amount) shouldBe partialSubstitutionAmount
-          bobLock.specification.kind shouldBe targetLock.specification.kind
+          GovernanceLockUtil.getGovernanceLockKind(bobLock) shouldBe
+            GovernanceLockUtil.getGovernanceLockKind(targetLock)
 
           val aliceLock = governanceLocksFor(aliceParticipant, alice.partyId).loneElement
           BigDecimal(aliceLock.amount) shouldBe targetLockAmount - partialSubstitutionAmount
@@ -214,7 +215,7 @@ class GovernanceLockIntegrationTest
       )
   }
 
-  "A VestingLock substitution created via TSv1 can be accepted by the owner of the target lock" in {
+  "A vesting GovernanceLock substitution created via TSv1 can be accepted by the owner of the target lock" in {
     implicit env =>
       val (alice, bob, targetLockCid, _) = setup(bobFunds = targetLockAmount)
 
@@ -236,7 +237,7 @@ class GovernanceLockIntegrationTest
         bob,
         lockKind,
         lockSubject,
-        BigDecimal(vestingLock.vestingAmount),
+        BigDecimal(vestingLock.amount),
       )
 
       clue("the substitution is a pending TransferInstruction from bob to alice") {
@@ -246,7 +247,7 @@ class GovernanceLockIntegrationTest
           bob.partyId,
           substitutionCid,
           alice.partyId,
-          BigDecimal(vestingLock.vestingAmount),
+          BigDecimal(vestingLock.amount),
         )
       }
 
@@ -254,7 +255,7 @@ class GovernanceLockIntegrationTest
         "alice accepts the substitution",
         acceptTransferInstruction(aliceParticipant, alice, substitutionCid),
       )(
-        "bob owns a VestingLock with the same vesting schedule and alice has none",
+        "bob owns a GovernanceLock with the same vesting schedule and alice has none",
         _ => {
           // The substitution is gone; bob's only instruction is his new lock
           listTransferInstructions(bobParticipant, bob.partyId).map(
@@ -262,10 +263,13 @@ class GovernanceLockIntegrationTest
           ) shouldBe Seq(lockManagerParty.toProtoPrimitive)
 
           val bobLock = vestingLocksFor(bobParticipant, bob.partyId).loneElement
-          BigDecimal(bobLock.vestingAmount) shouldBe BigDecimal(vestingLock.vestingAmount)
-          bobLock.vestingPeriod shouldBe vestingLock.vestingPeriod
-          bobLock.endTime shouldBe vestingLock.endTime
-          bobLock.specification.kind shouldBe vestingLock.specification.kind
+          BigDecimal(bobLock.amount) shouldBe BigDecimal(vestingLock.amount)
+          vestingLockSpecification(bobLock).vestingPeriod shouldBe
+            vestingLockSpecification(vestingLock).vestingPeriod
+          vestingLockSpecification(bobLock).endTime shouldBe
+            vestingLockSpecification(vestingLock).endTime
+          GovernanceLockUtil.getGovernanceLockKind(bobLock) shouldBe
+            GovernanceLockUtil.getGovernanceLockKind(vestingLock)
 
           vestingLocksFor(aliceParticipant, alice.partyId) shouldBe empty
         },

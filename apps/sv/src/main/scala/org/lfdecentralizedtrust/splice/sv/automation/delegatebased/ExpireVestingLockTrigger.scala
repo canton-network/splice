@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import scala.jdk.CollectionConverters.*
 
-/** Garbage-collects fully vested `VestingLock`s that there not explicitly
+/** Garbage-collects fully vested `GovernanceLock`s that there not explicitly
   * withdrawn.
   */
 class ExpireVestingLockTrigger(
@@ -35,7 +35,7 @@ class ExpireVestingLockTrigger(
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredVestingLockBatchSize,
       svTaskContext.dsoStore.listExpiredVestingLocks(Some(unavailablePartiesStore)),
-      splice.governancelock.VestingLock.COMPANION,
+      splice.governancelock.GovernanceLock.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       getStakeholders,
@@ -62,7 +62,7 @@ class ExpireVestingLockTrigger(
       cmds = expiredLocks.flatMap(co =>
         dsoRules
           .exercise(
-            _.exerciseDsoRules_VestingLock_ExpireVestingLock(
+            _.exerciseDsoRules_GovernanceLock_DsoExpire(
               co.contractId,
               controller,
             )
@@ -86,17 +86,17 @@ class ExpireVestingLockTrigger(
   }
 }
 
-object ExpireVestingLockTrigger extends ContractStakeholders[splice.governancelock.VestingLock] {
-  private type LockCid = splice.governancelock.VestingLock.ContractId
-  private type Lock = splice.governancelock.VestingLock
+object ExpireVestingLockTrigger extends ContractStakeholders[splice.governancelock.GovernanceLock] {
+  private type LockCid = splice.governancelock.GovernanceLock.ContractId
+  private type Lock = splice.governancelock.GovernanceLock
 
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[LockCid, Lock]
     ]
 
-  override def informees(payload: splice.governancelock.VestingLock): Seq[String] =
+  override def informees(payload: splice.governancelock.GovernanceLock): Seq[String] =
     Seq(payload.owner)
 
-  override def dso(payload: splice.governancelock.VestingLock): String = payload.dso
+  override def dso(payload: splice.governancelock.GovernanceLock): String = payload.dso
 }

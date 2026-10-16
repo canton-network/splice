@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
-import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.VestingLock
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.GovernanceLock
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -19,12 +19,16 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireVestingLockTrigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialGovernanceLockConfig
-import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.util.{
+  GovernanceLockUtil,
+  TimeTestUtil,
+  TriggerTestUtil,
+  WalletTestUtil,
+}
 
 import java.time.Duration
 
-/** Covers `ExpireVestingLockTrigger`: batched archival of fully vested
-  * `VestingLock`s.
+/** Covers `ExpireVestingLockTrigger`: batched archival of fully vested `GovernanceLock`s.
   *
   * The trigger is a
   * [[org.lfdecentralizedtrust.splice.automation.BatchedMultiDomainExpiredContractTrigger]],
@@ -173,6 +177,7 @@ class ExpireVestingLockTimeBasedIntegrationTest
 
   private def listVestingLocks(implicit env: SpliceTestConsoleEnvironment) =
     sv1Backend.appState.dsoStore.multiDomainAcsStore
-      .listContracts(VestingLock.COMPANION)
+      .listContracts(GovernanceLock.COMPANION)
       .futureValue
+      .filter(lock => GovernanceLockUtil.getVestingLockSpecification(lock.payload).isDefined)
 }

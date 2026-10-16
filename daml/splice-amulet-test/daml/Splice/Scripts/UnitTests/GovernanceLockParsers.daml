@@ -194,16 +194,16 @@ test_governanceLockMetadataParser = do
 -- Lock specification parser
 ----------------------------
 
-test_governanceLockSpecificationParser'
-  :  (Text -> [(Text, Text)] -> Validation Text GovernanceLockSpecification)
+test_fullLockSpecificationParser'
+  :  (Text -> [(Text, Text)] -> Validation Text FullLockSpecification)
   -> Script ()
-test_governanceLockSpecificationParser' run = do
-  let fullSpecification = GovernanceLockSpecification with
+test_fullLockSpecificationParser' run = do
+  let fullSpecification = FullLockSpecification with
         kind = GLK_FeaturedApp testProvider
   expectSuccess fullSpecification $
     run (governanceLockTagToText GLT_FeaturedApp) [(lockSubjectMetaKey, "provider")]
 
-  expectSuccess (GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv") $
+  expectSuccess (FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv") $
     run (governanceLockTagToText GLT_SuperValidator) [(lockSubjectMetaKey, "someSv")]
 
   -- Invalid field
@@ -211,10 +211,10 @@ test_governanceLockSpecificationParser' run = do
     run (governanceLockTagToText GLT_FeaturedApp) [(lockSubjectMetaKey, invalidParty)]
 
 -- | The lock kind is read from the `lockKindMetaKey` field.
-test_governanceLockSpecificationParser : Script ()
-test_governanceLockSpecificationParser =
-  test_governanceLockSpecificationParser' \kind entries ->
-    runParser (governanceLockSpecificationParser governanceLockKindParser)
+test_fullLockSpecificationParser : Script ()
+test_fullLockSpecificationParser =
+  test_fullLockSpecificationParser' \kind entries ->
+    runParser (fullLockSpecificationParser governanceLockKindParser)
       (mkMeta $ (lockKindMetaKey, kind) :: entries)
 
 -- TSv1 request parser
@@ -236,18 +236,18 @@ test_governanceLockRequestTSv1Parser = do
   let run receiver entries = runParser (governanceLockRequestTSv1Parser testAdmin receiver) (mkMeta entries)
       request r = (requestMetaKey, r)
       faLock = [(lockKindMetaKey, governanceLockTagToText GLT_FeaturedApp), (lockSubjectMetaKey, "provider")]
-      faSpecification = GovernanceLockSpecification with kind = GLK_FeaturedApp testProvider
+      faSpecification = FullLockSpecification with kind = GLK_FeaturedApp testProvider
       invalidReceiverError p = "Invalid receiver: '" <> show p <> "'"
 
   -- Create a lock: the specification is parsed
   expectRequest (run lockManagerParty $ request "create-lock" :: (unlockAmountMetaKey, "1.0") :: faLock) \case
-    GLR_CreateGovernanceLock{governanceSpecification} -> governanceSpecification === faSpecification
+    GLR_CreateGovernanceLock{fullSpecification} -> fullSpecification === faSpecification
     _ -> fail "Expected GLR_CreateGovernanceLock"
 
   -- Create a lock
   expectRequest (run lockManagerParty $ request "create-lock" :: faLock) \case
-    GLR_CreateGovernanceLock{governanceSpecification} ->
-      governanceSpecification === faSpecification
+    GLR_CreateGovernanceLock{fullSpecification} ->
+      fullSpecification === faSpecification
     _ -> fail "Expected GLR_CreateGovernanceLock"
 
   -- Unlock with all fields set
@@ -258,8 +258,8 @@ test_governanceLockRequestTSv1Parser = do
         :: (vestingStartTimeMetaKey, "2026-01-01T00:00:00Z")
         :: faLock)
     \case
-      GLR_UnlockGovernanceLock{governanceSpecification, unlockAmount, vestingStartTime} -> do
-        governanceSpecification === faSpecification
+      GLR_UnlockGovernanceLock{fullSpecification, unlockAmount, vestingStartTime} -> do
+        fullSpecification === faSpecification
         unlockAmount === 10000.0
         vestingStartTime === time (date 2026 Jan 1) 0 0 0
       _ -> fail "Expected GLR_UnlockGovernanceLock"
@@ -276,11 +276,11 @@ test_governanceLockRequestTSv1Parser = do
         :: (transferAmountMetaKey, "1.0")
         :: faLock)
     \case
-      GLR_TransferGovernanceLock{governanceSpecification, newOwner, transferAmount} -> do
-        governanceSpecification === faSpecification
+      GLR_TransferLock{specification, newOwner, transferAmount} -> do
+        specification === GLS_FullLock faSpecification
         newOwner === alice
         transferAmount === 1.0
-      _ -> fail "Expected GLR_TransferGovernanceLock"
+      _ -> fail "Expected GLR_TransferLock"
 
   -- Withdraw vested funds: the vesting lock key and the vested-until time are read from the metadata
   expectRequest
@@ -293,12 +293,12 @@ test_governanceLockRequestTSv1Parser = do
         :: (lockVestingEndTimeMetaKey, "1767225600000000")
         :: faLock)
     \case
-      GLR_WithdrawVestingLock{vestingSpecification, vestedUntilTime, vestingPeriod, vestingEndTime} -> do
+      GLR_WithdrawVestingLock{vestingSpecification, vestedUntilTime} -> do
         vestingSpecification === VestingLockSpecification with
           kind = GLK_FeaturedApp testProvider
+          vestingPeriod = days 60
+          endTime = time (date 2026 Jan 1) 0 0 0
         vestedUntilTime === time (date 2025 Dec 1) 0 0 0
-        vestingPeriod === days 60
-        vestingEndTime === time (date 2026 Jan 1) 0 0 0
       _ -> fail "Expected GLR_WithdrawVestingLock"
 
   expectRequest
@@ -314,9 +314,9 @@ test_governanceLockRequestTSv1Parser = do
 
   -- Withdraw without the vested-until time and the vesting lock key
   expectRequestErrors
-    [ missingMetadataMessage vestedUntilTimeMetaKey
-    , missingMetadataMessage lockVestingDurationMetaKey
+    [ missingMetadataMessage lockVestingDurationMetaKey
     , missingMetadataMessage lockVestingEndTimeMetaKey
+    , missingMetadataMessage vestedUntilTimeMetaKey
     ]
     $ run lockManagerParty (request "withdraw-vested-funds" :: faLock)
 
@@ -334,9 +334,9 @@ test_governanceLockRequestTSv1Parser = do
     run alice (request "transfer-lock" :: faLock)
   expectRequestErrors
     [ invalidReceiverError alice
-    , missingMetadataMessage vestedUntilTimeMetaKey
     , missingMetadataMessage lockVestingDurationMetaKey
     , missingMetadataMessage lockVestingEndTimeMetaKey
+    , missingMetadataMessage vestedUntilTimeMetaKey
     ]
     $ run alice (request "withdraw-vested-funds" :: faLock)
   -- Substituting a lock also needs the lock manager as the receiver; all errors are reported
@@ -366,9 +366,9 @@ testAdmin = testParty "registry-admin"
 
 -- | Parses a substitution request and returns its substitution.
 -- Arguments: registry admin. Input: metadata to be converted to a compat mode memo.
-substitutionTSv1Parser : Party -> Parser Metadata AnySubstitution
+substitutionTSv1Parser : Party -> Parser Metadata GovernanceLockKey
 substitutionTSv1Parser admin = governanceLockRequestTSv1Parser admin lockManagerParty >>= \case
-  GLR_SubstituteLock{substitution} -> pure substitution
+  GLR_SubstituteLock{target} -> pure target
   result -> assertFail $ "Expected GLR_SubstituteLock but got: " <> show result
 
 -- | The metadata entry that requests a substitution.
@@ -387,11 +387,10 @@ test_substitutionTSv1Parser_examples = do
   -- Minimal example: bob substitutes funds of the SV lock of alice for "someSv", for example a lock that alice
   -- created in compatibility mode.
   expectSuccess
-    (AS_Governance with
-      governanceLockKey = GovernanceLockKey with
-        dso = testAdmin
-        owner = alice
-        specification = GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
+    (GovernanceLockKey with
+      dso = testAdmin
+      owner = alice
+      specification = GLS_FullLock FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
     $ run
         [ ("cip-127/request", "substitute-lock")
         , ("cip-127/lock-kind", "sv-lock")
@@ -403,12 +402,11 @@ test_substitutionTSv1Parser_examples = do
   -- approve substitutions together with the provider. Bob substitutes funds of that lock with a lock whose
   -- substitutions charlie can approve together with either bob or the provider.
   expectSuccess
-    (AS_Governance with
-      governanceLockKey = GovernanceLockKey with
-        dso = testAdmin
-        owner = alice
-        specification = GovernanceLockSpecification with
-          kind = GLK_FeaturedApp testProvider)
+    (GovernanceLockKey with
+      dso = testAdmin
+      owner = alice
+      specification = GLS_FullLock FullLockSpecification with
+        kind = GLK_FeaturedApp testProvider)
     $ run
         [ ("cip-127/request", "substitute-lock")
         , ("cip-127/lock-kind", "fa-lock")
@@ -420,12 +418,11 @@ test_substitutionTSv1Parser_examples = do
   -- the state `vesting`, and must name its vesting period (60 days, in microseconds) and its end time
   -- (2026-01-01T00:00:00Z, in microseconds since the epoch).
   expectSuccess
-    (AS_Vesting with
-      vestingLockKey = VestingLockKey with
-        dso = testAdmin
-        owner = alice
-        specification = VestingLockSpecification with
-          kind = GLK_SuperValidatorRightsOwner "someSv"
+    (GovernanceLockKey with
+      dso = testAdmin
+      owner = alice
+      specification = GLS_VestingLock VestingLockSpecification with
+        kind = GLK_SuperValidatorRightsOwner "someSv"
         vestingPeriod = days 60
         endTime = time (date 2026 Jan 1) 0 0 0)
     $ run

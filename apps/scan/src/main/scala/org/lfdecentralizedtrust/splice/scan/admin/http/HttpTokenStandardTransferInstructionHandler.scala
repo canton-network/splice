@@ -28,6 +28,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   DarResourcesUtil,
+  GovernanceLockUtil,
   TokenStandardAccount,
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1
@@ -442,14 +443,12 @@ class HttpTokenStandardTransferInstructionHandler(
                 newBuilder,
               )
             case governanceLock: splice.governancelock.GovernanceLock =>
-              getGovernanceLockContext("GovernanceLock", Some(governanceLock.lockedAmulet), true)
-            case vestingLock: splice.governancelock.VestingLock =>
-              // A partial withdrawal (< endTime) unlocks the LockedAmulet, so it is required.
-              // A full withdrawal (>= endTime) returns the holding directly, so doesn't need it.
-              val requireLockedAmulet = clock.now.toInstant.isBefore(vestingLock.endTime)
+              val requireLockedAmulet = GovernanceLockUtil
+                .getVestingLockSpecification(governanceLock)
+                .fold(true)(v => clock.now.toInstant.isBefore(v.endTime))
               getGovernanceLockContext(
-                "VestingLock",
-                Some(vestingLock.lockedAmulet),
+                "GovernanceLock",
+                Some(governanceLock.lockedAmulet),
                 requireLockedAmulet,
               )
             // A substitution proposed by the target lock owner locks no funds,
@@ -457,12 +456,6 @@ class HttpTokenStandardTransferInstructionHandler(
             case substitution: splice.governancelock.GovernanceLockSubstitution =>
               getGovernanceLockContext(
                 "GovernanceLockSubstitution",
-                substitution.lockedAmulet.toScala,
-                substitution.lockedAmulet.isPresent,
-              )
-            case substitution: splice.governancelock.VestingLockSubstitution =>
-              getGovernanceLockContext(
-                "VestingLockSubstitution",
                 substitution.lockedAmulet.toScala,
                 substitution.lockedAmulet.isPresent,
               )

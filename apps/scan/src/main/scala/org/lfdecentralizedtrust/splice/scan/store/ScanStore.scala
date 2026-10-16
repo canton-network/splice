@@ -34,7 +34,12 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
   VotesStore,
 }
-import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Contract,
+  ContractWithState,
+  GovernanceLockUtil,
+  TemplateJsonDecoder,
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -483,32 +488,15 @@ object ScanStore {
           versionGuard = { case (pkgVersionSupport, now) =>
             (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
           },
-        )(
-          ScanAcsStoreRowData(_)
-        ),
-        mkFilter(splice.governancelock.GovernanceLockSubstitution.COMPANION)(
-          co => co.payload.target.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
-          },
         )(contract =>
           ScanAcsStoreRowData(
             contract = contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+            contractExpiresAt = GovernanceLockUtil
+              .getVestingLockSpecification(contract.payload)
+              .map(v => Timestamp.assertFromInstant(v.endTime)),
           )
         ),
-        mkFilter(splice.governancelock.VestingLock.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
-          },
-        ) { contract =>
-          ScanAcsStoreRowData(
-            contract = contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.endTime)),
-          )
-        },
-        mkFilter(splice.governancelock.VestingLockSubstitution.COMPANION)(
+        mkFilter(splice.governancelock.GovernanceLockSubstitution.COMPANION)(
           co => co.payload.target.dso == dso,
           versionGuard = { case (pkgVersionSupport, now) =>
             (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)

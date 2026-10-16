@@ -49,11 +49,12 @@ testGovernanceLockHappyPathScenario ops = do
 
   -- The 80k vest from the unlock time on, and a lock with the remaining 100k replaces the original lock.
   Some vestingLock <- queryContractId alice aliceVesting
-  vestingLock.vestingAmount === 80000.0
-  vestingLock.specification.kind === someSvKind
-  vestingLock.endTime `addRelTime` negate vestingLock.vestingPeriod === unlockTime
+  vestingLock.amount === 80000.0
+  governanceLockKind vestingLock.specification === someSvKind
+  times <- requireVestingLock vestingLock.specification
+  times.endTime `addRelTime` negate times.vestingPeriod === unlockTime
   checkLockedHolding alice aliceVesting 80000.0
-  [(remainingLockCid, remainingLock)] <- query @GovernanceLock alice
+  [(remainingLockCid, remainingLock)] <- queryFilter @GovernanceLock alice isFullLock
   remainingLock.amount === 100000.0
   checkLockedHolding alice remainingLockCid 100000.0
 
@@ -173,11 +174,11 @@ testGovernanceLockMinimumAmountsScenario ops = do
 
   -- Exact amount should succeed.
   firstVestingCid <- expectSuccess $ ops.governanceUnlock env lockCid alice (unlockMeta 10000.0 unlockAt)
-  [(remainingLockCid, _)] <- query @GovernanceLock alice
+  [(remainingLockCid, _)] <- queryFilter @GovernanceLock alice isFullLock
 
   -- Unlock of full amount should succeed.
   expectSuccess $ ops.governanceUnlock env remainingLockCid alice (unlockMeta 10000.0 unlockAt)
-  remainingLocks <- query @GovernanceLock alice
+  remainingLocks <- queryFilter @GovernanceLock alice isFullLock
   remainingLocks === []
 
   passTime (days 180)
@@ -430,16 +431,7 @@ testTopUpNegativePath = do
 checkHolding' : Implements a V2.Holding => Party -> ContractId a -> Decimal -> Script ()
 checkHolding' party holding amount = WalletClientV2.checkHolding party (toInterfaceContractId holding) amount
 
-checkIsUnlocked : (Implements a V2.Holding) => Party -> ContractId a -> Script ()
-checkIsUnlocked p holdingCid = do
-  holdingO <- queryInterfaceContractId p $ toInterfaceContractId @V2.Holding holdingCid
-  now <- getTime
-  let holding = case holdingO of
-        None -> error $ "Holding " <> show holdingCid <> " was not found"
-        Some holding -> holding
-  unless (WalletClientV2.isUnlocked now holding.lock) $ fail $ "Holding " <> show holding <> " is not unlocked"
-
--- | Find the holding for a GovernanceLock or VestingLock, and check that it has the correct amount.
+-- | Find the holding for a GovernanceLock, and check that it has the correct amount.
 checkLockedHolding
   :  (Template t, HasEnsure t, HasField "lockedAmulet" t (ContractId LockedAmulet))
   => Party
@@ -563,19 +555,19 @@ data GovernanceLockOperations = GovernanceLockOperations with
     -> ContractId GovernanceLock
     -> Party
     -> Metadata
-    -> Script (Either SubmitError (Optional (ContractId VestingLock)))
+    -> Script (Either SubmitError (Optional (ContractId GovernanceLock)))
   governanceUnlock
     :  TestEnv
     -> ContractId GovernanceLock
     -> Party
     -> Metadata
-    -> Script (Either SubmitError (ContractId VestingLock))
+    -> Script (Either SubmitError (ContractId GovernanceLock))
   vestingWithdraw
     :  TestEnv
-    -> ContractId VestingLock
+    -> ContractId GovernanceLock
     -> Party
     -> Metadata
-    -> Script (Either SubmitError (Optional (ContractId VestingLock)))
+    -> Script (Either SubmitError (Optional (ContractId GovernanceLock)))
 
 tsv1Operations = GovernanceLockOperations with
     governanceLock
@@ -585,10 +577,10 @@ tsv1Operations = GovernanceLockOperations with
   where
     governanceLock env owner amount kind meta = lockForGovernance' env.registries env.registriesEnv.amuletV2 owner amount kind meta
     optGovernanceUnlock env cid actor meta =
-      fmap (pendingLockCid @VestingLock) <$> unlockGovernanceLockRequest env.registries env.registriesEnv.amuletV2 cid actor meta
+      fmap (pendingLockCid @GovernanceLock) <$> unlockGovernanceLockRequest env.registries env.registriesEnv.amuletV2 cid actor meta
     governanceUnlock env cid actor meta = ((<$>) fromSome) <$> optGovernanceUnlock env cid actor meta
     vestingWithdraw env cid actor meta =
-      fmap (pendingLockCid @VestingLock) <$> withdrawVestingLockRequest env.registries env.registriesEnv.amuletV2 cid actor meta
+      fmap (pendingLockCid @GovernanceLock) <$> withdrawVestingLockRequest env.registries env.registriesEnv.amuletV2 cid actor meta
 
 -- TSv1 lock requests
 ---------------------
@@ -678,14 +670,14 @@ unlockGovernanceLockRequest
 unlockGovernanceLockRequest registries registry lockCid actor meta = do
   Some lock <- queryContractId registry.instrumentId.admin lockCid
   request <- lockRequest registry lock.owner 0.0
-    (tsv1RequestMemo governanceLockRequestUnlockAndStartVesting lock.specification.kind) meta
+    (tsv1RequestMemo governanceLockRequestUnlockAndStartVesting (governanceLockKind lock.specification)) meta
   submitLockRequest' registries actor request
 
 -- | Unlocks `unlockAmount` of a governance lock, with vesting starting at `vestingStartTime`.
 -- Returns the new vesting lock, the lock with the remaining funds and the unlocked funds, where they exist.
 unlockGovernanceLock'
   :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> ContractId GovernanceLock -> Decimal -> Time
-  -> Script (Either SubmitError (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet)))
+  -> Script (Either SubmitError (Optional (ContractId GovernanceLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet)))
 unlockGovernanceLock' registries registry lockCid unlockAmount vestingStartTime = do
   let dso = registry.instrumentId.admin
   Some lock <- queryContractId dso lockCid
@@ -698,26 +690,27 @@ unlockGovernanceLock' registries registry lockCid unlockAmount vestingStartTime 
       -- A partial unlock keeps the rest of the funds in a new lock with the same key
       locksAfter <- locksWithSameKey
       pure $ Right
-        ( pendingLockCid @VestingLock r
+        ( pendingLockCid @GovernanceLock r
         , listToOptional $ filter (`notElem` locksBefore) locksAfter
         , coerceContractId <$> listToOptional r.senderChangeCids
         )
 
 unlockGovernanceLock
   :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> ContractId GovernanceLock -> Decimal -> Time
-  -> Script (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet))
+  -> Script (Optional (ContractId GovernanceLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet))
 unlockGovernanceLock registries registry lockCid unlockAmount vestingStartTime =
   errorIfLeft =<< unlockGovernanceLock' registries registry lockCid unlockAmount vestingStartTime
 
 -- | Submits a TSv1 request to withdraw the vested funds of the vesting lock `lockCid`,
 -- with the parameters in `meta`.
 withdrawVestingLockRequest
-  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> ContractId VestingLock -> Party -> Metadata
+  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> ContractId GovernanceLock -> Party -> Metadata
   -> Script (Either SubmitError V1.TransferInstructionResult)
 withdrawVestingLockRequest registries registry lockCid actor meta = do
   Some lock <- queryContractId registry.instrumentId.admin lockCid
+  times <- requireVestingLock lock.specification
   request <- lockRequest registry lock.owner 0.0
-    (tsv1RequestMemo' governanceLockRequestWithdrawVestedFunds lock.specification.kind (vestingLockMetaEntries lock.vestingPeriod lock.endTime))
+    (tsv1RequestMemo' governanceLockRequestWithdrawVestedFunds (governanceLockKind lock.specification) (vestingLockMetaEntries times.vestingPeriod times.endTime))
     meta
   submitLockRequest' registries actor request
 
@@ -737,21 +730,25 @@ vestingTargetMetaEntries : RelTime -> Time -> [(Text, Text)]
 vestingTargetMetaEntries vestingPeriod endTime =
   (lockStatusMetaKey, lockStateToText LS_Vesting) :: vestingLockMetaEntries vestingPeriod endTime
 
+isFullLock : GovernanceLock -> Bool
+isFullLock lock = foldGovernanceLockSpecification (const True) (const False) lock.specification
+
+fullLockSpecification : GovernanceLockKind -> GovernanceLockSpecification
+fullLockSpecification kind = GLS_FullLock FullLockSpecification with kind
+
+lockTargetMetaEntries : GovernanceLockSpecification -> [(Text, Text)]
+lockTargetMetaEntries = foldGovernanceLockSpecification (const []) \v -> vestingTargetMetaEntries v.vestingPeriod v.endTime
+
 -- | The TSv1 memo of a request to substitute a lock.
-substitutionMemo : AnySubstitution -> Text
-substitutionMemo = \case
-  AS_Governance{governanceLockKey} ->
-    tsv1RequestMemo' governanceLockRequestSubstituteLock governanceLockKey.specification.kind
-      [(targetLockOwnerMetaKey, partyToText governanceLockKey.owner)]
-  AS_Vesting{vestingLockKey} ->
-    tsv1RequestMemo' governanceLockRequestSubstituteLock vestingLockKey.specification.kind $
-      (targetLockOwnerMetaKey, partyToText vestingLockKey.owner)
-        :: vestingTargetMetaEntries vestingLockKey.vestingPeriod vestingLockKey.endTime
+substitutionMemo : GovernanceLockKey -> Text
+substitutionMemo target =
+  tsv1RequestMemo' governanceLockRequestSubstituteLock (governanceLockKind target.specification) $
+    (targetLockOwnerMetaKey, partyToText target.owner) :: lockTargetMetaEntries target.specification
 
 -- | Proposes as `proposer` to substitute `amount` of the target lock, requested at `requestedAt`
 -- and funded with all unlocked holdings of `proposer`.
 proposeSubstitutionAt'
-  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> AnySubstitution -> Decimal -> Time
+  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> GovernanceLockKey -> Decimal -> Time
   -> Script (Either SubmitError V1.TransferInstructionResult)
 proposeSubstitutionAt' registries registry proposer substitution amount requestedAt = do
   inputs <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount proposer) proposer registry.instrumentId
@@ -762,7 +759,7 @@ proposeSubstitutionAt' registries registry proposer substitution amount requeste
 
 -- | Proposes as `proposer` to substitute `amount` of the target lock, requested now.
 proposeSubstitution'
-  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> AnySubstitution -> Decimal
+  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> GovernanceLockKey -> Decimal
   -> Script (Either SubmitError V1.TransferInstructionResult)
 proposeSubstitution' registries registry proposer substitution amount = do
   now <- getTime
@@ -770,50 +767,29 @@ proposeSubstitution' registries registry proposer substitution amount = do
 
 -- | Proposes as `proposer` to substitute `amount` of the target lock, and returns the proposal.
 proposeSubstitution
-  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> AnySubstitution -> Decimal
+  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> GovernanceLockKey -> Decimal
   -> Script (ContractId V1.TransferInstruction)
 proposeSubstitution registries registry proposer substitution amount =
   expectTransferPending =<< expectSuccess (proposeSubstitution' registries registry proposer substitution amount)
 
 -- | The TSv1 request of the owner of the source lock to propose the lock transfer `transfer`.
-lockTransferRequest
-  :  LockKeyForOwner lockKey
-  => AmuletRegistryV2.AmuletRegistry -> GovernanceLockKind -> [(Text, Text)] -> LockTransfer lockKey
-  -> Script V1.Transfer
-lockTransferRequest registry kind lockMetaEntries transfer = do
-  let memo = tsv1RequestMemo' governanceLockRequestTransferLock kind $
+lockTransferRequest : AmuletRegistryV2.AmuletRegistry -> LockTransfer -> Script V1.Transfer
+lockTransferRequest registry transfer = do
+  let memo = tsv1RequestMemo' governanceLockRequestTransferLock (governanceLockKind transfer.source.specification) $
         [ (newLockOwnerMetaKey, partyToText transfer.receiver)
         , (transferAmountMetaKey, show transfer.amount)
-        ] <> lockMetaEntries
-  request <- lockRequest registry (lockKeyOwner transfer) 0.0 memo emptyMetadata
+        ] <> lockTargetMetaEntries transfer.source.specification
+  request <- lockRequest registry transfer.source.owner 0.0 memo emptyMetadata
   pure request with requestedAt = transfer.requestedAt
-
-governanceLockTransferRequest : AmuletRegistryV2.AmuletRegistry -> LockTransfer GovernanceLockKey -> Script V1.Transfer
-governanceLockTransferRequest registry transfer =
-  lockTransferRequest registry (lockTransferSource transfer).specification.kind [] transfer
-
-vestingLockTransferRequest : AmuletRegistryV2.AmuletRegistry -> LockTransfer VestingLockKey -> Script V1.Transfer
-vestingLockTransferRequest registry transfer =
-  let source = lockTransferSource transfer
-  in lockTransferRequest registry source.specification.kind (vestingTargetMetaEntries source.vestingPeriod source.endTime) transfer
 
 -- | Proposes the lock transfer `transfer`, submitted as `proposer`.
 proposeGovernanceLockTransfer'
-  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> LockTransfer GovernanceLockKey
+  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> LockTransfer
   -> Script (Either SubmitError (ContractId GovernanceLockTransfer))
 proposeGovernanceLockTransfer' registries registry proposer transfer = do
-  request <- governanceLockTransferRequest registry transfer
+  request <- lockTransferRequest registry transfer
   result <- submitLockRequest' registries proposer request
   pure $ fromSomeNote "Expected a pending lock transfer" . pendingLockCid @GovernanceLockTransfer <$> result
-
--- | Proposes the lock transfer `transfer`, submitted as `proposer`.
-proposeVestingLockTransfer'
-  :  MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> LockTransfer VestingLockKey
-  -> Script (Either SubmitError (ContractId VestingLockTransfer))
-proposeVestingLockTransfer' registries registry proposer transfer = do
-  request <- vestingLockTransferRequest registry transfer
-  result <- submitLockRequest' registries proposer request
-  pure $ fromSomeNote "Expected a pending lock transfer" . pendingLockCid @VestingLockTransfer <$> result
 
 getExtraArgsForRounds : ChoiceContext -> ContractId IssuingMiningRound -> ContractId OpenMiningRound -> ExtraArgs
 getExtraArgsForRounds context issuingMiningRoundCid openRoundCid = ExtraArgs with
