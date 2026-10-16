@@ -445,6 +445,7 @@ class ScanApp(
         acsSnapshotStore,
         scanEventStore,
         store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
+        historicalVotesStore,
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
