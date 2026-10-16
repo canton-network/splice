@@ -41,6 +41,7 @@ import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.automation.TxLogBackfillingTrigger
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.VotesBackfillSource
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.scalactic.source.Position
@@ -85,6 +86,7 @@ class ScanHistoryBackfillingIntegrationTest
             // Small batch size to force multiple backfilling rounds
             updateHistoryBackfillBatchSize = 2,
             txLogBackfillBatchSize = 2,
+            votesStoreBackfillingPollingInterval = NonNegativeFiniteDuration.ofSeconds(1),
           )
         )(config)
       )
@@ -558,6 +560,14 @@ class ScanHistoryBackfillingIntegrationTest
       sv2ScanBackend.listVoteRequestResults(VoteResultsFilters(), 100)._1 should be(empty)
     }
 
+    clue("Vote store results differ: SV1 ingested the vote, SV2 joined after it") {
+      listVotesStoreResults(sv1ScanBackend) should have size (1)
+      listVotesStoreResults(sv2ScanBackend) should be(empty)
+      // Neither can backfill yet: txlog backfilling is not initialized on either scan
+      sv1ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe false
+      sv2ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe false
+    }
+
     actAndCheck(
       "Run txlog backfilling once on all scans", {
         sv1ScanTxLogBackfillTrigger.runOnce().futureValue
@@ -583,8 +593,42 @@ class ScanHistoryBackfillingIntegrationTest
     )
 
     actAndCheck(
-      "Resume txlog backfilling", {
+      "Resume txlog backfilling on SV1 only", {
         sv1ScanTxLogBackfillTrigger.resume()
+      },
+    )(
+      "SV1 completes txlog backfilling, and then votes store backfilling from its txlog",
+      _ => {
+        sv1ScanBackend.appState.store.multiDomainAcsStore
+          .getTxLogBackfillingState()
+          .futureValue should be(TxLogBackfillingState.Complete)
+        sv1ScanBackend.getBackfillingStatus().complete shouldBe true
+        sv1ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
+        sv1ScanBackend.appState.votesStore
+          .getBackfillingProgress()
+          .futureValue
+          .value
+          .source shouldBe VotesBackfillSource.TxLog
+      },
+    )
+
+    clue("SV2 backfills the vote from SV1, while its own txlog backfilling is still in progress") {
+      eventually() {
+        sv2ScanBackend.appState.votesStore.isBackfillingComplete().futureValue shouldBe true
+      }
+      sv2ScanBackend.appState.store.multiDomainAcsStore
+        .getTxLogBackfillingState()
+        .futureValue should be(TxLogBackfillingState.InProgress)
+      sv2ScanBackend.appState.votesStore
+        .getBackfillingProgress()
+        .futureValue
+        .value
+        .source shouldBe VotesBackfillSource.Peers
+      listVotesStoreResults(sv2ScanBackend) shouldBe listVotesStoreResults(sv1ScanBackend)
+    }
+
+    actAndCheck(
+      "Resume txlog backfilling on SV2", {
         sv2ScanTxLogBackfillTrigger.resume()
       },
     )(
@@ -612,6 +656,12 @@ class ScanHistoryBackfillingIntegrationTest
     }
 
   }
+
+  private def listVotesStoreResults(backend: ScanAppBackendReference) =
+    backend.appState.votesStore
+      .listVoteRequestResults(VoteResultsFilters(), PageLimit.tryCreate(100), None)
+      .futureValue
+      .resultsInPage
 
   private def readUpdateHistoryFromScan(backend: ScanAppBackendReference) = {
     backend
