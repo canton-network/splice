@@ -122,7 +122,7 @@ data FeaturedAppRight_ClearUnderlockResult = FeaturedAppRight_ClearUnderlockResu
   featuredAppRightCid : ContractId FeaturedAppRight
     deriving (Serializable)
 
-data FeaturedAppRight_EnforcePermanentUnderlockResult = FeaturedAppRight_EnforcePermanentUnderlockResult
+data FeaturedAppRight_EnforcePermanentUnderlockResult = FeaturedAppRight_EnforcePermanentUnderlockResult {}
     deriving (Serializable)
 
 data AppRewardCoupon_DsoExpireResult = AppRewardCoupon_DsoExpireResult with

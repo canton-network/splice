@@ -320,7 +320,7 @@ data GovernanceLock_MergeAndTopUpResult
   deriving (Eq, Show, Serializable)
 
 data GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
-   = GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+   = GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult {}
    deriving (Serializable)
 
 vestingLock_withdrawImpl : ContractId GovernanceLock -> GovernanceLock -> Time -> [Party] -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
@@ -351,7 +351,7 @@ vestingLock_withdrawImpl _self this@GovernanceLock{..} vestedUntilTime actors co
 
 
 data GovernanceLock_DsoExpireResult
-  = GovernanceLock_DsoExpireResult
+  = GovernanceLock_DsoExpireResult {}
     -- ^
     -- The `GovernanceLock_DsoExpire` choice doesn't return anything because
     -- an SV trigger that cleans up expired vesting locks doesn't care to do
@@ -513,7 +513,7 @@ data GovernanceLockSubstitution_RejectResult
     unlockedAmulet : Optional (ContractId Amulet)
       -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
 
-data GovernanceLockSubstitution_DsoExpireResult = GovernanceLockSubstitution_DsoExpireResult
+data GovernanceLockSubstitution_DsoExpireResult = GovernanceLockSubstitution_DsoExpireResult {}
   deriving (Serializable)
 
 data GovernanceLock_DsoSubstituteResult = GovernanceLock_DsoSubstituteResult with
@@ -521,7 +521,7 @@ data GovernanceLock_DsoSubstituteResult = GovernanceLock_DsoSubstituteResult wit
       -- ^ The lock that keeps the funds that were not substituted, if any.
     unlockedAmulet : ContractId Amulet
       -- ^ The substituted funds, returned to the owner.
-  deriving (Eq, Show, Serializable)
+  deriving (Serializable)
 
 governanceLock_substituteImpl : ContractId GovernanceLock -> GovernanceLock -> Decimal -> ExtraArgs -> Update GovernanceLock_DsoSubstituteResult
 governanceLock_substituteImpl self this@GovernanceLock{..} substitutedAmount extraArgs = do
@@ -552,7 +552,7 @@ data GovernanceLock_DsoSplitForSubstitutionResult = GovernanceLock_DsoSplitForSu
       -- ^ The lock that keeps the funds that were not split off, if any.
     splitAmulet : ContractId LockedAmulet
       -- ^ The funds that were split off, locked for the new lock.
-  deriving (Eq, Show, Serializable)
+  deriving (Serializable)
 
 governanceLock_splitForSubstitutionImpl : ContractId GovernanceLock -> GovernanceLock -> Decimal -> GovernanceLockSpecification -> ExtraArgs -> Update GovernanceLock_DsoSplitForSubstitutionResult
 governanceLock_splitForSubstitutionImpl self this@GovernanceLock{..} splitAmount newSpecification extraArgs = do
@@ -691,7 +691,6 @@ data CreateSubstitutionArgs = CreateSubstitutionArgs with
     inputHoldingCids : [ContractId Holding] -- ^ Holdings providing the funds
     extraArgs : ExtraArgs
     requestedAt : Time -- ^ Time of the request to create the proposal
-  deriving (Eq, Show, Serializable)
 
 createSubstitution : CreateSubstitutionArgs -> Update (ContractId V1.TransferInstruction, V1.TransferInstruction, Optional (ContractId Amulet))
 createSubstitution CreateSubstitutionArgs {..} = do
@@ -741,7 +740,6 @@ data LockTransfer = LockTransfer with
 data LockTransferArgs = LockTransferArgs with
     transfer : LockTransfer
     extraArgs : ExtraArgs
-  deriving (Eq, Show, Serializable)
 
 data TransferTransferInstructionViewArgs = TransferTransferInstructionViewArgs with
   transfer : LockTransfer
@@ -824,7 +822,7 @@ template GovernanceLockTransfer with
         assertDeadlineExceeded "GovernanceLockTransfer.expiresAt" expiresAt
         pure GovernanceLockTransfer_DsoExpireResult
 
-data GovernanceLockTransfer_DsoExpireResult = GovernanceLockTransfer_DsoExpireResult
+data GovernanceLockTransfer_DsoExpireResult = GovernanceLockTransfer_DsoExpireResult {}
   deriving (Serializable)
 
 data GovernanceLockTransfer_AcceptResult
@@ -835,10 +833,6 @@ data GovernanceLockTransfer_AcceptResult
       -- ^ The lock of the sender that keeps the funds that were not transferred, if any.
     lockedAmulet : ContractId LockedAmulet
       -- ^ The transferred funds, now locked for the owner of the new lock.
-
-data GovernanceLockTransfer_WithdrawResult = GovernanceLockTransfer_WithdrawResult
-
-data GovernanceLockTransfer_RejectResult = GovernanceLockTransfer_RejectResult
 
 data GovernanceLock_DsoTransferResult
   = GovernanceLock_DsoTransferResult with
@@ -931,15 +925,13 @@ governanceLockTransfer_acceptImpl self GovernanceLockTransfer{..} actors extraAr
     remainingLockCid = result.remainingLockCid
     lockedAmulet = newLockedAmulet
 
-governanceLockTransfer_withdrawImpl : GovernanceLockTransfer -> [Party] -> Update GovernanceLockTransfer_WithdrawResult
+governanceLockTransfer_withdrawImpl : GovernanceLockTransfer -> [Party] -> Update ()
 governanceLockTransfer_withdrawImpl GovernanceLockTransfer{..} actors = do
   checkActors actors [[transfer.source.owner]]
-  pure GovernanceLockTransfer_WithdrawResult
 
-governanceLockTransfer_rejectImpl : GovernanceLockTransfer -> [Party] -> Update GovernanceLockTransfer_RejectResult
+governanceLockTransfer_rejectImpl : GovernanceLockTransfer -> [Party] -> Update ()
 governanceLockTransfer_rejectImpl GovernanceLockTransfer{..} actors = do
   checkActors actors [[transfer.receiver]]
-  pure GovernanceLockTransfer_RejectResult
 
 -- | Checks to validate lock transfers
 validateLockTransfer : Time -> LockTransfer -> Update ()
@@ -1375,7 +1367,7 @@ data GovernanceLockRequest
   deriving (Show)
 
 data LockState = LS_Locked | LS_Vesting
-  deriving (Eq, Show)
+  deriving (Eq)
 
 lockStateToText : LockState -> Text
 lockStateToText LS_Locked = "locked"

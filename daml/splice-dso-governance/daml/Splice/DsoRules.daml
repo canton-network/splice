@@ -246,10 +246,10 @@ data DsoRules_CreateFeaturedAppUnderlockInstructionResult = DsoRules_CreateFeatu
     instructionCid : ContractId FeaturedAppUnderlockInstruction
   deriving (Serializable)
 
-data DsoRules_ExecuteFeaturedAppUnderlockInstructionResult = DsoRules_ExecuteFeaturedAppUnderlockInstructionResult
+data DsoRules_ExecuteFeaturedAppUnderlockInstructionResult = DsoRules_ExecuteFeaturedAppUnderlockInstructionResult {}
   deriving (Serializable)
 
-data DsoRules_EnforceFeaturedAppPermanentUnderlockResult = DsoRules_EnforceFeaturedAppPermanentUnderlockResult
+data DsoRules_EnforceFeaturedAppPermanentUnderlockResult = DsoRules_EnforceFeaturedAppPermanentUnderlockResult {}
   deriving (Serializable)
 
 data DsoRules_CreateFeaturedAppConfigUpdateInstructionResult = DsoRules_CreateFeaturedAppConfigUpdateInstructionResult with
@@ -372,16 +372,16 @@ data DsoRules_ExpireDevelopmentFundCouponResult = DsoRules_ExpireDevelopmentFund
     result : DevelopmentFundCoupon_DsoExpireResult
   deriving (Serializable)
 
-data DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult = DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult
+data DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult = DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult {}
   deriving (Serializable)
 
-data DsoRules_GovernanceLock_DsoExpireResult = DsoRules_GovernanceLock_DsoExpireResult with
+data DsoRules_GovernanceLock_DsoExpireResult = DsoRules_GovernanceLock_DsoExpireResult {}
   deriving (Serializable)
 
-data DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult = DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult with
+data DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult = DsoRules_GovernanceLockSubstitution_WithdrawExpiredResult {}
   deriving (Serializable)
 
-data DsoRules_GovernanceLockTransfer_ExpireResult = DsoRules_GovernanceLockTransfer_ExpireResult
+data DsoRules_GovernanceLockTransfer_ExpireResult = DsoRules_GovernanceLockTransfer_ExpireResult {}
   deriving (Serializable)
 
 data DsoRules_MiningRound_CloseResult = DsoRules_MiningRound_CloseResult with
