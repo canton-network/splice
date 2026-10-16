@@ -90,6 +90,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
+import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
   PageLimit,
@@ -255,6 +256,12 @@ class ScanApp(
         loggerFactory,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+      )
+      historicalVotesStore = DbVotesStore(
+        TxLogStoreId.unwrap(store.txLogStoreId),
+        storage,
+        kvStore,
+        loggerFactory,
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
@@ -440,6 +447,7 @@ class ScanApp(
         acsSnapshotStore,
         scanEventStore,
         store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
+        historicalVotesStore,
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
