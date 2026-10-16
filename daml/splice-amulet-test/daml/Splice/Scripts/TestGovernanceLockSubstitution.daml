@@ -413,6 +413,26 @@ testSelfSubstitution_partial = do
   WalletClientV2.checkUnlockedBalance alice instrId 0.0
   WalletClientV2.checkBalance alice instrId 50000.0
 
+testSubstitution_mergesTargetLocks : Script ()
+testSubstitution_mergesTargetLocks = do
+  (env@TestEnv{..}, _, targetSpec) <- setupSelfSubstitution $ fullLockSpecification selfSubstitutionKind
+  (selfProposalCid, _) <- proposeSelfSubstitution env targetSpec 20000.0
+  expectSuccess $ acceptInstructionV1 env selfProposalCid alice
+  locks <- queryFilter @GovernanceLock alice (\l -> l.owner == alice)
+  length locks === 2
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 50000.0
+  proposalCid <- proposeSubstitution registries registriesEnv.amuletV2 bob
+    (GovernanceLockKey with dso = instrId.admin; owner = alice; specification = targetSpec)
+    50000.0
+  [unlockedAmulet] <- expectTransferCompleted =<< expectSuccess (acceptInstructionV1 env proposalCid alice)
+  WalletClientV2.checkHolding alice (coerceContractId unlockedAmulet) 50000.0
+
+  remainingLocks <- queryFilter @GovernanceLock alice (\l -> l.owner == alice)
+  remainingLocks === []
+  [(newLockCid, _)] <- queryFilter @GovernanceLock bob (\l -> l.owner == bob)
+  checkLockedHolding bob newLockCid 50000.0
+
 testSelfSubstitution_fullTSv1 : Script ()
 testSelfSubstitution_fullTSv1 = do
   (env@TestEnv{..}, _, targetSpec) <- setupSelfSubstitution $ fullLockSpecification selfSubstitutionKind

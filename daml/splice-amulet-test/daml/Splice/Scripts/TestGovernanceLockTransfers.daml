@@ -60,7 +60,7 @@ lockWithSpec env owner amount specification = do
 svVestingLock
   : TestEnv -> Party -> Decimal -> Script (ContractId GovernanceLock, GovernanceLock)
 svVestingLock env owner amount = do
-  (lockCid, _) <- svLock env owner amount
+  (lockCid, _) <- lockWithSpec env owner amount $ fullLockSpecification $ GLK_SuperValidatorRightsOwner "TestVestingSV"
   vestingLockFor env owner lockCid amount
 
 -- | Creates an FA vesting lock of `amount` for `owner`, by
@@ -335,6 +335,26 @@ testLockTransferV1_acceptFullGovernanceLock = do
   aliceLocks === []
   checkBalances env alice (1000.0, 0.0)
   checkBalances env bob (0.0, 100000.0)
+
+testLockTransferV1_acceptMergesSourceLocks : Script ()
+testLockTransferV1_acceptMergesSourceLocks = do
+  (env@TestEnv{..}, _, lock, transferCid) <- setupGovernanceLockTransfer 40000.0
+  svLock env bob 50000.0
+  [] <- expectTransferCompleted =<< expectSuccess (acceptInstructionV1 env (asTransferInstruction transferCid) bob)
+  bobLocks <- governanceLocksOf bob
+  length bobLocks === 2
+
+  WalletClientV2.createBatchingUtility charlie
+  transfer <- validLockTransfer ((key lock) with owner = bob) charlie 90000.0
+  mergedTransferCid <- expectSuccess $ proposeGovernanceLockTransfer' env.registries env.registriesEnv.amuletV2 bob transfer
+  [] <- expectTransferCompleted =<< expectSuccess (acceptInstructionV1 env (asTransferInstruction mergedTransferCid) charlie)
+
+  [(charlieLockCid, _)] <- governanceLocksOf charlie
+  checkLockedHolding charlie charlieLockCid 90000.0
+  remainingBobLocks <- governanceLocksOf bob
+  remainingBobLocks === []
+  checkBalances env bob (0.0, 0.0)
+  checkBalances env charlie (0.0, 90000.0)
 
 testLockTransferV1_acceptPartialVestingLock : Script ()
 testLockTransferV1_acceptPartialVestingLock = do

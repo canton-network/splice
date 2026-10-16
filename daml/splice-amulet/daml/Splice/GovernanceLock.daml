@@ -6,12 +6,12 @@
 module Splice.GovernanceLock where
 
 import Prelude hiding (forA)
-import DA.Action (unless)
+import DA.Action (foldrA, unless)
 import DA.Assert
+import DA.ContractKeys (lookupNByKey)
 import DA.Foldable (forA_, toList)
 import DA.Functor (($>))
 import DA.List.Total (head)
-import DA.Map (Map)
 import DA.Map qualified as Map
 import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
@@ -29,7 +29,6 @@ import Splice.AmuletRules
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
-import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
 import Splice.Expiry hiding (maxTime)
 import Splice.Fees (relTimeToDays, relTimeToSeconds)
 import Splice.ExternalPartyConfigState
@@ -117,75 +116,6 @@ template GovernanceLock
         assertDeadlineExceeded "endTime" $ governanceLockExpiresAt specification
         pure GovernanceLock_DsoExpireResult
 
-    choice GovernanceLock_MergeAndTopUp : GovernanceLock_MergeAndTopUpResult
-      with
-        topUpAmount : Decimal
-          -- ^ Amount that should be deposited extra from liquid funds.
-        lockInputs : [ContractId GovernanceLock]
-          -- ^ Locks with the same owner and specification to merge into this lock
-        holdingInputs : [ContractId Holding]
-          -- ^ Holding inputs used to fund the top-up.
-        svRewardCouponInputs : [ContractId SvRewardCoupon]
-          -- ^ Sv Reward Coupon inputs used to fund the top-up.
-        svRewardCouponPercentage : Decimal
-          -- ^ Percentage (specified as a number between 0.0 and 1.0) of the sv reward coupons
-          -- minting allowance to top-up a governance lock with. The remainder is returned as change.
-        extraArgs : ExtraArgs
-      controller owner
-      do
-        requireFullLock specification
-        require' ("topUpAmount", topUpAmount) isGreaterOrEqualR ("zero", 0.0)
-        require' ("svRewardCouponPercentage", svRewardCouponPercentage) isGreaterOrEqualR ("zero", 0.0)
-        require' ("svRewardCouponPercentage", svRewardCouponPercentage) isLessOrEqualR ("one", 1.0)
-        let forOwner = ForOwner with dso; owner
-
-        (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-
-        (holdingsFromSvRewardCoupons, svRewardMintAllowance) <- getSvRewardInputAmuletAndChange
-          svRewardCouponInputs
-          svRewardCouponPercentage
-          extraArgs
-          forOwner
-          (toInterfaceContractId context.externalPartyConfigState)
-
-        (unlockedAmuletCid, (_, lockProps)) <- unlockAmulet forOwner lockedAmulet
-
-        -- Check if we have any locks to merge and extract required info
-        unlockedAmountsAndHoldings : [(Decimal, ContractId Holding)] <- forA lockInputs $ \governanceLockCid -> do
-          governanceLock <- fetchChecked @GovernanceLock forOwner governanceLockCid
-          requireMatchExpected ("governanceLock.dso", governanceLock.dso) dso
-          requireMatchExpected ("governanceLock.owner", governanceLock.owner) owner
-          requireMatchExpected ("governanceLock.specification", governanceLock.specification) specification
-
-          (amuletCid, (totalUnlockedLockAmount, _)) <- unlockAmulet forOwner governanceLock.lockedAmulet
-          pure (totalUnlockedLockAmount, toInterfaceContractId amuletCid)
-
-        let unlockedAmountFromMergeLocks : Decimal = sum [amt | (amt, _) <- unlockedAmountsAndHoldings]
-            unlockedHoldingsFromMergeLocks : [ContractId Holding] = [holding | (_, holding) <- unlockedAmountsAndHoldings]
-            newLockAmount = amount + topUpAmount + unlockedAmountFromMergeLocks + svRewardMintAllowance
-            allInputHoldings = toInterfaceContractId unlockedAmuletCid
-              :: holdingInputs
-              <> unlockedHoldingsFromMergeLocks
-              <> holdingsFromSvRewardCoupons
-
-        ([newLockedAmulet], newChangeHolding) <- lockAmulet
-          forOwner
-          [(newLockAmount, lockProps)]
-          allInputHoldings
-          context
-          $ if svRewardMintAllowance > 0.0
-              then "(includes minting and locking " <> show svRewardMintAllowance <> " SV rewards)"
-              else ""
-
-        newGovernanceLock <- create this with
-          amount = newLockAmount
-          lockedAmulet = newLockedAmulet
-          originalLockCid = Some $ fromOptional (toAnyContractId self) originalLockCid
-
-        pure $ GovernanceLock_MergeAndTopUpResult with
-          governanceLock = newGovernanceLock
-          changeHolding = newChangeHolding
-
     choice GovernanceLock_DsoConvertProvisionalFeaturedAppLock : GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
       with
         featuredAppRightCid : ContractId FeaturedAppRight
@@ -255,13 +185,100 @@ template GovernanceLock
       transferInstruction_withdrawImpl _ _ = assertFail "Transfers representing governance locks cannot be withdrawn"
       transferInstruction_updateImpl _ _ = assertFail "Transfers representing governance locks cannot be updated"
 
+data FetchAndMergeLocksResult = FetchAndMergeLocksResult with
+  lockCid : ContractId GovernanceLock
+  lock : GovernanceLock
+  changeHolding : Optional (ContractId Amulet)
+
+fetchAndMergeGovernanceLocks'
+  :  Optional (Decimal, [ContractId Holding], Time)
+  -> GovernanceLockKey
+  -> ExternalPartyTransferContext
+  -> ExternalPartyConfigState
+  -> Update FetchAndMergeLocksResult
+fetchAndMergeGovernanceLocks' newFunds key context state =
+  let
+    defaultNumberToMerge = 20
+
+    merge : Time -> [(ContractId GovernanceLock, GovernanceLock)] -> Update FetchAndMergeLocksResult
+    merge requestedAt locks = do
+      -- The merged lock continues the lineage of the first existing lock
+      -- The lineage of the other merged locks ends here, as a lock can only have one original lock
+      let originalLockCid = (\(cid, lock) -> fromOptional (toAnyContractId cid) lock.originalLockCid) <$> head locks
+          forOwner = ForOwner with dso = key.dso; owner = key.owner
+          (initialAmount, initialInputs) = optional (0.0, []) (\(amount, inputs, _) -> (amount, inputs)) newFunds
+
+      (mergedAmount, inputHoldings) <- foldrA
+        (\(lockCid, lock) (accAmount, accHoldings) -> do
+          potentiallyUnsafeArchive lockCid
+          (amuletCid, (unlockedAmount, _)) <- unlockAmulet forOwner lock.lockedAmulet
+          pure (accAmount + unlockedAmount, toInterfaceContractId amuletCid :: accHoldings))
+        (initialAmount, initialInputs)
+        locks
+
+      -- Presence of `newFunds` means we're creating a lock, so require the minimum amount
+      case newFunds of
+        Some _ -> requireMinimumLock state mergedAmount
+        None -> pure ()
+
+      -- The unlocked holdings sum up to exactly their locked amounts, so any change comes from the new inputs
+      ([newLockedAmulet], changeHolding) <- lockAmulet
+        forOwner
+        [(mergedAmount, governanceLockProperties key.specification)]
+        inputHoldings
+        context
+        ""
+
+      let newLock = GovernanceLock with
+            dso = key.dso
+            owner = key.owner
+            amount = mergedAmount
+            lockedAmulet = newLockedAmulet
+            specification = key.specification
+            originalLockCid
+            requestedAt
+      newLockCid <- create newLock
+      pure FetchAndMergeLocksResult with
+        lockCid = newLockCid
+        lock = newLock
+        changeHolding
+
+    attemptMerge : Int -> Update FetchAndMergeLocksResult
+    attemptMerge numberToMerge = do
+      locks <- lookupNByKey @GovernanceLock numberToMerge key
+      case (newFunds, locks) of
+        (None, []) -> assertFail $ "No locks found with key: " <> show key
+        (None, [(lockCid, lock)]) -> pure FetchAndMergeLocksResult with
+          lockCid
+          lock
+          changeHolding = None
+        (None, (_, lock) :: _) -> merge lock.requestedAt locks
+        (Some (_, _, requestedAt), _) -> merge requestedAt locks
+
+  in case (key.specification, newFunds) of
+    (spec@(GLS_VestingLock _), Some funds) ->
+      assertFail $ "Refusing to lock new funds for vesting lock: " <> show spec <> ", funds: " <> show funds
+
+    (GLS_VestingLock spec, None) -> do
+      -- Vesting locks with `endTime` in the past must not be merged
+      -- Doing so would set `expiresAt = endTime` on the resulting transfer, causing an error in `AmuletRules`
+      stillVesting <- isLedgerTimeLT spec.endTime
+      attemptMerge $ if stillVesting then defaultNumberToMerge else 1
+
+    _ -> attemptMerge defaultNumberToMerge
+
+fetchAndMergeGovernanceLocks : GovernanceLockKey -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update FetchAndMergeLocksResult
+fetchAndMergeGovernanceLocks key context state = do
+  -- `changeHolding` should always be `None` since no new funds are passed
+  result@FetchAndMergeLocksResult{changeHolding = None} <- fetchAndMergeGovernanceLocks' None key context state
+  pure result
+
 governanceLock_unlockImpl : ContractId GovernanceLock -> GovernanceLock -> Decimal -> Time -> [Party] -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
 governanceLock_unlockImpl self this@GovernanceLock{..} unlockAmount vestingStartTime actors context state
     = do
         fullSpec <- requireFullLock specification
         checkActors actors [[owner]]
-        assertWithinDeadline "vestingStartTime" vestingStartTime
-        assertDeadlineExceeded "vestingStartTime - 1 day" (vestingStartTime `addRelTime` days (-1))
+        assertInNext24Hours "vestingStartTime" vestingStartTime
         require' ("unlockAmount", unlockAmount) isLessOrEqualR ("amount", amount)
         let isFullUnlock = unlockAmount == amount
         require' ("unlockAmount", unlockAmount) isGreaterR ("zero", 0.0)
@@ -299,7 +316,7 @@ governanceLock_unlockImpl self this@GovernanceLock{..} unlockAmount vestingStart
           lockedAmulet
           amount
           specification
-          originalLockCid = guard isFullUnlock $> coerceContractId self
+          originalLockCid = guard isFullUnlock $> fromOptional (toAnyContractId self) originalLockCid
           requestedAt = endTime `addRelTime` (- vestingPeriod))
 
         pure GovernanceLock_UnlockResult with
@@ -312,12 +329,6 @@ data GovernanceLock_UnlockResult
       vestingLock : Optional (ContractId GovernanceLock)
       governanceLock : Optional (ContractId GovernanceLock)
       unlockedAmulet : Optional (ContractId Amulet)
-
-data GovernanceLock_MergeAndTopUpResult
-  = GovernanceLock_MergeAndTopUpResult with
-      governanceLock : ContractId GovernanceLock
-      changeHolding : Optional (ContractId Amulet)
-  deriving (Eq, Show, Serializable)
 
 data GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
    = GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult {}
@@ -384,23 +395,14 @@ governanceLock_lockForGovernance_impl
  -> Update (GovernanceLock, ContractId GovernanceLock, Optional (ContractId Amulet))
 governanceLock_lockForGovernance_impl dso amount inputs fullSpecification extraArgs owner requestedAt = do
   let specification = GLS_FullLock fullSpecification
-  assertWithinDeadline "requestedAt + 1 day" $ requestedAt `addRelTime` days 1
+  assertInPast24Hours "requestedAt" requestedAt
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-  requireMinimumLock state amount
-  let lockProperties = LockProperties with
-        context = describeGovernanceLock specification
-        expiresAt = maxBound
-  ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [(amount, lockProperties)] inputs context ""
-  let governanceLock = GovernanceLock with
-        dso
-        owner
-        amount
-        lockedAmulet
-        specification
-        requestedAt
-        originalLockCid = None
-  governanceLockCid <- create governanceLock
-  pure (governanceLock, governanceLockCid, changeHolding)
+  FetchAndMergeLocksResult{lock, lockCid, changeHolding} <- fetchAndMergeGovernanceLocks'
+    (Some (amount, inputs, requestedAt))
+    (GovernanceLockKey with dso; owner; specification)
+    context
+    state
+  pure (lock, lockCid, changeHolding)
 
 governanceLockKind : GovernanceLockSpecification -> GovernanceLockKind
 governanceLockKind = foldGovernanceLockSpecification (.kind) (.kind)
@@ -431,6 +433,16 @@ vestingDurationFor (GLK_SuperValidatorRightsOwner _) state = governanceLockSuper
 requireMinimumLock : ExternalPartyConfigState -> Decimal -> Update ()
 requireMinimumLock context amount = do
   require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", governanceLockMinimumLockAmount context.governanceLockConfig)
+
+assertInPast24Hours : Text -> Time -> Update ()
+assertInPast24Hours desc time = do
+  assertDeadlineExceeded desc time
+  assertWithinDeadline (desc <> " + 1 day") (time `addRelTime` days 1)
+
+assertInNext24Hours : Text -> Time -> Update ()
+assertInNext24Hours desc time = do
+  assertWithinDeadline desc time
+  assertDeadlineExceeded (desc <> " - 1 day") (time `addRelTime` days (-1))
 
 unfeaturedPaymentContextAndConfigFromChoiceContext : Party -> ChoiceContext -> Update (ExternalPartyTransferContext, ExternalPartyConfigState)
 unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do
@@ -585,7 +597,8 @@ governanceLock_splitForSubstitutionImpl self this@GovernanceLock{..} splitAmount
 governanceLockSubstitution_acceptImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> ExtraArgs -> Update GovernanceLockSubstitution_AcceptResult
 governanceLockSubstitution_acceptImpl self GovernanceLockSubstitution{..} actors extraArgs = do
   checkActors actors [[target.owner]]
-  (lockCid, _lock) <- fetchByKey @GovernanceLock target
+  (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext target.dso extraArgs.context
+  FetchAndMergeLocksResult{lockCid} <- fetchAndMergeGovernanceLocks target context state
   (newLockedAmulet, remainingLockCid, unlockedAmulet) <- case lockedAmulet of
     Some proposalLockedAmulet -> do
       substituteResult <- exercise lockCid GovernanceLock_DsoSubstitute with
@@ -895,20 +908,17 @@ governanceLockTransfer_acceptImpl : ContractId GovernanceLockTransfer -> Governa
 governanceLockTransfer_acceptImpl self GovernanceLockTransfer{..} actors extraArgs = do
   checkActors actors [[transfer.receiver]]
   let dso = transfer.source.dso
-  (lockCid, _lock) <- fetchByKey @GovernanceLock transfer.source
+  (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+  FetchAndMergeLocksResult{lockCid} <- fetchAndMergeGovernanceLocks transfer.source context state
   result <- exercise lockCid GovernanceLock_DsoTransfer with
     transferredAmount = transfer.amount
     extraArgs
   -- Lock the unlocked funds of the sender again, now for the receiver.
   -- This needs the authority of the receiver.
-  (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-  let lockProperties = LockProperties with
-        context = describeGovernanceLock transfer.source.specification
-        expiresAt = governanceLockExpiresAt transfer.source.specification
   ([newLockedAmulet], None) <- lockAmuletFor
     (ForOwner with dso; owner = transfer.source.owner)
     transfer.receiver
-    [(transfer.amount, lockProperties)]
+    [(transfer.amount, governanceLockProperties transfer.source.specification)]
     [toInterfaceContractId result.unlockedAmulet]
     context
     ""
@@ -936,8 +946,7 @@ governanceLockTransfer_rejectImpl GovernanceLockTransfer{..} actors = do
 -- | Checks to validate lock transfers
 validateLockTransfer : Time -> LockTransfer -> Update ()
 validateLockTransfer expiresAt transfer = do
-  assertDeadlineExceeded "requestedAt" transfer.requestedAt
-  assertWithinDeadline "requestedAt + 1 day" $ transfer.requestedAt `addRelTime` days 1
+  assertInPast24Hours "requestedAt" transfer.requestedAt
   require' ("receiver", transfer.receiver) (notR isEqualR) ("sender", transfer.source.owner)
   -- TODO(canton-network/splice-sv-fa-locking#128): Validate that lock transfer
   --   amount doesn't exceed the total amount of of locks refered by
@@ -972,6 +981,11 @@ type LockSpecification = (Decimal, LockProperties)
 data LockProperties = LockProperties with
   context : Text
   expiresAt : Time
+
+governanceLockProperties : GovernanceLockSpecification -> LockProperties
+governanceLockProperties spec = LockProperties with
+  context = describeGovernanceLock spec
+  expiresAt = governanceLockExpiresAt spec
 
 splitLockedAmulet : ForOwner -> ContractId LockedAmulet -> LockSpecification -> ExternalPartyTransferContext -> Update (Optional (ContractId LockedAmulet, Decimal), (ContractId LockedAmulet, Decimal))
 splitLockedAmulet forOwner lockedAmuletCid spec@(unlockAmount, _) context = do
@@ -1220,6 +1234,7 @@ governanceLock_transferFactoryV1_lockImpl dso V1.TransferFactory_Transfer{transf
 
   let lockTransfer = (view $ toInterface @V1.TransferInstruction lock).transfer
   requireMatchExpected ("lock transfer", lockTransfer) transfer with
+    amount = lockTransfer.amount
     executeBefore = lockTransfer.executeBefore
     inputHoldingCids = lockTransfer.inputHoldingCids
     meta = lockTransfer.meta
@@ -1239,10 +1254,11 @@ governanceLock_transferFactoryV1_unlockImpl
   -> Update V1.TransferInstructionResult
 governanceLock_transferFactoryV1_unlockImpl dso V1.TransferFactory_Transfer{transfer, extraArgs} specification unlockAmount vestingStartTime = do
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-  (lockCid, lock) <- fetchByKey @GovernanceLock $ GovernanceLockKey with
-    dso
-    owner = transfer.sender
-    specification = GLS_FullLock specification
+  let key = GovernanceLockKey with
+        dso
+        owner = transfer.sender
+        specification = GLS_FullLock specification
+  FetchAndMergeLocksResult{lockCid, lock} <- fetchAndMergeGovernanceLocks key context state
   potentiallyUnsafeArchive lockCid
   result <- governanceLock_unlockImpl lockCid lock unlockAmount vestingStartTime [transfer.sender] context state
   pure V1.TransferInstructionResult with
@@ -1290,11 +1306,12 @@ governanceLock_transferFactoryV1_withdrawImpl
   -> Time
   -> Update V1.TransferInstructionResult
 governanceLock_transferFactoryV1_withdrawImpl dso V1.TransferFactory_Transfer{..} specification vestedUntilTime = do
-  (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
-  (lockCid, lock) <- fetchByKey @GovernanceLock GovernanceLockKey with
-    dso
-    owner = transfer.sender
-    specification = GLS_VestingLock specification
+  (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+  let key = GovernanceLockKey with
+        dso
+        owner = transfer.sender
+        specification = GLS_VestingLock specification
+  FetchAndMergeLocksResult{lockCid, lock} <- fetchAndMergeGovernanceLocks key context state
   potentiallyUnsafeArchive lockCid
   result <- vestingLock_withdrawImpl lockCid lock vestedUntilTime [transfer.sender] context
   pure V1.TransferInstructionResult with
@@ -1624,63 +1641,3 @@ vestingDurationParser = relTimeMetadataParser lockVestingDurationMetaKey
 
 vestingEndTimeParser : Parser Metadata Time
 vestingEndTimeParser = timeMetadataParser lockVestingEndTimeMetaKey
-
--- SV Reward Coupon Helpers
----------------------------
-
-fetchAndValidateIssuingMiningRounds : [AnyValue] -> ForDso -> Update (Map Round IssuingMiningRound, Map Round (ContractId IssuingMiningRound))
-fetchAndValidateIssuingMiningRounds vals forDso = do
-  issuingMiningRounds <- forA vals $ \(AV_ContractId cid) -> do
-    let issuingMiningRoundCid = fromAnyContractId cid
-    issuingMiningRound <- fetchReferenceData @IssuingMiningRound forDso issuingMiningRoundCid
-    let round = issuingMiningRound.round
-    assertDeadlineExceeded ("issuingMiningRound[" <> show round.number <> "].opensAt") issuingMiningRound.opensAt
-    pure (round, (issuingMiningRound, issuingMiningRoundCid))
-  let issuingMiningRounds' = [(round, miningRound) | (round, (miningRound, _)) <- issuingMiningRounds]
-      issuingMiningRoundCids = [(round, miningRoundCid) | (round, (_, miningRoundCid)) <- issuingMiningRounds]
-  pure (Map.fromList issuingMiningRounds', Map.fromList issuingMiningRoundCids)
-
-
-getSvRewardInputAmuletAndChange
-  : [ContractId SvRewardCoupon]
-  -> Decimal
-  -> ExtraArgs
-  -> ForOwner
-  -> ContractId TransferEventsV2.EventLog
-  -> Update ([ContractId Holding], Decimal)
-getSvRewardInputAmuletAndChange [] _ _ _ _ = pure ([], 0.0)
-getSvRewardInputAmuletAndChange svRewardCouponInputs svRewardCouponPercentage extraArgs forOwner transferEventsV2EventLog = do
-  let dso = forOwner.dso
-  (currentIssuingMiningRoundCids, openMiningRoundCid) <- getMiningRoundsFromChoiceContext extraArgs.context
-  (_, issuingMiningRoundCidsMap) <-
-    fetchAndValidateIssuingMiningRounds (toAnyValue <$> currentIssuingMiningRoundCids) $ ForDso with dso
-
-  let transferContext = TransferContext with
-        openMiningRound = openMiningRoundCid
-        issuingMiningRounds = issuingMiningRoundCidsMap
-        validatorRights = Map.empty
-        featuredAppRight = None
-      transfer = Splice.AmuletRules.Transfer with
-        sender = forOwner.owner
-        provider = forOwner.owner -- the sender is serving as its own "app provider"
-        outputs = []
-        inputs = fmap InputSvRewardCoupon svRewardCouponInputs
-        beneficiaries = None
-      rewardsConfig = RewardsIssuanceConfig with
-        issueAppRewards = False
-        issueValidatorRewards = False
-
-  result <- executeTransfer transferEventsV2EventLog rewardsConfig transferContext dso [] transfer
-  let (Some changeFromSvCouponRewards) : Optional (ContractId Amulet) = result.senderChangeAmulet
-
-  amulet <- fetchChecked forOwner changeFromSvCouponRewards
-  let svRewardMintAllowance = amulet.amount.initialAmount * svRewardCouponPercentage
-
-  pure ([toInterfaceContractId changeFromSvCouponRewards], svRewardMintAllowance)
-
-
--- Instances
-------------
-
-instance HasCheckedFetch GovernanceLock ForOwner where
-  contractGroupId GovernanceLock{..} = ForOwner with dso; owner = owner
