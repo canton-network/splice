@@ -40,13 +40,14 @@ import org.lfdecentralizedtrust.splice.store.db.{
   StoreDescriptor,
   StoreDescriptorStore,
 }
-import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
+import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanStore}
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import org.lfdecentralizedtrust.splice.util.Trees
+import slick.dbio.DBIO
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
-import slick.jdbc.{JdbcProfile, PostgresProfile}
+import slick.jdbc.{GetResult, JdbcProfile, PostgresProfile}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import java.time.Instant
@@ -153,6 +154,10 @@ class DbVotesStore(
 
   /** The record time of the first transaction that the ingestion of this store has seen.
     * Vote results from before that time have to be backfilled.
+    *
+    * Record times are only ordered within a synchronizer, so using this as the boundary between
+    * ingested and backfilled votes relies on votes only existing on the main synchronizer: votes
+    * are signed by the SVs, which only exist there.
     */
   def getFirstIngestedRecordTime()(implicit tc: TraceContext): Future[Option[CantonTimestamp]] = {
     import ScanKeyValueProvider.timestampCodec
@@ -160,6 +165,113 @@ class DbVotesStore(
       .readValueAndLogOnDecodingFailure[CantonTimestamp](firstIngestedRecordTimeKey)
       .value
   }
+
+  /** Where [[VotesStoreBackfilling]] should resume from, or `None` if it has not started yet. */
+  def getBackfillingProgress()(implicit tc: TraceContext): Future[Option[VotesBackfillProgress]] = {
+    import ScanKeyValueProvider.votesBackfillProgressCodec
+    kvStore.readValueAndLogOnDecodingFailure[VotesBackfillProgress](backfillProgressKey).value
+  }
+
+  def persistBackfillingProgress(
+      progress: VotesBackfillProgress
+  )(implicit tc: TraceContext): Future[Unit] = {
+    import ScanKeyValueProvider.votesBackfillProgressCodec
+    kvStore.setValue(backfillProgressKey, progress)
+  }
+
+  def isBackfillingComplete()(implicit tc: TraceContext): Future[Boolean] =
+    kvStore
+      .readValueAndLogOnDecodingFailure[Boolean](backfillCompleteKey)
+      .value
+      .map(_.getOrElse(false))
+
+  def markBackfillingComplete()(implicit tc: TraceContext): Future[Unit] =
+    kvStore.setValue(backfillCompleteKey, true).map { _ =>
+      logger.info("DbVotesStore backfilling is complete")
+    }
+
+  /** Inserts vote results backfilled from this Scan's txlog, and persists `progress` in the same
+    * transaction, so that backfilling never inserts the same page twice.
+    *
+    * A vote is always the root of its transaction, so these are inserted with event number 0.
+    */
+  def insertTxLogVoteResults(
+      results: Seq[ScanStore.TxLogVoteRequestResult],
+      progress: VotesBackfillProgress,
+  )(implicit tc: TraceContext): Future[Unit] = {
+    val storeId = assertStoreId
+    insertBackfilledPage(
+      results.map(r =>
+        toInsert(
+          r.result,
+          storeId,
+          r.recordTime.toMicros,
+          r.synchronizerId.toProtoPrimitive,
+          r.updateId,
+          eventNumber = 0,
+        )
+      ),
+      progress,
+      "DbVotesStore.insertTxLogVoteResults",
+    )
+  }
+
+  /** Inserts vote results backfilled from a peer scan's `votes_store_results`, and persists
+    * `progress` in the same transaction, so that backfilling never inserts the same page twice.
+    */
+  def insertPeerVoteResults(
+      rows: Seq[PeerVoteResult],
+      progress: VotesBackfillProgress,
+  )(implicit tc: TraceContext): Future[Unit] = {
+    val storeId = assertStoreId
+    insertBackfilledPage(
+      rows.map(_.toInsert(storeId)),
+      progress,
+      "DbVotesStore.insertPeerVoteResults",
+    )
+  }
+
+  private def insertBackfilledPage(
+      inserts: Seq[InsertVoteResult],
+      progress: VotesBackfillProgress,
+      operationName: String,
+  )(implicit tc: TraceContext): Future[Unit] = {
+    import ScanKeyValueProvider.votesBackfillProgressCodec
+    import profile.api.jdbcActionExtensionMethods
+    storage
+      .queryAndUpdate(
+        DBIO
+          .seq(inserts.map(_.action)*)
+          .andThen(kvStore.setValueAction(backfillProgressKey, progress))
+          .transactionally,
+        operationName,
+      )
+      .map(_ => ())
+  }
+
+  /** Serves [[VotesStoreBackfilling]] running on a peer: a page of this store's own rows, strictly
+    * before `before`, ordered backwards by `(record_time, event_number)`.
+    *
+    * Deliberately does not use `row_id`: it is a local identity column, not comparable across scans.
+    */
+  def listBackfillPage(
+      before: VotesBackfillCursor,
+      limit: Int,
+  )(implicit tc: TraceContext): Future[Seq[PeerVoteResult]] =
+    for {
+      sid <- storeIdF
+      rows <- storage.query(
+        sql"""select record_time, synchronizer_id, update_id, event_number, vote_action_name,
+                     vote_requester_name, vote_accepted, vote_tracking_cid, vote_completed_at,
+                     vote_effective_at, choice_result, error
+              from #$table
+              where store_id = $sid
+                and (record_time, event_number) < (${before.recordTime.toMicros}, ${before.eventNumber})
+              order by record_time desc, event_number desc
+              limit $limit""".as[PeerVoteResult],
+        "DbVotesStore.listBackfillPage",
+      )
+    } yield rows
 
   override def listVoteRequestResults(
       filters: VoteResultsFilters,
@@ -271,6 +383,77 @@ object DbVotesStore {
 
   val table = "votes_store_results"
   val firstIngestedRecordTimeKey = "votes_store_first_ingested_record_time"
+  val backfillProgressKey = "votes_store_backfill_progress"
+  val backfillCompleteKey = "votes_store_backfill_complete"
+
+  /** Where [[VotesStoreBackfilling]] should resume: everything at `(recordTime, eventNumber)` or
+    * later is already in `votes_store_results`; backfilling continues strictly before it.
+    */
+  final case class VotesBackfillCursor(recordTime: CantonTimestamp, eventNumber: Int)
+
+  /** Where [[VotesStoreBackfilling]] reads from. Decided once, when backfilling starts, and
+    * persisted so that a restart never switches sources halfway through.
+    */
+  sealed trait VotesBackfillSource extends Product with Serializable
+  object VotesBackfillSource {
+    case object TxLog extends VotesBackfillSource
+    case object Peers extends VotesBackfillSource
+  }
+
+  final case class VotesBackfillProgress(cursor: VotesBackfillCursor, source: VotesBackfillSource)
+
+  /** A vote result backfilled from a peer scan's `votes_store_results`, i.e. every column of that
+    * table except `store_id` (which is local to each scan) and `row_id` (an opaque identity column
+    * only used for the UI's pagination, never for backfilling).
+    */
+  final case class PeerVoteResult(
+      recordTime: CantonTimestamp,
+      synchronizerId: String,
+      updateId: String,
+      eventNumber: Int,
+      voteActionName: String,
+      voteRequesterName: String,
+      voteAccepted: Boolean,
+      voteTrackingCid: String,
+      voteCompletedAt: Option[CantonTimestamp],
+      voteEffectiveAt: Option[CantonTimestamp],
+      choiceResult: String,
+      error: Option[String],
+  ) {
+    def toInsert(storeId: Int): InsertVoteResult = InsertVoteResult(
+      storeId = storeId,
+      recordTime = recordTime.toMicros,
+      synchronizerId = String2066.tryCreate(synchronizerId),
+      updateId = String2066.tryCreate(updateId),
+      eventNumber = eventNumber,
+      voteActionName = String2066.tryCreate(voteActionName),
+      voteRequesterName = String2066.tryCreate(voteRequesterName),
+      voteAccepted = voteAccepted,
+      voteTrackingCid = String2066.tryCreate(voteTrackingCid),
+      voteCompletedAt = voteCompletedAt.map(_.toMicros),
+      voteEffectiveAt = voteEffectiveAt.map(_.toMicros),
+      choiceResult = String256M.tryCreate(choiceResult),
+      error = error,
+    )
+  }
+
+  implicit private val getResultPeerVoteResult: GetResult[PeerVoteResult] = GetResult { prs =>
+    import prs.*
+    PeerVoteResult(
+      recordTime = CantonTimestamp.ofEpochMicro(<<[Long]),
+      synchronizerId = <<[String],
+      updateId = <<[String],
+      eventNumber = <<[Int],
+      voteActionName = <<[String],
+      voteRequesterName = <<[String],
+      voteAccepted = <<[Boolean],
+      voteTrackingCid = <<[String],
+      voteCompletedAt = <<?[Long].map(CantonTimestamp.ofEpochMicro),
+      voteEffectiveAt = <<?[Long].map(CantonTimestamp.ofEpochMicro),
+      choiceResult = <<[String],
+      error = <<?[String],
+    )
+  }
 
   /** Records the record time of the first transaction that the ingestion has seen, unless it is already set.
     * Runs in the same SQL transaction as the ingestion of the votes, so the value is recorded if and only if

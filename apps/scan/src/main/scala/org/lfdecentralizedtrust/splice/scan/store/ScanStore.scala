@@ -231,9 +231,31 @@ trait ScanStore
       companionClass: ContractCompanion[C, TCId, T],
       tc: TraceContext,
   ): Future[Option[Contract[TCId, T]]]
+
+  /** Pages backwards through the txlog's vote results by record time, strictly before `before`.
+    * Used only to backfill `votes_store_results`; not exposed over HTTP.
+    */
+  def listVoteRequestResultsBefore(
+      before: Option[CantonTimestamp],
+      limit: Int,
+  )(implicit tc: TraceContext): Future[Seq[ScanStore.TxLogVoteRequestResult]]
+
+  /** The highest record time ingested per synchronizer by this Scan's own ACS/txlog ingestion,
+    * which is independent of (and may be arbitrarily out of sync with) UpdateHistory's ingestion.
+    * Used only to avoid gaps when backfilling `votes_store_results` from the txlog.
+    */
+  def acsLastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp]
 }
 
 object ScanStore {
+
+  /** A vote result read from the txlog, with what `votes_store_results` needs to identify it. */
+  final case class TxLogVoteRequestResult(
+      recordTime: CantonTimestamp,
+      synchronizerId: SynchronizerId,
+      updateId: String,
+      result: splice.dsorules.DsoRules_CloseVoteRequestResult,
+  )
 
   case class Key(
       /** The party-id of the DSO whose public data this scan is distributing. */

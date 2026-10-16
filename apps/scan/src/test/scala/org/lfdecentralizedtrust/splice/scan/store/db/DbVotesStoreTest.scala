@@ -375,6 +375,125 @@ class DbVotesStoreTest
         }
       }
     }
+
+    "backfilling cursor and completion" should {
+      "round-trip the progress" in {
+        val progress = DbVotesStore.VotesBackfillProgress(
+          DbVotesStore.VotesBackfillCursor(CantonTimestamp.now(), 3),
+          DbVotesStore.VotesBackfillSource.Peers,
+        )
+        for {
+          stores <- mkStores()
+          initial <- stores.votesStore.getBackfillingProgress()
+          _ <- stores.votesStore.persistBackfillingProgress(progress)
+          stored <- stores.votesStore.getBackfillingProgress()
+        } yield {
+          initial shouldBe empty
+          stored shouldBe Some(progress)
+        }
+      }
+
+      "default to incomplete, until marked complete" in {
+        for {
+          stores <- mkStores()
+          before <- stores.votesStore.isBackfillingComplete()
+          _ <- stores.votesStore.markBackfillingComplete()
+          after <- stores.votesStore.isBackfillingComplete()
+        } yield {
+          before shouldBe false
+          after shouldBe true
+        }
+      }
+    }
+
+    "the txlog backfilling source" should {
+      "page backwards by record time" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          allAtOnce <- stores.scanStore.listVoteRequestResultsBefore(None, 1000)
+          paged <- listAllTxLogPages(stores, pageSize = 2)
+        } yield {
+          allAtOnce.map(_.recordTime) shouldBe txLogVoteFixtures
+            .map(f => CantonTimestamp.assertFromInstant(f.recordTime))
+            .sorted
+            .reverse
+          allAtOnce.map(_.result) should contain theSameElementsAs txLogVoteFixtures.flatMap(
+            _.votes
+          )
+          paged shouldBe allAtOnce
+        }
+      }
+
+      "return an empty page once genesis is reached" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          oldest = txLogVoteFixtures.map(_.recordTime).min
+          before <- stores.scanStore.listVoteRequestResultsBefore(
+            Some(CantonTimestamp.assertFromInstant(oldest)),
+            1000,
+          )
+        } yield before shouldBe empty
+      }
+    }
+
+    "backfilling from the txlog" should {
+      "insert the same vote results as the txlog, together with the progress" in {
+        val progress = DbVotesStore.VotesBackfillProgress(
+          DbVotesStore.VotesBackfillCursor(CantonTimestamp.MinValue, 0),
+          DbVotesStore.VotesBackfillSource.TxLog,
+        )
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, txLogVoteFixtures)
+          fresh <- mkFreshVotesStore()
+          txLogResults <- stores.scanStore.listVoteRequestResultsBefore(None, 1000)
+          _ <- fresh.insertTxLogVoteResults(txLogResults, progress)
+          stored <- fresh.getBackfillingProgress()
+          count <- fresh.countVoteRequestResults(VoteResultsFilters())
+          results <- listAllPages(fresh, VoteResultsFilters(), pageSize = 1000)
+        } yield {
+          stored shouldBe Some(progress)
+          count shouldBe txLogVoteFixtures.flatMap(_.votes).size.toLong
+          results.flatten should contain theSameElementsAs txLogVoteFixtures.flatMap(_.votes)
+        }
+      }
+    }
+
+    "backfilling from peers" should {
+      "page backwards by (record_time, event_number) and insert the same results" in {
+        val progress = DbVotesStore.VotesBackfillProgress(
+          DbVotesStore.VotesBackfillCursor(CantonTimestamp.MinValue, 0),
+          DbVotesStore.VotesBackfillSource.Peers,
+        )
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          fresh <- mkFreshVotesStore()
+          peerRows <- listAllPeerPages(stores.votesStore, pageSize = 2)
+          _ <- fresh.insertPeerVoteResults(peerRows, progress)
+          stored <- fresh.getBackfillingProgress()
+          count <- fresh.countVoteRequestResults(VoteResultsFilters())
+          results <- listAllPages(fresh, VoteResultsFilters(), pageSize = 1000)
+        } yield {
+          stored shouldBe Some(progress)
+          count shouldBe voteFixtures.flatMap(_.votes).size.toLong
+          results.flatten should contain theSameElementsAs voteFixtures.flatMap(_.votes)
+        }
+      }
+
+      "return an empty page once genesis is reached" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          page <- stores.votesStore.listBackfillPage(
+            DbVotesStore.VotesBackfillCursor(CantonTimestamp.MinValue, 0),
+            1000,
+          )
+        } yield page shouldBe empty
+      }
+    }
   }
 
   private val base = Instant.parse("2024-03-01T10:00:00Z")
@@ -520,6 +639,12 @@ class DbVotesStoreTest
     )
   }
 
+  /** The subset of [[voteFixtures]] that can occur in the txlog: there, a vote is always the
+    * root of its transaction, so a transaction closes exactly one vote request.
+    */
+  private def txLogVoteFixtures: Seq[VoteFixture] =
+    voteFixtures.filter(f => f.votes.size == 1 && !f.nested)
+
   private lazy val filters: Seq[VoteResultsFilters] = Seq(
     VoteResultsFilters(),
     VoteResultsFilters(accepted = Some(true)),
@@ -645,6 +770,60 @@ class DbVotesStoreTest
             }
         }
     go(None, Seq.empty)
+  }
+
+  /** Pages backwards through the txlog via [[ScanStore.listVoteRequestResultsBefore]],
+    * following the cursor the same way [[VotesStoreBackfilling]] would.
+    */
+  private def listAllTxLogPages(
+      stores: Stores,
+      pageSize: Int,
+  ): Future[Seq[ScanStore.TxLogVoteRequestResult]] = {
+    def go(
+        before: Option[CantonTimestamp],
+        acc: Seq[ScanStore.TxLogVoteRequestResult],
+    ): Future[Seq[ScanStore.TxLogVoteRequestResult]] =
+      stores.scanStore.listVoteRequestResultsBefore(before, pageSize).flatMap {
+        case Seq() => Future.successful(acc)
+        case page =>
+          go(Some(page.map(_.recordTime).min), acc ++ page)
+      }
+    go(None, Seq.empty)
+  }
+
+  /** Pages backwards through a (fully backfilled) votes store via [[DbVotesStore.listBackfillPage]],
+    * following the cursor the same way [[VotesStoreBackfilling]] would when reading from a peer.
+    */
+  private def listAllPeerPages(
+      votesStore: DbVotesStore,
+      pageSize: Int,
+  ): Future[Seq[DbVotesStore.PeerVoteResult]] = {
+    def go(
+        before: DbVotesStore.VotesBackfillCursor,
+        acc: Seq[DbVotesStore.PeerVoteResult],
+    ): Future[Seq[DbVotesStore.PeerVoteResult]] =
+      votesStore.listBackfillPage(before, pageSize).flatMap {
+        case Seq() => Future.successful(acc)
+        case page =>
+          val oldest = page.minBy(row => (row.recordTime, row.eventNumber))
+          go(
+            DbVotesStore.VotesBackfillCursor(
+              oldest.recordTime,
+              oldest.eventNumber,
+            ),
+            acc ++ page,
+          )
+      }
+    go(DbVotesStore.VotesBackfillCursor(CantonTimestamp.MaxValue, 0), Seq.empty)
+  }
+
+  private def mkFreshVotesStore(): Future[DbVotesStore] = {
+    val participantId = mkParticipantId("DbVotesStoreTestFreshVotesStore")
+    for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
+      fresh = DbVotesStore(dsoParty, participantId, storage, kvStore, loggerFactory)
+      _ <- fresh.ingestionSink.initialize(0L)
+    } yield fresh
   }
 
   private def mkStores(): Future[Stores] =

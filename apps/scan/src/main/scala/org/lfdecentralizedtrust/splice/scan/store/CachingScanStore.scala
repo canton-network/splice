@@ -234,6 +234,15 @@ class CachingScanStore(
       (f: VoteResultsFilters) => store.countVoteRequestResults(f),
     ).get(filters)
 
+  override def listVoteRequestResultsBefore(
+      before: Option[CantonTimestamp],
+      limit: Int,
+  )(implicit tc: TraceContext): Future[Seq[ScanStore.TxLogVoteRequestResult]] =
+    store.listVoteRequestResultsBefore(before, limit)
+
+  override def acsLastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp] =
+    store.acsLastIngestedRecordTimes
+
   override def listVoteRequestsByTrackingCid(
       voteRequestCids: Seq[VoteRequest.ContractId],
       limit: Limit,
