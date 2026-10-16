@@ -325,7 +325,8 @@ object DbVotesStore {
                     exercised.getContractId,
                     storeId,
                     recordTime,
-                    tx,
+                    tx.getSynchronizerId,
+                    tx.getUpdateId,
                     eventNumber,
                   )
                 )
@@ -346,7 +347,8 @@ object DbVotesStore {
                     exercised.getContractId,
                     storeId,
                     recordTime,
-                    tx,
+                    tx.getSynchronizerId,
+                    tx.getUpdateId,
                     eventNumber,
                   ).copy(error = Some(e.getMessage.take(MaxErrorLength)))
                 )
@@ -363,15 +365,16 @@ object DbVotesStore {
       contractId: String,
       storeId: Int,
       recordTime: Long,
-      tx: Transaction,
+      synchronizerId: String,
+      updateId: String,
       eventNumber: Int,
   ): InsertVoteResult = {
     val outcome = VoteRequestOutcome.parse(result.outcome)
     InsertVoteResult(
       storeId = storeId,
       recordTime = recordTime,
-      synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
-      updateId = String2066.tryCreate(tx.getUpdateId),
+      synchronizerId = String2066.tryCreate(synchronizerId),
+      updateId = String2066.tryCreate(updateId),
       eventNumber = eventNumber,
       contractId = String2066.tryCreate(contractId),
       voteActionName = String2066.tryCreate(actionName(result.request.action)),
