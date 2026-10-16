@@ -16,6 +16,7 @@ infra:
     retentionSize: "200GB"
     storageSize: "600Gi"
   enableSweetSecurity: true
+  supportDsync: true
 pulumiProjectConfig:
   default:
     cloudSql:
