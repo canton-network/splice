@@ -179,6 +179,11 @@ Traffic top-ups; how does one "buy" traffic?
    thereby ensuring that paid traffic fees are translated into actual traffic balance increases.
    Sequencers also update the in-sequencer traffic state themselves, whenever traffic is consumed (see :ref:`traffic_accounting`).
 
+.. _traffic_topup_validator_automation:
+
+Buying traffic with the validator app's top-up automation
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 The validator app contains built-in top-up automation that automatically buys traffic to meet preconfigured throughput needs.
 Operators configure a target throughput (bytes per second) and a minimum top-up interval (seconds);
 the automation buys ``target throughput × minimum top-up interval`` bytes whenever both of the following conditions are met:
@@ -198,7 +203,69 @@ the validator app will
 
 For configuring the built-in top-up automation, please refer to the :ref:`Kubernetes validator deployment guide <helm_validator_topup>`
 or the corresponding :ref:`Docker-compose one<compose_validator_topup>`.
-Configuring alternative methods for buying traffic, e.g., using third-party services, exceeds the scope of this documentation.
+
+.. _traffic_topup_token_standard:
+
+Buying traffic with a token standard transfer
++++++++++++++++++++++++++++++++++++++++++++++
+
+Any party that holds CC can buy extra traffic for any synchronizer member with a standard CC transfer.
+
+To buy traffic, create a CC transfer with these values:
+
+- **Receiver:** the traffic purchase party
+  ``cip-128_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd``.
+- **Amount:** the total amount of CC that you want to spend on traffic.
+- **Memo:** the ``splice.lfdecentralizedtrust.org/reason`` metadata value, in this format:
+
+  .. code-block:: text
+
+     cip-128/memo:memberId=<member>&synchronizerId=<synchronizer>&migrationId=<int>
+
+  - ``memberId`` (required): the ID of the synchronizer member that receives the traffic, for example ``PAR::...``.
+  - ``synchronizerId`` (required): the ID of the synchronizer.
+  - ``migrationId`` (required): the current migration ID of the synchronizer.
+  - ``forfeitValidatorRewardCoupon`` (optional): ``true`` or ``false``. The default is ``false``.
+    See :ref:`the execution window <traffic_topup_token_standard_execution_window>`.
+
+  The memo must start with ``cip-128/memo:`` and contain the three required keys (in any order).
+
+The transfer completes immediately. It burns the full amount and adds the purchased traffic to the member's traffic balance.
+
+To calculate the amount, get the current CC price in USD and the ``extraTrafficPrice`` in USD per MB
+with the Scan commands in :ref:`traffic_parameters`. The CC amount to spend for a number of bytes is:
+
+.. code-block:: text
+
+   CC amount = bytes × extraTrafficPrice / 1,000,000 / CC price
+
+The purchased traffic in bytes is rounded down:
+
+.. code-block:: text
+
+   bytes = floor(CC amount × CC price × 1,000,000 / extraTrafficPrice)
+
+The purchased traffic must be at least ``minTopupAmount`` bytes.
+For example, at a CC price of 0.15 USD and an ``extraTrafficPrice`` of 60 USD/MB, a transfer of 100 CC buys 250,000 bytes.
+
+The transfer fails, and burns no CC, if:
+
+- the memo has an incorrect format,
+- the synchronizer is not a synchronizer on which traffic can be bought (error code: ``splice.lfdecentralizedtrust.org/unknown-synchronizer``), or
+- the purchased traffic is less than ``minTopupAmount`` (error code: ``splice.lfdecentralizedtrust.org/insufficient-topup-amount``).
+  Use an amount that buys at least ``minTopupAmount`` bytes.
+
+The ``splice.lfdecentralizedtrust.org/reason`` metadata of the transfer result and of the burn shows the purchased traffic, for example:
+
+.. code-block:: text
+
+   purchased traffic: 250000 bytes for memberId=PAR::...&synchronizerId=...&migrationId=0
+
+.. _traffic_topup_token_standard_execution_window:
+
+The purchase creates a validator reward coupon for the validator that hosts the sending party.
+Because of this, the transfer must be executed within about 10 minutes after it is prepared.
+If you sign the transaction long before it is executed, add ``&forfeitValidatorRewardCoupon=true`` to the memo to skip the reward coupon.
 
 .. _traffic_wasted:
 
