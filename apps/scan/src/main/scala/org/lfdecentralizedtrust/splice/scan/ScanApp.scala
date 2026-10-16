@@ -87,6 +87,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
 import org.lfdecentralizedtrust.splice.store.{
@@ -229,6 +230,15 @@ class ScanApp(
         loggerFactory,
         retryProvider.metricsFactory,
       )
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
+      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
+      historicalVotesStore = DbVotesStore(
+        store.acsContractFilter.ingestionFilter.primaryParty,
+        participantId,
+        storage,
+        kvStore,
+        loggerFactory,
+      )
       updateHistory = new UpdateHistory(
         storage,
         domainMigrationId,
@@ -242,6 +252,7 @@ class ScanApp(
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+        additionalIngestionSinks = Seq(historicalVotesStore.ingestionSink),
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
@@ -266,8 +277,6 @@ class ScanApp(
         retryProvider,
         loggerFactory,
       )
-      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
-      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       historyStart = new ScanHistoryStart(
         new KvHistoryStartStore(kvProvider),
         new ParticipantHistoryStartSources(
@@ -435,6 +444,7 @@ class ScanApp(
         appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
+        store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
