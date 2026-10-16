@@ -43,13 +43,13 @@ function getUiClientId(
   }
   switch (uiName) {
     case 'wallet':
-      return getNamespaceConfig(cfg, namespace).uiClientIds.wallet;
+      return getNamespaceConfig(cfg, namespace).uiClientIds!.wallet!;
     case 'cns':
-      return getNamespaceConfig(cfg, namespace).uiClientIds.cns;
+      return getNamespaceConfig(cfg, namespace).uiClientIds!.cns!;
     case 'sv':
-      return getNamespaceConfig(cfg, namespace).uiClientIds.sv!;
+      return getNamespaceConfig(cfg, namespace).uiClientIds!.sv!;
     case 'splitwell':
-      return getNamespaceConfig(cfg, namespace).uiClientIds.splitwell!;
+      return getNamespaceConfig(cfg, namespace).uiClientIds!.splitwell!;
   }
 }
 
