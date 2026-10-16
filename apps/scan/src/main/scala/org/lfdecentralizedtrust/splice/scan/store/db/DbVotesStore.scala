@@ -16,6 +16,7 @@ import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.*
 import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.canton.tracing.TraceContext
+import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
   ARC_AmuletRules,
   ARC_AnsEntryContext,
@@ -206,9 +207,16 @@ class DbVotesStore(
     }
   }
 
-  /** Dates that cannot be parsed are ignored, as if the filter was not set. */
-  private def parseMicros(s: String): Option[Long] =
-    Try(Instant.parse(s)).toOption.flatMap(CantonTimestamp.fromInstant(_).toOption).map(_.toMicros)
+  /** Fails with INVALID_ARGUMENT (HTTP 400) if the date cannot be parsed. */
+  private def parseMicros(field: String, s: String): Long =
+    Try(Instant.parse(s)).toOption
+      .flatMap(CantonTimestamp.fromInstant(_).toOption)
+      .getOrElse(
+        throw Status.INVALID_ARGUMENT
+          .withDescription(s"Invalid $field: '$s' is not an ISO-8601 instant")
+          .asRuntimeException()
+      )
+      .toMicros
 
   private def and(conds: NonEmptyList[SQLActionBuilderChain]) =
     conds.reduceLeft((a, b) => (a ++ sql" and " ++ b).toActionBuilder)
@@ -224,7 +232,10 @@ class DbVotesStore(
       f.actionName.map(n => sql"vote_action_name like ${lengthLimited(s"%$n%")}"),
       f.accepted.map(a => sql"vote_accepted = $a"),
       f.requester.map(r => sql"vote_requester_name like ${lengthLimited(s"%$r%")}"),
-      (f.effectiveFrom.flatMap(parseMicros), f.effectiveTo.flatMap(parseMicros)) match {
+      (
+        f.effectiveFrom.map(parseMicros("effective_from", _)),
+        f.effectiveTo.map(parseMicros("effective_to", _)),
+      ) match {
         case (Some(from), Some(to)) => Some(sql"vote_effective_at between $from and $to")
         case (Some(from), None) => Some(sql"vote_effective_at >= $from")
         case (None, Some(to)) => Some(sql"vote_effective_at <= $to")

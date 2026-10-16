@@ -21,6 +21,7 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext, SynchronizerAlias}
+import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_MiningRound_Archive
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
   ARC_AmuletRules,
@@ -281,24 +282,31 @@ class DbVotesStoreTest
         }
       }
 
-      "ignore dates that cannot be parsed" in {
+      "reject dates that cannot be parsed" in {
+        val invalid = Seq(
+          VoteResultsFilters(effectiveFrom = Some("Invalid Date")),
+          VoteResultsFilters(effectiveTo = Some("")),
+          VoteResultsFilters(
+            effectiveFrom = Some("garbage"),
+            effectiveTo = Some(base.plusSeconds(3).toString),
+          ),
+        )
+        def code(f: Future[?]): Future[Status.Code] = f.failed.map {
+          case e: StatusRuntimeException => e.getStatus.getCode
+          case e => fail(s"Unexpected exception $e")
+        }
         for {
           stores <- mkStores()
           _ <- ingestAll(stores, voteFixtures)
-          all <- stores.votesStore.countVoteRequestResults(VoteResultsFilters())
-          garbage <- stores.votesStore.countVoteRequestResults(
-            VoteResultsFilters(effectiveFrom = Some("Invalid Date"), effectiveTo = Some(""))
-          )
-          onlyTo <- stores.votesStore.countVoteRequestResults(
-            VoteResultsFilters(
-              effectiveFrom = Some("garbage"),
-              effectiveTo = Some(base.plusSeconds(3).toString),
-            )
-          )
-        } yield {
-          garbage shouldBe all
-          onlyTo shouldBe 1L
-        }
+          codes <- MonadUtil.sequentialTraverse(invalid) { filters =>
+            for {
+              listCode <- code(
+                stores.votesStore.listVoteRequestResults(filters, PageLimit.tryCreate(10), None)
+              )
+              countCode <- code(stores.votesStore.countVoteRequestResults(filters))
+            } yield Seq(listCode, countCode)
+          }
+        } yield codes.flatten should contain only Status.Code.INVALID_ARGUMENT
       }
     }
 
