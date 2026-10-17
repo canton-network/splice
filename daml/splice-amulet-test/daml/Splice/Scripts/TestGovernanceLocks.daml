@@ -326,15 +326,15 @@ iso8601TimeToMeta : Text -> Time -> Metadata -> Metadata
 iso8601TimeToMeta key t meta = Metadata $ TM.insert key (show t) meta.values
 
 -- | The TSv1 memo of a lock request. A wallet sets it as the transfer reason.
-tsv1RequestMemo : Text -> GovernanceLockKind -> Text
+tsv1RequestMemo : GovernanceLockRequestTag -> GovernanceLockKind -> Text
 tsv1RequestMemo request kind = tsv1RequestMemo' request kind []
 
 -- | The TSv1 memo of a lock request, with extra metadata entries.
-tsv1RequestMemo' : Text -> GovernanceLockKind -> [(Text, Text)] -> Text
+tsv1RequestMemo' : GovernanceLockRequestTag -> GovernanceLockKind -> [(Text, Text)] -> Text
 tsv1RequestMemo' request kind extraEntries =
   let (tag, subject) = governanceLockKindToTagAndSubject kind
   in encodeLockCompatMemo $ Metadata $ TM.fromList $
-       [ (requestMetaKey, request)
+       [ (requestMetaKey, governanceLockRequestTagToText request)
        , (lockKindMetaKey, governanceLockTagToText tag)
        , (lockSubjectMetaKey, subject)
        ] <> extraEntries
@@ -449,7 +449,7 @@ pendingLockCid result = case result.output of
 lockForGovernance' : MultiRegistry.MultiRegistry -> AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockKind -> Metadata -> Script (Either SubmitError (ContractId GovernanceLock))
 lockForGovernance' registries registry owner amount kind meta = do
   inputs <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner registry.instrumentId
-  request <- lockRequest registry owner amount (tsv1RequestMemo governanceLockRequestCreateLock kind) meta
+  request <- lockRequest registry owner amount (tsv1RequestMemo GLRT_CreateLock kind) meta
   result <- submitLockRequest registries request with inputHoldingCids = downcast <$> inputs
   pure $ fromSomeNote "Expected a pending governance lock" . pendingLockCid @GovernanceLock <$> result
 
@@ -468,7 +468,7 @@ unlockGovernanceLockRequest
 unlockGovernanceLockRequest registries registry lockCid actor meta = do
   Some lock <- queryContractId registry.instrumentId.admin lockCid
   request <- lockRequest registry lock.owner 0.0
-    (tsv1RequestMemo governanceLockRequestUnlockAndStartVesting (governanceLockKind lock.specification)) meta
+    (tsv1RequestMemo GLRT_UnlockAndStartVesting (governanceLockKind lock.specification)) meta
   submitLockRequest' registries actor request
 
 transferredGovernanceLock : TestEnv -> Party -> Party -> Decimal -> GovernanceLockKind -> Script (ContractId GovernanceLock)
@@ -529,7 +529,7 @@ withdrawVestingLockRequest registries registry lockCid actor meta = do
   Some lock <- queryContractId registry.instrumentId.admin lockCid
   times <- requireVestingLock lock.specification
   request <- lockRequest registry lock.owner 0.0
-    (tsv1RequestMemo' governanceLockRequestWithdrawVestedFunds (governanceLockKind lock.specification) (vestingLockMetaEntries times.vestingPeriod times.endTime))
+    (tsv1RequestMemo' GLRT_WithdrawVestedFunds (governanceLockKind lock.specification) (vestingLockMetaEntries times.vestingPeriod times.endTime))
     meta
   submitLockRequest' registries actor request
 
@@ -561,7 +561,7 @@ lockTargetMetaEntries = foldGovernanceLockSpecification (const []) \v -> vesting
 -- | The TSv1 memo of a request to substitute a lock.
 substitutionMemo : GovernanceLockKey -> Text
 substitutionMemo target =
-  tsv1RequestMemo' governanceLockRequestSubstituteLock (governanceLockKind target.specification) $
+  tsv1RequestMemo' GLRT_SubstituteLock (governanceLockKind target.specification) $
     (targetLockOwnerMetaKey, partyToText target.owner) :: lockTargetMetaEntries target.specification
 
 -- | Proposes as `proposer` to substitute `amount` of the target lock, requested at `requestedAt`
@@ -594,7 +594,7 @@ proposeSubstitution registries registry proposer substitution amount =
 -- | The TSv1 request of the owner of the source lock to propose the lock transfer `transfer`.
 lockTransferRequest : AmuletRegistryV2.AmuletRegistry -> LockTransfer -> Script V1.Transfer
 lockTransferRequest registry transfer = do
-  let memo = tsv1RequestMemo' governanceLockRequestTransferLock (governanceLockKind transfer.source.specification) $
+  let memo = tsv1RequestMemo' GLRT_TransferLock (governanceLockKind transfer.source.specification) $
         [ (newLockOwnerMetaKey, partyToText transfer.receiver)
         , (transferAmountMetaKey, show transfer.amount)
         ] <> lockTargetMetaEntries transfer.source.specification

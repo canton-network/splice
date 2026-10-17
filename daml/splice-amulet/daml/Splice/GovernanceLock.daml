@@ -3,7 +3,85 @@
 
 {-# LANGUAGE ApplicativeDo #-}
 
-module Splice.GovernanceLock where
+module Splice.GovernanceLock (
+  -- * Templates and choices
+  GovernanceLock(..),
+  GovernanceLock_DsoExpire(..),
+  GovernanceLock_DsoExpireResult(..),
+  GovernanceLock_DsoConvertProvisionalFeaturedAppLock(..),
+  GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult(..),
+  GovernanceLock_DsoSubstitute(..),
+  GovernanceLock_DsoSubstituteResult(..),
+  GovernanceLock_DsoSplitForSubstitution(..),
+  GovernanceLock_DsoSplitForSubstitutionResult(..),
+  GovernanceLock_DsoTransfer(..),
+  GovernanceLock_DsoTransferResult(..),
+
+  GovernanceLockSubstitution(..),
+  GovernanceLockSubstitution_DsoExpire(..),
+  GovernanceLockSubstitution_DsoExpireResult(..),
+
+  GovernanceLockTransfer(..),
+  GovernanceLockTransfer_DsoExpire(..),
+  GovernanceLockTransfer_DsoExpireResult(..),
+
+  -- * Lock specifications
+  GovernanceLockKind(..),
+  GovernanceLockSpecification(..),
+  FullLockSpecification(..),
+  VestingLockSpecification(..),
+  GovernanceLockKey(..),
+  LockTransfer(..),
+  foldGovernanceLockSpecification,
+  requireVestingLock,
+  governanceLockKind,
+  calculateUnvestedAmount,
+  lockManagerParty,
+
+  -- * Token standard implementation
+  governanceLock_transferFactoryV1_transferImpl,
+
+  -- * Lock metadata
+  GovernanceLockTag(..),
+  LockState(..),
+  governanceLockTagToText,
+  governanceLockKindToTagAndSubject,
+  lockStateToText,
+  encodeCommonLockMetadata,
+  encodeLockCompatMemo,
+  transferGovernanceLockMetadata,
+  missingMetadataMessage,
+  cipMetaPrefix,
+  cipMemoPrefix,
+  requestMetaKey,
+  unlockAmountMetaKey,
+  transferAmountMetaKey,
+  newLockOwnerMetaKey,
+  targetLockOwnerMetaKey,
+  lockKindMetaKey,
+  lockSubjectMetaKey,
+  lockStatusMetaKey,
+  lockVestingDurationMetaKey,
+  lockVestingEndTimeMetaKey,
+  vestingStartTimeMetaKey,
+  vestedUntilTimeMetaKey,
+
+  -- * Lock requests
+  GovernanceLockRequest(..),
+  GovernanceLockRequestTag(..),
+  governanceLockRequestTagToText,
+  parseGovernanceLockRequestTSv1,
+
+  -- * Parsers
+  Parser(..),
+  runParser,
+  assertParsed,
+  governanceLockMetadataParser,
+  governanceLockTagParser,
+  governanceLockKindParser,
+  fullLockSpecificationParser,
+  governanceLockRequestTSv1Parser,
+) where
 
 import Prelude hiding (forA)
 import DA.Action (foldrA, unless)
@@ -33,7 +111,6 @@ import Splice.Expiry hiding (maxTime)
 import Splice.Fees (relTimeToDays, relTimeToSeconds)
 import Splice.ExternalPartyConfigState
 import Splice.Iso8601 (parseIso8601UtcTime)
-import Splice.Round
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 import Splice.TokenStandard.Utils.Internal.Conversions (encodeRelTime, encodeTime, relTimeFromMeta, timeFromMeta)
 import Splice.Types
@@ -452,12 +529,6 @@ unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do
           featuredAppRight = None
        , configState )
 
-getMiningRoundsFromChoiceContext : ChoiceContext -> Update ([ContractId IssuingMiningRound], ContractId OpenMiningRound)
-getMiningRoundsFromChoiceContext choiceContext = do
-  issuingMiningRoundCids <- getFromContextU @([ContractId IssuingMiningRound]) choiceContext issuingMiningRoundContextKey
-  openMiningRoundCid <- getFromContextU @(ContractId OpenMiningRound) choiceContext openMiningRoundContextKey
-  pure (issuingMiningRoundCids, openMiningRoundCid)
-
 -- Substitution
 -- ============
 
@@ -634,12 +705,14 @@ substitution_returnFunds dso proposer lockedAmulet =
 governanceLockSubstitution_withdrawImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> Update GovernanceLockSubstitution_WithdrawResult
 governanceLockSubstitution_withdrawImpl _self this actors = do
   checkActors actors [[this.owner]]
-  GovernanceLockSubstitution_WithdrawResult <$> substitution_returnFunds this.target.dso this.owner this.lockedAmulet
+  unlockedAmulet <- substitution_returnFunds this.target.dso this.owner this.lockedAmulet
+  pure GovernanceLockSubstitution_WithdrawResult with unlockedAmulet
 
 governanceLockSubstitution_rejectImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> Update GovernanceLockSubstitution_RejectResult
 governanceLockSubstitution_rejectImpl _self this actors = do
   checkActors actors [[this.target.owner]]
-  GovernanceLockSubstitution_RejectResult <$> substitution_returnFunds this.target.dso this.owner this.lockedAmulet
+  unlockedAmulet <- substitution_returnFunds this.target.dso this.owner this.lockedAmulet
+  pure GovernanceLockSubstitution_RejectResult with unlockedAmulet
 
 data SubstitutionTransferInstructionViewArgs = SubstitutionTransferInstructionViewArgs with
   dso : Party
@@ -693,7 +766,7 @@ substitutionTransferResult_failed unlockedAmulet = V1.TransferInstructionResult 
 
 -- | Memo of a substitution proposal of a `GovernanceLock`: the memo of the new lock plus the accept request.
 substitutionGovernanceLockMetadata : GovernanceLockSpecification -> Metadata
-substitutionGovernanceLockMetadata = encodeGovernanceLockMetadataWithRequest governanceLockRequestAcceptToSubstituteLock
+substitutionGovernanceLockMetadata = encodeGovernanceLockMetadataWithRequest "accept-to-substitute-lock"
 
 -- | Type to simplify passing in all the arguments required to create a substitution proposal.
 data CreateSubstitutionArgs = CreateSubstitutionArgs with
@@ -793,7 +866,7 @@ transferTransferResult_failed = V1.TransferInstructionResult with
 transferTransferUpdateUnsupported = "Transfers representing governance lock transfers cannot be updated"
 
 transferGovernanceLockMetadata : GovernanceLockSpecification -> Metadata
-transferGovernanceLockMetadata = encodeGovernanceLockMetadataWithRequest governanceLockRequestAcceptToTransferLock
+transferGovernanceLockMetadata = encodeGovernanceLockMetadataWithRequest "accept-to-transfer-lock"
 
 -- | A proposal by the owner of `GovernanceLock`s to transfer all or part of
 -- them to a new owner. The proposal holds no funds: on accept, the locks
@@ -1170,7 +1243,7 @@ data GovernanceLockTag
   = GLT_FeaturedApp
   | GLT_ProvisionalFeaturedApp
   | GLT_SuperValidator
-  deriving (Eq)
+  deriving (Eq, Enum, Bounded)
 
 governanceLockTagToText : GovernanceLockTag -> Text
 governanceLockTagToText GLT_FeaturedApp = "fa-lock"
@@ -1181,7 +1254,7 @@ dataFromText : Eq a => (a -> Text) -> [a] -> Text -> Optional a
 dataFromText toText values text = find ((== text) . toText) values
 
 governanceLockTagFromText : Text -> Optional GovernanceLockTag
-governanceLockTagFromText = dataFromText governanceLockTagToText [GLT_FeaturedApp, GLT_ProvisionalFeaturedApp, GLT_SuperValidator]
+governanceLockTagFromText = dataFromText governanceLockTagToText [minBound .. maxBound]
 
 governanceLockKindToTagAndSubject : GovernanceLockKind -> (GovernanceLockTag, Text)
 governanceLockKindToTagAndSubject (GLK_FeaturedApp provider) = (GLT_FeaturedApp, partyToText provider)
@@ -1383,15 +1456,33 @@ data GovernanceLockRequest
       target : GovernanceLockKey
   deriving (Show)
 
+data GovernanceLockRequestTag
+  = GLRT_CreateLock
+  | GLRT_UnlockAndStartVesting
+  | GLRT_TransferLock
+  | GLRT_WithdrawVestedFunds
+  | GLRT_SubstituteLock
+  deriving (Eq, Enum, Bounded)
+
+governanceLockRequestTagToText : GovernanceLockRequestTag -> Text
+governanceLockRequestTagToText GLRT_CreateLock = "create-lock"
+governanceLockRequestTagToText GLRT_UnlockAndStartVesting = "unlock-and-start-vesting"
+governanceLockRequestTagToText GLRT_TransferLock = "transfer-lock"
+governanceLockRequestTagToText GLRT_WithdrawVestedFunds = "withdraw-vested-funds"
+governanceLockRequestTagToText GLRT_SubstituteLock = "substitute-lock"
+
+governanceLockRequestTagFromText : Text -> Optional GovernanceLockRequestTag =
+  dataFromText governanceLockRequestTagToText [minBound .. maxBound]
+
 data LockState = LS_Locked | LS_Vesting
-  deriving (Eq)
+  deriving (Eq, Enum, Bounded)
 
 lockStateToText : LockState -> Text
 lockStateToText LS_Locked = "locked"
 lockStateToText LS_Vesting = "vesting"
 
 lockStateFromText : Text -> Optional LockState
-lockStateFromText = dataFromText lockStateToText [LS_Locked, LS_Vesting]
+lockStateFromText = dataFromText lockStateToText [minBound .. maxBound]
 
 -- Parsers
 ----------
@@ -1496,20 +1587,16 @@ partyFromTextParser key party = validationParser $ (partyFromText party) <?> (in
 partyFromMetadataParser : Text -> Parser Metadata Party
 partyFromMetadataParser key = requiredMetadataParser key >>= partyFromTextParser key
 
-governanceLockTagParser' : Text -> Parser i GovernanceLockTag
-governanceLockTagParser' t = validationParser $ (governanceLockTagFromText t) <?> ("Invalid lock kind: '" <> t <> "'")
-
 governanceLockTagParser : Parser Metadata GovernanceLockTag
-governanceLockTagParser = requiredMetadataParser lockKindMetaKey >>= governanceLockTagParser'
+governanceLockTagParser = requiredMetadataParser lockKindMetaKey >>= \tag ->
+  validationParser $ (governanceLockTagFromText tag) <?> ("Invalid lock kind: '" <> tag <> "'")
 
 governanceLockSubjectParser : Parser Metadata Text
 governanceLockSubjectParser = requiredMetadataParser lockSubjectMetaKey
 
-governanceLockKindParser' : GovernanceLockTag -> Parser Metadata GovernanceLockKind
-governanceLockKindParser' tag = governanceLockSubjectParser >>= governanceLockKindFromTagAndSubject tag
-
 governanceLockKindParser : Parser Metadata GovernanceLockKind
-governanceLockKindParser = governanceLockTagParser >>= governanceLockKindParser'
+governanceLockKindParser = governanceLockTagParser >>= \tag ->
+  governanceLockSubjectParser >>= governanceLockKindFromTagAndSubject tag
 
 governanceLockMetadataParser : Parser Metadata Metadata
 governanceLockMetadataParser = do
@@ -1533,12 +1620,12 @@ governanceLockMetadataParser = do
 parseGovernanceLockMetadata : CanAssert m => Metadata -> m Metadata
 parseGovernanceLockMetadata = assertParsed governanceLockMetadataParser
 
-fullLockSpecificationParser : Parser Metadata GovernanceLockKind -> Parser Metadata FullLockSpecification
-fullLockSpecificationParser kindParser = FullLockSpecification <$> kindParser
+fullLockSpecificationParser : Parser Metadata FullLockSpecification
+fullLockSpecificationParser = FullLockSpecification <$> governanceLockKindParser
 
-vestingLockSpecificationParser : Parser Metadata GovernanceLockKind -> Parser Metadata VestingLockSpecification
-vestingLockSpecificationParser kindParser = do
-  kind <- kindParser
+vestingLockSpecificationParser : Parser Metadata VestingLockSpecification
+vestingLockSpecificationParser = do
+  kind <- governanceLockKindParser
   vestingPeriod <- vestingDurationParser
   endTime <- vestingEndTimeParser
   pure $ VestingLockSpecification with
@@ -1546,33 +1633,25 @@ vestingLockSpecificationParser kindParser = do
     vestingPeriod
     endTime
 
-governanceLockSpecificationParser : LockState -> Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockSpecification
-governanceLockSpecificationParser LS_Locked kindParser = GLS_FullLock <$> fullLockSpecificationParser kindParser
-governanceLockSpecificationParser LS_Vesting kindParser = GLS_VestingLock <$> vestingLockSpecificationParser kindParser
+governanceLockSpecificationParser : LockState -> Parser Metadata GovernanceLockSpecification
+governanceLockSpecificationParser LS_Locked = GLS_FullLock <$> fullLockSpecificationParser
+governanceLockSpecificationParser LS_Vesting = GLS_VestingLock <$> vestingLockSpecificationParser
 
-governanceLockRequestCreateLock = "create-lock"
-governanceLockRequestUnlockAndStartVesting = "unlock-and-start-vesting"
-governanceLockRequestTransferLock = "transfer-lock"
-governanceLockRequestWithdrawVestedFunds = "withdraw-vested-funds"
-governanceLockRequestSubstituteLock = "substitute-lock"
-governanceLockRequestAcceptToSubstituteLock = "accept-to-substitute-lock"
-governanceLockRequestAcceptToTransferLock = "accept-to-transfer-lock"
+glr_createGovernanceLock_parser : Parser Metadata GovernanceLockRequest
+glr_createGovernanceLock_parser =
+  GLR_CreateGovernanceLock <$> fullLockSpecificationParser
 
-glr_createGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
-glr_createGovernanceLock_parser kindParser =
-  GLR_CreateGovernanceLock <$> fullLockSpecificationParser kindParser
-
-glr_unlockGovernanceLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
-glr_unlockGovernanceLock_parser kindParser =
+glr_unlockGovernanceLock_parser : Parser Metadata GovernanceLockRequest
+glr_unlockGovernanceLock_parser =
   GLR_UnlockGovernanceLock <$>
-    fullLockSpecificationParser kindParser <*>
+    fullLockSpecificationParser <*>
     unlockAmountParser <*>
     vestingStartTimeParser
 
-glr_withdrawVestingLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
-glr_withdrawVestingLock_parser kindParser =
+glr_withdrawVestingLock_parser : Parser Metadata GovernanceLockRequest
+glr_withdrawVestingLock_parser =
   GLR_WithdrawVestingLock <$>
-    vestingLockSpecificationParser kindParser <*>
+    vestingLockSpecificationParser <*>
     vestedUntilTimeParser
 
 lockStateParser : Parser Metadata LockState
@@ -1581,10 +1660,10 @@ lockStateParser = optionalMetadataParser lockStatusMetaKey >>= \case
   Some t | Some state <- lockStateFromText t -> pure state
   Some t -> assertFail $ "Invalid value in " <> lockStatusMetaKey <> " metadata field: '" <> t <> "'"
 
-glr_transferLock_parser : Parser Metadata GovernanceLockKind -> Parser Metadata GovernanceLockRequest
-glr_transferLock_parser kindParser = do
+glr_transferLock_parser : Parser Metadata GovernanceLockRequest
+glr_transferLock_parser = do
   targetState <- lockStateParser
-  specification <- governanceLockSpecificationParser targetState kindParser
+  specification <- governanceLockSpecificationParser targetState
   newOwner <- partyFromMetadataParser newLockOwnerMetaKey
   transferAmount <- transferAmountParser
   pure GLR_TransferLock with
@@ -1592,24 +1671,30 @@ glr_transferLock_parser kindParser = do
     newOwner
     transferAmount
 
-glr_substituteLock_parser : Parser Metadata GovernanceLockKind -> Party -> Parser Metadata GovernanceLockRequest
-glr_substituteLock_parser kindParser dso = do
+glr_substituteLock_parser : Party -> Parser Metadata GovernanceLockRequest
+glr_substituteLock_parser dso = do
   targetState <- lockStateParser
   targetOwner <- partyFromMetadataParser targetLockOwnerMetaKey
-  specification <- governanceLockSpecificationParser targetState kindParser
+  specification <- governanceLockSpecificationParser targetState
   pure $ GLR_SubstituteLock GovernanceLockKey with
     dso
     owner = targetOwner
     specification
 
+governanceLockRequestTagParser : Parser Metadata GovernanceLockRequestTag
+governanceLockRequestTagParser = do
+  request <- requiredMetadataParser requestMetaKey
+  case governanceLockRequestTagFromText request of
+    Some tag -> pure tag
+    None -> assertFail $ "Invalid request: '" <> request <> "'"
+
 governanceLockRequestTSv1Parser : Party -> Party -> Parser Metadata GovernanceLockRequest
-governanceLockRequestTSv1Parser dso receiver = requiredMetadataParser requestMetaKey >>= (\tag -> checkReceiverIsLockManager *> case tag of
-    r | r == governanceLockRequestCreateLock -> do glr_createGovernanceLock_parser governanceLockKindParser
-    r | r == governanceLockRequestUnlockAndStartVesting -> glr_unlockGovernanceLock_parser governanceLockKindParser
-    r | r == governanceLockRequestTransferLock -> glr_transferLock_parser governanceLockKindParser
-    r | r == governanceLockRequestWithdrawVestedFunds -> glr_withdrawVestingLock_parser governanceLockKindParser
-    r | r == governanceLockRequestSubstituteLock -> glr_substituteLock_parser governanceLockKindParser dso
-    r -> assertFail $ "Invalid request: '" <> r <> "'")
+governanceLockRequestTSv1Parser dso receiver = governanceLockRequestTagParser >>= (\tag -> checkReceiverIsLockManager *> case tag of
+    GLRT_CreateLock -> do glr_createGovernanceLock_parser
+    GLRT_UnlockAndStartVesting -> glr_unlockGovernanceLock_parser
+    GLRT_TransferLock -> glr_transferLock_parser
+    GLRT_WithdrawVestedFunds -> glr_withdrawVestingLock_parser
+    GLRT_SubstituteLock -> glr_substituteLock_parser dso)
   where
     checkReceiverIsLockManager : Parser Metadata ()
     checkReceiverIsLockManager =

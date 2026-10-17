@@ -90,7 +90,7 @@ test_assertParsed = do
 test_governanceLockTagParser : Script ()
 test_governanceLockTagParser = do
   -- `GovernanceLockTag` has no `Show` instance, so compare the tags by their text
-  let run t = runParser (governanceLockTagParser' t) ()
+  let run t = runParser governanceLockTagParser (mkMeta [(lockKindMetaKey, t)])
       expectTag tag = expectSuccess (governanceLockTagToText tag) . fmap governanceLockTagToText
 
   expectTag GLT_FeaturedApp $ run "fa-lock"
@@ -130,10 +130,6 @@ test_governanceLockKindParser = do
   -- The subject of an SV lock must only contain alphanumeric characters or hyphens
   expectErrors ["Invalid SV name for sv-lock: " <> invalidSVName] $
     run [kind GLT_SuperValidator, subject invalidSVName]
-
-  -- `governanceLockKindParser'` takes the tag as an argument and ignores the kind field
-  expectSuccess (GLK_SuperValidatorRightsOwner "someSv") $
-    runParser (governanceLockKindParser' GLT_SuperValidator) (mkMeta [kind GLT_FeaturedApp, subject "someSv"])
 
 -- Metadata parser
 ------------------
@@ -214,8 +210,7 @@ test_fullLockSpecificationParser' run = do
 test_fullLockSpecificationParser : Script ()
 test_fullLockSpecificationParser =
   test_fullLockSpecificationParser' \kind entries ->
-    runParser (fullLockSpecificationParser governanceLockKindParser)
-      (mkMeta $ (lockKindMetaKey, kind) :: entries)
+    runParser fullLockSpecificationParser (mkMeta $ (lockKindMetaKey, kind) :: entries)
 
 -- TSv1 request parser
 ----------------------
@@ -373,7 +368,7 @@ substitutionTSv1Parser admin = governanceLockRequestTSv1Parser admin lockManager
 
 -- | The metadata entry that requests a substitution.
 substitutionRequest : (Text, Text)
-substitutionRequest = (requestMetaKey, governanceLockRequestSubstituteLock)
+substitutionRequest = (requestMetaKey, governanceLockRequestTagToText GLRT_SubstituteLock)
 
 -- | Examples of the `allocation.meta` of an `AllocationFactory_Allocate` call that proposes a substitution.
 --
