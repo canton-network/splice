@@ -76,10 +76,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics
 import org.lfdecentralizedtrust.splice.sv.onboarding.joining.JoiningNodeInitializer
 import org.lfdecentralizedtrust.splice.sv.onboarding.lsu.RollForwardLsuInitializer
-import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.{
-  DsoPartyMigration,
-  SvOnboardingSnapshotService,
-}
+import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
 import org.lfdecentralizedtrust.splice.sv.onboarding.sv1.SV1Initializer
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{
@@ -457,14 +454,6 @@ class SvApp(
             throw new IllegalStateException("No initial round specified in user's metadata")
         }
 
-      onboardingSnapshotService = new SvOnboardingSnapshotService(
-        config.onboardingSnapshots,
-        clock,
-        retryProvider,
-        loggerFactory,
-      )
-      _ = svAutomation.registerOnboardingSnapshotCleanupTrigger(onboardingSnapshotService)
-
       publicHandler = new HttpSvPublicHandler(
         svAutomation,
         dsoAutomation,
@@ -482,7 +471,7 @@ class SvApp(
           retryProvider,
           loggerFactory,
         ),
-        onboardingSnapshotService,
+        svAutomation.onboardingSnapshotService,
         loggerFactory,
       )
 
@@ -611,7 +600,6 @@ class SvApp(
         httpClient,
         templateDecoder,
         httpRateLimiter,
-        onboardingSnapshotService,
       )
     }
   }
@@ -743,7 +731,6 @@ object SvApp {
       httpClient: HttpClient,
       decoder: TemplateJsonDecoder,
       httpRateLimiter: HttpRateLimiter,
-      onboardingSnapshotService: SvOnboardingSnapshotService,
   ) extends FlagCloseableAsync
       with HasHealth {
     override def isHealthy: Boolean =
@@ -772,7 +759,6 @@ object SvApp {
           s"Participant Admin connection",
           participantAdminConnection.close(),
         ),
-        SyncCloseable("onboarding snapshot service", onboardingSnapshotService.close()),
         SyncCloseable("sv automation", svAutomation.close()),
         SyncCloseable("dso automation", dsoAutomation.close()),
         SyncCloseable("sv store", svStore.close()),
