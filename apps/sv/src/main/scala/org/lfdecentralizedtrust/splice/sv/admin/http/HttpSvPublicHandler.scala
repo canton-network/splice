@@ -415,7 +415,7 @@ class HttpSvPublicHandler(
               response <- HttpSvPublicHandler.onboardSvPartyMigrationPrepareResponse(
                 onboardingSnapshotService,
                 prepared,
-                dsoPartyMigration.exportSnapshotToFile(_, _),
+                dsoPartyMigration.exportSnapshotToFile(_, participantId, _),
               )
             } yield response,
         )
