@@ -14,8 +14,8 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.config.SpliceInstanceNamesConfig
 import org.lfdecentralizedtrust.splice.environment.{
-  ParticipantAdminConnection,
   PackageVersionSupport,
+  ParticipantAdminConnection,
   SynchronizerNodeService,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
@@ -36,9 +36,10 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.{
   UpdateHistoryBulkStoragePersistentProgress,
   UpdatesSegment,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbVotesStore}
 import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
+  HistoricalVotesStore,
   S3BucketConnection,
   UpdateHistory,
 }
@@ -82,6 +83,8 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       appActivityStore = mock[AppActivityStore],
       snapshotStore = mock[AcsSnapshotStore],
       eventStore = mock[ScanEventStore],
+      historicalVotesStore = mock[HistoricalVotesStore],
+      votesStore = mock[DbVotesStore],
       bulkStorage = bulkStorage,
       scanApiMetrics = mock[ScanHttpApiMetrics],
       dsoAnsResolver = mock[DsoAnsResolver],

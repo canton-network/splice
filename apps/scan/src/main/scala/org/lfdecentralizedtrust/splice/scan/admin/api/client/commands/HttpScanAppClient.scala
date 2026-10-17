@@ -70,6 +70,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.p2p.grpc.P2PGrpcNetworking.P2PEndpoint
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.P2PEndpointConfig
 import com.digitalasset.canton.topology.{
@@ -1580,6 +1581,79 @@ object HttpScanAppClient {
         Right(response)
     }
   }
+
+  case class GetVotesBackfillingStatus(before: CantonTimestamp)
+      extends InternalBaseCommand[
+        http.GetVotesBackfillingStatusResponse,
+        definitions.VotesAvailability,
+      ] {
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetVotesBackfillingStatusResponse] =
+      client.getVotesBackfillingStatus(
+        before.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        headers,
+      )
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetVotesBackfillingStatusResponse.OK(response) =>
+        Right(response.availability)
+    }
+  }
+
+  case class GetVotesBefore(
+      before: DbVotesStore.VotesBackfillCursor,
+      count: Int,
+  ) extends InternalBaseCommand[
+        http.GetVotesBeforeResponse,
+        Seq[DbVotesStore.PeerVoteResult],
+      ] {
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetVotesBeforeResponse] = {
+      client.getVotesBefore(
+        definitions.GetVotesBeforeRequest(
+          before.recordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          before.eventNumber,
+          count,
+        ),
+        headers,
+      )
+    }
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetVotesBeforeResponse.OK(response) =>
+        Right(response.votes.map(decodeVoteResultForBackfilling))
+    }
+  }
+
+  private def decodeVoteResultForBackfilling(
+      row: definitions.VoteResultForBackfilling
+  ): DbVotesStore.PeerVoteResult =
+    DbVotesStore.PeerVoteResult(
+      recordTime = CantonTimestamp.assertFromInstant(row.recordTime.toInstant),
+      synchronizerId = row.synchronizerId,
+      updateId = row.updateId,
+      eventNumber = row.eventNumber,
+      voteActionName = row.voteActionName,
+      voteRequesterName = row.voteRequesterName,
+      voteAccepted = row.voteAccepted,
+      voteTrackingCid = row.voteTrackingCid,
+      voteCompletedAt =
+        row.voteCompletedAt.map(t => CantonTimestamp.assertFromInstant(t.toInstant)),
+      voteEffectiveAt =
+        row.voteEffectiveAt.map(t => CantonTimestamp.assertFromInstant(t.toInstant)),
+      choiceResult = row.choiceResult,
+      error = row.error,
+    )
 
   case class GetTransferFactory(choiceArgs: transferinstructionv1.TransferFactory_Transfer)
       extends TokenStandardTransferInstructionBaseCommand[

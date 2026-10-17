@@ -124,6 +124,12 @@ case class ScanAppBackendConfig(
     updateHistoryMaxPageSize: Int = Limit.DefaultMaxPageSize,
     txLogBackfillEnabled: Boolean = true,
     txLogBackfillBatchSize: Int = 100,
+    // Backfills `votes_store_results` from the txlog and then from peer scans.
+    // See VotesStoreBackfilling.
+    votesStoreBackfillingEnabled: Boolean = true,
+    votesStoreBackfillingPollingInterval: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofSeconds(10),
+    votesStoreBackfillingPageSize: Int = 100,
     cache: ScanCacheConfig = ScanCacheConfig(),
     acsStoreDescriptorUserVersion: Option[Long] = None,
     txLogStoreDescriptorUserVersion: Option[Long] = None,

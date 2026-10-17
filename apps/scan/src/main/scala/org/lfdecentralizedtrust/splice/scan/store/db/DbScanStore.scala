@@ -68,6 +68,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
+  EventId,
   PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
@@ -629,6 +630,37 @@ class DbScanStore(
       .query(query, "countVoteRequestResults")
       .map(_.headOption.getOrElse(0L))
   }
+
+  override def listVoteRequestResultsBefore(
+      before: Option[CantonTimestamp],
+      limit: Int,
+  )(implicit tc: TraceContext): Future[Seq[ScanStore.TxLogVoteRequestResult]] =
+    storage
+      .query(
+        listVoteRequestResultsBeforeQuery(
+          txLogTableName = ScanTables.txLogTableName,
+          txLogStoreId = txLogStoreId,
+          dbType = EntryType.VoteRequestTxLogEntry,
+          before = before.map(_.toMicros),
+          limit = limit,
+        ),
+        "listVoteRequestResultsBefore",
+      )
+      .map(_.map { row =>
+        val entry = txLogConfig.decodeEntry(EntryType.VoteRequestTxLogEntry, row.entryData) match {
+          case e: VoteRequestTxLogEntry => e
+          case _ => throw txLogIsOfWrongType(EntryType.VoteRequestTxLogEntry.str)
+        }
+        ScanStore.TxLogVoteRequestResult(
+          recordTime = CantonTimestamp.ofEpochMicro(row.recordTime),
+          synchronizerId = row.synchronizerId,
+          updateId = EventId.updateIdFromEventId(entry.eventId),
+          result = entry.result.getOrElse(throw txMissingField()),
+        )
+      })
+
+  override def acsLastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp] =
+    multiDomainAcsStore.lastIngestedRecordTimes
 
   override def lookupLatestSvRewardWeightChange(
       svParty: PartyId,

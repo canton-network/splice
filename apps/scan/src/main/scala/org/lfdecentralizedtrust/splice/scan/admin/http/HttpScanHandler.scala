@@ -125,20 +125,21 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.{
+  ActiveVotesStore,
   AppStore,
   AppStoreWithIngestion,
+  HistoricalVotesStore,
   PageLimit,
   TimestampWithMigrationId,
+  UpdateHistory,
   VoteResultsFilters,
-  VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
 
-import java.lang.IllegalStateException
 import scala.collection.immutable.SortedMap
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbVotesStore}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStore.VotesBackfillCursor
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
   Contract,
@@ -174,6 +175,8 @@ class HttpScanHandler(
     appActivityStore: AppActivityStore,
     snapshotStore: AcsSnapshotStore,
     eventStore: ScanEventStore,
+    historicalVotesStore: HistoricalVotesStore,
+    votesStore: DbVotesStore,
     bulkStorage: Option[BulkStorageReader],
     scanApiMetrics: ScanHttpApiMetrics,
     dsoAnsResolver: DsoAnsResolver,
@@ -202,7 +205,7 @@ class HttpScanHandler(
   private val store = storeWithIngestion.store
 
   override protected val workflowId: String = this.getClass.getSimpleName
-  override protected val votesStore: VotesStore = store
+  override protected val activeVotesStore: ActiveVotesStore = store
   override protected val validatorLicensesStore: AppStore = store
 
   private val initializedBftSequencersCache
@@ -2112,7 +2115,7 @@ class HttpScanHandler(
     implicit val tc = extracted
     withSpan(s"$workflowId.listAmuletPriceVotes") { _ => _ =>
       for {
-        amuletPriceVotes <- votesStore.listAmuletPriceVotes()
+        amuletPriceVotes <- activeVotesStore.listAmuletPriceVotes()
       } yield ScanResource.ListAmuletPriceVotesResponse.OK(
         definitions.ListAmuletPriceVotesResponse(
           amuletPriceVotes.map(_.toHttp).toVector
@@ -2139,7 +2142,7 @@ class HttpScanHandler(
       val limit = PageLimit.tryCreate(body.limit.intValue)
       val after = body.pageToken.map(_.longValue)
       for {
-        page <- votesStore.listVoteRequestResults(
+        page <- historicalVotesStore.listVoteRequestResults(
           VoteResultsFilters(
             body.actionName,
             body.accepted,
@@ -2181,7 +2184,7 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
       for {
-        count <- votesStore.countVoteRequestResults(
+        count <- historicalVotesStore.countVoteRequestResults(
           VoteResultsFilters(
             body.actionName,
             body.accepted,
@@ -2495,6 +2498,7 @@ class HttpScanHandler(
   )()(extracted: TraceContext): Future[ScanResource.GetBackfillingStatusResponse] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getBackfillingStatus") { _ => _ =>
+      // TODO(#7728) include the votes store backfilling once we switch over the HTTP endpoints
       for {
         updateHistoryStatus <- updateHistory.getBackfillingState()
         txLogStatus <- store.multiDomainAcsStore.getTxLogBackfillingState()
@@ -2507,6 +2511,87 @@ class HttpScanHandler(
       )
     }
   }
+
+  /** Whether this Scan holds all vote results before `before`: its own backfilling must be
+    * complete (for the votes before its first ingested one), and its ingestion must have reached
+    * `before` (for the votes after it). Relies on votes only existing on the main synchronizer,
+    * as `UpdateHistory.lastIngestedRecordTime` does not distinguish synchronizers.
+    */
+  private def votesAvailability(before: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[definitions.VotesAvailability] =
+    votesStore.isBackfillingComplete().map {
+      case false => definitions.VotesAvailability.Backfilling
+      case true if updateHistory.lastIngestedRecordTime.exists(_ >= before) =>
+        definitions.VotesAvailability.Available
+      case true => definitions.VotesAvailability.Ingesting
+    }
+
+  override def getVotesBackfillingStatus(
+      respond: ScanResource.GetVotesBackfillingStatusResponse.type
+  )(beforeRecordTime: OffsetDateTime)(
+      extracted: TraceContext
+  ): Future[ScanResource.GetVotesBackfillingStatusResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getVotesBackfillingStatus") { _ => _ =>
+      votesAvailability(CantonTimestamp.assertFromInstant(beforeRecordTime.toInstant)).map(
+        availability =>
+          ScanResource.GetVotesBackfillingStatusResponse.OK(
+            definitions.GetVotesBackfillingStatusResponse(availability)
+          )
+      )
+    }
+  }
+
+  override def getVotesBefore(respond: ScanResource.GetVotesBeforeResponse.type)(
+      body: definitions.GetVotesBeforeRequest
+  )(extracted: TraceContext): Future[ScanResource.GetVotesBeforeResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getVotesBefore") { _ => _ =>
+      val before = VotesBackfillCursor(
+        CantonTimestamp.assertFromInstant(body.beforeRecordTime.toInstant),
+        body.beforeEventNumber,
+      )
+      votesAvailability(before.recordTime).flatMap {
+        case definitions.VotesAvailability.Available =>
+          votesStore
+            .listBackfillPage(before, body.count)
+            .map(rows =>
+              ScanResource.GetVotesBeforeResponse.OK(
+                definitions.GetVotesBeforeResponse(
+                  rows.map(encodeVoteResultForBackfilling).toVector
+                )
+              )
+            )
+        case availability =>
+          Future.failed(
+            Status.FAILED_PRECONDITION
+              .withDescription(
+                s"This Scan cannot serve vote results before ${before.recordTime} yet: $availability"
+              )
+              .asRuntimeException()
+          )
+      }
+    }
+  }
+
+  private def encodeVoteResultForBackfilling(
+      row: DbVotesStore.PeerVoteResult
+  ): definitions.VoteResultForBackfilling =
+    definitions.VoteResultForBackfilling(
+      recordTime = row.recordTime.toInstant.atOffset(ZoneOffset.UTC),
+      synchronizerId = row.synchronizerId,
+      updateId = row.updateId,
+      eventNumber = row.eventNumber,
+      voteActionName = row.voteActionName,
+      voteRequesterName = row.voteRequesterName,
+      voteAccepted = row.voteAccepted,
+      voteTrackingCid = row.voteTrackingCid,
+      voteCompletedAt = row.voteCompletedAt.map(_.toInstant.atOffset(ZoneOffset.UTC)),
+      voteEffectiveAt = row.voteEffectiveAt.map(_.toInstant.atOffset(ZoneOffset.UTC)),
+      choiceResult = row.choiceResult,
+      error = row.error,
+    )
 
   override def featureSupport(respond: ScanResource.FeatureSupportResponse.type)()(
       extracted: TraceContext

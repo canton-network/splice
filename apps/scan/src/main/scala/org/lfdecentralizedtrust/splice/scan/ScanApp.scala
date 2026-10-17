@@ -7,6 +7,7 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.ProcessingTimeout
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.LifeCycle
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.resource.{DbStorage, Storage}
@@ -76,7 +77,9 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanRewardsReferenceStore,
   ScanStore,
 }
+import org.lfdecentralizedtrust.splice.PekkoRetryingService
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage
+import org.lfdecentralizedtrust.splice.scan.store.votesbackfilling.VotesStoreBackfilling
 import org.lfdecentralizedtrust.splice.scan.store.historystart.{
   KvHistoryStartStore,
   ParticipantHistoryStartSources,
@@ -87,6 +90,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
 import org.lfdecentralizedtrust.splice.store.{
@@ -229,6 +233,38 @@ class ScanApp(
         loggerFactory,
         retryProvider.metricsFactory,
       )
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
+      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
+      historicalVotesStore = DbVotesStore(
+        store.acsContractFilter.ingestionFilter.primaryParty,
+        participantId,
+        storage,
+        kvStore,
+        loggerFactory,
+      )
+      votesStoreBackfilling = Option.when(config.votesStoreBackfillingEnabled) {
+        new VotesStoreBackfilling(
+          config.votesStoreBackfillingPollingInterval,
+          config.votesStoreBackfillingPageSize,
+          store,
+          historicalVotesStore,
+          svName,
+          ledgerClient,
+          config.automation,
+          amuletAppParameters.upgradesConfig,
+          new WallClock(retryProvider.timeouts, loggerFactory),
+          retryProvider,
+          loggerFactory,
+        )
+      }
+      votesStoreBackfillingService = votesStoreBackfilling.map(
+        _.asPekkoRetryingService(
+          config.automation,
+          new WallClock(retryProvider.timeouts, loggerFactory),
+          retryProvider,
+        )
+      )
+      _ = votesStoreBackfillingService.discard
       updateHistory = new UpdateHistory(
         storage,
         domainMigrationId,
@@ -242,6 +278,7 @@ class ScanApp(
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+        additionalIngestionSinks = Seq(historicalVotesStore.ingestionSink),
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
@@ -266,8 +303,6 @@ class ScanApp(
         retryProvider,
         loggerFactory,
       )
-      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
-      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       historyStart = new ScanHistoryStart(
         new KvHistoryStartStore(kvProvider),
         new ParticipantHistoryStartSources(
@@ -435,6 +470,8 @@ class ScanApp(
         appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
+        store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
+        historicalVotesStore,
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,
@@ -578,6 +615,8 @@ class ScanApp(
         store,
         automation,
         bulkStorage,
+        historicalVotesStore,
+        votesStoreBackfillingService,
         historyStart,
         verdictAutomation,
         scanEventStore,
@@ -653,6 +692,8 @@ object ScanApp {
       store: ScanStore,
       automation: ScanAutomationService,
       bulkStorage: Option[BulkStorage],
+      votesStore: DbVotesStore,
+      votesStoreBackfillingService: Option[PekkoRetryingService[VotesStoreBackfilling.Step]],
       historyStart: ScanHistoryStart,
       verdictAutomation: ScanVerdictAutomationService,
       eventStore: ScanEventStore,
@@ -673,6 +714,7 @@ object ScanApp {
         bftSequencersAdminConnections ++
           cleanups ++
           bulkStorage.toList ++
+          votesStoreBackfillingService.toList ++
           Seq(
             automation,
             verdictAutomation,

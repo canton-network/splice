@@ -10,11 +10,13 @@ import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
+import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.VoteRequest
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.lfdecentralizedtrust.splice.store.db.{AcsQueries, TxLogQueries}
 import slick.dbio.{Effect, NoStream}
+import slick.jdbc.{GetResult, PositionedResult}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.sql.SqlStreamingAction
 
@@ -136,6 +138,43 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     (sql"""select count(*) from #$txLogTableName where store_id = $txLogStoreId and """ ++ whereClause).toActionBuilder
       .as[Long]
   }
+
+  import DbVotesStoreQueryBuilder.TxLogVoteResultRow
+  implicit private val getResultTxLogVoteResultRow: GetResult[TxLogVoteResultRow] =
+    (pp: PositionedResult) => TxLogVoteResultRow(pp.<<, pp.<<, pp.<<)
+
+  /** Pages backwards through the txlog's vote results by record time.
+    *
+    * A vote is always the root exercise of its transaction, so no two votes share a record time,
+    * and record time alone is a sufficient pagination key.
+    */
+  def listVoteRequestResultsBeforeQuery(
+      txLogTableName: String,
+      txLogStoreId: TxLogStoreId,
+      dbType: String3,
+      before: Option[Long],
+      limit: Int,
+  ): SqlStreamingAction[Vector[TxLogVoteResultRow], TxLogVoteResultRow, Effect.Read] = {
+    val conditions = NonEmptyList(
+      sql"""entry_type = $dbType""",
+      before.map(b => sql"""record_time < $b""").toList,
+    )
+    val whereClause = conditions.reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
+    (sql"""select record_time, domain_id, entry_data from #$txLogTableName
+           where store_id = $txLogStoreId and """ ++ whereClause ++
+      sql""" order by record_time desc limit $limit""").toActionBuilder
+      .as[TxLogVoteResultRow]
+  }
+}
+
+object DbVotesStoreQueryBuilder {
+
+  /** A vote result row of the txlog, with the entry still encoded: only the caller knows the entry type. */
+  final case class TxLogVoteResultRow(
+      recordTime: Long,
+      synchronizerId: SynchronizerId,
+      entryData: String,
+  )
 }
 
 /** All column names will be unsafely interpolated, as they're expected to be constant strings.

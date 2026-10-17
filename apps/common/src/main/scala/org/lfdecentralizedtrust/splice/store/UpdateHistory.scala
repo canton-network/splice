@@ -42,7 +42,7 @@ import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.logging.pretty.Pretty
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.pretty.Pretty.{param, prettyOfClass}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
@@ -103,6 +103,7 @@ class UpdateHistory(
     enableissue12777Workaround: Boolean,
     enableImportUpdateBackfill: Boolean,
     metrics: HistoryMetrics,
+    additionalIngestionSinks: Seq[UpdateHistory.AdditionalIngestionSink] = Seq.empty,
 )(implicit
     ec: ExecutionContext,
     closeContext: CloseContext,
@@ -296,6 +297,10 @@ class UpdateHistory(
               new RuntimeException(s"No row for $newHistoryId found, which was just inserted!")
             )
             .map(_.map(LegacyOffset.Api.assertFromStringToLong))
+
+          _ <- Future.sequence(
+            additionalIngestionSinks.map(_.initialize(newHistoryId))
+          )
         } yield {
           state.updateAndGet(
             _.copy(
@@ -339,6 +344,7 @@ class UpdateHistory(
       override def ingestUpdateBatch(batch: NonEmptyList[TreeUpdateOrOffsetCheckpoint])(implicit
           traceContext: TraceContext
       ): Future[Unit] = {
+
         MonadUtil
           .sequentialTraverse(batch.toList) { updateOrCheckpoint =>
             val offset: Long = updateOrCheckpoint.offset
@@ -358,6 +364,15 @@ class UpdateHistory(
                 )
 
             timeIngestion {
+              // CPU-only preprocessing step, runs on the execution context of the ingestion service,
+              // and not the database execution context.
+              // TODO(#7049): This could be moved to a separate Pekko stage,
+              // such that it executes in parallel with the database actions.
+              val additionalIngestionActions =
+                additionalIngestionSinks.flatMap(
+                  _.prepareBatch(NonEmptyList.one(updateOrCheckpoint))
+                )
+
               // Note: in theory, it's enough if this action is atomic - there should only be a single
               // ingestion sink storing updates for the given (participant, party, migrationId) tuple,
               // so there should be no concurrent updates.
@@ -374,6 +389,9 @@ class UpdateHistory(
                       ingestedEvents <- ingestUpdateOrCheckpoint_(
                         updateOrCheckpoint,
                         domainMigrationId,
+                      )
+                      _ <- DBIO.seq(
+                        additionalIngestionActions.map(_.action)*
                       )
                       _ <- updateOffset(offset)
                     } yield ingestedEvents
@@ -408,6 +426,9 @@ class UpdateHistory(
                           updateOrCheckpoint,
                           domainMigrationId,
                         )
+                        _ <- DBIO.seq(
+                          additionalIngestionActions.map(_.action)*
+                        )
                         _ <- updateOffset(offset)
                       } yield ingestedEvents
                     }
@@ -417,7 +438,15 @@ class UpdateHistory(
               storage
                 .queryAndUpdate(action, "ingestUpdate")
                 .map { ingestedEvents =>
+                  additionalIngestionActions.foreach(action =>
+                    logger.debug(
+                      s"History $historyId migration $domainMigrationId ingested $action @ $recordTime"
+                    )
+                  )
                   recordTime.foreach(advanceLastIngestedRecordTime)
+                  additionalIngestionSinks.foreach(
+                    _.onTransactionCommitted(NonEmptyList.one(updateOrCheckpoint))
+                  )
                   metrics.UpdateHistory.eventCount.inc(ingestedEvents.numCreatedEvents)(
                     MetricsContext("event_type" -> "created")
                   )
@@ -2621,6 +2650,64 @@ object UpdateHistory {
   // so we read them back as an arbitrary value.
   private def missingString: String = ""
   private def missingStringSeq: Seq[String] = Seq.empty
+
+  /** Represents a DBIOAction with all parameters already encoded in their
+    * native JDBC format. Wrapping the action in a named class simplifies debugging.
+    */
+  trait PreparedIngestionAction extends PrettyPrinting {
+    def action: DBIOAction[?, NoStream, Effect.Read & Effect.Write]
+  }
+
+  trait AdditionalIngestionSink {
+
+    /** Initializes the ingestion sink.
+      *
+      * Called at least once before any other method.
+      * May be called multiple times, if the ingestion services crashes and restarts.
+      */
+    def initialize(historyId: Long)(implicit
+        tc: TraceContext
+    ): Future[Unit]
+
+    /** Prepares a batch of updates for ingestion.
+      *
+      * Returns the database actions that ingest the given updates. They run in
+      * the same SQL transaction as the update history ingestion.
+      *
+      * Implement this as a function of its inputs: it may be called concurrently,
+      * out of order, well before the returned actions run, or for updates whose
+      * actions are never run (e.g., an offset that was already ingested).
+      * Logging and updating caches are fine, but must not be relied on.
+      *
+      * Should not throw exceptions. If this method throws, the whole update history
+      * ingestion service crashes and restarts, and then replays the same updates,
+      * so one update that cannot be handled blocks ingestion of the update history
+      * for good. An update that this sink cannot handle must yield no action.
+      *
+      * @param updates A sequence of consecutive updates from the update stream
+      */
+    def prepareBatch(
+        updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
+    )(implicit
+        tc: TraceContext
+    ): Seq[PreparedIngestionAction]
+
+    /** Called after the SQL transaction that ingests `updates` has been committed.
+      *
+      * Only update in-memory state here, such as caches or metrics. State that must
+      * survive a restart belongs in the actions returned by `prepareBatch`.
+      *
+      * Not guaranteed to be called. May be skipped if the application crashes
+      * right after the commit.
+      *
+      * @param updates The updates that were passed to `prepareBatch`
+      */
+    def onTransactionCommitted(
+        updates: NonEmptyList[TreeUpdateOrOffsetCheckpoint]
+    )(implicit
+        tc: TraceContext
+    ): Unit
+  }
 }
 
 final case class TimestampWithMigrationId(
