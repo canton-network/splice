@@ -270,7 +270,6 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       receiver: RichPartyId,
       instructionCid: transferinstructionv1.TransferInstruction.ContractId,
       expectedTimeBounds: Option[(CantonTimestamp, CantonTimestamp)] = None,
-      meta: Map[String, String] = Map.empty,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ) = {
@@ -282,9 +281,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       .submitJavaExternalOrLocal(
         receiver,
         commands = instructionCid
-          .exerciseTransferInstruction_Withdraw(
-            choiceContext.toExtraArgs(new metadatav1.Metadata(meta.asJava))
-          )
+          .exerciseTransferInstruction_Withdraw(choiceContext.toExtraArgs())
           .commands()
           .asScala
           .toSeq,

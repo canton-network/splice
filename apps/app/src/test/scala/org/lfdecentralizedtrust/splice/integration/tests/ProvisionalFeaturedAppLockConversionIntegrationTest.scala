@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProvisionalFeaturedAppLockConversionTrigger
 import org.lfdecentralizedtrust.splice.util.*
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class ProvisionalFeaturedAppLockConversionIntegrationTest
     extends IntegrationTest
     with WalletTestUtil

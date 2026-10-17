@@ -38,8 +38,7 @@ import java.time.Duration
   * locks that makes the batching observable and deterministic: 2, then 1, then
   * nothing left to do.
   */
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_24
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_30
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class ExpireVestingLockTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext

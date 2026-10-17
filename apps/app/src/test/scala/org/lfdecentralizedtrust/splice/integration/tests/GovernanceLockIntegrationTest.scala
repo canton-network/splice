@@ -15,6 +15,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 }
 import org.lfdecentralizedtrust.splice.util.{GovernanceLockUtil, WalletTestUtil}
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class GovernanceLockIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil

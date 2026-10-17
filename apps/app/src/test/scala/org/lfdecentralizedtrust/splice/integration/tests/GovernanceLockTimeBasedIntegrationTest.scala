@@ -20,6 +20,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import java.time.Duration
 import java.time.temporal.ChronoUnit
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class GovernanceLockTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil

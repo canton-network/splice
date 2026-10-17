@@ -595,6 +595,7 @@ amulet_allocationFactoryV1_allocateImpl externalAmuletRules _self arg = do
     output = V1.AllocationInstructionResult_Completed with allocationCid
     meta
 
+
 -- Utilities
 ------------
 

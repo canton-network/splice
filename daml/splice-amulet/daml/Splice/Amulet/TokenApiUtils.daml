@@ -180,11 +180,6 @@ lockContextContextKey = "lock-context"
 expireLockKey : Text
 expireLockKey = "expire-lock"
 
-issuingMiningRoundContextKey : Text
-issuingMiningRoundContextKey = "issuing-mining-round"
-
-openMiningRoundContextKey : Text
-openMiningRoundContextKey = "open-mining-round"
 
 -- Metadata utilities
 ---------------------

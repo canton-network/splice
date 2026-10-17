@@ -1,8 +1,6 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
-{-# LANGUAGE AllowAmbiguousTypes #-}
-
 -- | Daml script functions for initializing and using an amulet registry via the
 -- token standard and the amulet specific functions.
 module Splice.Testing.Registries.AmuletRegistry

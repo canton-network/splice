@@ -43,6 +43,7 @@ template ExternalPartyConfigState
 
       eventLog_holdingsChangeImpl = eventLog_holdingsChangeDefaultImpl dso
 
+
 instance HasCheckedFetch ExternalPartyConfigState ForDso where
   contractGroupId ExternalPartyConfigState {..} = ForDso with
     dso = dso
