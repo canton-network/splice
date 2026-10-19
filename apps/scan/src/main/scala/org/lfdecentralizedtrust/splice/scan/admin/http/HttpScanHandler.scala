@@ -2546,10 +2546,11 @@ class HttpScanHandler(
         CantonTimestamp.assertFromInstant(body.beforeRecordTime.toInstant),
         body.beforeEventNumber,
       )
+      val limit = PageLimit.tryCreate(body.count)
       votesAvailability(before.recordTime).flatMap {
         case definitions.VotesAvailability.Available =>
           votesStore
-            .listBackfillPage(before, body.count)
+            .listBackfillPage(before, limit)
             .map(rows =>
               ScanResource.GetVotesBeforeResponse.OK(
                 definitions.GetVotesBeforeResponse(
