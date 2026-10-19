@@ -6,6 +6,15 @@
 
     - Upgrade base image to 1.0.19
 
+  - Scan App
+
+    - `/v0/events` responses now include two optional per-event fields:
+
+      - `asset_activity_records`: asset-side activity records parallel to `app_activity_records`.
+      - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app.
+
+    - The `AppActivityRecord` schema has been renamed to `ActivityRecord` (shared `{party, weight}` type referenced by both `EventHistoryAppActivityRecords.records` and `EventHistoryAssetActivityRecords.records`). Wire shape unchanged; generated-client type name differs.
+
   - Validator App
 
     - `synchronizer-topology.num-parties` metric now includes also parties not hosted on any participant. This also fixes an issue where those were deducted from the metric on update,
