@@ -222,7 +222,9 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
       case 'SRARC_GrantFeaturedAppRight':
         return createGrantFeatureAppProposal(
           dsoAction.value.provider,
-          dsoAction.value.activityWeight ?? ''
+          dsoAction.value.activityWeight ?? '',
+          dsoAction.value.appKind ?? '',
+          dsoAction.value.opsParties ?? []
         );
       case 'SRARC_RevokeFeaturedAppRight':
         return createRevokeFeatureAppProposal(dsoAction.value.rightCid);
@@ -254,11 +256,15 @@ function createOffboardMemberProposal(memberToOffboard: string): OffBoardMemberP
 
 function createGrantFeatureAppProposal(
   provider: string,
-  activityWeight: string
+  activityWeight: string,
+  appKind: string,
+  opsParties: string[]
 ): FeatureAppProposal {
   return {
     provider: provider,
     activityWeight: activityWeight,
+    appKind: appKind,
+    opsParties: opsParties,
   };
 }
 
@@ -509,7 +515,7 @@ export function buildFeaturedAppConfigUpdateEntry(
 // Collect all opsParties referenced by in-flight (pending) vote requests — both
 // SRARC_GrantFeaturedAppRight (opsParties) and SRARC_CreateFeaturedAppConfigUpdateInstruction
 // (updates[].newConfig.opsParties). Used by the grant/amend forms to warn (non-blocking) when
-// the author picks an opsParty already pending in another vote.
+// the author picks an opsParty already pending in another vote. Shared by #7665/#7674.
 export function extractInFlightOpsParties(
   proposals: Contract<VoteRequest>[] | undefined
 ): string[] {
