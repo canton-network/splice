@@ -136,6 +136,14 @@ trait GovernanceLockTest extends TokenStandardTest {
         Map(lockStatusMetaKey -> lockStatus.status)
     )
 
+  /** The memo of a pending transfer of a lock that is not vesting */
+  def makeAcceptTransferLockMemo(lockKind: LockKind, lockSubject: String): String =
+    makeLockMemo(
+      List("request" -> "accept-to-transfer-lock") ++
+        commonLockMemoEntries(lockKind, lockSubject) ++
+        Map(lockStatusMetaKey -> Locked.status)
+    )
+
   // Using a Map so order doesn't matter when comparing below
   private def extractLockMemoEntries(memo: String): Map[String, String] =
     memo
@@ -448,6 +456,20 @@ trait GovernanceLockTest extends TokenStandardTest {
           transferAmount,
           Some(durationToRelTime(vestingPeriod)),
           Some(vestingEndTime),
+        )
+      )
+
+    /** Propose a transfer of part of a vesting GovernanceLock, keeping its
+      * vesting schedule
+      */
+    final def transferVestingLock(lock: governancelock.GovernanceLock) =
+      new TransferLock((newLockOwner, transferAmount) =>
+        (
+          Vesting,
+          newLockOwner,
+          transferAmount,
+          Some(vestingLockSpecification(lock).vestingPeriod),
+          Some(vestingLockSpecification(lock).endTime),
         )
       )
   }
