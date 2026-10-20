@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.environment
 
 import cats.data.EitherT
 import cats.implicits.catsSyntaxOptionId
+import org.lfdecentralizedtrust.splice.admin.api.client.commands.ParticipantRepairManagementExtensions
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
   ParticipantAdminCommands,
@@ -232,7 +233,7 @@ class ParticipantAdminConnection(
       "import_acs",
       "Imports the acs in the participantl",
       runCmd(
-        ParticipantAdminCommands.ParticipantRepairManagement
+        ParticipantRepairManagementExtensions
           .ImportAcsBytes(
             chunkedAcsBytes,
             IMPORT_ACS_WORKFLOW_ID_PREFIX,
@@ -240,6 +241,8 @@ class ParticipantAdminConnection(
             excludedStakeholders = Set.empty,
             representativePackageIdOverride = RepresentativePackageIdOverride.NoOverride,
             synchronizerId = synchronizerId,
+            // TODO(#7800) Remove when Canton gives us an option to.
+            forceRepairWhenTopologyTransactionAtLedgerEnd = true,
           ),
         timeoutOverride = Some(GrpcAdminCommand.DefaultUnboundedTimeout),
       ).map(_ => ()),
