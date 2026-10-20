@@ -113,15 +113,14 @@ object DbScanRewardsReferenceStore {
   // same as `defaultAppKind` in the daml.
   val DefaultAppKind: FeaturedAppKind = FeaturedAppKind.FAK_GENERAL
 
-  // Lower value means more general
   private def appKindPrecedence(kind: FeaturedAppKind): Int = kind match {
     case FeaturedAppKind.FAK_GENERAL => 0
     case FeaturedAppKind.FAK_ASSETMOVING => 1
     case FeaturedAppKind.FAK_ASSET => 2
   }
 
-  private def mostGeneralAppKind(a: FeaturedAppKind, b: FeaturedAppKind): FeaturedAppKind =
-    if (appKindPrecedence(a) <= appKindPrecedence(b)) a else b
+  private def maxAppKind(a: FeaturedAppKind, b: FeaturedAppKind): FeaturedAppKind =
+    if (appKindPrecedence(a) >= appKindPrecedence(b)) a else b
 }
 
 class DbScanRewardsReferenceStore private (
@@ -226,9 +225,9 @@ class DbScanRewardsReferenceStore private (
           acc.get(payload.provider).fold((weight, kind, opsParties)) {
             case (prevWeight, prevKind, prevOpsParties) =>
               (
-                // Use the max of all weights, in case multiple contracts exist for a party
+                // Use the max of all weights and kind, in case multiple contracts exist for a party
                 prevWeight max weight,
-                DbScanRewardsReferenceStore.mostGeneralAppKind(prevKind, kind),
+                DbScanRewardsReferenceStore.maxAppKind(prevKind, kind),
                 prevOpsParties ++ opsParties,
               )
           },
