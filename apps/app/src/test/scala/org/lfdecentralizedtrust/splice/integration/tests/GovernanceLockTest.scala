@@ -90,6 +90,22 @@ trait GovernanceLockTest extends TokenStandardTest {
         },
       )
 
+  type TransferLockData = (LockStatus, PartyId, BigDecimal, Option[RelTime], Option[Instant])
+
+  case object TransferLock
+      extends LockRequest[TransferLockData](
+        "transfer-lock",
+        { case (lockStatus, newLockOwner, transferAmount, vestingPeriod, vestingEndTime) =>
+          List(
+            lockStatusMetaKey -> lockStatus.status,
+            "new-lock-owner" -> newLockOwner.toProtoPrimitive,
+            "transfer-amount" -> transferAmount.toString,
+          ) ++
+            vestingPeriod.map(t => (lockVestingDurationMetaKey, t.microseconds.toString)) ++
+            vestingEndTime.map(t => (lockVestingEndTimeMetaKey, instantToMicros(t).toString))
+        },
+      )
+
   private def makeLockMemo(entries: List[(String, String)]): String =
     lockMemoPrefix + entries.map { case (k, v) => s"$k=$v" }.mkString("&")
 
@@ -313,6 +329,28 @@ trait GovernanceLockTest extends TokenStandardTest {
       )
     }
 
+    final def createAndUnlockGovernanceLock(
+        participant: ParticipantClientReference,
+        owner: RichPartyId,
+        lockKind: LockKind,
+        lockSubject: String,
+        lockAmount: BigDecimal,
+        unlockAmount: BigDecimal,
+        vestingStartTime: CantonTimestamp,
+        isValid: CId => View => Boolean = _ => _ => true,
+    )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+      val cid = createGovernanceLock(participant, owner, lockKind, lockSubject, lockAmount)
+      unlockGovernanceLock(
+        participant,
+        owner,
+        lockKind,
+        lockSubject,
+        unlockAmount,
+        vestingStartTime,
+        isValid(cid),
+      )
+    }
+
     final def withdrawVestingLock(
         participant: ParticipantClientReference,
         owner: RichPartyId,
@@ -377,6 +415,46 @@ trait GovernanceLockTest extends TokenStandardTest {
         (
           Vesting,
           PartyId.tryFromProtoPrimitive(lock.owner),
+          Some(vestingLockSpecification(lock).vestingPeriod),
+          Some(vestingLockSpecification(lock).endTime),
+        )
+      )
+
+    final class TransferLock(makeData: (PartyId, BigDecimal) => TransferLockData) {
+      final def apply(
+          participant: ParticipantClientReference,
+          owner: RichPartyId,
+          lockKind: LockKind,
+          lockSubject: String,
+          newLockOwner: PartyId,
+          transferAmount: BigDecimal,
+      )(implicit env: SpliceTestConsoleEnvironment): CId = {
+        // `owner` may already have pending instructions, so only look at new ones
+        val existingCids = listTransfers(participant, owner.partyId).map(_._1).toSet
+
+        transferAndList(
+          "the owner proposes the lock transfer",
+          "the lock transfer is now a pending TransferInstruction to the new owner",
+          participant,
+          owner,
+          0,
+          makeInputLockMemo(TransferLock, lockKind, lockSubject)(
+            makeData(newLockOwner, transferAmount)
+          ),
+          // A lock transfer proposal moves no funds, so no input holding is archived
+          wait = false,
+          defaultIsValid(newLockOwner.toProtoPrimitive, existingCids),
+        ).loneElement._1
+      }
+    }
+
+    /** Propose a transfer of a vesting GovernanceLock */
+    final def transferVestingLock(lock: governancelock.GovernanceLock) =
+      new TransferLock((newLockOwner, transferAmount) =>
+        (
+          Vesting,
+          newLockOwner,
+          transferAmount,
           Some(vestingLockSpecification(lock).vestingPeriod),
           Some(vestingLockSpecification(lock).endTime),
         )

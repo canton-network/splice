@@ -13,7 +13,10 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireVestingLockTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
+  ExpireGovernanceLockTransferTrigger,
+  ExpireVestingLockTrigger,
+}
 import org.lfdecentralizedtrust.splice.sv.config.InitialGovernanceLockConfig
 import org.lfdecentralizedtrust.splice.util.{
   GovernanceLockUtil,
@@ -59,13 +62,15 @@ class GovernanceLockTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppConfigs_(
           _.copy(
-            delegatelessAutomationExpiredVestingLockBatchSize = triggerBatchSize
+            delegatelessAutomationExpiredVestingLockBatchSize = triggerBatchSize,
+            delegatelessAutomationExpiredGovernanceLockTransferBatchSize = triggerBatchSize,
           )
         )(config)
       )
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAutomationConfig(ConfigTransforms.ConfigurableApp.Sv)(
-          _.withPausedTrigger[ExpireVestingLockTrigger]
+          _.withPausedTrigger[ExpireGovernanceLockTransferTrigger]
+            .withPausedTrigger[ExpireVestingLockTrigger]
         )(config)
       )
 
@@ -261,22 +266,15 @@ class GovernanceLockTimeBasedIntegrationTest
     actAndCheck(
       s"Lock and unlock $numLocks times, vesting until $endTime", {
         (1 to numLocks).map { _ =>
-          val governanceLock = tsv1Operations.createGovernanceLock(
+          tsv1Operations.createAndUnlockGovernanceLock(
             participant,
             owner,
             lockKind,
             lockSubject = lockSubject,
-            amount = lockAmount,
-          )
-          tsv1Operations.unlockGovernanceLock(
-            participant,
-            owner,
-            lockKind,
-            lockSubject,
+            lockAmount = lockAmount,
             unlockAmount = lockAmount,
             vestingStartTime = vestingStartTime,
-            isValid =
-              _.originalInstructionCid.toScala.exists(_.contractId == governanceLock.contractId),
+            isValid = cid => _.originalInstructionCid.toScala.exists(_.contractId == cid.contractId),
           )
         }
       },
@@ -308,6 +306,96 @@ class GovernanceLockTimeBasedIntegrationTest
       listVestingLocks shouldBe empty
     }
   }
+
+  "ExpireGovernanceLockTransferTrigger archives expired transfers in batches" in { implicit env =>
+    val numTransfers = 3
+    val trigger =
+      sv1Backend.dsoDelegateBasedAutomation.trigger[ExpireGovernanceLockTransferTrigger]
+
+    val sv1Party = sv1Backend.getDsoInfo().svParty
+    val owner = RichPartyId.local(sv1Party)
+    val participant = sv1Backend.participantClientWithAdminToken
+    val newLockOwner = aliceValidatorBackend.getValidatorPartyId()
+
+    val vestingStartTime = getLedgerTime.plusSeconds(1)
+
+    // `tsv1Operations.createGovernanceLock` feeds all of the owner's unlocked
+    // holdings into the `TransferFactory_Transfer` choice. Thus, the tap has to
+    // have landed before the lock is submitted.
+    actAndCheck(
+      s"Tap $lockAmount CC for sv1",
+      sv1WalletClient.tap(walletAmuletToUsd(lockAmount)),
+    )(
+      "the tapped amulet is visible",
+      _ => listHoldings(participant, sv1Party).filter(_._2.lock.isEmpty) should have length 1,
+    )
+
+    val (_, vestingLock) = actAndCheck(
+      "Lock and unlock, so that the lock starts vesting",
+      tsv1Operations.createAndUnlockGovernanceLock(
+        participant,
+        owner,
+        lockKind,
+        lockSubject = lockSubject,
+        lockAmount = lockAmount,
+        unlockAmount = lockAmount,
+        vestingStartTime = vestingStartTime,
+      ),
+    )(
+      "SvDsoStore ingests the VestingLock",
+      _ => listVestingLocks.loneElement.payload,
+    )
+
+    actAndCheck(
+      s"Propose $numTransfers transfers of the VestingLock to $newLockOwner",
+      (1 to numTransfers).foreach { _ =>
+        tsv1Operations.transferVestingLock(vestingLock)(
+          participant,
+          owner,
+          lockKind,
+          lockSubject,
+          newLockOwner,
+          1000,
+        )
+      },
+    )(
+      "SvDsoStore ingests all GovernanceLockTransfers",
+      _ => listLockTransfers should have length numTransfers.toLong,
+    )
+
+    clue("The lock transfers are not yet expired, so the trigger has no work") {
+      trigger.runOnce().futureValue shouldBe false
+      listLockTransfers should have length numTransfers.toLong
+    }
+
+    // `listExpiredGovernanceLockTransfers` uses a strict `contract_expires_at < now`, and the
+    // trigger reads `now` 5s behind the clock (`clockSkewAutomationDelay`), so step well past
+    // `endTime`.
+    advanceTime(vestingDuration.plusSeconds(10))
+
+    clue("The lock transfers stay put while the trigger is paused") {
+      listLockTransfers should have length numTransfers.toLong
+    }
+
+    clue(s"First run archives one full batch of $triggerBatchSize") {
+      eventually()(trigger.runOnce().futureValue shouldBe true)
+      listLockTransfers should have length (numTransfers - triggerBatchSize).toLong
+    }
+
+    clue("Second run archives the remaining partial batch") {
+      trigger.runOnce().futureValue shouldBe true
+      listLockTransfers shouldBe empty
+    }
+
+    clue("The source VestingLock is left untouched") {
+      listVestingLocks.loneElement.payload shouldBe vestingLock
+    }
+  }
+
+  private def listLockTransfers(implicit env: SpliceTestConsoleEnvironment) =
+    sv1Backend.appState.dsoStore.multiDomainAcsStore
+      .listContracts(governancelock.transfer.GovernanceLockTransfer.COMPANION)
+      .futureValue
 
   private def listVestingLocks(implicit env: SpliceTestConsoleEnvironment) =
     sv1Backend.appState.dsoStore.multiDomainAcsStore
