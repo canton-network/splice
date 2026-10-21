@@ -147,8 +147,11 @@ object RewardComputationInputs extends NamedLogging {
 
   private val scale: Numeric.Scale = Numeric.Scale.assertFromInt(10)
   private[scan] val zero: Numeric = fromLong(0L)
-  // Daml default for optDevelopmentFundPercentage
+  // Daml defaults for optional fields on RewardConfig and IssuanceConfig.
   private val defaultDevelopmentFundPercentage: BigDecimal = BigDecimal("0.05")
+  private val defaultExtraFeaturedAssetActivityWeight: BigDecimal = BigDecimal("0.2")
+  private val defaultMaxExtraFeaturedAssetActivityWeightPerAsset: BigDecimal = BigDecimal("0.1")
+  private val defaultDsoAppActivityWeight: BigDecimal = BigDecimal("0.1")
 
   private[rewards] def fromLong(x: Long): Numeric =
     damlRight(Numeric.fromLong(scale, x))
@@ -182,10 +185,18 @@ object RewardComputationInputs extends NamedLogging {
         amuletPrice = fromBigDecimal(round.amuletPrice),
         trafficPrice = fromBigDecimal(trafficPrice),
         appRewardCouponThreshold = fromBigDecimal(rewardConfig.appRewardCouponThreshold),
-        // TODO(#7627): read from rewardConfig once the daml PR adds these fields.
-        extraFeaturedAssetActivityWeight = fromBigDecimal(BigDecimal("0.2")),
-        maxExtraFeaturedAssetActivityWeightPerAsset = fromBigDecimal(BigDecimal("0.1")),
-        dsoAppActivityWeight = fromBigDecimal(BigDecimal("0.1")),
+        extraFeaturedAssetActivityWeight = fromBigDecimal(
+          rewardConfig.extraFeaturedAssetActivityWeight.toScala
+            .fold(defaultExtraFeaturedAssetActivityWeight)(BigDecimal(_))
+        ),
+        maxExtraFeaturedAssetActivityWeightPerAsset = fromBigDecimal(
+          rewardConfig.maxExtraFeaturedAssetActivityWeightPerAsset.toScala
+            .fold(defaultMaxExtraFeaturedAssetActivityWeightPerAsset)(BigDecimal(_))
+        ),
+        dsoAppActivityWeight = fromBigDecimal(
+          rewardConfig.dsoAppActivityWeight.toScala
+            .fold(defaultDsoAppActivityWeight)(BigDecimal(_))
+        ),
       )
       // Daml doesn't bound batchSize yet, so cap it to what lookupBatchByHash will
       // serve
