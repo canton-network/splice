@@ -73,6 +73,7 @@ class GovernanceLockIntegrationTest
         amount = targetLockAmount,
       )
       val targetLock = governanceLocksFor(aliceParticipant, aliceParty).loneElement
+      eventually()(aliceWalletClient.balance().lockedQty shouldBe targetLockAmount)
 
       (alice, bob, targetLock)
     }
@@ -168,7 +169,7 @@ class GovernanceLockIntegrationTest
         )
 
         clue("bob's funds are locked in the substitution") {
-          bobWalletClient.balance().lockedQty shouldBe partialSubstitutionAmount
+          eventually()(bobWalletClient.balance().lockedQty shouldBe partialSubstitutionAmount)
         }
 
         actAndCheck(

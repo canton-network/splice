@@ -31,11 +31,19 @@ object WalletTables extends AcsTables {
       rewardCouponRound: Option[Long] = None,
       rewardCouponWeight: Option[Long] = None,
       transferPreapprovalReceiver: Option[PartyId] = None,
+      governanceLockType: Option[String] = None,
+      governanceLockSubject: Option[String] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       UserWalletAcsStoreRowData.IndexColumns.reward_coupon_round -> rewardCouponRound,
       UserWalletAcsStoreRowData.IndexColumns.reward_coupon_weight -> rewardCouponWeight,
       UserWalletAcsStoreRowData.IndexColumns.transfer_preapproval_receiver -> transferPreapprovalReceiver,
+      UserWalletAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType.map(
+        lengthLimited
+      ),
+      UserWalletAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject.map(
+        lengthLimited
+      ),
     )
   }
   object UserWalletAcsStoreRowData {
@@ -47,10 +55,14 @@ object WalletTables extends AcsTables {
       val reward_coupon_round = "reward_coupon_round"
       val reward_coupon_weight = "reward_coupon_weight"
       val transfer_preapproval_receiver = "transfer_preapproval_receiver"
+      val governance_lock_type = "governance_lock_type"
+      val governance_lock_subject = "governance_lock_subject"
       val All = Seq(
         reward_coupon_round,
         reward_coupon_weight,
         transfer_preapproval_receiver,
+        governance_lock_type,
+        governance_lock_subject,
       )
     }
   }
@@ -70,11 +82,17 @@ object WalletTables extends AcsTables {
       contract: Contract[?, ?],
       override val contractExpiresAt: Option[Timestamp] = None,
       rewardCouponRound: Option[Long] = None,
+      governanceLockType: Option[String] = None,
+      governanceLockSubject: Option[String] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       ExternalPartyWalletAcsStoreRowData.IndexColumns.reward_coupon_round -> IndexColumnValue(
         rewardCouponRound
-      )
+      ),
+      ExternalPartyWalletAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType
+        .map(lengthLimited),
+      ExternalPartyWalletAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject
+        .map(lengthLimited),
     )
   }
   object ExternalPartyWalletAcsStoreRowData {
@@ -84,7 +102,13 @@ object WalletTables extends AcsTables {
       }
     private object IndexColumns {
       val reward_coupon_round = "reward_coupon_round"
-      val All: Seq[String] = Seq(reward_coupon_round)
+      val governance_lock_type = "governance_lock_type"
+      val governance_lock_subject = "governance_lock_subject"
+      val All: Seq[String] = Seq(
+        reward_coupon_round,
+        governance_lock_type,
+        governance_lock_subject,
+      )
     }
   }
 
