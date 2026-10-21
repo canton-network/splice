@@ -654,7 +654,11 @@ publication, slot and stream before the cutover.
 5. **Fill the gap** between steps 2 and 3, for both tables in both datasets,
    with the canton-network-internal#7622 procedure, as in section 2f. Name the
    columns in its `INSERT … SELECT`: the stag-prod tables are ingestion-time
-   partitioned, and BigQuery rejects `SELECT *` without a column list. The legacy
+   partitioned, and BigQuery rejects `SELECT *` without a column list. For
+   stag-prod, fill `<dataset>_prod` directly (with `record_date`), not only
+   `<dataset>_staging`: the hourly `sp_append_*` job copies staging to prod above a
+   per-table `record_time` watermark, which the first rows after step 3 move past
+   the whole gap. The legacy
    stream uses `backfillAll`: watch whether it starts backfilling the new
    relations after step 3, and see #7622 on switching it to `--backfill-none`
    first.
