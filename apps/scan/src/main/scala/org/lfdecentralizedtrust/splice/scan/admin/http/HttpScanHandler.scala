@@ -930,13 +930,20 @@ class HttpScanHandler(
         val appActivityRecordEncoded = verdictWithViewsO.flatMap { case (v, _) =>
           appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAppActivityRecord)
         }
+        // TODO(#7837): cover these fields in the integration test.
+        val assetActivityRecordEncoded = verdictWithViewsO.flatMap { case (v, _) =>
+          appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAssetActivityRecord)
+        }
+        val submittingAppProviderEncoded = verdictWithViewsO.flatMap { case (v, _) =>
+          appActivityRecordMap.get(v.rowId).flatMap(_.submittingAppProvider)
+        }
         definitions.EventHistoryItem(
           encodedUpdateV2,
           verdictEncoded,
           trafficSummaryEncoded,
           appActivityRecordEncoded,
-          assetActivityRecords = None,
-          submittingAppProvider = None,
+          assetActivityRecords = assetActivityRecordEncoded,
+          submittingAppProvider = submittingAppProviderEncoded,
         )
       }.toVector
     }
