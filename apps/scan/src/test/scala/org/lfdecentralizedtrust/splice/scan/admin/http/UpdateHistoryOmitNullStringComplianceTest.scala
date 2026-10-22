@@ -7,6 +7,7 @@ import com.digitalasset.canton.BaseTest
 import org.lfdecentralizedtrust.splice.http.OmitNullString
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   ActivityRecord,
+  AppActivityRecord,
   CreatedEvent,
   EnvelopeTrafficSummary,
   EventHistoryAppActivityRecords,
@@ -149,7 +150,8 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
           checkNoUnsafeOptions[TransactionView]("TransactionView") ++
           checkNoUnsafeOptions[Quorum]("Quorum") ++
           checkNoUnsafeOptions[EnvelopeTrafficSummary]("EnvelopeTrafficSummary") ++
-          checkNoUnsafeOptions[ActivityRecord]("ActivityRecord")
+          checkNoUnsafeOptions[ActivityRecord]("ActivityRecord") ++
+          checkNoUnsafeOptions[AppActivityRecord]("AppActivityRecord")
 
       if (violations.nonEmpty) {
         fail(
