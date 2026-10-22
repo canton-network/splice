@@ -3946,7 +3946,7 @@ components:
             Activity records, one per provider.
           type: array
           items:
-            $ref: "#/components/schemas/ActivityRecord"
+            $ref: "#/components/schemas/AppActivityRecord"
     EventHistoryActivityRecords:
       type: object
       description: |
@@ -3964,7 +3964,25 @@ components:
     ActivityRecord:
       type: object
       description: |
-        ActivityRecord for a provider.
+        Activity record for a provider.
+      required:
+        - party
+        - weight
+      properties:
+        party:
+          description: |
+            The provider party identifier.
+          type: string
+        weight:
+          description: |
+            Activity weight in bytes of traffic.
+          type: integer
+          format: int64
+    AppActivityRecord:
+      type: object
+      description: |
+        Conceptually equal to `ActivityRecord`, but kept
+        for backwards compatibility.
       required:
         - party
         - weight
