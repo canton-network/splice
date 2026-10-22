@@ -5,7 +5,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
-import scala.util.control.NonFatal
+import com.digitalasset.canton.console.CommandFailure
 
 def requireEnv(name: String): String =
   sys.env.getOrElse(name, sys.error(s"Environment variable $name must be set"))
@@ -43,7 +43,8 @@ while (true) {
         )
         .result
       // `from` is inclusive, so the cursor is moved past the last valid-from seen to exclude it
-      val nextFrom = newTransactions.map(_.validFrom.value).maxOption.fold(from)(_.immediateSuccessor)
+      val nextFrom =
+        newTransactions.map(_.validFrom.value).maxOption.fold(from)(_.immediateSuccessor)
       (synchronizerId, newTransactions, nextFrom)
     }
 
@@ -65,7 +66,7 @@ while (true) {
 
     cursors = polled.map { case (synchronizerId, _, nextFrom) => synchronizerId -> nextFrom }.toMap
   } catch {
-    case NonFatal(e) =>
+    case e: Exception =>
       logger.warn(
         s"Topology key monitor failed to poll participant, retrying in ${pollIntervalSeconds}s",
         e,
