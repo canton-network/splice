@@ -784,6 +784,18 @@ trait SvDsoStore
     splice.governancelock.transfer.GovernanceLockTransfer,
   ]
 
+  /** List substitution proposals that are past their `expiresAt`.
+    *
+    * Implemented in `DbSvDsoStore` because the lock owner is nested at
+    * `target.owner`, which `ignoredPartyFields` cannot reach.
+    */
+  def listExpiredGovernanceLockSubstitutions(
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None
+  ): ListExpiredContracts[
+    splice.governancelock.substitution.GovernanceLockSubstitution.ContractId,
+    splice.governancelock.substitution.GovernanceLockSubstitution,
+  ]
+
   def listExpiredAnsEntries(
       unavailablePartiesStore: Option[UnavailablePartiesStore]
   ): ListExpiredContracts[
@@ -1734,6 +1746,21 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.governancelock.substitution.GovernanceLockSubstitution.COMPANION)(
+        co => co.payload.target.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        val (lockType, lockSubject) =
+          GovernanceLockUtil.specificationTypeAndSubject(contract.payload.target.specification)
+        DsoAcsStoreRowData(
+          contract,
+          governanceLockType = Some(lockType.storeValue),
+          governanceLockSubject = Some(lockSubject),
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },

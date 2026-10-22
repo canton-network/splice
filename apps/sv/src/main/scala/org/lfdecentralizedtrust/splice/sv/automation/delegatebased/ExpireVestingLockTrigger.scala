@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
+import org.lfdecentralizedtrust.splice.util.GovernanceLockUtil
 
 import scala.jdk.CollectionConverters.*
 
@@ -96,7 +97,7 @@ object ExpireVestingLockTrigger extends ContractStakeholders[splice.governancelo
     ]
 
   override def informees(payload: splice.governancelock.GovernanceLock): Seq[String] =
-    Seq(payload.owner)
+    GovernanceLockUtil.governanceLockInformees(payload)
 
   override def dso(payload: splice.governancelock.GovernanceLock): String = payload.dso
 }

@@ -15,9 +15,10 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestC
 import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, GovernanceLockUtil}
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction
 
-import java.time.Instant
+import java.time.{Duration, Instant}
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.TimeUnit
 import scala.jdk.OptionConverters.*
 
 trait GovernanceLockTest extends TokenStandardTest {
@@ -34,6 +35,9 @@ trait GovernanceLockTest extends TokenStandardTest {
   private val lockStatusMetaKey = "lock-status"
   private val lockVestingDurationMetaKey = "lock-vesting-duration-micros"
   private val lockVestingEndTimeMetaKey = "lock-vesting-end-time-micros"
+
+  private def durationToRelTime(d: Duration): RelTime =
+    new RelTime(TimeUnit.NANOSECONDS.toMicros(d.toNanos))
 
   private def instantToMicros(i: Instant): Long = ChronoUnit.MICROS.between(Instant.EPOCH, i)
 
@@ -241,8 +245,9 @@ trait GovernanceLockTest extends TokenStandardTest {
         env: SpliceTestConsoleEnvironment
     ): ChoiceContextWithDisclosures
 
-    private def defaultIsValid(receiver: String, existingCids: Set[CId]): (CId, View) => Boolean =
-      (cid, view) => transferValues.receiver(view) == receiver && !existingCids.contains(cid)
+    private def defaultIsValid(receiver: PartyId, existingCids: Set[CId]): (CId, View) => Boolean =
+      (cid, view) =>
+        transferValues.receiver(view) == receiver.toProtoPrimitive && !existingCids.contains(cid)
 
     private def transferAndList(
         actClue: String,
@@ -287,7 +292,7 @@ trait GovernanceLockTest extends TokenStandardTest {
         amount,
         makeInputLockMemo(CreateLock, lockKind, lockSubject)(()),
         wait = true,
-        defaultIsValid(lockManagerParty.toProtoPrimitive, existingCids),
+        defaultIsValid(lockManagerParty, existingCids),
       ).loneElement._1
     }
 
@@ -321,33 +326,8 @@ trait GovernanceLockTest extends TokenStandardTest {
             (unlockAmount, vestingStartTime)
           ),
           wait = false,
-          (cid, view) =>
-            defaultIsValid(lockManagerParty.toProtoPrimitive, existingCids)(cid, view) && isValid(
-              view
-            ),
+          (cid, view) => defaultIsValid(lockManagerParty, existingCids)(cid, view) && isValid(view),
         )
-      )
-    }
-
-    final def createAndUnlockGovernanceLock(
-        participant: ParticipantClientReference,
-        owner: RichPartyId,
-        lockKind: LockKind,
-        lockSubject: String,
-        lockAmount: BigDecimal,
-        unlockAmount: BigDecimal,
-        vestingStartTime: CantonTimestamp,
-        isValid: CId => View => Boolean = _ => _ => true,
-    )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-      val cid = createGovernanceLock(participant, owner, lockKind, lockSubject, lockAmount)
-      unlockGovernanceLock(
-        participant,
-        owner,
-        lockKind,
-        lockSubject,
-        unlockAmount,
-        vestingStartTime,
-        isValid(cid),
       )
     }
 
@@ -400,7 +380,7 @@ trait GovernanceLockTest extends TokenStandardTest {
           // A substitution proposed by the owner of the target lock locks no funds,
           // so no input holding is archived
           wait = owner.partyId != targetLockOwner,
-          defaultIsValid(targetLockOwner.toProtoPrimitive, existingCids),
+          defaultIsValid(targetLockOwner, existingCids),
         ).loneElement._1
       }
     }
@@ -408,6 +388,12 @@ trait GovernanceLockTest extends TokenStandardTest {
     /** Propose a substitution of a GovernanceLock */
     def substituteGovernanceLock(lock: governancelock.GovernanceLock) =
       new SubstituteLock((Locked, PartyId.tryFromProtoPrimitive(lock.owner), None, None))
+
+    /** Propose a substitution of a vesting GovernanceLock with the given attributes */
+    def substituteVestingLock(owner: PartyId, vestingPeriod: Duration, vestingEndTime: Instant) =
+      new SubstituteLock(
+        (Vesting, owner, Some(durationToRelTime(vestingPeriod)), Some(vestingEndTime))
+      )
 
     /** Propose a substitution of a vesting GovernanceLock */
     def substituteVestingLock(lock: governancelock.GovernanceLock) =
@@ -443,20 +429,26 @@ trait GovernanceLockTest extends TokenStandardTest {
           ),
           // A lock transfer proposal moves no funds, so no input holding is archived
           wait = false,
-          defaultIsValid(newLockOwner.toProtoPrimitive, existingCids),
+          defaultIsValid(newLockOwner, existingCids),
         ).loneElement._1
       }
     }
 
+    /** Propose a transfer of a GovernanceLock */
+    final def transferGovernanceLock =
+      new TransferLock((newLockOwner, transferAmount) =>
+        (Locked, newLockOwner, transferAmount, None, None)
+      )
+
     /** Propose a transfer of a vesting GovernanceLock */
-    final def transferVestingLock(lock: governancelock.GovernanceLock) =
+    final def transferVestingLock(vestingPeriod: Duration, vestingEndTime: Instant) =
       new TransferLock((newLockOwner, transferAmount) =>
         (
           Vesting,
           newLockOwner,
           transferAmount,
-          Some(vestingLockSpecification(lock).vestingPeriod),
-          Some(vestingLockSpecification(lock).endTime),
+          Some(durationToRelTime(vestingPeriod)),
+          Some(vestingEndTime),
         )
       )
   }

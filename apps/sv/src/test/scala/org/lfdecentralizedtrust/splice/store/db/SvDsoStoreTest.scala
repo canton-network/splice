@@ -319,6 +319,122 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
     }
 
+    "listExpiredGovernanceLockSubstitutions" should {
+
+      "return proposals past their expiresAt, and never those of another DSO" in {
+        val dsoSubstitution =
+          governanceLockSubstitution(userParty(1), userParty(2), time(2).toInstant)
+        val laterDsoSubstitution =
+          governanceLockSubstitution(userParty(1), userParty(3), time(4).toInstant)
+        // The 'dso' party differs from the one 'mkStore()' uses below, so this
+        // proposal is never ingested and must not show up even past its expiry.
+        val otherDsoSubstitution =
+          governanceLockSubstitution(
+            userParty(5),
+            userParty(6),
+            time(2).toInstant,
+            dso = userParty(4),
+          )
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(dsoSubstitution, laterDsoSubstitution, otherDsoSubstitution)
+          )(dummyDomain.create(_)(store.multiDomainAcsStore))
+        } yield {
+          def cidsAt(t: CantonTimestamp) = store
+            .listExpiredGovernanceLockSubstitutions(None)(t, PageLimit.tryCreate(10))(
+              TraceContext.empty
+            )
+            .futureValue
+            .map(_.contract.contractId)
+
+          cidsAt(time(1)) should be(empty)
+          // 'contract_expires_at < now' is strict: a proposal is not expired at its own expiresAt.
+          cidsAt(time(2)) should be(empty)
+          cidsAt(time(3)) should contain theSameElementsAs Seq(dsoSubstitution.contractId)
+          cidsAt(time(5)) should contain theSameElementsAs Seq(
+            dsoSubstitution.contractId,
+            laterDsoSubstitution.contractId,
+          )
+        }
+      }
+
+      "respects ignored parties, for both the proposer and the lock owner" in {
+        val proposer = userParty(1)
+        val lockOwner = userParty(2)
+        val substitution = governanceLockSubstitution(proposer, lockOwner, time(2).toInstant)
+        // A second proposal sharing neither party, so that ignoring `proposer` or
+        // `lockOwner` is shown to filter only the first one.
+        val otherSubstitution =
+          governanceLockSubstitution(userParty(3), userParty(4), time(2).toInstant)
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(Seq(substitution, otherSubstitution))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+        } yield {
+          def cidsIgnoring(ignored: Set[PartyId]) = store
+            .listExpiredGovernanceLockSubstitutions(
+              Some(new InMemoryUnavailablePartiesStore(ignored))
+            )(time(3), PageLimit.tryCreate(10))(TraceContext.empty)
+            .futureValue
+            .map(_.contract.contractId)
+
+          // An empty ignore list must not filter anything out.
+          cidsIgnoring(Set.empty) should contain theSameElementsAs
+            Seq(substitution.contractId, otherSubstitution.contractId)
+          cidsIgnoring(Set(proposer)) should contain theSameElementsAs
+            Seq(otherSubstitution.contractId)
+          cidsIgnoring(Set(lockOwner)) should contain theSameElementsAs
+            Seq(otherSubstitution.contractId)
+          // The DSO party is a signatory on both but is neither the proposer nor
+          // the lock owner, so ignoring it must not filter anything out.
+          cidsIgnoring(Set(dsoParty)) should contain theSameElementsAs
+            Seq(substitution.contractId, otherSubstitution.contractId)
+        }
+      }
+
+      "respects an ignored featured app provider, who observes the target lock" in {
+        val provider = userParty(1)
+        val faSubstitution = governanceLockSubstitution(
+          userParty(2),
+          userParty(3),
+          time(2).toInstant,
+          kind = new splice.governancelock.governancelockkind.GLK_FeaturedApp(
+            provider.toProtoPrimitive
+          ),
+        )
+        // An SV lock has no provider, so its subject never matches an ignored party.
+        val svSubstitution =
+          governanceLockSubstitution(userParty(4), userParty(5), time(2).toInstant)
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(Seq(faSubstitution, svSubstitution))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+        } yield {
+          def cidsIgnoring(ignored: Set[PartyId]) = store
+            .listExpiredGovernanceLockSubstitutions(
+              Some(new InMemoryUnavailablePartiesStore(ignored))
+            )(time(3), PageLimit.tryCreate(10))(TraceContext.empty)
+            .futureValue
+            .map(_.contract.contractId)
+
+          // The provider is neither proposer nor lock owner, so only the subject column
+          // can filter them out.
+          cidsIgnoring(Set(provider)) should contain theSameElementsAs
+            Seq(svSubstitution.contractId)
+          // An SV name never matches an ignored party, so that row survives.
+          cidsIgnoring(Set(userParty(9))) should contain theSameElementsAs
+            Seq(faSubstitution.contractId, svSubstitution.contractId)
+        }
+      }
+
+    }
+
     "contractFilter" should {
 
       "ingest GovernanceLocks scoped to the DSO party" in {
@@ -2467,6 +2583,40 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       payload = template,
     )
   }
+
+  private def governanceLockSubstitution(
+      proposer: PartyId,
+      lockOwner: PartyId,
+      expiresAt: Instant,
+      kind: splice.governancelock.GovernanceLockKind =
+        new splice.governancelock.governancelockkind.GLK_SuperValidatorRightsOwner("sv1"),
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    splice.governancelock.substitution.GovernanceLockSubstitution.ContractId,
+    splice.governancelock.substitution.GovernanceLockSubstitution,
+  ] =
+    contract(
+      identifier =
+        splice.governancelock.substitution.GovernanceLockSubstitution.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId =
+        new splice.governancelock.substitution.GovernanceLockSubstitution.ContractId(contractId),
+      payload = new splice.governancelock.substitution.GovernanceLockSubstitution(
+        new splice.governancelock.GovernanceLockKey(
+          dso.toProtoPrimitive,
+          lockOwner.toProtoPrimitive,
+          new splice.governancelock.governancelockspecification.GLS_FullLock(
+            new splice.governancelock.FullLockSpecification(kind)
+          ),
+        ),
+        proposer.toProtoPrimitive,
+        BigDecimal(10).bigDecimal,
+        Optional.empty(),
+        Instant.EPOCH,
+        expiresAt,
+        Optional.empty(),
+      ),
+    )
 
   private def governanceLockTransfer(
       sender: PartyId,
