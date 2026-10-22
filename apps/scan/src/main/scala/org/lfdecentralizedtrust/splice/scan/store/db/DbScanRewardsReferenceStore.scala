@@ -193,8 +193,8 @@ class DbScanRewardsReferenceStore private (
                     recordTime -> ScanRewardsReferenceStore.ActiveRoundInfo(
                       roundNumber = r.contract.payload.round.number.toLong,
                       opensAt = opensAt,
-                      assetActivityParams = r.contract.payload.rewardConfig.toScala
-                        .flatMap(AssetActivityParams.fromRewardConfig),
+                      assetActivityParams = AssetActivityParams
+                        .fromRewardConfig(r.contract.payload.rewardConfig.toScala),
                     )
                   }
                 }
