@@ -769,7 +769,7 @@ class DbScanAppRewardsStoreTest
           .computeAndStoreRewards(roundNumber, batchSize = 100, inputs = testInputs)
           .failed
       } yield {
-        result.getMessage should include("exceeds the shared featured-app issuance budget")
+        result.getMessage should include("exceeds the sum of app-side and asset-side allocations")
       }
     }
   }
@@ -785,11 +785,10 @@ class DbScanAppRewardsStoreTest
         threshold_CC = BigDecimal(0),
         totalIssuanceForFeaturedAppRewards = totalIssuance,
         unclaimedAppRewardAmount = BigDecimal(0),
+        issuancePerFeaturedAppBurnCC = BigDecimal(0),
         issuancePerFeaturedAssetBurnCC = BigDecimal(0),
         issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
         totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-        issuancePerFeaturedAppBurnCC = BigDecimal(0),
-        featuredAppMintingAllowanceCC = BigDecimal(0),
       )
 
     def insertRoundTotal(historyId: Long, round: Long, amount: BigDecimal): Future[Unit] =
@@ -836,7 +835,7 @@ class DbScanAppRewardsStoreTest
           )
         ).failed
       } yield {
-        result.getMessage should include("exceeds the shared featured-app issuance budget")
+        result.getMessage should include("exceeds the sum of app-side and asset-side allocations")
       }
     }
 
@@ -871,11 +870,10 @@ class DbScanAppRewardsStoreTest
           threshold_CC = Threshold.Half,
           totalIssuanceForFeaturedAppRewards = BigDecimal("10.0"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
           totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -898,11 +896,10 @@ class DbScanAppRewardsStoreTest
           threshold_CC = Threshold.Half,
           totalIssuanceForFeaturedAppRewards = BigDecimal("10.3"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
           totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -923,11 +920,10 @@ class DbScanAppRewardsStoreTest
           threshold_CC = Threshold.Half,
           totalIssuanceForFeaturedAppRewards = BigDecimal("0.5"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
           totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -948,11 +944,10 @@ class DbScanAppRewardsStoreTest
           threshold_CC = Threshold.Zero,
           totalIssuanceForFeaturedAppRewards = BigDecimal("6.666666"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
           totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -971,11 +966,10 @@ class DbScanAppRewardsStoreTest
           threshold_CC = Threshold.Half,
           totalIssuanceForFeaturedAppRewards = BigDecimal("2.0"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
           totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -996,11 +990,10 @@ class DbScanAppRewardsStoreTest
           threshold_CC = Threshold.One,
           totalIssuanceForFeaturedAppRewards = BigDecimal("0.3"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
           totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 0,
@@ -1019,13 +1012,12 @@ class DbScanAppRewardsStoreTest
         params = RewardIssuanceParams(
           issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
           threshold_CC = Threshold.Half,
-          totalIssuanceForFeaturedAppRewards = BigDecimal("10.0"),
+          totalIssuanceForFeaturedAppRewards = BigDecimal("0"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("2.0"),
           totalIssuanceForFeaturedAssetRewards = BigDecimal("10.0"),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -1047,13 +1039,12 @@ class DbScanAppRewardsStoreTest
         params = RewardIssuanceParams(
           issuancePerFeaturedAppTraffic_CCperMB = IssuanceRate.Two,
           threshold_CC = Threshold.Half,
-          totalIssuanceForFeaturedAppRewards = BigDecimal("10.0"),
+          totalIssuanceForFeaturedAppRewards = BigDecimal("2.0"),
           unclaimedAppRewardAmount = BigDecimal("2.0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("3.0"),
           totalIssuanceForFeaturedAssetRewards = BigDecimal("6.0"),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal("2.0"),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 1,
@@ -1075,13 +1066,12 @@ class DbScanAppRewardsStoreTest
         params = RewardIssuanceParams(
           issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
           threshold_CC = Threshold.Half,
-          totalIssuanceForFeaturedAppRewards = BigDecimal("0.25"),
+          totalIssuanceForFeaturedAppRewards = BigDecimal("0"),
           unclaimedAppRewardAmount = BigDecimal("0"),
+          issuancePerFeaturedAppBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurnCC = BigDecimal(0),
           issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("0.05"),
           totalIssuanceForFeaturedAssetRewards = BigDecimal("0.25"),
-          issuancePerFeaturedAppBurnCC = BigDecimal(0),
-          featuredAppMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
           partyTotalCount = 0,
