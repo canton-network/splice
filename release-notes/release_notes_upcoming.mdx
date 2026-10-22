@@ -9,6 +9,15 @@
       - `asset_activity_records`: asset-side activity records parallel to `app_activity_records`.
       - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app.
 
+    - `/v0/reward-accounting/.../activity-totals` responses include five new required fields describing the app- and asset-side split of featured-app rewards:
+
+      - `total_asset_activity_weight`: total asset-activity weight for the round.
+      - `total_app_reward_from_app_activity`: app-source portion of the featured-app minting allowance.
+      - `total_app_reward_from_asset_activity`: asset-source portion of the featured-app minting allowance.
+      - `issuance_per_featured_app_activity`: CC rewarded per CC of featured app-activity coupon issued this round.
+      - `issuance_per_featured_asset_activity`: ratio of Amulet minted per Amulet burned for asset activity.
+
+      `total_app_reward_minting_allowance` now carries the combined app + asset allocation.
 
     - The following request fields now have a `maxItems` bound of 1000; requests exceeding it are rejected with 400:
 
