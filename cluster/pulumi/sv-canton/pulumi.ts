@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as automation from '@pulumi/pulumi/automation';
 
+import { clusterDSyncsConfiguration } from '../common-sv/src/dSyncNode';
 import { allSvNamesToDeploy } from '../common-sv/src/dsoConfig';
 import { DeploySvRunbook, isDevNet } from '../common/src/config';
 import { spliceEnvConfig } from '../common/src/config/envConfig';
@@ -35,7 +36,8 @@ export function pulumiOptsForMigration(
 export async function stackForMigration(
   nodeName: string,
   migrationId: DomainMigrationIndex,
-  requiresExistingStack: boolean
+  requiresExistingStack: boolean,
+  nodeType: 'sv' | 'dsync' = 'sv'
 ): Promise<automation.Stack> {
   return stack(
     'sv-canton',
@@ -43,7 +45,8 @@ export async function stackForMigration(
     requiresExistingStack,
     {
       SPLICE_MIGRATION_ID: migrationId.toString(),
-      SPLICE_SV: nodeName,
+      ...(nodeType === 'sv' ? { SPLICE_SV: nodeName } : {}),
+      ...(nodeType === 'dsync' ? { SPLICE_DSYNC_NODE: nodeName } : {}),
     }
   );
 }
@@ -81,6 +84,26 @@ export function runSvCantonForAllMigrations<T>(
     forceMigrations,
     onlyMigrationsFollowingCurrentReference
   );
+}
+
+export function runSvCantonForDsyncForAllMigrations<T>(
+  operation: string,
+  runForStack: (stack: automation.Stack, migration: MigrationInfo, dsyncNode: string) => Promise<T>,
+  requiresExistingStack: boolean,
+): { name: string; promise: Promise<T> }[] {
+  return Object.values(clusterDSyncsConfiguration).flatMap(dsync => {
+    return Object.keys(dsync.nodes).flatMap(dsyncNode => {
+      return dsync.migrationConfig.allMigrations.map(migration => {
+        return {
+          name: `${operation}-canton-M${migration.id}-${dsyncNode}`,
+          // eslint-disable-next-line promise/prefer-await-to-then
+          promise: stackForMigration(dsyncNode, migration.id, requiresExistingStack, 'dsync').then(stack => {
+            return runForStack(stack, migration, dsyncNode);
+          }),
+        };
+      });
+    });
+  });
 }
 
 export function runSvCantonForSvs<T>(

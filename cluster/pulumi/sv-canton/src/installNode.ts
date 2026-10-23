@@ -9,8 +9,12 @@ import {
   supportsSvRunbookReset,
 } from '@canton-network/splice-pulumi-common';
 import {
+  configForDSyncNode,
   configForSv,
+  dSyncMigrationConfigForNode,
   InstalledMigrationSpecificSv,
+  StaticSvConfig,
+  staticSvConfigFromDSyncNodeConfig,
   sv1Config,
   svConfigs,
   svRunbookConfig,
@@ -20,21 +24,36 @@ import { installCantonComponents } from './canton';
 
 export async function installNode(
   migrationId: DomainMigrationIndex,
-  sv: string,
-  auth0Client: Auth0Client
+  auth0Client: Auth0Client,
+  nodeName: string,
+  nodeType: 'sv' | 'dsync'
 ): Promise<InstalledMigrationSpecificSv | undefined> {
-  const svConfig = svConfigs.concat([svRunbookConfig]).find(config => {
-    return config.nodeName === sv;
-  });
-  if (svConfig === undefined) {
-    throw new Error(`No sv config found for ${sv}`);
+  let nodeConfig: StaticSvConfig;
+  if (nodeType === 'sv') {
+    const svConfig = svConfigs.concat([svRunbookConfig]).find(config => {
+      return config.nodeName === nodeName;
+    });
+    if (svConfig === undefined) {
+      throw new Error(`No sv config found for ${nodeName}`);
+    }
+    nodeConfig = svConfig!;
+  } else if (nodeType === 'dsync') {
+    const dsyncNodeConfig = staticSvConfigFromDSyncNodeConfig(nodeName);
+    if (dsyncNodeConfig === undefined) {
+      throw new Error(`No dsync node config found for ${nodeName}`);
+    }
+    nodeConfig = {
+      ...dsyncNodeConfig,
+    };
+  } else {
+    throw new Error(`Unknown node type ${nodeType} for ${nodeName}`);
   }
-  const nodeConfig = svConfig!;
   const isCoreSv = nodeConfig.nodeName !== svRunbookConfig.nodeName;
   const isFirstSv = nodeConfig.nodeName === sv1Config.nodeName;
   const isSvRunbook = nodeConfig.nodeName === svRunbookConfig.nodeName;
 
-  const config = configForSv(nodeConfig.nodeName);
+  const config =
+    nodeType === 'sv' ? configForSv(nodeConfig.nodeName) : configForDSyncNode(nodeConfig.nodeName);
   const supportsReset = isSvRunbook ? supportsSvRunbookReset : undefined;
 
   // namespace lifecycle is managed by the main canton-network stack
@@ -42,6 +61,11 @@ export async function installNode(
 
   const serviceAccountName = `sv-canton-migration-${migrationId}`;
   const imagePullDeps = imagePullSecretWithNonDefaultServiceAccount(xns, serviceAccountName);
+
+  const migrationConfig =
+    nodeType === 'sv'
+      ? DecentralizedSynchronizerUpgradeConfig
+      : dSyncMigrationConfigForNode(nodeName);
 
   return await installCantonComponents(
     xns,
@@ -55,7 +79,8 @@ export async function installNode(
       isCoreSv: isCoreSv,
       ...config,
     },
-    DecentralizedSynchronizerUpgradeConfig,
+    migrationConfig,
+    nodeType,
     undefined,
     { dependsOn: imagePullDeps },
     supportsReset,

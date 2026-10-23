@@ -28,6 +28,7 @@ export async function installCantonComponents(
     isCoreSv: boolean;
   } & SingleSvConfiguration,
   migrationConfig: DecentralizedSynchronizerMigrationConfig,
+  ledgerApiConsumerAppName: 'sv' | 'dsync',
   dbs?: {
     participant: Postgres;
     mediator: Postgres;
@@ -40,14 +41,14 @@ export async function installCantonComponents(
   const isActiveMigration = migrationConfig.active.id === migrationId;
 
   const auth0Config = auth0Client.getCfg();
-  const ledgerApiUserSecret = installLedgerApiUserSecret(
+  const ledgerApiUserSecret = await installLedgerApiUserSecret(
     auth0Client,
     xns,
-    `sv-canton-migration-${migrationId}`,
-    'sv'
+    `${ledgerApiConsumerAppName}-canton-migration-${migrationId}`,
+    ledgerApiConsumerAppName
   );
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource(
-    `sv-canton-migration-${migrationId}`,
+    `${ledgerApiConsumerAppName}-canton-migration-${migrationId}`,
     true
   );
 

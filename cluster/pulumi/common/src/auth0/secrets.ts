@@ -11,7 +11,7 @@ function lookupClientSecrets(
   allSecrets: Auth0SecretMap,
   auth0Client: Auth0Client,
   namespace: string,
-  app: 'sv' | 'validator' | 'splitwell'
+  app: 'sv' | 'validator' | 'splitwell' | 'dsync'
 ): Auth0ClientSecret {
   const appClientId = getClientId(auth0Client, app, namespace);
 
@@ -56,7 +56,7 @@ function getUiClientId(
 async function ledgerApiSecretContent(
   auth0Client: Auth0Client,
   allSecrets: Auth0SecretMap,
-  clientName: 'sv' | 'validator' | 'splitwell',
+  clientName: 'sv' | 'validator' | 'splitwell' | 'dsync',
   namespace: string
 ): Promise<Record<string, string>> {
   const cfg = auth0Client.getCfg();
@@ -116,7 +116,7 @@ export async function installLedgerApiUserSecret(
   auth0Client: Auth0Client,
   xns: ExactNamespace,
   secretNameApp: string,
-  clientName: 'sv' | 'validator' | 'splitwell'
+  clientName: 'sv' | 'validator' | 'splitwell' | 'dsync'
 ): Promise<k8s.core.v1.Secret> {
   const secrets = await auth0Client.getSecrets();
   const secret = await ledgerApiSecretContent(auth0Client, secrets, clientName, xns.logicalName);
@@ -142,7 +142,7 @@ export async function installLedgerApiUserSecret(
 // TODO(#2873): remove this after applying once
 function legacyResourceName(
   xns: ExactNamespace,
-  clientName: 'sv' | 'validator' | 'splitwell'
+  clientName: 'sv' | 'validator' | 'splitwell' | 'dsync'
 ): string {
   // Currently, for no good reason, we have sv-1 vs sv1_validator naming inconsistency.
   // To make things worse, the sv-da-1 namespace is even more special and has sv-da-1 vs sv-da-1_validator.
@@ -191,7 +191,7 @@ function legacyResourceName(
 async function installLedgerApiSecret(
   auth0Client: Auth0Client,
   xns: ExactNamespace,
-  clientName: 'sv' | 'validator' | 'splitwell'
+  clientName: 'sv' | 'validator' | 'splitwell' | 'dsync'
 ): Promise<k8s.core.v1.Secret> {
   const secrets = await auth0Client.getSecrets();
   const secret = await ledgerApiSecretContent(auth0Client, secrets, clientName, xns.logicalName);

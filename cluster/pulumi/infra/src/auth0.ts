@@ -16,6 +16,7 @@ import {
   ResolvedOutput,
   resolvedOutput,
 } from '@canton-network/splice-pulumi-common';
+import { allDSyncNodeNames } from '@canton-network/splice-pulumi-common-sv/src/dSyncNode';
 import { dsoSize } from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import {
   standardSvConfigsBasic,
@@ -26,8 +27,6 @@ import {
   validatorIngressName,
 } from '@canton-network/splice-pulumi-common-validator/src/config';
 import _ from 'lodash';
-
-import { infraConfig } from './config';
 
 function tokenLifetime(): number {
   return fixedTokens() ? 2592000 : 86400; // TODO(DACH-NY/canton-network-internal#2114): Move this to the cluster config? We want it to be long for fixed token clusters
@@ -672,7 +671,8 @@ function auth0ForDSyncNamespace(
 }
 
 function dsyncAuth0(clusterBasename: string): pulumi.Output<Auth0Config> | undefined {
-  if (!infraConfig.supportDsync) {
+  const dsyncNodeNames = allDSyncNodeNames();
+  if (dsyncNodeNames.length === 0) {
     return undefined;
   }
   const domain = 'canton-network-dsync-test.us.auth0.com';
@@ -683,13 +683,13 @@ function dsyncAuth0(clusterBasename: string): pulumi.Output<Auth0Config> | undef
     clientId,
     clientSecret,
   });
-  const configs = [1, 2, 3, 4].map(i =>
-    auth0ForDSyncNamespace(clusterBasename, `dsync-op-${i}`, provider)
+  const configs = dsyncNodeNames.map(nodeName =>
+    auth0ForDSyncNamespace(clusterBasename, nodeName, provider)
   );
   return pulumi.all(configs).apply(cfgs => {
     const namespacedConfig: NamespacedAuth0Configs = {};
     cfgs.forEach((cfg, i) => {
-      namespacedConfig[`dsync-op-${i + 1}`] = cfg;
+      namespacedConfig[dsyncNodeNames[i]] = cfg;
     });
     return {
       namespacedConfigs: namespacedConfig,

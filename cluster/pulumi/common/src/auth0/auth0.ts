@@ -164,6 +164,7 @@ export function auth0UserNameEnvVarSource(
 export enum Auth0ClientType {
   RUNBOOK,
   MAINSTACK,
+  DSYNC,
 }
 
 export function getAuth0ClusterConfig(): Output<Auth0ClusterConfig> {
@@ -210,6 +211,17 @@ export function getAuth0Config(clientType: Auth0ClientType): Output<Auth0Fetch> 
           return new Auth0Fetch(cfg);
         });
       }
+    case Auth0ClientType.DSYNC:
+      if (!auth0ClusterCfg.dSync) {
+        throw new Error('missing dSync auth0 output');
+      }
+      return auth0ClusterCfg.dSync.apply(cfg => {
+        if (!cfg) {
+          throw new Error('missing dSync auth0 output');
+        }
+        cfg.auth0MgtClientSecret = config.requireEnv('AUTH0_DSYNC_MANAGEMENT_API_CLIENT_SECRET');
+        return new Auth0Fetch(cfg);
+      });
   }
 }
 
@@ -219,14 +231,16 @@ export function getNamespaceConfig(
 ): Auth0NamespaceConfig {
   const nsConfig = auth0Config.namespacedConfigs[namespace];
   if (!nsConfig) {
-    throw new Error(`No Auth0 configuration for namespace ${namespace}`);
+    throw new Error(
+      `No Auth0 configuration for namespace ${namespace} (found only: ${auth0Config.namespacedConfigs ? Object.keys(auth0Config.namespacedConfigs).join(', ') : 'none'})`
+    );
   }
   return nsConfig;
 }
 
 export function getClientId(
   auth0: Auth0Client | Auth0Config,
-  clientName: 'sv' | 'validator' | 'splitwell',
+  clientName: 'sv' | 'validator' | 'splitwell' | 'dsync',
   namespace: string
 ): string {
   const config = 'getCfg' in auth0 ? auth0.getCfg() : auth0;
@@ -234,9 +248,11 @@ export function getClientId(
     case 'sv':
       return getNamespaceConfig(config, namespace).backendClientIds.svApp!;
     case 'validator':
-      return getNamespaceConfig(config, namespace).backendClientIds.validator;
+      return getNamespaceConfig(config, namespace).backendClientIds.validator!;
     case 'splitwell':
       return getNamespaceConfig(config, namespace).backendClientIds.splitwell!;
+    case 'dsync':
+      return getNamespaceConfig(config, namespace).backendClientIds.dSync!;
   }
 }
 
