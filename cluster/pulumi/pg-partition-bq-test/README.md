@@ -12,8 +12,8 @@ its own publication, replication slot and BigQuery dataset:
 
 - the **stag-prod** stream: `appendOnly`, `backfillNone`, and HOUR
   ingestion-time partitioning. Most checks below are on its dataset.
-- the **legacy** stream: merge mode and `backfillAll`. It is here to check that
-  the renamed `*_legacy` table never reaches BigQuery, even with backfill
+- the **legacy** stream: merge mode and `backfillAll`. It is here to check what
+  reaches BigQuery from the renamed `*_legacy` table, also with backfill
   (sections 2d to 2f). Both streams list their tables by name in `includeObjects`.
 
 The publications and replication slots are created by the real
@@ -418,10 +418,10 @@ SELECT slot_name, active, pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_
 -- slots advancing
 ```
 
-Nothing writes to the `*_legacy` tables after V078, but the publications still
-publish them, so write to the legacy table here: its changes reach both slots,
-and both streams must drop them, because neither names that table. A distinct
-`row_id` and payload make any change that lands in BigQuery stand out:
+Nothing writes to the `*_legacy` tables after V078: V078 only renames them, and
+scan only reads them. But the publications still publish them, so write to the
+legacy table here to see where its changes go. A distinct `row_id` and payload
+make any change that lands in BigQuery stand out:
 
 ```sql
 INSERT INTO sim_update_history_c_x_legacy (row_id, record_time, payload)
@@ -455,8 +455,24 @@ SELECT 'stag-prod' AS ds, row_id, payload
 UNION ALL
 SELECT 'legacy', row_id, payload
   FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` WHERE payload LIKE 'legacy-%';
--- expect no rows: the writes to the legacy table went nowhere
+-- seen in a real run: 1000, legacy-insert and 1, legacy-update, in each dataset
+
+SELECT row_id, payload, datastream_metadata.change_type
+  FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` WHERE row_id IN (1, 1000)
+  ORDER BY row_id, datastream_metadata.source_timestamp;
+-- 1, pre-cutover …, INSERT, then the probe's two rows; record their change types
 ```
+
+- **Seen in a real run:** no table named after the legacy table appears, but
+  both streams apply the legacy table's changes to the BigQuery table of its
+  **old name**. Datastream apparently keeps the relation it resolved at stream
+  start rather than following the name. In the merge-mode legacy dataset, the
+  update overwrote the pre-cutover row 1. So between the release and the
+  config change, any DML on a `*_legacy` table reaches BigQuery; a `DELETE`
+  would remove rows from the legacy dataset. After 2e the legacy table is out
+  of the publications, and its changes no longer reach the slots.
+- The probe rows stay in BigQuery for the rest of the test; the expectations
+  below include them.
 
 - **Expected:** both streams stay `RUNNING`, and nothing flags the gap: the
   console's stream details Objects tab lists `partition_test.sim_update_history_c_x`
@@ -515,7 +531,8 @@ Check BigQuery:
 
 SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
--- expect post-fix, 4, 18, 21 and pre-cutover, 5, 1, 5; no gap rows
+-- expect legacy-insert, 1, 1000, 1000 and legacy-update, 1, 1, 1 (the 2d probe),
+-- post-fix, 4, 18, 21 and pre-cutover, 5, 1, 5; no gap rows
 
 SELECT column_name, data_type FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.COLUMNS
   WHERE table_name = 'partition_test_sim_update_history_c_x' ORDER BY ordinal_position;
@@ -523,8 +540,9 @@ SELECT column_name, data_type FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.COLUMNS
 
 SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
--- expect post-fix, 4, 18, 21 and pre-cutover, 5, 1, 5, as in stag-prod, unless
--- the legacy stream backfilled the new parent by itself (then also gap, 12, 6, 17)
+-- expect legacy-insert, 1, 1000, 1000 and legacy-update, 1, 1, 1 (the 2d probe),
+-- post-fix, 4, 18, 21 and pre-cutover, 4, 2, 5 (row 1 was overwritten in 2d),
+-- and, if the legacy stream backfilled the new parent by itself, gap, 12, 6, 17
 
 SELECT column_name FROM \`$BQ_DATASET_LEGACY\`.INFORMATION_SCHEMA.KEY_COLUMN_USAGE
   WHERE table_name = 'partition_test_sim_update_history_c_x' ORDER BY ordinal_position;
@@ -571,12 +589,12 @@ Wait a few minutes, then:
 
 SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
--- expect gap, 12, 6, 17 and post-fix, 4, 18, 21 and pre-cutover, 5, 1, 5:
--- the gap is filled, and the pre-cutover rows, which only the legacy table
--- has, are untouched
+-- expect gap, 12, 6, 17, legacy-insert, 1, 1000, 1000, legacy-update, 1, 1, 1,
+-- post-fix, 4, 18, 21 and pre-cutover, 4, 2, 5: the gap is filled, and the
+-- rows only the legacy table has are untouched
 
 -- re-run the legacy-insert/legacy-update query from 2d
--- expect no rows
+-- expect the same 4 rows as in 2d: the backfill reads only the new parent
 ```
 
 - **Record:** whether the backfill duplicates or changes any row in the
@@ -592,6 +610,7 @@ WITH base_ids AS (
   SELECT row_id, LEAD(row_id) OVER (ORDER BY row_id) AS next_row_id
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`
   WHERE ingested_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+    AND payload NOT LIKE 'legacy-%'  -- the 2d probe; not part of #7622
 )
 SELECT row_id + 1 AS gap_start_id, next_row_id - 1 AS gap_end_id,
        next_row_id - row_id - 1 AS missing_count
@@ -674,11 +693,11 @@ Verify, and clean up:
 
 SELECT datastream_metadata IS NULL AS backfilled, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
--- expect false, 9, 1, 21 and true, 12, 6, 17
+-- expect false, 11, 1, 1000 (including the 2 probe rows from 2d) and true, 12, 6, 17
 
 SELECT row_id, count(*) FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`
   GROUP BY row_id HAVING count(*) > 1;
--- expect no rows, empty output (meaning no duplicates)
+-- expect only 1, 2: the original row 1 and the 2d probe's update of it
 ```
 
 ```bash
@@ -716,7 +735,7 @@ SELECT count(*) FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\`;
 -- expect 17, unchanged from section 2
 
 SELECT count(*) FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`;
--- expect 21, unchanged from section 2
+-- expect 23, unchanged from section 2 (21 and the 2 probe rows from 2d)
 
 SELECT datastream_metadata.change_type, count(*)
   FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\` GROUP BY 1;
@@ -724,13 +743,14 @@ SELECT datastream_metadata.change_type, count(*)
 
 SELECT datastream_metadata.change_type, count(*)
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
--- expect NULL, 12 (the rows filled in 2f) and INSERT, 9 (no DELETE)
+-- expect NULL, 12 (the rows filled in 2f), INSERT, 10 (9 and the probe's insert)
+-- and the probe's update, 1, with the change type recorded in 2d; no DELETE
 
 SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_scan_verdict_store\`;
 -- expect 17, unchanged from section 2
 
 SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\`;
--- expect 21, unchanged from section 2
+-- expect 22, unchanged from section 2 (rows 1 to 21 and the probe's 1000)
 ```
 
 - **Expected:** both streams are still `RUNNING`.
@@ -739,7 +759,8 @@ SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\
 
 The above was run and confirmed on a real scratchnet cluster at `a0d914e224434db747f006522747fc6f5737d2da` on 2026-10-21,
 except the legacy-shaped stream and the writes to and backfill around the
-`*_legacy` table, which were added after that run and have not been run yet.
+`*_legacy` table, which were added after that run. Those were run through 2d
+on 2026-10-24, with the results recorded there.
 
 The earlier procedure, whose migration altered the
 publication itself, was verified in a real test as of
@@ -798,7 +819,12 @@ publication, slot and stream before the cutover.
    relations after step 3, and see #7622 on switching it to `--backfill-none`
    first. Sections 2e and 2f show whether it does, and whether a manual
    backfill of the new parents fills the legacy dataset instead.
-6. **Don't** change anything that would replace the pub/slot commands: no
+6. **Don't** write to the `*_legacy` tables between steps 2 and 3, not even to
+   prune them by `DELETE`: they are still in both publications, and Datastream
+   applies their changes to the BigQuery tables of the old names (section 2d).
+   As of PR 7770 nothing does: V078 only renames them, and scan only reads them.
+   Pruning them with `DROP TABLE` is DDL, which logical replication doesn't emit.
+7. **Don't** change anything that would replace the pub/slot commands: no
    `triggers`, no renamed resources, no `--replace`. A replace runs
    `delete-pub-rep-slot`, which drops the slot.
 
