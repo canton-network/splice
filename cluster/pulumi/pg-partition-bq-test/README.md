@@ -755,6 +755,59 @@ SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\
 
 - **Expected:** both streams are still `RUNNING`.
 
+### `DELETE` on the new parent while it is published
+
+Scan deletes from the new parents by name, for example to clean up after a
+domain migration. Logical replication rejects an `UPDATE` or `DELETE` on a
+published table without a replica identity, so check that the partitions
+have one, through the parent's primary key:
+
+```sql
+SELECT c.relname, c.relreplident, i.indexrelid::regclass AS pk
+  FROM pg_class c LEFT JOIN pg_index i ON i.indrelid = c.oid AND i.indisprimary
+  WHERE c.relname LIKE 'sim_update_history_c_x%' AND c.relkind IN ('p', 'r') ORDER BY 1;
+-- every row has d (default: the primary key) and a primary key index
+```
+
+Delete a gap row, which reached BigQuery through 2f, and a post-fix row, which
+reached it through the stream:
+
+```sql
+DELETE FROM sim_update_history_c_x WHERE row_id IN (10, 18)
+  RETURNING tableoid::regclass, row_id;
+-- sim_update_history_c_x_p<today>, 10 and sim_update_history_c_x_p<today>, 18
+-- DELETE 2
+```
+
+Wait a few minutes, then:
+
+```sql
+SELECT row_id, payload, datastream_metadata.change_type
+  FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`
+  WHERE datastream_metadata.change_type = 'DELETE' ORDER BY 1;
+-- expect 10 and 18, DELETE: appended under the parent's name, not the partition's
+
+SELECT count(*) FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`;
+-- expect 25 (23 and the 2 DELETE rows)
+
+SELECT row_id FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\`
+  WHERE row_id IN (10, 18);
+-- expect no rows: the merge removed both
+
+SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\`;
+-- expect 20 (22 minus 2)
+
+-- the table list
+-- expect no change: no per-partition table
+```
+
+- **Expected:** both streams are still `RUNNING`, with no error for the object.
+- **Record:**
+  - what the stag-prod `DELETE` rows carry besides the key, `(row_id, record_time)`;
+    with the default replica identity, Postgres sends only the key columns;
+  - whether the legacy-shaped dataset removed the rows, given the merge key
+    recorded in 2e.
+
 ## 4. Test status
 
 The above was run and confirmed on a real scratchnet cluster at `a0d914e224434db747f006522747fc6f5737d2da` on 2026-10-21,
