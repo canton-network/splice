@@ -479,7 +479,7 @@ SELECT row_id, payload, datastream_metadata.change_type
   console's stream details Objects tab lists `partition_test.sim_update_history_c_x`
   as normal (seen in a real run, for the stag-prod stream). Only the row counts
   above reveal it.
-- **Record:** whether either stream reports an error for the writes to the
+- **Seen in a real run:** neither stream reports an error for the writes to the
   legacy table, in `streams describe` or `objects list`.
 
 ### 2e. The config change: the operator re-runs `bigquery-cloudsql.sh`
