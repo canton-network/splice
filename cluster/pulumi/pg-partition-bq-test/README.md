@@ -542,30 +542,31 @@ SELECT column_name, data_type FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.COLUMNS
 SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
 -- expect legacy-insert, 1, 1000, 1000 and legacy-update, 1, 1, 1 (the 2d probe),
--- post-fix, 4, 18, 21 and pre-cutover, 4, 2, 5 (row 1 was overwritten in 2d),
--- and, if the legacy stream backfilled the new parent by itself, gap, 12, 6, 17
+-- post-fix, 4, 18, 21 and pre-cutover, 4, 2, 5 (row 1 was overwritten in 2d);
+-- no gap rows
 
 SELECT column_name FROM \`$BQ_DATASET_LEGACY\`.INFORMATION_SCHEMA.KEY_COLUMN_USAGE
   WHERE table_name = 'partition_test_sim_update_history_c_x' ORDER BY ordinal_position;
--- the merge key of the legacy-shaped table
+-- seen in a real run: row_id
 ```
 
 - **Expected:** both streams stay `RUNNING`.
 - **Seen in a real run:** the BigQuery table is still clustered on `row_id`
   only, although the new parent's primary key is `(row_id, record_time)`.
-- **Record:**
-  - whether the legacy stream backfills `partition_test.sim_update_history_c_x`
-    by itself after `SET TABLE`: `objects list --stream="$STREAM_LEGACY"` shows
-    the object's backfill job, and the gap rows appear in the query above;
-  - the merge key above, and whether the legacy stream reports an error for the
-    object now that the source's primary key is `(row_id, record_time)`.
+- **Seen in a real run:**
+  - the legacy stream does not backfill `partition_test.sim_update_history_c_x`
+    by itself after `SET TABLE`, despite `backfillAll`: `objects list
+    --stream="$STREAM_LEGACY"` shows no backfill job, and no gap rows arrive;
+  - the merge key stays `row_id`, the key the table was created with, although
+    the source's primary key is now `(row_id, record_time)`, and the legacy
+    stream reports no error for the object.
 
 ### 2f. Fill the gap
 
 **Legacy-shaped dataset: Datastream backfill.** Backfill the object on the
 legacy stream. This reads the new parent by its name, and is the second check
-that the `*_legacy` table never reaches BigQuery. Skip `start-backfill` if 2e
-recorded that the stream already backfilled the object by itself.
+that the `*_legacy` table never reaches BigQuery. As 2e shows, the stream
+does not start this backfill by itself.
 
 ```bash
 OBJECT=$(gcloud datastream objects lookup --stream="$STREAM_LEGACY" --location=us-central1 \
@@ -806,8 +807,8 @@ SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\
 - **Record:**
   - what the stag-prod `DELETE` rows carry besides the key, `(row_id, record_time)`;
     with the default replica identity, Postgres sends only the key columns;
-  - whether the legacy-shaped dataset removed the rows, given the merge key
-    recorded in 2e.
+  - whether the legacy-shaped dataset removed the rows, given its merge key
+    `row_id` (2e).
 
 ## 4. Test status
 
