@@ -804,8 +804,8 @@ SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\
 -- expect no change: no per-partition table
 ```
 
-- **Expected:** both streams are still `RUNNING`, with no error for the object.
 - **Seen in a real run:**
+  - both streams are still `RUNNING`, with no error for the object;
   - the stag-prod `DELETE` rows carry `row_id`, `record_time` and
     `datastream_metadata`, with `ingested_at`, `payload` and `payload_interned`
     null: with the default replica identity, Postgres sends only the key
