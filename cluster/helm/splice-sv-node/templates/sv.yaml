@@ -49,11 +49,9 @@ spec:
           imagePullPolicy: {{ . }}
           {{- end }}
           env:
-            {{- if .Values.persistentDataPvc }}
             - name: ADDITIONAL_CONFIG_ONBOARDING_SNAPSHOTS
               value: |
-                canton.sv-apps.sv.onboarding-snapshots.directory = "/persistent-data/onboarding-snapshots"
-            {{- end }}
+                canton.sv-apps.sv.onboarding-snapshots.directory = "/onboarding-snapshots"
             - name: JAVA_TOOL_OPTIONS
               value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
             {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "sv" "keyName" "sv" "fixedTokens" .Values.cluster.fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
@@ -583,6 +581,8 @@ spec:
               # would not receive configmap updates.
               # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
               mountPath: /app/logback
+            - name: onboarding-snapshots-volume
+              mountPath: /onboarding-snapshots
           {{- if or .Values.participantIdentitiesDumpImport .Values.migration.attachPvc }}
           {{- with .Values.participantIdentitiesDumpImport }}
             - name: participant-bootstrapping-dump-volume
@@ -637,6 +637,9 @@ spec:
         - name: logback-config
           configMap:
             name: {{ .Release.Name }}-sv-app-logback-config
+        - name: onboarding-snapshots-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-onboarding-snapshots-pvc
       {{- with .Values.participantIdentitiesDumpImport }}
         - name: participant-bootstrapping-dump-volume
           secret:
@@ -719,8 +722,25 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistentDataPvc.size }}
-  storageClassName: {{ .Values.persistentDataPvc.volumeStorageClass | default (.Values.pvc).volumeStorageClass }}
+  storageClassName: {{ .Values.persistentDataPvc.volumeStorageClass }}
 {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-onboarding-snapshots-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splice-util-lib.default-labels" (set . "app" $appIdentifier) | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.onboardingSnapshotsPvc.size }}
+  storageClassName: {{ .Values.onboardingSnapshotsPvc.volumeStorageClass | default (.Values.pvc).volumeStorageClass }}
 ---
 apiVersion: v1
 kind: ConfigMap

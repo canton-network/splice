@@ -475,7 +475,7 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "custom-sv-sa"
-  - it: "persistentDataPvc creates volume and mount for snapshots and heap dumps at /persistent-data"
+  - it: "persistentDataPvc creates volume and mount for heap dumps at /persistent-data"
     set:
       persistentDataPvc:
         size: "5Gi"
@@ -498,7 +498,6 @@ tests:
 
   - it: "persistentDataPvc creates a PersistentVolumeClaim resource"
     set:
-      pvc.volumeStorageClass: "migration-storage"
       persistentDataPvc:
         size: "5Gi"
         volumeStorageClass: "standard"
@@ -520,53 +519,7 @@ tests:
           value:
             helm.sh/resource-policy: keep
 
-  - it: "snapshot storage inherits the existing storage class by default"
-    set:
-      pvc.volumeStorageClass: "operator-storage"
-    documentSelector:
-      path: metadata.name
-      value: mock-sv-sv-app-pvc
-    asserts:
-      - equal:
-          path: spec.resources.requests.storage
-          value: "35Gi"
-      - equal:
-          path: spec.storageClassName
-          value: "operator-storage"
-
-  - it: "snapshot storage renders without the migration pvc"
-    set:
-      migration.attachPvc: false
-      pvc: null
-    documentSelector:
-      path: metadata.name
-      value: mock-sv-sv-app-pvc
-    asserts:
-      - equal:
-          path: spec.resources.requests.storage
-          value: "35Gi"
-      - equal:
-          path: spec.storageClassName
-          value: null
-
-  - it: "onboarding snapshots use persistent storage by default"
-    documentSelector:
-      path: kind
-      value: Deployment
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].volumeMounts
-          content:
-            name: sv-app-volume
-            mountPath: /persistent-data
-      - equal:
-          path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_ONBOARDING_SNAPSHOTS')].value
-          value: |
-            canton.sv-apps.sv.onboarding-snapshots.directory = "/persistent-data/onboarding-snapshots"
-
-  - it: "persistentDataPvc can be disabled for ephemeral deployments"
-    set:
-      persistentDataPvc: null
+  - it: "persistentDataPvc is not created by default"
     documentSelector:
       path: kind
       value: Deployment
@@ -577,6 +530,63 @@ tests:
             name: sv-app-volume
             persistentVolumeClaim:
               claimName: mock-sv-sv-app-pvc
+
+  - it: "onboarding snapshots are stored on their own PVC mounted at /onboarding-snapshots"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: onboarding-snapshots-volume
+            mountPath: /onboarding-snapshots
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: onboarding-snapshots-volume
+            persistentVolumeClaim:
+              claimName: mock-sv-onboarding-snapshots-pvc
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_ONBOARDING_SNAPSHOTS
+            value: |
+              canton.sv-apps.sv.onboarding-snapshots.directory = "/onboarding-snapshots"
+
+  - it: "onboarding snapshots PVC defaults to the migration PVC's storage class"
+    set:
+      pvc:
+        volumeStorageClass: "operator-storage"
+    documentSelector:
+      path: metadata.name
+      value: mock-sv-onboarding-snapshots-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: 35Gi
+      - equal:
+          path: spec.storageClassName
+          value: "operator-storage"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "onboarding snapshots PVC can use its own storage class"
+    set:
+      onboardingSnapshotsPvc:
+        volumeStorageClass: "premium-rwo"
+    documentSelector:
+      path: metadata.name
+      value: mock-sv-onboarding-snapshots-pvc
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: "premium-rwo"
 
   - it: "sets default security contexts for pod, sv-app, and init container"
     documentSelector:
