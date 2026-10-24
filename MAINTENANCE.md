@@ -46,7 +46,7 @@ Initial setup:
 1. Check out the [Canton **Open Source** repo](https://github.com/digital-asset/canton)
 2. Define the environment variable used in the commands below using `export PATH_TO_CANTON_OSS=<your-canton-oss-repo-path>`. This can be added to your private env vars.
 
-Current Canton commit: `8bae1f1b4a3d7176efc7c293146182e366086126`
+Current Canton commit: `59bfa4ae22e7b32461d61d24febe8738a5ee2360`
 
 1. Checkout the **current Canton commit listed above** in the Canton open source repo from above, so we can diff our current fork against this checkout.
 2. Change to your checkout of the Splice repo and execute the following steps:
