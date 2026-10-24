@@ -805,18 +805,21 @@ SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\
 ```
 
 - **Expected:** both streams are still `RUNNING`, with no error for the object.
-- **Record:**
-  - what the stag-prod `DELETE` rows carry besides the key, `(row_id, record_time)`;
-    with the default replica identity, Postgres sends only the key columns;
-  - whether the legacy-shaped dataset removed the rows, given its merge key
-    `row_id` (2e).
+- **Seen in a real run:**
+  - the stag-prod `DELETE` rows carry `row_id`, `record_time` and
+    `datastream_metadata`, with `ingested_at`, `payload` and `payload_interned`
+    null: with the default replica identity, Postgres sends only the key
+    columns `(row_id, record_time)`;
+  - the legacy-shaped dataset removed both rows, although its merge key is
+    `row_id` only (2e).
 
 ## 4. Test status
 
 The above was run and confirmed on a real scratchnet cluster at `a0d914e224434db747f006522747fc6f5737d2da` on 2026-10-21,
-except the legacy-shaped stream and the writes to and backfill around the
-`*_legacy` table, which were added after that run. Those were run through 2d
-on 2026-10-24, with the results recorded there.
+except the legacy-shaped stream, the writes to and backfill around the
+`*_legacy` table, and the `DELETE` on the new parent, which were added after
+that run. Those were run on 2026-10-24, with the results recorded in sections
+2d to 3.
 
 The earlier procedure, whose migration altered the
 publication itself, was verified in a real test as of
