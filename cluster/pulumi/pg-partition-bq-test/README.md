@@ -566,7 +566,9 @@ SELECT column_name FROM \`$BQ_DATASET_LEGACY\`.INFORMATION_SCHEMA.KEY_COLUMN_USA
 **Legacy-shaped dataset: Datastream backfill.** Backfill the object on the
 legacy stream. This reads the new parent by its name, and is the second check
 that the `*_legacy` table never reaches BigQuery. As 2e shows, the stream
-does not start this backfill by itself.
+does not start this backfill by itself. It is only a check here: on real
+clusters, a Datastream backfill puts too much load on the scan database, so
+runbook step 5 fills the legacy dataset with the #7622 procedure too.
 
 ```bash
 OBJECT=$(gcloud datastream objects lookup --stream="$STREAM_LEGACY" --location=us-central1 \
@@ -587,7 +589,7 @@ Wait a few minutes, then:
 
 ```sql
 -- the table list
--- expect no change: no …_sim_update_history_c_x_legacy
+-- seen in a real run: no change, no …_sim_update_history_c_x_legacy
 
 SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
@@ -600,8 +602,7 @@ SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_i
 ```
 
 - **Record:** whether the backfill duplicates or changes any row in the
-  legacy-shaped table, and whether this would do for the legacy dataset in
-  runbook step 5 instead of the #7622 procedure.
+  legacy-shaped table.
 
 **Stag-prod dataset: the #7622 procedure.** This follows the BigQuery backfill procedure in
 [canton-network-internal#7622](https://github.com/DACH-NY/canton-network-internal/pull/7622)
@@ -871,8 +872,9 @@ publication, slot and stream before the cutover.
    per-table `record_time` watermark, which the first rows after step 3 move past
    the whole gap. The legacy
    stream uses `backfillAll`, but does not start backfilling the new parents
-   by itself after step 3 (section 2e). Section 2f shows whether a manual
-   backfill of the new parents fills the legacy dataset instead.
+   by itself after step 3 (section 2e). Don't start one by hand to fill the
+   legacy dataset: a Datastream backfill puts too much load on the scan
+   database.
 6. **Don't** write to the `*_legacy` tables between steps 2 and 3, not even to
    prune them by `DELETE`: they are still in both publications, and Datastream
    applies their changes to the BigQuery tables of the old names (section 2d).
