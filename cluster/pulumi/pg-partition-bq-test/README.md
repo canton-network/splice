@@ -460,7 +460,8 @@ SELECT 'legacy', row_id, payload
 SELECT row_id, payload, datastream_metadata.change_type
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` WHERE row_id IN (1, 1000)
   ORDER BY row_id, datastream_metadata.source_timestamp;
--- 1, pre-cutover …, INSERT, then the probe's two rows; record their change types
+-- seen in a real run: 1, pre-cutover …, INSERT; 1, legacy-update, UPDATE;
+-- 1000, legacy-insert, INSERT
 ```
 
 - **Seen in a real run:** no table named after the legacy table appears, but
@@ -744,7 +745,7 @@ SELECT datastream_metadata.change_type, count(*)
 SELECT datastream_metadata.change_type, count(*)
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
 -- expect NULL, 12 (the rows filled in 2f), INSERT, 10 (9 and the probe's insert)
--- and the probe's update, 1, with the change type recorded in 2d; no DELETE
+-- and UPDATE, 1 (the probe's update); no DELETE
 
 SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_scan_verdict_store\`;
 -- expect 17, unchanged from section 2
