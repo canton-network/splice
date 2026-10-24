@@ -870,9 +870,8 @@ publication, slot and stream before the cutover.
    `<dataset>_staging`: the hourly `sp_append_*` job copies staging to prod above a
    per-table `record_time` watermark, which the first rows after step 3 move past
    the whole gap. The legacy
-   stream uses `backfillAll`: watch whether it starts backfilling the new
-   relations after step 3, and see #7622 on switching it to `--backfill-none`
-   first. Sections 2e and 2f show whether it does, and whether a manual
+   stream uses `backfillAll`, but does not start backfilling the new parents
+   by itself after step 3 (section 2e). Section 2f shows whether a manual
    backfill of the new parents fills the legacy dataset instead.
 6. **Don't** write to the `*_legacy` tables between steps 2 and 3, not even to
    prune them by `DELETE`: they are still in both publications, and Datastream
