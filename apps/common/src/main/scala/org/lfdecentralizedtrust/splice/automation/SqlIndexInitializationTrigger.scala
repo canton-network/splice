@@ -96,7 +96,7 @@ class SqlIndexInitializationTrigger(
       tc: TraceContext
   ): Future[Seq[SqlIndexInitializationTrigger.Task]] = {
     storage.dbConfig match {
-      case postgresConfig: DbConfig.Postgres =>
+      case _: DbConfig.Postgres =>
         nextTask(remainingActions.get())
           .failOnShutdownToAbortException("Retrieve SqlIndexInitializationTrigger tasks")
       case _ =>
@@ -262,6 +262,24 @@ object SqlIndexInitializationTrigger {
           create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_rbio
           on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, reward_party)
           where reward_beneficiary_is_observer = false
+        """,
+      ),
+    IndexAction
+      .Create(
+        indexName = "dso_acs_store_sid_mid_glt_gls",
+        createAction = sqlu"""
+          create index concurrently if not exists dso_acs_store_sid_mid_glt_gls
+          on dso_acs_store (store_id, migration_id, governance_lock_type, governance_lock_subject)
+          where governance_lock_type is not null
+        """,
+      ),
+    IndexAction
+      .Create(
+        indexName = "scan_acs_store_sid_mid_glt_gls",
+        createAction = sqlu"""
+          create index concurrently if not exists scan_acs_store_sid_mid_glt_gls
+          on scan_acs_store (store_id, migration_id, governance_lock_type, governance_lock_subject)
+          where governance_lock_type is not null
         """,
       ),
     IndexAction

@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.store
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import cats.implicits.toTraverseOps
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
@@ -48,7 +50,6 @@ import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
@@ -754,6 +755,21 @@ trait SvDsoStore
       : ListExpiredContracts[so.SvOnboardingConfirmed.ContractId, so.SvOnboardingConfirmed] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(so.SvOnboardingConfirmed.COMPANION)
 
+  def listExpiredVestingLocks(
+      unavailablePartiesStore: Option[UnavailablePartiesStore]
+  ): ListExpiredContracts[
+    splice.governancelock.GovernanceLock.ContractId,
+    splice.governancelock.GovernanceLock,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.governancelock.GovernanceLock.COMPANION,
+      unavailablePartiesStore,
+      // TODO(canton-network/splice-sv-fa-locking#76): Make sure custom
+      // controllers parties are listed here as well when they are implemented
+      // in Daml.
+      ignoredPartyFields = Seq("owner"),
+    )
+
   def listExpiredAnsEntries(
       unavailablePartiesStore: Option[UnavailablePartiesStore]
   ): ListExpiredContracts[
@@ -1044,6 +1060,13 @@ trait SvDsoStore
     ]
   ]
 
+  def listProvisionalGovernanceLocksWithFeaturedAppRightSample(
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None
+  ): ListExpiredContracts[
+    splice.governancelock.GovernanceLock.ContractId,
+    splice.governancelock.GovernanceLock,
+  ]
+
   def lookupFeaturedAppRight(
       providerPartyId: PartyId
   )(implicit
@@ -1217,8 +1240,9 @@ object SvDsoStore {
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
       closeContext: CloseContext,
-  ): SvDsoStore = {
-    new DbSvDsoStore(
+      tc: TraceContext,
+  ): Future[SvDsoStore] = {
+    DbSvDsoStore.create(
       key,
       storage,
       loggerFactory,
@@ -1668,6 +1692,24 @@ object SvDsoStore {
         DsoAcsStoreRowData(
           contract,
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.governancelock.GovernanceLock.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        val expiresAt = GovernanceLockUtil
+          .getVestingLockSpecification(contract.payload)
+          .map(v => Timestamp.assertFromInstant(v.endTime))
+        val (lockType, lockSubject) =
+          GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+        DsoAcsStoreRowData(
+          contract,
+          governanceLockType = Some(lockType.storeValue),
+          governanceLockSubject = Some(lockSubject),
+          contractExpiresAt = expiresAt,
         )
       },
     )
