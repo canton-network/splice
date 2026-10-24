@@ -51,15 +51,15 @@ persistence:
 #  secretOverrides:
 #    postgresPassword: ""
 
-persistentDataPvc:
-  size: 35Gi
-
 migration:
   attachPvc: true
 # pvc used for migrations
 pvc:
   volumeName: sv-app-global-domain-migration-pvc
   volumeStorageClass: standard-rwo
+
+onboardingSnapshotsPvc:
+  size: 35Gi
 
 failOnAppVersionMismatch: true
 permissionedSynchronizer: false

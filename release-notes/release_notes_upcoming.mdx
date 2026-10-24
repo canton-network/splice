@@ -27,9 +27,8 @@
   - Deployment
 
     - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
-      that must point to persistent storage. The SV Helm chart now sets this up by default with a 35 GiB
-      `persistentDataPvc` mounted at `/persistent-data`. The volume also stores JVM heap dumps, which are not cleaned
-      up automatically.
+      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
+      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
 
 ## Upcoming for next minor release (template):
 
