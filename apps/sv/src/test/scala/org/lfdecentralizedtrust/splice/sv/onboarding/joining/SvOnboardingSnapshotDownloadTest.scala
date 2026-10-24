@@ -100,7 +100,7 @@ class SvOnboardingSnapshotDownloadTest
     File.usingTemporaryDirectory() { directory =>
       test(
         SvOnboardingSnapshotDownload(
-          SvOnboardingSnapshotsConfig(directory = Some(directory.path)),
+          SvOnboardingSnapshotsConfig(directory.path),
           "test",
           retryProvider,
         )
@@ -191,7 +191,7 @@ class SvOnboardingSnapshotDownloadTest
 
     "never write outside its directory" in File.usingTemporaryDirectory() { directory =>
       val snapshotDownload = SvOnboardingSnapshotDownload(
-        SvOnboardingSnapshotsConfig(directory = Some(directory.path)),
+        SvOnboardingSnapshotsConfig(directory.path),
         "test",
         retryProvider,
       )
@@ -210,7 +210,7 @@ class SvOnboardingSnapshotDownloadTest
         )
         val exports = (directory / "exports").createDirectories()
         val snapshotDownload = SvOnboardingSnapshotDownload(
-          SvOnboardingSnapshotsConfig(directory = Some(directory.path)),
+          SvOnboardingSnapshotsConfig(directory.path),
           "acs",
           retryProvider,
         )
@@ -223,7 +223,7 @@ class SvOnboardingSnapshotDownloadTest
 
     "reuse a complete download after restart only when prepare returns the same id" in File
       .usingTemporaryDirectory() { directory =>
-        val config = SvOnboardingSnapshotsConfig(directory = Some(directory.path))
+        val config = SvOnboardingSnapshotsConfig(directory.path)
         def downloader = SvOnboardingSnapshotDownload(config, "acs", retryProvider)
         val id = SvOnboardingSnapshotId("id")
         val first = downloader
@@ -246,7 +246,7 @@ class SvOnboardingSnapshotDownloadTest
 
     "redownload an incomplete or truncated snapshot after restart" in File
       .usingTemporaryDirectory() { directory =>
-        val config = SvOnboardingSnapshotsConfig(directory = Some(directory.path))
+        val config = SvOnboardingSnapshotsConfig(directory.path)
         def downloader = SvOnboardingSnapshotDownload(config, "acs", retryProvider)
         val id = SvOnboardingSnapshotId("id")
         val interrupted = new Interrupted(4)
@@ -262,7 +262,7 @@ class SvOnboardingSnapshotDownloadTest
 
     "redownload when completion metadata is corrupt or expired" in File.usingTemporaryDirectory() {
       directory =>
-        val config = SvOnboardingSnapshotsConfig(directory = Some(directory.path))
+        val config = SvOnboardingSnapshotsConfig(directory.path)
         def downloader = SvOnboardingSnapshotDownload(config, "acs", retryProvider)
         val id = SvOnboardingSnapshotId("id")
         val first = downloader
@@ -295,23 +295,6 @@ class SvOnboardingSnapshotDownloadTest
           snapshotDownload.download(id, sponsor.download).futureValue
         ) shouldBe content
         sponsor.requests shouldBe Seq("id")
-    }
-
-    "refuse to join without a configured directory" in {
-      def notConfigured(error: Throwable) = inside(error) { case e: StatusRuntimeException =>
-        e.getStatus.getCode shouldBe Status.Code.FAILED_PRECONDITION
-        e.getStatus.getDescription should include("onboarding-snapshots.directory")
-      }
-      notConfigured(
-        SvOnboardingSnapshotDownload
-          .checkConfigured(SvOnboardingSnapshotsConfig())
-          .failed
-          .futureValue
-      )
-      notConfigured(
-        the[StatusRuntimeException] thrownBy
-          SvOnboardingSnapshotDownload(SvOnboardingSnapshotsConfig(), "acs", retryProvider)
-      )
     }
   }
 }

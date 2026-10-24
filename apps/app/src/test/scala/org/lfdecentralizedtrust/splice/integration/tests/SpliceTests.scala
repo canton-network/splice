@@ -31,7 +31,6 @@ import org.lfdecentralizedtrust.splice.environment.{
 import org.lfdecentralizedtrust.splice.integration.{EnvironmentDefinition, InitialPackageVersions}
 import org.lfdecentralizedtrust.splice.integration.plugins.{
   EventHistorySanityCheckPlugin,
-  OnboardingSnapshotDirectories,
   ResetDecentralizedNamespace,
   ResetSequencerSynchronizerStateThreshold,
   TokenStandardCliSanityCheckPlugin,
@@ -120,7 +119,6 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     }
 
     registerPlugin(new WaitForPorts(extraPortsToWaitFor))
-    registerPlugin(new OnboardingSnapshotDirectories())
 
     if (resetRequiredTopologyState) {
       registerPlugin(new ResetDecentralizedNamespace())
@@ -172,7 +170,6 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     protected lazy val resetRequiredTopologyState: Boolean = true
 
     registerPlugin(new WaitForPorts(extraPortsToWaitFor))
-    registerPlugin(new OnboardingSnapshotDirectories())
 
     protected def runTokenStandardCliSanityCheck: Boolean = true
     protected lazy val tokenStandardCliBehavior

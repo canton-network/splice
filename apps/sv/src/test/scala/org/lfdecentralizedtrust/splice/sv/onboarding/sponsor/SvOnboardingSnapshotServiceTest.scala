@@ -57,17 +57,16 @@ class SvOnboardingSnapshotServiceTest
     Files.write(file.resolve("block-deletion"), Array[Byte](1))
   }
 
-  private def withService(config: SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig())(
+  private def withService(
+      config: Path => SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig(_)
+  )(
       test: (SvOnboardingSnapshotService, SimClock, RetryProvider) => Unit
-  ): Unit = if (config.directory.isEmpty) {
-    File.usingTemporaryDirectory() { directory =>
-      withService(config.copy(directory = Some(directory.path)))(test)
-    }
-  } else {
+  ): Unit = File.usingTemporaryDirectory() { directory =>
     val clock = new SimClock(loggerFactory = loggerFactory)
     val retryProvider =
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-    val service = new SvOnboardingSnapshotService(config, clock, retryProvider, loggerFactory)
+    val service =
+      new SvOnboardingSnapshotService(config(directory.path), clock, retryProvider, loggerFactory)
     try test(service, clock, retryProvider)
     finally {
       retryProvider.close()
@@ -76,34 +75,6 @@ class SvOnboardingSnapshotServiceTest
   }
 
   "SvOnboardingSnapshotService" should {
-
-    "start without a directory but reject prepare" in {
-      val clock = new SimClock(loggerFactory = loggerFactory)
-      val retryProvider =
-        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-      val service =
-        new SvOnboardingSnapshotService(
-          SvOnboardingSnapshotsConfig(),
-          clock,
-          retryProvider,
-          loggerFactory,
-        )
-      def notConfigured(result: Future[?]) =
-        inside(result.failed.futureValue) { case e: StatusRuntimeException =>
-          e.getStatus.getCode shouldBe Status.Code.INTERNAL
-          e.getStatus.getDescription should include("onboarding-snapshots.directory")
-        }
-      try {
-        service.exportsDirectory shouldBe None
-        service.removeExpired(clock.now).futureValue shouldBe 0
-        notConfigured(service.checkConfigured())
-        notConfigured(service.prepare(key("sv1"), writeSnapshot(Future.unit)))
-        service.lookup(SvOnboardingSnapshotId(UUID.randomUUID().toString)) shouldBe None
-      } finally {
-        retryProvider.close()
-        service.close()
-      }
-    }
 
     "export in the background and reuse the snapshot for the same key" in withService() {
       (service, _, _) =>
@@ -151,7 +122,7 @@ class SvOnboardingSnapshotServiceTest
           },
           forExactly(1, _)(_.warningMessage should include("failed")),
         )
-      eventually()(service.exportsDirectory.toList.flatMap(File(_).list) shouldBe empty)
+      eventually()(File(service.exportsDirectory).list.toList shouldBe empty)
 
       val id =
         service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
@@ -210,7 +181,7 @@ class SvOnboardingSnapshotServiceTest
     }
 
     "run at most `parallelism` exports and reject them when the queue is full" in withService(
-      SvOnboardingSnapshotsConfig(parallelism = PositiveInt.two, queueSize = PositiveInt.one)
+      SvOnboardingSnapshotsConfig(_, parallelism = PositiveInt.two, queueSize = PositiveInt.one)
     ) { (service, _, _) =>
       final class Export(name: String) {
         val started = Promise[Unit]()
@@ -248,7 +219,7 @@ class SvOnboardingSnapshotServiceTest
     }
 
     "remove snapshots after the retention period from the cleanup trigger" in withService(
-      SvOnboardingSnapshotsConfig(retention = PositiveFiniteDuration.ofHours(24))
+      SvOnboardingSnapshotsConfig(_, retention = PositiveFiniteDuration.ofHours(24))
     ) { (service, clock, retryProvider) =>
       val trigger = new SvOnboardingSnapshotCleanupTrigger(
         TriggerContext(
@@ -429,16 +400,16 @@ class SvOnboardingSnapshotServiceTest
 
     "recover completed snapshots with the same id and original retention after restart" in File
       .usingTemporaryDirectory() { directory =>
-        val config = SvOnboardingSnapshotsConfig(directory = Some(directory.path))
+        val config = SvOnboardingSnapshotsConfig(directory.path)
         val id = new java.util.concurrent.atomic.AtomicReference[SvOnboardingSnapshotId]()
-        withService(config) { (service, clock, _) =>
+        withService(_ => config) { (service, clock, _) =>
           clock.advance(Duration.ofHours(1))
           id.set(service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue)
           eventually()(service.lookup(id.get()) should matchPattern {
             case Some(SnapshotState.Ready(_)) =>
           })
         }
-        withService(config) { (service, clock, _) =>
+        withService(_ => config) { (service, clock, _) =>
           inside(service.lookup(id.get())) { case Some(SnapshotState.Ready(file)) =>
             File(file).contentAsString shouldBe "snapshot"
           }
@@ -463,7 +434,7 @@ class SvOnboardingSnapshotServiceTest
         val download =
           (directory / "downloads" / "acs" / "snapshot").createIfNotExists(createParents = true)
         val otherFile = (directory / "other").createIfNotExists()
-        withService(SvOnboardingSnapshotsConfig(directory = Some(directory.path))) { (_, _, _) =>
+        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (_, _, _) =>
           interrupted.exists shouldBe false
           download.exists shouldBe true
           otherFile.exists shouldBe true
@@ -476,16 +447,15 @@ class SvOnboardingSnapshotServiceTest
           (directory / "downloads" / "old" / "snapshot").createIfNotExists(createParents = true)
         val recent =
           (directory / "downloads" / "recent" / "snapshot").createIfNotExists(createParents = true)
-        withService(SvOnboardingSnapshotsConfig(directory = Some(directory.path))) {
-          (service, clock, _) =>
-            abandoned.exists shouldBe true
-            Files.setLastModifiedTime(abandoned.path, FileTime.from(Instant.EPOCH))
-            Files.setLastModifiedTime(abandoned.parent.path, FileTime.from(Instant.EPOCH))
-            service.removeExpired(clock.now).futureValue shouldBe 1
-            abandoned.parent.exists shouldBe false
-            clock.advance(Duration.ofDays(365 * 100))
-            service.removeExpired(clock.now).futureValue shouldBe 0
-            recent.exists shouldBe true
+        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
+          abandoned.exists shouldBe true
+          Files.setLastModifiedTime(abandoned.path, FileTime.from(Instant.EPOCH))
+          Files.setLastModifiedTime(abandoned.parent.path, FileTime.from(Instant.EPOCH))
+          service.removeExpired(clock.now).futureValue shouldBe 1
+          abandoned.parent.exists shouldBe false
+          clock.advance(Duration.ofDays(365 * 100))
+          service.removeExpired(clock.now).futureValue shouldBe 0
+          recent.exists shouldBe true
         }
       }
 
@@ -504,7 +474,7 @@ class SvOnboardingSnapshotServiceTest
         (corrupt / "snapshot").createIfNotExists(createParents = true)
         (corrupt / "metadata.json").writeText("not json")
         loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
-          withService(SvOnboardingSnapshotsConfig(directory = Some(directory.path))) { (_, _, _) =>
+          withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (_, _, _) =>
             corrupt.exists shouldBe false
           },
           _.warningMessage should include("Cannot recover onboarding snapshot"),
