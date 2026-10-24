@@ -26,7 +26,6 @@ lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
-lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
