@@ -45,7 +45,7 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
     RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
   private val snapshotDirectory = better.files.File.newTemporaryDirectory()
   private val snapshotService = new SvOnboardingSnapshotService(
-    SvOnboardingSnapshotsConfig(directory = Some(snapshotDirectory.path)),
+    SvOnboardingSnapshotsConfig(snapshotDirectory.path),
     new SimClock(loggerFactory = loggerFactory),
     retryProvider,
     loggerFactory,
