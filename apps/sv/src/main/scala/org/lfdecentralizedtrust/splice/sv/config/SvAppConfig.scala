@@ -529,7 +529,7 @@ case class SvAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
-    onboardingSnapshots: SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig(),
+    onboardingSnapshots: SvOnboardingSnapshotsConfig,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
@@ -744,7 +744,7 @@ final case class UnavailablePartiesBackoffParameters(
 )
 
 final case class SvOnboardingSnapshotsConfig(
-    directory: Option[Path] = None,
+    directory: Path,
     retention: PositiveFiniteDuration = PositiveFiniteDuration.ofHours(24),
     parallelism: PositiveInt = PositiveInt.one,
     queueSize: PositiveInt = PositiveInt.tryCreate(4),

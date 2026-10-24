@@ -230,6 +230,9 @@ services:
               }
             }
       - SPLICE_APP_SV_PARTICIPANT_ADDRESS=participant
+      - |
+        ADDITIONAL_CONFIG_ONBOARDING_SNAPSHOTS=
+            canton.sv-apps.sv.onboarding-snapshots.directory = "/tmp/onboarding-snapshots"
       - SPLICE_APP_SV_IS_DEV_NET=${SPLICE_SV_IS_DEVNET}
       - SPLICE_APP_SV_ONBOARDING_TYPE=found-dso
       - SPLICE_APP_SV_ONBOARDING_NAME=sv
