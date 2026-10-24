@@ -7,10 +7,16 @@ range-partitioned Postgres table. It exists to validate the
 particular the `publish_via_partition_root = true` publication setting from
 [#6730](https://github.com/canton-network/splice/issues/6730).
 
-The stack mirrors the **stag-prod** stream in `common-sv/src/bigQuery.ts`:
-`appendOnly`, `backfillNone`, and HOUR ingestion-time partitioning. Because of
-`backfillNone`, Datastream backfill is not part of this test. The publication and
-replication slot are created by the real
+The stack mirrors both scan streams in `common-sv/src/bigQuery.ts`, each with
+its own publication, replication slot and BigQuery dataset:
+
+- the **stag-prod** stream: `appendOnly`, `backfillNone`, and HOUR
+  ingestion-time partitioning. Most checks below are on its dataset.
+- the **legacy** stream: merge mode and `backfillAll`. It is here to check that
+  the renamed `*_legacy` table never reaches BigQuery, even with backfill
+  (sections 2d to 2f). Both streams list their tables by name in `includeObjects`.
+
+The publications and replication slots are created by the real
 `cluster/pulumi/canton-network/bigquery-cloudsql.sh`.
 
 The stack is applied manually only. It is not part of any deploy flow or of `make update-expected`.
@@ -23,17 +29,18 @@ The stack is applied manually only. It is not part of any deploy flow or of `mak
 | Database and schema | `partition_test` |
 | Users | `cnadmin` (owns the tables), `bqdatastream` (Datastream) |
 | Tables | `sim_scan_verdict_store` (partitioned from the start), `sim_update_history_c_x` (plain, swapped in section 2) |
-| Publication and slot | `pgpart_stag_prod_pub` (`publish_via_partition_root = true`), `pgpart_stag_prod_r_slot` |
+| Publications and slots | `pgpart_stag_prod_pub` and `pgpart_legacy_pub` (`publish_via_partition_root = true`), `pgpart_stag_prod_r_slot` and `pgpart_legacy_r_slot` |
 | NAT VM, Datastream private connection, firewall | `<cluster>-pgpart-*`; peering /29 is `GCP_MASTER_IPV4_CIDR` + 24 |
-| BigQuery dataset | `pgpart_<cluster>` |
-| Datastream stream | `<cluster>-pgpart-stag-prod` |
+| BigQuery datasets | `pgpart_<cluster>` (stag-prod), `pgpart_<cluster>_legacy` |
+| Datastream streams | `<cluster>-pgpart-stag-prod`, `<cluster>-pgpart-legacy` |
 
 Datastream names the BigQuery tables `<schema>_<table>`, so the two tables
-expected in the dataset are `partition_test_sim_scan_verdict_store` and
+expected in each dataset are `partition_test_sim_scan_verdict_store` and
 `partition_test_sim_update_history_c_x`.
 
 The stack config `waitForMigration` sets the migration that
-`bigquery-cloudsql.sh` waits for. It is unset until section 2e.
+`bigquery-cloudsql.sh` waits for, for both publications. It is unset until
+section 2e.
 
 ## Deploy
 
@@ -58,7 +65,9 @@ Set these variables for the commands below, filled from the stack outputs:
 PRIVATE_IP=...          # privateIp
 PGPASSWORD=...          # cnadminPassword
 BQ_DATASET=...          # bigQueryDataset, e.g. da-cn-scratchnet.pgpart_scratchd
+BQ_DATASET_LEGACY=...   # bigQueryDatasetLegacy
 STREAM=...              # datastreamStreamId
+STREAM_LEGACY=...       # datastreamStreamIdLegacy
 ```
 
 ### psql
@@ -115,25 +124,42 @@ bq query --use_legacy_sql=false --label=testing:pgpart-pr7737 "<query>"
 The BigQuery samples below are written for that double-quoted argument: their
 backticks are escaped, and the shell expands `$BQ_DATASET`.
 
+The **table list** below shows the tables in both datasets. Several sections
+check it; it must never show a table named after a partition, such as
+`…_sim_scan_verdict_store_p20261012`, or after the renamed
+`…_sim_update_history_c_x_legacy`:
+
+```sql
+SELECT table_schema, table_name FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.TABLES
+UNION ALL
+SELECT table_schema, table_name FROM \`$BQ_DATASET_LEGACY\`.INFORMATION_SCHEMA.TABLES
+ORDER BY 1, 2;
+```
+
 Datastream writes with a delay of a few minutes, even with `dataFreshness: 0s`.
 Re-run BigQuery checks until the numbers stop changing before you conclude anything.
 To check the stream status and per-object errors:
 
 ```bash
-gcloud datastream streams describe "$STREAM" --location=us-central1 --format='value(state,errors)'
-gcloud datastream objects list --stream="$STREAM" --location=us-central1
+for s in "$STREAM" "$STREAM_LEGACY"; do
+  gcloud datastream streams describe "$s" --location=us-central1 --format='value(state,errors)'
+  gcloud datastream objects list --stream="$s" --location=us-central1
+done
 ```
+
+Each stream should list exactly two objects, `partition_test.sim_scan_verdict_store`
+and `partition_test.sim_update_history_c_x`, throughout the test.
 
 
 ## 0. Publication sanity
 
 ```sql
-SELECT pubname, pubviaroot FROM pg_publication;
--- pgpart_stag_prod_pub, t
+SELECT pubname, pubviaroot FROM pg_publication ORDER BY 1;
+-- pgpart_legacy_pub, t and pgpart_stag_prod_pub, t
 
-SELECT * FROM pg_publication_tables WHERE pubname = 'pgpart_stag_prod_pub';
--- sim_scan_verdict_store and sim_update_history_c_x only, with no partitions
--- such as sim_scan_verdict_store_import
+SELECT * FROM pg_publication_tables ORDER BY 1, 3;
+-- sim_scan_verdict_store and sim_update_history_c_x only, for each publication,
+-- with no partitions such as sim_scan_verdict_store_import
 ```
 
 ## 1. Partitions and CDC
@@ -190,12 +216,18 @@ SELECT count(*), min(row_id), max(row_id) FROM sim_scan_verdict_store;
 Check BigQuery (assuming shell command from above, double-quoted argument):
 
 ```sql
-SELECT table_name FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.TABLES ORDER BY 1;
--- expect only partition_test_sim_scan_verdict_store
+-- the table list
+-- expect partition_test_sim_scan_verdict_store in each dataset; the legacy
+-- dataset may also have an empty partition_test_sim_update_history_c_x
+-- already, from the initial backfill
 
 SELECT count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\`;
 -- expect 13, 1, 13 (matching above pg version)
+
+SELECT count(*), min(row_id), max(row_id)
+  FROM \`$BQ_DATASET_LEGACY.partition_test_sim_scan_verdict_store\`;
+-- expect 13, 1, 13 too
 
 SELECT row_id, count(*) FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\`
   GROUP BY row_id HAVING count(*) > 1;
@@ -241,8 +273,8 @@ SELECT tableoid::regclass, row_id, payload FROM sim_scan_verdict_store
 Check that the row arrives in the same BigQuery table:
 
 ```sql
-SELECT table_name FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.TABLES ORDER BY 1;
--- expect still only partition_test_sim_scan_verdict_store
+-- the table list
+-- expect no change
 
 SELECT row_id, payload FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\`
   WHERE payload = 'phase1 new partition';
@@ -288,6 +320,9 @@ SELECT count(*), max(row_id) FROM sim_update_history_c_x;
 ```sql
 SELECT count(*), max(row_id) FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`;
 -- expect 5, 5 (matching above pg version)
+
+SELECT count(*), max(row_id) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\`;
+-- expect 5, 5 too
 ```
 
 ### 2a. Rename alone: what the publication does by default
@@ -295,8 +330,8 @@ SELECT count(*), max(row_id) FROM \`$BQ_DATASET.partition_test_sim_update_histor
 ```sql
 BEGIN;
 ALTER TABLE sim_update_history_c_x RENAME TO sim_update_history_c_x_legacy;
-SELECT * FROM pg_publication_tables WHERE pubname = 'pgpart_stag_prod_pub';
--- sim_scan_verdict_store and sim_update_history_c_x_legacy
+SELECT * FROM pg_publication_tables ORDER BY 1, 3;
+-- sim_scan_verdict_store and sim_update_history_c_x_legacy, for each publication
 ROLLBACK;
 ```
 
@@ -372,31 +407,63 @@ INSERT INTO sim_scan_verdict_store (record_time, payload)
 SELECT min(row_id), max(row_id) FROM sim_update_history_c_x;
 -- 6, 17 (the new parent continues the legacy row_id sequence)
 
-SELECT * FROM pg_publication_tables WHERE pubname = 'pgpart_stag_prod_pub';
--- sim_scan_verdict_store and sim_update_history_c_x_legacy; the new parent is not published
+SELECT * FROM pg_publication_tables ORDER BY 1, 3;
+-- sim_scan_verdict_store and sim_update_history_c_x_legacy, for each publication;
+-- the new parent is not published
 
 SELECT slot_name, active, pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn) AS lag_bytes
-  FROM pg_replication_slots;
--- pgpart_stag_prod_r_slot, t, and a lag that stays small when re-run after the
--- BigQuery checks: sim_scan_verdict_store keeps the slot advancing
+  FROM pg_replication_slots ORDER BY 1;
+-- pgpart_legacy_r_slot and pgpart_stag_prod_r_slot, both t, and a lag that stays
+-- small when re-run after the BigQuery checks: sim_scan_verdict_store keeps the
+-- slots advancing
+```
+
+Nothing writes to the `*_legacy` tables after V078, but the publications still
+publish them, so write to the legacy table here: its changes reach both slots,
+and both streams must drop them, because neither names that table. A distinct
+`row_id` and payload make any change that lands in BigQuery stand out:
+
+```sql
+INSERT INTO sim_update_history_c_x_legacy (row_id, record_time, payload)
+  VALUES (1000, (extract(epoch FROM now()) * 1000000)::bigint, 'legacy-insert');
+-- INSERT 0 1
+UPDATE sim_update_history_c_x_legacy SET payload = 'legacy-update' WHERE row_id = 1;
+-- UPDATE 1
 ```
 
 Wait 20–30 minutes, then check BigQuery:
 
 ```sql
-SELECT table_name FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.TABLES ORDER BY 1;
--- expect only partition_test_sim_scan_verdict_store and partition_test_sim_update_history_c_x
+-- the table list
+-- expect partition_test_sim_scan_verdict_store and partition_test_sim_update_history_c_x
+-- in each dataset, and no …_sim_update_history_c_x_legacy
 
 SELECT count(*), max(row_id) FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\`;
 -- expect 17, 17: the control rows arrive, so the stream is alive
 
 SELECT count(*), max(row_id) FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\`;
 -- expect 5, 5, unchanged: none of the gap rows arrive
+
+SELECT count(*), max(row_id) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_scan_verdict_store\`;
+-- expect 17, 17
+
+SELECT count(*), max(row_id) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\`;
+-- expect 5, 5, unchanged
+
+SELECT 'stag-prod' AS ds, row_id, payload
+  FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` WHERE payload LIKE 'legacy-%'
+UNION ALL
+SELECT 'legacy', row_id, payload
+  FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` WHERE payload LIKE 'legacy-%';
+-- expect no rows: the writes to the legacy table went nowhere
 ```
 
-- **Expected:** the stream stays `RUNNING`, and nothing flags the gap: the
+- **Expected:** both streams stay `RUNNING`, and nothing flags the gap: the
   console's stream details Objects tab lists `partition_test.sim_update_history_c_x`
-  as normal (seen in a real run). Only the row counts above reveal it.
+  as normal (seen in a real run, for the stag-prod stream). Only the row counts
+  above reveal it.
+- **Record:** whether either stream reports an error for the writes to the
+  legacy table, in `streams describe` or `objects list`.
 
 ### 2e. The config change: the operator re-runs `bigquery-cloudsql.sh`
 
@@ -409,17 +476,20 @@ cncluster pulumi pg-partition-bq-test preview --diff
 cncluster pulumi pg-partition-bq-test up
 ```
 
-- **Expected preview:** one `~ update` of `<cluster>-pgpart-pub-replicate-slot`,
-  whose `create` and `delete` change only in `--flyway-migration-to-wait-for`.
-  Nothing is replaced. A replace would run `delete-pub-rep-slot` and drop the slot.
-- **Expected `up`:** the script finds V078 at once and runs `SET TABLE`.
+- **Expected preview:** a `~ update` of each of `<cluster>-pgpart-pub-replicate-slot`
+  and `<cluster>-pgpart-pub-replicate-slot-legacy`, whose `create` and `delete`
+  change only in `--flyway-migration-to-wait-for`. Nothing is replaced. A
+  replace would run `delete-pub-rep-slot` and drop the slot.
+- **Expected `up`:** the script finds V078 at once and runs `SET TABLE`, for
+  each publication.
 
 ```sql
-SELECT * FROM pg_publication_tables WHERE pubname = 'pgpart_stag_prod_pub';
--- sim_scan_verdict_store and sim_update_history_c_x; the _legacy table is gone
+SELECT * FROM pg_publication_tables ORDER BY 1, 3;
+-- sim_scan_verdict_store and sim_update_history_c_x, for each publication;
+-- the _legacy table is gone
 
-SELECT pubname, pubviaroot FROM pg_publication;
--- pgpart_stag_prod_pub, t (SET TABLE leaves it alone)
+SELECT pubname, pubviaroot FROM pg_publication ORDER BY 1;
+-- pgpart_legacy_pub, t and pgpart_stag_prod_pub, t (SET TABLE leaves them alone)
 ```
 
 Ingest again:
@@ -440,9 +510,8 @@ SELECT split_part(payload, ' ', 1) AS phase, count(*), min(row_id), max(row_id)
 Check BigQuery:
 
 ```sql
-SELECT table_name FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.TABLES ORDER BY 1;
--- expect only partition_test_sim_scan_verdict_store and partition_test_sim_update_history_c_x;
--- no …_sim_update_history_c_x_legacy and no per-partition table
+-- the table list
+-- expect no change: no …_sim_update_history_c_x_legacy and no per-partition table
 
 SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
@@ -451,15 +520,70 @@ SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_i
 SELECT column_name, data_type FROM \`$BQ_DATASET\`.INFORMATION_SCHEMA.COLUMNS
   WHERE table_name = 'partition_test_sim_update_history_c_x' ORDER BY ordinal_position;
 -- expect payload_interned, INT64, added by Datastream for the new parent
+
+SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
+  FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
+-- expect post-fix, 4, 18, 21 and pre-cutover, 5, 1, 5, as in stag-prod, unless
+-- the legacy stream backfilled the new parent by itself (then also gap, 12, 6, 17)
+
+SELECT column_name FROM \`$BQ_DATASET_LEGACY\`.INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+  WHERE table_name = 'partition_test_sim_update_history_c_x' ORDER BY ordinal_position;
+-- the merge key of the legacy-shaped table
 ```
 
-- **Expected:** the stream stays `RUNNING`.
+- **Expected:** both streams stay `RUNNING`.
 - **Seen in a real run:** the BigQuery table is still clustered on `row_id`
   only, although the new parent's primary key is `(row_id, record_time)`.
+- **Record:**
+  - whether the legacy stream backfills `partition_test.sim_update_history_c_x`
+    by itself after `SET TABLE`: `objects list --stream="$STREAM_LEGACY"` shows
+    the object's backfill job, and the gap rows appear in the query above;
+  - the merge key above, and whether the legacy stream reports an error for the
+    object now that the source's primary key is `(row_id, record_time)`.
 
 ### 2f. Fill the gap
 
-This follows the BigQuery backfill procedure in
+**Legacy-shaped dataset: Datastream backfill.** Backfill the object on the
+legacy stream. This reads the new parent by its name, and is the second check
+that the `*_legacy` table never reaches BigQuery. Skip `start-backfill` if 2e
+recorded that the stream already backfilled the object by itself.
+
+```bash
+OBJECT=$(gcloud datastream objects lookup --stream="$STREAM_LEGACY" --location=us-central1 \
+  --postgresql-schema=partition_test --postgresql-table=sim_update_history_c_x \
+  --format='value(name.basename())')
+gcloud datastream objects start-backfill "$OBJECT" --stream="$STREAM_LEGACY" --location=us-central1
+gcloud datastream objects describe "$OBJECT" --stream="$STREAM_LEGACY" --location=us-central1 \
+  --format='value(backfillJob.state)'
+# re-run until COMPLETED
+
+gcloud datastream objects lookup --stream="$STREAM_LEGACY" --location=us-central1 \
+  --postgresql-schema=partition_test --postgresql-table=sim_update_history_c_x_legacy
+# expect NOT_FOUND: the stream has no object for the legacy table, so nothing
+# can backfill it
+```
+
+Wait a few minutes, then:
+
+```sql
+-- the table list
+-- expect no change: no …_sim_update_history_c_x_legacy
+
+SELECT SPLIT(payload, ' ')[OFFSET(0)] AS phase, count(*), min(row_id), max(row_id)
+  FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
+-- expect gap, 12, 6, 17 and post-fix, 4, 18, 21 and pre-cutover, 5, 1, 5:
+-- the gap is filled, and the pre-cutover rows, which only the legacy table
+-- has, are untouched
+
+-- re-run the legacy-insert/legacy-update query from 2d
+-- expect no rows
+```
+
+- **Record:** whether the backfill duplicates or changes any row in the
+  legacy-shaped table, and whether this would do for the legacy dataset in
+  runbook step 5 instead of the #7622 procedure.
+
+**Stag-prod dataset: the #7622 procedure.** This follows the BigQuery backfill procedure in
 [canton-network-internal#7622](https://github.com/DACH-NY/canton-network-internal/pull/7622)
 (`BIGQUERY.md`). Find the gap:
 
@@ -585,6 +709,9 @@ SELECT count(*) FROM sim_update_history_c_x;
 Wait a few minutes, then:
 
 ```sql
+-- the table list
+-- expect no change
+
 SELECT count(*) FROM \`$BQ_DATASET.partition_test_sim_scan_verdict_store\`;
 -- expect 17, unchanged from section 2
 
@@ -598,13 +725,21 @@ SELECT datastream_metadata.change_type, count(*)
 SELECT datastream_metadata.change_type, count(*)
   FROM \`$BQ_DATASET.partition_test_sim_update_history_c_x\` GROUP BY 1 ORDER BY 1;
 -- expect NULL, 12 (the rows filled in 2f) and INSERT, 9 (no DELETE)
+
+SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_scan_verdict_store\`;
+-- expect 17, unchanged from section 2
+
+SELECT count(*) FROM \`$BQ_DATASET_LEGACY.partition_test_sim_update_history_c_x\`;
+-- expect 21, unchanged from section 2
 ```
 
-- **Expected:** the stream is still `RUNNING`.
+- **Expected:** both streams are still `RUNNING`.
 
 ## 4. Test status
 
-The above was run and confirmed on a real scratchnet cluster at `a0d914e224434db747f006522747fc6f5737d2da` on 2026-10-21.
+The above was run and confirmed on a real scratchnet cluster at `a0d914e224434db747f006522747fc6f5737d2da` on 2026-10-21,
+except the legacy-shaped stream and the writes to and backfill around the
+`*_legacy` table, which were added after that run and have not been run yet.
 
 The earlier procedure, whose migration altered the
 publication itself, was verified in a real test as of
@@ -661,7 +796,8 @@ publication, slot and stream before the cutover.
    the whole gap. The legacy
    stream uses `backfillAll`: watch whether it starts backfilling the new
    relations after step 3, and see #7622 on switching it to `--backfill-none`
-   first.
+   first. Sections 2e and 2f show whether it does, and whether a manual
+   backfill of the new parents fills the legacy dataset instead.
 6. **Don't** change anything that would replace the pub/slot commands: no
    `triggers`, no renamed resources, no `--replace`. A replace runs
    `delete-pub-rep-slot`, which drops the slot.
@@ -676,8 +812,8 @@ cncluster pulumi pg-partition-bq-test down
 Remove `waitForMigration` first: a fresh `up` that waits for V078 times out,
 because only section 2b records it.
 
-Deleting the stack drops the replication slot and publication first, then the
-instance, and deletes the BigQuery dataset along with its contents.
+Deleting the stack drops the replication slots and publications first, then the
+instance, and deletes the BigQuery datasets along with their contents.
 
 Everything the stack and this procedure create carries `pgpart-pr7737`: as the
 `testing` label where the resource takes labels, as the description of the

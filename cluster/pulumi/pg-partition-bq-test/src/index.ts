@@ -3,10 +3,11 @@
 //
 // Throwaway CloudSQL -> Datastream -> BigQuery pipeline with a partitioned
 // source table, to validate the #6312 cutover against the stag-prod Datastream
-// configuration. See ../README.md for the test procedure.
+// configuration and, with a second stream, the legacy one. See ../README.md
+// for the test procedure.
 //
-// The network path, connection profiles and stream mirror
-// common-sv/src/bigQuery.ts; the publication and replication slot are created
+// The network path, connection profiles and streams mirror
+// common-sv/src/bigQuery.ts; the publications and replication slots are created
 // by the real canton-network/bigquery-cloudsql.sh.
 import * as command from '@pulumi/command';
 import * as gcp from '@pulumi/gcp';
@@ -32,8 +33,11 @@ const dbPort = 5432;
 const replicatorUserName = 'bqdatastream';
 const databaseName = 'partition_test';
 const schemaName = databaseName;
-const publicationName = 'pgpart_stag_prod_pub';
-const replicationSlotName = 'pgpart_stag_prod_r_slot';
+const stagProdPublication = {
+  publication: 'pgpart_stag_prod_pub',
+  slot: 'pgpart_stag_prod_r_slot',
+};
+const legacyPublication = { publication: 'pgpart_legacy_pub', slot: 'pgpart_legacy_r_slot' };
 const fakeFlywayMigration = 'V001__pgpart_init.sql';
 // The migration bigquery-cloudsql.sh waits for before (re)applying the
 // publication. Changing it reruns the script, as bumping the wait in
@@ -177,7 +181,10 @@ const initDb = new command.local.Command(
   { dependsOn: [database, adminUser] }
 );
 
-function pubRepSlotCommand(action: string): pulumi.Output<string> {
+function pubRepSlotCommand(
+  action: string,
+  { publication, slot }: typeof stagProdPublication
+): pulumi.Output<string> {
   const args = [
     pulumi.interpolate`--private-network-project="${project.projectId}"`,
     pulumi.interpolate`--compute-region="${GCP_REGION}"`,
@@ -185,8 +192,8 @@ function pubRepSlotCommand(action: string): pulumi.Output<string> {
     pulumi.interpolate`--schema-name="${schemaName}"`,
     pulumi.interpolate`--tables-to-replicate-joined="${tablesToReplicate.join(', ')}"`,
     pulumi.interpolate`--postgres-user-name="${defaultUserName}"`,
-    pulumi.interpolate`--publication-name="${publicationName}"`,
-    pulumi.interpolate`--replication-slot-name="${replicationSlotName}"`,
+    pulumi.interpolate`--publication-name="${publication}"`,
+    pulumi.interpolate`--replication-slot-name="${slot}"`,
     pulumi.interpolate`--replicator-user-name="${replicatorUserName}"`,
     pulumi.interpolate`--postgres-instance-name="${pgsqlInstance.name}"`,
     pulumi.interpolate`--scan-app-database-name="${databaseName}"`,
@@ -201,10 +208,21 @@ function pubRepSlotCommand(action: string): pulumi.Output<string> {
 const pubRepSlot = new command.local.Command(
   `${prefix}-pub-replicate-slot`,
   {
-    create: pubRepSlotCommand('create-pub-rep-slot'),
-    delete: pubRepSlotCommand('delete-pub-rep-slot'),
+    create: pubRepSlotCommand('create-pub-rep-slot', stagProdPublication),
+    delete: pubRepSlotCommand('delete-pub-rep-slot', stagProdPublication),
   },
   { dependsOn: [initDb, adminUser, replicatorUser], deleteBeforeReplace: true }
+);
+
+// Unlike common-sv, runs after the other one: Cloud SQL rejects an import while
+// another runs, and nothing retries a manual `up`.
+const legacyPubRepSlot = new command.local.Command(
+  `${prefix}-pub-replicate-slot-legacy`,
+  {
+    create: pubRepSlotCommand('create-pub-rep-slot', legacyPublication),
+    delete: pubRepSlotCommand('delete-pub-rep-slot', legacyPublication),
+  },
+  { dependsOn: [initDb, adminUser, replicatorUser, pubRepSlot], deleteBeforeReplace: true }
 );
 
 // ============================================================================
@@ -283,17 +301,23 @@ const sourceProfile = new gcp.datastream.ConnectionProfile(
     privateConnectivity: { privateConnection: privateConnection.name },
     labels,
   },
-  { dependsOn: [natVm, privateConnection, replicatorUser, pubRepSlot] }
+  { dependsOn: [natVm, privateConnection, replicatorUser, pubRepSlot, legacyPubRepSlot] }
 );
 
+// both streams name their tables alike, so each needs its own dataset
+function newDataset(datasetId: string): gcp.bigquery.Dataset {
+  return new gcp.bigquery.Dataset(datasetId, {
+    datasetId,
+    friendlyName: `${datasetId} Dataset`,
+    location: GCP_REGION,
+    deleteContentsOnDestroy: true,
+    labels,
+  });
+}
+
 const datasetId = `pgpart_${CLUSTER_BASENAME.replace(/-/g, '_')}`;
-const dataset = new gcp.bigquery.Dataset(datasetId, {
-  datasetId,
-  friendlyName: `${datasetId} Dataset`,
-  location: GCP_REGION,
-  deleteContentsOnDestroy: true,
-  labels,
-});
+const dataset = newDataset(datasetId);
+const legacyDataset = newDataset(`${datasetId}_legacy`);
 
 const destinationProfile = new gcp.datastream.ConnectionProfile(
   `${prefix}-bq-cxn`,
@@ -304,7 +328,7 @@ const destinationProfile = new gcp.datastream.ConnectionProfile(
     bigqueryProfile: {},
     labels,
   },
-  { dependsOn: [dataset, privateConnection] }
+  { dependsOn: [dataset, legacyDataset, privateConnection] }
 );
 
 const streamId = `${prefix}-stag-prod`;
@@ -326,8 +350,8 @@ const stream = new gcp.datastream.Stream(
             },
           ],
         },
-        publication: publicationName,
-        replicationSlot: replicationSlotName,
+        publication: stagProdPublication.publication,
+        replicationSlot: stagProdPublication.slot,
       },
       sourceConnectionProfile: sourceProfile.name,
     },
@@ -361,6 +385,46 @@ const stream = new gcp.datastream.Stream(
   { dependsOn: [sourceProfile, destinationProfile, dataset, pubRepSlot] }
 );
 
+// Shaped like the legacy stream: merge mode and backfillAll. Like it, it names
+// its tables explicitly, which README.md section 2 tests with a backfill.
+const legacyStreamId = `${prefix}-legacy`;
+const legacyStream = new gcp.datastream.Stream(
+  legacyStreamId,
+  {
+    location: GCP_REGION,
+    streamId: legacyStreamId,
+    displayName: legacyStreamId,
+    desiredState: 'RUNNING',
+    sourceConfig: {
+      postgresqlSourceConfig: {
+        includeObjects: {
+          postgresqlSchemas: [
+            {
+              schema: schemaName,
+              postgresqlTables: tablesToReplicate.map(table => ({ table })),
+            },
+          ],
+        },
+        publication: legacyPublication.publication,
+        replicationSlot: legacyPublication.slot,
+      },
+      sourceConnectionProfile: sourceProfile.name,
+    },
+    destinationConfig: {
+      bigqueryDestinationConfig: {
+        singleTargetDataset: {
+          datasetId: pulumi.interpolate`projects/${legacyDataset.project}/datasets/${legacyDataset.datasetId}`,
+        },
+        dataFreshness: '0s',
+      },
+      destinationConnectionProfile: destinationProfile.name,
+    },
+    backfillAll: {},
+    labels,
+  },
+  { dependsOn: [sourceProfile, destinationProfile, legacyDataset, legacyPubRepSlot] }
+);
+
 export const instanceName = pgsqlInstance.name;
 export const privateIp = pgsqlInstance.privateIpAddress;
 export const natVmName = natVm.name;
@@ -369,6 +433,9 @@ export const postgresDatabase = databaseName;
 export const postgresUser = defaultUserName;
 export const cnadminPassword = pulumi.secret(adminPassword);
 export const bigQueryDataset = pulumi.interpolate`${dataset.project}.${dataset.datasetId}`;
+export const bigQueryDatasetLegacy = pulumi.interpolate`${legacyDataset.project}.${legacyDataset.datasetId}`;
 export const datastreamStreamId = stream.streamId;
+export const datastreamStreamIdLegacy = legacyStream.streamId;
 export const datastreamLocation = GCP_REGION;
-export const publication = publicationName;
+export const publication = stagProdPublication.publication;
+export const publicationLegacy = legacyPublication.publication;
