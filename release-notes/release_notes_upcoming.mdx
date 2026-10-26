@@ -10,6 +10,16 @@
       as the previous default (14) is reaching end-of-life on November 12, 2026 and won't be supported by Splice nor receive updates from upstream Postgres.
       If you cannot yet upgrade, you must restore the previous volume in `compose.yaml` AND change the Postgres version in the `.env` file back to `14.24-trixie@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446`.
 
+  - Participant
+
+    - **Breaking** Downloading the participant's private keys via its admin API is now disabled by default.
+      For participants that do not use KMS, this breaks participant identities dumps, including periodic backups
+      (`participantIdentitiesBackup`), the validator's `/v0/admin/participant/identities` endpoint, and SV identities dumps.
+      These now fail with an error that explains how to re-enable key downloads.
+      To re-enable them, set `enableKeyDownload: true` in the `splice-participant` Helm chart,
+      or pass `-K` to the Docker Compose validator's `start.sh`.
+      Participants that use KMS are not affected, as their identities dumps do not include private keys.
+
   - Scan App
 
     - The following request fields now have a `maxItems` bound of 1000; requests exceeding it are rejected with 400:

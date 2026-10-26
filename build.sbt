@@ -2572,6 +2572,17 @@ updateTestConfigForParallelRuns := {
       "SvOffboardingIntegrationTest",
       "ManualStartIntegrationTest",
     ).exists(name.contains)
+  // These are tests that download private keys from participants (e.g., for identities dumps),
+  // which needs to be explicitly allowed in Canton (`start-canton.sh -k`).
+  def isKeyDownloadTest(name: String): Boolean =
+    Seq(
+      "CombinedDumpDirectoryExportIntegrationTest",
+      "PeriodicBackupIntegrationTest",
+      "ParticipantPlaintextIdentitiesIntegrationTest",
+      "SvIdentitiesDumpIntegrationTest",
+      "SvReonboardingIntegrationTest",
+      "ValidatorReonboarding",
+    ).exists(name.contains)
   def isManualSignatureIntegrationTest(name: String): Boolean =
     Seq(
       "ManualSignatureIntegrationTest"
@@ -2675,6 +2686,11 @@ updateTestConfigForParallelRuns := {
       "app upgrade tests",
       "test-full-class-names-app-upgrade.log",
       (t: String) => !isTimeBasedTest(t) && isAppUpgradeTest(t),
+    ),
+    (
+      "tests that download participant keys",
+      "test-full-class-names-key-download.log",
+      (t: String) => isKeyDownloadTest(t),
     ),
     (
       "resource intensive tests",

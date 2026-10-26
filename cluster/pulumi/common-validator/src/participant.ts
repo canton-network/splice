@@ -60,6 +60,8 @@ export async function installParticipant(
     metrics: {
       enable: true,
     },
+    // TODO(DACH-NY/canton-network-internal#7687): Only enable this where needed (e.g., for identities backups of non-KMS participants).
+    enableKeyDownload: true,
   };
 
   const participantValuesWithSpecifiedAud: ChartValues = {

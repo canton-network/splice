@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.config.{DbConfig, FullClientConfig}
+import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.{ForceFlag, ParticipantId, PartyId}
@@ -244,7 +245,7 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
           // in tests for Canton does not work for standalone instances.
           testResourcesPath / "standalone-participant-extra-no-auth.conf",
         ),
-        Seq.empty,
+        Seq(ProcessTestUtil.enableKeyDownloadConfig),
         "alice-participant",
         "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
         "EXTRA_PARTICIPANT_DB" -> oldParticipantDb,
@@ -401,6 +402,17 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
           .effectiveAmount shouldBe lockedAmount
       }
 
+      clue("Dumping participant identities fails if key downloads are disabled") {
+        // The participant in this Canton instance does not allow key downloads
+        loggerFactory.assertThrowsAndLogsSeq[CommandFailure](
+          aliceValidatorLocalBackend.dumpParticipantIdentities(),
+          entries =>
+            forAtLeast(1, entries) {
+              _.toString should include("key downloads are disabled")
+            },
+        )
+      }
+
       clue("Restart validator without migration config") {
         aliceValidatorLocalBackend.stop()
         aliceValidatorLocalRestart.startSync()
@@ -469,7 +481,7 @@ class ValidatorReonboardingWithPartiesToMigrateIntegrationTest
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
       ),
-      Seq.empty,
+      Seq(ProcessTestUtil.enableKeyDownloadConfig),
       "alice-reonboard-from-key-database",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> oldParticipantDb,

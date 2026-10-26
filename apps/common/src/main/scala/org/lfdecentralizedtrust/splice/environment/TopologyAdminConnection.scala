@@ -7,6 +7,7 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits.catsSyntaxOptionId
 import cats.syntax.applicative.*
 import cats.syntax.either.*
+import com.daml.grpc.{GrpcException, GrpcStatus}
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
@@ -65,6 +66,7 @@ import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   AuthorizedStateChanged,
+  KeyDownloadDisabledException,
   TopologySnapshot,
   TopologyTransactionType,
 }
@@ -1578,6 +1580,13 @@ abstract class TopologyAdminConnection(
       traceContext: TraceContext
   ): Future[ByteString] = {
     runCmd(VaultAdminCommands.ExportKeyPair(fingerprint, ProtocolVersion.latest, password = None))
+      .recoverWith {
+        // Canton reports this as FAILED_PRECONDITION, which we otherwise retry.
+        // Fail with a non-retryable error instead so that misconfigurations surface quickly.
+        case GrpcException(GrpcStatus(Status.Code.FAILED_PRECONDITION, Some(description)), _)
+            if description.contains(KeyDownloadDisabledException.cantonErrorDescription) =>
+          Future.failed(new KeyDownloadDisabledException(serviceName, fingerprint))
+      }
   }
 
   def generateKeyPair(name: String, usage: NonEmpty[Set[SigningKeyUsage]])(implicit
@@ -1817,6 +1826,23 @@ abstract class TopologyAdminConnection(
 }
 
 object TopologyAdminConnection {
+
+  /** The node does not allow downloading its private keys. */
+  final class KeyDownloadDisabledException(serviceName: String, fingerprint: Fingerprint)
+      extends RuntimeException(
+        s"Failed to download private key $fingerprint via $serviceName: key downloads are disabled on that node. " +
+          "Allow them to create identities dumps (e.g., for backups) of nodes that do not use KMS: " +
+          "set `enableKeyDownload: true` in the splice-participant Helm chart, " +
+          "pass `-K` to the Docker Compose validator's start.sh, " +
+          "or set `canton.features.enable-preview-commands = yes` in the node's Canton config."
+      )
+
+  object KeyDownloadDisabledException {
+    // TODO(DACH-NY/canton-network-internal#7687): Adapt this once Canton has a dedicated `enable-key-download` flag.
+    val cantonErrorDescription =
+      "Remote export of private keys only allowed when preview is enabled"
+  }
+
   sealed trait TopologyTransactionType {
     def proposals: Boolean
   }

@@ -1,0 +1,5 @@
+services:
+  participant:
+    environment:
+      # TODO(DACH-NY/canton-network-internal#7687): Switch to the dedicated `enable-key-download` flag once available.
+      - ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD=canton.features.enable-preview-commands = yes
