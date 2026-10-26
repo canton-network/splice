@@ -834,14 +834,14 @@ class DbScanAppRewardsStore(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
-    val appIssuance = params.issuancePerFeaturedAppTraffic_CCperMB
-    val assetIssuance = params.issuancePerFeaturedAssetBurn_CCperMB
-    val assetBurnRate = params.issuancePerFeaturedAssetBurnCC
-    val appBurnRate = params.issuancePerFeaturedAppBurnCC
-    val threshold = params.threshold_CC
-    val unclaimed = params.unclaimedAppRewardAmount
-    val totalAppRewardFromAppActivity = params.totalIssuanceForFeaturedAppRewards
-    val totalAppRewardFromAssetActivity = params.totalIssuanceForFeaturedAssetRewards
+    val appIssuance = params.issuancePerAppBurnCCperMB
+    val assetIssuance = params.issuancePerAssetBurnCCperMB
+    val assetBurnRate = params.issuancePerAssetBurnCC
+    val appBurnRate = params.issuancePerAppBurnCC
+    val threshold = params.appRewardCouponThresholdCC
+    val unclaimed = params.unclaimedMintingAllowanceCC
+    val totalAppRewardFromAppActivity = params.appMintingAllowanceCC
+    val totalAppRewardFromAssetActivity = params.assetMintingAllowanceCC
 
     (sql"""with combined as (
              select app_provider_party,
@@ -886,7 +886,7 @@ class DbScanAppRewardsStore(
     *
     * Under TBAR v1.1 `total_app_reward_minting_allowance` holds the per-party
     * sum from both app and asset activity, bounded above by the combined
-    * `totalIssuanceForFeaturedAppRewards + totalIssuanceForFeaturedAssetRewards`.
+    * `appMintingAllowanceCC + assetMintingAllowanceCC`.
     *
     * Called inside a transactional block which rolls back if it fails.
     */
@@ -901,7 +901,7 @@ class DbScanAppRewardsStore(
     """.as[BigDecimal].head.map { totalRewardAmount =>
       val tolerance = rewardMintingAllowanceTolerance
       val combinedAllocation =
-        params.totalIssuanceForFeaturedAppRewards + params.totalIssuanceForFeaturedAssetRewards
+        params.appMintingAllowanceCC + params.assetMintingAllowanceCC
       if (totalRewardAmount > combinedAllocation + tolerance) {
         throw Status.INTERNAL
           .withDescription(

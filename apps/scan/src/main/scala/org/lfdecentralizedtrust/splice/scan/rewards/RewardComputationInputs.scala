@@ -12,23 +12,23 @@ import scala.jdk.OptionConverters.RichOptional
   *
   * Fields are BigDecimal because they flow into SQL queries.
   *
-  * Under TBAR v1.1 (CIP-104 amendment) `unclaimedAppRewardAmount` carries the
+  * Under TBAR v1.1 (CIP-104 amendment) `unclaimedMintingAllowanceCC` carries the
   * round-wide unclaimed amount — app-side's unclaimed cascades into asset-side's
   * budget before any asset allocation, so there is no separate
   * unclaimed asset portion.
   */
 final case class RewardIssuanceParams(
     // Common
-    threshold_CC: BigDecimal,
-    unclaimedAppRewardAmount: BigDecimal,
+    appRewardCouponThresholdCC: BigDecimal,
+    unclaimedMintingAllowanceCC: BigDecimal,
     // App side
-    totalIssuanceForFeaturedAppRewards: BigDecimal,
-    issuancePerFeaturedAppTraffic_CCperMB: BigDecimal,
-    issuancePerFeaturedAppBurnCC: BigDecimal,
+    appMintingAllowanceCC: BigDecimal,
+    issuancePerAppBurnCCperMB: BigDecimal,
+    issuancePerAppBurnCC: BigDecimal,
     // Asset side
-    totalIssuanceForFeaturedAssetRewards: BigDecimal,
-    issuancePerFeaturedAssetBurn_CCperMB: BigDecimal,
-    issuancePerFeaturedAssetBurnCC: BigDecimal,
+    assetMintingAllowanceCC: BigDecimal,
+    issuancePerAssetBurnCCperMB: BigDecimal,
+    issuancePerAssetBurnCC: BigDecimal,
 )
 
 /** Raw contract inputs for app reward CC computation.
@@ -68,38 +68,37 @@ final case class RewardComputationInputs(
       totalRoundAppActivityWeight: Long,
       totalFeaturedAssetWeight: Long,
   ): RewardIssuanceParams = {
-    val totalCouponsCC = bytesToCC(totalRoundAppActivityWeight)
-    val rewardsToIssue = mul(amuletsToIssueInRound, appRewardPercentage)
+    val totalAppBurnCC = bytesToCC(totalRoundAppActivityWeight)
+    val roundMintingAllowanceCC = mul(amuletsToIssueInRound, appRewardPercentage)
     val appTranche = computeIssuanceTranche(
-      rewardsToIssue = rewardsToIssue,
+      rewardsToIssue = roundMintingAllowanceCC,
       capPerCoupon = featuredAppRewardCap,
-      totalCoupons = totalCouponsCC,
+      totalCoupons = totalAppBurnCC,
     )
 
     // Asset side (CIP-104 amendment): same tranche formula and cap as the app
     // side, consuming the app side's remainder as the asset budget.
-    val totalFeaturedAssetBurnCC = bytesToCC(totalFeaturedAssetWeight)
+    val totalAssetBurnCC = bytesToCC(totalFeaturedAssetWeight)
     val assetTranche = computeIssuanceTranche(
       rewardsToIssue = appTranche.unclaimedAllowance,
       capPerCoupon = featuredAppRewardCap,
-      totalCoupons = totalFeaturedAssetBurnCC,
+      totalCoupons = totalAssetBurnCC,
     )
 
     // Convert Numeric → BigDecimal at the output boundary for SQL.
-    // Under TBAR v1.1, totalIssuanceForFeaturedAppRewards carries the app-source
-    // allocation (parallel to totalIssuanceForFeaturedAssetRewards for the asset
+    // Under TBAR v1.1, appMintingAllowanceCC carries the app-source
+    // allocation (parallel to assetMintingAllowanceCC for the asset
     // side); the shared pot is implicit as app + asset + unclaimed.
     RewardIssuanceParams(
-      threshold_CC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
-      unclaimedAppRewardAmount = BigDecimal(assetTranche.unclaimedAllowance),
-      totalIssuanceForFeaturedAppRewards = BigDecimal(appTranche.claimedAllowance),
-      issuancePerFeaturedAppTraffic_CCperMB =
-        BigDecimal(mul(trafficPriceInCCperMB, appTranche.issuanceRatio)),
-      issuancePerFeaturedAppBurnCC = BigDecimal(appTranche.issuanceRatio),
-      totalIssuanceForFeaturedAssetRewards = BigDecimal(assetTranche.claimedAllowance),
-      issuancePerFeaturedAssetBurn_CCperMB =
+      appRewardCouponThresholdCC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
+      unclaimedMintingAllowanceCC = BigDecimal(assetTranche.unclaimedAllowance),
+      appMintingAllowanceCC = BigDecimal(appTranche.claimedAllowance),
+      issuancePerAppBurnCCperMB = BigDecimal(mul(trafficPriceInCCperMB, appTranche.issuanceRatio)),
+      issuancePerAppBurnCC = BigDecimal(appTranche.issuanceRatio),
+      assetMintingAllowanceCC = BigDecimal(assetTranche.claimedAllowance),
+      issuancePerAssetBurnCCperMB =
         BigDecimal(mul(trafficPriceInCCperMB, assetTranche.issuanceRatio)),
-      issuancePerFeaturedAssetBurnCC = BigDecimal(assetTranche.issuanceRatio),
+      issuancePerAssetBurnCC = BigDecimal(assetTranche.issuanceRatio),
     )
   }
 
