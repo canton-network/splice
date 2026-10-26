@@ -81,6 +81,15 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
         (updateId, r.hcursor.get[String]("receiver").fold(e => fail(e), identity))
     }
 
+  "scan_party_monitor.py's unit tests pass" in { _ =>
+    val output = mutable.ListBuffer.empty[String]
+    val exitCode = scala.sys.process
+      .Process(Seq("python", "-m", "unittest", "discover", "-s", "scripts/scan-party-monitor"))
+      .!(ProcessLogger(output.append(_), output.append(_)))
+    logger.debug(s"Unit tests of $script exited with $exitCode:\n${output.mkString("\n")}")
+    exitCode shouldBe 0 withClue s"exit code; output:\n${output.mkString("\n")}"
+  }
+
   "scan_party_monitor.py reports transfers to unexpected recipients and confirmations" in {
     implicit env =>
       val dir: Path = Files.createTempDirectory("scan-party-monitor")

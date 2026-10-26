@@ -64,7 +64,7 @@ def at(second: int) -> str:
     return f"2026-01-02T00:00:{second:02d}.123456Z"
 
 
-# ---- Scan JSON builders ------------------------------------------------------------------
+### Scan JSON builders
 
 
 def created(
@@ -199,7 +199,7 @@ def summary(match: Optional[Json]) -> Dict[str, List[Tuple[str, str, str]]]:
     }
 
 
-# ---- fakes -----------------------------------------------------------------------------
+### fakes
 
 
 class FakeScan(spm.ScanClient):
@@ -343,7 +343,7 @@ def no_proxy() -> Iterator[None]:
         yield
 
 
-# ---- pure functions --------------------------------------------------------------------
+### pure functions
 
 
 class HelpersTest(unittest.TestCase):
@@ -530,7 +530,7 @@ class StoreTest(unittest.TestCase):
             spm.Store(self.path)
 
 
-# ---- the monitor against a fake Scan ----------------------------------------------------
+### the monitor against a fake Scan
 
 
 class MonitorTestCase(unittest.TestCase):
@@ -862,7 +862,7 @@ class ReconfigurationTest(MonitorTestCase):
         self.assertLogged("ACS seed complete: 5 contracts")
 
 
-# ---- HTTP ------------------------------------------------------------------------------
+### HTTP
 
 
 class HttpTest(unittest.TestCase):

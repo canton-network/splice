@@ -162,7 +162,7 @@ with HTTP 429, the script backs off and halves its request rate for five minutes
 - Incoming transfers through a `TransferPreapproval` of a party with `alert_confirmations`
   match, because the receiver of such a transfer is a signatory of the preapproval and of
   the new holding, and hence confirms the transfer.
-- If the snapshot to seed from disappears from Scan before the seed completes (Scan prunes
+- If the snapshot to seed from disappears from Scan before the seed completes (Scan may prune
   old snapshots), the script stops with an error; delete the database file and start over.
 
 ## Tests
@@ -174,4 +174,5 @@ Python 3 and take a few seconds. Run them from the repository root with
 python3 -m unittest discover -s scripts/scan-party-monitor -v
 ```
 
-`ScanPartyMonitorScriptIntegrationTest` runs the script against a local Splice network.
+`ScanPartyMonitorScriptIntegrationTest` runs these unit tests, and the script against a local
+Splice network.

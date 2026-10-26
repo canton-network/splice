@@ -155,7 +155,7 @@ def holding_amount(created: Json) -> Optional[str]:
     return amount if isinstance(amount, str) else None
 
 
-# ---- configuration -----------------------------------------------------------------
+### configuration
 
 
 @dataclass(frozen=True)
@@ -227,7 +227,7 @@ def load_config(path: str) -> Dict[str, PartyConfig]:
     return parse_config(raw)
 
 
-# ---- Scan client ---------------------------------------------------------------------
+### Scan client
 
 
 class Pacer:
@@ -379,7 +379,7 @@ class ScanClient:
         return transactions
 
 
-# ---- local store -----------------------------------------------------------------------
+### local store
 
 
 @dataclass(frozen=True)
@@ -476,7 +476,7 @@ class Store:
         self.conn.execute("DELETE FROM contracts")
 
 
-# ---- Slack -----------------------------------------------------------------------------
+### Slack
 
 
 class SlackNotifier:
@@ -565,7 +565,7 @@ def format_slack_message(matches: List[Json]) -> str:
     return _join_capped(header, lines, "updates")
 
 
-# ---- monitor ---------------------------------------------------------------------------
+### monitor
 
 
 class Monitor:
@@ -593,7 +593,7 @@ class Monitor:
         }
         self.stats: Dict[str, int] = {"transactions": 0, "matches": 0}
 
-    # ---- configuration changes -------------------------------------------------------
+    ### configuration changes
 
     def prepare(self) -> None:
         """Compares the configured parties with the ones the contract map was built for, and
@@ -658,7 +658,7 @@ class Monitor:
             f"Tracked parties changed ({'; '.join(changes)}); re-seeding the contracts"
         )
 
-    # ---- ACS seed --------------------------------------------------------------------
+    ### ACS seed
 
     def seed(self) -> None:
         try:
@@ -766,7 +766,7 @@ class Monitor:
         self.store.put_contract(created["contract_id"], created["signatories"], holding_owner(created))
         return True
 
-    # ---- update stream -----------------------------------------------------------------
+    ### update stream
 
     def stream(self) -> None:
         store = self.store
@@ -931,7 +931,7 @@ class Monitor:
         }
 
 
-# ---- command line ------------------------------------------------------------------------
+### command line
 
 
 def timestamp(value: str) -> str:
