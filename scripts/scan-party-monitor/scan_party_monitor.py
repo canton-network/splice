@@ -676,11 +676,14 @@ class Monitor:
             if migration_id is None:
                 migration_id = self.scan.get_migration_id()
             try:
-                record_time = self.scan.get_snapshot_before(utc_now_iso(), migration_id)
+                record_time = self.scan.get_snapshot_before(
+                    self.args.seed_snapshot_before or utc_now_iso(), migration_id
+                )
             except NotFound:
                 raise FatalError(
-                    f"Scan has no ACS snapshot for migration id {migration_id} yet. Scan takes snapshots "
-                    "every few hours; retry later, or pass an older --migration-id."
+                    f"Scan has no ACS snapshot for migration id {migration_id} before "
+                    f"{self.args.seed_snapshot_before or 'now'}. Scan takes snapshots every few hours; "
+                    "retry later, or pass an older --migration-id or a later --seed-snapshot-before."
                 )
             store.begin()
             store.set_meta(Meta.SNAPSHOT_MIGRATION_ID, migration_id)
@@ -773,9 +776,16 @@ class Monitor:
         # together with the cursor, once they have been posted.
         unposted: List[Json] = []
         oldest_unposted = 0.0
+        stop_at = None if self.args.stop_at_record_time is None else parse_time(self.args.stop_at_record_time)
         store.begin()
         while True:
             updates = self.scan.get_updates(migration_id, record_time, self.args.updates_page_size)
+            caught_up = len(updates) < self.args.updates_page_size
+            reached_stop = False
+            if stop_at is not None:
+                before_stop = [u for u in updates if parse_time(u["record_time"]) <= stop_at]
+                reached_stop = len(before_stop) < len(updates)
+                updates = before_stop
             for update in updates:
                 match = self.process_update(update)
                 if match is not None:
@@ -794,10 +804,10 @@ class Monitor:
                 self.stats["transactions"] += len(updates)
                 self.forget_reported_until(position(migration_id, record_time))
 
-            caught_up = len(updates) < self.args.updates_page_size
             if (
                 not unposted
                 or caught_up
+                or reached_stop
                 or time.monotonic() - oldest_unposted >= self.args.slack_batch_seconds
             ):
                 if unposted and self.slack is not None:
@@ -810,6 +820,11 @@ class Monitor:
             if now - last_heartbeat >= self.args.heartbeat_interval_seconds:
                 last_heartbeat = now
                 self.heartbeat(migration_id, record_time)
+            if reached_stop:
+                store.commit()
+                self.heartbeat(migration_id, record_time)
+                LOG.info(f"Reached --stop-at-record-time {self.args.stop_at_record_time}; exiting as requested")
+                return
             if caught_up:
                 if self.args.exit_when_caught_up:
                     store.commit()
@@ -913,6 +928,16 @@ class Monitor:
 # ---- command line ------------------------------------------------------------------------
 
 
+def timestamp(value: str) -> str:
+    try:
+        parsed = parse_time(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be an ISO-8601 timestamp, e.g. 2026-10-26T12:00:00Z")
+    if parsed.tzinfo is None:
+        raise argparse.ArgumentTypeError("must include a time zone, e.g. 2026-10-26T12:00:00Z")
+    return value
+
+
 def page_size(value: str) -> int:
     n = int(value)
     if not 1 <= n <= MAX_PAGE_SIZE:
@@ -940,6 +965,16 @@ def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
         help="While catching up, collect alerts for up to this long into one Slack message (default: %(default)s)",
     )
     parser.add_argument("--migration-id", type=int, help="Migration id of the ACS snapshot to seed from (default: the latest)")
+    parser.add_argument(
+        "--seed-snapshot-before",
+        type=timestamp,
+        help="Seed from the latest ACS snapshot at or before this time (default: now); only used for the first seed",
+    )
+    parser.add_argument(
+        "--stop-at-record-time",
+        type=timestamp,
+        help="Exit once all updates up to this record time have been processed, e.g. to replay a fixed time range",
+    )
     parser.add_argument("--acs-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Contracts per ACS request (default: %(default)s)")
     parser.add_argument(
         "--acs-requests-per-second",

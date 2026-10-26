@@ -117,6 +117,11 @@ given by `--db`:
 Note that the script reports matches in all updates after the snapshot, which can be a few
 hours before the script was first started.
 
+**Replaying a fixed range.** `--seed-snapshot-before TIME` seeds from the latest snapshot at
+or before `TIME` instead of the latest one, and `--stop-at-record-time TIME` exits once all
+updates up to `TIME` have been processed. Together, they make a run reproducible, e.g. to
+check a configuration against past transactions.
+
 **Adding parties.** The contract map only covers the parties it was built for. When the
 configuration adds parties, the script rebuilds the map from the latest snapshot before its
 current position and replays the updates from there. During the replay, it reports matches
@@ -149,6 +154,9 @@ with HTTP 429, the script backs off and halves its request rate for five minutes
 - If several tracked parties send holdings in one transaction, the outputs cannot be
   attributed to one of them, so each is checked against all outputs; this can report a
   transfer to another sender's expected recipient.
+- A transfer funded only from reward coupons, without consuming any of the sender's
+  holdings, is not detected as a transfer; it is reported for parties with
+  `alert_confirmations`.
 - Burning holdings without creating new ones (e.g. to buy traffic) is not a transfer and
   is only reported for parties with `alert_confirmations`.
 - Incoming transfers through a `TransferPreapproval` of a party with `alert_confirmations`
