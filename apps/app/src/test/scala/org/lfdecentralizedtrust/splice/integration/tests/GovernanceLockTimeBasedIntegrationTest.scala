@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.util.{
   TokenStandardMetadata,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.store.TransferTxLogEntry
 import org.scalatest.Assertion
 
 import java.time.Duration
@@ -35,6 +36,7 @@ import scala.jdk.OptionConverters.*
 class GovernanceLockTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
+    with WalletTxLogTestUtil
     with TimeTestUtil
     with GovernanceLockTest {
 
@@ -85,6 +87,43 @@ class GovernanceLockTimeBasedIntegrationTest
   private def checkLockKind(kind: governancelock.GovernanceLockKind): Assertion =
     kind shouldBe a[governancelock.governancelockkind.GLK_SuperValidatorRightsOwner]
 
+  private def latestAliceEventId()(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Option[String] =
+    aliceWalletClient.listTransactions(None, pageSize = 1).headOption.map(_.eventId)
+
+  private def checkLockActionHistory(
+      previousEventId: Option[String],
+      expectedBalanceChange: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    checkTxHistory(
+      aliceWalletClient,
+      Seq({ case entry: TransferTxLogEntry =>
+        entry.sender.value.amount shouldBe expectedBalanceChange
+      }),
+      previousEventId = previousEventId,
+      trafficTopups = IgnoreTopupsDevNet,
+    )
+
+  /** Checks alice's unlocked and locked balances after a lock action, and that
+    * the action's wallet history entry captures expected balance change.
+    */
+  private def checkBalancesAndHistory(
+      action: String,
+      previousEventId: Option[String],
+      expectedUnlocked: BigDecimal,
+      expectedLocked: BigDecimal,
+      expectedBalanceChange: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    clue(s"alice's balances and wallet history after $action") {
+      eventually() {
+        val balance = aliceWalletClient.balance()
+        balance.unlockedQty shouldBe expectedUnlocked
+        balance.lockedQty shouldBe expectedLocked
+      }
+      checkLockActionHistory(previousEventId, expectedBalanceChange)
+    }
+
   private def testTokenStandardCompat[CId <: ContractId[?], View](
       ops: TokenStandardOps[CId, View]
   ) =
@@ -94,6 +133,11 @@ class GovernanceLockTimeBasedIntegrationTest
       val owner = RichPartyId.local(ownerParty)
 
       aliceWalletClient.tap(lockAmount)
+      val (beforeCreate, unlockedAfterTap) = eventually() {
+        val eventId = latestAliceEventId()
+        eventId should not be empty
+        (eventId, aliceWalletClient.balance().unlockedQty)
+      }
 
       // Create the governance lock via a transfer to the magic party
       val governanceLockCid = ops.createGovernanceLock(
@@ -102,6 +146,13 @@ class GovernanceLockTimeBasedIntegrationTest
         lockKind,
         lockSubject,
         amount = lockAmount,
+      )
+      checkBalancesAndHistory(
+        "creating the lock",
+        beforeCreate,
+        expectedUnlocked = unlockedAfterTap - lockAmount,
+        expectedLocked = lockAmount,
+        expectedBalanceChange = -lockAmount,
       )
 
       clue("the GovernanceLock has the correct kind") {
@@ -140,6 +191,7 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       // Withdraw the governance lock; it's relocked as a vesting GovernanceLock and funds remain locked
+      val beforeUnlock = latestAliceEventId()
       val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
       val (vestingLockCid, vestingLockView) = ops
         .unlockGovernanceLock(
@@ -174,14 +226,20 @@ class GovernanceLockTimeBasedIntegrationTest
           .disclosedContracts should not be empty
       }
 
-      clue("the amulet remains locked while vesting") {
-        aliceWalletClient.balance().lockedQty shouldBe lockAmount
-      }
+      // The amulet remains locked while vesting
+      checkBalancesAndHistory(
+        "unlocking and starting to vest",
+        beforeUnlock,
+        expectedUnlocked = unlockedAfterTap - lockAmount,
+        expectedLocked = lockAmount,
+        expectedBalanceChange = BigDecimal(0),
+      )
 
       // Advance part of the way into the 2 minute vesting period and withdraw with an explicit
       // withdraw time of 30 seconds into the vesting period
       advanceTime(Duration.ofSeconds(31))
 
+      val beforePartialWithdraw = latestAliceEventId()
       val (remainingVestingLockCid, remainingVestingLockView) = ops
         .withdrawVestingLock(
           aliceValidatorBackend.participantClientWithAdminToken,
@@ -209,12 +267,19 @@ class GovernanceLockTimeBasedIntegrationTest
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(remainingVestingLock))
       val remainingVestingAmount = BigDecimal(remainingVestingLock.amount)
       remainingVestingAmount shouldBe expectedRemainingLockAmount
-      aliceWalletClient.balance().lockedQty shouldBe expectedRemainingLockAmount
+      checkBalancesAndHistory(
+        "withdrawing the vested funds mid-vesting",
+        beforePartialWithdraw,
+        expectedUnlocked = unlockedAfterTap - expectedRemainingLockAmount,
+        expectedLocked = expectedRemainingLockAmount,
+        expectedBalanceChange = lockAmount - expectedRemainingLockAmount,
+      )
 
       // Advance past the end of the vesting period and withdraw with an explicit withdraw time of
       // the exact end of the vesting period
       advanceTime(Duration.ofSeconds(90))
 
+      val beforeFullWithdraw = latestAliceEventId()
       ops.withdrawVestingLock(
         aliceValidatorBackend.participantClientWithAdminToken,
         owner,
@@ -228,6 +293,15 @@ class GovernanceLockTimeBasedIntegrationTest
           ownerParty,
           c => isVestingLock(c.data),
         ) shouldBe empty
+      // The vested funds stay in the expired LockedAmulet, which the wallet
+      // still counts as locked, so neither balance changes
+      checkBalancesAndHistory(
+        "withdrawing the fully vested funds",
+        beforeFullWithdraw,
+        expectedUnlocked = unlockedAfterTap - expectedRemainingLockAmount,
+        expectedLocked = expectedRemainingLockAmount,
+        expectedBalanceChange = BigDecimal(0),
+      )
 
       clue("the only LockedAmulet of the owner is the expired LockedAmulet of the vesting lock") {
         val now = getLedgerTime.toInstant
