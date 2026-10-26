@@ -79,15 +79,11 @@ final case class RewardComputationInputs(
     // Asset side (CIP-104 amendment): same tranche formula and cap as the app
     // side, consuming the app side's remainder as the asset budget.
     val totalFeaturedAssetBurnCC = bytesToCC(totalFeaturedAssetWeight)
-    val assetTranche =
-      if (totalFeaturedAssetBurnCC.compareTo(zero) <= 0)
-        TrancheParameters(zero, zero, appTranche.unclaimedAllowance)
-      else
-        computeIssuanceTranche(
-          rewardsToIssue = appTranche.unclaimedAllowance,
-          capPerCoupon = featuredAppRewardCap,
-          totalCoupons = totalFeaturedAssetBurnCC,
-        )
+    val assetTranche = computeIssuanceTranche(
+      rewardsToIssue = appTranche.unclaimedAllowance,
+      capPerCoupon = featuredAppRewardCap,
+      totalCoupons = totalFeaturedAssetBurnCC,
+    )
 
     // Convert Numeric → BigDecimal at the output boundary for SQL.
     // Under TBAR v1.1, totalIssuanceForFeaturedAppRewards carries the app-source
