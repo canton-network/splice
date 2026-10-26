@@ -164,3 +164,14 @@ with HTTP 429, the script backs off and halves its request rate for five minutes
   the new holding, and hence confirms the transfer.
 - If the snapshot to seed from disappears from Scan before the seed completes (Scan prunes
   old snapshots), the script stops with an error; delete the database file and start over.
+
+## Tests
+
+`test_scan_party_monitor.py` has unit tests against an in-process fake of Scan. They only need
+Python 3 and take a few seconds. Run them from the repository root with
+
+```bash
+python3 -m unittest discover -s scripts/scan-party-monitor -v
+```
+
+`ScanPartyMonitorScriptIntegrationTest` runs the script against a local Splice network.

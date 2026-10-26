@@ -29,6 +29,7 @@ Run with `-h` for supported options.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -282,7 +283,8 @@ def http_request(
         with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
             return response.status, response.headers, response.read()
     except urllib.error.HTTPError as e:
-        return e.code, e.headers, e.read()
+        with e:
+            return e.code, e.headers, e.read()
 
 
 class ScanClient:
@@ -407,8 +409,12 @@ class Store:
         if version is None:
             self.set_meta(Meta.SCHEMA_VERSION, SCHEMA_VERSION)
         elif version != SCHEMA_VERSION:
+            self.conn.close()
             raise FatalError(f"Database schema version {version} is not supported, expected {SCHEMA_VERSION}")
         self.party_ids: Dict[str, int] = {p: i for i, p in self.conn.execute("SELECT id, party FROM parties")}
+
+    def close(self) -> None:
+        self.conn.close()
 
     def begin(self) -> None:
         self.conn.execute("BEGIN")
@@ -1008,19 +1014,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     try:
         config = load_config(args.config)
-        store = Store(args.db)
-        stored_url = store.get_meta(Meta.SCAN_URL)
-        scan_url = args.scan_url.rstrip("/")
-        if stored_url is None:
-            store.set_meta(Meta.SCAN_URL, scan_url)
-        elif stored_url != scan_url:
-            LOG.warning(f"{args.db} was created against {stored_url}; continuing with {scan_url}")
-        scan = ScanClient(scan_url, args.acs_requests_per_second, args.updates_requests_per_second)
-        slack = SlackNotifier(args.slack_webhook_url) if args.slack_webhook_url else None
-        monitor = Monitor(args, scan, store, slack, config)
-        monitor.prepare()
-        monitor.seed()
-        monitor.stream()
+        with contextlib.closing(Store(args.db)) as store:
+            stored_url = store.get_meta(Meta.SCAN_URL)
+            scan_url = args.scan_url.rstrip("/")
+            if stored_url is None:
+                store.set_meta(Meta.SCAN_URL, scan_url)
+            elif stored_url != scan_url:
+                LOG.warning(f"{args.db} was created against {stored_url}; continuing with {scan_url}")
+            scan = ScanClient(scan_url, args.acs_requests_per_second, args.updates_requests_per_second)
+            slack = SlackNotifier(args.slack_webhook_url) if args.slack_webhook_url else None
+            monitor = Monitor(args, scan, store, slack, config)
+            monitor.prepare()
+            monitor.seed()
+            monitor.stream()
     except StopRequested:
         pass
     except FatalError as e:
