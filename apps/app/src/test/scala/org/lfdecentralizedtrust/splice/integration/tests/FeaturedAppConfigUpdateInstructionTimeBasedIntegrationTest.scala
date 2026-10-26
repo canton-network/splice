@@ -28,7 +28,7 @@ import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
 
 import scala.jdk.OptionConverters.*
 
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_31
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
