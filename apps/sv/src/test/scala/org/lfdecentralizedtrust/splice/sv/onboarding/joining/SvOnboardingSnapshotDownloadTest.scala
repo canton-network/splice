@@ -5,9 +5,6 @@ package org.lfdecentralizedtrust.splice.sv.onboarding.joining
 
 import better.files.File
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
-import com.daml.metrics.api.noop.NoOpMetricsFactory
-import com.digitalasset.canton.concurrent.FutureSupervisor
-import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.http.scaladsl.model.{
   ContentTypes,
@@ -29,7 +26,6 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import java.io.IOException
 import java.nio.file.{Files, Path}
-import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 
@@ -38,14 +34,6 @@ class SvOnboardingSnapshotDownloadTest
     with BaseTest
     with HasActorSystem
     with HasExecutionContext {
-
-  private val retryProvider =
-    RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
-
-  override def afterAll(): Unit = {
-    retryProvider.close()
-    super.afterAll()
-  }
 
   private val content = "0123456789".getBytes
 
@@ -78,16 +66,10 @@ class SvOnboardingSnapshotDownloadTest
     }
   }
 
-  private class PreparingSponsor(responses: Either[Throwable, OnboardSvDownloadResponse]*) {
+  private class UnreliableSponsor(responses: Either[Throwable, OnboardSvDownloadResponse]*) {
     private val remaining = mutable.Queue(responses*)
-    val prepares = new AtomicInteger()
-    val downloads = mutable.ListBuffer.empty[String]
-    def prepare(): Future[SvOnboardingSnapshotId] =
-      Future.successful(SvOnboardingSnapshotId(s"id-${prepares.incrementAndGet()}"))
-    def download(id: SvOnboardingSnapshotId): Future[OnboardSvDownloadResponse] = {
-      downloads += id.value
-      remaining.dequeue().fold(Future.failed, Future.successful)
-    }
+    val download: SvOnboardingSnapshotId => Future[OnboardSvDownloadResponse] =
+      _ => remaining.dequeue().fold(Future.failed, Future.successful)
   }
 
   private def httpError(status: StatusCode) = HttpCommandException(
@@ -102,7 +84,6 @@ class SvOnboardingSnapshotDownloadTest
         SvOnboardingSnapshotDownload(
           SvOnboardingSnapshotsConfig(directory.path),
           "test",
-          retryProvider,
         )
       )
     }
@@ -114,60 +95,34 @@ class SvOnboardingSnapshotDownloadTest
 
   "SvOnboardingSnapshotDownload" should {
 
-    "keep the prepared id across temporary service failures" in withDownload { snapshotDownload =>
-      val preparing = httpError(StatusCodes.ServiceUnavailable)
-      val sponsor = new PreparingSponsor(Left(preparing), Left(preparing), Right(full()))
-      def attempt = snapshotDownload.prepareAndDownload(sponsor.prepare(), sponsor.download)
-
-      attempt.failed.futureValue shouldBe preparing
-      attempt.failed.futureValue shouldBe preparing
-      Files.readAllBytes(attempt.futureValue) shouldBe content
-      sponsor.prepares.get() shouldBe 1
-      sponsor.downloads shouldBe Seq("id-1", "id-1", "id-1")
-    }
-
-    "download again from the start with the same prepared id after an interrupted download" in withDownload {
+    "fail with a non-retryable error only when the sponsor no longer has the snapshot" in withDownload {
       snapshotDownload =>
-        val interrupted = new Interrupted(4)
-        val sponsor = new PreparingSponsor(Right(interrupted.response), Right(full()))
-        def attempt = snapshotDownload.prepareAndDownload(sponsor.prepare(), sponsor.download)
-
-        interrupted.after(snapshotDownload, attempt)
-        Files.readAllBytes(attempt.futureValue) shouldBe content
-        sponsor.prepares.get() shouldBe 1
-        sponsor.downloads shouldBe Seq("id-1", "id-1")
-    }
-
-    "prepare again when the sponsor no longer has a usable snapshot" in {
-      Seq[StatusCode](StatusCodes.NotFound, StatusCodes.InternalServerError).foreach { status =>
-        withDownload { snapshotDownload =>
-          val interrupted = new Interrupted(4)
-          val error = httpError(status)
-          val sponsor =
-            new PreparingSponsor(Right(interrupted.response), Left(error), Right(full()))
-          def attempt = snapshotDownload.prepareAndDownload(sponsor.prepare(), sponsor.download)
-
-          interrupted.after(snapshotDownload, attempt)
-          attempt.failed.futureValue shouldBe error
-          Files.readAllBytes(attempt.futureValue) shouldBe content
-          sponsor.prepares.get() shouldBe 2
-          sponsor.downloads shouldBe Seq("id-1", "id-1", "id-2")
+        val id = SvOnboardingSnapshotId("id")
+        val notFound = httpError(StatusCodes.NotFound)
+        snapshotDownload
+          .download(id, new UnreliableSponsor(Left(notFound)).download)
+          .failed
+          .futureValue shouldBe SvOnboardingSnapshotDownload.SnapshotNotFound(notFound)
+        Seq[StatusCode](StatusCodes.InternalServerError, StatusCodes.ServiceUnavailable).foreach {
+          status =>
+            val error = httpError(status)
+            snapshotDownload
+              .download(id, new UnreliableSponsor(Left(error)).download)
+              .failed
+              .futureValue shouldBe error
         }
-      }
     }
 
-    "retry preparation after a failed prepare request" in withDownload { snapshotDownload =>
-      val preparing = httpError(StatusCodes.ServiceUnavailable)
-      val sponsor = new PreparingSponsor(Right(full()))
-      snapshotDownload
-        .prepareAndDownload(Future.failed(preparing), sponsor.download)
-        .failed
-        .futureValue shouldBe preparing
-      sponsor.downloads shouldBe empty
-      val file =
-        snapshotDownload.prepareAndDownload(sponsor.prepare(), sponsor.download).futureValue
-      Files.readAllBytes(file) shouldBe content
-      sponsor.downloads shouldBe Seq("id-1")
+    "download again from the start after an interrupted download" in withDownload {
+      snapshotDownload =>
+        val id = SvOnboardingSnapshotId("id")
+        val interrupted = new Interrupted(4)
+        val sponsor = new Sponsor(interrupted.response, full())
+        interrupted.after(snapshotDownload, snapshotDownload.download(id, sponsor.download))
+        Files.readAllBytes(
+          snapshotDownload.download(id, sponsor.download).futureValue
+        ) shouldBe content
+        sponsor.requests shouldBe Seq("id", "id")
     }
 
     "download the whole snapshot" in withDownload { snapshotDownload =>
@@ -180,20 +135,20 @@ class SvOnboardingSnapshotDownloadTest
 
     "recreate the download directory if cleanup removes it while waiting" in withDownload {
       snapshotDownload =>
-        val preparing = httpError(StatusCodes.ServiceUnavailable)
-        val sponsor = new PreparingSponsor(Left(preparing), Right(full()))
-        def attempt = snapshotDownload.prepareAndDownload(sponsor.prepare(), sponsor.download)
-        attempt.failed.futureValue shouldBe preparing
+        val id = SvOnboardingSnapshotId("id")
+        val unavailable = httpError(StatusCodes.ServiceUnavailable)
+        val sponsor = new UnreliableSponsor(Left(unavailable), Right(full()))
+        snapshotDownload.download(id, sponsor.download).failed.futureValue shouldBe unavailable
         File(snapshotDownload.directory).delete()
-        Files.readAllBytes(attempt.futureValue) shouldBe content
-        sponsor.prepares.get() shouldBe 1
+        Files.readAllBytes(
+          snapshotDownload.download(id, sponsor.download).futureValue
+        ) shouldBe content
     }
 
     "never write outside its directory" in File.usingTemporaryDirectory() { directory =>
       val snapshotDownload = SvOnboardingSnapshotDownload(
         SvOnboardingSnapshotsConfig(directory.path),
         "test",
-        retryProvider,
       )
       val file =
         snapshotDownload
@@ -212,7 +167,6 @@ class SvOnboardingSnapshotDownloadTest
         val snapshotDownload = SvOnboardingSnapshotDownload(
           SvOnboardingSnapshotsConfig(directory.path),
           "acs",
-          retryProvider,
         )
         snapshotDownload.directory shouldBe (directory / "downloads" / "acs").path
         stale.exists shouldBe true
@@ -221,33 +175,26 @@ class SvOnboardingSnapshotDownloadTest
         Files.exists(snapshotDownload.directory) shouldBe false
     }
 
-    "reuse a complete download after restart only when prepare returns the same id" in File
+    "reuse a complete download after restart only for the same id" in File
       .usingTemporaryDirectory() { directory =>
         val config = SvOnboardingSnapshotsConfig(directory.path)
-        def downloader = SvOnboardingSnapshotDownload(config, "acs", retryProvider)
+        def downloader = SvOnboardingSnapshotDownload(config, "acs")
         val id = SvOnboardingSnapshotId("id")
-        val first = downloader
-          .prepareAndDownload(Future.successful(id), new Sponsor(full()).download)
-          .futureValue
+        val first = downloader.download(id, new Sponsor(full()).download).futureValue
         val reused = downloader
-          .prepareAndDownload(
-            Future.successful(id),
-            _ => fail("must not download the completed snapshot again"),
-          )
+          .download(id, _ => fail("must not download the completed snapshot again"))
           .futureValue
         reused shouldBe first
         Files.readAllBytes(reused) shouldBe content
         val changed = new Sponsor(full())
-        downloader
-          .prepareAndDownload(Future.successful(SvOnboardingSnapshotId("new-id")), changed.download)
-          .futureValue
+        downloader.download(SvOnboardingSnapshotId("new-id"), changed.download).futureValue
         changed.requests shouldBe Seq("new-id")
       }
 
     "redownload an incomplete or truncated snapshot after restart" in File
       .usingTemporaryDirectory() { directory =>
         val config = SvOnboardingSnapshotsConfig(directory.path)
-        def downloader = SvOnboardingSnapshotDownload(config, "acs", retryProvider)
+        def downloader = SvOnboardingSnapshotDownload(config, "acs")
         val id = SvOnboardingSnapshotId("id")
         val interrupted = new Interrupted(4)
         val first = downloader
@@ -263,7 +210,7 @@ class SvOnboardingSnapshotDownloadTest
     "redownload when completion metadata is corrupt or expired" in File.usingTemporaryDirectory() {
       directory =>
         val config = SvOnboardingSnapshotsConfig(directory.path)
-        def downloader = SvOnboardingSnapshotDownload(config, "acs", retryProvider)
+        def downloader = SvOnboardingSnapshotDownload(config, "acs")
         val id = SvOnboardingSnapshotId("id")
         val first = downloader
         first.download(id, new Sponsor(full()).download).futureValue

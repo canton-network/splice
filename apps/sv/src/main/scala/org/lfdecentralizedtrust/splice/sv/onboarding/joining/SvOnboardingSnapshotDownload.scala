@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.sv.onboarding.joining
 
 import better.files.File
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.parser.decode
@@ -24,18 +23,14 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
 
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.Try
 import scala.util.control.NonFatal
 
 final class SvOnboardingSnapshotDownload private (
     val directory: Path,
-    retryProvider: RetryProvider,
     config: SvOnboardingSnapshotsConfig,
-) extends NamedLogging {
-
-  override val loggerFactory: NamedLoggerFactory = retryProvider.loggerFactory
+) {
 
   import SvOnboardingSnapshotDownload.*
 
@@ -64,31 +59,6 @@ final class SvOnboardingSnapshotDownload private (
       ) &&
       Instant.parse(metadata.createdAt).plus(config.retention.asJava).isAfter(Instant.now())
     }.getOrElse(false)
-  private val preparedId = new AtomicReference[Option[SvOnboardingSnapshotId]](None)
-
-  def prepareAndDownload(
-      prepare: => Future[SvOnboardingSnapshotId],
-      downloadFrom: SvOnboardingSnapshotId => Future[OnboardSvDownloadResponse],
-  )(implicit ec: ExecutionContext, mat: Materializer): Future[Path] = {
-    def prepareSnapshot(): Future[SvOnboardingSnapshotId] =
-      prepare.map { id =>
-        preparedId.set(Some(id))
-        id
-      }
-    val prepared = preparedId
-      .get()
-      .fold(
-        prepareSnapshot()
-      )(Future.successful)
-    prepared.flatMap { id =>
-      download(id, downloadFrom).recoverWith {
-        case error @ HttpCommandException(_, status, _)
-            if status == StatusCodes.NotFound || status == StatusCodes.InternalServerError =>
-          preparedId.set(None)
-          Future.failed(error)
-      }
-    }
-  }
 
   def download(
       id: SvOnboardingSnapshotId,
@@ -99,26 +69,30 @@ final class SvOnboardingSnapshotDownload private (
       case false =>
         val metadata = DownloadMetadata(id.value, Instant.now().toString, None)
         Future(blocking(writeMetadata(metadata))).flatMap { _ =>
-          downloadFrom(id).flatMap { case OnboardSvDownloadResponse.OK(entity) =>
-            entity.dataBytes
-              .runWith(FileIO.toPath(file))
-              .flatMap { result =>
-                Future(blocking {
-                  if (entity.contentLengthOption.exists(_ != result.count))
-                    throw new java.io.IOException("Incomplete onboarding snapshot download")
-                  writeMetadata(metadata.copy(size = Some(result.count)))
-                  file
-                })
-              }
-              .recoverWith { case NonFatal(e) =>
-                Future.failed(
-                  Status.UNAVAILABLE
-                    .withDescription(s"Download of onboarding snapshot was interrupted: $e")
-                    .withCause(e)
-                    .asRuntimeException()
-                )
-              }
-          }
+          downloadFrom(id)
+            .recoverWith { case notFound @ HttpCommandException(_, StatusCodes.NotFound, _) =>
+              Future.failed(SnapshotNotFound(notFound))
+            }
+            .flatMap { case OnboardSvDownloadResponse.OK(entity) =>
+              entity.dataBytes
+                .runWith(FileIO.toPath(file))
+                .flatMap { result =>
+                  Future(blocking {
+                    if (entity.contentLengthOption.exists(_ != result.count))
+                      throw new java.io.IOException("Incomplete onboarding snapshot download")
+                    writeMetadata(metadata.copy(size = Some(result.count)))
+                    file
+                  })
+                }
+                .recoverWith { case NonFatal(e) =>
+                  Future.failed(
+                    Status.UNAVAILABLE
+                      .withDescription(s"Download of onboarding snapshot was interrupted: $e")
+                      .withCause(e)
+                      .asRuntimeException()
+                  )
+                }
+            }
         }
     }
 
@@ -132,14 +106,15 @@ object SvOnboardingSnapshotDownload {
   private implicit val encoder: Encoder[DownloadMetadata] = deriveEncoder
   private implicit val decoder: Decoder[DownloadMetadata] = deriveDecoder
 
+  final case class SnapshotNotFound(cause: HttpCommandException)
+      extends RetryProvider.QuietNonRetryableException(cause.getMessage)
+
   def apply(
       config: SvOnboardingSnapshotsConfig,
       name: String,
-      retryProvider: RetryProvider,
   ): SvOnboardingSnapshotDownload = {
     new SvOnboardingSnapshotDownload(
       (File(config.directory) / "downloads" / name).createDirectories().path,
-      retryProvider,
       config,
     )
   }
