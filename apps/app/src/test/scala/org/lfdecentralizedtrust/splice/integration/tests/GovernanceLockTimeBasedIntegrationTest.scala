@@ -140,7 +140,7 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       // Withdraw the governance lock; it's relocked as a vesting GovernanceLock and funds remain locked
-      val vestingStartTime = getLedgerTime.plusSeconds(1)
+      val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
       val (vestingLockCid, vestingLockView) = ops
         .unlockGovernanceLock(
           aliceValidatorBackend.participantClientWithAdminToken,
@@ -166,7 +166,7 @@ class GovernanceLockTimeBasedIntegrationTest
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(vestingLock))
       val vestingSpec = vestingLockSpecification(vestingLock)
       vestingSpec.endTime.minus(vestingSpec.vestingPeriod.microseconds, ChronoUnit.MICROS) shouldBe
-        vestingStartTime.toInstant
+        vestingStartTime
 
       clue("Scan serves a withdraw choice context for the vesting lock") {
         ops
@@ -252,8 +252,8 @@ class GovernanceLockTimeBasedIntegrationTest
     val owner = RichPartyId.local(sv1Party)
     val participant = sv1Backend.participantClientWithAdminToken
 
-    val vestingStartTime = getLedgerTime.plusSeconds(1)
-    val endTime = vestingStartTime.toInstant.plus(vestingDuration)
+    val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+    val endTime = vestingStartTime.plus(vestingDuration)
 
     // `tsv1Operations.createGovernanceLock` feeds all of the owner's unlocked
     // holdings into the `TransferFactory_Transfer` choice. Thus, the tap has to

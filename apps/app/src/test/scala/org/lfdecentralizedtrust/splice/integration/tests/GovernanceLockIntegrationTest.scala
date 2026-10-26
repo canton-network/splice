@@ -236,7 +236,7 @@ class GovernanceLockIntegrationTest
             lockKind,
             lockSubject,
             unlockAmount = targetLockAmount,
-            vestingStartTime = env.environment.clock.now.plusSeconds(30),
+            vestingStartTime = env.environment.clock.now.plusSeconds(30).toInstant,
           )
           .value
         val vestingLock = vestingLocksFor(aliceParticipant, alice.partyId).loneElement

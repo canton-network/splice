@@ -1,6 +1,5 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
@@ -41,8 +40,10 @@ trait GovernanceLockTest extends TokenStandardTest {
 
   private def instantToMicros(i: Instant): Long = ChronoUnit.MICROS.between(Instant.EPOCH, i)
 
-  private def formatTimestamp(t: CantonTimestamp): String =
-    DateTimeFormatter.ISO_INSTANT.format(t.toInstant.truncatedTo(ChronoUnit.SECONDS))
+  protected def truncateInstant(i: Instant): Instant = i.truncatedTo(ChronoUnit.SECONDS)
+
+  private def formatInstant(i: Instant): String =
+    DateTimeFormatter.ISO_INSTANT.format(truncateInstant(i))
 
   sealed abstract class LockKind(val kind: String)
   case object SuperValidatorLock extends LockKind("sv-lock")
@@ -58,21 +59,21 @@ trait GovernanceLockTest extends TokenStandardTest {
   )
   case object CreateLock extends LockRequest[Unit]("create-lock", _ => Nil)
   case object UnlockAndStartVesting
-      extends LockRequest[(BigDecimal, CantonTimestamp)](
+      extends LockRequest[(BigDecimal, Instant)](
         "unlock-and-start-vesting",
         { case (unlockAmount, vestingStartTime) =>
           List(
             "unlock-amount" -> unlockAmount.toString,
-            "vesting-start-time" -> formatTimestamp(vestingStartTime),
+            "vesting-start-time" -> formatInstant(vestingStartTime),
           )
         },
       )
   case object WithdrawVestedFunds
-      extends LockRequest[(CantonTimestamp, RelTime, Instant)](
+      extends LockRequest[(Instant, RelTime, Instant)](
         "withdraw-vested-funds",
         { case (vestedUntilTime, vestingPeriod, vestingEndTime) =>
           List(
-            "vested-until-time" -> formatTimestamp(vestedUntilTime),
+            "vested-until-time" -> formatInstant(vestedUntilTime),
             lockVestingDurationMetaKey -> vestingPeriod.microseconds.toString,
             lockVestingEndTimeMetaKey -> instantToMicros(vestingEndTime).toString,
           )
@@ -309,7 +310,7 @@ trait GovernanceLockTest extends TokenStandardTest {
         lockKind: LockKind,
         lockSubject: String,
         unlockAmount: BigDecimal,
-        vestingStartTime: CantonTimestamp,
+        vestingStartTime: Instant,
         isValid: View => Boolean = _ => true,
     )(implicit env: SpliceTestConsoleEnvironment): Option[(CId, View)] = {
       // `owner` may already have pending instructions, so only look at new ones
@@ -337,7 +338,7 @@ trait GovernanceLockTest extends TokenStandardTest {
         lockKind: LockKind,
         lockSubject: String,
         vestingLock: governancelock.GovernanceLock,
-        vestedUntilTime: CantonTimestamp,
+        vestedUntilTime: Instant,
     )(implicit env: SpliceTestConsoleEnvironment): Option[(CId, View)] =
       atMostOneVestingLock(
         transferAndList(
