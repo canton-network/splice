@@ -109,7 +109,9 @@ final case class RewardComputationInputs(
     mul(div(fromLong(bytesWeight), fromLong(1000000L)), trafficPriceInCCperMB)
 
   /** Replicates Daml `computeIssuanceTranche` for
-    * `totalUnfeaturedAppRewardCoupons = 0`.
+    * `totalUnfeaturedAppRewardCoupons = 0`. Used for both app and asset
+    * tranches per the [CIP-104
+    * amendment](https://github.com/canton-foundation/cips/pull/262).
     *
     * `unclaimedAllowance` is what's left for the next tranche.
     */
