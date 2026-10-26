@@ -41,6 +41,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from enum import Enum
 from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 
@@ -49,6 +50,8 @@ USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
 SCHEMA_VERSION = "1"
 MAX_PAGE_SIZE = 1000
 MAX_TRACKED_PARTIES = 1000
+# Hex characters of a namespace fingerprint: a multihash prefix (1220) and a SHA-256 digest
+MIN_FINGERPRINT_LENGTH = 68
 HTTP_TIMEOUT_SECONDS = 120
 BACKOFF_INITIAL_SECONDS = 2
 BACKOFF_MAX_SECONDS = 60
@@ -66,6 +69,27 @@ LOG = logging.getLogger("scan-party-monitor")
 Json = Dict[str, Any]
 # (migration id, record time): the order of updates in Scan.
 Position = Tuple[int, datetime]
+
+
+class Meta(Enum):
+    """Keys of the store's meta table."""
+
+    SCHEMA_VERSION = "schema_version"
+    SCAN_URL = "scan_url"
+    # JSON list of the parties the contract map is built for
+    TRACKED_PARTIES = "tracked_parties"
+    # JSON object: party -> [migration id, record time] up to which its matches were reported
+    REPORTED_UNTIL = "reported_until"
+    # The ACS snapshot to seed from, and the progress of the seed
+    SNAPSHOT_MIGRATION_ID = "snapshot_migration_id"
+    SNAPSHOT_RECORD_TIME = "snapshot_record_time"
+    ACS_NEXT_PAGE_TOKEN = "acs_next_page_token"
+    ACS_PAGES = "acs_pages"
+    ACS_CONTRACTS = "acs_contracts"
+    ACS_COMPLETE = "acs_complete"
+    # The position in the update stream
+    CURSOR_MIGRATION_ID = "cursor_migration_id"
+    CURSOR_RECORD_TIME = "cursor_record_time"
 
 
 class FatalError(Exception):
@@ -141,8 +165,13 @@ class PartyConfig:
 
 
 def _check_party_id(party: object, where: str) -> str:
-    if not isinstance(party, str) or not re.fullmatch(r"\S.*::[0-9a-fA-F]+", party):
-        raise FatalError(f"{where}: {party!r} is not a party id (expected <hint>::<fingerprint>)")
+    if not isinstance(party, str) or not re.fullmatch(
+        rf"\S.*::[0-9a-fA-F]{{{MIN_FINGERPRINT_LENGTH},}}", party
+    ):
+        raise FatalError(
+            f"{where}: {party!r} is not a party id (expected <hint>::<fingerprint>, with a "
+            f"fingerprint of at least {MIN_FINGERPRINT_LENGTH} hex digits)"
+        )
     return party
 
 
@@ -374,9 +403,9 @@ class Store:
             "CREATE TABLE IF NOT EXISTS contracts "
             "(cid TEXT PRIMARY KEY, signatories TEXT NOT NULL, holding_owner INTEGER) WITHOUT ROWID"
         )
-        version = self.get_meta("schema_version")
+        version = self.get_meta(Meta.SCHEMA_VERSION)
         if version is None:
-            self.set_meta("schema_version", SCHEMA_VERSION)
+            self.set_meta(Meta.SCHEMA_VERSION, SCHEMA_VERSION)
         elif version != SCHEMA_VERSION:
             raise FatalError(f"Database schema version {version} is not supported, expected {SCHEMA_VERSION}")
         self.party_ids: Dict[str, int] = {p: i for i, p in self.conn.execute("SELECT id, party FROM parties")}
@@ -387,20 +416,24 @@ class Store:
     def commit(self) -> None:
         self.conn.execute("COMMIT")
 
-    def get_meta(self, key: str) -> Optional[str]:
-        row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    def rollback(self) -> None:
+        if self.conn.in_transaction:
+            self.conn.execute("ROLLBACK")
+
+    def get_meta(self, key: Meta) -> Optional[str]:
+        row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key.value,)).fetchone()
         return row[0] if row else None
 
-    def require_meta(self, key: str) -> str:
+    def require_meta(self, key: Meta) -> str:
         value = self.get_meta(key)
         if value is None:
-            raise FatalError(f"The database lacks {key}; delete it and start over")
+            raise FatalError(f"The database lacks {key.value}; delete it and start over")
         return value
 
-    def set_meta(self, key: str, value: object) -> None:
+    def set_meta(self, key: Meta, value: object) -> None:
         self.conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-            (key, None if value is None else str(value)),
+            (key.value, None if value is None else str(value)),
         )
 
     def party_id(self, party: str) -> int:
@@ -550,7 +583,7 @@ class Monitor:
         # Per party, the position up to which its matches were already reported before a re-seed.
         self.reported_until: Dict[str, Position] = {
             p: position(m, t)
-            for p, (m, t) in json.loads(store.get_meta("reported_until") or "{}").items()
+            for p, (m, t) in json.loads(store.get_meta(Meta.REPORTED_UNTIL) or "{}").items()
         }
         self.stats: Dict[str, int] = {"transactions": 0, "matches": 0}
 
@@ -561,15 +594,15 @@ class Monitor:
         schedules a re-seed if parties were added."""
         store = self.store
         configured = sorted(self.config)
-        stored_json = store.get_meta("tracked_parties")
+        stored_json = store.get_meta(Meta.TRACKED_PARTIES)
         stored = set(json.loads(stored_json)) if stored_json is not None else None
         if stored == set(configured):
             return
-        seeding = store.get_meta("acs_complete") != "1"
+        seeding = store.get_meta(Meta.ACS_COMPLETE) != "1"
         # While seeding, the parties must not change at all, as the ACS page token is only
         # valid for the same request; afterwards, only added parties need a re-seed.
         if stored is None or (not seeding and set(configured) <= stored):
-            store.set_meta("tracked_parties", json.dumps(configured))
+            store.set_meta(Meta.TRACKED_PARTIES, json.dumps(configured))
             return
 
         changes = [
@@ -581,8 +614,8 @@ class Monitor:
         if not seeding:
             # Re-seed from the latest snapshot that is not after the cursor, and replay the
             # updates from there without reporting again what was already reported.
-            cursor_migration_id = int(store.require_meta("cursor_migration_id"))
-            cursor_record_time = store.require_meta("cursor_record_time")
+            cursor_migration_id = int(store.require_meta(Meta.CURSOR_MIGRATION_ID))
+            cursor_record_time = store.require_meta(Meta.CURSOR_RECORD_TIME)
             try:
                 snapshot = self.scan.get_snapshot_before(cursor_record_time, cursor_migration_id)
             except NotFound:
@@ -595,7 +628,7 @@ class Monitor:
             for p in stored & set(configured):
                 self.reported_until[p] = max(self.reported_until.get(p, cursor), cursor)
             store.set_meta(
-                "reported_until",
+                Meta.REPORTED_UNTIL,
                 json.dumps(
                     {
                         p: [m, t.isoformat()]
@@ -604,16 +637,16 @@ class Monitor:
                     }
                 ),
             )
-            store.set_meta("snapshot_migration_id", cursor_migration_id)
-            store.set_meta("snapshot_record_time", snapshot)
+            store.set_meta(Meta.SNAPSHOT_MIGRATION_ID, cursor_migration_id)
+            store.set_meta(Meta.SNAPSHOT_RECORD_TIME, snapshot)
         # Otherwise a seed is in progress; restart it for the new set of parties, as the ACS
         # page token is only valid for the same request.
         store.clear_contracts()
-        store.set_meta("acs_complete", 0)
-        store.set_meta("acs_next_page_token", None)
-        store.set_meta("acs_pages", 0)
-        store.set_meta("acs_contracts", 0)
-        store.set_meta("tracked_parties", json.dumps(configured))
+        store.set_meta(Meta.ACS_COMPLETE, 0)
+        store.set_meta(Meta.ACS_NEXT_PAGE_TOKEN, None)
+        store.set_meta(Meta.ACS_PAGES, 0)
+        store.set_meta(Meta.ACS_CONTRACTS, 0)
+        store.set_meta(Meta.TRACKED_PARTIES, json.dumps(configured))
         store.commit()
         LOG.info(
             f"Tracked parties changed ({'; '.join(changes)}); re-seeding the contracts"
@@ -622,10 +655,22 @@ class Monitor:
     # ---- ACS seed --------------------------------------------------------------------
 
     def seed(self) -> None:
+        try:
+            self._seed()
+        except KeyboardInterrupt:
+            # Every page is committed on its own, so this is like --stop-after-acs-pages.
+            self.store.rollback()
+            LOG.info(
+                f"Interrupted after {self.store.get_meta(Meta.ACS_PAGES) or 0} ACS pages; "
+                "rerun to resume"
+            )
+            raise StopRequested()
+
+    def _seed(self) -> None:
         store = self.store
-        if store.get_meta("acs_complete") == "1":
+        if store.get_meta(Meta.ACS_COMPLETE) == "1":
             return
-        stored_migration_id = store.get_meta("snapshot_migration_id")
+        stored_migration_id = store.get_meta(Meta.SNAPSHOT_MIGRATION_ID)
         if stored_migration_id is None:
             migration_id: int = self.args.migration_id
             if migration_id is None:
@@ -638,25 +683,25 @@ class Monitor:
                     "every few hours; retry later, or pass an older --migration-id."
                 )
             store.begin()
-            store.set_meta("snapshot_migration_id", migration_id)
-            store.set_meta("snapshot_record_time", record_time)
-            store.set_meta("acs_pages", 0)
-            store.set_meta("acs_contracts", 0)
+            store.set_meta(Meta.SNAPSHOT_MIGRATION_ID, migration_id)
+            store.set_meta(Meta.SNAPSHOT_RECORD_TIME, record_time)
+            store.set_meta(Meta.ACS_PAGES, 0)
+            store.set_meta(Meta.ACS_CONTRACTS, 0)
             store.commit()
             LOG.info(f"Seeding contracts from the ACS snapshot at {record_time} (migration id {migration_id})")
         else:
             migration_id = int(stored_migration_id)
-            record_time = store.require_meta("snapshot_record_time")
-            if store.get_meta("acs_next_page_token") is not None:
+            record_time = store.require_meta(Meta.SNAPSHOT_RECORD_TIME)
+            if store.get_meta(Meta.ACS_NEXT_PAGE_TOKEN) is not None:
                 LOG.info(
                     f"Resuming the seed from the ACS snapshot at {record_time} (migration id {migration_id}) "
-                    f"after {store.get_meta('acs_pages')} pages and {store.get_meta('acs_contracts')} contracts"
+                    f"after {store.get_meta(Meta.ACS_PAGES)} pages and {store.get_meta(Meta.ACS_CONTRACTS)} contracts"
                 )
 
         party_ids = sorted(self.config)
-        token = store.get_meta("acs_next_page_token")
-        pages = int(store.require_meta("acs_pages"))
-        contracts = int(store.require_meta("acs_contracts"))
+        token = store.get_meta(Meta.ACS_NEXT_PAGE_TOKEN)
+        pages = int(store.require_meta(Meta.ACS_PAGES))
+        contracts = int(store.require_meta(Meta.ACS_CONTRACTS))
         pages_this_run = 0
         contracts_this_run = 0
         started = time.monotonic()
@@ -680,13 +725,13 @@ class Monitor:
                 if self.store_if_tracked(e):
                     contracts += 1
                     contracts_this_run += 1
-            store.set_meta("acs_next_page_token", token)
-            store.set_meta("acs_pages", pages)
-            store.set_meta("acs_contracts", contracts)
+            store.set_meta(Meta.ACS_NEXT_PAGE_TOKEN, token)
+            store.set_meta(Meta.ACS_PAGES, pages)
+            store.set_meta(Meta.ACS_CONTRACTS, contracts)
             if token is None:
-                store.set_meta("acs_complete", 1)
-                store.set_meta("cursor_migration_id", migration_id)
-                store.set_meta("cursor_record_time", record_time)
+                store.set_meta(Meta.ACS_COMPLETE, 1)
+                store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
+                store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
             store.commit()
 
             now = time.monotonic()
@@ -716,8 +761,8 @@ class Monitor:
 
     def stream(self) -> None:
         store = self.store
-        migration_id = int(store.require_meta("cursor_migration_id"))
-        record_time = store.require_meta("cursor_record_time")
+        migration_id = int(store.require_meta(Meta.CURSOR_MIGRATION_ID))
+        record_time = store.require_meta(Meta.CURSOR_RECORD_TIME)
         n = len(self.config)
         LOG.info(
             f"Streaming updates after {record_time} (migration id {migration_id}), tracking "
@@ -744,8 +789,8 @@ class Monitor:
                 # Reassignments carry the migration id in their event.
                 migration_id = last.get("migration_id", last.get("event", {}).get("migration_id"))
                 record_time = last["record_time"]
-                store.set_meta("cursor_migration_id", migration_id)
-                store.set_meta("cursor_record_time", record_time)
+                store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
+                store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
                 self.stats["transactions"] += len(updates)
                 self.forget_reported_until(position(migration_id, record_time))
 
@@ -779,7 +824,7 @@ class Monitor:
             for p in passed:
                 del self.reported_until[p]
             self.store.set_meta(
-                "reported_until",
+                Meta.REPORTED_UNTIL,
                 json.dumps({p: [m, t.isoformat()] for p, (m, t) in self.reported_until.items()}),
             )
 
@@ -929,10 +974,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         config = load_config(args.config)
         store = Store(args.db)
-        stored_url = store.get_meta("scan_url")
+        stored_url = store.get_meta(Meta.SCAN_URL)
         scan_url = args.scan_url.rstrip("/")
         if stored_url is None:
-            store.set_meta("scan_url", scan_url)
+            store.set_meta(Meta.SCAN_URL, scan_url)
         elif stored_url != scan_url:
             LOG.warning(f"{args.db} was created against {stored_url}; continuing with {scan_url}")
         scan = ScanClient(scan_url, args.acs_requests_per_second, args.updates_requests_per_second)
