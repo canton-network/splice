@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import itertools
 import json
 import logging
 import os
@@ -114,9 +115,9 @@ _FRACTION_RE = re.compile(r"\.(\d+)")
 
 def parse_time(s: str) -> datetime:
     """Parses the ISO-8601 timestamps returned by Scan, on any Python 3 version."""
-    s = s.replace("Z", "+00:00")
-    s = _FRACTION_RE.sub(lambda m: "." + (m.group(1) + "000000")[:6], s, count=1)
-    return datetime.fromisoformat(s)
+    return datetime.fromisoformat(
+        _FRACTION_RE.sub(lambda m: "." + (m.group(1) + "000000")[:6], s.replace("Z", "+00:00"), count=1)
+    )
 
 
 def position(migration_id: int, record_time: str) -> Position:
@@ -135,23 +136,23 @@ def qualified_name(template_id: str) -> str:
     return template_id.split(":", 1)[-1]
 
 
+def _holding_arguments(created: Json) -> Optional[Json]:
+    """The Amulet arguments of a created Amulet or LockedAmulet, None for other templates."""
+    name = qualified_name(created["template_id"])
+    arguments: Json = created.get("create_arguments") or {}
+    if name == AMULET:
+        return arguments
+    return arguments.get("amulet") or {} if name == LOCKED_AMULET else None
+
+
 def holding_owner(created: Json) -> Optional[str]:
     """The owner of a created Amulet or LockedAmulet, None for other templates."""
-    name = qualified_name(created["template_id"])
-    arguments = created.get("create_arguments") or {}
-    if name == LOCKED_AMULET:
-        arguments = arguments.get("amulet") or {}
-    elif name != AMULET:
-        return None
-    owner = arguments.get("owner")
+    owner = (_holding_arguments(created) or {}).get("owner")
     return owner if isinstance(owner, str) else None
 
 
 def holding_amount(created: Json) -> Optional[str]:
-    arguments = created.get("create_arguments") or {}
-    if qualified_name(created["template_id"]) == LOCKED_AMULET:
-        arguments = arguments.get("amulet") or {}
-    amount = (arguments.get("amount") or {}).get("initialAmount")
+    amount = ((_holding_arguments(created) or {}).get("amount") or {}).get("initialAmount")
     return amount if isinstance(amount, str) else None
 
 
@@ -188,6 +189,22 @@ def _check_keys(obj: Json, allowed: Set[str], where: str) -> None:
         raise FatalError(f"{where}: unknown keys {sorted(unknown)}; expected some of {sorted(allowed)}")
 
 
+def _party_config(party: str, settings: object, common: List[str]) -> PartyConfig:
+    _check_party_id(party, "parties")
+    where = f"parties.{party}"
+    if not isinstance(settings, dict):
+        raise FatalError(f"{where} must be an object")
+    _check_keys(settings, {"additional_recipients", "alert_confirmations"}, where)
+    additional = _party_list(settings.get("additional_recipients", []), f"{where}.additional_recipients")
+    alert_confirmations = settings.get("alert_confirmations", False)
+    if not isinstance(alert_confirmations, bool):
+        raise FatalError(f"{where}.alert_confirmations must be true or false")
+    return PartyConfig(
+        expected_recipients=frozenset(common) | frozenset(additional) | {party},
+        alert_confirmations=alert_confirmations,
+    )
+
+
 def parse_config(raw: object) -> Dict[str, PartyConfig]:
     if not isinstance(raw, dict):
         raise FatalError("The configuration must be a JSON object")
@@ -198,24 +215,7 @@ def parse_config(raw: object) -> Dict[str, PartyConfig]:
         raise FatalError("The configuration must list the tracked parties in a non-empty 'parties' object")
     if len(parties) > MAX_TRACKED_PARTIES:
         raise FatalError(f"At most {MAX_TRACKED_PARTIES} parties can be tracked, got {len(parties)}")
-    config: Dict[str, PartyConfig] = {}
-    for party, settings in parties.items():
-        _check_party_id(party, "parties")
-        where = f"parties.{party}"
-        if not isinstance(settings, dict):
-            raise FatalError(f"{where} must be an object")
-        _check_keys(settings, {"additional_recipients", "alert_confirmations"}, where)
-        additional = _party_list(
-            settings.get("additional_recipients", []), f"{where}.additional_recipients"
-        )
-        alert_confirmations = settings.get("alert_confirmations", False)
-        if not isinstance(alert_confirmations, bool):
-            raise FatalError(f"{where}.alert_confirmations must be true or false")
-        config[party] = PartyConfig(
-            expected_recipients=frozenset(common) | frozenset(additional) | {party},
-            alert_confirmations=alert_confirmations,
-        )
-    return config
+    return {party: _party_config(party, settings, common) for party, settings in parties.items()}
 
 
 def load_config(path: str) -> Dict[str, PartyConfig]:
@@ -306,8 +306,7 @@ class ScanClient:
         url = f"{self.url}/api/scan{path}"
         if query:
             url += "?" + urllib.parse.urlencode(query)
-        attempt = 0
-        while True:
+        for attempt in itertools.count():
             pacer.acquire()
             status: Optional[int]
             try:
@@ -331,7 +330,7 @@ class ScanClient:
                 f"{content.decode(errors='replace')[:200]}); retrying in {delay:.0f}s"
             )
             time.sleep(delay)
-            attempt += 1
+        raise AssertionError("unreachable")
 
     def get_migration_id(self) -> int:
         return int(self._call(self.other_pacer, "GET", "/v0/migrations/last")["migration_id"])
@@ -485,8 +484,7 @@ class SlackNotifier:
         self.webhook_url = webhook_url
 
     def post(self, text: str) -> None:
-        attempt = 0
-        while True:
+        for attempt in itertools.count():
             status: Optional[int]
             headers: Any
             try:
@@ -507,17 +505,14 @@ class SlackNotifier:
                 f"Posting to Slack failed ({status or 'connection error'}); retrying in {delay:.0f}s"
             )
             time.sleep(delay)
-            attempt += 1
 
 
 def format_reason(reason: Json) -> str:
     if reason["reason"] == "transfer":
         amount = reason.get("amount") or "an unknown amount"
         return f"transfer of {amount} to `{reason['receiver']}` (not an expected recipient)"
-    what = qualified_name(reason["template_id"])
-    if "choice" in reason:
-        what += f" / {reason['choice']}"
-    return f"{reason['reason']} on {what}"
+    choice = f" / {reason['choice']}" if "choice" in reason else ""
+    return f"{reason['reason']} on {qualified_name(reason['template_id'])}{choice}"
 
 
 def _plural(n: int, singular: str, plural: str) -> str:
@@ -526,16 +521,24 @@ def _plural(n: int, singular: str, plural: str) -> str:
 
 def _join_capped(header: List[str], lines: List[str], omitted_what: str) -> str:
     """header + as many lines as fit in Slack's limits, then a count of the omitted ones."""
-    kept: List[str] = []
-    length = sum(len(h) + 1 for h in header)
-    for line in lines[:SLACK_MAX_LINES]:
-        if length + len(line) + 1 > SLACK_MAX_CHARS:
-            break
-        kept.append(line)
-        length += len(line) + 1
-    if len(kept) < len(lines):
-        kept.append(f"… and {len(lines) - len(kept)} more {omitted_what} (see the script's stdout)")
-    return "\n".join(header + kept)
+    candidates = lines[:SLACK_MAX_LINES]
+    header_length = sum(len(h) + 1 for h in header)
+    lengths = itertools.accumulate(len(line) + 1 for line in candidates)
+    kept = [line for line, length in zip(candidates, lengths) if header_length + length <= SLACK_MAX_CHARS]
+    omitted = (
+        [f"… and {len(lines) - len(kept)} more {omitted_what} (see the script's stdout)"]
+        if len(kept) < len(lines)
+        else []
+    )
+    return "\n".join(header + kept + omitted)
+
+
+def _update_line(match: Json) -> str:
+    """One line of a grouped Slack message."""
+    reasons = [f"`{party}`: {format_reason(r)}" for party, rs in match["parties"].items() for r in rs]
+    more = len(reasons) - SLACK_MAX_REASONS_PER_UPDATE
+    shown = "; ".join(reasons[:SLACK_MAX_REASONS_PER_UPDATE] + ([f"+{more} more"] if more > 0 else []))
+    return f"• `{match['update_id']}` at `{match['record_time']}`: {shown}"
 
 
 def format_slack_message(matches: List[Json]) -> str:
@@ -556,14 +559,7 @@ def format_slack_message(matches: List[Json]) -> str:
         f":rotating_light: {len(matches)} alerts for tracked parties on {first['scan_url']}, "
         f"record times `{first['record_time']}` – `{matches[-1]['record_time']}`"
     ]
-    lines = []
-    for m in matches:
-        reasons = [f"`{party}`: {format_reason(r)}" for party, rs in m["parties"].items() for r in rs]
-        shown = "; ".join(reasons[:SLACK_MAX_REASONS_PER_UPDATE])
-        if len(reasons) > SLACK_MAX_REASONS_PER_UPDATE:
-            shown += f"; +{len(reasons) - SLACK_MAX_REASONS_PER_UPDATE} more"
-        lines.append(f"• `{m['update_id']}` at `{m['record_time']}`: {shown}")
-    return _join_capped(header, lines, "updates")
+    return _join_capped(header, [_update_line(m) for m in matches], "updates")
 
 
 ### monitor
@@ -632,18 +628,11 @@ class Monitor:
                     f"Delete {self.args.db} and start over."
                 )
             cursor = position(cursor_migration_id, cursor_record_time)
-            for p in stored & set(configured):
-                self.reported_until[p] = max(self.reported_until.get(p, cursor), cursor)
-            store.set_meta(
-                Meta.REPORTED_UNTIL,
-                json.dumps(
-                    {
-                        p: [m, t.isoformat()]
-                        for p, (m, t) in self.reported_until.items()
-                        if p in self.config
-                    }
-                ),
-            )
+            self.reported_until = {
+                **self.reported_until,
+                **{p: max(self.reported_until.get(p, cursor), cursor) for p in stored & set(configured)},
+            }
+            self._save_reported_until()
             store.set_meta(Meta.SNAPSHOT_MIGRATION_ID, cursor_migration_id)
             store.set_meta(Meta.SNAPSHOT_RECORD_TIME, snapshot)
         # Otherwise a seed is in progress; restart it for the new set of parties, as the ACS
@@ -679,9 +668,9 @@ class Monitor:
             return
         stored_migration_id = store.get_meta(Meta.SNAPSHOT_MIGRATION_ID)
         if stored_migration_id is None:
-            migration_id: int = self.args.migration_id
-            if migration_id is None:
-                migration_id = self.scan.get_migration_id()
+            migration_id: int = (
+                self.args.migration_id if self.args.migration_id is not None else self.scan.get_migration_id()
+            )
             try:
                 record_time = self.scan.get_snapshot_before(
                     self.args.seed_snapshot_before or utc_now_iso(), migration_id
@@ -788,29 +777,29 @@ class Monitor:
         while True:
             updates = self.scan.get_updates(migration_id, record_time, self.args.updates_page_size)
             caught_up = len(updates) < self.args.updates_page_size
-            reached_stop = False
-            if stop_at is not None:
-                # Record times overlapping across migrations were only possible before logical
-                # synchronizer upgrades and never happened; with LSU they cannot happen.
-                before_stop = [u for u in updates if parse_time(u["record_time"]) <= stop_at]
-                reached_stop = len(before_stop) < len(updates)
-                updates = before_stop
-            for update in updates:
-                match = self.process_update(update)
-                if match is not None:
-                    print(json.dumps(match), flush=True)
-                    if not unposted:
-                        oldest_unposted = time.monotonic()
-                    unposted.append(match)
-                    self.stats["matches"] += 1
-            if updates:
-                last = updates[-1]
+            # Record times overlapping across migrations were only possible before logical
+            # synchronizer upgrades and never happened; with LSU they cannot happen.
+            in_range = (
+                updates
+                if stop_at is None
+                else list(itertools.takewhile(lambda u: parse_time(u["record_time"]) <= stop_at, updates))
+            )
+            reached_stop = len(in_range) < len(updates)
+            matches = [m for m in map(self.process_update_event, in_range) if m is not None]
+            for m in matches:
+                print(json.dumps(m), flush=True)
+            if matches and not unposted:
+                oldest_unposted = time.monotonic()
+            unposted = unposted + matches
+            self.stats["matches"] += len(matches)
+            if in_range:
+                last = in_range[-1]
                 # Reassignments carry the migration id in their event.
                 migration_id = last.get("migration_id", last.get("event", {}).get("migration_id"))
                 record_time = last["record_time"]
                 store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
                 store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
-                self.stats["transactions"] += len(updates)
+                self.stats["transactions"] += len(in_range)
                 self.forget_reported_until(position(migration_id, record_time))
 
             if (
@@ -843,14 +832,18 @@ class Monitor:
                 time.sleep(self.args.poll_interval_seconds)
 
     def forget_reported_until(self, cursor: Position) -> None:
-        passed = [p for p, until in self.reported_until.items() if until <= cursor]
-        if passed:
-            for p in passed:
-                del self.reported_until[p]
-            self.store.set_meta(
-                Meta.REPORTED_UNTIL,
-                json.dumps({p: [m, t.isoformat()] for p, (m, t) in self.reported_until.items()}),
-            )
+        remaining = {p: until for p, until in self.reported_until.items() if until > cursor}
+        if len(remaining) < len(self.reported_until):
+            self.reported_until = remaining
+            self._save_reported_until()
+
+    def _save_reported_until(self) -> None:
+        self.store.set_meta(
+            Meta.REPORTED_UNTIL,
+            json.dumps(
+                {p: [m, t.isoformat()] for p, (m, t) in self.reported_until.items() if p in self.config}
+            ),
+        )
 
     def heartbeat(self, migration_id: int, record_time: str) -> None:
         lag = lag_seconds(record_time)
@@ -860,7 +853,7 @@ class Monitor:
             f"{self.stats['transactions']} updates, {self.stats['matches']} matching"
         )
 
-    def process_update(self, update: Json) -> Optional[Json]:
+    def process_update_event(self, update: Json) -> Optional[Json]:
         if "events_by_id" not in update:
             # A reassignment; no matching, but keep the contract map complete.
             created = update["event"].get("created_event")
@@ -868,70 +861,92 @@ class Monitor:
                 self.store_if_tracked(created)
             return None
 
-        events = update["events_by_id"]
-        reasons: Dict[str, List[Json]] = {}
-        senders: Set[str] = set()
-        created_holdings: List[Tuple[str, Json]] = []
-
-        def add(party: str, reason: str, event: Json, **details: Any) -> None:
-            r: Json = {"reason": reason, "event_id": event["event_id"], "template_id": event["template_id"]}
-            if "choice" in event:
-                r["choice"] = event["choice"]
-            r.update(details)
-            reasons.setdefault(party, []).append(r)
-
         # Pre-order traversal is execution order, so contracts created earlier in this
         # transaction are in the map before they can be exercised.
-        stack = list(reversed(update["root_event_ids"]))
-        while stack:
-            event = events.get(stack.pop())
-            if event is None:
-                continue
+        ordered = preorder(update["events_by_id"], update["root_event_ids"])
+        found: List[Tuple[str, Json]] = []
+        senders: Set[str] = set()
+        for event in ordered:
             if event["event_type"] == "created_event":
-                for p in event["signatories"]:
-                    if self.store.party_ids.get(p) in self.confirmation_ids:
-                        add(p, "created_signatory", event)
-                owner = holding_owner(event)
-                if owner is not None:
-                    created_holdings.append((owner, event))
+                found += [
+                    _reason(p, "created_signatory", event)
+                    for p in event["signatories"]
+                    if self.store.party_ids.get(p) in self.confirmation_ids
+                ]
                 self.store_if_tracked(event)
             else:
-                for p in event["acting_parties"]:
-                    if self.store.party_ids.get(p) in self.confirmation_ids:
-                        add(p, "acting", event)
+                found += [
+                    _reason(p, "acting", event)
+                    for p in event["acting_parties"]
+                    if self.store.party_ids.get(p) in self.confirmation_ids
+                ]
                 stored = self.store.lookup(event["contract_id"])
                 if stored is not None:
-                    for pid in stored.signatory_ids & self.confirmation_ids:
-                        add(self.tracked_by_id[pid], "exercised_contract_signatory", event)
+                    found += [
+                        _reason(self.tracked_by_id[pid], "exercised_contract_signatory", event)
+                        for pid in stored.signatory_ids & self.confirmation_ids
+                    ]
                     if event["consuming"]:
                         if stored.holding_owner_id in self.tracked_by_id:
                             senders.add(self.tracked_by_id[stored.holding_owner_id])
                         self.store.delete_contract(event["contract_id"])
-                stack.extend(reversed(event["child_event_ids"]))
 
         # A transfer moves holdings of a tracked party to holdings of other parties. With
         # several tracked senders, outputs can't be attributed to one of them, so each sender
         # is checked against all outputs.
-        for sender in sorted(senders):
-            expected = self.config[sender].expected_recipients
-            for owner, event in created_holdings:
-                if owner not in expected:
-                    add(sender, "transfer", event, receiver=owner, amount=holding_amount(event))
+        created_holdings = [
+            (owner, e)
+            for e in ordered
+            if e["event_type"] == "created_event"
+            for owner in [holding_owner(e)]
+            if owner is not None
+        ]
+        transfers = [
+            _reason(sender, "transfer", e, receiver=owner, amount=holding_amount(e))
+            for sender in sorted(senders)
+            for owner, e in created_holdings
+            if owner not in self.config[sender].expected_recipients
+        ]
 
         update_position = position(update["migration_id"], update["record_time"])
-        for p in list(reasons):
-            until = self.reported_until.get(p)
-            if until is not None and update_position <= until:
-                del reasons[p]
-        if not reasons:
+        all_found = found + transfers
+        unreported = {
+            p: [r for q, r in all_found if q == p]
+            for p in dict.fromkeys(q for q, _ in all_found)
+            if p not in self.reported_until or update_position > self.reported_until[p]
+        }
+        if not unreported:
             return None
         return {
             "update_id": update["update_id"],
             "migration_id": update["migration_id"],
             "record_time": update["record_time"],
             "scan_url": self.scan.url,
-            "parties": reasons,
+            "parties": unreported,
         }
+
+
+def preorder(events: Json, root_ids: List[str]) -> List[Json]:
+    """The events of a transaction in execution order."""
+    ordered: List[Json] = []
+    stack = list(reversed(root_ids))
+    while stack:
+        event = events.get(stack.pop())
+        if event is not None:
+            ordered.append(event)
+            stack.extend(reversed(event.get("child_event_ids", [])))
+    return ordered
+
+
+def _reason(party: str, reason: str, event: Json, **details: Any) -> Tuple[str, Json]:
+    choice = {"choice": event["choice"]} if "choice" in event else {}
+    return party, {
+        "reason": reason,
+        "event_id": event["event_id"],
+        "template_id": event["template_id"],
+        **choice,
+        **details,
+    }
 
 
 ### command line

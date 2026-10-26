@@ -659,7 +659,7 @@ class MatchingTest(MonitorTestCase):
                 self.setUp()
                 monitor = self.seeded(config)
                 update = transfer("u1", at(1), ALICE, "alice-1", BOB, "10.0", "alice-change", "bob-preapproval")
-                self.assertIsNone(monitor.process_update(update))
+                self.assertIsNone(monitor.process_update_event(update))
                 # The contract map follows the transaction.
                 self.assertIsNone(monitor.store.lookup("alice-1"))
                 self.assertIsNotNone(monitor.store.lookup("alice-change"))
@@ -668,7 +668,7 @@ class MatchingTest(MonitorTestCase):
         monitor = self.seeded({"parties": {ALICE: {"additional_recipients": [BOB]}, CHARLIE: {}}})
         update = transfer("u1", at(1), ALICE, "alice-1", CHARLIE, "10.0", "alice-change", "charlie-preapproval")
         self.assertEqual(
-            monitor.process_update(update),
+            monitor.process_update_event(update),
             {
                 "update_id": "u1",
                 "migration_id": 0,
@@ -684,13 +684,13 @@ class MatchingTest(MonitorTestCase):
 
     def test_transfer_of_an_untracked_party_is_not_reported(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
-        self.assertIsNone(monitor.process_update(transfer("u1", at(1), CHARLIE, "charlie-1", BOB, "10.0")))
+        self.assertIsNone(monitor.process_update_event(transfer("u1", at(1), CHARLIE, "charlie-1", BOB, "10.0")))
 
     def test_alert_confirmations_reports_all_confirmation_reasons(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
         update = transfer("u1", at(1), ALICE, "alice-1", CHARLIE, "10.0", "alice-change", "charlie-preapproval")
         self.assertEqual(
-            summary(monitor.process_update(update)),
+            summary(monitor.process_update_event(update)),
             {
                 ALICE: [
                     ("acting", "Splice.Amulet:Amulet", "Archive"),
@@ -707,7 +707,7 @@ class MatchingTest(MonitorTestCase):
         monitor = self.seeded({"parties": {BOB: {"alert_confirmations": True}}})
         update = transfer("u1", at(1), ALICE, "alice-1", BOB, "10.0", "alice-change", "bob-preapproval")
         self.assertEqual(
-            summary(monitor.process_update(update)),
+            summary(monitor.process_update_event(update)),
             {
                 BOB: [
                     ("created_signatory", "Splice.Amulet:Amulet", "-"),
@@ -724,7 +724,7 @@ class MatchingTest(MonitorTestCase):
             exercised("u1:0", "observed", OTHER, "Other_Do", [DSO], True, ["u1:1"]),
             created("observed-2", OTHER, [DSO], observers=[ALICE], event_id="u1:1"),
         )
-        self.assertIsNone(monitor.process_update(update))
+        self.assertIsNone(monitor.process_update_event(update))
 
     def test_holding_created_and_spent_in_one_transaction(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
@@ -736,7 +736,7 @@ class MatchingTest(MonitorTestCase):
             exercised("u1:2", "fresh", AMULET, "Archive", [DSO, ALICE], True),
             amulet("charlie-2", CHARLIE, "5.0", "u1:3"),
         )
-        self.assertEqual(summary(monitor.process_update(update)), {ALICE: [("transfer", "Splice.Amulet:Amulet", CHARLIE)]})
+        self.assertEqual(summary(monitor.process_update_event(update)), {ALICE: [("transfer", "Splice.Amulet:Amulet", CHARLIE)]})
 
     def test_locked_amulet_sender_is_the_owner_not_the_lock_holder(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {}, CHARLIE: {}}})
@@ -746,13 +746,13 @@ class MatchingTest(MonitorTestCase):
             exercised("u1:0", "alice-locked", LOCKED_AMULET, "LockedAmulet_Unlock", [CHARLIE], True, ["u1:1"]),
             amulet("bob-2", BOB, "20.0", "u1:1"),
         )
-        self.assertEqual(summary(monitor.process_update(update)), {ALICE: [("transfer", "Splice.Amulet:Amulet", BOB)]})
+        self.assertEqual(summary(monitor.process_update_event(update)), {ALICE: [("transfer", "Splice.Amulet:Amulet", BOB)]})
 
     def test_assigned_holdings_are_tracked(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
-        self.assertIsNone(monitor.process_update(assignment("r1", at(1), amulet("moved", ALICE, "7.0"))))
+        self.assertIsNone(monitor.process_update_event(assignment("r1", at(1), amulet("moved", ALICE, "7.0"))))
         update = transfer("u2", at(2), ALICE, "moved", CHARLIE, "7.0")
-        self.assertEqual(summary(monitor.process_update(update)), {ALICE: [("transfer", "Splice.Amulet:Amulet", CHARLIE)]})
+        self.assertEqual(summary(monitor.process_update_event(update)), {ALICE: [("transfer", "Splice.Amulet:Amulet", CHARLIE)]})
 
 
 def unexpected_transfers(n: int) -> List[Json]:
