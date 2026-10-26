@@ -54,7 +54,7 @@ class JoiningNodeDsoPartyHosting(
     getSponsorSvConfig(onboardingConfig) match {
       case Some(sponsorSvConfig) =>
         val snapshotDownload =
-          SvOnboardingSnapshotDownload(onboardingSnapshotsConfig, "dso-party-acs", retryProvider)
+          SvOnboardingSnapshotDownload(onboardingSnapshotsConfig, "dso-party-acs")
         (for {
           acsSnapshot <- retryProvider.retry(
             RetryFor.WaitingOnInitDependency,
@@ -82,30 +82,40 @@ class JoiningNodeDsoPartyHosting(
                     RetryFor.WaitingOnInitDependencyLong,
                     "authorize_dso_party",
                     "authorize DSO party hosting on sponsor",
-                    snapshotDownload.prepareAndDownload(
-                      svConnection
-                        .prepareDsoPartyHostingSnapshot(svParty)
-                        .flatMap {
-                          case Left(proposalNotFound) =>
-                            if (
-                              proposalNotFound.partyToParticipantMappingSerial < partyToParticipantProposal.base.serial
-                            ) {
-                              // We can just retry in this case without resubmitting the proposal, the sponsor will eventually catch up
-                              // and our proposal will either be valid or fail with an invalid error.
-                              Future.failed(
-                                Status.FAILED_PRECONDITION
-                                  .withDescription(
-                                    s"Sponsor failed with missing proposal for serial ${proposalNotFound.partyToParticipantMappingSerial} which is smaller than our proposal for serial ${partyToParticipantProposal.base.serial}, sponsor is likely lagging behind."
-                                  )
-                                  .asRuntimeException()
-                              )
-                            } else {
-                              Future.failed(proposalNotFound)
+                    svConnection
+                      .prepareDsoPartyHostingSnapshot(svParty)
+                      .flatMap {
+                        case Left(proposalNotFound) =>
+                          if (
+                            proposalNotFound.partyToParticipantMappingSerial < partyToParticipantProposal.base.serial
+                          ) {
+                            // We can just retry in this case without resubmitting the proposal, the sponsor will eventually catch up
+                            // and our proposal will either be valid or fail with an invalid error.
+                            Future.failed(
+                              Status.FAILED_PRECONDITION
+                                .withDescription(
+                                  s"Sponsor failed with missing proposal for serial ${proposalNotFound.partyToParticipantMappingSerial} which is smaller than our proposal for serial ${partyToParticipantProposal.base.serial}, sponsor is likely lagging behind."
+                                )
+                                .asRuntimeException()
+                            )
+                          } else {
+                            Future.failed(proposalNotFound)
+                          }
+                        case Right(id) =>
+                          retryProvider
+                            .retry(
+                              RetryFor.WaitingOnInitDependencyLong,
+                              "download_dso_party_snapshot",
+                              s"download DSO party snapshot $id from sponsor",
+                              snapshotDownload
+                                .download(id, svConnection.downloadOnboardingSnapshot),
+                              logger,
+                            )
+                            .recoverWith {
+                              case SvOnboardingSnapshotDownload.SnapshotNotFound(notFound) =>
+                                Future.failed(notFound)
                             }
-                          case Right(id) => Future.successful(id)
-                        },
-                      svConnection.downloadOnboardingSnapshot,
-                    ),
+                      },
                     logger,
                   )
                   .recoverWith {
