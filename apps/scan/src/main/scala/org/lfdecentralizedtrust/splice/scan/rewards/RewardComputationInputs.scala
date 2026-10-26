@@ -137,7 +137,7 @@ final case class RewardComputationInputs(
       val cappedRewardsToIssue =
         if (rewardsToIssue.compareTo(scaledTotalCoupons) < 0) rewardsToIssue
         else scaledTotalCoupons
-      val issuancePerCoupon = div(mul(cappedRewardsToIssue, capPerCoupon), scaledTotalCoupons)
+      val issuancePerCoupon = div(cappedRewardsToIssue, totalCoupons)
       val remainingBudget = sub(rewardsToIssue, cappedRewardsToIssue)
       (issuancePerCoupon, remainingBudget)
     }
