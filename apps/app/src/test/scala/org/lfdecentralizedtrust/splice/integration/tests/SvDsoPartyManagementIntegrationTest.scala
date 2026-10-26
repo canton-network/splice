@@ -5,6 +5,10 @@ import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicClient
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.sv.onboarding.joining.{
+  JoiningNodeDsoPartyHosting,
+  SvOnboardingSnapshotDownload,
+}
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
@@ -14,6 +18,8 @@ import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest, ResponseEntity, StatusCodes}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.util.ByteString
+
+import java.nio.file.Files
 
 class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with WalletTestUtil {
 
@@ -224,9 +230,17 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
         new String(bytesOf(response.entity)) should include("could not be found")
       }
 
-      clue("sv3 can restart") {
+      clue("sv3 can restart and deletes a leftover DSO party snapshot download") {
         sv3Backend.stop()
+        val download = SvOnboardingSnapshotDownload.downloadDirectory(
+          sv3Backend.config.onboardingSnapshots,
+          JoiningNodeDsoPartyHosting.SnapshotDownloadName,
+        )
+        val leftover =
+          Files.write(Files.createDirectories(download).resolve("snapshot"), "leftover".getBytes)
+        Files.exists(leftover) shouldBe true
         sv3Backend.startSync()
+        Files.exists(download) shouldBe false
       }
   }
 

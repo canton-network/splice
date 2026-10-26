@@ -113,12 +113,10 @@ class SvOnboardingSnapshotService(
       tc: TraceContext
   ): Boolean =
     Try {
-      if (Files.isDirectory(dir)) {
-        Seq("metadata.json", "metadata.tmp", "snapshot").foreach(name =>
-          Files.deleteIfExists(dir.resolve(name)).discard
-        )
-      }
-      Files.deleteIfExists(dir)
+      Seq("metadata.json", "metadata.tmp", "snapshot").foreach(name =>
+        Files.deleteIfExists(dir.resolve(name)).discard
+      )
+      Files.delete(dir)
     } match {
       case Success(_) =>
         logger.info(s"Removed onboarding snapshot file $id")
@@ -140,37 +138,6 @@ class SvOnboardingSnapshotService(
       }
     }
   }
-
-  private def removeExpiredDownloads(now: Instant)(implicit tc: TraceContext): Int =
-    List(config.directory)
-      .flatMap { root =>
-        val downloads = File(root) / "downloads"
-        if (downloads.isDirectory) downloads.children.toSeq else Seq.empty
-      }
-      .count { download =>
-        Try {
-          val expired = (Iterator.single(download) ++ download.listRecursively).forall(file =>
-            !Files
-              .getLastModifiedTime(file.path)
-              .toInstant
-              .plus(config.retention.asJava)
-              .isAfter(now)
-          )
-          if (expired) download.delete().discard
-          expired
-        } match {
-          case Success(removed) => removed
-          case Failure(error) =>
-            logger.warn(
-              s"Failed to clean up onboarding download ${download.name}; cleanup will retry",
-              error,
-            )
-            false
-        }
-      }
-
-  blocking(removeExpiredNow(clock.now)(TraceContext.empty)).discard
-  blocking(removeExpiredDownloads(Instant.now())(TraceContext.empty)).discard
 
   private val (queue, queueTerminated) = Source
     .queue[QueuedExport](config.queueSize.value)
@@ -243,12 +210,8 @@ class SvOnboardingSnapshotService(
     }
   }
 
-  def removeExpired(now: CantonTimestamp)(implicit tc: TraceContext): Future[Int] = Future {
-    blocking {
-      val exportsRemoved = mutex.exclusive(removeExpiredNow(now))
-      exportsRemoved + removeExpiredDownloads(Instant.now())
-    }
-  }
+  def removeExpired(now: CantonTimestamp)(implicit tc: TraceContext): Future[Int] =
+    Future(blocking(mutex.exclusive(removeExpiredNow(now))))
 
   private def runExport(queued: QueuedExport): Future[Done] = {
     implicit val tc: TraceContext = queued.traceContext
@@ -296,8 +259,7 @@ class SvOnboardingSnapshotService(
                         s"Onboarding snapshot export ${queued.id} stopped by shutdown: $error"
                       )
                     else logger.warn(s"Onboarding snapshot export ${queued.id} failed", error)
-                    val dir = queued.file.getParent
-                    if (Files.exists(dir)) deleteSnapshot(queued.id, dir).discard
+                    deleteSnapshot(queued.id, queued.file.getParent).discard
                 }
               }
             }

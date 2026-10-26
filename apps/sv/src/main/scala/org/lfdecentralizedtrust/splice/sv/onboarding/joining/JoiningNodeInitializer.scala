@@ -69,8 +69,9 @@ import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 import org.lfdecentralizedtrust.splice.util.{Contract, PackageVetting, TemplateJsonDecoder}
 
 import java.security.interfaces.ECPrivateKey
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 
 /** Container for the methods required by the SvApp to initialize a joining SV node. */
 class JoiningNodeInitializer(
@@ -285,6 +286,7 @@ class JoiningNodeInitializer(
       dsoAutomation <-
         if (dsoPartyIsAuthorized) {
           logger.info("DSO party is authorized to our participant.")
+          deleteDsoPartySnapshotDownload()
           for {
             _ <- SetupUtil.grantSvUserRightActAsDso(
               connection,
@@ -416,6 +418,18 @@ class JoiningNodeInitializer(
         dsoStore,
         dsoAutomation,
       )
+    }
+  }
+
+  private def deleteDsoPartySnapshotDownload(): Unit = {
+    val download = SvOnboardingSnapshotDownload.downloadDirectory(
+      config.onboardingSnapshots,
+      JoiningNodeDsoPartyHosting.SnapshotDownloadName,
+    )
+    try blocking(SvOnboardingSnapshotDownload.deleteDownload(download))
+    catch {
+      case NonFatal(error) =>
+        logger.warn(s"Failed to delete DSO party snapshot download $download", error)
     }
   }
 
