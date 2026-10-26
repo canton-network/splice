@@ -290,6 +290,9 @@ final case class InitialRewardConfig(
         rewardCouponTimeToLiveMicros
       ),
       appRewardCouponThreshold.bigDecimal,
+      java.util.Optional.empty(),
+      java.util.Optional.empty(),
+      java.util.Optional.empty(),
     )
   }
 }
