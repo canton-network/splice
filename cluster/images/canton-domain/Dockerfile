@@ -19,5 +19,5 @@ EXPOSE 10013
 COPY app.conf bootstrap.sc /app/
 
 HEALTHCHECK --start-period=10m \
-  CMD wget -q -O /dev/null http://localhost:5071/health/ready \
-   && wget -q -O /dev/null http://localhost:5072/health/ready || exit 1
+  CMD wget -Y off -q -T 5 -O /dev/null http://localhost:5071/health/ready \
+   && wget -Y off -q -T 5 -O /dev/null http://localhost:5072/health/ready || exit 1

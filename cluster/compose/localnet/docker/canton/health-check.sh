@@ -6,7 +6,8 @@ set -eou pipefail
 
 check() {
   echo "Checking $1"
-  wget -q --tries=1 --timeout=5 -O /dev/null "http://127.0.0.1:$1/health/ready"
+  # -Y off: busybox wget ignores no_proxy, so a proxy injected via the environment would break the probe
+  wget -Y off -q --tries=1 --timeout=5 -O /dev/null "http://127.0.0.1:$1/health/ready"
 }
 
 if [ "$APP_USER_PROFILE" = "on" ]; then
