@@ -74,6 +74,9 @@ import org.lfdecentralizedtrust.splice.history.{
   GovernanceLockSubstitutionAccept,
   GovernanceLockSubstitutionReject,
   GovernanceLockSubstitutionWithdraw,
+  GovernanceLockTransferAccept,
+  GovernanceLockTransferReject,
+  GovernanceLockTransferWithdraw,
   LockedAmuletExpireAmulet,
   LockedAmuletExpireAmuletV2,
   LockedAmuletOwnerExpireLock,
@@ -907,6 +910,33 @@ class UserWalletTxLogParser(
               )
             }
 
+          // The sender's unlocked funds are locked again for the receiver, so neither unlocked
+          // balance changes
+          case GovernanceLockTransferAccept(_) =>
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive = true,
+              )
+            }.map { childState =>
+              // All unlocks are of the source lock funds
+              val sender = unlockedAmuletOwner(tree, childState)
+              val receiver = createdGovernanceLockOwners(tree, exercised).find(_ != sender)
+              // The sender funds all new locks, including the one of the receiver
+              val lockedAmount = createdLockedAmulets(tree, exercised)
+                .map(c => BigDecimal(c.payload.amulet.amount.initialAmount))
+                .sum
+              governanceLockAcceptState(
+                tree,
+                exercised,
+                childState,
+                PartyAndAmount(sender, -lockedAmount),
+                receiver.map(PartyAndAmount(_, BigDecimal(0))).toList,
+              )
+            }
+
           case TransferInstruction_Accept(node) =>
             defer {
               parseTrees(
@@ -972,7 +1002,8 @@ class UserWalletTxLogParser(
                 )
             }
 
-          case TransferInstruction_Withdraw(_) | GovernanceLockSubstitutionWithdraw(_) =>
+          case TransferInstruction_Withdraw(_) | GovernanceLockSubstitutionWithdraw(_) |
+              GovernanceLockTransferWithdraw(_) =>
             defer {
               parseTrees(
                 tree,
@@ -991,7 +1022,8 @@ class UserWalletTxLogParser(
                 )
             }
 
-          case TransferInstruction_Reject(_) | GovernanceLockSubstitutionReject(_) =>
+          case TransferInstruction_Reject(_) | GovernanceLockSubstitutionReject(_) |
+              GovernanceLockTransferReject(_) =>
             defer {
               parseTrees(
                 tree,
@@ -1510,8 +1542,8 @@ class UserWalletTxLogParser(
     *    by `GovernanceLock(unlockAmulet)` calls to the initial sender amount.
     *
     * All governance lock requests are transfers to `lockManagerParty`. Some of
-    * them, e.g., substitutions proposed by the owner of the target lock, lock
-    * no funds at all.
+    * them, e.g., lock transfer proposals and substitutions proposed by the
+    * owner of the target lock, lock no funds at all.
     */
   private def governanceLockRequestLockedAmount(
       tree: Transaction,
@@ -1559,19 +1591,19 @@ class UserWalletTxLogParser(
       .map(_.payload.owner)
       .toSeq
 
-  /** The owner of the amulets that the accepted governance lock substitution unlocks.
-    * Accepting a substitution always unlocks funds of exactly one owner.
+  /** The owner of the amulets that the accepted governance lock proposal unlocks.
+    * Accepting a substitution or transfer always unlocks funds of exactly one owner.
     */
   private def unlockedAmuletOwner(tree: Transaction, childState: State): String =
     childState.entries
       .collectFirst { case b: BalanceChangeTxLogEntry => b.receiver }
       .getOrElse(
         throw new RuntimeException(
-          s"Expected an unlocked amulet when accepting a governance lock substitution in transaction ${tree.getUpdateId}"
+          s"Expected an unlocked amulet when accepting a governance lock proposal in transaction ${tree.getUpdateId}"
         )
       )
 
-  /** Transfer entry of an accepted governance lock substitution. Its amounts start
+  /** Transfer entry of an accepted governance lock proposal. Its amounts start
     * at the negated new locks of each party, and the unlocks of the child
     * state are merged into them.
     */
