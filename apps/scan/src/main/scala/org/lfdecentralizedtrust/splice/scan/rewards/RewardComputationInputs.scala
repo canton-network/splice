@@ -70,27 +70,24 @@ final case class RewardComputationInputs(
   ): RewardIssuanceParams = {
     val totalCouponsCC = bytesToCC(totalRoundAppActivityWeight)
     val rewardsToIssue = mul(amuletsToIssueInRound, appRewardPercentage)
-    val (issuancePerCoupon, appMintingAllowanceRemainder) = computeIssuanceTranche(
+    val appTranche = computeIssuanceTranche(
       rewardsToIssue = rewardsToIssue,
       capPerCoupon = featuredAppRewardCap,
       totalCoupons = totalCouponsCC,
     )
-    val featuredAppMintingAllowanceCC = sub(rewardsToIssue, appMintingAllowanceRemainder)
 
     // Asset side (CIP-104 amendment): same tranche formula and cap as the app
     // side, consuming the app side's remainder as the asset budget.
     val totalFeaturedAssetBurnCC = bytesToCC(totalFeaturedAssetWeight)
-    val (issuancePerFeaturedAssetBurnCC, featuredAssetMintingAllowanceCC, unclaimed) =
-      if (totalFeaturedAssetBurnCC.compareTo(zero) <= 0) {
-        (zero, zero, appMintingAllowanceRemainder)
-      } else {
-        val (rate, remainder) = computeIssuanceTranche(
-          rewardsToIssue = appMintingAllowanceRemainder,
+    val assetTranche =
+      if (totalFeaturedAssetBurnCC.compareTo(zero) <= 0)
+        TrancheParameters(zero, zero, appTranche.unclaimedAllowance)
+      else
+        computeIssuanceTranche(
+          rewardsToIssue = appTranche.unclaimedAllowance,
           capPerCoupon = featuredAppRewardCap,
           totalCoupons = totalFeaturedAssetBurnCC,
         )
-        (rate, sub(appMintingAllowanceRemainder, remainder), remainder)
-      }
 
     // Convert Numeric → BigDecimal at the output boundary for SQL.
     // Under TBAR v1.1, totalIssuanceForFeaturedAppRewards carries the app-source
@@ -98,15 +95,15 @@ final case class RewardComputationInputs(
     // side); the shared pot is implicit as app + asset + unclaimed.
     RewardIssuanceParams(
       threshold_CC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
-      unclaimedAppRewardAmount = BigDecimal(unclaimed),
-      totalIssuanceForFeaturedAppRewards = BigDecimal(featuredAppMintingAllowanceCC),
+      unclaimedAppRewardAmount = BigDecimal(assetTranche.unclaimedAllowance),
+      totalIssuanceForFeaturedAppRewards = BigDecimal(appTranche.claimedAllowance),
       issuancePerFeaturedAppTraffic_CCperMB =
-        BigDecimal(mul(trafficPriceInCCperMB, issuancePerCoupon)),
-      issuancePerFeaturedAppBurnCC = BigDecimal(issuancePerCoupon),
-      totalIssuanceForFeaturedAssetRewards = BigDecimal(featuredAssetMintingAllowanceCC),
+        BigDecimal(mul(trafficPriceInCCperMB, appTranche.issuanceRatio)),
+      issuancePerFeaturedAppBurnCC = BigDecimal(appTranche.issuanceRatio),
+      totalIssuanceForFeaturedAssetRewards = BigDecimal(assetTranche.claimedAllowance),
       issuancePerFeaturedAssetBurn_CCperMB =
-        BigDecimal(mul(trafficPriceInCCperMB, issuancePerFeaturedAssetBurnCC)),
-      issuancePerFeaturedAssetBurnCC = BigDecimal(issuancePerFeaturedAssetBurnCC),
+        BigDecimal(mul(trafficPriceInCCperMB, assetTranche.issuanceRatio)),
+      issuancePerFeaturedAssetBurnCC = BigDecimal(assetTranche.issuanceRatio),
     )
   }
 
@@ -119,9 +116,8 @@ final case class RewardComputationInputs(
   /** Replicates Daml `computeIssuanceTranche` for
     * `totalUnfeaturedAppRewardCoupons = 0`.
     *
-    * Returns `(issuancePerCoupon, remainingBudget)` where
-    * `remainingBudget = rewardsToIssue - cappedRewardsToIssue` is what's left
-    * for the next tranche. The multiply-before-divide order
+    * `unclaimedAllowance` is what's left for the next tranche. The
+    * multiply-before-divide order
     * `(cappedRewardsToIssue * capPerCoupon) / scaledTotalCoupons` matches the
     * Daml source.
     */
@@ -129,9 +125,9 @@ final case class RewardComputationInputs(
       rewardsToIssue: Numeric,
       capPerCoupon: Numeric,
       totalCoupons: Numeric,
-  ): (Numeric, Numeric) = {
-    if (totalCoupons.compareTo(zero) <= 0) (zero, rewardsToIssue)
-    else if (capPerCoupon.compareTo(zero) <= 0) (zero, rewardsToIssue)
+  ): TrancheParameters = {
+    if (totalCoupons.compareTo(zero) <= 0) TrancheParameters(zero, zero, rewardsToIssue)
+    else if (capPerCoupon.compareTo(zero) <= 0) TrancheParameters(zero, zero, rewardsToIssue)
     else {
       val scaledTotalCoupons = mul(capPerCoupon, totalCoupons)
       val cappedRewardsToIssue =
@@ -139,7 +135,7 @@ final case class RewardComputationInputs(
         else scaledTotalCoupons
       val issuancePerCoupon = div(cappedRewardsToIssue, totalCoupons)
       val remainingBudget = sub(rewardsToIssue, cappedRewardsToIssue)
-      (issuancePerCoupon, remainingBudget)
+      TrancheParameters(issuancePerCoupon, cappedRewardsToIssue, remainingBudget)
     }
   }
 }
@@ -147,9 +143,18 @@ final case class RewardComputationInputs(
 object RewardComputationInputs {
   private val scale: Numeric.Scale = Numeric.Scale.assertFromInt(10)
   private[rewards] val zero: Numeric = fromLong(0L)
-  private[rewards] val one: Numeric = fromLong(1L)
   // Daml defaults for optional fields on IssuanceConfig.
   private val defaultDevelopmentFundPercentage: BigDecimal = BigDecimal("0.05")
+
+  /** Result of `computeIssuanceTranche`.
+    *
+    * `claimedAllowance + unclaimedAllowance == rewardsToIssue` (the input budget).
+    */
+  private[rewards] final case class TrancheParameters(
+      issuanceRatio: Numeric,
+      claimedAllowance: Numeric,
+      unclaimedAllowance: Numeric,
+  )
 
   private[rewards] def fromLong(x: Long): Numeric =
     damlRight(Numeric.fromLong(scale, x))
