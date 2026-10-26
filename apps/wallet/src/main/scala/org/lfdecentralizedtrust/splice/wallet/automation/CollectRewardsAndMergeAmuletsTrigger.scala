@@ -62,6 +62,22 @@ class CollectRewardsAndMergeAmuletsTrigger(
   ): Future[Boolean] =
     for {
       _ <- operatorBalanceMonitorO.fold(Future.unit)(observeOperatorBalance)
+      result <-
+        if (operatorBalanceMonitorO.forall(_.shouldCollectRewards))
+          doCollectRewardsAndMergeAmulets()
+        else {
+          logger.warn(
+            "Not collecting rewards because the balance of the validator operator party has been above " +
+              s"the allowed maximum for more than ${OperatorBalanceMonitor.maxTimeAboveLimit}"
+          )
+          Future.successful(false)
+        }
+    } yield result
+
+  private def doCollectRewardsAndMergeAmulets()(implicit
+      traceContext: TraceContext
+  ): Future[Boolean] =
+    for {
       commandPriority <- validatorTopupConfigO match {
         case None =>
           Future.successful(CommandPriority.Low) // not the wallet of the validator operator

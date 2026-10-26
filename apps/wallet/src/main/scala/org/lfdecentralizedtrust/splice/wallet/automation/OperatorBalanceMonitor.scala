@@ -84,8 +84,16 @@ class OperatorBalanceMonitor(
   /** True if the balance has been above the limit for longer than `maxDuration`. */
   def hasBeenAboveLimitFor(maxDuration: Duration): Boolean =
     lastBelowLimit.get.exists(below => clock.now > below.plus(maxDuration))
+
+  /** False if the balance has been above the limit for longer than [[OperatorBalanceMonitor.maxTimeAboveLimit]],
+    * in which case the operator must not collect rewards.
+    */
+  def shouldCollectRewards: Boolean = !hasBeenAboveLimitFor(
+    OperatorBalanceMonitor.maxTimeAboveLimit
+  )
 }
 
 object OperatorBalanceMonitor {
   val lastBelowLimitKey = "validator_operator_last_below_balance_limit"
+  val maxTimeAboveLimit: Duration = Duration.ofHours(24)
 }
