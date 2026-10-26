@@ -116,10 +116,7 @@ final case class RewardComputationInputs(
   /** Replicates Daml `computeIssuanceTranche` for
     * `totalUnfeaturedAppRewardCoupons = 0`.
     *
-    * `unclaimedAllowance` is what's left for the next tranche. The
-    * multiply-before-divide order
-    * `(cappedRewardsToIssue * capPerCoupon) / scaledTotalCoupons` matches the
-    * Daml source.
+    * `unclaimedAllowance` is what's left for the next tranche.
     */
   private def computeIssuanceTranche(
       rewardsToIssue: Numeric,
