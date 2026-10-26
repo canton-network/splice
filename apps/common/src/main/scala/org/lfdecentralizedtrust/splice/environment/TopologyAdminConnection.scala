@@ -1833,7 +1833,7 @@ object TopologyAdminConnection {
         s"Failed to download private key $fingerprint via $serviceName: key downloads are disabled on that node. " +
           "Allow them to create identities dumps (e.g., for backups) of nodes that do not use KMS: " +
           "set `enableKeyDownload: true` in the splice-participant Helm chart, " +
-          "pass `-K` to the Docker Compose validator's start.sh, " +
+          "pass `--enable-key-download` to the Docker Compose validator's start.sh, " +
           "or set `canton.features.enable-preview-commands = yes` in the node's Canton config."
       )
 

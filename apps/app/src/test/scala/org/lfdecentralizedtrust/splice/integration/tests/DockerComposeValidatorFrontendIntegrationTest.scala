@@ -245,7 +245,7 @@ class DockerComposeValidatorFrontendIntegrationTest
     val identities = backupsDir.resolve("identities.json")
 
     // Key download is required for the identities dump below
-    withComposeValidator("after restoring from backup", Seq("-K")) {
+    withComposeValidator("after restoring from backup", Seq("--enable-key-download")) {
       withFrontEnd("frontend") { implicit webDriver =>
         eventuallySucceeds()(go to s"http://wallet.localhost")
         clue("Alice can login and is already onboarded") {

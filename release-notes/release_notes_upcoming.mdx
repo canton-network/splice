@@ -17,7 +17,7 @@
       (`participantIdentitiesBackup`), the validator's `/v0/admin/participant/identities` endpoint, and SV identities dumps.
       These now fail with an error that explains how to re-enable key downloads.
       To re-enable them, set `enableKeyDownload: true` in the `splice-participant` Helm chart,
-      or pass `-K` to the Docker Compose validator's `start.sh`.
+      or pass `--enable-key-download` to the Docker Compose validator's `start.sh`.
       Participants that use KMS are not affected, as their identities dumps do not include private keys.
 
   - Scan App

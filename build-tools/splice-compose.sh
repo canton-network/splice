@@ -127,7 +127,7 @@ function _start_validator {
     extra_flags+=("-k")
   fi
   if [ "${enable_key_download:-0}" -eq 1 ]; then
-    extra_flags+=("-K")
+    extra_flags+=("--enable-key-download")
   fi
   if [ -n "$restore_identities_dump" ]; then
     extra_flags+=("-i" "$restore_identities_dump")
@@ -222,7 +222,21 @@ function subcmd_start {
   wallet_gateway=0
   enable_key_download=0
 
-  while getopts 'haldn:m:wt:i:p:P:bEkKg' arg; do
+  # Long options (getopts only supports short ones)
+  args=()
+  for arg in "$@"; do
+    case "${arg}" in
+      --enable-key-download)
+        enable_key_download=1
+        ;;
+      *)
+        args+=("${arg}")
+        ;;
+    esac
+  done
+  set -- ${args[@]+"${args[@]}"}
+
+  while getopts 'haldn:m:wt:i:p:P:bEkg' arg; do
     case ${arg} in
       h)
         subcmd_help
@@ -268,9 +282,6 @@ function subcmd_start {
       k)
         skip_participant_db_conflict_check=1
         ;;
-      K)
-        enable_key_download=1
-        ;;
       g)
         wallet_gateway=1
         ;;
@@ -307,7 +318,7 @@ function subcmd_start {
   fi
 }
 function usage_start {
-  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k] [-K] [-g]"
+  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k] [-g] [--enable-key-download]"
   _info "      -a: Enable authentication"
   _info "      -l: Start the validator against a local SV (for integration tests). Default is against a cluster determined by GCP_CLUSTER_HOSTNAME"
   _info "      -d: Use images from the DA-internal repository (default: use locally built images)"
@@ -321,8 +332,8 @@ function usage_start {
   _info "      -b: Disable BFT reads&writes and trust a single SV."
   _info "      -E: Bind to 0.0.0.0 for external access."
   _info "      -k: Disable the validator participant db conflict check (forwarded to the validator start.sh as -k)."
-  _info "      -K: Allow downloading the participant's private keys (forwarded to the validator start.sh as -K)."
   _info "      -g: Also deploy the wallet gateway and portfolio UI (forwarded to the validator start.sh as -g)."
+  _info "      --enable-key-download: Allow downloading the participant's private keys (forwarded to the validator start.sh)."
 }
 
 subcommand_whitelist[stop]='stop a validator'
