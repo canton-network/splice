@@ -861,6 +861,23 @@ object UserWalletStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
         ),
+        mkFilter(splice.governancelock.GovernanceLock.COMPANION)(
+          co => co.payload.dso == dso && co.payload.owner == endUser,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          val (lockType, lockSubject) =
+            GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+          UserWalletAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = GovernanceLockUtil
+              .getVestingLockSpecification(contract.payload)
+              .map(v => Timestamp.assertFromInstant(v.endTime)),
+            governanceLockType = Some(lockType.storeValue),
+            governanceLockSubject = Some(lockSubject),
+          )
+        },
       ),
       Map(
         mkFilterInterface(allocationrequestv1.AllocationRequest.INTERFACE)(co =>

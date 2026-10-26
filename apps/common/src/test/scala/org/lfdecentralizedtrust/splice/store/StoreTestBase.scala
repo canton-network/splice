@@ -18,6 +18,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{LogEntry, NamedLogging, SuppressionRule}
 import com.digitalasset.canton.protocol.LfContractId
+import com.digitalasset.canton.util.MonadUtil
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
@@ -577,6 +578,46 @@ abstract class StoreTestBase
         Instant.now().truncatedTo(ChronoUnit.MICROS),
       ),
     )
+
+  protected def testGovernanceLockIngestion(
+      owner: PartyId,
+      dso: PartyId,
+      otherDso: PartyId,
+      mkStore: () => Future[AppStore],
+  ) =
+    "ingest GovernanceLocks of the DSO and skip those of other parties" in {
+      val wantedFull = governanceLock(owner, amount = BigDecimal(10), dso = dso)
+      val unwantedFull = governanceLock(owner, amount = BigDecimal(20), dso = otherDso)
+      val vestingEndTime = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.MICROS)
+      val wantedVesting = governanceLock(
+        owner,
+        amount = BigDecimal(10),
+        vestingEndTime = Some(vestingEndTime),
+        dso = dso,
+      )
+      val unwantedVesting = governanceLock(
+        owner,
+        amount = BigDecimal(20),
+        vestingEndTime = Some(vestingEndTime),
+        dso = otherDso,
+      )
+      for {
+        store <- mkStore()
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(wantedFull, unwantedFull, wantedVesting, unwantedVesting)
+        )(
+          dummyDomain.create(_, createdEventSignatories = Seq(dso, owner))(
+            store.multiDomainAcsStore
+          )
+        )
+        result <- store.multiDomainAcsStore.listContracts(
+          governancelockCodegen.GovernanceLock.COMPANION
+        )
+      } yield {
+        result.map(_.contractId) should contain theSameElementsAs
+          Seq(wantedFull, wantedVesting).map(_.contractId)
+      }
+    }
 
   protected def appRewardCoupon(
       round: Int,

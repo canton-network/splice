@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   ValidatorRight,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommandCounter
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock as governancelockCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegation as mintingDelegationCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
@@ -256,6 +257,23 @@ object ExternalPartyWalletStore {
           co.payload.dso == dso &&
           co.payload.beneficiary == externalParty
         }(ExternalPartyWalletAcsStoreRowData(_)),
+        mkFilter(governancelockCodegen.GovernanceLock.COMPANION)(
+          co => co.payload.dso == dso && co.payload.owner == externalParty,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          val (lockType, lockSubject) =
+            GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+          ExternalPartyWalletAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = GovernanceLockUtil
+              .getVestingLockSpecification(contract.payload)
+              .map(v => Timestamp.assertFromInstant(v.endTime)),
+            governanceLockType = Some(lockType.storeValue),
+            governanceLockSubject = Some(lockSubject),
+          )
+        },
       ),
     )
   }
