@@ -65,6 +65,11 @@ object Dependencies {
   private lazy val netty_version = "4.1.138.Final"
   private lazy val bouncy_castle_version = "1.86"
 
+  // Applied to all projects as dependencyOverrides. The older versions come from CantonDependencies.scala, which is
+  // replaced on every Canton fork bump, or from libraries that are already on their latest release
+  // (scala-compiler 2.13.18 -> jline, httpclient5 5.6.4 -> httpcore5) or would each need an upgrade
+  // (jackson-databind is requested by auth0, flyway, json4s and logstash).
+  // Remove an entry once the build resolves that version without it.
   lazy val pinnedTransitiveVersions: Seq[ModuleID] = Seq(
     "buffer",
     "codec",
