@@ -394,8 +394,8 @@ class DbScanAppRewardsStoreTest
         _ <- insertActivityRecord(
           historyId,
           roundNumber,
-          parties = Seq.empty,
-          weights = Seq.empty,
+          appParties = Seq.empty,
+          appWeights = Seq.empty,
           assetParties = Seq("alice::provider"),
           assetWeights = Seq(2000L),
         )
@@ -425,8 +425,8 @@ class DbScanAppRewardsStoreTest
         _ <- insertActivityRecord(
           historyId,
           roundNumber,
-          parties = Seq("alice::provider"),
-          weights = Seq(100L),
+          appParties = Seq("alice::provider"),
+          appWeights = Seq(100L),
           assetParties = Seq("alice::provider"),
           assetWeights = Seq(3000L),
         )
@@ -455,8 +455,8 @@ class DbScanAppRewardsStoreTest
         _ <- insertActivityRecord(
           historyId,
           roundNumber,
-          parties = Seq("alice::provider"),
-          weights = Seq(500L),
+          appParties = Seq("alice::provider"),
+          appWeights = Seq(500L),
           assetParties = Seq("bob::provider"),
           assetWeights = Seq(2000L),
         )
@@ -1429,14 +1429,14 @@ class DbScanAppRewardsStoreTest
   private def insertActivityRecord(
       historyId: Long,
       round: Long,
-      parties: Seq[String],
-      weights: Seq[Long],
+      appParties: Seq[String],
+      appWeights: Seq[Long],
       assetParties: Seq[String] = Nil,
       assetWeights: Seq[Long] = Nil,
   ): Future[Unit] = {
     val verdictId = verdictCounter.getAndIncrement()
-    val partiesArray = parties.mkString("{", ",", "}")
-    val weightsArray = weights.mkString("{", ",", "}")
+    val appPartiesArray = appParties.mkString("{", ",", "}")
+    val appWeightsArray = appWeights.mkString("{", ",", "}")
     val assetPartiesArray = assetParties.mkString("{", ",", "}")
     val assetWeightsArray = assetWeights.mkString("{", ",", "}")
     futureUnlessShutdownToFuture(
@@ -1458,8 +1458,8 @@ class DbScanAppRewardsStoreTest
                   app_provider_parties, app_activity_weights,
                   asset_activity_provider_parties, asset_activity_weights)
                  values ($historyId, $verdictId, $round,
-                         #${"'" + partiesArray + "'"},
-                         #${"'" + weightsArray + "'"},
+                         #${"'" + appPartiesArray + "'"},
+                         #${"'" + appWeightsArray + "'"},
                          #${"'" + assetPartiesArray + "'"},
                          #${"'" + assetWeightsArray + "'"})""",
           "test.insertActivityRecord",
