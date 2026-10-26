@@ -81,6 +81,7 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
         (updateId, r.hcursor.get[String]("receiver").fold(e => fail(e), identity))
     }
 
+  // TODO(tech-debt): run the Python unit tests, and mypy, in CI directly instead of from this suite
   "scan_party_monitor.py's unit tests pass" in { _ =>
     val output = mutable.ListBuffer.empty[String]
     val exitCode = scala.sys.process
