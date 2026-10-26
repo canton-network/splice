@@ -92,6 +92,26 @@
       - Add an optional `governanceLockConfig` field to `AmuletConfig` with the minimum lock amount (default 10,000 CC)
         and the vesting durations for SV locks (default 365.25 days) and FA locks (default 60 days).
 
+      - Add optional `appKind` and `opsParties` fields to `FeaturedAppRight` as
+        specified in
+        [CIP-104](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md).
+        The new `FeaturedAppRight_UpdateConfig` choice patches the `appKind`, `activityWeight` and `opsParties`
+        fields of a featured app right and supersedes the now deprecated `FeaturedAppRight_Update`.
+
+      - Add `SRARC_CreateFeaturedAppConfigUpdateInstruction` vote action, which
+        updates the config of one or more featured app rights.
+
+      - Add optional fields to `RewardConfig`:
+        `extraFeaturedAssetActivityWeight` (default 0.2),
+        `maxExtraFeaturedAssetActivityWeightPerAsset` (default 0.1) and
+        `dsoAppActivityWeight` (default 0.1) .
+
+      - Once the CIP-104 is enabled, the issuance per featured app activity, and
+        issuance per featured asset activity of a round will be computed
+        off-ledger, and these values will be added to `IssuingMiningRound` so
+        that explorers and other third-party apps can learn about the round's
+        mint/burn ratio for asset activity.
+
       - These changes require a Daml upgrade to the following versions:
 
         | name | version |
