@@ -105,16 +105,18 @@ final case class RewardComputationInputs(
       capPerCoupon: Numeric,
       totalCoupons: Numeric,
   ): TrancheParameters = {
-    if (totalCoupons.compareTo(zero) <= 0) TrancheParameters(zero, zero, rewardsToIssue)
-    else if (capPerCoupon.compareTo(zero) <= 0) TrancheParameters(zero, zero, rewardsToIssue)
+    if (totalCoupons.compareTo(zero) <= 0 || capPerCoupon.compareTo(zero) <= 0)
+      TrancheParameters(zero, zero, rewardsToIssue)
     else {
       val scaledTotalCoupons = mul(capPerCoupon, totalCoupons)
-      val cappedRewardsToIssue =
+      val claimedAllowance =
         if (rewardsToIssue.compareTo(scaledTotalCoupons) < 0) rewardsToIssue
         else scaledTotalCoupons
-      val issuancePerCoupon = div(cappedRewardsToIssue, totalCoupons)
-      val remainingBudget = sub(rewardsToIssue, cappedRewardsToIssue)
-      TrancheParameters(issuancePerCoupon, cappedRewardsToIssue, remainingBudget)
+      TrancheParameters(
+        issuanceRatio = div(claimedAllowance, totalCoupons),
+        claimedAllowance = claimedAllowance,
+        unclaimedAllowance = sub(rewardsToIssue, claimedAllowance),
+      )
     }
   }
 }
