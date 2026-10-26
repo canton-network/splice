@@ -21,7 +21,7 @@ import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient.{
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingSnapshotsConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
 
-import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.{Files, NoSuchFileException, Path, StandardCopyOption}
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.Try
@@ -54,9 +54,7 @@ final class SvOnboardingSnapshotDownload private (
     Try {
       val metadata =
         decode[DownloadMetadata](Files.readString(metadataFile)).fold(throw _, identity)
-      metadata.id == id.value && metadata.size.exists(size =>
-        Files.isRegularFile(file) && Files.size(file) == size
-      ) &&
+      metadata.id == id.value && Files.isRegularFile(file) && Files.size(file) == metadata.size &&
       Instant.parse(metadata.createdAt).plus(config.retention.asJava).isAfter(Instant.now())
     }.getOrElse(false)
 
@@ -67,8 +65,11 @@ final class SvOnboardingSnapshotDownload private (
     Future(blocking(completedDownload(id))).flatMap {
       case true => Future.successful(file)
       case false =>
-        val metadata = DownloadMetadata(id.value, Instant.now().toString, None)
-        Future(blocking(writeMetadata(metadata))).flatMap { _ =>
+        val createdAt = Instant.now().toString
+        Future(blocking {
+          Files.createDirectories(directory)
+          Files.deleteIfExists(metadataFile)
+        }).flatMap { _ =>
           downloadFrom(id)
             .recoverWith { case notFound @ HttpCommandException(_, StatusCodes.NotFound, _) =>
               Future.failed(SnapshotNotFound(notFound))
@@ -80,7 +81,7 @@ final class SvOnboardingSnapshotDownload private (
                   Future(blocking {
                     if (entity.contentLengthOption.exists(_ != result.count))
                       throw new java.io.IOException("Incomplete onboarding snapshot download")
-                    writeMetadata(metadata.copy(size = Some(result.count)))
+                    writeMetadata(DownloadMetadata(id.value, createdAt, result.count))
                     file
                   })
                 }
@@ -102,19 +103,26 @@ final class SvOnboardingSnapshotDownload private (
 
 object SvOnboardingSnapshotDownload {
 
-  private final case class DownloadMetadata(id: String, createdAt: String, size: Option[Long])
+  private final case class DownloadMetadata(id: String, createdAt: String, size: Long)
   private implicit val encoder: Encoder[DownloadMetadata] = deriveEncoder
   private implicit val decoder: Decoder[DownloadMetadata] = deriveDecoder
 
   final case class SnapshotNotFound(cause: HttpCommandException)
       extends RetryProvider.QuietNonRetryableException(cause.getMessage)
 
+  def downloadDirectory(config: SvOnboardingSnapshotsConfig, name: String): Path =
+    config.directory.resolve("downloads").resolve(name)
+
+  def deleteDownload(directory: Path): Unit =
+    try File(directory).delete().discard
+    catch { case _: NoSuchFileException => () }
+
   def apply(
       config: SvOnboardingSnapshotsConfig,
       name: String,
   ): SvOnboardingSnapshotDownload = {
     new SvOnboardingSnapshotDownload(
-      (File(config.directory) / "downloads" / name).createDirectories().path,
+      File(downloadDirectory(config, name)).createDirectories().path,
       config,
     )
   }

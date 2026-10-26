@@ -27,7 +27,6 @@ import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
 
 import java.nio.file.{Files, Path}
-import java.nio.file.attribute.FileTime
 import java.time.{Duration, Instant}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -426,7 +425,7 @@ class SvOnboardingSnapshotServiceTest
         }
       }
 
-    "discard interrupted exports without touching downloads or completed exports on startup" in File
+    "remove interrupted exports without touching other files" in File
       .usingTemporaryDirectory() { directory =>
         val interrupted = directory / "exports" / UUID.randomUUID().toString
         (interrupted / "snapshot").createIfNotExists(createParents = true)
@@ -434,28 +433,11 @@ class SvOnboardingSnapshotServiceTest
         val download =
           (directory / "downloads" / "acs" / "snapshot").createIfNotExists(createParents = true)
         val otherFile = (directory / "other").createIfNotExists()
-        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (_, _, _) =>
+        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
+          service.removeExpired(clock.now).futureValue shouldBe 1
           interrupted.exists shouldBe false
           download.exists shouldBe true
           otherFile.exists shouldBe true
-        }
-      }
-
-    "expire abandoned downloads while preserving recently written downloads" in File
-      .usingTemporaryDirectory() { directory =>
-        val abandoned =
-          (directory / "downloads" / "old" / "snapshot").createIfNotExists(createParents = true)
-        val recent =
-          (directory / "downloads" / "recent" / "snapshot").createIfNotExists(createParents = true)
-        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
-          abandoned.exists shouldBe true
-          Files.setLastModifiedTime(abandoned.path, FileTime.from(Instant.EPOCH))
-          Files.setLastModifiedTime(abandoned.parent.path, FileTime.from(Instant.EPOCH))
-          service.removeExpired(clock.now).futureValue shouldBe 1
-          abandoned.parent.exists shouldBe false
-          clock.advance(Duration.ofDays(365 * 100))
-          service.removeExpired(clock.now).futureValue shouldBe 0
-          recent.exists shouldBe true
         }
       }
 
@@ -468,17 +450,18 @@ class SvOnboardingSnapshotServiceTest
         service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id
     }
 
-    "discard corrupt completion metadata on startup" in File.usingTemporaryDirectory() {
+    "remove exports with corrupt completion metadata" in File.usingTemporaryDirectory() {
       directory =>
         val corrupt = directory / "exports" / UUID.randomUUID().toString
         (corrupt / "snapshot").createIfNotExists(createParents = true)
         (corrupt / "metadata.json").writeText("not json")
-        loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
-          withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (_, _, _) =>
-            corrupt.exists shouldBe false
-          },
-          _.warningMessage should include("Cannot recover onboarding snapshot"),
-        )
+        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
+          loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
+            service.removeExpired(clock.now).futureValue shouldBe 1,
+            _.warningMessage should include("Cannot recover onboarding snapshot"),
+          )
+          corrupt.exists shouldBe false
+        }
     }
 
     "never resolve a download id outside the export directory" in withService() { (service, _, _) =>

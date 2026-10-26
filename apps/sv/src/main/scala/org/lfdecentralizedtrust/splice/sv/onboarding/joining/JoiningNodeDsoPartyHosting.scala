@@ -54,7 +54,10 @@ class JoiningNodeDsoPartyHosting(
     getSponsorSvConfig(onboardingConfig) match {
       case Some(sponsorSvConfig) =>
         val snapshotDownload =
-          SvOnboardingSnapshotDownload(onboardingSnapshotsConfig, "dso-party-acs")
+          SvOnboardingSnapshotDownload(
+            onboardingSnapshotsConfig,
+            JoiningNodeDsoPartyHosting.SnapshotDownloadName,
+          )
         (for {
           acsSnapshot <- retryProvider.retry(
             RetryFor.WaitingOnInitDependency,
@@ -199,4 +202,8 @@ class JoiningNodeDsoPartyHosting(
       case _ => None
     }
 
+}
+
+object JoiningNodeDsoPartyHosting {
+  val SnapshotDownloadName = "dso-party-acs"
 }
