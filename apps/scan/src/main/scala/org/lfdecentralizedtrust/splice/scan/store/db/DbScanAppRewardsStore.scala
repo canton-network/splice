@@ -834,8 +834,8 @@ class DbScanAppRewardsStore(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
-    val appIssuance = params.issuancePerAppBurnCCperMB
-    val assetIssuance = params.issuancePerAssetBurnCCperMB
+    val appIssuance = params.issuancePerAppBurnCCPerMB
+    val assetIssuance = params.issuancePerAssetBurnCCPerMB
     val assetBurnRate = params.issuancePerAssetBurnCC
     val appBurnRate = params.issuancePerAppBurnCC
     val threshold = params.appRewardCouponThresholdCC
