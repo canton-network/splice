@@ -31,14 +31,10 @@ final case class RewardIssuanceParams(
     issuancePerAssetBurnCC: BigDecimal,
 )
 
-/** Raw contract inputs for app reward CC computation.
+/** Inputs for app reward CC computation.
   *
-  * Built by mirroring the code from `Splice.Issuance.daml` into Scala with the
-  * same scale (Numeric 10) and rounding mode (HALF_EVEN).
-  *
-  * All fields use `Numeric` to enforce Daml-compatible arithmetic throughout
-  *
-  * @see https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-reward-computation-details
+  * Based on CIP-0104 text and using Daml decimal arithmetic
+  * (Numeric 10 with rounding mode HALF_EVEN).
   */
 final case class RewardComputationInputs(
     amuletToIssuePerYear: Numeric,
@@ -85,9 +81,6 @@ final case class RewardComputationInputs(
     )
 
     // Convert Numeric → BigDecimal at the output boundary for SQL.
-    // Under TBAR v1.1, appMintingAllowanceCC carries the app-source
-    // allocation (parallel to assetMintingAllowanceCC for the asset
-    // side); the shared pot is implicit as app + asset + unclaimed.
     RewardIssuanceParams(
       appRewardCouponThresholdCC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
       unclaimedMintingAllowanceCC = BigDecimal(assetTranche.unclaimedAllowance),
@@ -107,19 +100,6 @@ final case class RewardComputationInputs(
   private def bytesToCC(bytesWeight: Long): Numeric =
     mul(div(fromLong(bytesWeight), fromLong(1000000L)), trafficPriceInCCPerMB)
 
-  /** Replicates Daml `computeIssuanceTranche` for
-    * `totalUnfeaturedAppRewardCoupons = 0`. Used for both app and asset
-    * tranches per the [CIP-104
-    * amendment](https://github.com/canton-foundation/cips/pull/262).
-    *
-    * `unclaimedAllowance` is what's left for the next tranche.
-    *
-    * The per-coupon ratio is `cappedRewardsToIssue / totalCoupons`. The
-    * algebraic equivalent `(cappedRewardsToIssue × capPerCoupon) / (capPerCoupon
-    * × totalCoupons)` matches the Daml source but introduces a redundant
-    * rounding step at scale 10; the simplified form is numerically identical
-    * for values within scale-10 precision.
-    */
   private def computeIssuanceTranche(
       rewardsToIssue: Numeric,
       capPerCoupon: Numeric,
