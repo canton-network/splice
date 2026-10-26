@@ -88,6 +88,9 @@ trait InstanceReference
     with FeatureFlagFilter
     with PrettyPrinting {
 
+  @deprecated("admin tokens are not defined outside of local references", since = "3.7")
+  def adminToken: Option[String]
+
   @inline final override def uid: UniqueIdentifier = id.uid
 
   val name: String
@@ -398,6 +401,14 @@ trait LocalInstanceReference extends InstanceReference with NoTracing {
 
   override protected[console] def adminApiToken: Option[String] = adminToken
 
+  /** A Canton Admin Token that is not a JWT. It can be used both in the Ledger API and Admin API.
+    *
+    * @return
+    *   a canton admin token
+    *
+    * @see
+    *   [[com.digitalasset.canton.auth.CantonAdminTokenAuthService]]
+    */
   def adminToken: Option[String]
 }
 
@@ -418,6 +429,9 @@ trait RemoteInstanceReference extends InstanceReference {
       config.clientAdminApi,
       adminApiToken,
     )
+
+  @deprecated("admin tokens are not defined outside of local references", since = "3.7")
+  override def adminToken: Option[String] = None
 }
 
 /** Bare, Canton agnostic parts of the ledger-api client
@@ -432,14 +446,14 @@ trait RemoteInstanceReference extends InstanceReference {
   *   the port of the ledger api server
   * @param tls
   *   the tls config to use on the client
-  * @param ledgerApiToken
+  * @param token
   *   the jwt token to use on the client
   */
 class ExternalLedgerApiClient(
     hostname: String,
     port: Port,
     tls: Option[TlsClientConfig],
-    val ledgerApiToken: Option[String] = None,
+    val token: Option[String] = None,
 )(implicit val consoleEnvironment: ConsoleEnvironment)
     extends BaseLedgerApiAdministration
     with LedgerApiCommandRunner
@@ -455,7 +469,9 @@ class ExternalLedgerApiClient(
       command: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result] =
     consoleEnvironment.grpcLedgerCommandRunner
-      .runCommand("sourceLedger", command, FullClientConfig(hostname, port, tls), ledgerApiToken)
+      .runCommand("sourceLedger", command, FullClientConfig(hostname, port, tls), token)
+
+  override protected[console] def ledgerApiToken: Option[String] = token
 
   override private[canton] def optionallyAwait[Tx](
       tx: Tx,
@@ -791,7 +807,7 @@ class LocalParticipantReference(
     consoleEnvironment.environment.participants.getStarting(name)
 
   /** secret, not publicly documented way to get the admin token */
-  def adminToken: Option[String] = runningNode.flatMap(_.getAdminToken)
+  override def adminToken: Option[String] = runningNode.flatMap(_.getAdminToken)
 
   private lazy val testing_ =
     new LocalParticipantTestingGroup(this, consoleEnvironment, loggerFactory)
