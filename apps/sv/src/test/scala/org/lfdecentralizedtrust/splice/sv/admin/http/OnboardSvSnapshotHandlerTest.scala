@@ -147,16 +147,16 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
       } finally exported.trySuccess(()).discard
     }
 
-    "return a generic error when a completed snapshot file is missing" in {
+    "report a completed snapshot whose file is missing as not found" in {
       val id = prepare("missing-file", writeSnapshot)
       val file = eventually() {
         inside(snapshotService.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
       }
       Files.delete(file)
       download(id) ~> route ~> check {
-        status shouldBe StatusCodes.InternalServerError
+        status shouldBe StatusCodes.NotFound
         val body = responseAs[String]
-        body should include(s"Export of onboarding snapshot $id failed")
+        body should include(s"Onboarding snapshot $id not found")
         body should not include file.toString
       }
     }

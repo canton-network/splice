@@ -943,14 +943,10 @@ object HttpSvPublicHandler {
     Future {
       blocking {
         snapshotService.lookup(id) match {
-          case None => notFound
+          case None | Some(SnapshotState.Failed(_)) => notFound
           case Some(SnapshotState.Exporting) =>
             respond.ServiceUnavailable(
               definitions.ErrorResponse(s"Onboarding snapshot $id is still being exported")
-            )
-          case Some(SnapshotState.Failed(_)) =>
-            respond.InternalServerError(
-              definitions.ErrorResponse(s"Export of onboarding snapshot $id failed")
             )
           case Some(SnapshotState.Ready(file)) =>
             try
