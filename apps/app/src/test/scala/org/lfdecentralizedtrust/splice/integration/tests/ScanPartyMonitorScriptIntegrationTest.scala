@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.UUID
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.*
 import scala.sys.process.ProcessLogger
 
 class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletTestUtil {
@@ -53,19 +54,37 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
     ScriptRun(exitCode, stdout.toSeq, stderr.toSeq)
   }
 
-  private def reasons(matches: Seq[Json], party: String): Seq[(String, Option[String])] =
+  private def writeConfig(path: Path, config: Json): String = {
+    Files.writeString(path, config.noSpaces)
+    path.toString
+  }
+
+  private def reasonsOf(matches: Seq[Json], party: String): Seq[(String, Json)] =
     for {
       m <- matches
+      updateId = m.hcursor.get[String]("update_id").fold(e => fail(e), identity)
       r <- m.hcursor.downField("parties").downField(party).focus.flatMap(_.asArray).toList.flatten
-    } yield (
-      r.hcursor.get[String]("reason").fold(e => fail(e), identity),
-      r.hcursor.get[String]("choice").toOption,
-    )
+    } yield (updateId, r)
 
-  "scan_party_monitor.py reports transactions in which watched parties are confirming parties" in {
+  private def reasons(matches: Seq[Json], party: String): Seq[(String, Option[String])] =
+    reasonsOf(matches, party).map { case (_, r) =>
+      (
+        r.hcursor.get[String]("reason").fold(e => fail(e), identity),
+        r.hcursor.get[String]("choice").toOption,
+      )
+    }
+
+  /** (update id, receiver) of the transfer reasons of `party`. */
+  private def transfers(matches: Seq[Json], party: String): Seq[(String, String)] =
+    reasonsOf(matches, party).collect {
+      case (updateId, r) if r.hcursor.get[String]("reason").contains("transfer") =>
+        (updateId, r.hcursor.get[String]("receiver").fold(e => fail(e), identity))
+    }
+
+  "scan_party_monitor.py reports transfers to unexpected recipients and confirmations" in {
     implicit env =>
-      val dbDir: Path = Files.createTempDirectory("scan-party-monitor")
-      val db = dbDir.resolve("monitor.sqlite").toString
+      val dir: Path = Files.createTempDirectory("scan-party-monitor")
+      val db = dir.resolve("monitor.sqlite")
       val slackBodies = new java.util.concurrent.ConcurrentLinkedQueue[String]()
       val slack = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
       slack.createContext(
@@ -83,80 +102,128 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
       try {
         val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
         val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+        val charlieParty = onboardWalletUser(charlieWalletClient, aliceValidatorBackend)
         val alice = aliceParty.toProtoPrimitive
         val bob = bobParty.toProtoPrimitive
+        val charlie = charlieParty.toProtoPrimitive
         aliceWalletClient.tap(100.0)
-        // pays for bob's preapproval
+        // pay for the preapprovals
         bobValidatorWalletClient.tap(10.0)
+        aliceValidatorWalletClient.tap(10.0)
+        // these wait for scan to ingest the preapprovals, and hence alice's tap
         createTransferPreapprovalEnsuringItExists(bobWalletClient, bobValidatorBackend)
+        createTransferPreapprovalEnsuringItExists(charlieWalletClient, aliceValidatorBackend)
 
-        clue("Take an ACS snapshot containing bob's TransferPreapproval") {
+        clue("Take an ACS snapshot containing alice's amulet and the preapprovals") {
           sv1ScanBackend.forceAcsSnapshotNow()
         }
 
-        val allMatches = mutable.ListBuffer.empty[Json]
         val scanUrl = sv1ScanBackend.httpClientConfig.url.toString()
-        val commonArgs = Seq(
+        val slackUrl = s"http://127.0.0.1:${slack.getAddress.getPort}/slack"
+        def args(db: Path, config: String, extra: String*): Seq[String] = Seq(
           "--scan-url",
           scanUrl,
           "--db",
-          db,
+          db.toString,
+          "--config",
+          config,
           "--acs-page-size",
-          "10",
+          "1",
           "--acs-requests-per-second",
           "20",
           "--updates-requests-per-second",
           "20",
           "--exit-when-caught-up",
+        ) ++ extra
+
+        // alice may transfer to bob; charlie is tracked so that the seed has several pages
+        val aliceToBobOnly = writeConfig(
+          dir.resolve("alice-to-bob-only.json"),
+          Json.obj(
+            "parties" -> Json.obj(
+              alice -> Json.obj("additional_recipients" -> Json.arr(Json.fromString(bob))),
+              charlie -> Json.obj(),
+            )
+          ),
         )
 
         clue("An interrupted seed reports progress and stops") {
-          val run = runScript(commonArgs ++ Seq("--party", alice, "--stop-after-acs-pages", "1"))
-          run.stderr.exists(_.contains("ACS seed: 1 pages, 10 contracts stored")) shouldBe true
+          val run = runScript(args(db, aliceToBobOnly, "--stop-after-acs-pages", "1"))
+          run.stderr.exists(_.contains("ACS seed: 1 pages,")) shouldBe true
           run.stderr.exists(_.contains("Stopping after 1 ACS pages")) shouldBe true
           run.stdout shouldBe empty
         }
 
         clue("The seed resumes and the script catches up with scan") {
-          val run = runScript(commonArgs ++ Seq("--party", alice))
+          val run = runScript(args(db, aliceToBobOnly))
           run.stderr.exists(_.contains("Resuming the seed")) shouldBe true
           run.stderr.exists(_.contains("ACS seed complete")) shouldBe true
           run.stderr.exists(_.contains("Caught up with scan")) shouldBe true
+          run.stdout shouldBe empty
         }
 
-        actAndCheck(
-          "Alice sends amulet to bob through bob's TransferPreapproval",
-          aliceWalletClient.transferPreapprovalSend(bobParty, 10.0, UUID.randomUUID.toString),
+        val dbBeforeTransfers = dir.resolve("before-transfers.sqlite")
+        Files.copy(db, dbBeforeTransfers)
+
+        val transferMatches = mutable.ListBuffer.empty[Json]
+        val (_, charlieTransfers) = actAndCheck(
+          "Alice sends amulet to bob once and to charlie twice", {
+            aliceWalletClient.transferPreapprovalSend(bobParty, 10.0, UUID.randomUUID.toString)
+            aliceWalletClient.transferPreapprovalSend(charlieParty, 5.0, UUID.randomUUID.toString)
+            aliceWalletClient.transferPreapprovalSend(charlieParty, 6.0, UUID.randomUUID.toString)
+          },
         )(
-          "The script, now also watching bob, reports the transfer for both parties",
+          "The script reports both transfers to charlie",
           _ => {
             // Every run resumes from where the previous one stopped, so collect the outputs
             // of all attempts.
-            val run = runScript(
-              commonArgs ++ Seq(
-                "--party",
-                alice,
-                "--party",
-                bob,
-                "--slack-webhook-url",
-                s"http://127.0.0.1:${slack.getAddress.getPort}/slack",
-              )
-            )
-            allMatches ++= run.matches
-            reasons(allMatches.toSeq, alice) should contain(
-              ("acting", Some("TransferPreapproval_Send"))
-            )
-            // bob's TransferPreapproval was created before the ACS snapshot, so this checks
-            // that the script uses the contracts from the seed for parties added later.
-            reasons(allMatches.toSeq, bob) should contain(
-              ("exercised_contract_signatory", Some("TransferPreapproval_Send"))
-            )
+            transferMatches ++= runScript(args(db, aliceToBobOnly)).matches
+            val charlieTransfers = transfers(transferMatches.toSeq, alice)
+            charlieTransfers.map(_._2) shouldBe Seq(charlie, charlie)
+            charlieTransfers
           },
         )
 
-        clue("The matching transaction was posted to Slack") {
-          val bodies = slackBodies.toArray(Array.empty[String]).toSeq
-          forExactly(1, bodies) { body =>
+        clue("Only the transfers to charlie were reported") {
+          // the transfer to bob came first, so it has been processed
+          reasons(transferMatches.toSeq, alice).map(_._1).toSet shouldBe Set("transfer")
+          reasons(transferMatches.toSeq, bob) shouldBe empty
+          reasons(transferMatches.toSeq, charlie) shouldBe empty
+        }
+
+        clue("Catching up on several alerts posts one Slack message") {
+          runScript(args(dbBeforeTransfers, aliceToBobOnly, "--slack-webhook-url", slackUrl))
+          val bodies = slackBodies.asScala.toSeq
+          inside(bodies) { case Seq(body) =>
+            forAll(charlieTransfers) { case (updateId, _) => body should include(updateId) }
+          }
+        }
+
+        // bob becomes a common expected recipient and is newly tracked for all confirmations
+        val trackBob = writeConfig(
+          dir.resolve("track-bob.json"),
+          Json.obj(
+            "expected_recipients" -> Json.arr(Json.fromString(bob)),
+            "parties" -> Json.obj(
+              alice -> Json.obj(),
+              charlie -> Json.obj(),
+              bob -> Json.obj("alert_confirmations" -> Json.True),
+            ),
+          ),
+        )
+
+        clue("Adding bob re-seeds, reports bob's transactions, and doesn't repeat alice's") {
+          val slackBodiesBefore = slackBodies.size()
+          val run = runScript(args(db, trackBob, "--slack-webhook-url", slackUrl))
+          run.stderr.exists(_.contains("re-seeding")) shouldBe true
+          // bob's TransferPreapproval was created before the ACS snapshot, so this checks
+          // that the re-seed loaded the contracts of the added party.
+          reasons(run.matches, bob) should contain(
+            ("exercised_contract_signatory", Some("TransferPreapproval_Send"))
+          )
+          reasons(run.matches, alice) shouldBe empty
+          val newBodies = slackBodies.asScala.toSeq.drop(slackBodiesBefore)
+          inside(newBodies) { case Seq(body) =>
             body should (include(bob) and include("TransferPreapproval_Send"))
           }
         }

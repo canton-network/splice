@@ -4,20 +4,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Monitors a Scan instance for transactions in which any of a given set of parties
-acts as a confirming party, i.e. the party
-  - is an acting party of an exercise,
-  - is a signatory of a created contract, or
-  - is a signatory of the contract that is exercised.
+Monitors a Scan instance for activity of a configured set of tracked parties, and alerts on
+  - transfers of Amulet from a tracked party to a party that is not one of its expected
+    recipients, and
+  - for tracked parties with `alert_confirmations` set, every transaction in which the party
+    is a confirming party, i.e. the party
+      - is an acting party of an exercise,
+      - is a signatory of a created contract, or
+      - is a signatory of the contract that is exercised.
 
-Matching transactions are printed to stdout as JSON lines and, optionally, posted
-to a Slack incoming webhook.
+Matching transactions are printed to stdout as JSON lines and, optionally, posted to a Slack
+incoming webhook.
 
-Scan's update stream does not include the signatories of exercised contracts, so the
-script keeps a map from contract id to signatories for all contracts known to Scan in
-a local SQLite database. It is seeded from a Scan ACS snapshot and then kept up to date
-from the update stream. Both phases are resumable: stopping the script and restarting it
-with the same --db continues where it left off.
+Scan's update stream does not include the signatories of exercised contracts, so the script
+keeps a map from contract id to signatories for the contracts signed by tracked parties in a
+local SQLite database. It is seeded from a Scan ACS snapshot and then kept up to date from the
+update stream. Both phases are resumable: stopping the script and restarting it with the same
+--db continues where it left off. Adding parties to the configuration re-seeds the map.
 
 Uses only the Python standard library. See README.md next to this file for details.
 Run with `-h` for supported options.
@@ -37,23 +40,32 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
 SCHEMA_VERSION = "1"
 MAX_PAGE_SIZE = 1000
+MAX_TRACKED_PARTIES = 1000
 HTTP_TIMEOUT_SECONDS = 120
 BACKOFF_INITIAL_SECONDS = 2
 BACKOFF_MAX_SECONDS = 60
 RATE_LIMIT_PENALTY_SECONDS = 300
-SLACK_MAX_REASON_LINES = 20
+SLACK_MAX_LINES = 20
+SLACK_MAX_REASONS_PER_UPDATE = 3
+# Slack truncates messages at 40000 characters.
+SLACK_MAX_CHARS = 35000
+AMULET = "Splice.Amulet:Amulet"
+LOCKED_AMULET = "Splice.Amulet:LockedAmulet"
 
 LOG = logging.getLogger("scan-party-monitor")
 
 # A JSON object as returned by Scan, or one of our match records.
 Json = Dict[str, Any]
+# (migration id, record time): the order of updates in Scan.
+Position = Tuple[int, datetime]
 
 
 class FatalError(Exception):
@@ -61,6 +73,10 @@ class FatalError(Exception):
 
 
 class NotFound(Exception):
+    pass
+
+
+class StopRequested(Exception):
     pass
 
 
@@ -78,11 +94,110 @@ def parse_time(s: str) -> datetime:
     return datetime.fromisoformat(s)
 
 
+def position(migration_id: int, record_time: str) -> Position:
+    return (migration_id, parse_time(record_time))
+
+
 def lag_seconds(record_time: str) -> Optional[int]:
     try:
         return int((datetime.now(timezone.utc) - parse_time(record_time)).total_seconds())
     except ValueError:
         return None
+
+
+def qualified_name(template_id: str) -> str:
+    """`<package id>:<module>:<entity>` -> `<module>:<entity>`"""
+    return template_id.split(":", 1)[-1]
+
+
+def holding_owner(created: Json) -> Optional[str]:
+    """The owner of a created Amulet or LockedAmulet, None for other templates."""
+    name = qualified_name(created["template_id"])
+    arguments = created.get("create_arguments") or {}
+    if name == LOCKED_AMULET:
+        arguments = arguments.get("amulet") or {}
+    elif name != AMULET:
+        return None
+    owner = arguments.get("owner")
+    return owner if isinstance(owner, str) else None
+
+
+def holding_amount(created: Json) -> Optional[str]:
+    arguments = created.get("create_arguments") or {}
+    if qualified_name(created["template_id"]) == LOCKED_AMULET:
+        arguments = arguments.get("amulet") or {}
+    amount = (arguments.get("amount") or {}).get("initialAmount")
+    return amount if isinstance(amount, str) else None
+
+
+# ---- configuration -----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PartyConfig:
+    # Includes the common expected recipients, the party's additional ones, and the party itself.
+    expected_recipients: FrozenSet[str]
+    alert_confirmations: bool
+
+
+def _check_party_id(party: object, where: str) -> str:
+    if not isinstance(party, str) or not re.fullmatch(r"\S.*::[0-9a-fA-F]+", party):
+        raise FatalError(f"{where}: {party!r} is not a party id (expected <hint>::<fingerprint>)")
+    return party
+
+
+def _party_list(value: object, where: str) -> List[str]:
+    if not isinstance(value, list):
+        raise FatalError(f"{where} must be a list of party ids")
+    return [_check_party_id(p, where) for p in value]
+
+
+def _check_keys(obj: Json, allowed: Set[str], where: str) -> None:
+    unknown = set(obj) - allowed
+    if unknown:
+        raise FatalError(f"{where}: unknown keys {sorted(unknown)}; expected some of {sorted(allowed)}")
+
+
+def parse_config(raw: object) -> Dict[str, PartyConfig]:
+    if not isinstance(raw, dict):
+        raise FatalError("The configuration must be a JSON object")
+    _check_keys(raw, {"expected_recipients", "parties"}, "configuration")
+    common = _party_list(raw.get("expected_recipients", []), "expected_recipients")
+    parties = raw.get("parties")
+    if not isinstance(parties, dict) or not parties:
+        raise FatalError("The configuration must list the tracked parties in a non-empty 'parties' object")
+    if len(parties) > MAX_TRACKED_PARTIES:
+        raise FatalError(f"At most {MAX_TRACKED_PARTIES} parties can be tracked, got {len(parties)}")
+    config: Dict[str, PartyConfig] = {}
+    for party, settings in parties.items():
+        _check_party_id(party, "parties")
+        where = f"parties.{party}"
+        if not isinstance(settings, dict):
+            raise FatalError(f"{where} must be an object")
+        _check_keys(settings, {"additional_recipients", "alert_confirmations"}, where)
+        additional = _party_list(
+            settings.get("additional_recipients", []), f"{where}.additional_recipients"
+        )
+        alert_confirmations = settings.get("alert_confirmations", False)
+        if not isinstance(alert_confirmations, bool):
+            raise FatalError(f"{where}.alert_confirmations must be true or false")
+        config[party] = PartyConfig(
+            expected_recipients=frozenset(common) | frozenset(additional) | {party},
+            alert_confirmations=alert_confirmations,
+        )
+    return config
+
+
+def load_config(path: str) -> Dict[str, PartyConfig]:
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+    except (OSError, ValueError) as e:
+        raise FatalError(f"Cannot read the configuration {path}: {e}")
+    return parse_config(raw)
+
+
+# ---- Scan client ---------------------------------------------------------------------
 
 
 class Pacer:
@@ -192,17 +307,27 @@ class ScanClient:
     def get_snapshot_before(self, before: str, migration_id: int) -> str:
         return str(
             self._call(
-            self.other_pacer,
-            "GET",
-            "/v0/state/acs/snapshot-timestamp",
-            query={"before": before, "migration_id": migration_id},
+                self.other_pacer,
+                "GET",
+                "/v0/state/acs/snapshot-timestamp",
+                query={"before": before, "migration_id": migration_id},
             )["record_time"]
         )
 
     def get_acs_page(
-        self, migration_id: int, record_time: str, page_size: int, after: Optional[str]
+        self,
+        migration_id: int,
+        record_time: str,
+        party_ids: List[str],
+        page_size: int,
+        after: Optional[str],
     ) -> Json:
-        body: Json = {"migration_id": migration_id, "record_time": record_time, "page_size": page_size}
+        body: Json = {
+            "migration_id": migration_id,
+            "record_time": record_time,
+            "party_ids": party_ids,
+            "page_size": page_size,
+        }
         if after is not None:
             body["after"] = after
         return self._call(self.acs_pacer, "POST", "/v2/state/acs", body)
@@ -223,6 +348,15 @@ class ScanClient:
         return transactions
 
 
+# ---- local store -----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StoredContract:
+    signatory_ids: Set[int]
+    holding_owner_id: Optional[int]
+
+
 class Store:
     """SQLite store for the contract map and progress.
 
@@ -238,7 +372,7 @@ class Store:
         )
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS contracts "
-            "(cid TEXT PRIMARY KEY, signatories TEXT NOT NULL) WITHOUT ROWID"
+            "(cid TEXT PRIMARY KEY, signatories TEXT NOT NULL, holding_owner INTEGER) WITHOUT ROWID"
         )
         version = self.get_meta("schema_version")
         if version is None:
@@ -278,38 +412,45 @@ class Store:
             self.party_ids[party] = pid
         return pid
 
-    def _encode(self, signatories: Iterable[str]) -> str:
-        return " ".join(str(self.party_id(p)) for p in signatories)
-
-    def put_contracts(self, contracts: Iterable[Tuple[str, List[str]]]) -> None:
-        """contracts: iterable of (contract id, list of signatory party ids)."""
-        self.conn.executemany(
-            "INSERT OR REPLACE INTO contracts (cid, signatories) VALUES (?, ?)",
-            [(cid, self._encode(sigs)) for cid, sigs in contracts],
+    def put_contract(self, cid: str, signatories: Iterable[str], owner: Optional[str]) -> None:
+        self.conn.execute(
+            "INSERT OR REPLACE INTO contracts (cid, signatories, holding_owner) VALUES (?, ?, ?)",
+            (
+                cid,
+                " ".join(str(self.party_id(p)) for p in signatories),
+                None if owner is None else self.party_id(owner),
+            ),
         )
 
-    def signatory_ids(self, cid: str) -> Optional[Set[int]]:
-        row = self.conn.execute("SELECT signatories FROM contracts WHERE cid = ?", (cid,)).fetchone()
-        return None if row is None else {int(i) for i in row[0].split()}
+    def lookup(self, cid: str) -> Optional[StoredContract]:
+        row = self.conn.execute(
+            "SELECT signatories, holding_owner FROM contracts WHERE cid = ?", (cid,)
+        ).fetchone()
+        if row is None:
+            return None
+        return StoredContract({int(i) for i in row[0].split()}, row[1])
 
     def delete_contract(self, cid: str) -> None:
         self.conn.execute("DELETE FROM contracts WHERE cid = ?", (cid,))
+
+    def clear_contracts(self) -> None:
+        self.conn.execute("DELETE FROM contracts")
+
+
+# ---- Slack -----------------------------------------------------------------------------
 
 
 class SlackNotifier:
     def __init__(self, webhook_url: str) -> None:
         self.webhook_url = webhook_url
 
-    def notify(self, match: Json) -> None:
-        text = format_slack_message(match)
+    def post(self, text: str) -> None:
         attempt = 0
         while True:
             status: Optional[int]
             headers: Any
             try:
-                status, headers, content = http_request(
-                    "POST", self.webhook_url, {"text": text}
-                )
+                status, headers, content = http_request("POST", self.webhook_url, {"text": text})
             except (OSError, urllib.error.URLError) as e:
                 status, headers, content = None, {}, str(e).encode()
             if status == 200:
@@ -329,24 +470,63 @@ class SlackNotifier:
             attempt += 1
 
 
-def format_slack_message(match: Json) -> str:
-    lines = [
-        f":rotating_light: Watched part{'y' if len(match['parties']) == 1 else 'ies'} "
-        f"confirmed a transaction on {match['scan_url']}",
-        f"update `{match['update_id']}` at record time `{match['record_time']}` "
-        f"(migration {match['migration_id']})",
+def format_reason(reason: Json) -> str:
+    if reason["reason"] == "transfer":
+        amount = reason.get("amount") or "an unknown amount"
+        return f"transfer of {amount} to `{reason['receiver']}` (not an expected recipient)"
+    what = qualified_name(reason["template_id"])
+    if "choice" in reason:
+        what += f" / {reason['choice']}"
+    return f"{reason['reason']} on {what}"
+
+
+def _plural(n: int, singular: str, plural: str) -> str:
+    return singular if n == 1 else plural
+
+
+def _join_capped(header: List[str], lines: List[str], omitted_what: str) -> str:
+    """header + as many lines as fit in Slack's limits, then a count of the omitted ones."""
+    kept: List[str] = []
+    length = sum(len(h) + 1 for h in header)
+    for line in lines[:SLACK_MAX_LINES]:
+        if length + len(line) + 1 > SLACK_MAX_CHARS:
+            break
+        kept.append(line)
+        length += len(line) + 1
+    if len(kept) < len(lines):
+        kept.append(f"… and {len(lines) - len(kept)} more {omitted_what} (see the script's stdout)")
+    return "\n".join(header + kept)
+
+
+def format_slack_message(matches: List[Json]) -> str:
+    """One Slack message for all of `matches`, which must not be empty."""
+    first = matches[0]
+    if len(matches) == 1:
+        parties = first["parties"]
+        header = [
+            f":rotating_light: Alert for tracked {_plural(len(parties), 'party', 'parties')} "
+            f"on {first['scan_url']}",
+            f"update `{first['update_id']}` at record time `{first['record_time']}` "
+            f"(migration {first['migration_id']})",
+        ]
+        lines = [f"• `{party}`: {format_reason(r)}" for party, rs in parties.items() for r in rs]
+        return _join_capped(header, lines, "reasons")
+
+    header = [
+        f":rotating_light: {len(matches)} alerts for tracked parties on {first['scan_url']}, "
+        f"record times `{first['record_time']}` – `{matches[-1]['record_time']}`"
     ]
-    reason_lines = []
-    for party, reasons in match["parties"].items():
-        for r in reasons:
-            what = r["template_id"].split(":", 1)[-1]
-            if "choice" in r:
-                what += f" / {r['choice']}"
-            reason_lines.append(f"• `{party}`: {r['reason']} on {what}")
-    lines += reason_lines[:SLACK_MAX_REASON_LINES]
-    if len(reason_lines) > SLACK_MAX_REASON_LINES:
-        lines.append(f"… and {len(reason_lines) - SLACK_MAX_REASON_LINES} more")
-    return "\n".join(lines)
+    lines = []
+    for m in matches:
+        reasons = [f"`{party}`: {format_reason(r)}" for party, rs in m["parties"].items() for r in rs]
+        shown = "; ".join(reasons[:SLACK_MAX_REASONS_PER_UPDATE])
+        if len(reasons) > SLACK_MAX_REASONS_PER_UPDATE:
+            shown += f"; +{len(reasons) - SLACK_MAX_REASONS_PER_UPDATE} more"
+        lines.append(f"• `{m['update_id']}` at `{m['record_time']}`: {shown}")
+    return _join_capped(header, lines, "updates")
+
+
+# ---- monitor ---------------------------------------------------------------------------
 
 
 class Monitor:
@@ -356,17 +536,90 @@ class Monitor:
         scan: ScanClient,
         store: Store,
         slack: Optional[SlackNotifier],
-        watched: List[str],
+        config: Dict[str, PartyConfig],
     ) -> None:
         self.args = args
         self.scan = scan
         self.store = store
         self.slack = slack
-        self.watched = watched
-        self.watched_ids = {store.party_id(p): p for p in watched}
-        self.stats: Dict[str, int] = {"transactions": 0, "matches": 0, "unknown_contracts": 0}
+        self.config = config
+        self.tracked_by_id = {store.party_id(p): p for p in config}
+        self.confirmation_ids = {
+            pid for pid, p in self.tracked_by_id.items() if config[p].alert_confirmations
+        }
+        # Per party, the position up to which its matches were already reported before a re-seed.
+        self.reported_until: Dict[str, Position] = {
+            p: position(m, t)
+            for p, (m, t) in json.loads(store.get_meta("reported_until") or "{}").items()
+        }
+        self.stats: Dict[str, int] = {"transactions": 0, "matches": 0}
 
-    # ---- ACS seed --------------------------------------------------------------
+    # ---- configuration changes -------------------------------------------------------
+
+    def prepare(self) -> None:
+        """Compares the configured parties with the ones the contract map was built for, and
+        schedules a re-seed if parties were added."""
+        store = self.store
+        configured = sorted(self.config)
+        stored_json = store.get_meta("tracked_parties")
+        stored = set(json.loads(stored_json)) if stored_json is not None else None
+        if stored == set(configured):
+            return
+        seeding = store.get_meta("acs_complete") != "1"
+        # While seeding, the parties must not change at all, as the ACS page token is only
+        # valid for the same request; afterwards, only added parties need a re-seed.
+        if stored is None or (not seeding and set(configured) <= stored):
+            store.set_meta("tracked_parties", json.dumps(configured))
+            return
+
+        changes = [
+            f"{what}: {', '.join(sorted(parties))}"
+            for what, parties in [("added", set(configured) - stored), ("removed", stored - set(configured))]
+            if parties
+        ]
+        store.begin()
+        if not seeding:
+            # Re-seed from the latest snapshot that is not after the cursor, and replay the
+            # updates from there without reporting again what was already reported.
+            cursor_migration_id = int(store.require_meta("cursor_migration_id"))
+            cursor_record_time = store.require_meta("cursor_record_time")
+            try:
+                snapshot = self.scan.get_snapshot_before(cursor_record_time, cursor_migration_id)
+            except NotFound:
+                raise FatalError(
+                    f"Scan has no ACS snapshot before {cursor_record_time} (migration id "
+                    f"{cursor_migration_id}) to re-seed from for the added parties. "
+                    f"Delete {self.args.db} and start over."
+                )
+            cursor = position(cursor_migration_id, cursor_record_time)
+            for p in stored & set(configured):
+                self.reported_until[p] = max(self.reported_until.get(p, cursor), cursor)
+            store.set_meta(
+                "reported_until",
+                json.dumps(
+                    {
+                        p: [m, t.isoformat()]
+                        for p, (m, t) in self.reported_until.items()
+                        if p in self.config
+                    }
+                ),
+            )
+            store.set_meta("snapshot_migration_id", cursor_migration_id)
+            store.set_meta("snapshot_record_time", snapshot)
+        # Otherwise a seed is in progress; restart it for the new set of parties, as the ACS
+        # page token is only valid for the same request.
+        store.clear_contracts()
+        store.set_meta("acs_complete", 0)
+        store.set_meta("acs_next_page_token", None)
+        store.set_meta("acs_pages", 0)
+        store.set_meta("acs_contracts", 0)
+        store.set_meta("tracked_parties", json.dumps(configured))
+        store.commit()
+        LOG.info(
+            f"Tracked parties changed ({'; '.join(changes)}); re-seeding the contracts"
+        )
+
+    # ---- ACS seed --------------------------------------------------------------------
 
     def seed(self) -> None:
         store = self.store
@@ -394,11 +647,13 @@ class Monitor:
         else:
             migration_id = int(stored_migration_id)
             record_time = store.require_meta("snapshot_record_time")
-            LOG.info(
-                f"Resuming the seed from the ACS snapshot at {record_time} (migration id {migration_id}) "
-                f"after {store.get_meta('acs_pages')} pages and {store.get_meta('acs_contracts')} contracts"
-            )
+            if store.get_meta("acs_next_page_token") is not None:
+                LOG.info(
+                    f"Resuming the seed from the ACS snapshot at {record_time} (migration id {migration_id}) "
+                    f"after {store.get_meta('acs_pages')} pages and {store.get_meta('acs_contracts')} contracts"
+                )
 
+        party_ids = sorted(self.config)
         token = store.get_meta("acs_next_page_token")
         pages = int(store.require_meta("acs_pages"))
         contracts = int(store.require_meta("acs_contracts"))
@@ -408,7 +663,9 @@ class Monitor:
         last_report = 0.0
         while True:
             try:
-                page = self.scan.get_acs_page(migration_id, record_time, self.args.acs_page_size, token)
+                page = self.scan.get_acs_page(
+                    migration_id, record_time, party_ids, self.args.acs_page_size, token
+                )
             except NotFound:
                 raise FatalError(
                     f"The ACS snapshot at {record_time} (migration id {migration_id}) is no longer "
@@ -417,11 +674,12 @@ class Monitor:
             events = page["created_events"]
             token = page.get("next_page_token")
             pages += 1
-            contracts += len(events)
             pages_this_run += 1
-            contracts_this_run += len(events)
             store.begin()
-            store.put_contracts((e["contract_id"], e["signatories"]) for e in events)
+            for e in events:
+                if self.store_if_tracked(e):
+                    contracts += 1
+                    contracts_this_run += 1
             store.set_meta("acs_next_page_token", token)
             store.set_meta("acs_pages", pages)
             store.set_meta("acs_contracts", contracts)
@@ -447,52 +705,90 @@ class Monitor:
                 LOG.info(f"Stopping after {pages_this_run} ACS pages as requested; rerun to resume")
                 raise StopRequested()
 
-    # ---- update stream -----------------------------------------------------------
+    def store_if_tracked(self, created: Json) -> bool:
+        """Stores a created contract if a tracked party signs it."""
+        if not any(self.store.party_ids.get(p) in self.tracked_by_id for p in created["signatories"]):
+            return False
+        self.store.put_contract(created["contract_id"], created["signatories"], holding_owner(created))
+        return True
+
+    # ---- update stream -----------------------------------------------------------------
 
     def stream(self) -> None:
         store = self.store
         migration_id = int(store.require_meta("cursor_migration_id"))
         record_time = store.require_meta("cursor_record_time")
+        n = len(self.config)
         LOG.info(
-            f"Streaming updates after {record_time} (migration id {migration_id}), watching "
-            f"{len(self.watched)} part{'y' if len(self.watched) == 1 else 'ies'}"
+            f"Streaming updates after {record_time} (migration id {migration_id}), tracking "
+            f"{n} {_plural(n, 'party', 'parties')}"
         )
         last_heartbeat = time.monotonic()
+        # Matches not yet posted to Slack. Their updates are only committed to the store,
+        # together with the cursor, once they have been posted.
+        unposted: List[Json] = []
+        oldest_unposted = 0.0
+        store.begin()
         while True:
             updates = self.scan.get_updates(migration_id, record_time, self.args.updates_page_size)
+            for update in updates:
+                match = self.process_update(update)
+                if match is not None:
+                    print(json.dumps(match), flush=True)
+                    if not unposted:
+                        oldest_unposted = time.monotonic()
+                    unposted.append(match)
+                    self.stats["matches"] += 1
             if updates:
-                store.begin()
-                matches = [m for m in (self.process_update(u) for u in updates) if m]
-                for m in matches:
-                    self.report(m)
                 last = updates[-1]
                 # Reassignments carry the migration id in their event.
                 migration_id = last.get("migration_id", last.get("event", {}).get("migration_id"))
                 record_time = last["record_time"]
                 store.set_meta("cursor_migration_id", migration_id)
                 store.set_meta("cursor_record_time", record_time)
-                store.commit()
                 self.stats["transactions"] += len(updates)
-                self.stats["matches"] += len(matches)
+                self.forget_reported_until(position(migration_id, record_time))
+
+            caught_up = len(updates) < self.args.updates_page_size
+            if (
+                not unposted
+                or caught_up
+                or time.monotonic() - oldest_unposted >= self.args.slack_batch_seconds
+            ):
+                if unposted and self.slack is not None:
+                    self.slack.post(format_slack_message(unposted))
+                unposted = []
+                store.commit()
+                store.begin()
 
             now = time.monotonic()
             if now - last_heartbeat >= self.args.heartbeat_interval_seconds:
                 last_heartbeat = now
                 self.heartbeat(migration_id, record_time)
-            if len(updates) < self.args.updates_page_size:
+            if caught_up:
                 if self.args.exit_when_caught_up:
+                    store.commit()
                     self.heartbeat(migration_id, record_time)
                     LOG.info("Caught up with scan; exiting as requested")
                     return
                 time.sleep(self.args.poll_interval_seconds)
+
+    def forget_reported_until(self, cursor: Position) -> None:
+        passed = [p for p, until in self.reported_until.items() if until <= cursor]
+        if passed:
+            for p in passed:
+                del self.reported_until[p]
+            self.store.set_meta(
+                "reported_until",
+                json.dumps({p: [m, t.isoformat()] for p, (m, t) in self.reported_until.items()}),
+            )
 
     def heartbeat(self, migration_id: int, record_time: str) -> None:
         lag = lag_seconds(record_time)
         LOG.info(
             f"At record time {record_time} (migration id {migration_id}, "
             f"{'unknown' if lag is None else f'{lag}s'} behind); this run: "
-            f"{self.stats['transactions']} updates, {self.stats['matches']} matching, "
-            f"{self.stats['unknown_contracts']} exercises on unknown contracts"
+            f"{self.stats['transactions']} updates, {self.stats['matches']} matching"
         )
 
     def process_update(self, update: Json) -> Optional[Json]:
@@ -500,17 +796,20 @@ class Monitor:
             # A reassignment; no matching, but keep the contract map complete.
             created = update["event"].get("created_event")
             if created is not None:
-                self.store.put_contracts([(created["contract_id"], created["signatories"])])
+                self.store_if_tracked(created)
             return None
 
         events = update["events_by_id"]
-        parties: Dict[str, List[Json]] = {}
+        reasons: Dict[str, List[Json]] = {}
+        senders: Set[str] = set()
+        created_holdings: List[Tuple[str, Json]] = []
 
-        def add(pid: int, reason: str, event: Json) -> None:
+        def add(party: str, reason: str, event: Json, **details: Any) -> None:
             r: Json = {"reason": reason, "event_id": event["event_id"], "template_id": event["template_id"]}
             if "choice" in event:
                 r["choice"] = event["choice"]
-            parties.setdefault(self.watched_ids[pid], []).append(r)
+            r.update(details)
+            reasons.setdefault(party, []).append(r)
 
         # Pre-order traversal is execution order, so contracts created earlier in this
         # transaction are in the map before they can be exercised.
@@ -521,61 +820,52 @@ class Monitor:
                 continue
             if event["event_type"] == "created_event":
                 for p in event["signatories"]:
-                    pid = self.store.party_ids.get(p)
-                    if pid in self.watched_ids:
-                        add(pid, "created_signatory", event)
-                self.store.put_contracts([(event["contract_id"], event["signatories"])])
+                    if self.store.party_ids.get(p) in self.confirmation_ids:
+                        add(p, "created_signatory", event)
+                owner = holding_owner(event)
+                if owner is not None:
+                    created_holdings.append((owner, event))
+                self.store_if_tracked(event)
             else:
                 for p in event["acting_parties"]:
-                    pid = self.store.party_ids.get(p)
-                    if pid in self.watched_ids:
-                        add(pid, "acting", event)
-                signatories = self.store.signatory_ids(event["contract_id"])
-                if signatories is None:
-                    self.stats["unknown_contracts"] += 1
-                    LOG.debug(f"Exercise {event['event_id']} on unknown contract {event['contract_id']}")
-                else:
-                    for pid in signatories & self.watched_ids.keys():
-                        add(pid, "exercised_contract_signatory", event)
-                if event["consuming"]:
-                    self.store.delete_contract(event["contract_id"])
+                    if self.store.party_ids.get(p) in self.confirmation_ids:
+                        add(p, "acting", event)
+                stored = self.store.lookup(event["contract_id"])
+                if stored is not None:
+                    for pid in stored.signatory_ids & self.confirmation_ids:
+                        add(self.tracked_by_id[pid], "exercised_contract_signatory", event)
+                    if event["consuming"]:
+                        if stored.holding_owner_id in self.tracked_by_id:
+                            senders.add(self.tracked_by_id[stored.holding_owner_id])
+                        self.store.delete_contract(event["contract_id"])
                 stack.extend(reversed(event["child_event_ids"]))
 
-        if not parties:
+        # A transfer moves holdings of a tracked party to holdings of other parties. With
+        # several tracked senders, outputs can't be attributed to one of them, so each sender
+        # is checked against all outputs.
+        for sender in sorted(senders):
+            expected = self.config[sender].expected_recipients
+            for owner, event in created_holdings:
+                if owner not in expected:
+                    add(sender, "transfer", event, receiver=owner, amount=holding_amount(event))
+
+        update_position = position(update["migration_id"], update["record_time"])
+        for p in list(reasons):
+            until = self.reported_until.get(p)
+            if until is not None and update_position <= until:
+                del reasons[p]
+        if not reasons:
             return None
         return {
             "update_id": update["update_id"],
             "migration_id": update["migration_id"],
             "record_time": update["record_time"],
             "scan_url": self.scan.url,
-            "parties": parties,
+            "parties": reasons,
         }
 
-    def report(self, match: Json) -> None:
-        print(json.dumps(match), flush=True)
-        if self.slack is not None:
-            self.slack.notify(match)
 
-
-class StopRequested(Exception):
-    pass
-
-
-def read_parties(args: argparse.Namespace) -> List[str]:
-    parties = list(args.party or [])
-    if args.parties_file:
-        with open(args.parties_file) as f:
-            for line in f:
-                line = line.split("#", 1)[0].strip()
-                if line:
-                    parties.append(line)
-    parties = list(dict.fromkeys(parties))
-    if not parties:
-        raise FatalError("No parties to watch; pass --party or --parties-file")
-    for p in parties:
-        if "::" not in p:
-            LOG.warning(f"'{p}' does not look like a full party id (expected <hint>::<fingerprint>)")
-    return parties
+# ---- command line ------------------------------------------------------------------------
 
 
 def page_size(value: str) -> int:
@@ -587,16 +877,22 @@ def page_size(value: str) -> int:
 
 def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Alert on Scan transactions in which watched parties are confirming parties"
+        description="Alert on Scan transactions of tracked parties: transfers to unexpected "
+        "recipients, and optionally all transactions they confirm"
     )
     parser.add_argument("--scan-url", required=True, help="Base URL of the Scan instance, e.g. https://scan.sv-1.example.com")
     parser.add_argument("--db", required=True, help="SQLite database file for the contract map and progress; created if missing")
-    parser.add_argument("--party", action="append", help="Party id to watch; may be repeated")
-    parser.add_argument("--parties-file", help="File with one party id per line to watch ('#' starts a comment)")
+    parser.add_argument("--config", required=True, help="JSON file with the tracked parties; see README.md")
     parser.add_argument(
         "--slack-webhook-url",
         default=os.environ.get("SLACK_WEBHOOK_URL"),
         help="Slack incoming webhook URL to post alerts to (default: $SLACK_WEBHOOK_URL)",
+    )
+    parser.add_argument(
+        "--slack-batch-seconds",
+        type=float,
+        default=60,
+        help="While catching up, collect alerts for up to this long into one Slack message (default: %(default)s)",
     )
     parser.add_argument("--migration-id", type=int, help="Migration id of the ACS snapshot to seed from (default: the latest)")
     parser.add_argument("--acs-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Contracts per ACS request (default: %(default)s)")
@@ -631,7 +927,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     try:
-        parties = read_parties(args)
+        config = load_config(args.config)
         store = Store(args.db)
         stored_url = store.get_meta("scan_url")
         scan_url = args.scan_url.rstrip("/")
@@ -641,7 +937,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             LOG.warning(f"{args.db} was created against {stored_url}; continuing with {scan_url}")
         scan = ScanClient(scan_url, args.acs_requests_per_second, args.updates_requests_per_second)
         slack = SlackNotifier(args.slack_webhook_url) if args.slack_webhook_url else None
-        monitor = Monitor(args, scan, store, slack, parties)
+        monitor = Monitor(args, scan, store, slack, config)
+        monitor.prepare()
         monitor.seed()
         monitor.stream()
     except StopRequested:
@@ -650,7 +947,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         LOG.error(str(e))
         return 1
     except KeyboardInterrupt:
-        LOG.info("Interrupted; progress up to the last completed page is saved")
+        LOG.info("Interrupted; progress up to the last alerts sent is saved")
         return 130
     return 0
 
