@@ -5,7 +5,6 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
-import com.digitalasset.canton.console.CommandFailure
 
 def requireEnv(name: String): String =
   sys.env.getOrElse(name, sys.error(s"Environment variable $name must be set"))
@@ -64,9 +63,11 @@ while (true) {
       }
     }
 
-    cursors = polled.map { case (synchronizerId, _, nextFrom) => synchronizerId -> nextFrom }.toMap
+    cursors = cursors ++ polled.map { case (synchronizerId, _, nextFrom) =>
+      synchronizerId -> nextFrom
+    }
   } catch {
-    case e: Exception =>
+    case scala.util.control.NonFatal(e) =>
       logger.warn(
         s"Topology key monitor failed to poll participant, retrying in ${pollIntervalSeconds}s",
         e,
