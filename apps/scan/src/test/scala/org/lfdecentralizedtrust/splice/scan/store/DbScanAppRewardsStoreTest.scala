@@ -781,13 +781,13 @@ class DbScanAppRewardsStoreTest
 
     def mkParams(totalIssuance: BigDecimal): RewardIssuanceParams =
       RewardIssuanceParams(
-        issuancePerAppBurnCCperMB = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
         appRewardCouponThresholdCC = BigDecimal(0),
         appMintingAllowanceCC = totalIssuance,
         unclaimedMintingAllowanceCC = BigDecimal(0),
         issuancePerAppBurnCC = BigDecimal(0),
         issuancePerAssetBurnCC = BigDecimal(0),
-        issuancePerAssetBurnCCperMB = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
         assetMintingAllowanceCC = BigDecimal(0),
       )
 
@@ -866,13 +866,13 @@ class DbScanAppRewardsStoreTest
         description = "golden-value test",
         activities = Seq(Activity.alice5M),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("10.0"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal(0),
+          issuancePerAssetBurnCCPerMB = BigDecimal(0),
           assetMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
@@ -892,13 +892,13 @@ class DbScanAppRewardsStoreTest
         description = "below-threshold exclusion",
         activities = Seq(Activity.alice5M, Activity.bob150K),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("10.3"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal(0),
+          issuancePerAssetBurnCCPerMB = BigDecimal(0),
           assetMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
@@ -916,13 +916,13 @@ class DbScanAppRewardsStoreTest
         description = "threshold boundary (exactly at threshold is included)",
         activities = Seq(Activity.alice250K),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("0.5"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal(0),
+          issuancePerAssetBurnCCPerMB = BigDecimal(0),
           assetMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
@@ -940,13 +940,13 @@ class DbScanAppRewardsStoreTest
         description = "decimal precision",
         activities = Seq(Activity.aliceDecimal),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.Zero,
           appMintingAllowanceCC = BigDecimal("6.666666"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal(0),
+          issuancePerAssetBurnCCPerMB = BigDecimal(0),
           assetMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
@@ -962,13 +962,13 @@ class DbScanAppRewardsStoreTest
         description = "single party above threshold, round totals correct",
         activities = Seq(Activity.alice1M),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("2.0"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal(0),
+          issuancePerAssetBurnCCPerMB = BigDecimal(0),
           assetMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
@@ -986,13 +986,13 @@ class DbScanAppRewardsStoreTest
         description = "all parties below threshold",
         activities = Seq(Activity.alice100K, Activity.bob50K),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.One,
           appMintingAllowanceCC = BigDecimal("0.3"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal(0),
+          issuancePerAssetBurnCCPerMB = BigDecimal(0),
           assetMintingAllowanceCC = BigDecimal(0),
         ),
         expected = RewardTotalsTests.Expected(
@@ -1010,13 +1010,13 @@ class DbScanAppRewardsStoreTest
         description = "asset-only party crosses threshold via asset side",
         activities = Seq(Activity.aliceAsset5M),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = BigDecimal(0),
+          issuancePerAppBurnCCPerMB = BigDecimal(0),
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("0"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal("2.0"),
+          issuancePerAssetBurnCCPerMB = BigDecimal("2.0"),
           assetMintingAllowanceCC = BigDecimal("10.0"),
         ),
         expected = RewardTotalsTests.Expected(
@@ -1037,13 +1037,13 @@ class DbScanAppRewardsStoreTest
         description = "party with both app and asset weight combines sources",
         activities = Seq(Activity.aliceBoth),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = IssuanceRate.Two,
+          issuancePerAppBurnCCPerMB = IssuanceRate.Two,
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("2.0"),
           unclaimedMintingAllowanceCC = BigDecimal("2.0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal("3.0"),
+          issuancePerAssetBurnCCPerMB = BigDecimal("3.0"),
           assetMintingAllowanceCC = BigDecimal("6.0"),
         ),
         expected = RewardTotalsTests.Expected(
@@ -1064,13 +1064,13 @@ class DbScanAppRewardsStoreTest
         description = "asset-only party below threshold is excluded",
         activities = Seq(Activity.aliceAsset5M),
         params = RewardIssuanceParams(
-          issuancePerAppBurnCCperMB = BigDecimal(0),
+          issuancePerAppBurnCCPerMB = BigDecimal(0),
           appRewardCouponThresholdCC = Threshold.Half,
           appMintingAllowanceCC = BigDecimal("0"),
           unclaimedMintingAllowanceCC = BigDecimal("0"),
           issuancePerAppBurnCC = BigDecimal(0),
           issuancePerAssetBurnCC = BigDecimal(0),
-          issuancePerAssetBurnCCperMB = BigDecimal("0.05"),
+          issuancePerAssetBurnCCPerMB = BigDecimal("0.05"),
           assetMintingAllowanceCC = BigDecimal("0.25"),
         ),
         expected = RewardTotalsTests.Expected(
