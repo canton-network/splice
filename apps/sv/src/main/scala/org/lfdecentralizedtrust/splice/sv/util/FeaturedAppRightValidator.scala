@@ -18,9 +18,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
 object FeaturedAppRightValidator {
-  // Scope of the overlap check: opsParties-vs-opsParties only. A party that is both an opsParty
-  // here and a provider of another FeaturedAppRight (or vice versa) is NOT treated as a conflict;
-  // cross-role provider/opsParty collisions are intentionally out of scope.
+  // Scope of the overlap check: a party may be the provider or an opsParty of at most one
+  // FeaturedAppRight. Both same-role (opsParty-vs-opsParty, provider-vs-provider) and cross-role
+  // (opsParty-vs-provider and the reverse) collisions across different rights are rejected.
   def validateFeaturedAppRightAction(
       action: ActionRequiringConfirmation,
       store: SvDsoStore,
@@ -101,9 +101,9 @@ object FeaturedAppRightValidator {
     else if (proposed.contains(provider))
       Future.successful(Left("provider cannot be its own opsParty"))
     else
-      store.findConflictingOpsParties(proposed, excludeCid).map {
+      store.findConflictingParties((provider +: proposed).distinct, excludeCid).map {
         case Nil => Right(())
-        case c => Left(s"opsParties already in use: ${c.mkString(", ")}")
+        case c => Left(s"parties already in use: ${c.mkString(", ")}")
       }
 
   // Decision: None and empty [] opsParties are treated as equivalent — SvUtil.optionalJavaListToSeq

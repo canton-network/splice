@@ -515,7 +515,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
 
-    "findConflictingOpsParties" should {
+    "findConflictingParties" should {
       def ops(ps: PartyId*): Option[Seq[PartyId]] = Some(ps.toSeq)
 
       "return empty when the proposed set is empty" in {
@@ -524,7 +524,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingOpsParties(Seq.empty, None)
+          result <- store.findConflictingParties(Seq.empty, None)
         } yield result shouldBe empty
       }
 
@@ -534,7 +534,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1), userParty(2)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingOpsParties(Seq(userParty(2), userParty(3)), None)
+          result <- store.findConflictingParties(Seq(userParty(2), userParty(3)), None)
         } yield result.toSet shouldBe Set(userParty(2))
       }
 
@@ -544,7 +544,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingOpsParties(Seq(userParty(3)), None)
+          result <- store.findConflictingParties(Seq(userParty(3)), None)
         } yield result shouldBe empty
       }
 
@@ -555,7 +555,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingOpsParties(Seq(userParty(1)), Some(cid))
+          result <- store.findConflictingParties(Seq(userParty(1)), Some(cid))
         } yield result shouldBe empty
       }
 
@@ -568,7 +568,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(2), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingOpsParties(Seq(userParty(1)), None)
+          result <- store.findConflictingParties(Seq(userParty(1)), None)
         } yield result shouldBe Seq(userParty(1))
       }
 
@@ -581,8 +581,18 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(2), opsParties = Some(Seq.empty))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingOpsParties(Seq(userParty(1)), None)
+          result <- store.findConflictingParties(Seq(userParty(1)), None)
         } yield result shouldBe empty
+      }
+
+      "return a provider that overlaps with the proposed set" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- store.findConflictingParties(Seq(providerParty(1)), None)
+        } yield result.toSet shouldBe Set(providerParty(1))
       }
     }
 
@@ -678,6 +688,32 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             grantAction(providerParty(2), Seq(userParty(1))),
+            store,
+          )
+        } yield result.isLeft shouldBe true
+      }
+
+      // a proposed opsParty equals another right's provider
+      "reject a grant whose opsParty is another right's provider" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(featuredAppRight(providerParty(1)))(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(2), Seq(providerParty(1))),
+            store,
+          )
+        } yield result.isLeft shouldBe true
+      }
+
+      // the proposed provider equals another right's opsParty
+      "reject a grant whose provider is another right's opsParty" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(userParty(1), Seq(userParty(5))),
             store,
           )
         } yield result.isLeft shouldBe true

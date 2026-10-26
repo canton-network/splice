@@ -2497,7 +2497,7 @@ class DbSvDsoStore private (
     } yield result.map(contractFromRow(FeaturedAppActivityMarker.COMPANION)(_))
   }
 
-  override def findConflictingOpsParties(
+  override def findConflictingParties(
       proposed: Seq[PartyId],
       excludeRightCid: Option[String],
   )(implicit tc: TraceContext): Future[Seq[PartyId]] = {
@@ -2506,24 +2506,29 @@ class DbSvDsoStore private (
       val arr = proposed.map(_.toProtoPrimitive).toArray
       val exclude = excludeRightCid.fold(sql"")(cid => sql" and acs.contract_id <> $cid ")
       val q = (sql"""
-      select distinct e
-      from #${DsoTables.acsTableName} acs,
-            jsonb_array_elements_text(
-             case when jsonb_typeof(acs.create_arguments->'opsParties') = 'array'
-                  then acs.create_arguments->'opsParties'
-                  else '[]'::jsonb
-             end
-           ) e
-      where acs.store_id = $acsStoreId
-        and acs.migration_id = $domainMigrationId
-        and acs.package_name = ${FeaturedAppRight.PACKAGE_NAME}
-        and acs.template_id_qualified_name = ${QualifiedName(
+        with rights as materialized (
+          select acs.contract_id, acs.create_arguments
+          from #${DsoTables.acsTableName} acs
+          where acs.store_id = $acsStoreId
+            and acs.migration_id = $domainMigrationId
+            and acs.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+            and acs.template_id_qualified_name = ${QualifiedName(
           FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
         )}
-        and e = any($arr)
-      """ ++ exclude).toActionBuilder.as[String]
+        """ ++ exclude ++ sql"""
+        )
+        select distinct party from (
+          select r.create_arguments->>'provider' as party from rights r
+          union all
+          select e from rights r,
+            jsonb_array_elements_text(
+              case when jsonb_typeof(r.create_arguments->'opsParties') = 'array'
+                   then r.create_arguments->'opsParties' else '[]'::jsonb end) e
+        ) all_parties
+        where party = any($arr)
+        """).toActionBuilder.as[String]
       waitUntilAcsIngested {
-        storage.query(q, "findConflictingOpsParties").map(_.map(PartyId.tryFromProtoPrimitive))
+        storage.query(q, "findConflictingParties").map(_.map(PartyId.tryFromProtoPrimitive))
       }
     }
   }

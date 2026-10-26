@@ -1249,7 +1249,7 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
-  def findConflictingOpsParties(
+  def findConflictingParties(
       proposed: Seq[PartyId],
       excludeRightCid: Option[String],
   )(implicit tc: TraceContext): Future[Seq[PartyId]]
