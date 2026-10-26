@@ -844,6 +844,10 @@ class DbScanAppRewardsStore(
     val totalAppRewardFromAssetActivity = params.assetMintingAllowanceCC
 
     (sql"""with combined as (
+             -- Per the amendment's per-party reward formula:
+             --   appBurnCC × issuancePerAppBurnCC + assetBurnCC × issuancePerAssetBurnCC.
+             -- Rewritten using the per-MB rates since (bytes/1e6) × ratePerMB == burnCC × ratePerCC,
+             -- saving one Numeric multiplication per row.
              select app_provider_party,
                     (cast(total_app_activity_weight as decimal(38,10)) / 1000000.0)
                       * $appIssuance
@@ -861,6 +865,8 @@ class DbScanAppRewardsStore(
                     (row_number() over (order by app_provider_party) - 1)::int,
                     app_provider_party, combined_amount
              from combined
+             -- The amendment's threshold rule zeros below-threshold rewards;
+             -- filtering is equivalent at the sum.
              where combined_amount >= $threshold
              returning total_app_reward_amount
            )

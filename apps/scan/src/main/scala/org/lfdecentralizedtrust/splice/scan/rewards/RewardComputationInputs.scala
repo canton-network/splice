@@ -114,6 +114,12 @@ final case class RewardComputationInputs(
     * amendment](https://github.com/canton-foundation/cips/pull/262).
     *
     * `unclaimedAllowance` is what's left for the next tranche.
+    *
+    * The per-coupon ratio is `cappedRewardsToIssue / totalCoupons`. The
+    * algebraic equivalent `(cappedRewardsToIssue × capPerCoupon) / (capPerCoupon
+    * × totalCoupons)` matches the Daml source but introduces a redundant
+    * rounding step at scale 10; the simplified form is numerically identical
+    * for values within scale-10 precision.
     */
   private def computeIssuanceTranche(
       rewardsToIssue: Numeric,
