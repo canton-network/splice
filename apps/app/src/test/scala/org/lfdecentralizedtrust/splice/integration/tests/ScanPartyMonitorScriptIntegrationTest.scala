@@ -2,8 +2,16 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.sun.net.httpserver.HttpServer
 import io.circe.Json
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  updateAutomationConfig,
+}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.scan.automation.{
+  AcsSnapshotBackfillingTrigger,
+  AcsSnapshotTrigger,
+}
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 
 import java.net.InetSocketAddress
@@ -16,7 +24,14 @@ import scala.sys.process.ProcessLogger
 class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletTestUtil {
 
   override def environmentDefinition: EnvironmentDefinition =
-    EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName)
+    EnvironmentDefinition
+      .simpleTopology1Sv(this.getClass.getSimpleName)
+      // the test forces a snapshot, which would race with the automatic ones
+      .addConfigTransforms((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Scan)(
+          _.withPausedTrigger[AcsSnapshotTrigger].withPausedTrigger[AcsSnapshotBackfillingTrigger]
+        )(config)
+      )
 
   private val script = "scripts/scan-party-monitor/scan_party_monitor.py"
 
