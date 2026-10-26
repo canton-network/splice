@@ -476,19 +476,19 @@ object RewardComputationInputsTest {
         issuancePerFeaturedAppBurnCC = BigDecimal("1.5"),
       ),
     ),
-    // Simple: cap=0.1 binds; burn=1.0 » leftover=0.35 → rate = 0.35.
+    // Simple: cap=0.1 binds; burn=4 CC, cap×burn=0.4 » leftover=0.35 → rate = 0.35/4 = 0.0875.
     TestCase(
       label = "simple+asset: burn exceeds leftover, asset prorated",
       inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
       totalRoundAppActivityWeight = 1000000L,
-      totalFeaturedAssetWeight = 1000000L,
+      totalFeaturedAssetWeight = 4000000L,
       expected = RewardIssuanceParams(
         issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.1"),
         threshold_CC = BigDecimal("0.5"),
         totalIssuanceForFeaturedAppRewards = BigDecimal("0.1"),
         unclaimedAppRewardAmount = BigDecimal("0"),
-        issuancePerFeaturedAssetBurnCC = BigDecimal("0.35"),
-        issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("0.35"),
+        issuancePerFeaturedAssetBurnCC = BigDecimal("0.0875"),
+        issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("0.0875"),
         totalIssuanceForFeaturedAssetRewards = BigDecimal("0.35"),
         issuancePerFeaturedAppBurnCC = BigDecimal("0.1"),
       ),
@@ -553,7 +553,7 @@ object RewardComputationInputsTest {
 
     // 7e. Cap binds + asset burn fits within leftover
 
-    // MainNet: 1000 CC burn fits within 54512.87 leftover → 1:1 rate.
+    // MainNet: cap=1.5 × 4033.07 CC burn = 6049.60 fits within 54512.87 leftover.
     TestCase(
       label = "MainNet+asset: cap binds, asset fits within leftover",
       inputs = mainNet,
@@ -563,14 +563,14 @@ object RewardComputationInputsTest {
         issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("604.9606775559"),
         threshold_CC = BigDecimal("3.3608926531"),
         totalIssuanceForFeaturedAppRewards = BigDecimal("57549.5317604300"),
-        unclaimedAppRewardAmount = BigDecimal("50479.8019264880"),
-        issuancePerFeaturedAssetBurnCC = BigDecimal("1"),
-        issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("403.3071183706"),
-        totalIssuanceForFeaturedAssetRewards = BigDecimal("4033.0711837060"),
+        unclaimedAppRewardAmount = BigDecimal("48463.2663346350"),
+        issuancePerFeaturedAssetBurnCC = BigDecimal("1.5"),
+        issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("604.9606775559"),
+        totalIssuanceForFeaturedAssetRewards = BigDecimal("6049.6067755590"),
         issuancePerFeaturedAppBurnCC = BigDecimal("1.5"),
       ),
     ),
-    // Simple: cap=0.1 binds; 0.1 CC burn fits within 0.35 leftover → 1:1 rate.
+    // Simple: cap=0.1 × 0.1 CC burn = 0.01 fits within 0.35 leftover.
     TestCase(
       label = "simple+asset: cap binds, asset fits within leftover",
       inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
@@ -580,10 +580,10 @@ object RewardComputationInputsTest {
         issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.1"),
         threshold_CC = BigDecimal("0.5"),
         totalIssuanceForFeaturedAppRewards = BigDecimal("0.1"),
-        unclaimedAppRewardAmount = BigDecimal("0.25"),
-        issuancePerFeaturedAssetBurnCC = BigDecimal("1"),
-        issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("1"),
-        totalIssuanceForFeaturedAssetRewards = BigDecimal("0.1"),
+        unclaimedAppRewardAmount = BigDecimal("0.34"),
+        issuancePerFeaturedAssetBurnCC = BigDecimal("0.1"),
+        issuancePerFeaturedAssetBurn_CCperMB = BigDecimal("0.1"),
+        totalIssuanceForFeaturedAssetRewards = BigDecimal("0.01"),
         issuancePerFeaturedAppBurnCC = BigDecimal("0.1"),
       ),
     ),
