@@ -185,6 +185,27 @@ object RewardComputationInputsTest {
     appRewardCouponThreshold = n(BigDecimal("0.5")),
   )
 
+  /** Inputs from the amendment's "Example: Tiered App Reward Distribution".
+    *
+    *   roundMintingAllowanceCC = 112,000 CC per round
+    *   featuredAppRewardCap = 0.79
+    *   trafficPrice = $60/MB, amuletPrice = $0.1/CC → trafficPriceInCCPerMB = 600 CC/MB
+    *
+    * Set amuletToIssuePerYear so amuletsToIssueInRound = 112,000, with
+    * appRewardPercentage = 1 and developmentFundPercentage = 0 to keep the
+    * minting allowance identity transparent.
+    */
+  private val dvpExample = RewardComputationInputs(
+    amuletToIssuePerYear = n(roundsPerYear * BigDecimal("112000")),
+    appRewardPercentage = n(BigDecimal("1")),
+    featuredAppRewardCap = n(BigDecimal("0.79")),
+    developmentFundPercentage = n(BigDecimal("0")),
+    tickDurationMicros = tickDurationMicros,
+    amuletPrice = n(BigDecimal("0.1")),
+    trafficPrice = n(BigDecimal("60")),
+    appRewardCouponThreshold = n(BigDecimal("0")),
+  )
+
   case class TestCase(
       label: String,
       inputs: RewardComputationInputs,
@@ -625,6 +646,69 @@ object RewardComputationInputsTest {
         issuancePerAssetBurnCCPerMB = BigDecimal("0.1"),
         assetMintingAllowanceCC = BigDecimal("0.4"),
         issuancePerAppBurnCC = BigDecimal(0),
+      ),
+    ),
+
+    // --- 7g. Amendment "Tiered App Reward Distribution" DvP scenarios ---
+    // Each DvP contributes 25 kB app activity to the submitting asset mover
+    // and 2.5 kB asset activity for each of Bank1 and Bank2. Expected
+    // per-DvP rewards from the amendment table:
+    //   1k:  asset mover 11.85 CC, each bank 1.185 CC per DvP
+    //   8k:  asset mover 11.85 CC, each bank 1.075 CC per DvP
+    //   20k: asset mover  5.60 CC, each bank      0 CC per DvP
+
+    // 1,000 DvPs → 25 MB app burn (15,000 CC), 5 MB asset burn (3,000 CC).
+    // Cap binds on both tranches; room to spare.
+    TestCase(
+      label = "dvpExample: 1k DvPs, full app and asset rewards",
+      inputs = dvpExample,
+      totalRoundAppActivityWeight = 25000000L,
+      totalFeaturedAssetWeight = 5000000L,
+      expected = RewardIssuanceParams(
+        issuancePerAppBurnCCPerMB = BigDecimal("474"),
+        appRewardCouponThresholdCC = BigDecimal(0),
+        appMintingAllowanceCC = BigDecimal("11850"),
+        unclaimedMintingAllowanceCC = BigDecimal("97780"),
+        issuancePerAssetBurnCC = BigDecimal("0.79"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("474"),
+        assetMintingAllowanceCC = BigDecimal("2370"),
+        issuancePerAppBurnCC = BigDecimal("0.79"),
+      ),
+    ),
+    // 8,000 DvPs → 200 MB app burn (120,000 CC), 40 MB asset burn (24,000 CC).
+    // App cap binds; asset side exhausts the leftover (17,200 CC) before its cap kicks in.
+    TestCase(
+      label = "dvpExample: 8k DvPs, asset rewards scaled by leftover",
+      inputs = dvpExample,
+      totalRoundAppActivityWeight = 200000000L,
+      totalFeaturedAssetWeight = 40000000L,
+      expected = RewardIssuanceParams(
+        issuancePerAppBurnCCPerMB = BigDecimal("474"),
+        appRewardCouponThresholdCC = BigDecimal(0),
+        appMintingAllowanceCC = BigDecimal("94800"),
+        unclaimedMintingAllowanceCC = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal("0.7166666667"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("430.00000002"),
+        assetMintingAllowanceCC = BigDecimal("17200"),
+        issuancePerAppBurnCC = BigDecimal("0.79"),
+      ),
+    ),
+    // 20,000 DvPs → 500 MB app burn (300,000 CC), 100 MB asset burn (60,000 CC).
+    // App side allowance binds (112,000 < 0.79 × 300,000); no leftover for asset.
+    TestCase(
+      label = "dvpExample: 20k DvPs, no asset rewards",
+      inputs = dvpExample,
+      totalRoundAppActivityWeight = 500000000L,
+      totalFeaturedAssetWeight = 100000000L,
+      expected = RewardIssuanceParams(
+        issuancePerAppBurnCCPerMB = BigDecimal("223.99999998"),
+        appRewardCouponThresholdCC = BigDecimal(0),
+        appMintingAllowanceCC = BigDecimal("112000"),
+        unclaimedMintingAllowanceCC = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        assetMintingAllowanceCC = BigDecimal(0),
+        issuancePerAppBurnCC = BigDecimal("0.3733333333"),
       ),
     ),
   )
