@@ -4,12 +4,19 @@ import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.automation.{PollingParallelTaskExecutionTrigger, TaskFailed, TaskOutcome, TaskSuccess, TriggerContext}
+import org.lfdecentralizedtrust.splice.automation.{
+  PollingParallelTaskExecutionTrigger,
+  TaskFailed,
+  TaskOutcome,
+  TaskSuccess,
+  TriggerContext,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.FeaturedAppConfigUpdateInstruction
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import ExecuteFeaturedAppConfigUpdateInstructionTrigger.*
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -30,7 +37,8 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
     * The DB queries underlying it SHOULD be efficient enough to run in a loop.
     */
   override protected def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = {
-    store.listFeaturedAppConfigUpdateInstructionSample()
+    store
+      .listFeaturedAppConfigUpdateInstructionSample(PageLimit.tryCreate(context.config.parallelism))
       .map(_.map(Task(_)))
   }
 
@@ -42,26 +50,27 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
       featuredAppRight <- store.lookupFeaturedAppRight(provider)
       result <- featuredAppRight match {
         case None => Future.successful(TaskFailed(s"no FeaturedAppRight for provider $provider"))
-        case Some(right) => for {
-          dsoRules <- store.getDsoRules()
-          cmd = dsoRules.exercise(
-            _.exerciseDsoRules_ExecuteFeaturedAppConfigUpdateInstruction(
-              task.instruction.contractId,
-              right.contractId,
-              controller
+        case Some(right) =>
+          for {
+            dsoRules <- store.getDsoRules()
+            cmd = dsoRules.exercise(
+              _.exerciseDsoRules_ExecuteFeaturedAppConfigUpdateInstruction(
+                task.instruction.contractId,
+                right.contractId,
+                controller,
+              )
             )
-          )
-          _ <- svTaskContext
-            .connection(SpliceLedgerConnectionPriority.Low)
-            .submit(
-              Seq(store.key.svParty),
-              Seq(store.key.dsoParty),
-              cmd,
-            )
-            .noDedup
-            .withSynchronizerId(dsoRules.domain)
-            .yieldUnit()
-        } yield TaskSuccess(s"Executed update for provider $provider")
+            _ <- svTaskContext
+              .connection(SpliceLedgerConnectionPriority.Low)
+              .submit(
+                Seq(store.key.svParty),
+                Seq(store.key.dsoParty),
+                cmd,
+              )
+              .noDedup
+              .withSynchronizerId(dsoRules.domain)
+              .yieldUnit()
+          } yield TaskSuccess(s"Executed update for provider $provider")
       }
     } yield result
   }
