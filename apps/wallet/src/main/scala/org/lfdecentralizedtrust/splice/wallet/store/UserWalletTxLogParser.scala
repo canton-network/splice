@@ -92,9 +92,11 @@ import org.lfdecentralizedtrust.splice.history.{
 }
 import org.lfdecentralizedtrust.splice.store.TxLogStore
 import org.lfdecentralizedtrust.splice.util.{
+  Contract,
   EventId,
   ExerciseNode,
   ExerciseNodeCompanion,
+  QualifiedName,
   TokenStandardAccount,
   TokenStandardMetadata,
 }
@@ -655,6 +657,8 @@ class UserWalletTxLogParser(
                   childState
                 } else {
                   val sender = node.argument.value.transfer.sender
+                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
+                    .getOrElse(BigDecimal(node.argument.value.transfer.amount))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -664,7 +668,7 @@ class UserWalletTxLogParser(
                       TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
                     ),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(PartyAndAmount(sender, -node.argument.value.transfer.amount)),
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers =
                       Seq.empty, // This only locks CC so there is not actually any receiver
                     senderHoldingFees = BigDecimal(0.0),
@@ -708,15 +712,21 @@ class UserWalletTxLogParser(
                 if (childState.hasTransfer) {
                   childState
                 } else {
-                  // We hit this only for self-transfers after the 24 submission delay change.
+                  // We hit this only for self-transfers after the 24 submission delay change,
+                  // and for governance lock requests.
                   val sender = node.argument.value.transfer.sender
+                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
+                    .getOrElse(BigDecimal(0))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(
-                      PartyAndAmount(sender, 0)
-                    ), // This is the net amount, without fees this is always zero.
+                    // The net amount:
+                    //
+                    // - for self-transfers: it is always zero without fees, and
+                    // - for governance lock requests: negative of all amulet
+                    //   locks, amulet unlocks are merged in below.
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers = Seq.empty, // receivers never includes the sender
                     senderHoldingFees = BigDecimal(0.0),
                     appRewardsUsed = BigDecimal(0.0),
@@ -765,6 +775,8 @@ class UserWalletTxLogParser(
                 } else {
                   val admin = node.argument.value.transfer.instrumentId.admin
                   val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
+                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
+                    .getOrElse(BigDecimal(node.argument.value.transfer.amount))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -774,7 +786,7 @@ class UserWalletTxLogParser(
                       TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
                     ),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(PartyAndAmount(sender, -node.argument.value.transfer.amount)),
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers =
                       Seq.empty, // This only locks CC so there is not actually any receiver
                     senderHoldingFees = BigDecimal(0.0),
@@ -819,16 +831,22 @@ class UserWalletTxLogParser(
                 if (childState.hasTransfer) {
                   childState
                 } else {
-                  // We hit this only for self-transfers after the 24 submission delay change.
+                  // We hit this only for self-transfers after the 24 submission delay change,
+                  // and for governance lock requests.
                   val admin = node.argument.value.transfer.instrumentId.admin
                   val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
+                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
+                    .getOrElse(BigDecimal(0))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(
-                      PartyAndAmount(sender, 0)
-                    ), // This is the net amount, without fees this is always zero.
+                    // The net amount:
+                    //
+                    // - for self-transfers: it is always zero without fees, and
+                    // - for governance lock requests: negative of all amulet
+                    //   locks, amulet unlocks are merged in below.
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers = Seq.empty, // receivers never includes the sender
                     senderHoldingFees = BigDecimal(0.0),
                     appRewardsUsed = BigDecimal(0.0),
@@ -1430,6 +1448,51 @@ class UserWalletTxLogParser(
   ): Eval[State] = {
     val roots = rootsEventIds.map(tree.getEventsById.get(_))
     roots.foldMap(parseTree(tree, _, synchronizerId, ignoreUnexpectedAmuletCreateArchive))
+  }
+
+  private val governanceLockTemplate =
+    QualifiedName(splice.governancelock.GovernanceLock.COMPANION.getTemplateIdWithPackageId)
+
+  /** The amount the request locks for `sender` if a token standard transfer is
+    * a governance lock request. None for other transfers.
+    *
+    * Governance lock requests ignore the requested transfer amount per
+    * CIP-127. `GovernanceLock(unlockAmulet)` calls `LockedAmulet_UnlockV2`
+    * choice, but `lockAmulet` calls bare `executeExternalPartyTransfer` without
+    * a choice. As a result, unlock amount is being parsed into a
+    * `BalanceChangeTxLogEntry` while lock amount is being ignored by this
+    * parser.
+    *
+    * This method helps in a corrective logic:
+    *
+    * 1. collect lock amounts from events directly
+    * 2. negate and use it to set the initial "sender amount" of a transfer
+    *    tx log entry
+    * 3. let `mergeBalanceChangesIntoTransfer` add balance changes produced
+    *    by `GovernanceLock(unlockAmulet)` calls to the initial sender amount.
+    */
+  private def governanceLockRequestLockedAmount(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+      sender: String,
+  ): Option[BigDecimal] = {
+    val descendants = tree.preorderDescendants(exercised).toSeq
+    val touchesGovernanceLock = descendants.exists {
+      case created: CreatedEvent =>
+        QualifiedName(created.getTemplateId) == governanceLockTemplate
+      case ex: ExercisedEvent => QualifiedName(ex.getTemplateId) == governanceLockTemplate
+      case _ => false
+    }
+    Option.when(touchesGovernanceLock)(
+      descendants
+        .collect { case created: CreatedEvent =>
+          Contract.fromCreatedEvent(amuletCodegen.LockedAmulet.COMPANION)(created)
+        }
+        .flatten
+        .filter(_.payload.amulet.owner == sender)
+        .map(c => BigDecimal(c.payload.amulet.amount.initialAmount))
+        .sum
+    )
   }
 
   override def tryParse(tx: Transaction, synchronizerId: SynchronizerId)(implicit
