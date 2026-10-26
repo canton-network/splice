@@ -211,8 +211,11 @@ class FakeScan(spm.ScanClient):
         self.updates = list(updates)
         self.acs_requests: List[Json] = []
         self.snapshot_queries: List[Dict[str, Any]] = []
-        # Raise KeyboardInterrupt on this ACS request (1-based), as if Ctrl-C was pressed.
+        self.updates_requests: List[Json] = []
+        # Raise KeyboardInterrupt on this ACS or updates request (1-based), as if Ctrl-C was
+        # pressed.
         self.interrupt_acs_request: Optional[int] = None
+        self.interrupt_updates_request: Optional[int] = None
 
     def _call(
         self,
@@ -251,6 +254,9 @@ class FakeScan(spm.ScanClient):
             return page
         if (method, path) == ("POST", "/v2/updates"):
             assert body is not None
+            self.updates_requests.append(body)
+            if self.interrupt_updates_request == len(self.updates_requests):
+                raise KeyboardInterrupt()
             after = spm.position(body["after"]["after_migration_id"], body["after"]["after_record_time"])
 
             def update_position(u: Json) -> spm.Position:
@@ -811,6 +817,18 @@ class StreamTest(MonitorTestCase):
         self.assertEqual(len(self.run_monitor(ONLY_ALICE)), 1)
         self.assertEqual(len(self.slack.posts), 1)
         self.assertEqual(self.meta(Meta.CURSOR_RECORD_TIME), at(1))
+
+    def test_a_kill_keeps_the_pages_without_alerts(self) -> None:
+        self.scan.updates = [
+            transaction(f"o{i}", at(i), created(f"other-{i}", OTHER, [DSO], event_id=f"o{i}:0")) for i in range(1, 4)
+        ]
+        self.scan.interrupt_updates_request = 3
+        self.assertEqual(self.run_monitor(ONLY_ALICE, "--updates-page-size", "1", raises=KeyboardInterrupt), [])
+        self.assertEqual(self.meta(Meta.CURSOR_RECORD_TIME), at(2))
+        self.scan.interrupt_updates_request = None
+        self.scan.updates_requests = []
+        self.run_monitor(ONLY_ALICE, "--updates-page-size", "1")
+        self.assertEqual(self.scan.updates_requests[0]["after"]["after_record_time"], at(2))
 
 
 class ReconfigurationTest(MonitorTestCase):
