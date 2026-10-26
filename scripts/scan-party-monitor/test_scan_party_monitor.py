@@ -357,6 +357,13 @@ class HelpersTest(unittest.TestCase):
             datetime(2026, 1, 2, 3, 4, 5, 123456, tzinfo=utc),
         )
 
+    def test_utc_now_iso_keeps_microseconds(self) -> None:
+        now = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=timezone.utc)
+        with mock.patch.object(spm, "datetime", wraps=datetime) as patched:
+            patched.now.return_value = now
+            self.assertEqual(spm.utc_now_iso(), "2026-01-02T03:04:05.678901Z")
+        self.assertEqual(spm.parse_time("2026-01-02T03:04:05.678901Z"), now)
+
     def test_positions_order_by_migration_then_record_time(self) -> None:
         self.assertLess(spm.position(0, at(2)), spm.position(0, at(10)))
         self.assertLess(spm.position(0, at(10)), spm.position(1, at(2)))

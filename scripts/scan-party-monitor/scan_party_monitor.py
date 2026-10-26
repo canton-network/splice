@@ -106,7 +106,7 @@ class StopRequested(Exception):
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 _FRACTION_RE = re.compile(r"\.(\d+)")
