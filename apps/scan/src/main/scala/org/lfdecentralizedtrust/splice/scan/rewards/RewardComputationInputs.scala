@@ -48,6 +48,15 @@ final case class RewardComputationInputs(
 ) {
   import RewardComputationInputs.*
 
+  requirePositive("amuletToIssuePerYear", amuletToIssuePerYear)
+  requireNonNegative("appRewardPercentage", appRewardPercentage)
+  requireNonNegative("featuredAppRewardCap", featuredAppRewardCap)
+  requireNonNegative("developmentFundPercentage", developmentFundPercentage)
+  requirePositive("tickDurationMicros", tickDurationMicros)
+  requirePositive("amuletPrice", amuletPrice)
+  requireNonNegative("trafficPrice", trafficPrice)
+  requireNonNegative("appRewardCouponThreshold", appRewardCouponThreshold)
+
   private val microsPerYear: Long = 365L * 24 * 3600 * 1000000L
   private val roundsPerYear: Numeric = div(fromLong(microsPerYear), fromLong(tickDurationMicros))
   private val amuletsToIssueInRound_beforeDevFund: Numeric =
@@ -63,6 +72,8 @@ final case class RewardComputationInputs(
       totalRoundAppActivityWeight: Long,
       totalFeaturedAssetWeight: Long,
   ): RewardIssuanceParams = {
+    requireNonNegative("totalRoundAppActivityWeight", totalRoundAppActivityWeight)
+    requireNonNegative("totalFeaturedAssetWeight", totalFeaturedAssetWeight)
     val totalAppBurnCC = bytesToCC(totalRoundAppActivityWeight)
     val roundMintingAllowanceCC = mul(amuletsToIssueInRound, appRewardPercentage)
     val appTranche = computeIssuanceTranche(
@@ -126,6 +137,18 @@ object RewardComputationInputs {
   private[rewards] val zero: Numeric = fromLong(0L)
   // Daml defaults for optional fields on IssuanceConfig.
   private val defaultDevelopmentFundPercentage: BigDecimal = BigDecimal("0.05")
+
+  private def requirePositive(name: String, value: Numeric): Unit =
+    require(value.compareTo(zero) > 0, s"$name must be strictly positive (received: $value)")
+
+  private def requireNonNegative(name: String, value: Numeric): Unit =
+    require(value.compareTo(zero) >= 0, s"$name must be non-negative (received: $value)")
+
+  private def requirePositive(name: String, value: Long): Unit =
+    require(value > 0L, s"$name must be strictly positive (received: $value)")
+
+  private def requireNonNegative(name: String, value: Long): Unit =
+    require(value >= 0L, s"$name must be non-negative (received: $value)")
 
   /** Result of `computeIssuanceTranche`.
     *
