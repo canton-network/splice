@@ -590,5 +590,44 @@ object RewardComputationInputsTest {
         issuancePerAppBurnCC = BigDecimal("0.1"),
       ),
     ),
+
+    // --- 7f. Zero app burn: asset tranche sees the full round budget ---
+
+    // MainNet: zero app burn; asset tranche's rewardsToIssue == roundMintingAllowanceCC.
+    // cap=1.5 × 4033.07 CC burn = 6049.60 fits within 112062.40 budget.
+    TestCase(
+      label = "MainNet+asset: zero app burn, asset gets full round budget",
+      inputs = mainNet,
+      totalRoundAppActivityWeight = 0L,
+      totalFeaturedAssetWeight = 10000000L,
+      expected = RewardIssuanceParams(
+        issuancePerAppBurnCCperMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
+        appMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("106012.7980950650"),
+        issuancePerAssetBurnCC = BigDecimal("1.5"),
+        issuancePerAssetBurnCCperMB = BigDecimal("604.9606775559"),
+        assetMintingAllowanceCC = BigDecimal("6049.6067755590"),
+        issuancePerAppBurnCC = BigDecimal(0),
+      ),
+    ),
+    // Simple: zero app burn; asset tranche's rewardsToIssue == roundMintingAllowanceCC = 0.45.
+    // cap=0.1 × 4 CC burn = 0.4 fits within 0.45 budget.
+    TestCase(
+      label = "simple+asset: zero app burn, asset gets full round budget",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
+      totalRoundAppActivityWeight = 0L,
+      totalFeaturedAssetWeight = 4000000L,
+      expected = RewardIssuanceParams(
+        issuancePerAppBurnCCperMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+        appMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("0.05"),
+        issuancePerAssetBurnCC = BigDecimal("0.1"),
+        issuancePerAssetBurnCCperMB = BigDecimal("0.1"),
+        assetMintingAllowanceCC = BigDecimal("0.4"),
+        issuancePerAppBurnCC = BigDecimal(0),
+      ),
+    ),
   )
 }
