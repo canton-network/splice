@@ -130,7 +130,7 @@ final case class RewardComputationInputs(
       capPerCoupon: Numeric,
       totalCoupons: Numeric,
   ): (Numeric, Numeric) = {
-    if (totalCoupons.compareTo(zero) <= 0) (capPerCoupon, rewardsToIssue)
+    if (totalCoupons.compareTo(zero) <= 0) (zero, rewardsToIssue)
     else if (capPerCoupon.compareTo(zero) <= 0) (zero, rewardsToIssue)
     else {
       val scaledTotalCoupons = mul(capPerCoupon, totalCoupons)
