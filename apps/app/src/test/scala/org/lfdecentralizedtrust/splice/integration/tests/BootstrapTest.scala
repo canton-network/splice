@@ -32,7 +32,7 @@ class BootstrapTest extends IntegrationTestWithIsolatedEnvironment {
       )
       .addConfigTransform((_, config) =>
         ConfigTransforms.useSelfSignedTokensForParticipantAdminApiAuth(
-          AuthUtil.testSecret,
+          AuthUtil.adminApiTestSecret,
           AuthUtil.testParticipantAdminApiAudience,
         )(
           config

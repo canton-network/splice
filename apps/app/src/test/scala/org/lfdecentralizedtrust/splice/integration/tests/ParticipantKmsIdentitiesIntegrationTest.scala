@@ -77,7 +77,7 @@ class ParticipantKmsIdentitiesIntegrationTest
           ConfigTransforms.useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret)(config),
         (_, config) =>
           ConfigTransforms.useSelfSignedTokensForParticipantAdminApiAuth(
-            AuthUtil.testSecret,
+            AuthUtil.adminApiTestSecret,
             AuthUtil.testParticipantAdminApiAudience,
           )(
             config

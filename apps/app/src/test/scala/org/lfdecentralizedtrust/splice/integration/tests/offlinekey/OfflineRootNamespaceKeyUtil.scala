@@ -74,8 +74,7 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
             adminApiConfig,
             FullClientConfig(port = Port.tryCreate(27701)),
             adminApiToken = Some(
-              AuthUtil.CantonAdminApi
-                .testToken(AuthUtil.testSecret, AuthUtil.testParticipantAdminApiAudience)
+              AuthUtil.CantonAdminApi.participantAdminApiTestToken
             ),
           ),
         )

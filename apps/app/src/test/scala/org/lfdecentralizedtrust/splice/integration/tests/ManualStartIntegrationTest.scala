@@ -434,10 +434,7 @@ class ManualStartIntegrationTest
         Future.successful(
           Some(
             AuthToken(
-              AuthUtil.CantonAdminApi.testToken(
-                secret = AuthUtil.testSecret,
-                audience = AuthUtil.testParticipantAdminApiAudience,
-              )
+              AuthUtil.CantonAdminApi.participantAdminApiTestToken
             )
           )
         ),

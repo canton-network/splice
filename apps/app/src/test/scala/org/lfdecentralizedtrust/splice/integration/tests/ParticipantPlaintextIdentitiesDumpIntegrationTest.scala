@@ -71,7 +71,7 @@ class ParticipantPlaintextIdentitiesIntegrationTest
         (_, config) => useSelfSignedTokensForLongRunningLedgerApiAuth(AuthUtil.testSecret, config),
         (_, config) =>
           useSelfSignedTokensForParticipantAdminApiAuth(
-            AuthUtil.testSecret,
+            AuthUtil.adminApiTestSecret,
             AuthUtil.testParticipantAdminApiAudience,
           )(config),
         (_, config) =>

@@ -18,6 +18,7 @@ object AuthUtil {
     )
   val testParticipantAdminApiAudience: String = "participant"
   val testSecret: String = "test"
+  val adminApiTestSecret: String = "admin-test"
   val testSignatureAlgorithm: Algorithm = Algorithm.HMAC256(testSecret)
 
   /** We expect the audience field to have format `https://<domain>/<version>/<app-name>` */
@@ -70,6 +71,12 @@ object AuthUtil {
   }
 
   object CantonAdminApi {
+
+    def participantAdminApiTestToken: String =
+      testToken(
+        AuthUtil.adminApiTestSecret,
+        AuthUtil.testParticipantAdminApiAudience,
+      )
 
     // borrowed from com.digitalasset.canton.participant.ledger.api.JwtTokenUtilities
     def testToken(

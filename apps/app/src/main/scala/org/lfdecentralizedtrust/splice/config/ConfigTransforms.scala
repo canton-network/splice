@@ -198,7 +198,7 @@ object ConfigTransforms {
       ensureNovelDamlNames(testId),
       useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret),
       useSelfSignedTokensForParticipantAdminApiAuth(
-        AuthUtil.testSecret,
+        AuthUtil.adminApiTestSecret,
         AuthUtil.testParticipantAdminApiAudience,
       ),
       reducePollingInterval,
@@ -954,7 +954,7 @@ object ConfigTransforms {
       secret: String,
       audience: String,
   ): ConfigTransform =
-    modifyAllParticipantAdminApiConfigs { adminApi =>
+    updateAllParticipantAdminApiConfigs { adminApi =>
       adminApi.copy(
         authConfig = AuthTokenSourceConfig.Static(
           token = AuthUtil.CantonAdminApi.testToken(secret, audience),
@@ -964,7 +964,7 @@ object ConfigTransforms {
       )
     }
 
-  private def modifyAllParticipantAdminApiConfigs(
+  private def updateAllParticipantAdminApiConfigs(
       modify: ClientConfigWithAuth => ClientConfigWithAuth
   ): ConfigTransform =
     combineAllTransforms(
