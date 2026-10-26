@@ -803,7 +803,8 @@ class Monitor:
                 self.forget_reported_until(position(migration_id, record_time))
 
             if (
-                not unposted
+                self.slack is None
+                or not unposted
                 or caught_up
                 or reached_stop
                 or time.monotonic() - oldest_unposted >= self.args.slack_batch_seconds

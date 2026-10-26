@@ -558,13 +558,15 @@ class MonitorTestCase(unittest.TestCase):
         self.db = os.path.join(tmp.name, "monitor.sqlite")
         self.scan = FakeScan(ACS, [])
         self.slack = FakeSlack()
+        self.slack_configured = True
         self.logs: List[str] = []
 
     def monitor(self, config: Json, *flags: str) -> spm.Monitor:
         args = spm.parse_cli_args(
             ["--scan-url", self.scan.url, "--db", self.db, "--config", "-", "--exit-when-caught-up", *flags]
         )
-        return spm.Monitor(args, self.scan, spm.Store(self.db), self.slack, spm.parse_config(config))
+        slack = self.slack if self.slack_configured else None
+        return spm.Monitor(args, self.scan, spm.Store(self.db), slack, spm.parse_config(config))
 
     def run_monitor(self, config: Json, *flags: str, raises: Optional[Type[BaseException]] = None) -> List[Json]:
         """Runs the monitor like main() does; returns the matches printed to stdout."""
@@ -829,6 +831,22 @@ class StreamTest(MonitorTestCase):
         self.scan.updates_requests = []
         self.run_monitor(ONLY_ALICE, "--updates-page-size", "1")
         self.assertEqual(self.scan.updates_requests[0]["after"]["after_record_time"], at(2))
+
+    def test_a_kill_repeats_only_the_alerts_not_yet_posted_to_slack(self) -> None:
+        # Without Slack there is nothing to batch, so every page is kept.
+        for slack_configured, cursor, repeated in [(True, SNAPSHOT, ["u1", "u2", "u3"]), (False, at(2), ["u3"])]:
+            with self.subTest(slack_configured=slack_configured):
+                self.setUp()
+                self.slack_configured = slack_configured
+                self.scan.updates = unexpected_transfers(3)
+                self.scan.interrupt_updates_request = 3
+                matches = self.run_monitor(ONLY_ALICE, "--updates-page-size", "1", raises=KeyboardInterrupt)
+                self.assertEqual([m["update_id"] for m in matches], ["u1", "u2"])
+                self.assertEqual(self.slack.posts, [])
+                self.assertEqual(self.meta(Meta.CURSOR_RECORD_TIME), cursor)
+                self.scan.interrupt_updates_request = None
+                self.assertEqual([m["update_id"] for m in self.run_monitor(ONLY_ALICE)], repeated)
+                self.assertEqual(len(self.slack.posts), 1 if slack_configured else 0)
 
 
 class ReconfigurationTest(MonitorTestCase):
