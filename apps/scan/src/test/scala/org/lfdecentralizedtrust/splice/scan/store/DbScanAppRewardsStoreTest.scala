@@ -1700,7 +1700,6 @@ object DbScanAppRewardsStoreTest {
       amuletToIssuePerYear = n(roundsPerYear),
       appRewardPercentage = n(BigDecimal("0.5")),
       featuredAppRewardCap = n(BigDecimal("100")),
-      unfeaturedAppRewardCap = n(BigDecimal("0")),
       developmentFundPercentage = n(BigDecimal("0.1")),
       tickDurationMicros = tickDurationMicros,
       amuletPrice = n(BigDecimal("1.0")),

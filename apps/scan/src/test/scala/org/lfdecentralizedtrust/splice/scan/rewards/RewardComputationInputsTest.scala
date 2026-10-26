@@ -146,7 +146,7 @@ object RewardComputationInputsTest {
     *
     * Source: https://docs.global.canton.network.sync.global/dso
     *   amuletToIssuePerYear = 10e9, appRewardPercentage = 0.62
-    *   featuredAppRewardCap = 1.5, unfeaturedAppRewardCap = 0.6
+    *   featuredAppRewardCap = 1.5
     *   optDevelopmentFundPercentage = None → default 0.05
     *   trafficPrice = 60 $/MB, amuletPrice = 0.14877 $/CC
     *
@@ -158,7 +158,6 @@ object RewardComputationInputsTest {
     amuletToIssuePerYear = n(BigDecimal("10000000000")),
     appRewardPercentage = n(BigDecimal("0.62")),
     featuredAppRewardCap = n(BigDecimal("1.5")),
-    unfeaturedAppRewardCap = n(BigDecimal("0.6")),
     developmentFundPercentage = n(BigDecimal("0.05")),
     tickDurationMicros = tickDurationMicros,
     amuletPrice = n(BigDecimal("0.14877")),
@@ -179,7 +178,6 @@ object RewardComputationInputsTest {
     amuletToIssuePerYear = n(roundsPerYear), // yields exactly 1.0 per round
     appRewardPercentage = n(BigDecimal("0.5")),
     featuredAppRewardCap = n(BigDecimal("100")),
-    unfeaturedAppRewardCap = n(BigDecimal("0")),
     developmentFundPercentage = n(BigDecimal("0.1")),
     tickDurationMicros = tickDurationMicros,
     amuletPrice = n(BigDecimal("1.0")),
