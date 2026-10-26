@@ -23,6 +23,8 @@ Uses only the Python standard library. See README.md next to this file for detai
 Run with `-h` for supported options.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import logging
@@ -36,6 +38,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 VERSION = "0.1.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
@@ -49,6 +52,9 @@ SLACK_MAX_REASON_LINES = 20
 
 LOG = logging.getLogger("scan-party-monitor")
 
+# A JSON object as returned by Scan, or one of our match records.
+Json = Dict[str, Any]
+
 
 class FatalError(Exception):
     pass
@@ -58,21 +64,21 @@ class NotFound(Exception):
     pass
 
 
-def utc_now_iso():
+def utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 _FRACTION_RE = re.compile(r"\.(\d+)")
 
 
-def parse_time(s):
+def parse_time(s: str) -> datetime:
     """Parses the ISO-8601 timestamps returned by Scan, on any Python 3 version."""
     s = s.replace("Z", "+00:00")
     s = _FRACTION_RE.sub(lambda m: "." + (m.group(1) + "000000")[:6], s, count=1)
     return datetime.fromisoformat(s)
 
 
-def lag_seconds(record_time):
+def lag_seconds(record_time: str) -> Optional[int]:
     try:
         return int((datetime.now(timezone.utc) - parse_time(record_time)).total_seconds())
     except ValueError:
@@ -86,13 +92,13 @@ class Pacer:
     proactively rather than relying on HTTP 429s.
     """
 
-    def __init__(self, name, rate):
+    def __init__(self, name: str, rate: float) -> None:
         self.name = name
         self.rate = rate
         self.next_time = time.monotonic()
         self.penalty_until = 0.0
 
-    def acquire(self):
+    def acquire(self) -> None:
         if self.rate <= 0:
             return
         now = time.monotonic()
@@ -102,7 +108,7 @@ class Pacer:
             now = self.next_time
         self.next_time = now + 1.0 / rate
 
-    def penalize(self):
+    def penalize(self) -> None:
         if time.monotonic() >= self.penalty_until:
             LOG.warning(
                 f"Rate limited by scan on {self.name}; halving the request rate "
@@ -111,12 +117,14 @@ class Pacer:
         self.penalty_until = time.monotonic() + RATE_LIMIT_PENALTY_SECONDS
 
 
-def backoff_delay(attempt):
-    delay = min(BACKOFF_MAX_SECONDS, BACKOFF_INITIAL_SECONDS * (2**attempt))
+def backoff_delay(attempt: int) -> float:
+    delay = min(BACKOFF_MAX_SECONDS, BACKOFF_INITIAL_SECONDS * 2.0**attempt)
     return delay * random.uniform(0.5, 1.0)
 
 
-def http_request(method, url, body=None, headers=None):
+def http_request(
+    method: str, url: str, body: Optional[Json] = None, headers: Optional[Dict[str, str]] = None
+) -> Tuple[int, Any, bytes]:
     """Returns (status, response headers, response body); raises only on connection errors."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
     request = urllib.request.Request(url, data=data, method=method)
@@ -134,25 +142,34 @@ def http_request(method, url, body=None, headers=None):
 
 
 class ScanClient:
-    def __init__(self, url, acs_rate, updates_rate):
+    def __init__(self, url: str, acs_rate: float, updates_rate: float) -> None:
         self.url = url.rstrip("/")
         self.acs_pacer = Pacer("/v2/state/acs", acs_rate)
         self.updates_pacer = Pacer("/v2/updates", updates_rate)
         self.other_pacer = Pacer("other scan endpoints", 1)
 
-    def _call(self, pacer, method, path, body=None, query=None):
+    def _call(
+        self,
+        pacer: Pacer,
+        method: str,
+        path: str,
+        body: Optional[Json] = None,
+        query: Optional[Dict[str, Any]] = None,
+    ) -> Json:
         url = f"{self.url}/api/scan{path}"
         if query:
             url += "?" + urllib.parse.urlencode(query)
         attempt = 0
         while True:
             pacer.acquire()
+            status: Optional[int]
             try:
                 status, _, content = http_request(method, url, body)
             except (OSError, urllib.error.URLError) as e:
                 status, content = None, str(e).encode()
             if status == 200:
-                return json.loads(content)
+                result: Json = json.loads(content)
+                return result
             if status == 404:
                 raise NotFound(content.decode(errors="replace"))
             if status is not None and 400 <= status < 500 and status != 429:
@@ -169,32 +186,41 @@ class ScanClient:
             time.sleep(delay)
             attempt += 1
 
-    def get_migration_id(self):
-        return self._call(self.other_pacer, "GET", "/v0/migrations/last")["migration_id"]
+    def get_migration_id(self) -> int:
+        return int(self._call(self.other_pacer, "GET", "/v0/migrations/last")["migration_id"])
 
-    def get_snapshot_before(self, before, migration_id):
-        return self._call(
+    def get_snapshot_before(self, before: str, migration_id: int) -> str:
+        return str(
+            self._call(
             self.other_pacer,
             "GET",
             "/v0/state/acs/snapshot-timestamp",
             query={"before": before, "migration_id": migration_id},
-        )["record_time"]
+            )["record_time"]
+        )
 
-    def get_acs_page(self, migration_id, record_time, page_size, after):
-        body = {"migration_id": migration_id, "record_time": record_time, "page_size": page_size}
+    def get_acs_page(
+        self, migration_id: int, record_time: str, page_size: int, after: Optional[str]
+    ) -> Json:
+        body: Json = {"migration_id": migration_id, "record_time": record_time, "page_size": page_size}
         if after is not None:
             body["after"] = after
         return self._call(self.acs_pacer, "POST", "/v2/state/acs", body)
 
-    def get_updates(self, after_migration_id, after_record_time, page_size):
-        body = {
+    def get_updates(
+        self, after_migration_id: int, after_record_time: str, page_size: int
+    ) -> List[Json]:
+        body: Json = {
             "after": {
                 "after_migration_id": after_migration_id,
                 "after_record_time": after_record_time,
             },
             "page_size": page_size,
         }
-        return self._call(self.updates_pacer, "POST", "/v2/updates", body)["transactions"]
+        transactions: List[Json] = self._call(self.updates_pacer, "POST", "/v2/updates", body)[
+            "transactions"
+        ]
+        return transactions
 
 
 class Store:
@@ -204,10 +230,8 @@ class Store:
     the progress markers are always updated atomically.
     """
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.conn = sqlite3.connect(path, isolation_level=None)
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS parties (id INTEGER PRIMARY KEY, party TEXT UNIQUE NOT NULL)"
@@ -221,57 +245,67 @@ class Store:
             self.set_meta("schema_version", SCHEMA_VERSION)
         elif version != SCHEMA_VERSION:
             raise FatalError(f"Database schema version {version} is not supported, expected {SCHEMA_VERSION}")
-        self.party_ids = {p: i for i, p in self.conn.execute("SELECT id, party FROM parties")}
+        self.party_ids: Dict[str, int] = {p: i for i, p in self.conn.execute("SELECT id, party FROM parties")}
 
-    def begin(self):
+    def begin(self) -> None:
         self.conn.execute("BEGIN")
 
-    def commit(self):
+    def commit(self) -> None:
         self.conn.execute("COMMIT")
 
-    def get_meta(self, key):
+    def get_meta(self, key: str) -> Optional[str]:
         row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return row[0] if row else None
 
-    def set_meta(self, key, value):
+    def require_meta(self, key: str) -> str:
+        value = self.get_meta(key)
+        if value is None:
+            raise FatalError(f"The database lacks {key}; delete it and start over")
+        return value
+
+    def set_meta(self, key: str, value: object) -> None:
         self.conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
             (key, None if value is None else str(value)),
         )
 
-    def party_id(self, party):
+    def party_id(self, party: str) -> int:
         pid = self.party_ids.get(party)
         if pid is None:
-            pid = self.conn.execute("INSERT INTO parties (party) VALUES (?)", (party,)).lastrowid
+            cursor = self.conn.execute("INSERT INTO parties (party) VALUES (?)", (party,))
+            assert cursor.lastrowid is not None
+            pid = cursor.lastrowid
             self.party_ids[party] = pid
         return pid
 
-    def _encode(self, signatories):
+    def _encode(self, signatories: Iterable[str]) -> str:
         return " ".join(str(self.party_id(p)) for p in signatories)
 
-    def put_contracts(self, contracts):
+    def put_contracts(self, contracts: Iterable[Tuple[str, List[str]]]) -> None:
         """contracts: iterable of (contract id, list of signatory party ids)."""
         self.conn.executemany(
             "INSERT OR REPLACE INTO contracts (cid, signatories) VALUES (?, ?)",
             [(cid, self._encode(sigs)) for cid, sigs in contracts],
         )
 
-    def signatory_ids(self, cid):
+    def signatory_ids(self, cid: str) -> Optional[Set[int]]:
         row = self.conn.execute("SELECT signatories FROM contracts WHERE cid = ?", (cid,)).fetchone()
         return None if row is None else {int(i) for i in row[0].split()}
 
-    def delete_contract(self, cid):
+    def delete_contract(self, cid: str) -> None:
         self.conn.execute("DELETE FROM contracts WHERE cid = ?", (cid,))
 
 
 class SlackNotifier:
-    def __init__(self, webhook_url):
+    def __init__(self, webhook_url: str) -> None:
         self.webhook_url = webhook_url
 
-    def notify(self, match):
+    def notify(self, match: Json) -> None:
         text = format_slack_message(match)
         attempt = 0
         while True:
+            status: Optional[int]
+            headers: Any
             try:
                 status, headers, content = http_request(
                     "POST", self.webhook_url, {"text": text}
@@ -295,7 +329,7 @@ class SlackNotifier:
             attempt += 1
 
 
-def format_slack_message(match):
+def format_slack_message(match: Json) -> str:
     lines = [
         f":rotating_light: Watched part{'y' if len(match['parties']) == 1 else 'ies'} "
         f"confirmed a transaction on {match['scan_url']}",
@@ -316,25 +350,31 @@ def format_slack_message(match):
 
 
 class Monitor:
-    def __init__(self, args, scan, store, slack, watched):
+    def __init__(
+        self,
+        args: argparse.Namespace,
+        scan: ScanClient,
+        store: Store,
+        slack: Optional[SlackNotifier],
+        watched: List[str],
+    ) -> None:
         self.args = args
         self.scan = scan
         self.store = store
         self.slack = slack
         self.watched = watched
         self.watched_ids = {store.party_id(p): p for p in watched}
-        self.stats = {"transactions": 0, "matches": 0, "unknown_contracts": 0}
+        self.stats: Dict[str, int] = {"transactions": 0, "matches": 0, "unknown_contracts": 0}
 
     # ---- ACS seed --------------------------------------------------------------
 
-    def seed(self):
+    def seed(self) -> None:
         store = self.store
         if store.get_meta("acs_complete") == "1":
             return
-        migration_id = store.get_meta("snapshot_migration_id")
-        record_time = store.get_meta("snapshot_record_time")
-        if migration_id is None:
-            migration_id = self.args.migration_id
+        stored_migration_id = store.get_meta("snapshot_migration_id")
+        if stored_migration_id is None:
+            migration_id: int = self.args.migration_id
             if migration_id is None:
                 migration_id = self.scan.get_migration_id()
             try:
@@ -352,15 +392,16 @@ class Monitor:
             store.commit()
             LOG.info(f"Seeding contracts from the ACS snapshot at {record_time} (migration id {migration_id})")
         else:
-            migration_id = int(migration_id)
+            migration_id = int(stored_migration_id)
+            record_time = store.require_meta("snapshot_record_time")
             LOG.info(
                 f"Resuming the seed from the ACS snapshot at {record_time} (migration id {migration_id}) "
                 f"after {store.get_meta('acs_pages')} pages and {store.get_meta('acs_contracts')} contracts"
             )
 
         token = store.get_meta("acs_next_page_token")
-        pages = int(store.get_meta("acs_pages"))
-        contracts = int(store.get_meta("acs_contracts"))
+        pages = int(store.require_meta("acs_pages"))
+        contracts = int(store.require_meta("acs_contracts"))
         pages_this_run = 0
         contracts_this_run = 0
         started = time.monotonic()
@@ -408,10 +449,10 @@ class Monitor:
 
     # ---- update stream -----------------------------------------------------------
 
-    def stream(self):
+    def stream(self) -> None:
         store = self.store
-        migration_id = int(store.get_meta("cursor_migration_id"))
-        record_time = store.get_meta("cursor_record_time")
+        migration_id = int(store.require_meta("cursor_migration_id"))
+        record_time = store.require_meta("cursor_record_time")
         LOG.info(
             f"Streaming updates after {record_time} (migration id {migration_id}), watching "
             f"{len(self.watched)} part{'y' if len(self.watched) == 1 else 'ies'}"
@@ -445,7 +486,7 @@ class Monitor:
                     return
                 time.sleep(self.args.poll_interval_seconds)
 
-    def heartbeat(self, migration_id, record_time):
+    def heartbeat(self, migration_id: int, record_time: str) -> None:
         lag = lag_seconds(record_time)
         LOG.info(
             f"At record time {record_time} (migration id {migration_id}, "
@@ -454,7 +495,7 @@ class Monitor:
             f"{self.stats['unknown_contracts']} exercises on unknown contracts"
         )
 
-    def process_update(self, update):
+    def process_update(self, update: Json) -> Optional[Json]:
         if "events_by_id" not in update:
             # A reassignment; no matching, but keep the contract map complete.
             created = update["event"].get("created_event")
@@ -463,10 +504,10 @@ class Monitor:
             return None
 
         events = update["events_by_id"]
-        parties = {}
+        parties: Dict[str, List[Json]] = {}
 
-        def add(pid, reason, event):
-            r = {"reason": reason, "event_id": event["event_id"], "template_id": event["template_id"]}
+        def add(pid: int, reason: str, event: Json) -> None:
+            r: Json = {"reason": reason, "event_id": event["event_id"], "template_id": event["template_id"]}
             if "choice" in event:
                 r["choice"] = event["choice"]
             parties.setdefault(self.watched_ids[pid], []).append(r)
@@ -510,7 +551,7 @@ class Monitor:
             "parties": parties,
         }
 
-    def report(self, match):
+    def report(self, match: Json) -> None:
         print(json.dumps(match), flush=True)
         if self.slack is not None:
             self.slack.notify(match)
@@ -520,7 +561,7 @@ class StopRequested(Exception):
     pass
 
 
-def read_parties(args):
+def read_parties(args: argparse.Namespace) -> List[str]:
     parties = list(args.party or [])
     if args.parties_file:
         with open(args.parties_file) as f:
@@ -537,14 +578,14 @@ def read_parties(args):
     return parties
 
 
-def page_size(value):
+def page_size(value: str) -> int:
     n = int(value)
     if not 1 <= n <= MAX_PAGE_SIZE:
         raise argparse.ArgumentTypeError(f"must be between 1 and {MAX_PAGE_SIZE}")
     return n
 
 
-def parse_cli_args(argv):
+def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Alert on Scan transactions in which watched parties are confirming parties"
     )
@@ -582,7 +623,7 @@ def parse_cli_args(argv):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv: Optional[List[str]] = None) -> int:
     args = parse_cli_args(argv)
     logging.basicConfig(
         stream=sys.stderr,
