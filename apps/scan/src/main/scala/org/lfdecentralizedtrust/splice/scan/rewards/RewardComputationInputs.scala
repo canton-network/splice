@@ -14,8 +14,8 @@ import scala.jdk.OptionConverters.RichOptional
   *
   * Under TBAR v1.1 (CIP-104 amendment) `unclaimedAppRewardAmount` carries the
   * round-wide unclaimed amount — app-side's unclaimed cascades into asset-side's
-  * budget before any asset allocation, so there is no separately-unclaimed
-  * app or asset portion.
+  * budget before any asset allocation, so there is no separate
+  * unclaimed asset portion.
   */
 final case class RewardIssuanceParams(
     // Common
