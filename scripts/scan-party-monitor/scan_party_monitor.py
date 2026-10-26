@@ -789,6 +789,8 @@ class Monitor:
             caught_up = len(updates) < self.args.updates_page_size
             reached_stop = False
             if stop_at is not None:
+                # Record times overlapping across migrations were only possible before logical
+                # synchronizer upgrades and never happened; with LSU they cannot happen.
                 before_stop = [u for u in updates if parse_time(u["record_time"]) <= stop_at]
                 reached_stop = len(before_stop) < len(updates)
                 updates = before_stop
