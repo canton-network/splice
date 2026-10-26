@@ -190,7 +190,7 @@ class ValidatorApp(
                 ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
               )
             }
-            domainMigrationId <- appInitStep("Resolving domain migration id") {
+            _ <- appInitStep("Resolving domain migration id") {
               resolveDomainMigrationId(scanConnection)
             }
             domainConnector = new SynchronizerConnector(
@@ -650,7 +650,7 @@ class ValidatorApp(
         validatorParty = validatorParty,
         dsoParty = dsoParty,
       )
-      store = ValidatorStore(
+      store <- ValidatorStore(
         key,
         storage,
         loggerFactory,
@@ -1165,7 +1165,7 @@ class ValidatorApp(
                         )(operation)
                       },
                 )
-              } ++ walletStatusHandler.toList.map { case (walletHandler, walletManager) =>
+              } ++ walletStatusHandler.toList.map { case (walletHandler, _) =>
                 StatusWalletResource.routes(
                   walletHandler,
                   operation =>

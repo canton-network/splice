@@ -114,7 +114,7 @@ class SplitwellApp(
     domainMigrationId <- appInitStep(s"Resolving domain migration id") {
       resolveDomainMigrationId(scanConnection)
     }
-    store = SplitwellStore(
+    store <- SplitwellStore(
       storeKey,
       dsoParty,
       storage,

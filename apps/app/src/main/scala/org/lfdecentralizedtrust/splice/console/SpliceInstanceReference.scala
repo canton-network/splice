@@ -103,6 +103,9 @@ trait AppReference extends InstanceReference {
       timeout: NonNegativeDuration = spliceConsoleEnvironment.commandTimeouts.bounded,
       maxBackoff: NonNegativeDuration = NonNegativeDuration.tryFromDuration(20.seconds),
   ): Unit
+
+  // Doesn't make sense for Splice
+  override def adminToken: Nothing = ???
 }
 
 trait HttpAppReference extends AppReference with HttpCommandRunner {
@@ -285,9 +288,6 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
 
   /** Remote participant this splitwell app is configured to interact with. */
   lazy val participantClient = getParticipantClient()
-
-  // Doesn't make sense for Splice
-  override def adminToken: Nothing = ???
 
   override def adminApiToken: Option[String] = super.adminApiToken
 }

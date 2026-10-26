@@ -123,6 +123,13 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
       traceContext: TraceContext
   ): Future[Option[ContractState]]
 
+  /** Like `#lookupContractById` but does not require the caller to know the contract's template.
+    * The template is resolved from the row and looked up via [[ContractCompanions]].
+    */
+  def lookupGenericContractById(id: ContractId[?])(implicit
+      traceContext: TraceContext
+  ): Future[Option[Contract[?, ?]]]
+
   /** True if the ids contains an id that has been archived. */
   def containsArchived(ids: Seq[ContractId[?]])(implicit
       traceContext: TraceContext
@@ -796,8 +803,6 @@ object MultiDomainAcsStore extends StoreErrors {
   final case class ReassignmentId(source: SynchronizerId, id: String)
 
   object ReassignmentId {
-    def fromAssign(in: ReassignmentEvent.Assign) =
-      ReassignmentId(in.source, in.unassignId)
     def fromUnassign(out: ReassignmentEvent.Unassign) =
       ReassignmentId(out.source, out.unassignId)
   }
@@ -907,16 +912,7 @@ object MultiDomainAcsStore extends StoreErrors {
 
   // The state of a contract in the store. Note that, contrary to `ContractState`, this can
   // also include archived contracts.
-  sealed abstract class StoreContractState extends PrettyPrinting {
-    def toActiveState: Option[MultiDomainAcsStore.ContractState] =
-      this match {
-        case StoreContractState.Assigned(domain) =>
-          Some(MultiDomainAcsStore.ContractState.Assigned(domain))
-        case StoreContractState.InFlight(_) => Some(MultiDomainAcsStore.ContractState.InFlight)
-        case StoreContractState.Archived => None
-      }
-
-  }
+  sealed abstract class StoreContractState extends PrettyPrinting
   object StoreContractState {
 
     /** Observed activation (assign/create).
@@ -951,11 +947,6 @@ object MultiDomainAcsStore extends StoreErrors {
       state: StoreContractState,
   ) extends PrettyPrinting {
 
-    def toAssigned: Option[SynchronizerId] = state match {
-      case StoreContractState.Assigned(domain) => Some(domain)
-      case StoreContractState.InFlight(_) | StoreContractState.Archived => None
-    }
-
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("contractId", _.contractId),
       param("transferCounter", _.transferCounter),
@@ -973,11 +964,6 @@ object MultiDomainAcsStore extends StoreErrors {
         throw contractIdNotFound(PrettyContractId(companionClass.typeId(companion), id))
       )
     }
-
-  /** Max batch size for domain reassignment automation.  Not a hard limit,
-    * chosen to be "reasonable".
-    */
-  val notOnDomainsTotalLimit: PageLimit = PageLimit tryCreate 1000
 
   type VersionGuard = (PackageVersionSupport, CantonTimestamp) => (
       TraceContext

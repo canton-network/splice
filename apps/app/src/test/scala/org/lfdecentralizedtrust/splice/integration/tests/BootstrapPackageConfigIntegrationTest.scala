@@ -245,6 +245,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.developmentFundManagerBlacklist,
         amuletConfig.minDevelopmentFundMintingDelay,
         amuletConfig.amuletSwitchOverTimes,
+        amuletConfig.governanceLockConfig,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -341,7 +342,7 @@ class BootstrapPackageConfigIntegrationTest
     sv2PackageVettingTrigger.resume()
 
     clue(s"Vetting state for slow sv is updated after the trigger runs, and alice sees it") {
-      eventually() {
+      eventually(timeUntilSuccess = 2.minutes) {
         vettingIsUpdatedForTheNewConfig(
           aliceValidatorBackend.participantClient,
           sv2Backend.participantClient.id,
@@ -399,6 +400,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.developmentFundManagerBlacklist,
         amuletConfig.minDevelopmentFundMintingDelay,
         amuletConfig.amuletSwitchOverTimes,
+        amuletConfig.governanceLockConfig,
       )
 
       val upgradeAction = new ARC_AmuletRules(

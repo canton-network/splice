@@ -165,13 +165,6 @@ final object AllocationFactoryV2Allocate
         splice.api.token.allocationinstructionv2.AllocationFactory.CHOICE_AllocationFactory_Allocate,
     )
 
-final object AllocationV2Settle
-    extends InterfaceExerciseNodeCompanion.Mk(
-      interface = splice.api.token.allocationv2.Allocation.INTERFACE,
-      template = splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
-      choice = splice.api.token.allocationv2.Allocation.CHOICE_Allocation_Settle,
-    )
-
 final object SettlementFactorySettle
     extends InterfaceExerciseNodeCompanion.Mk(
       interface = splice.api.token.allocationv2.SettlementFactory.INTERFACE,
@@ -368,24 +361,20 @@ object AmuletArchive {
     } else None
 }
 
+object GovernanceLockSubstitutionExercise {
+  private val substitutionTemplate = QualifiedName(
+    splice.governancelock.substitution.GovernanceLockSubstitution.COMPANION.getTemplateIdWithPackageId
+  )
+
+  def unapply(event: ExercisedEvent): Option[ExercisedEvent] =
+    if (QualifiedName(event.getTemplateId) == substitutionTemplate) Some(event) else None
+}
+
 object AmuletCreate {
   type TCid = amuletCodegen.Amulet.ContractId
   type T = amuletCodegen.Amulet
   type ContractType = Contract[TCid, T]
   val companion = amuletCodegen.Amulet.COMPANION
-
-  def unapply(
-      event: CreatedEvent
-  ): Option[ContractType] = {
-    Contract.fromCreatedEvent(companion)(event)
-  }
-}
-
-object LockedAmuletCreate {
-  type TCid = amuletCodegen.LockedAmulet.ContractId
-  type T = amuletCodegen.LockedAmulet
-  type ContractType = Contract[TCid, T]
-  val companion = amuletCodegen.LockedAmulet.COMPANION
 
   def unapply(
       event: CreatedEvent
