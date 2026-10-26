@@ -9,7 +9,10 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.{HasHealth, SpliceCircuitBreaker}
-import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
+import org.lfdecentralizedtrust.splice.wallet.automation.{
+  OperatorBalanceMonitor,
+  UserWalletAutomationService,
+}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
   RewardSharingConfig,
@@ -44,6 +47,7 @@ class UserWalletService(
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
+    operatorBalanceMonitorO: Option[OperatorBalanceMonitor],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
     rewardSharingConfig: RewardSharingConfig,
@@ -105,6 +109,7 @@ class UserWalletService(
         packageVersionSupport,
         loggerFactory,
         validatorTopupConfigO,
+        operatorBalanceMonitorO,
         walletSweep,
         autoAcceptTransfers,
         rewardSharingConfig,

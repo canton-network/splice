@@ -29,6 +29,7 @@ class CollectRewardsAndMergeAmuletsTrigger(
     treasury: TreasuryService,
     scanConnection: BftScanConnection,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
+    operatorBalanceMonitorO: Option[OperatorBalanceMonitor],
     clock: Clock,
 )(implicit
     override val ec: ExecutionContext,
@@ -60,6 +61,7 @@ class CollectRewardsAndMergeAmuletsTrigger(
       traceContext: TraceContext
   ): Future[Boolean] =
     for {
+      _ <- operatorBalanceMonitorO.fold(Future.unit)(observeOperatorBalance)
       commandPriority <- validatorTopupConfigO match {
         case None =>
           Future.successful(CommandPriority.Low) // not the wallet of the validator operator
@@ -93,4 +95,14 @@ class CollectRewardsAndMergeAmuletsTrigger(
           case Failure(err) => Failure(err)
         }
     } yield result
+
+  private def observeOperatorBalance(monitor: OperatorBalanceMonitor)(implicit
+      traceContext: TraceContext
+  ): Future[Unit] =
+    for {
+      round <- scanConnection.getLatestOpenMiningRound().map(_.payload.round.number)
+      (unlockedBalance, _) <- store.getAmuletBalanceWithHoldingFees(round)
+      lockedBalance <- store.getLockedAmuletBalance()
+      _ <- monitor.observe(unlockedBalance + lockedBalance)
+    } yield ()
 }
