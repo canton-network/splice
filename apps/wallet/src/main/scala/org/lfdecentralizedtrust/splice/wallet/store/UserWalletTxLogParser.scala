@@ -71,7 +71,9 @@ import org.lfdecentralizedtrust.splice.history.{
   DevelopmentFundCoupon_Withdraw,
   DirectTokenStandardTransfer,
   DirectTokenStandardTransferV2,
-  GovernanceLockSubstitutionExercise,
+  GovernanceLockSubstitutionAccept,
+  GovernanceLockSubstitutionReject,
+  GovernanceLockSubstitutionWithdraw,
   LockedAmuletExpireAmulet,
   LockedAmuletExpireAmuletV2,
   LockedAmuletOwnerExpireLock,
@@ -96,7 +98,7 @@ import org.lfdecentralizedtrust.splice.util.{
   EventId,
   ExerciseNode,
   ExerciseNodeCompanion,
-  QualifiedName,
+  GovernanceLockUtil,
   TokenStandardAccount,
   TokenStandardMetadata,
 }
@@ -154,14 +156,6 @@ class UserWalletTxLogParser(
     root match {
       case exercised: ExercisedEvent =>
         exercised match {
-
-          // Governance lock substitutions are not shown in the wallet history.
-          // This is a limitation we've accepted, as accepting a substitution does not result in a
-          // transfer, but instead in a lock being created, so it's not simple to parse them.
-          // Their acceptance and withdrawal unlock amulets without any of the choices below, so
-          // they must be matched before the generic token standard choices.
-          case GovernanceLockSubstitutionExercise(_) =>
-            now(State.empty)
 
           // ------------------------------------------------------------------
           // Treasury service
@@ -657,8 +651,12 @@ class UserWalletTxLogParser(
                   childState
                 } else {
                   val sender = node.argument.value.transfer.sender
-                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
-                    .getOrElse(BigDecimal(node.argument.value.transfer.amount))
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver,
+                  ).getOrElse(BigDecimal(node.argument.value.transfer.amount))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -715,8 +713,12 @@ class UserWalletTxLogParser(
                   // We hit this only for self-transfers after the 24 submission delay change,
                   // and for governance lock requests.
                   val sender = node.argument.value.transfer.sender
-                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
-                    .getOrElse(BigDecimal(0))
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver,
+                  ).getOrElse(BigDecimal(0))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -775,8 +777,12 @@ class UserWalletTxLogParser(
                 } else {
                   val admin = node.argument.value.transfer.instrumentId.admin
                   val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
-                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
-                    .getOrElse(BigDecimal(node.argument.value.transfer.amount))
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin),
+                  ).getOrElse(BigDecimal(node.argument.value.transfer.amount))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -835,8 +841,12 @@ class UserWalletTxLogParser(
                   // and for governance lock requests.
                   val admin = node.argument.value.transfer.instrumentId.admin
                   val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
-                  val lockedAmount = governanceLockRequestLockedAmount(tree, exercised, sender)
-                    .getOrElse(BigDecimal(0))
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin),
+                  ).getOrElse(BigDecimal(0))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -864,6 +874,37 @@ class UserWalletTxLogParser(
                   node.argument.value.transfer.meta.values
                     .getOrDefault(TokenStandardMetadata.reasonMetaKey, "")
                 )
+            }
+
+          // The target lock returns the substituted funds to its owner, and the funds that the
+          // proposer locked move into the new lock, so only the target lock owner's balance changes
+          case GovernanceLockSubstitutionAccept(_) =>
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive = true,
+              )
+            }.map { childState =>
+              // All unlocks are of the target lock funds
+              val targetOwner = unlockedAmuletOwner(tree, childState)
+              val proposer = createdGovernanceLockOwners(tree, exercised)
+                .find(_ != targetOwner)
+                .getOrElse(targetOwner)
+              val receivers =
+                if (proposer == targetOwner) Seq.empty
+                else
+                  Seq(
+                    PartyAndAmount(targetOwner, -lockedAmountOwnedBy(tree, exercised, targetOwner))
+                  )
+              governanceLockAcceptState(
+                tree,
+                exercised,
+                childState,
+                PartyAndAmount(proposer, -lockedAmountOwnedBy(tree, exercised, proposer)),
+                receivers,
+              )
             }
 
           case TransferInstruction_Accept(node) =>
@@ -931,7 +972,7 @@ class UserWalletTxLogParser(
                 )
             }
 
-          case TransferInstruction_Withdraw(_) =>
+          case TransferInstruction_Withdraw(_) | GovernanceLockSubstitutionWithdraw(_) =>
             defer {
               parseTrees(
                 tree,
@@ -950,7 +991,7 @@ class UserWalletTxLogParser(
                 )
             }
 
-          case TransferInstruction_Reject(_) =>
+          case TransferInstruction_Reject(_) | GovernanceLockSubstitutionReject(_) =>
             defer {
               parseTrees(
                 tree,
@@ -1450,9 +1491,6 @@ class UserWalletTxLogParser(
     roots.foldMap(parseTree(tree, _, synchronizerId, ignoreUnexpectedAmuletCreateArchive))
   }
 
-  private val governanceLockTemplate =
-    QualifiedName(splice.governancelock.GovernanceLock.COMPANION.getTemplateIdWithPackageId)
-
   /** The amount the request locks for `sender` if a token standard transfer is
     * a governance lock request. None for other transfers.
     *
@@ -1470,29 +1508,99 @@ class UserWalletTxLogParser(
     *    tx log entry
     * 3. let `mergeBalanceChangesIntoTransfer` add balance changes produced
     *    by `GovernanceLock(unlockAmulet)` calls to the initial sender amount.
+    *
+    * All governance lock requests are transfers to `lockManagerParty`. Some of
+    * them, e.g., substitutions proposed by the owner of the target lock, lock
+    * no funds at all.
     */
   private def governanceLockRequestLockedAmount(
       tree: Transaction,
       exercised: ExercisedEvent,
       sender: String,
-  ): Option[BigDecimal] = {
-    val descendants = tree.preorderDescendants(exercised).toSeq
-    val touchesGovernanceLock = descendants.exists {
-      case created: CreatedEvent =>
-        QualifiedName(created.getTemplateId) == governanceLockTemplate
-      case ex: ExercisedEvent => QualifiedName(ex.getTemplateId) == governanceLockTemplate
-      case _ => false
-    }
-    Option.when(touchesGovernanceLock)(
-      descendants
-        .collect { case created: CreatedEvent =>
-          Contract.fromCreatedEvent(amuletCodegen.LockedAmulet.COMPANION)(created)
-        }
-        .flatten
-        .filter(_.payload.amulet.owner == sender)
-        .map(c => BigDecimal(c.payload.amulet.amount.initialAmount))
-        .sum
+      receiver: String,
+  ): Option[BigDecimal] =
+    Option.when(receiver == GovernanceLockUtil.lockManagerParty)(
+      lockedAmountOwnedBy(tree, exercised, sender)
     )
+
+  private def createdLockedAmulets(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+  ): Seq[Contract[amuletCodegen.LockedAmulet.ContractId, amuletCodegen.LockedAmulet]] =
+    tree
+      .preorderDescendants(exercised)
+      .collect { case created: CreatedEvent =>
+        Contract.fromCreatedEvent(amuletCodegen.LockedAmulet.COMPANION)(created)
+      }
+      .flatten
+      .toSeq
+
+  /** Total amount of the amulets locked for `owner` below `exercised`. */
+  private def lockedAmountOwnedBy(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+      owner: String,
+  ): BigDecimal =
+    createdLockedAmulets(tree, exercised)
+      .filter(_.payload.amulet.owner == owner)
+      .map(c => BigDecimal(c.payload.amulet.amount.initialAmount))
+      .sum
+
+  private def createdGovernanceLockOwners(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+  ): Seq[String] =
+    tree
+      .preorderDescendants(exercised)
+      .collect { case created: CreatedEvent =>
+        Contract.fromCreatedEvent(splice.governancelock.GovernanceLock.COMPANION)(created)
+      }
+      .flatten
+      .map(_.payload.owner)
+      .toSeq
+
+  /** The owner of the amulets that the accepted governance lock substitution unlocks.
+    * Accepting a substitution always unlocks funds of exactly one owner.
+    */
+  private def unlockedAmuletOwner(tree: Transaction, childState: State): String =
+    childState.entries
+      .collectFirst { case b: BalanceChangeTxLogEntry => b.receiver }
+      .getOrElse(
+        throw new RuntimeException(
+          s"Expected an unlocked amulet when accepting a governance lock substitution in transaction ${tree.getUpdateId}"
+        )
+      )
+
+  /** Transfer entry of an accepted governance lock substitution. Its amounts start
+    * at the negated new locks of each party, and the unlocks of the child
+    * state are merged into them.
+    */
+  private def governanceLockAcceptState(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+      childState: State,
+      sender: PartyAndAmount,
+      receivers: Seq[PartyAndAmount],
+  ): State = {
+    val eventId = EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId)
+    val transferEntry = TransferTxLogEntry(
+      eventId = eventId,
+      subtype = Some(TransferTransactionSubtype.TransferInstruction_Accept.toProto),
+      date = Some(tree.getEffectiveAt),
+      sender = Some(sender),
+      receivers = receivers,
+      senderHoldingFees = BigDecimal(0.0),
+      appRewardsUsed = BigDecimal(0.0),
+      validatorRewardsUsed = BigDecimal(0.0),
+      svRewardsUsed = Some(BigDecimal(0.0)),
+      transferInstructionCid = exercised.getContractId,
+    )
+    childState
+      .appended(State(entries = immutable.Queue[TxLogEntry](transferEntry)))
+      .mergeBalanceChangesIntoTransfer(
+        TransferTransactionSubtype.TransferInstruction_Accept,
+        Some(eventId),
+      )
   }
 
   override def tryParse(tx: Transaction, synchronizerId: SynchronizerId)(implicit

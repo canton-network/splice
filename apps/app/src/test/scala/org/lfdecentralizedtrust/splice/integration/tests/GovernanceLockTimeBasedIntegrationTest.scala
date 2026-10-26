@@ -25,7 +25,7 @@ import org.lfdecentralizedtrust.splice.util.{
   TokenStandardMetadata,
   WalletTestUtil,
 }
-import org.lfdecentralizedtrust.splice.wallet.store.TransferTxLogEntry
+import org.lfdecentralizedtrust.splice.wallet.store.{BalanceChangeTxLogEntry, TransferTxLogEntry}
 import org.scalatest.Assertion
 
 import java.time.Duration
@@ -487,6 +487,8 @@ class GovernanceLockTimeBasedIntegrationTest
         },
       )
 
+      val beforeExpiry = latestAliceEventId()
+
       clue("The substitutions are not yet expired, so the trigger has no work") {
         trigger.runOnce().futureValue shouldBe false
         listLockSubstitutions should have length numSubstitutions.toLong
@@ -519,6 +521,16 @@ class GovernanceLockTimeBasedIntegrationTest
           listHoldings(proposerParticipant, proposerParty).filter(
             _._2.lock.isEmpty
           ) should not be empty
+        }
+      }
+
+      clue("The proposer's wallet history shows each returned collateral") {
+        eventually() {
+          aliceWalletClient
+            .listTransactions(None, pageSize = 100)
+            .takeWhile(e => !beforeExpiry.contains(e.eventId))
+            .collect { case e: BalanceChangeTxLogEntry => e.amount } shouldBe
+            Seq.fill(numSubstitutions)(lockAmount)
         }
       }
   }
