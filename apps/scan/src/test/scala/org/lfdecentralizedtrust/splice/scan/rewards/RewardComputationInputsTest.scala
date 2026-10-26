@@ -444,42 +444,7 @@ object RewardComputationInputsTest {
 
     // --- 7. TBAR v1.1 asset side ---
 
-    // 7a. Zero burn → zero-guard
-    TestCase(
-      label = "MainNet+asset: zero burn exercises zero-guard",
-      inputs = mainNet,
-      totalRoundAppActivityWeight = 95129376L,
-      totalFeaturedAssetWeight = 0L,
-      expected = RewardIssuanceParams(
-        appMintingAllowanceCC = BigDecimal("57549.5317604300"),
-        assetMintingAllowanceCC = BigDecimal("0"),
-        unclaimedMintingAllowanceCC = BigDecimal("54512.8731101940"),
-        issuancePerAppBurnCC = BigDecimal("1.5"),
-        issuancePerAppBurnCCPerMB = BigDecimal("604.9606775559"),
-        issuancePerAssetBurnCC = BigDecimal("0"),
-        issuancePerAssetBurnCCPerMB = BigDecimal(0),
-        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
-      ),
-    ),
-    // Simple: cap doesn't bind, exact zero budget.
-    TestCase(
-      label = "simple+asset: zero burn exercises zero-guard",
-      inputs = simpleArithmetic,
-      totalRoundAppActivityWeight = 1000000L,
-      totalFeaturedAssetWeight = 0L,
-      expected = RewardIssuanceParams(
-        appMintingAllowanceCC = BigDecimal("0.45"),
-        assetMintingAllowanceCC = BigDecimal("0"),
-        unclaimedMintingAllowanceCC = BigDecimal("0"),
-        issuancePerAppBurnCC = BigDecimal("0.45"),
-        issuancePerAppBurnCCPerMB = BigDecimal("0.45"),
-        issuancePerAssetBurnCC = BigDecimal("0"),
-        issuancePerAssetBurnCCPerMB = BigDecimal(0),
-        appRewardCouponThresholdCC = BigDecimal("0.5"),
-      ),
-    ),
-
-    // 7b. Burn exceeds leftover → asset prorated
+    // 7a. Burn exceeds leftover → asset prorated
 
     // MainNet: burn=100000 » leftover ≈ 54512.87 → rate ≈ 0.5451.
     TestCase(
@@ -516,7 +481,7 @@ object RewardComputationInputsTest {
       ),
     ),
 
-    // 7c. Cap not binding → asset arm vanishes
+    // 7b. Cap not binding → asset arm vanishes
 
     // MainNet: doubled traffic $120/MB — cap doesn't bind, asset arm vanishes.
     TestCase(
@@ -553,7 +518,7 @@ object RewardComputationInputsTest {
       ),
     ),
 
-    // 7d. Non-terminating issuance at simple magnitudes
+    // 7c. Non-terminating issuance at simple magnitudes
     // 7 MB → 45/700 = 0.0642857143 (non-terminating in scale-10); the allowance
     // equals rewardsToIssue exactly.
     TestCase(
@@ -573,7 +538,7 @@ object RewardComputationInputsTest {
       ),
     ),
 
-    // 7e. Cap binds + asset burn fits within leftover
+    // 7d. Cap binds + asset burn fits within leftover
 
     // MainNet: cap=1.5 × 4033.07 CC burn = 6049.60 fits within 54512.87 leftover.
     TestCase(
@@ -610,46 +575,7 @@ object RewardComputationInputsTest {
       ),
     ),
 
-    // --- 7f. Zero app burn: asset tranche sees the full round budget ---
-
-    // MainNet: zero app burn; asset tranche's rewardsToIssue == roundMintingAllowanceCC.
-    // cap=1.5 × 4033.07 CC burn = 6049.60 fits within 112062.40 budget.
-    TestCase(
-      label = "MainNet+asset: zero app burn, asset gets full round budget",
-      inputs = mainNet,
-      totalRoundAppActivityWeight = 0L,
-      totalFeaturedAssetWeight = 10000000L,
-      expected = RewardIssuanceParams(
-        appMintingAllowanceCC = BigDecimal("0"),
-        assetMintingAllowanceCC = BigDecimal("6049.6067755590"),
-        unclaimedMintingAllowanceCC = BigDecimal("106012.7980950650"),
-        issuancePerAppBurnCC = BigDecimal(0),
-        issuancePerAppBurnCCPerMB = BigDecimal(0),
-        issuancePerAssetBurnCC = BigDecimal("1.5"),
-        issuancePerAssetBurnCCPerMB = BigDecimal("604.9606775559"),
-        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
-      ),
-    ),
-    // Simple: zero app burn; asset tranche's rewardsToIssue == roundMintingAllowanceCC = 0.45.
-    // cap=0.1 × 4 CC burn = 0.4 fits within 0.45 budget.
-    TestCase(
-      label = "simple+asset: zero app burn, asset gets full round budget",
-      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
-      totalRoundAppActivityWeight = 0L,
-      totalFeaturedAssetWeight = 4000000L,
-      expected = RewardIssuanceParams(
-        appMintingAllowanceCC = BigDecimal("0"),
-        assetMintingAllowanceCC = BigDecimal("0.4"),
-        unclaimedMintingAllowanceCC = BigDecimal("0.05"),
-        issuancePerAppBurnCC = BigDecimal(0),
-        issuancePerAppBurnCCPerMB = BigDecimal(0),
-        issuancePerAssetBurnCC = BigDecimal("0.1"),
-        issuancePerAssetBurnCCPerMB = BigDecimal("0.1"),
-        appRewardCouponThresholdCC = BigDecimal("0.5"),
-      ),
-    ),
-
-    // --- 7g. Amendment "Tiered App Reward Distribution" DvP scenarios ---
+    // --- 7e. Amendment "Tiered App Reward Distribution" DvP scenarios ---
     // Each DvP contributes 25 kB app activity to the submitting asset mover
     // and 2.5 kB asset activity for each of Bank1 and Bank2. Expected
     // per-DvP rewards from the amendment table:
@@ -709,6 +635,66 @@ object RewardComputationInputsTest {
         issuancePerAssetBurnCC = BigDecimal(0),
         issuancePerAssetBurnCCPerMB = BigDecimal(0),
         appRewardCouponThresholdCC = BigDecimal(0),
+      ),
+    ),
+
+    // --- 7f. Zero-branch coverage for computeIssuanceTranche ---
+    // Exercises both inner guards (totalCoupons <= 0 and capPerCoupon <= 0)
+    // on each side of the computation.
+
+    // 7f.1 — totalCoupons == 0 on the asset tranche call (zero asset burn).
+    TestCase(
+      label = "simple+asset: zero asset burn, asset-tranche zero-guard",
+      inputs = simpleArithmetic,
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 0L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.45"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.45"),
+        issuancePerAssetBurnCC = BigDecimal("0"),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7f.2 — totalCoupons == 0 on the app tranche call (zero app traffic);
+    // asset tranche sees the full round budget as its input.
+    TestCase(
+      label = "simple+asset: zero app traffic, app-tranche zero-guard",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
+      totalRoundAppActivityWeight = 0L,
+      totalFeaturedAssetWeight = 4000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0"),
+        assetMintingAllowanceCC = BigDecimal("0.4"),
+        unclaimedMintingAllowanceCC = BigDecimal("0.05"),
+        issuancePerAppBurnCC = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal("0.1"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("0.1"),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7f.3 — capPerCoupon == 0 on both tranche calls: nothing is distributed,
+    // the full round budget stays unclaimed.
+    TestCase(
+      label = "simple+asset: zero cap, nothing distributed",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0"))),
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 100000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal(0),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0.45"),
+        issuancePerAppBurnCC = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
   )
