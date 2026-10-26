@@ -357,6 +357,11 @@ class HelpersTest(unittest.TestCase):
             datetime(2026, 1, 2, 3, 4, 5, 123456, tzinfo=utc),
         )
 
+    def test_backoff_delay(self) -> None:
+        for attempt, low, high in [(0, 1, 2), (2, 4, 8), (10, 30, 60), (10_000, 30, 60)]:
+            with self.subTest(attempt=attempt):
+                self.assertTrue(low <= spm.backoff_delay(attempt) <= high)
+
     def test_utc_now_iso_keeps_microseconds(self) -> None:
         now = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=timezone.utc)
         with mock.patch.object(spm, "datetime", wraps=datetime) as patched:

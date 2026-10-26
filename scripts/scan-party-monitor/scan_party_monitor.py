@@ -263,7 +263,8 @@ class Pacer:
 
 
 def backoff_delay(attempt: int) -> float:
-    delay = min(BACKOFF_MAX_SECONDS, BACKOFF_INITIAL_SECONDS * 2.0**attempt)
+    # Cap the exponent, so that a long outage doesn't overflow the float.
+    delay = min(BACKOFF_MAX_SECONDS, BACKOFF_INITIAL_SECONDS * 2.0 ** min(attempt, 32))
     return delay * random.uniform(0.5, 1.0)
 
 
