@@ -23,10 +23,12 @@ export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...   # optional
   --config ./parties.json
 ```
 
-Run with `-h` for all options.
+Run with `-h` for all options. Generally, it can be used either as a long-running
+terminal application doing its own `--poll-interval-seconds` (default 10), or as
+a cron job with either `--stop-at-record-time` or `--exit-when-caught-up`.
 
-Scan's public API is only reachable from IP addresses that the SV operating the Scan
-instance has allowlisted. Use a Scan instance of an SV you work with.
+Use a Scan instance of an SV you work with; for best results, avoid the most
+heavily-loaded SVs.
 
 ### Configuration
 
@@ -41,6 +43,10 @@ instance has allowlisted. Use a Scan instance of an SV you work with.
 }
 ```
 
+The best usage pattern is to start out with your parties and recipients of concern
+as `parties` and `expected_recipients`, then use `alert_confirmations` for parties
+where much more verbosity is desired.
+
 - `parties` lists the tracked parties (at most 1000).
 - `expected_recipients` (optional) are parties that every tracked party may transfer to
   without an alert.
@@ -52,7 +58,7 @@ instance has allowlisted. Use a Scan instance of an SV you work with.
 
 To change the configuration, edit the file and restart the script with the same `--db`.
 Changes to recipients and `alert_confirmations` apply from the next update on. Adding a
-party makes the script re-seed its contracts (see below).
+party requires restarting from ACS (see below).
 
 ### What is reported
 
@@ -65,18 +71,12 @@ Each match has a reason:
 | `created_signatory`            | parties with `alert_confirmations` | the party is a signatory of a created contract                        |
 | `exercised_contract_signatory` | parties with `alert_confirmations` | the party is a signatory of the contract being exercised              |
 
-Holdings are `Amulet` and `LockedAmulet` contracts, so transfers are detected regardless of
-how they are made (directly, through a transfer preapproval, or through a token standard
-transfer instruction once it is accepted).
-
-The confirmation reasons are stricter than "the party sees the transaction" (being an
-observer, e.g. of an incoming transfer offer, does not match), and broader than "the party
-submitted the transaction" (actions taken with the party's authority through a delegation do
-match).
+Transfers directly, through a transfer preapproval, or through a token standard
+transfer instruction are all detected.
 
 ### Output
 
-One line per matching transaction, e.g.:
+One JSON line per matching transaction, e.g.:
 
 ```json
 {"update_id": "1220...", "migration_id": 4, "record_time": "2026-10-26T10:00:00.123456Z",
@@ -95,15 +95,12 @@ Create an [incoming webhook](https://api.slack.com/messaging/webhooks) for the c
 should receive alerts, and pass its URL in `SLACK_WEBHOOK_URL` (preferred, as the URL is a
 secret) or `--slack-webhook-url`.
 
-The script posts at most one message per poll of Scan. While it is catching up on a backlog,
-it collects the alerts of up to `--slack-batch-seconds` (default 60) into one message. A
-message lists a limited number of transactions; stdout always has all of them.
+A message lists a limited number of transactions; stdout always has all of them.
 
-## How it works
+## Implementation details
 
 Scan's update stream reports the acting parties of an exercise, but not the signatories of
-the exercised contract. The script therefore keeps a map from contract id to signatories
-(and, for holdings, the owner) of all contracts signed by a tracked party, in the SQLite file
+the exercised contract. The script therefore caches an ACS subset in the SQLite file
 given by `--db`:
 
 1. **Seed.** On first start, the script downloads the tracked parties' contracts from the
@@ -124,12 +121,11 @@ check a configuration against past transactions.
 
 **Adding parties.** The contract map only covers the parties it was built for. When the
 configuration adds parties, the script rebuilds the map from the latest snapshot before its
-current position and replays the updates from there. During the replay, it reports matches
-of the added parties only, as the others' were reported before.
+current position and replays the updates from there.
 
 **Delivery.** Alerts are delivered at least once: the position is only saved after the
 alerts up to it have been printed and posted to Slack. If the Slack webhook is unreachable
-the script keeps retrying rather than skipping alerts. After a crash, the alerts since the
+the script keeps retrying rather than skipping alerts. After a crash, alerts since the
 last saved position may be repeated.
 
 ## Rate limits
@@ -138,11 +134,12 @@ Scan rate-limits each endpoint **across all of its clients** (for `/v2/state/acs
 default is 5 requests per second for everyone together). The script therefore paces its own
 requests: by default 1 ACS request per second while seeding and 2 update requests per second
 while catching up, then one poll every 10 seconds. As the seed only fetches the tracked
-parties' contracts, it usually takes a few requests.
+parties' contracts, it usually takes very few requests, though as a result it is
+better to be conservative with your `parties` setting; e.g. avoid setting an SV
+or the DSO party unless you really need alerts on them.
 
 Please do not raise `--acs-requests-per-second` or `--updates-requests-per-second`: doing so
-slows down Scan for everyone else, including other users of this script. If Scan does respond
-with HTTP 429, the script backs off and halves its request rate for five minutes.
+slows down Scan for everyone else, including other users of this script.
 
 ## Limitations
 
@@ -151,17 +148,11 @@ with HTTP 429, the script backs off and halves its request rate for five minutes
   involve none of these do not appear in Scan at all.
 - Fetches do not appear in Scan's update stream, so being a confirming party only through a
   fetch is not detected.
-- If several tracked parties send holdings in one transaction, the outputs cannot be
-  attributed to one of them, so each is checked against all outputs; this can report a
-  transfer to another sender's expected recipient.
 - A transfer funded only from reward coupons, without consuming any of the sender's
   holdings, is not detected as a transfer; it is reported for parties with
   `alert_confirmations`.
 - Burning holdings without creating new ones (e.g. to buy traffic) is not a transfer and
   is only reported for parties with `alert_confirmations`.
-- Incoming transfers through a `TransferPreapproval` of a party with `alert_confirmations`
-  match, because the receiver of such a transfer is a signatory of the preapproval and of
-  the new holding, and hence confirms the transfer.
 - If the snapshot to seed from disappears from Scan before the seed completes (Scan may prune
   old snapshots), the script stops with an error; delete the database file and start over.
 
@@ -174,5 +165,5 @@ Python 3 and take a few seconds. Run them from the repository root with
 python3 -m unittest discover -s scripts/scan-party-monitor -v
 ```
 
-`ScanPartyMonitorScriptIntegrationTest` runs these unit tests, and the script against a local
-Splice network.
+`ScanPartyMonitorScriptIntegrationTest` runs these unit tests, and the script against
+a more realistic local Scan instance like other Scala integration tests.
