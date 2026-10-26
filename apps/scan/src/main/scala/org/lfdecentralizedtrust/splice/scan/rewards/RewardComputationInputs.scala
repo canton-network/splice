@@ -80,8 +80,8 @@ final case class RewardComputationInputs(
     )
     val featuredAppMintingAllowanceCC = sub(rewardsToIssue, appMintingAllowanceRemainder)
 
-    // Asset side (CIP-104 amendment): same tranche formula with capPerCoupon=1,
-    // consuming the app side's remainder as the asset budget.
+    // Asset side (CIP-104 amendment): same tranche formula and cap as the app
+    // side, consuming the app side's remainder as the asset budget.
     val totalFeaturedAssetBurnCC = bytesToCC(totalFeaturedAssetWeight)
     val (issuancePerFeaturedAssetBurnCC, featuredAssetMintingAllowanceCC, unclaimed) =
       if (totalFeaturedAssetBurnCC.compareTo(zero) <= 0) {
@@ -89,7 +89,7 @@ final case class RewardComputationInputs(
       } else {
         val (rate, remainder) = computeIssuanceTranche(
           rewardsToIssue = appMintingAllowanceRemainder,
-          capPerCoupon = one,
+          capPerCoupon = featuredAppRewardCap,
           totalCoupons = totalFeaturedAssetBurnCC,
         )
         (rate, sub(appMintingAllowanceRemainder, remainder), remainder)
