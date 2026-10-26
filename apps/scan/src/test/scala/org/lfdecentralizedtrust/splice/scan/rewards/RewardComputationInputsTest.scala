@@ -387,33 +387,33 @@ object RewardComputationInputsTest {
 
     // --- 6. Zero traffic: all rewards unclaimed ---
 
-    // MainNet: rate = trafficPriceInCCperMB * cap ≈ 403.30 * 1.5 ≈ 604.96
+    // MainNet: zero app burn → rate 0 per amendment lines 246-247.
     TestCase(
       label = "MainNet: zero traffic, all unclaimed",
       inputs = mainNet,
       totalRoundAppActivityWeight = 0L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("604.9606775559"),
+        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
         threshold_CC = BigDecimal("3.3608926531"),
         totalIssuanceForFeaturedAppRewards = BigDecimal("0"),
         unclaimedAppRewardAmount = BigDecimal("112062.4048706240"),
-        issuancePerFeaturedAppBurnCC = BigDecimal("1.5"),
+        issuancePerFeaturedAppBurnCC = BigDecimal(0),
         issuancePerFeaturedAssetBurnCC = BigDecimal(0),
         issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
         totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
       ),
     ),
-    // Simple: rate = 1.0 * 100 = 100, all 0.45 unclaimed
+    // Simple: zero app burn → rate 0 per amendment lines 246-247.
     TestCase(
       label = "simple: zero traffic, all rewards unclaimed",
       inputs = simpleArithmetic,
       totalRoundAppActivityWeight = 0L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("100"),
+        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal(0),
         threshold_CC = BigDecimal("0.5"),
         totalIssuanceForFeaturedAppRewards = BigDecimal("0"),
         unclaimedAppRewardAmount = BigDecimal("0.45"),
-        issuancePerFeaturedAppBurnCC = BigDecimal("100"),
+        issuancePerFeaturedAppBurnCC = BigDecimal(0),
         issuancePerFeaturedAssetBurnCC = BigDecimal(0),
         issuancePerFeaturedAssetBurn_CCperMB = BigDecimal(0),
         totalIssuanceForFeaturedAssetRewards = BigDecimal(0),
