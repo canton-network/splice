@@ -264,24 +264,10 @@ object SqlIndexInitializationTrigger {
           where reward_beneficiary_is_observer = false
         """,
       ),
-    IndexAction
-      .Create(
-        indexName = "dso_acs_store_sid_mid_glt_gls",
-        createAction = sqlu"""
-          create index concurrently if not exists dso_acs_store_sid_mid_glt_gls
-          on dso_acs_store (store_id, migration_id, governance_lock_type, governance_lock_subject)
-          where governance_lock_type is not null
-        """,
-      ),
-    IndexAction
-      .Create(
-        indexName = "scan_acs_store_sid_mid_glt_gls",
-        createAction = sqlu"""
-          create index concurrently if not exists scan_acs_store_sid_mid_glt_gls
-          on scan_acs_store (store_id, migration_id, governance_lock_type, governance_lock_subject)
-          where governance_lock_type is not null
-        """,
-      ),
+    governanceLockTypeAndSubjectIndexAction("dso_acs_store"),
+    governanceLockTypeAndSubjectIndexAction("scan_acs_store"),
+    governanceLockTypeAndSubjectIndexAction("user_wallet_acs_store"),
+    governanceLockTypeAndSubjectIndexAction("external_party_wallet_acs_store"),
     IndexAction
       .Create(
         indexName = "scan_txlog_store_sid_effat_en_vot",
@@ -293,6 +279,16 @@ object SqlIndexInitializationTrigger {
       ),
     IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
   )
+
+  private def governanceLockTypeAndSubjectIndexAction(tableName: String): IndexAction =
+    IndexAction.Create(
+      indexName = s"${tableName}_sid_mid_glt_gls",
+      createAction = sqlu"""
+        create index concurrently if not exists #${tableName}_sid_mid_glt_gls
+        on #$tableName (store_id, migration_id, governance_lock_type, governance_lock_subject)
+        where governance_lock_type is not null
+      """,
+    )
 
   sealed trait Task extends Product with Serializable with PrettyPrinting
   object Task {
