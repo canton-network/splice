@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "participant": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "adminApiPort": {
+          "type": "integer"
+        },
+        "ledgerApiPort": {
+          "type": "integer"
+        }
+      },
+      "required": ["address", "adminApiPort", "ledgerApiPort"]
+    },
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "pollIntervalSeconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
+    "securityContexts": {
+      "type": ["object", "null"],
+      "properties": {
+        "pod": {
+          "type": ["object", "null"]
+        },
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "topologyKeyMonitor": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["topologyKeyMonitor"]
+        }
+      },
+      "required": ["pod", "containers"]
+    }
+  }
+}

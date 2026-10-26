@@ -1,0 +1,11 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{ $_ := required ".Release.Namespace is required." .Release.Namespace }}
+
+{{ $_ := required ".Values.imageRepo is required." .Values.imageRepo }}
+
+{{ $_ := required ".Values.participant.address is required." .Values.participant.address }}
+{{- if not .Values.keys }}
+{{- fail ".Values.keys must contain at least one key fingerprint." }}
+{{- end }}
