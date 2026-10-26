@@ -106,6 +106,23 @@ class OperatorBalanceMonitorTest extends BaseTestWordSpec with HasExecutionConte
       f.monitor.hasBeenAboveLimitFor(day) shouldBe false
     }
 
+    "only allow collecting rewards until the balance has been above the limit for 24 hours" in {
+      val f = new Fixture
+      f.observe(limit)
+      f.monitor.shouldCollectRewards shouldBe true
+
+      f.clock.advance(Duration.ofHours(23))
+      f.observe(limit + 1)
+      f.monitor.shouldCollectRewards shouldBe true
+
+      f.clock.advance(Duration.ofHours(2))
+      f.observe(limit + 1)
+      f.monitor.shouldCollectRewards shouldBe false
+
+      f.observe(limit)
+      f.monitor.shouldCollectRewards shouldBe true
+    }
+
     "continue from the persisted time after a restart" in {
       val f = new Fixture
       f.observe(limit)
