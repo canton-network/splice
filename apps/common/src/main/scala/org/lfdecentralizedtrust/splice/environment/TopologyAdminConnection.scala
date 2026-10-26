@@ -1827,14 +1827,10 @@ abstract class TopologyAdminConnection(
 
 object TopologyAdminConnection {
 
-  /** The node does not allow downloading its private keys. */
   final class KeyDownloadDisabledException(serviceName: String, fingerprint: Fingerprint)
       extends RuntimeException(
-        s"Failed to download private key $fingerprint via $serviceName: key downloads are disabled on that node. " +
-          "Allow them to create identities dumps (e.g., for backups) of nodes that do not use KMS: " +
-          "set `enableKeyDownload: true` in the splice-participant Helm chart, " +
-          "pass `--enable-key-download` to the Docker Compose validator's start.sh, " +
-          "or set `canton.features.enable-preview-commands = yes` in the node's Canton config."
+        s"Failed to download private key $fingerprint via $serviceName: key downloads are disabled on this node. " +
+          "Please consult your deployment documentation for instructions on how to enable key downloads."
       )
 
   object KeyDownloadDisabledException {

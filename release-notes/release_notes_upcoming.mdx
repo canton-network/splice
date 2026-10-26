@@ -15,7 +15,6 @@
     - **Breaking** Downloading the participant's private keys via its admin API is now disabled by default.
       For participants that do not use KMS, this breaks participant identities dumps, including periodic backups
       (`participantIdentitiesBackup`), the validator's `/v0/admin/participant/identities` endpoint, and SV identities dumps.
-      These now fail with an error that explains how to re-enable key downloads.
       To re-enable them, set `enableKeyDownload: true` in the `splice-participant` Helm chart,
       or pass `--enable-key-download` to the Docker Compose validator's `start.sh`.
       Participants that use KMS are not affected, as their identities dumps do not include private keys.

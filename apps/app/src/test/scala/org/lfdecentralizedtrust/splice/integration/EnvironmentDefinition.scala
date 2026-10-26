@@ -646,8 +646,7 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
     EnvironmentDefinition(baseConfig = withConsolePreviewCommands(config), context = testName)
   }
 
-  // Our test configs include `canton-basic.conf`, which disables preview features so that
-  // Canton nodes disallow downloading private keys. The test console still needs preview commands.
+  // TODO(DACH-NY/canton-network-internal#7687): Revisit usages once the dedicated `enable-key-download` flag is available
   private def withConsolePreviewCommands(config: SpliceConfig): SpliceConfig =
     config.focus(_.features.enablePreviewCommands).replace(true)
 

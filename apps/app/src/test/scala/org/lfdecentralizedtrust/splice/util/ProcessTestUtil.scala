@@ -14,11 +14,9 @@ import scala.util.Using
 object ProcessTestUtil {
   val javaToolOptionsKey = "JAVA_TOOL_OPTIONS"
 
-  /** Extra config for external Canton processes that allows downloading private keys via the admin API,
-    * which is disallowed by default (see `include/canton-basic.conf`).
-    */
   // TODO(DACH-NY/canton-network-internal#7687): Switch to the dedicated `enable-key-download` flag once available.
   val enableKeyDownloadConfig = "canton.features.enable-preview-commands=yes"
+
   final case class Process(process: java.lang.Process) {
     def destroyAndWait(): Unit = {
       process.destroy()
