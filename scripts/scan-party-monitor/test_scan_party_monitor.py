@@ -202,6 +202,9 @@ def summary(match: Optional[Json]) -> Dict[str, List[Tuple[str, str, str]]]:
 ### fakes
 
 
+FAKE_BACKOFF_SECONDS = 30
+
+
 class FakeScan(spm.ScanClient):
     """Scan with a single ACS snapshot at SNAPSHOT of migration 0, and the given updates after it."""
 
@@ -216,6 +219,10 @@ class FakeScan(spm.ScanClient):
         # pressed.
         self.interrupt_acs_request: Optional[int] = None
         self.interrupt_updates_request: Optional[int] = None
+        # Updates request (1-based) -> how many attempts fail before it is answered. Each failure
+        # advances `clock` by FAKE_BACKOFF_SECONDS, as ScanClient's backoff would.
+        self.failed_updates_attempts: Dict[int, int] = {}
+        self.clock = 0.0
 
     def _call(
         self,
@@ -224,7 +231,12 @@ class FakeScan(spm.ScanClient):
         path: str,
         body: Optional[Json] = None,
         query: Optional[Dict[str, Any]] = None,
+        on_retry: Callable[[], None] = lambda: None,
     ) -> Json:
+        if path == "/v2/updates":
+            for _ in range(self.failed_updates_attempts.get(len(self.updates_requests) + 1, 0)):
+                self.clock += FAKE_BACKOFF_SECONDS
+                on_retry()
         return self.handle(method, path, body, query)
 
     def handle(self, method: str, path: str, body: Optional[Json], query: Optional[Dict[str, Any]]) -> Json:
@@ -850,6 +862,17 @@ class StreamTest(MonitorTestCase):
                 self.assertEqual([m["update_id"] for m in self.run_monitor(ONLY_ALICE)], repeated)
                 self.assertEqual(len(self.slack.posts), 1 if slack_configured else 0)
 
+    def test_alerts_are_posted_while_scan_requests_are_retried(self) -> None:
+        self.scan.updates = unexpected_transfers(2)
+        # u1 is due on Slack during the second backoff; then the run is killed.
+        self.scan.failed_updates_attempts = {2: 2}
+        self.scan.interrupt_updates_request = 2
+        with mock.patch("scan_party_monitor.time.monotonic", lambda: self.scan.clock):
+            self.run_monitor(ONLY_ALICE, "--updates-page-size", "1", raises=KeyboardInterrupt)
+        self.assertEqual(len(self.slack.posts), 1)
+        self.assertIn("`u1`", self.slack.posts[0])
+        self.assertEqual(self.meta(Meta.CURSOR_RECORD_TIME), at(1))
+
 
 class ReconfigurationTest(MonitorTestCase):
     def test_adding_a_party_reseeds_without_repeating_alerts(self) -> None:
@@ -937,8 +960,10 @@ class HttpTest(unittest.TestCase):
         ]
         with no_proxy(), http_server(self.respond) as url, captured_logs() as logs:
             scan = spm.ScanClient(url, 0, 0)
-            self.assertEqual(scan.get_updates(0, SNAPSHOT, 10), [])
+            retries: List[int] = []
+            self.assertEqual(scan.get_updates(0, SNAPSHOT, 10, on_retry=lambda: retries.append(len(self.requests))), [])
         self.assertEqual(len(self.requests), 5)
+        self.assertEqual(retries, [1, 2, 3, 4])
         self.assertTrue(any("IncompleteRead" in m for m in logs), logs)
         self.assertEqual(
             self.requests[-1],

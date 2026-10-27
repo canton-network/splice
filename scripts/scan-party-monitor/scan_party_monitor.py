@@ -46,7 +46,7 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime, timezone
-from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 
 VERSION = "0.2.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
@@ -307,7 +307,9 @@ class ScanClient:
         path: str,
         body: Optional[Json] = None,
         query: Optional[Dict[str, Any]] = None,
+        on_retry: Callable[[], None] = lambda: None,
     ) -> Json:
+        """Retries until Scan answers; calls `on_retry` after each backoff, before retrying."""
         url = f"{self.url}/api/scan{path}"
         if query:
             url += "?" + urllib.parse.urlencode(query)
@@ -335,6 +337,7 @@ class ScanClient:
                 f"{content.decode(errors='replace')[:200]}); retrying in {delay:.0f}s"
             )
             time.sleep(delay)
+            on_retry()
         raise AssertionError("unreachable")
 
     def get_migration_id(self) -> int:
@@ -369,7 +372,11 @@ class ScanClient:
         return self._call(self.acs_pacer, "POST", "/v2/state/acs", body)
 
     def get_updates(
-        self, after_migration_id: int, after_record_time: str, page_size: int
+        self,
+        after_migration_id: int,
+        after_record_time: str,
+        page_size: int,
+        on_retry: Callable[[], None] = lambda: None,
     ) -> List[Json]:
         body: Json = {
             "after": {
@@ -378,9 +385,9 @@ class ScanClient:
             },
             "page_size": page_size,
         }
-        transactions: List[Json] = self._call(self.updates_pacer, "POST", "/v2/updates", body)[
-            "transactions"
-        ]
+        transactions: List[Json] = self._call(
+            self.updates_pacer, "POST", "/v2/updates", body, on_retry=on_retry
+        )["transactions"]
         return transactions
 
 
@@ -777,10 +784,29 @@ class Monitor:
         # together with the cursor, once they have been posted.
         unposted: List[Json] = []
         oldest_unposted = 0.0
+
+        def deliver(now: bool) -> None:
+            """Posts the unposted matches if `now` or they are due, and then commits the updates
+            up to them. Called between pages, also while Scan requests are retried."""
+            nonlocal unposted
+            if (
+                self.slack is None
+                or not unposted
+                or now
+                or time.monotonic() - oldest_unposted >= self.args.slack_batch_seconds
+            ):
+                if unposted and self.slack is not None:
+                    self.slack.post(format_slack_message(unposted))
+                unposted = []
+                store.commit()
+                store.begin()
+
         stop_at = None if self.args.stop_at_record_time is None else parse_time(self.args.stop_at_record_time)
         store.begin()
         while True:
-            updates = self.scan.get_updates(migration_id, record_time, self.args.updates_page_size)
+            updates = self.scan.get_updates(
+                migration_id, record_time, self.args.updates_page_size, on_retry=lambda: deliver(False)
+            )
             caught_up = len(updates) < self.args.updates_page_size
             # Record times overlapping across migrations were only possible before logical
             # synchronizer upgrades and never happened; with LSU they cannot happen.
@@ -807,18 +833,7 @@ class Monitor:
                 self.stats["transactions"] += len(in_range)
                 self.forget_reported_until(position(migration_id, record_time))
 
-            if (
-                self.slack is None
-                or not unposted
-                or caught_up
-                or reached_stop
-                or time.monotonic() - oldest_unposted >= self.args.slack_batch_seconds
-            ):
-                if unposted and self.slack is not None:
-                    self.slack.post(format_slack_message(unposted))
-                unposted = []
-                store.commit()
-                store.begin()
+            deliver(caught_up or reached_stop)
 
             now = time.monotonic()
             if now - last_heartbeat >= self.args.heartbeat_interval_seconds:
