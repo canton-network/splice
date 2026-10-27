@@ -879,10 +879,10 @@ class DbScanAppRewardsStore(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
-    val appIssuance = params.issuancePerAppBurnCCPerMB
-    val assetIssuance = params.issuancePerAssetBurnCCPerMB
-    val assetBurnRate = params.issuancePerAssetBurnCC
-    val appBurnRate = params.issuancePerAppBurnCC
+    val appRatePerMB = params.issuancePerAppBurnCCPerMB
+    val assetRatePerMB = params.issuancePerAssetBurnCCPerMB
+    val appRatePerCC = params.issuancePerAppBurnCC
+    val assetRatePerCC = params.issuancePerAssetBurnCC
     val threshold = params.appRewardCouponThresholdCC
     val unclaimed = params.unclaimedMintingAllowanceCC
     val totalAppRewardFromAppActivity = params.appMintingAllowanceCC
@@ -895,9 +895,9 @@ class DbScanAppRewardsStore(
              -- saving one Numeric multiplication per row.
              select app_provider_party,
                     (cast(total_app_activity_weight as decimal(38,10)) / 1000000.0)
-                      * $appIssuance
+                      * $appRatePerMB
                     + (cast(total_asset_activity_weight as decimal(38,10)) / 1000000.0)
-                      * $assetIssuance
+                      * $assetRatePerMB
                       as combined_amount
              from #${Tables.appActivityPartyTotals}
              where history_id = $historyId and round_number = $roundNumber
@@ -928,7 +928,7 @@ class DbScanAppRewardsStore(
              $unclaimed,
              count(*),
              $totalAppRewardFromAppActivity, $totalAppRewardFromAssetActivity,
-             $appBurnRate, $assetBurnRate
+             $appRatePerCC, $assetRatePerCC
            from inserted_parties""").asUpdate
   }
 
