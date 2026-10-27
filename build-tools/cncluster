@@ -2362,8 +2362,7 @@ function subcmd_request_pam() {
 ###
 subcommand_whitelist[dump_identities]="Dump all node identities to a file"
 # Nodes that disallow key downloads cannot serve an identities dump; their IDs are reported as this marker instead.
-# TODO(DACH-NY/canton-network-internal#7687): Add dedicated endpoints to validators and SVs that return just the node IDs,
-#   so that this command works for all deployed nodes again.
+# TODO(DACH-NY/canton-network-internal#7687): Add dedicated endpoints to validators and SVs that return just the node IDs, so that this command works for all deployed nodes again.
 KEY_DOWNLOADS_DISABLED="<key downloads disabled>"
 function subcmd_dump_identities() {
     _cluster_must_exist

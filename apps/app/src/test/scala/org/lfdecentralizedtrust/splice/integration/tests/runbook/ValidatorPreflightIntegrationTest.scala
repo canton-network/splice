@@ -641,7 +641,7 @@ class Validator1PreflightIntegrationTest extends ValidatorPreflightIntegrationTe
   override protected val isDevNet = true
   override protected val auth0 = auth0UtilFromEnvVars("dev")
   override protected val validatorName = "validator1"
-  // Key downloads are only enabled for the validator runbook (see `cluster/configs/shared/scratchnet.yaml`)
+  // Key downloads are usually disabled for validator1 on testing clusters
   override protected def keyDownloadEnabled = false
   override protected val validatorAuth0Secret =
     sys.env("SPLICE_OAUTH_DEV_CLIENT_ID_VALIDATOR1")

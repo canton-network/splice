@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-// Periodic participant identities backups download the participant's private keys, unless the participant uses KMS.
-// Fail the deployment early instead of letting every backup fail at runtime.
+// For periodic participant identities backups we must be able to download the participant's private keys,
+// unless the participant uses KMS.
 export function checkKeyDownloadForPeriodicBackups(
   nodeName: string,
   {
