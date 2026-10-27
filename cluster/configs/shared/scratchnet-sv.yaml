@@ -10,7 +10,8 @@ svApp:
     requests:
       cpu: "1"
       memory: 2Gi
-
+  trafficBasedOnboarding: true
+  enableInternalTrafficFaucet: true
 scanApp:
   resources:
     limits:

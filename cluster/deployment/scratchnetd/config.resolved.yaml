@@ -327,6 +327,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -334,6 +335,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -402,6 +404,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -409,6 +412,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
@@ -480,6 +484,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -487,6 +492,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -555,6 +561,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -562,6 +569,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -630,6 +638,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -637,6 +646,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -705,6 +715,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -712,6 +723,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -780,6 +792,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -787,6 +800,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -855,6 +869,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -862,6 +877,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -930,6 +946,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -937,6 +954,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1005,6 +1023,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1012,6 +1031,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1080,6 +1100,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1087,6 +1108,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1155,6 +1177,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1162,6 +1185,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1230,6 +1254,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1237,6 +1262,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1305,6 +1331,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1312,6 +1339,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1380,6 +1408,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1387,6 +1416,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1455,6 +1485,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1462,6 +1493,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1530,6 +1562,7 @@ svs:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1537,6 +1570,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       resources:
         limits:
@@ -1611,6 +1645,7 @@ svs:
           value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
+      enableInternalTrafficFaucet: true
       resources:
         limits:
           cpu: '3'
@@ -1618,6 +1653,7 @@ svs:
         requests:
           cpu: '1'
           memory: '2Gi'
+      trafficBasedOnboarding: true
     validatorApp:
       auth0:
         clientId: 'fBFpzZSRuufk9ueV2pSEkOXNYXuQtVmY'
@@ -1661,6 +1697,7 @@ validator1:
     version: '1.11.1'
 validators:
   validator-runbook:
+    enableInternalAutoOnboardingThroughSvTrafficFaucet: true
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
