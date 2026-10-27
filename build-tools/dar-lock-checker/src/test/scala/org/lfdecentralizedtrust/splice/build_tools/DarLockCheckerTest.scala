@@ -161,53 +161,43 @@ class DarLockCheckerTest extends AnyWordSpec with Matchers {
     }
   }
 
-  "rewritePackageJson" should {
-    "bump the version suffix on a @daml.js/ entry without touching others" in {
-      val json =
-        """{
-          |  "dependencies": {
-          |    "@daml.js/splice-amulet": "file:common/frontend/daml.js/splice-amulet-0.1.18",
-          |    "@daml.js/splice-wallet": "file:common/frontend/daml.js/splice-wallet-0.1.19"
-          |  }
-          |}""".stripMargin
-      val expected =
-        """{
-          |  "dependencies": {
-          |    "@daml.js/splice-amulet": "file:common/frontend/daml.js/splice-amulet-0.1.19",
-          |    "@daml.js/splice-wallet": "file:common/frontend/daml.js/splice-wallet-0.1.19"
-          |  }
-          |}""".stripMargin
-      DarLockChecker.rewritePackageJson(json, pkg("splice-amulet"), ver("0.1.19")) shouldBe expected
+  "rewriteGeneratedPackages" should {
+    val generated =
+      """{
+        |  "damlJs": {
+        |    "directory": "common/frontend/daml.js",
+        |    "aliases": {
+        |      "splice-amulet": "splice-amulet-0.1.18",
+        |      "ans": "splice-amulet-name-service-0.1.19",
+        |      "splice-wallet": "splice-wallet-0.1.19"
+        |    }
+        |  }
+        |}""".stripMargin
+
+    "bump the version suffix of one package without touching others" in {
+      val result =
+        DarLockChecker.rewriteGeneratedPackages(generated, pkg("splice-amulet"), ver("0.1.19"))
+      result shouldBe generated
+        .replace("splice-amulet-0.1.18", "splice-amulet-0.1.19")
     }
 
     "leave the file unchanged when the package is not referenced" in {
-      val json =
-        """{
-          |  "dependencies": {
-          |    "@daml.js/splice-wallet": "file:common/frontend/daml.js/splice-wallet-0.1.18"
-          |  }
-          |}""".stripMargin
-      DarLockChecker.rewritePackageJson(json, pkg("splice-amulet"), ver("0.1.19")) shouldBe json
+      DarLockChecker.rewriteGeneratedPackages(
+        generated,
+        pkg("splice-wallet-payments"),
+        ver("0.1.19"),
+      ) shouldBe generated
     }
 
     "match entries whose alias differs from the package name" in {
-      val json =
-        """{
-          |  "dependencies": {
-          |    "@daml.js/ans": "file:common/frontend/daml.js/splice-amulet-name-service-0.1.19"
-          |  }
-          |}""".stripMargin
-      val expected =
-        """{
-          |  "dependencies": {
-          |    "@daml.js/ans": "file:common/frontend/daml.js/splice-amulet-name-service-0.1.20"
-          |  }
-          |}""".stripMargin
-      DarLockChecker.rewritePackageJson(
-        json,
+      val result = DarLockChecker.rewriteGeneratedPackages(
+        generated,
         pkg("splice-amulet-name-service"),
         ver("0.1.20"),
-      ) shouldBe expected
+      )
+      result shouldBe generated
+        .replace("splice-amulet-name-service-0.1.19", "splice-amulet-name-service-0.1.20")
+      result should include("\"splice-amulet\": \"splice-amulet-0.1.18\"")
     }
   }
 }

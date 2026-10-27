@@ -305,6 +305,7 @@ object BuildCommon {
       Seq(
         organization := "org.lfdecentralizedtrust.splice",
         scalaVersion := scala_version,
+        dependencyOverrides ++= Dependencies.pinnedTransitiveVersions,
         // , scalacOptions += "-Ystatistics" // re-enable if you need to debug compile times
       )
     )
@@ -1273,6 +1274,21 @@ object BuildCommon {
         log: ManagedLogger,
     ) = runCommand(
       Seq("npm", "run", script, "--workspace", workspace),
+      log,
+      None,
+      Some(workingDir),
+    )
+
+    /** Compiles a generated OpenAPI client (a directory with its own tsconfig.json) to
+      * its dist/ output. These clients are linked into node_modules by
+      * apps/scripts/link-generated-packages.mjs rather than declared as workspaces.
+      */
+    def buildOpenApiClient(
+        workingDir: File,
+        clientDir: String,
+        log: ManagedLogger,
+    ) = runCommand(
+      Seq("node_modules/.bin/tsc", "-p", clientDir),
       log,
       None,
       Some(workingDir),

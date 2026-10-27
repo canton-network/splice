@@ -4,6 +4,8 @@
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "canton-participant"
 enableHealthProbes: true
+# Enable the HTTP health endpoints (port 5071) and use them instead of the gRPC health service (port 5061) for the probes
+httpHealthProbes: true
 
 # Custom annotations and labels for deployed resources
 pod:
