@@ -421,7 +421,7 @@ function buildRewardConfigChanges(
       currentValue: before?.dsoAppActivityWeight || '',
       newValue: after?.dsoAppActivityWeight || '',
       description:
-        'Weight applied to DSO app activity (default: 0.5). Leave blank to use the protocol default.',
+        'Weight applied to DSO app activity (default: 0.1). Leave blank to use the protocol default.',
     },
   ] as ConfigChange[];
 }
