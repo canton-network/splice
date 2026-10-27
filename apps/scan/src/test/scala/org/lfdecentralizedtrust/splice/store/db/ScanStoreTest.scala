@@ -263,6 +263,12 @@ abstract class ScanStoreTest
         val largeFull = governanceLock(owner, amount = BigDecimal(40), kind = sv1)
         val vesting =
           governanceLock(owner, BigDecimal(20), kind = sv1, vestingEndTime = Some(vestingEndTime))
+        val vestingLaterEndTime = governanceLock(
+          owner,
+          BigDecimal(20),
+          kind = sv1,
+          vestingEndTime = Some(vestingEndTime.plusSeconds(1)),
+        )
         val faLock = governanceLock(
           owner,
           BigDecimal(20),
@@ -290,12 +296,6 @@ abstract class ScanStoreTest
             owner,
             BigDecimal(20),
             kind = sv1,
-            vestingEndTime = Some(vestingEndTime.plusSeconds(1)),
-          ),
-          governanceLock(
-            owner,
-            BigDecimal(20),
-            kind = sv1,
             vestingEndTime = Some(vestingEndTime),
             vestingPeriod = new RelTime(2_000_000),
           ),
@@ -303,12 +303,15 @@ abstract class ScanStoreTest
         for {
           store <- mkStore()
           _ <- MonadUtil.sequentialTraverse(
-            Seq(smallFull, largeFull, vesting, faLock) ++ others
+            Seq(smallFull, largeFull, vesting, vestingLaterEndTime, faLock) ++
+              others
           )(dummyDomain.create(_)(store.multiDomainAcsStore))
         } yield {
           listByKey(store, keyOf(smallFull), 10) shouldBe
             Seq(largeFull.contractId, smallFull.contractId)
           listByKey(store, keyOf(vesting), 10) shouldBe Seq(vesting.contractId)
+          listByKey(store, keyOf(vestingLaterEndTime), 10) shouldBe
+            Seq(vestingLaterEndTime.contractId)
           listByKey(store, keyOf(faLock), 10) shouldBe Seq(faLock.contractId)
         }
       }
