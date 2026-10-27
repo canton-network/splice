@@ -8,13 +8,18 @@
 # - `git fetch` / `git clone` without --depth, --deepen, --shallow-* or --filter
 # A finding is allowed if the line or the line above contains `# full-history-ok: <reason>`.
 # Calls through wrapper functions are not checked; annotate the wrapper's own `git fetch`.
+# Usable as a library: another repo's script can `run()` this with its own pathspecs.
 
+import argparse
 import os
 import re
 import sys
+from collections.abc import Sequence
 
 import git
 
+# Default pathspecs for the splice layout. Other repositories can import this file and call
+# `run(pathspecs)` with their own list, or pass `--pathspec` (repeatable) on the command line.
 PATHSPECS = [
     ".github",
     "scripts",
@@ -55,12 +60,14 @@ def check_file(path: str) -> list[str]:
     return findings
 
 
-def main() -> None:
+def run(pathspecs: Sequence[str]) -> None:
+    """Checks the git repository containing the current directory (not the one containing this
+    file), restricted to `pathspecs` (as in `git ls-files`). Exits non-zero on findings."""
     repo = git.Repo(search_parent_directories=True)
     if repo.working_tree_dir is None:
         sys.exit("ERROR: not in a git working tree")
     os.chdir(repo.working_tree_dir)
-    paths: list[str] = repo.git.ls_files("--", *PATHSPECS).splitlines()
+    paths: list[str] = repo.git.ls_files("--", *pathspecs).splitlines()
     findings = [
         finding
         for path in paths
@@ -79,6 +86,17 @@ def main() -> None:
         sys.exit(1)
     else:
         print("No unbounded git fetches found.")
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--pathspec",
+        action="append",
+        help="git pathspec to check, repeatable; replaces the default PATHSPECS",
+    )
+    args = parser.parse_args(argv)
+    run(args.pathspec or PATHSPECS)
 
 
 if __name__ == "__main__":
