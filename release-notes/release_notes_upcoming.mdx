@@ -80,30 +80,6 @@
        `canton.validator-apps.validator_backend.support-embedded-party-signing-keys = false` but it is recommended to instead make sure that the
        `ValidatorRight` contracts are [configured such that they won't start automation](https://docs.canton.network/global-synchronizer/production-operations/scalability#bypassing-the-limit).
 
-  - Daml
-
-    - **Implement traffic purchases via token standard transfers:** a V1 or V2 token standard transfer to the receiver party
-      `splice_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd`
-      with the memo set to `splice/memo:member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>[&forfeit-validator-reward-coupon=<true|false>]`
-      burns the full transfer `amount` and creates a `MemberTraffic` contract instead of transferring amulet.
-      The purchased traffic is calculated from the CC price and traffic price in the referenced `ExternalPartyConfigState`
-      and rounded down to whole bytes.
-      Any sub-byte remainder is also burned. Purchases below the minimum traffic top-up amount are rejected.
-      By default, the transaction must be executed within about 10 minutes after it is prepared
-      due to its dependency on the `OpenMiningRound` contract of the current round.
-      If you need more time, set the optional `forfeit-validator-reward-coupon` memo key to `true` to skip the validator reward coupon for the traffic burn.
-
-    - Traffic purchases, including those made through `AmuletRules_BuyMemberTraffic`, now include the purchased
-      traffic in bytes and the memo in the `splice.lfdecentralizedtrust.org/reason` of their burn and transaction metadata:
-      `splice/memo:purchased-traffic-bytes=<int>&member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>`
-
-    - Added three new fields: `trafficPrice`, `supportedSynchronizerIds` and
-      `minTrafficTopupAmount` to `ExternalPartyConfigState`.
-
-      **Action required from validator operators:** Upgrade to this release, which vets `splice-amulet 0.1.25`,
-      **before** the SVs vote to adopt it. After that vote, new `ExternalPartyConfigState` contracts will set the new fields
-      and can no longer be downgraded to an older `splice-amulet` version. Validators that are not upgraded will no longer
-      process Token Standard transfers and CC allocations.
 
 ## Upcoming for next minor release (template):
 
@@ -129,7 +105,7 @@
 
     - Daml Model Changes:
 
-      - Add governance locks, which implement on-chain enforcement of Featured App (FA) and Super Validator (SV)
+      - **Add governance locks**, which implement on-chain enforcement of Featured App (FA) and Super Validator (SV)
         locking as specified in [CIP-127](https://github.com/canton-foundation/cips/blob/main/cip-0127/cip-0127.md).
         This release implements the following increments of the
         [CIP-127 incremental delivery plan](https://github.com/canton-foundation/cips/blob/main/cip-0127/cip-0127.md#incremental-delivery-plan):
@@ -145,6 +121,27 @@
 
       - Add an optional `governanceLockConfig` field to `AmuletConfig` with the minimum lock amount (default 10,000 CC)
         and the vesting durations for SV locks (default 365.25 days) and FA locks (default 60 days).
+
+      - **Implement traffic purchases via token standard transfers:** a V1 or V2 token standard transfer to the receiver party
+        `splice_traffic-manager::1220000000000000000000000000000000000000000000000000000000000000abcd`
+        with the memo set to `splice/memo:member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>[&forfeit-validator-reward-coupon=<true|false>]`
+        burns the full transfer `amount` and creates a `MemberTraffic` contract instead of transferring amulet.
+        The purchased traffic is calculated from the CC price and traffic price in the referenced `ExternalPartyConfigState`
+        and rounded down to whole bytes.
+        Any sub-byte remainder is also burned. Purchases below the minimum traffic top-up amount are rejected.
+        By default, the transaction must be executed within about 10 minutes after it is prepared
+        due to its dependency on the `OpenMiningRound` contract of the current round.
+        If you need more time, set the optional `forfeit-validator-reward-coupon` memo key to `true` to skip the validator reward coupon for the traffic burn.
+
+      - Traffic purchases, including those made through `AmuletRules_BuyMemberTraffic`, now include the purchased
+        traffic in bytes and the memo in the `splice.lfdecentralizedtrust.org/reason` of their burn and transaction metadata:
+        `splice/memo:purchased-traffic-bytes=<int>&member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>`
+
+      - Added three new fields: `trafficPrice`, `supportedSynchronizerIds` and
+        `minTrafficTopupAmount` to `ExternalPartyConfigState`.
+
+      - Forbid using `splice/memo` or `cip-[0-9]*/memo` as the prefix of a normal token standard transfer
+        to avoid confusion with the special transfers introduced for governance locks and traffic purchases.
 
       - These changes require a Daml upgrade to the following versions:
 

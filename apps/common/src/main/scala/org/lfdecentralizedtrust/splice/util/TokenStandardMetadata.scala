@@ -12,7 +12,7 @@ object TokenStandardMetadata {
 
   // Mirrors "trafficPurchaseReceiver" in splice.ExternalPartyAmuletRules.daml.
   val trafficPurchaseReceiver =
-    "splice_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd"
+    "splice_traffic-manager::1220000000000000000000000000000000000000000000000000000000000000abcd"
 
   val expireLockKey = "expire-lock"
 }
