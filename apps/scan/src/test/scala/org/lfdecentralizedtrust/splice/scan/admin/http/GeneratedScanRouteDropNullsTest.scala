@@ -26,9 +26,9 @@ import scala.collection.immutable.SortedMap
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 
-/** Proves that the **generated** guardrail route code drops only the `external_transaction_hash`
-  * null field from JSON responses via the custom `Encoder` instances provided by
-  * [[ScanJsonSupport]], while retaining all other null fields.
+/** Proves that the **generated** guardrail route code drops `Option[OmitNullString]`-typed null
+  * fields from JSON responses via the custom `Encoder` instances provided by [[ScanJsonSupport]],
+  * while retaining all other null fields.
   */
 class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with ScalatestRouteTest {
 
@@ -83,12 +83,11 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
       }
     }
 
-    "retain other null fields in targeted response types (only external_transaction_hash is dropped)" in {
+    "retain other null fields in targeted response types (OmitNullString fields are the only ones dropped)" in {
       val handler = mock[ScanHandler[Unit]]
 
       // EventHistoryItem has several Option fields (update, verdict, etc.) — they should
-      // remain as null in JSON. Only external_transaction_hash (nested inside update)
-      // should be dropped when null.
+      // remain as null in JSON. OmitNullString fields should be dropped when null.
       val txV2 = UpdateHistoryTransactionV2(
         updateId = "update-2",
         migrationId = 0L,
@@ -131,6 +130,9 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
         json.hcursor.downField("verdict").focus shouldBe Some(Json.Null)
         json.hcursor.downField("traffic_summary").focus shouldBe Some(Json.Null)
         json.hcursor.downField("app_activity_records").focus shouldBe Some(Json.Null)
+
+        // submitting_app_provider was None, so must be absent from the JSON
+        json.hcursor.downField("submitting_app_provider").focus shouldBe None
 
         // But external_transaction_hash inside the nested transaction should be absent
         val txJson = json.hcursor.downField("update")
