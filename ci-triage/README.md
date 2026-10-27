@@ -277,3 +277,29 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | `ray/fix-10184-mediator-pruning-backoff-ignore` | 439cf863f1 | 10184: sim-time-only ignore for the mediator pruning scheduler backoff after a >= 30 d jump | rg against the run: WARN line 1, `Pruned up to` 0, whole log 1; not run through CI |
 | `ray/fix-10183-reset-namespace-late-proposer` | 5792168c1f | 10183: `ResetDecentralizedNamespace` tolerates a rejected proposal from an owner whose signature the threshold no longer needs; assertion accepts ALREADY_EXISTS and NO_APPROPRIATE_SIGNING_KEY | apps-app/Test/scalafmtCheck (see packet); NOT compiled/run; rename once the ref is confirmed |
 | `ray/fix-10197-bft-read-confirmation-wait` | 964e7df114 | 10197: 90 s budget for the two-confirmation check in TrafficBasedRewardsSvAppTimeBasedIntegrationTest.confirmBftRead | apps-app/Test/scalafmtCheck (see packet); NOT compiled/run |
+
+# CI failure triage - 2026-10-27
+
+Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | branch sha (PR) | job id and name | canton pin |
+|--------|--------|-----------------|-----------------|------------|
+| 10627 | 40359027430 | main 1edbbc4e6d (#7835) | 121699912134 `simtime (0)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
+| 10628 | 40358978037 | main 093005d8db (#7963) | 121699722984 `simtime (0)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
+| 10606 | 40307406863 | release-line-0.9.x 3eb742f434 (#7967) | 121520389410 `logical-sync-upgrade (0)` | 3.6.4 |
+| 10611 | 40313835584 | main bb5b8554a9 (#7818) | 121541858995 `wall-clock-time (8)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
+| 10612 | 40313835584 | main bb5b8554a9 (#7818) | 121541859078 `wall-clock-time (9)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
+| 10493 | CircleCI cn-internal pipeline 87085 `deploy_cimain` job 524319 | - | - | not reachable (403) |
+| 10637 | CircleCI cn-internal pipeline 87235 `bump_splice` job 525023 | - | - | not reachable (403) |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Packet + resolution / status |
+|--------|--------------------|--------------|------------------------------|
+| 10627 / 10628 | GovernanceLockTimeBasedIntegrationTest TSv1 vesting start compared with sub-second precision (`09:35:20Z was not equal to 09:35:20.999Z`) | - (10628 dup of 10627) | `10627-10628-governance-lock-tsv1-vesting-start-subsecond.md`. Test bug from #7961, FIXED by #7978 (cddc435d40, `truncateInstant`); first main run with it (40361408548) green. Close. |
+| 10606 | sv1Scan DB query retried forever after the test's teardown stopped sv1Scan (10:54:19.176); sv2 CalculateRewardsTrigger's root-hash GET arrived 37 ms later | new family | `10606-scan-request-during-shutdown-db-retry-forever.md`. Flake; fix in ScanApp shutdown order (stop HTTP before storage) or fail-fast on closing storage; test-side: stop SVs before scans. Keep open. |
+| 10611 | aliceValidator circuit breaker WARN on 20x SUBMISSION_ALREADY_IN_FLIGHT; first top-up send rejected by sv1 BFT sequencer `P2P connectivity is not ready (authenticated = 1 < dissemination quorum = 2)` at 11:30:11.771, epoch 21 1 -> 4 at 11:30:09.636 | 10165 (family B) | `10611-topup-trigger-in-flight-circuit-breaker-bft-quorum.md`. Flake. Close as dup of 10165. |
+| 10612 | `Token refresh failed: RejectedExecutionException: event executor terminated` from sv1StandaloneSequencer in the after-shutdown standalone log (BFT P2P peer sender blocking close) | 10147 family | `10612-bft-standalone-token-refresh-after-shutdown.md`. Flake. Close as dup of 10147. |
+| 10493 / 10637 | CircleCI `deploy_cimain` / `bump_splice` failures | probably 10494 (CANTON_PROTOCOL_VERSION) | Logs not reachable from the sandbox; needs the failing step output pasted. |

@@ -29,6 +29,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `custom-timeouts` entry for `onboardSvSequencer`, or extend the `onboard/validator` timeout ignore.
 - Umbrella 10165 (10094 and 10153 closed as dups; 10161 same). Occurs during any initDso with 3-4 SVs
   (ValidatorIntegrationTest, SvOnboardingIntegrationTest, SvDsoPartyManagementIntegrationTest).
+- Third signature (10611, 2026-10-26, CopyVotesIntegrationTest): a participant send rejected with
+  `SEQUENCER_UNAVAILABLE: P2P connectivity is not ready (authenticated = 1 < dissemination quorum = 2)` is not
+  retried (`Retry has not been configured for GrpcServiceUnavailable, giving up`), the command stays in flight until
+  max sequencing time (`UnSequencedCommandRejected` ~60 s later), the trigger's resubmits get
+  `SUBMISSION_ALREADY_IN_FLIGHT`, and after 20 the `SpliceCircuitBreaker` WARNs `tripped after 20 failures`.
 
 ## C. False off-boarding conclusion during onboarding state transfer (10048 family) - FIXED
 - Signatures: `Received topology for epoch N, but this node isn't part of it (i.e., it has been off-boarded)` on a
@@ -81,6 +86,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10144 GetPreferredPackages INTERNAL while a DAR upload merges into the package metadata view (Canton race,
   cn-test-failures 9136).
 - 10147 `[UNEXPECTED] State transition ... Connecting (unchanged)` WARN at standalone shutdown (Canton log level).
+  Same family, other line (10612): `Token refresh failed` with `RejectedExecutionException: event executor
+  terminated` in a standalone `_after_shutdown` log, preceded by `At least 1 active readers prevent closing ...
+  p2p-create-peer-sender` and 0.5 s token retries against the closed peer.
+- 10606 (new): scan app serves an HTTP request after its DB storage closed (test teardown stops scans before SVs);
+  `DB_STORAGE_DEGRADATION ... RejectedExecutionException ... [Terminated ...]` retried as `transient error (request
+  infinite retries)` until environment close. Confirm: `Stopping <scan> node` tens of ms before the first
+  DB_STORAGE_DEGRADATION, and an incoming `HTTP GET` on that scan in between (peer trigger trace).
 - 10121 / 10142 SummarizingMiningRoundTrigger ERROR on a retryable "totals not yet computed"
   (`ray/fix-summarizing-round-log-noise`).
 - 10084 re-triaged 2026-09-22: `IndexerState.ensureNoProcessingForSynchronizer` (reconnect path) retries at 200 ms
