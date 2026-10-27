@@ -92,7 +92,7 @@ final case class RewardComputationInputs(
     )
 
     // Convert Numeric → BigDecimal at the output boundary for SQL.
-    RewardIssuanceParams(
+    val issuanceParams = RewardIssuanceParams(
       appRewardCouponThresholdCC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
       unclaimedMintingAllowanceCC = BigDecimal(assetTranche.unclaimedAllowance),
       appMintingAllowanceCC = BigDecimal(appTranche.claimedAllowance),
@@ -103,6 +103,19 @@ final case class RewardComputationInputs(
         BigDecimal(mul(trafficPriceInCCPerMB, assetTranche.issuanceRatio)),
       issuancePerAssetBurnCC = BigDecimal(assetTranche.issuanceRatio),
     )
+    // The tranche splits use only subtraction (no multiplication), so the
+    // three minting-allowance components reconstruct the round budget exactly.
+    val sumOfAllowances =
+      issuanceParams.appMintingAllowanceCC + issuanceParams.assetMintingAllowanceCC +
+        issuanceParams.unclaimedMintingAllowanceCC
+    val roundBudget = BigDecimal(roundMintingAllowanceCC)
+    require(
+      sumOfAllowances.compare(roundBudget) == 0,
+      s"minting-allowance conservation violated: " +
+        s"appMintingAllowanceCC + assetMintingAllowanceCC + unclaimedMintingAllowanceCC " +
+        s"($sumOfAllowances) != roundMintingAllowanceCC ($roundBudget)",
+    )
+    issuanceParams
   }
 
   /** Convert a bytes-weight to CC via `trafficPriceInCCPerMB`.
@@ -158,7 +171,11 @@ object RewardComputationInputs {
       issuanceRatio: Numeric,
       claimedAllowance: Numeric,
       unclaimedAllowance: Numeric,
-  )
+  ) {
+    requireNonNegative("issuanceRatio", issuanceRatio)
+    requireNonNegative("claimedAllowance", claimedAllowance)
+    requireNonNegative("unclaimedAllowance", unclaimedAllowance)
+  }
 
   private[rewards] def fromLong(x: Long): Numeric =
     damlRight(Numeric.fromLong(scale, x))
