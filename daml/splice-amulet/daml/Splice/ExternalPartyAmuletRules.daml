@@ -396,8 +396,6 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
   -- meta: no extra account information allowed, as Amulet only supports basic accounts
   ensureNoAccountMeta "transfer" "sender" transfer.meta
   ensureNoAccountMeta "transfer" "receiver" transfer.meta
-  -- meta: the reason must not look like a CIP memo, e.g. the memo of a governance lock
-  require "Transfer reason must not start with a cip-<number>/memo prefix" (not $ reasonIsCipMemo transfer.meta)
 
   if transfer.receiver == trafficPurchaseReceiver then do
     -- TODO(#7561): accept a RegisteredSynchronizer to support dedicated synchronizers.
@@ -439,69 +437,75 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
       output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
         receiverHoldingCids = []
       meta = result.meta
-  else case optPreapprovalCid of
-    _ | transfer.receiver `elem` actors -> do
-      -- self-transfer or sender+receiver authorized
-      paymentContext <- unfeaturedPaymentContextFromChoiceContext dso arg.extraArgs.context
-      inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
-      result <- executeExternalPartyTransfer dso paymentContext Transfer with
-        sender = transfer.sender
-        provider = transfer.sender
-        inputs
-        outputs = [ TransferOutput with
-          receiver = transfer.receiver
-          amount = transfer.amount
-          receiverFeeRatio = 0.0
-          lock = None
-          meta = Some transfer.meta]
-        beneficiaries = None
-      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-        senderChangeCids = toInterfaceContractId <$> optionalToList result.senderChangeAmulet
-        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
-          receiverHoldingCids = createdAmuletToHolding <$> result.createdAmulets
-        meta = fromOptional emptyMetadata result.meta
+  else do
+    -- meta: the reason must not look like a CIP memo, e.g. the memo of a governance lock
+    require "Transfer reason must not start with a cip-<number>/memo prefix" (not $ reasonIsCipMemo transfer.meta)
+    -- meta: the reason must not look like a Splice memo, e.g. the memo of a traffic purchase
+    require "Transfer reason must not start with a splice/memo prefix" (not $ reasonIsSpliceMemo transfer.meta)
 
-    None -> do
-      -- prepare a two-step transfer
-      let twoStepTransfer = standardTransferToTwoStepTransfer arg.transfer
-      let requestedAt = arg.transfer.requestedAt
-      paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
-      (lockedAmulet, senderChangeCids, meta) <- prepareTwoStepTransfer twoStepTransfer requestedAt arg.transfer.inputHoldingCids paymentContext
-      -- create the transfer instruction tracking this locked amulet
-      transferInstructionCid <- toInterfaceContractId <$> create AmuletTransferInstruction with
-        transfer = arg.transfer with
-          inputHoldingCids = [toInterfaceContractId lockedAmulet] -- report the locked holding backing the transfer
-        lockedAmulet
-      -- return result
-      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-        senderChangeCids
-        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Pending
-          with
-            transferInstructionCid
-        meta
-
-    Some preapprovalCid -> do
-      -- use a payment context with featuring so the preapproval provider can be featured
-      paymentContext <- externalPartyTransferFromChoiceContext dso extraArgs.context
-      -- execute a direct transfer
-      inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
-      result <- exercise preapprovalCid TransferPreapproval_SendV2
-        with
+    case optPreapprovalCid of
+      _ | transfer.receiver `elem` actors -> do
+        -- self-transfer or sender+receiver authorized
+        paymentContext <- unfeaturedPaymentContextFromChoiceContext dso arg.extraArgs.context
+        inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
+        result <- executeExternalPartyTransfer dso paymentContext Transfer with
           sender = transfer.sender
-          context = paymentContext
+          provider = transfer.sender
           inputs
-          amount = transfer.amount
-          description =
-            -- TODO(tech-debt): remove this once we are sure everybody parses the metadata in the `TransferEventsV2.EventLog_HoldingsChange` and the reason field is no longer needed
-            TextMap.lookup reasonMetaKey transfer.meta.values
-          meta = Some transfer.meta
+          outputs = [ TransferOutput with
+            receiver = transfer.receiver
+            amount = transfer.amount
+            receiverFeeRatio = 0.0
+            lock = None
+            meta = Some transfer.meta]
+          beneficiaries = None
+        pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+          senderChangeCids = toInterfaceContractId <$> optionalToList result.senderChangeAmulet
+          output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
+            receiverHoldingCids = createdAmuletToHolding <$> result.createdAmulets
+          meta = fromOptional emptyMetadata result.meta
 
-      -- return result
-      pure Api.Token.TransferInstructionV1.TransferInstructionResult with
-        senderChangeCids = toInterfaceContractId <$> optionalToList result.result.senderChangeAmulet
-        output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
-          receiverHoldingCids = createdAmuletToHolding <$> result.result.createdAmulets
-        meta = result.meta
+      None -> do
+        -- prepare a two-step transfer
+        let twoStepTransfer = standardTransferToTwoStepTransfer arg.transfer
+        let requestedAt = arg.transfer.requestedAt
+        paymentContext <- unfeaturedPaymentContextFromChoiceContext dso extraArgs.context
+        (lockedAmulet, senderChangeCids, meta) <- prepareTwoStepTransfer twoStepTransfer requestedAt arg.transfer.inputHoldingCids paymentContext
+        -- create the transfer instruction tracking this locked amulet
+        transferInstructionCid <- toInterfaceContractId <$> create AmuletTransferInstruction with
+          transfer = arg.transfer with
+            inputHoldingCids = [toInterfaceContractId lockedAmulet] -- report the locked holding backing the transfer
+          lockedAmulet
+        -- return result
+        pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+          senderChangeCids
+          output = Api.Token.TransferInstructionV1.TransferInstructionResult_Pending
+            with
+              transferInstructionCid
+          meta
+
+      Some preapprovalCid -> do
+        -- use a payment context with featuring so the preapproval provider can be featured
+        paymentContext <- externalPartyTransferFromChoiceContext dso extraArgs.context
+        -- execute a direct transfer
+        inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
+        result <- exercise preapprovalCid TransferPreapproval_SendV2
+          with
+            sender = transfer.sender
+            context = paymentContext
+            inputs
+            amount = transfer.amount
+            description =
+              -- TODO(tech-debt): remove this once we are sure everybody parses the metadata in the `TransferEventsV2.EventLog_HoldingsChange` and the reason field is no longer needed
+              TextMap.lookup reasonMetaKey transfer.meta.values
+            meta = Some transfer.meta
+
+        -- return result
+        pure Api.Token.TransferInstructionV1.TransferInstructionResult with
+          senderChangeCids = toInterfaceContractId <$> optionalToList result.result.senderChangeAmulet
+          output = Api.Token.TransferInstructionV1.TransferInstructionResult_Completed with
+            receiverHoldingCids = createdAmuletToHolding <$> result.result.createdAmulets
+          meta = result.meta
 
 
 -- Token standard allocation factories
