@@ -100,7 +100,7 @@ monitoring:
         deniedRequests:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
-          threshold: 100
+          threshold: 300
         throttleRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
@@ -108,7 +108,7 @@ monitoring:
         wafRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
-          threshold: 10
+          threshold: 50
       cloudSql:
         maintenance: false
       cometbft:
