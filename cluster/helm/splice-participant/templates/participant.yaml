@@ -108,6 +108,7 @@ spec:
         # TODO(DACH-NY/canton-network-internal#7687): Switch to the dedicated `enable-key-download` flag once available.
         - name: ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD
           value: canton.features.enable-preview-commands = yes
+        {{- end }}
         {{- if .Values.httpHealthProbes }}
         - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
           value: canton.participants.participant.monitoring.http-health-server.port = 5071
