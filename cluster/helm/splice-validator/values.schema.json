@@ -1,7 +1,6 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/schema#",
   "type": "object",
-  "unevaluatedProperties": false,
   "properties": {
     "securityContexts": {
       "type": "object",
@@ -22,69 +21,6 @@
     },
     "serviceAccountName": {
       "type": "string"
-    },
-    "pod": {
-      "type": "object"
-    },
-    "service": {
-      "type": "object"
-    },
-    "logLevel": {
-      "type": "string"
-    },
-    "logLevelStdout": {
-      "type": "string"
-    },
-    "apiRequestLogLevel": {
-      "type": "string"
-    },
-    "logAsyncFlush": {
-      "type": "boolean"
-    },
-    "additionalEnvVars": {
-      "type": "array"
-    },
-    "enableReloader": {
-      "type": "boolean"
-    },
-    "extraInitContainers": {
-      "type": "array"
-    },
-    "persistentDataPvc": {
-      "type": "object"
-    },
-    "decentralizedSynchronizerUrl": {
-      "type": "string"
-    },
-    "validatorPartyHint": {
-      "type": "string"
-    },
-    "topup": {
-      "type": "object"
-    },
-    "autoAcceptTransfers": {
-      "type": "object"
-    },
-    "deduplicationDuration": {
-      "type": "string"
-    },
-    "maxVettingDelay": {
-      "type": "string"
-    },
-    "walletSweep": {
-      "type": "object"
-    },
-    "participantPruningSchedule": {
-      "type": "object"
-    },
-    "db": {
-      "type": "object"
-    },
-    "disableAllocateLedgerApiUserParty": {
-      "type": "boolean"
-    },
-    "splice-util-lib": {
-      "type": "object"
     },
     "automountServiceAccountToken": {
       "type": "boolean"
@@ -121,7 +57,6 @@
     },
     "synchronizer": {
       "type": "object",
-      "additionalProperties": false,
       "description": "Configuration parameters for the sequencer connections.",
       "properties": {
         "connectionType": {
@@ -153,7 +88,6 @@
     },
     "scanClient": {
       "type": "object",
-      "additionalProperties": false,
       "description": "Configuration parameters for the scan client.",
       "properties": {
         "scanType": {

@@ -1,7 +1,6 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/schema#",
   "type": "object",
-  "unevaluatedProperties": false,
   "allOf": [
     {
       "oneOf": [
@@ -53,48 +52,6 @@
         },
         "serviceAccountName": {
           "type": "string"
-        },
-        "pod": {
-          "type": "object"
-        },
-        "service": {
-          "type": "object"
-        },
-        "pvc": {
-          "type": "object"
-        },
-        "bulkStorage": {
-          "type": "object"
-        },
-        "rollForwardLsu": {
-          "type": "object"
-        },
-        "maxDarVersion": {
-          "type": "string"
-        },
-        "publicUrl": {
-          "type": "string"
-        },
-        "logLevel": {
-          "type": "string"
-        },
-        "logLevelStdout": {
-          "type": "string"
-        },
-        "apiRequestLogLevel": {
-          "type": "string"
-        },
-        "logAsyncFlush": {
-          "type": "boolean"
-        },
-        "additionalEnvVars": {
-          "type": "array"
-        },
-        "enableReloader": {
-          "type": "boolean"
-        },
-        "splice-util-lib": {
-          "type": "object"
         },
         "automountServiceAccountToken": {
           "type": "boolean"
@@ -296,7 +253,6 @@
         },
         "synchronizers": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "current"
           ],
@@ -397,7 +353,6 @@
         },
         "cantonBft": {
           "type": "object",
-          "additionalProperties": false,
           "required": ["p2pUrl"],
           "properties": {
             "p2pUrl": {
