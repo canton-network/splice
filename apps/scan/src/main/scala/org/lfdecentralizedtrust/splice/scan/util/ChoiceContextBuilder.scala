@@ -7,7 +7,6 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
@@ -303,21 +302,24 @@ object ChoiceContextBuilder {
         throw io.grpc.Status.NOT_FOUND
           .withDescription(s"No GovernanceLock with key $source found for $description")
           .asRuntimeException()
-      lockedAmulets <- MonadUtil.sequentialTraverse(locks) { lock =>
-        val lockedAmuletId = lock.payload.lockedAmulet
-        fetcher
-          .lookupContractById(amulet.LockedAmulet.COMPANION)(lockedAmuletId)
-          .map(
-            _.getOrElse(
-              throw io.grpc.Status.NOT_FOUND
-                .withDescription(
-                  s"LockedAmulet '${lockedAmuletId.contractId}' of GovernanceLock " +
-                    s"'${lock.contractId.contractId}' not found for $description"
-                )
-                .asRuntimeException()
+      lockedAmulets <- fetcher
+        .lookupContractsById(amulet.LockedAmulet.COMPANION)(
+          locks.map(_.payload.lockedAmulet)
+        )
+      // The batch lookup omits the ids it can't find, so report the first lock
+      // whose `LockedAmulet` is missing.
+      found = lockedAmulets.map(_.contractId.contractId).toSet
+      _ = locks
+        .find(lock => !found(lock.payload.lockedAmulet.contractId))
+        .foreach { lock =>
+          val lockedAmuletId = lock.payload.lockedAmulet
+          throw io.grpc.Status.NOT_FOUND
+            .withDescription(
+              s"LockedAmulet '${lockedAmuletId.contractId}' of GovernanceLock " +
+                s"'${lock.contractId.contractId}' not found for $description"
             )
-          )
-      }
+            .asRuntimeException()
+        }
       (choiceContextBuilder, _) <- getAmuletRulesTransferContext[
         DisclosedContract,
         ChoiceContext,
