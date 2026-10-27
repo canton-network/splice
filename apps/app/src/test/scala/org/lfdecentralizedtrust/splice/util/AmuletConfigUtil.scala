@@ -96,6 +96,7 @@ trait AmuletConfigUtil extends TestCommon {
       config.developmentFundManagerBlacklist,
       config.minDevelopmentFundMintingDelay,
       config.amuletSwitchOverTimes,
+      config.governanceLockConfig,
     )
 
   def setAmuletConfig(
