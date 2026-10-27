@@ -298,6 +298,9 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10497 | 39966442655 | main c8542ad58a (#7909) | 120458028680 `wall-clock-time (7)` | 3.7.0-snapshot.20261022.20797.0.vd0a4e6f2 |
 | 10676 | 40494870697 | main ef7c41a0b6 (#7922) | 122158220021 `resource-intensive (1)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
 | 10479 / 10480 | cn-internal GHA 38997942871 (Purge Unused Databases) / 36676064976 (Auth0 User Cleanup), backfilled for cni#7615 | - | - | not reachable (403) |
+| 10281 | 37325889948 | main 9e1c06863e (#7273) | 111816892945 `wall-clock-time (0)` | 3.6.x (2026-10-05 pin) |
+| 10302 | 37634008083 | main d8b78a11ca (#7660) | 112836149816 `docker-compose (1)` | 3.6.1 |
+| 10520 | 40064890060 (mainnet-Daml nightly, PV 36) | main bbe721d221 (#7738) | 120786177360 `wall-clock-time (1)` | 3.7.0-snapshot.20261022.20797.0.vd0a4e6f2 |
 
 ## Overview
 
@@ -328,3 +331,6 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10305 | dependencies_scan `fork/exec /bin/bash: operation not permitted` | - | `2026-10-27c/10305-10332-10493.md`. One-off runner fault, Oriol set no-repro. Close. |
 | 10332 | backup waits on a cometBFT snapshot on CantonBFT cimain | new, root-caused | `2026-10-27c/10305-10332-10493.md`. Concurrent deploy_basic force-push dropped the resolved config (Pawel); node-backup.sh `$pvc_name`/`$backupName` bug. Needs an owner. |
 | 10493 | deploy_cimain coursier `Stale file handle` on cache lock | - (NOT 10494) | `2026-10-27c/10305-10332-10493.md`. Infra one-off. Close. |
+| 10281 | TokenStandardTransfer treasury call REQUEST_TIME_OUT at 15:00:09.034; Phase 7 at alice 15:00:09.233, every BFT confirmation hop 1-4 s | - | `2026-10-27c/10281.md`. FIXED by #7909 (deadline 10 s -> 30 s, not in the failing sha). Close. |
+| 10302 | globalMediatorSv2 `Locked connection was lost` 14:39:55.691 after 3 read-only probes collided with the lock check | 10438 (#1283, cnn#15508) | `2026-10-27c/10302.md`. Canton race on the single KeepAliveConnection. Close as dup of 10438. |
+| 10520 | mainnet-Daml nightly (PV 36): SV1 bootstrap INITIAL_ONBOARDING_ERROR = TOPOLOGY_SERIAL_MISMATCH on sv1Participant identity txs, every run since 10-24 | new family | `2026-10-27c/10520.md`. Genesis takes participant identity raw from the Authorized store (hash differs from the PV 36 form the outbox sends); window #7944/#7910. SV app fix: generateOnboardingTopologyTransactions(initialProtocolVersion). Keep open. |

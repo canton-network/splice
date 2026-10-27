@@ -1,0 +1,9 @@
+# Host commands, round 3a (10281 10302 10520)
+
+Run on the host (zsh). 10520 stays open; the comment records the mechanism and the proposed SV app fix.
+
+```zsh
+gh issue close 10281 --repo DACH-NY/cn-test-failures --reason completed --comment "Fixed by canton-network/splice#7909 (treasury grpcDeadline 10 s -> 30 s, merged 2026-10-23). The transfer completed at aliceParticipant 0.2 s after the 10 s deadline; every confirmation hop on the BFT synchronizer took 1-4 s, nothing was stuck."
+gh issue close 10302 --repo DACH-NY/cn-test-failures --reason "not planned" --comment "Duplicate of #10438. Same WARN and mechanism: the DbLockedConnection read-only probe collides with the DbLockPostgres lock check on the single KeepAliveConnection three times in a row (14:39:44.574, 49.873, 55.689, each 1-3 ms after a lock check), connection rebuilt 80 ms later. Canton-side race, see #10438."
+gh issue comment 10520 --repo DACH-NY/cn-test-failures --body "Root cause: SV1Initializer puts sv1Participant's NamespaceDelegation/OwnerToKeyMapping into the PV 36 genesis raw from the Authorized store (getIdentityTransactions, hash 96687703...), while mediator/sequencer identities go through generateOnboardingTopologyTransactions(initialProtocolVersion). On connect the participant's onboarding outbox sends the PV 36 form (hash 306eee...), the sequencer does not treat it as a duplicate and rejects it with TOPOLOGY_SERIAL_MISMATCH (expected 2, actual 1) -> INITIAL_ONBOARDING_ERROR. Every nightly since 2026-10-24; window 63fdd611de..bbe721d221 = canton-network/splice#7944 (Canton 3.7 20261015 -> 20261022) and canton-network/splice#7910 (stable PV 37). Proposed fix: use participantAdminConnection.generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion) for the participant part of the genesis too."
+```

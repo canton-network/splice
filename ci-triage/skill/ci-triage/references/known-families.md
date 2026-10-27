@@ -80,6 +80,10 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   retry wrapper. Fix: `ray/fix-auth0-relogin-retry`.
 
 ## G. "All tests pass, one log line fails checkErrors" items still without a fix
+- 10438 / 10302 `Locked connection was lost, trying to rebuild` (DbLockedConnection, any node): the read-only
+  probe and `DbLockPostgres: checking lock` race for the single KeepAliveConnection; three `NoConnectionAvailable`
+  probes in a row, each 1-3 ms after a lock check on the same node, then rebuilt in < 100 ms. Canton race (older:
+  #1283, canton-network-node#15508). No ignore pattern; confirm by pairing each probe failure with a lock check.
 - 10084 IndexerState reconnect-drain WARN (Canton `retryLogLevel`; ignore rejected).
 - 10140 `SERVER_OVERLOADED` on DownloadTopologyStateForInit: test-only limit 3 in `sequencers.conf`; fix
   `ray/fix-topology-init-limit` (3 -> 7).
@@ -204,6 +208,19 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
   the contention itself is Canton / test infra (fewer writers per DB, non-serializable insert, capped backoff).
+
+## M. Slow confirmation round trips on the BFT synchronizer vs 10 s client deadlines
+- Signature: `REQUEST_TIME_OUT(3,...)` / `CallOptions deadline exceeded after 9.99s` on a wallet/treasury call; the
+  command still reaches Phase 7 shortly after the deadline. Confirm with the trace-id Phase 1-7 timeline (each hop
+  1-4 s, none stuck). 10281: treasury deadline, FIXED by #7909 (10 s -> 30 s, 2026-10-23).
+
+## N. SV1 bootstrap below the participant default protocol version (mainnet-Daml nightly, PV 36)
+- Signature: every shard exits with `sv1 app initialization: ... INITIAL_ONBOARDING_ERROR(9,...) ... Unable to register
+  onboarding topology transactions`; sequencer logs `TOPOLOGY_SERIAL_MISMATCH ... expected serial Some(2)` and
+  `Processing 3/3 non-duplicate transactions` for sv1Participant NamespaceDelegation/OwnerToKeyMapping serial 1.
+- Cause: SV1Initializer takes the participant identity raw from the Authorized store (getIdentityTransactions) while
+  mediator/sequencer use generateOnboardingTopologyTransactions(initialProtocolVersion); the outbox later sends the
+  PV 36 form with another hash. Since 2026-10-24 (#7944 / #7910). Issue 10520 (per-job dups closed); SV app fix open.
 
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
