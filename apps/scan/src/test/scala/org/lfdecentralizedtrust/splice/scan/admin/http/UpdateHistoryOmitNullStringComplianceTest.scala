@@ -58,18 +58,17 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
     def check: List[(String, Boolean)] = unhandledOmitNullStringFields[A](name, json)(tt)
   }
 
+  private def primaryConstructor[A: TypeTag]: MethodSymbol = {
+    val tpe = typeOf[A]
+    tpe.decls
+      .collectFirst { case m: MethodSymbol if m.isPrimaryConstructor => m }
+      .getOrElse(fail(s"No primary constructor found for ${tpe.typeSymbol.name}"))
+  }
+
   /** Returns all `Option[_]` fields that are NOT `Option[OmitNullString]`. */
   private def unsafeOptionFields[A: TypeTag]: List[String] = {
-    val tpe = typeOf[A]
-    val constructor = tpe.decls
-      .collectFirst {
-        case m: MethodSymbol if m.isPrimaryConstructor => m
-      }
-      .getOrElse(fail(s"No primary constructor found for ${tpe.typeSymbol.name}"))
-
     val omitNullStringOption = typeOf[Option[OmitNullString]]
-
-    constructor.paramLists.flatten.collect {
+    primaryConstructor[A].paramLists.flatten.collect {
       case param
           if param.typeSignature.typeConstructor =:= typeOf[Option[Any]].typeConstructor &&
             !(param.typeSignature =:= omitNullStringOption) =>
@@ -77,19 +76,11 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
     }
   }
 
-  private def omitNullStringFields[A: TypeTag]: List[String] = {
-    val tpe = typeOf[A]
-    val constructor = tpe.decls
-      .collectFirst {
-        case m: MethodSymbol if m.isPrimaryConstructor => m
-      }
-      .getOrElse(fail(s"No primary constructor found for ${tpe.typeSymbol.name}"))
-
-    constructor.paramLists.flatten.collect {
+  private def omitNullStringFields[A: TypeTag]: List[String] =
+    primaryConstructor[A].paramLists.flatten.collect {
       case param if param.typeSignature =:= typeOf[Option[OmitNullString]] =>
         param.name.toString
     }
-  }
 
   /** Converts a camelCase Scala field name to the snake_case JSON key that guardrail generates. */
   private def toSnakeCase(name: String): String =
