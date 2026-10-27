@@ -104,6 +104,10 @@ spec:
         - name: AUTH_TARGET_AUDIENCE
           value: {{ .Values.auth.targetAudience }}
         {{- end }}
+        {{- if .Values.nodeIdentifier }}
+        - name: CANTON_PARTICIPANT_IDENTIFIER
+          value: {{ .Values.nodeIdentifier | quote }}
+        {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
         ports:

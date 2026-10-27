@@ -62,6 +62,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "DA-Helm-Test-Node",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

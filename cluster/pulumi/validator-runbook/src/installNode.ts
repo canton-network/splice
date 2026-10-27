@@ -190,11 +190,15 @@ async function installValidator(
     supportsValidatorRunbookReset,
     validatorVersion
   );
+
+  const nodeIdentifier = validatorConfig.nodeIdentifier || validatorConfig.partyHint;
+
   const participantAddress = (
     await installParticipant(
       validatorConfig,
       xns,
       auth0Client.getCfg(),
+      nodeIdentifier,
       false, // We don't currently support non-auth for validator-runbook
       validatorVersion,
       postgres,
@@ -224,7 +228,7 @@ async function installValidator(
       {
         MIGRATION_ID: DecentralizedSynchronizerUpgradeConfig.activeMigrationId.toString(),
         SPONSOR_SV_URL: `https://sv.sv-2.${CLUSTER_HOSTNAME}`,
-        YOUR_VALIDATOR_NODE_NAME: validatorConfig.nodeIdentifier || validatorConfig.partyHint,
+        YOUR_VALIDATOR_NODE_NAME: nodeIdentifier,
         TRUSTED_SCAN_URL: `https://scan.sv-2.${CLUSTER_HOSTNAME}`,
       }
     ),

@@ -62,6 +62,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "Digital-Asset-2",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

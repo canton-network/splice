@@ -5,6 +5,8 @@ imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "canton-participant"
 enableHealthProbes: true
 
+nodeIdentifier: ""
+
 # Custom annotations and labels for deployed resources
 pod:
   annotations: {}

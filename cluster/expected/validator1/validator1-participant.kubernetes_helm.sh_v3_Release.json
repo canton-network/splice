@@ -86,6 +86,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "validator1",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

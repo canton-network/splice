@@ -25,6 +25,7 @@ export async function installParticipant(
   validatorConfig: ValidatorNodeConfig,
   xns: ExactNamespace,
   auth0Config: Auth0Config,
+  nodeIdentifier: string,
   disableAuth?: boolean,
   version: CnChartVersion = activeVersion,
   defaultPostgres?: postgres.Postgres,
@@ -97,6 +98,7 @@ export async function installParticipant(
       additionalJvmOptions: getAdditionalJvmOptions(
         validatorConfig.participant?.additionalJvmOptions
       ),
+      nodeIdentifier,
       additionalEnvVars: (participantValuesWithSpecifiedAud.additionalEnvVars ?? []).concat(
         validatorConfig.participant?.additionalEnvVars ?? []
       ),
