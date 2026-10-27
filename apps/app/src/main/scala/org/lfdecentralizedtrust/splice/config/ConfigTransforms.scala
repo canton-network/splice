@@ -194,11 +194,7 @@ object ConfigTransforms {
     Seq(
       makeAllTimeoutsBounded,
       ensureNovelDamlNames(testId),
-      useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret),
-      useSelfSignedTokensForParticipantAdminApiAuth(
-        AuthUtil.adminApiTestSecret,
-        AuthUtil.testParticipantAdminApiAudience,
-      ),
+      useSelfSignedTokensForAuth,
       reducePollingInterval,
       withPausedSvDomainComponentsOffboardingTriggers(),
       disableOnboardingParticipantPromotionDelay(),
@@ -766,6 +762,15 @@ object ConfigTransforms {
       .modify(portTransform(bump, _))
       .focus(_.mediator)
       .modify(portTransform(bump, _))
+
+  def useSelfSignedTokensForAuth: ConfigTransform =
+    combineAllTransforms(
+      useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret),
+      useSelfSignedTokensForParticipantAdminApiAuth(
+        AuthUtil.adminApiTestSecret,
+        AuthUtil.testParticipantAdminApiAudience,
+      ),
+    )
 
   /** Auth-enabled Splice apps use self-signed tokens with the given secret for their ledger API connections.
     * Other Splice apps use canton admin tokens for their ledger API connections.
