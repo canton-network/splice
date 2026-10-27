@@ -728,9 +728,15 @@ logAmuletUnlock dso reason owner lockedAmuletCid unlockedAmuletCid = do
 ------------
 
 instance HasCheckedFetch Amulet ForOwner where
-  contractGroupId Amulet{..} = ForOwner with ..
+  contractGroupId Amulet{..} = ForOwner with dso; owner
+
+instance HasCheckedFetch Amulet ForDso where
+  contractGroupId Amulet{..} = ForDso with dso
 
 instance HasCheckedFetch LockedAmulet ForOwner where
+  contractGroupId lockedAmulet = contractGroupId (lockedAmulet.amulet)
+
+instance HasCheckedFetch LockedAmulet ForDso where
   contractGroupId lockedAmulet = contractGroupId (lockedAmulet.amulet)
 
 instance HasCheckedFetch AppRewardCoupon ForOwner where
@@ -771,6 +777,9 @@ instance HasCheckedFetch FeaturedAppActivityMarker ForDso where
 
 instance HasCheckedFetch UnclaimedActivityRecord ForOwner where
   contractGroupId UnclaimedActivityRecord{..} = ForOwner with dso; owner = beneficiary
+
+instance HasCheckedFetch UnclaimedActivityRecord ForDso where
+  contractGroupId UnclaimedActivityRecord{..} = ForDso with dso
 
 instance HasCheckedFetch UnclaimedDevelopmentFundCoupon ForDso where
   contractGroupId UnclaimedDevelopmentFundCoupon{..} = ForDso with dso

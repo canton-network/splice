@@ -1187,6 +1187,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) cid
         exercise cid SvOnboardingRequest_Expire
         return DsoRules_ExpireSvOnboardingRequestResult
 
@@ -1260,7 +1261,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
-        TSU.requireMatchExpected  ("expireAllocations.expectedDso", expireAllocations.expectedDso) dso
+        TSU.requireMatchExpected ("expireAllocations.expectedDso", expireAllocations.expectedDso) dso
 
         res <- exercise extAmuletRulesCid (expireAllocations with expectedDso = dso)
         pure DsoRules_ExpireAmuletAllocationsResult with result = res
@@ -1285,7 +1286,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
-        require ("expectedDso " <> show transferInsts.expectedDso <> " matches the actualDso " <> show dso) (transferInsts.expectedDso == dso)
+        TSU.requireMatchExpected ("transferInsts.expectedDso", transferInsts.expectedDso) dso
         res <- exercise amuletRulesCid (transferInsts with expectedDso = dso)
         pure DsoRules_Amulet_ExpireTransferInstructionsResult with result = res
 
@@ -1305,6 +1306,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) cid
         result <- exercise cid choiceArg
         return DsoRules_Amulet_ExpireV2Result with
           expireSum = result.expireSum
@@ -1317,6 +1319,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) cid
         result <- exercise cid choiceArg
         return DsoRules_LockedAmulet_ExpireAmuletResult with
           expireSum = result.expireSum
@@ -1329,6 +1332,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) cid
         result <- exercise cid choiceArg
         return DsoRules_LockedAmulet_ExpireAmuletV2Result with
           expireSum = result.expireSum
@@ -1348,6 +1352,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         amuletPrice <- fetchMedianAmuletPrice dso (Map.keys svs) amuletPriceVoteCids
         result <- exercise amuletRulesCid AmuletRules_AdvanceOpenMiningRounds with ..
         return DsoRules_AdvanceOpenMiningRoundsResult with
@@ -1364,6 +1369,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid AmuletRules_UpdateExternalPartyConfigStates with ..
         return DsoRules_UpdateExternalPartyConfigStatesResult with
           newExternalPartyConfigStateCid = result.newExternalPartyConfigStateCid
@@ -1380,6 +1386,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) ansEntryContextCid
         summary <- exercise ansEntryContextCid choiceArg
         return DsoRules_CollectEntryRenewalPaymentResult with
           ansEntry = summary.entryCid
@@ -1393,6 +1400,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) ansEntryCid
         exercise ansEntryCid choiceArg
         pure DsoRules_ExpireAnsEntryResult
 
@@ -1405,6 +1413,8 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) subscriptionIdleStateCid
+        void $ fetchChecked (ForDso with dso) ansEntryContextCid
         result <- exercise subscriptionIdleStateCid choiceArg
         exercise ansEntryContextCid (AnsEntryContext_Terminate dso result.terminatedSubscription)
         pure DsoRules_ExpireSubscriptionResult
@@ -1417,6 +1427,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) ansEntryContextCid
         exercise ansEntryContextCid (AnsEntryContext_Terminate dso terminatedSubscriptionCid)
         pure DsoRules_TerminateSubscriptionResult
 
@@ -1545,6 +1556,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid choiceArg
         return DsoRules_ClaimExpiredRewardsV2Result with
           result
@@ -1557,6 +1569,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) processRewardsCid
         result <- exercise processRewardsCid choiceArg
         return DsoRules_ProcessRewardsV2_ProcessBatchResult with
           result
@@ -1569,6 +1582,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid choiceArg
         return DsoRules_UnhideRewardCouponsV2Result with
           result
@@ -1582,6 +1596,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid choiceArg
         return DsoRules_ArchiveDryRunRewardAccountingV2Result with
           result
@@ -1596,6 +1611,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         require "Number of unclaimed rewards is above the configured threshold" $ length unclaimedRewardCids > config.numUnclaimedRewardsThreshold
         result <- exercise amuletRulesCid AmuletRules_MergeUnclaimedRewards with ..
         return DsoRules_MergeUnclaimedRewardsResult with
@@ -1610,6 +1626,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid choiceArg
         return DsoRules_MergeUnclaimedDevelopmentFundCouponsResult with result
 
@@ -1621,6 +1638,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) developmentFundCouponCid
         result <- exercise developmentFundCouponCid DevelopmentFundCoupon_DsoExpire
         pure $ DsoRules_ExpireDevelopmentFundCouponResult with result
 
@@ -1684,6 +1702,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid AmuletRules_MiningRound_Close with ..
         return DsoRules_MiningRound_CloseResult with
           closedRound = result.closedRoundCid
@@ -1714,6 +1733,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         require "Number of member traffic contracts is above the configured threshold" $ length trafficCids > config.numMemberTrafficContractsThreshold
         result <- exercise amuletRulesCid AmuletRules_MergeMemberTrafficContracts with ..
         return DsoRules_MergeMemberTrafficContractsResult with
@@ -1769,6 +1789,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) transferPreapprovalCid
         exercise transferPreapprovalCid TransferPreapproval_Expire
         pure DsoRules_ExpireTransferPreapprovalResult
 
@@ -1780,6 +1801,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid argument
         pure DsoRules_AmuletRules_ConvertFeaturedAppActivityMarkersResult with result
 
@@ -1856,6 +1878,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) unclaimedActivityRecordCid
         UnclaimedActivityRecord_DsoExpireResult unclaimedRewardCid <-
           exercise unclaimedActivityRecordCid UnclaimedActivityRecord_DsoExpire
         pure DsoRules_ExpireUnclaimedActivityRecordResult with unclaimedRewardCid
