@@ -7,20 +7,20 @@
 Monitors a Scan instance for activity of a configured set of tracked parties, and alerts on
   - transfers of Amulet from a tracked party to a party that is not one of its expected
     recipients, and
-  - for tracked parties with `alert_confirmations` set, every transaction in which the party
-    is a confirming party, i.e. the party
-      - is an acting party of an exercise,
-      - is a signatory of a created contract, or
-      - is a signatory of the contract that is exercised.
+  - for tracked parties with `alert_confirmations` set, every transaction that the party
+    confirms or submits, according to the mediator's verdict. This includes transactions that
+    are entirely private to other parties than the DSO party, and rejected ones.
 
 Matching transactions are printed to stdout as JSON lines and, optionally, posted to a Slack
 incoming webhook.
 
-Scan's update stream does not include the signatories of exercised contracts, so the script
-keeps a map from contract id to signatories for the contracts signed by tracked parties in a
-local SQLite database. It is seeded from a Scan ACS snapshot and then kept up to date from the
-update stream. Both phases are resumable: stopping the script and restarting it with the same
---db continues where it left off. Adding parties to the configuration re-seeds the map.
+The script follows Scan's event stream, which pairs each transaction visible to the DSO party
+with the mediator's verdict on it. A transfer archives holdings of the sender, but the stream
+does not say whose holdings were archived, so the script keeps the holdings of the tracked
+parties in a local SQLite database. It is seeded from a Scan ACS snapshot and then kept up to
+date from the event stream. Both phases are resumable: stopping the script and restarting it
+with the same --db continues where it left off. Adding parties to the configuration re-seeds
+the holdings.
 
 Uses only the Python standard library. See README.md next to this file for details.
 Run with `-h` for supported options.
@@ -46,11 +46,11 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, FrozenSet, Iterable, List, NewType, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, NewType, Optional, Set, Tuple
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 MAX_PAGE_SIZE = 1000
 MAX_TRACKED_PARTIES = 1000
 # Hex characters of a namespace fingerprint: a multihash prefix (1220) and a SHA-256 digest
@@ -63,6 +63,7 @@ SLACK_MAX_LINES = 20
 SLACK_MAX_REASONS_PER_UPDATE = 3
 # Slack truncates messages at 40000 characters.
 SLACK_MAX_CHARS = 35000
+VERDICT_REJECTED = "VERDICT_RESULT_REJECTED"
 AMULET = "Splice.Amulet:Amulet"
 LOCKED_AMULET = "Splice.Amulet:LockedAmulet"
 
@@ -70,7 +71,7 @@ LOG = logging.getLogger("scan-party-monitor")
 
 # A JSON object as returned by Scan, or one of our match records.
 Json = Dict[str, Any]
-# (migration id, record time): the order of updates in Scan.
+# (migration id, record time): the order of events in Scan.
 Position = Tuple[int, datetime]
 # A party id from the configuration. Only _check_party_id creates one, so it has passed that
 # check; party ids from Scan are plain strs.
@@ -82,7 +83,7 @@ class Meta(Enum):
 
     SCHEMA_VERSION = "schema_version"
     SCAN_URL = "scan_url"
-    # JSON list of the parties the contract map is built for
+    # JSON list of the parties whose holdings are stored
     TRACKED_PARTIES = "tracked_parties"
     # JSON object: party -> [migration id, record time] up to which its matches were reported
     REPORTED_UNTIL = "reported_until"
@@ -91,9 +92,9 @@ class Meta(Enum):
     SNAPSHOT_RECORD_TIME = "snapshot_record_time"
     ACS_NEXT_PAGE_TOKEN = "acs_next_page_token"
     ACS_PAGES = "acs_pages"
-    ACS_CONTRACTS = "acs_contracts"
+    ACS_HOLDINGS = "acs_holdings"
     ACS_COMPLETE = "acs_complete"
-    # The position in the update stream
+    # The position in the event stream
     CURSOR_MIGRATION_ID = "cursor_migration_id"
     CURSOR_RECORD_TIME = "cursor_record_time"
 
@@ -297,10 +298,10 @@ def http_request(
 
 
 class ScanClient:
-    def __init__(self, url: str, acs_rate: float, updates_rate: float) -> None:
+    def __init__(self, url: str, acs_rate: float, events_rate: float) -> None:
         self.url = url.rstrip("/")
-        self.acs_pacer = Pacer("/v2/state/acs", acs_rate)
-        self.updates_pacer = Pacer("/v2/updates", updates_rate)
+        self.acs_pacer = Pacer("/v2/holdings/state", acs_rate)
+        self.events_pacer = Pacer("/v0/events", events_rate)
         self.other_pacer = Pacer("other scan endpoints", 1)
 
     def _call(
@@ -356,25 +357,26 @@ class ScanClient:
             )["record_time"]
         )
 
-    def get_acs_page(
+    def get_holdings_page(
         self,
         migration_id: int,
         record_time: str,
-        party_ids: List[PartyId],
+        owner_party_ids: List[PartyId],
         page_size: int,
         after: Optional[str],
     ) -> Json:
+        """A page of the Amulet and LockedAmulet holdings of the given owners in an ACS snapshot."""
         body: Json = {
             "migration_id": migration_id,
             "record_time": record_time,
-            "party_ids": party_ids,
+            "owner_party_ids": owner_party_ids,
             "page_size": page_size,
         }
         if after is not None:
             body["after"] = after
-        return self._call(self.acs_pacer, "POST", "/v2/state/acs", body)
+        return self._call(self.acs_pacer, "POST", "/v2/holdings/state", body)
 
-    def get_updates(
+    def get_events(
         self,
         after_migration_id: int,
         after_record_time: str,
@@ -388,26 +390,20 @@ class ScanClient:
             },
             "page_size": page_size,
         }
-        transactions: List[Json] = self._call(
-            self.updates_pacer, "POST", "/v2/updates", body, on_retry=on_retry
-        )["transactions"]
-        return transactions
+        events: List[Json] = self._call(
+            self.events_pacer, "POST", "/v0/events", body, on_retry=on_retry
+        )["events"]
+        return events
 
 
 ### local store
 
 
-@dataclass(frozen=True)
-class StoredContract:
-    signatory_ids: Set[int]
-    holding_owner_id: Optional[int]
-
-
 class Store:
-    """SQLite store for the contract map and progress.
+    """SQLite store for the holdings of the tracked parties, and progress.
 
-    The caller controls transactions with begin()/commit(), so that the contract map and
-    the progress markers are always updated atomically.
+    The caller controls transactions with begin()/commit(), so that the holdings and the
+    progress markers are always updated atomically.
     """
 
     def __init__(self, path: str) -> None:
@@ -417,8 +413,7 @@ class Store:
             "CREATE TABLE IF NOT EXISTS parties (id INTEGER PRIMARY KEY, party TEXT UNIQUE NOT NULL)"
         )
         self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS contracts "
-            "(cid TEXT PRIMARY KEY, signatories TEXT NOT NULL, holding_owner INTEGER) WITHOUT ROWID"
+            "CREATE TABLE IF NOT EXISTS holdings (cid TEXT PRIMARY KEY, owner INTEGER NOT NULL) WITHOUT ROWID"
         )
         version = self.get_meta(Meta.SCHEMA_VERSION)
         if version is None:
@@ -466,29 +461,21 @@ class Store:
             self.party_ids[party] = pid
         return pid
 
-    def put_contract(self, cid: str, signatories: Iterable[str], owner: Optional[str]) -> None:
+    def put_holding(self, cid: str, owner: str) -> None:
         self.conn.execute(
-            "INSERT OR REPLACE INTO contracts (cid, signatories, holding_owner) VALUES (?, ?, ?)",
-            (
-                cid,
-                " ".join(str(self.party_id(p)) for p in signatories),
-                None if owner is None else self.party_id(owner),
-            ),
+            "INSERT OR REPLACE INTO holdings (cid, owner) VALUES (?, ?)", (cid, self.party_id(owner))
         )
 
-    def lookup(self, cid: str) -> Optional[StoredContract]:
-        row = self.conn.execute(
-            "SELECT signatories, holding_owner FROM contracts WHERE cid = ?", (cid,)
-        ).fetchone()
-        if row is None:
-            return None
-        return StoredContract({int(i) for i in row[0].split()}, row[1])
+    def holding_owner_id(self, cid: str) -> Optional[int]:
+        """The party id of the owner of a stored holding, None if it is not stored."""
+        row = self.conn.execute("SELECT owner FROM holdings WHERE cid = ?", (cid,)).fetchone()
+        return None if row is None else int(row[0])
 
-    def delete_contract(self, cid: str) -> None:
-        self.conn.execute("DELETE FROM contracts WHERE cid = ?", (cid,))
+    def delete_holding(self, cid: str) -> None:
+        self.conn.execute("DELETE FROM holdings WHERE cid = ?", (cid,))
 
-    def clear_contracts(self) -> None:
-        self.conn.execute("DELETE FROM contracts")
+    def clear_holdings(self) -> None:
+        self.conn.execute("DELETE FROM holdings")
 
 
 ### Slack
@@ -526,8 +513,14 @@ def format_reason(reason: Json) -> str:
     if reason["reason"] == "transfer":
         amount = reason.get("amount") or "an unknown amount"
         return f"transfer of {amount} to `{reason['receiver']}` (not an expected recipient)"
-    choice = f" / {reason['choice']}" if "choice" in reason else ""
-    return f"{reason['reason']} on {qualified_name(reason['template_id'])}{choice}"
+    return f"{reason['reason']} party"
+
+
+def _kind(match: Json) -> Optional[str]:
+    """How a transaction differs from one that Scan shows in full, if it does."""
+    if match.get("verdict_result") == VERDICT_REJECTED:
+        return "rejected"
+    return "private" if match.get("private") else None
 
 
 def _plural(n: int, singular: str, plural: str) -> str:
@@ -553,7 +546,8 @@ def _update_line(match: Json) -> str:
     reasons = [f"`{party}`: {format_reason(r)}" for party, rs in match["parties"].items() for r in rs]
     more = len(reasons) - SLACK_MAX_REASONS_PER_UPDATE
     shown = "; ".join(reasons[:SLACK_MAX_REASONS_PER_UPDATE] + ([f"+{more} more"] if more > 0 else []))
-    return f"• `{match['update_id']}` at `{match['record_time']}`: {shown}"
+    kind = _kind(match)
+    return f"• `{match['update_id']}` at `{match['record_time']}`{f' ({kind})' if kind else ''}: {shown}"
 
 
 def format_slack_message(matches: List[Json]) -> str:
@@ -561,11 +555,12 @@ def format_slack_message(matches: List[Json]) -> str:
     first = matches[0]
     if len(matches) == 1:
         parties = first["parties"]
+        kind = _kind(first)
         header = [
             f":rotating_light: Alert for tracked {_plural(len(parties), 'party', 'parties')} "
             f"on {first['scan_url']}",
             f"update `{first['update_id']}` at record time `{first['record_time']}` "
-            f"(migration {first['migration_id']})",
+            f"(migration {first['migration_id']}{f', {kind}' if kind else ''})",
         ]
         lines = [f"• `{party}`: {format_reason(r)}" for party, rs in parties.items() for r in rs]
         return _join_capped(header, lines, "reasons")
@@ -595,20 +590,18 @@ class Monitor:
         self.slack = slack
         self.config = config
         self.tracked_by_id = {store.party_id(p): p for p in config}
-        self.confirmation_ids = {
-            pid for pid, p in self.tracked_by_id.items() if config[p].alert_confirmations
-        }
+        self.confirmation_parties = {p for p, c in config.items() if c.alert_confirmations}
         # Per party, the position up to which its matches were already reported before a re-seed.
         reported_until = json.loads(store.get_meta(Meta.REPORTED_UNTIL) or "{}")
         self.reported_until: Dict[PartyId, Position] = {
             p: position(*reported_until[p]) for p in config if p in reported_until
         }
-        self.stats: Dict[str, int] = {"transactions": 0, "matches": 0}
+        self.stats: Dict[str, int] = {"events": 0, "matches": 0}
 
     ### configuration changes
 
     def prepare(self) -> None:
-        """Compares the configured parties with the ones the contract map was built for, and
+        """Compares the configured parties with the ones whose holdings are stored, and
         schedules a re-seed if parties were added."""
         store = self.store
         configured = sorted(self.config)
@@ -631,7 +624,7 @@ class Monitor:
         store.begin()
         if not seeding:
             # Re-seed from the latest snapshot that is not after the cursor, and replay the
-            # updates from there without reporting again what was already reported.
+            # events from there without reporting again what was already reported.
             cursor_migration_id = int(store.require_meta(Meta.CURSOR_MIGRATION_ID))
             cursor_record_time = store.require_meta(Meta.CURSOR_RECORD_TIME)
             try:
@@ -652,15 +645,15 @@ class Monitor:
             store.set_meta(Meta.SNAPSHOT_RECORD_TIME, snapshot)
         # Otherwise a seed is in progress; restart it for the new set of parties, as the ACS
         # page token is only valid for the same request.
-        store.clear_contracts()
+        store.clear_holdings()
         store.set_meta(Meta.ACS_COMPLETE, 0)
         store.set_meta(Meta.ACS_NEXT_PAGE_TOKEN, None)
         store.set_meta(Meta.ACS_PAGES, 0)
-        store.set_meta(Meta.ACS_CONTRACTS, 0)
+        store.set_meta(Meta.ACS_HOLDINGS, 0)
         store.set_meta(Meta.TRACKED_PARTIES, json.dumps(configured))
         store.commit()
         LOG.info(
-            f"Tracked parties changed ({'; '.join(changes)}); re-seeding the contracts"
+            f"Tracked parties changed ({'; '.join(changes)}); re-seeding the holdings"
         )
 
     ### ACS seed
@@ -700,29 +693,29 @@ class Monitor:
             store.set_meta(Meta.SNAPSHOT_MIGRATION_ID, migration_id)
             store.set_meta(Meta.SNAPSHOT_RECORD_TIME, record_time)
             store.set_meta(Meta.ACS_PAGES, 0)
-            store.set_meta(Meta.ACS_CONTRACTS, 0)
+            store.set_meta(Meta.ACS_HOLDINGS, 0)
             store.commit()
-            LOG.info(f"Seeding contracts from the ACS snapshot at {record_time} (migration id {migration_id})")
+            LOG.info(f"Seeding holdings from the ACS snapshot at {record_time} (migration id {migration_id})")
         else:
             migration_id = int(stored_migration_id)
             record_time = store.require_meta(Meta.SNAPSHOT_RECORD_TIME)
             if store.get_meta(Meta.ACS_NEXT_PAGE_TOKEN) is not None:
                 LOG.info(
                     f"Resuming the seed from the ACS snapshot at {record_time} (migration id {migration_id}) "
-                    f"after {store.get_meta(Meta.ACS_PAGES)} pages and {store.get_meta(Meta.ACS_CONTRACTS)} contracts"
+                    f"after {store.get_meta(Meta.ACS_PAGES)} pages and {store.get_meta(Meta.ACS_HOLDINGS)} holdings"
                 )
 
         party_ids = sorted(self.config)
         token = store.get_meta(Meta.ACS_NEXT_PAGE_TOKEN)
         pages = int(store.require_meta(Meta.ACS_PAGES))
-        contracts = int(store.require_meta(Meta.ACS_CONTRACTS))
+        holdings = int(store.require_meta(Meta.ACS_HOLDINGS))
         pages_this_run = 0
-        contracts_this_run = 0
+        holdings_this_run = 0
         started = time.monotonic()
         last_report = 0.0
         while True:
             try:
-                page = self.scan.get_acs_page(
+                page = self.scan.get_holdings_page(
                     migration_id, record_time, party_ids, self.args.acs_page_size, token
                 )
             except NotFound:
@@ -737,11 +730,11 @@ class Monitor:
             store.begin()
             for e in events:
                 if self.store_if_tracked(e):
-                    contracts += 1
-                    contracts_this_run += 1
+                    holdings += 1
+                    holdings_this_run += 1
             store.set_meta(Meta.ACS_NEXT_PAGE_TOKEN, token)
             store.set_meta(Meta.ACS_PAGES, pages)
-            store.set_meta(Meta.ACS_CONTRACTS, contracts)
+            store.set_meta(Meta.ACS_HOLDINGS, holdings)
             if token is None:
                 store.set_meta(Meta.ACS_COMPLETE, 1)
                 store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
@@ -751,27 +744,28 @@ class Monitor:
             now = time.monotonic()
             if token is None or now - last_report >= self.args.progress_interval_seconds:
                 last_report = now
-                rate = contracts_this_run / max(now - started, 1e-6)
+                rate = holdings_this_run / max(now - started, 1e-6)
                 created_at = events[-1]["created_at"] if events else "-"
                 LOG.info(
-                    f"ACS seed: {pages} pages, {contracts} contracts stored "
-                    f"({rate:.0f} contracts/s), reached contracts created at {created_at}"
+                    f"ACS seed: {pages} pages, {holdings} holdings stored "
+                    f"({rate:.0f} holdings/s), reached holdings created at {created_at}"
                 )
             if token is None:
-                LOG.info(f"ACS seed complete: {contracts} contracts")
+                LOG.info(f"ACS seed complete: {holdings} holdings")
                 return
             if self.args.stop_after_acs_pages is not None and pages_this_run >= self.args.stop_after_acs_pages:
                 LOG.info(f"Stopping after {pages_this_run} ACS pages as requested; rerun to resume")
                 raise StopRequested()
 
     def store_if_tracked(self, created: Json) -> bool:
-        """Stores a created contract if a tracked party signs it."""
-        if not any(self.store.party_ids.get(p) in self.tracked_by_id for p in created["signatories"]):
+        """Stores a created holding if a tracked party owns it."""
+        owner = holding_owner(created)
+        if owner is None or owner not in self.config:
             return False
-        self.store.put_contract(created["contract_id"], created["signatories"], holding_owner(created))
+        self.store.put_holding(created["contract_id"], owner)
         return True
 
-    ### update stream
+    ### event stream
 
     def stream(self) -> None:
         store = self.store
@@ -779,17 +773,17 @@ class Monitor:
         record_time = store.require_meta(Meta.CURSOR_RECORD_TIME)
         n = len(self.config)
         LOG.info(
-            f"Streaming updates after {record_time} (migration id {migration_id}), tracking "
+            f"Streaming events after {record_time} (migration id {migration_id}), tracking "
             f"{n} {_plural(n, 'party', 'parties')}"
         )
         last_heartbeat = time.monotonic()
-        # Matches not yet posted to Slack. Their updates are only committed to the store,
+        # Matches not yet posted to Slack. Their events are only committed to the store,
         # together with the cursor, once they have been posted.
         unposted: List[Json] = []
         oldest_unposted = 0.0
 
         def deliver(now: bool) -> None:
-            """Posts the unposted matches if `now` or they are due, and then commits the updates
+            """Posts the unposted matches if `now` or they are due, and then commits the events
             up to them. Called between pages, also while Scan requests are retried."""
             nonlocal unposted
             if (
@@ -807,18 +801,17 @@ class Monitor:
         stop_at = None if self.args.stop_at_record_time is None else parse_time(self.args.stop_at_record_time)
         store.begin()
         while True:
-            updates = self.scan.get_updates(
-                migration_id, record_time, self.args.updates_page_size, on_retry=lambda: deliver(False)
+            events = self.scan.get_events(
+                migration_id, record_time, self.args.events_page_size, on_retry=lambda: deliver(False)
             )
-            caught_up = len(updates) < self.args.updates_page_size
-            # Record times overlapping across migrations were only possible before logical
-            # synchronizer upgrades and never happened; with LSU they cannot happen.
+            caught_up = len(events) < self.args.events_page_size
+            # Record times increase across migrations, so the record time alone gives the order.
             in_range = (
-                updates
+                events
                 if stop_at is None
-                else list(itertools.takewhile(lambda u: parse_time(u["record_time"]) <= stop_at, updates))
+                else list(itertools.takewhile(lambda e: parse_time(event_position(e)[1]) <= stop_at, events))
             )
-            matches = [m for m in map(self.process_update_event, in_range) if m is not None]
+            matches = [m for m in map(self.process_event, in_range) if m is not None]
             for m in matches:
                 print(json.dumps(m), flush=True)
             if matches and not unposted:
@@ -826,17 +819,14 @@ class Monitor:
             unposted = unposted + matches
             self.stats["matches"] += len(matches)
             if in_range:
-                last = in_range[-1]
-                # Reassignments carry the migration id in their event.
-                migration_id = last.get("migration_id", last.get("event", {}).get("migration_id"))
-                record_time = last["record_time"]
+                migration_id, record_time = event_position(in_range[-1])
                 store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
                 store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
-                self.stats["transactions"] += len(in_range)
+                self.stats["events"] += len(in_range)
                 self.forget_reported_until(position(migration_id, record_time))
-            # Scan only returns updates with later record times than the cursor, so none at or
+            # Scan only returns events with later record times than the cursor, so none at or
             # before the cutoff can follow once the cursor is at it.
-            reached_stop = len(in_range) < len(updates) or (
+            reached_stop = len(in_range) < len(events) or (
                 stop_at is not None and parse_time(record_time) >= stop_at
             )
 
@@ -878,44 +868,63 @@ class Monitor:
         LOG.info(
             f"At record time {record_time} (migration id {migration_id}, "
             f"{'unknown' if lag is None else f'{lag}s'} behind); this run: "
-            f"{self.stats['transactions']} updates, {self.stats['matches']} matching"
+            f"{self.stats['events']} events, {self.stats['matches']} matching"
         )
 
-    def process_update_event(self, update: Json) -> Optional[Json]:
+    def process_event(self, item: Json) -> Optional[Json]:
+        """Updates the holdings from an event of Scan's event stream; returns its match, if any."""
+        update: Optional[Json] = item.get("update")
+        verdict: Optional[Json] = item.get("verdict")
+        found = (self._update_reasons(update) if update is not None else []) + (
+            self._verdict_reasons(verdict) if verdict is not None else []
+        )
+        migration_id, record_time = event_position(item)
+        at = position(migration_id, record_time)
+        unreported = {
+            p: [r for q, r in found if q == p]
+            for p in dict.fromkeys(q for q, _ in found)
+            if p not in self.reported_until or at > self.reported_until[p]
+        }
+        if not unreported:
+            return None
+        details: Json = {}
+        if verdict is not None:
+            details["verdict_result"] = verdict["verdict_result"]
+            # An accepted transaction without an update is private to parties other than the DSO.
+            if update is None and verdict["verdict_result"] != VERDICT_REJECTED:
+                details["private"] = True
+        return {
+            "update_id": (update if update is not None else item["verdict"])["update_id"],
+            "migration_id": migration_id,
+            "record_time": record_time,
+            "scan_url": self.scan.url,
+            **details,
+            "parties": unreported,
+        }
+
+    def _update_reasons(self, update: Json) -> List[Tuple[PartyId, Json]]:
+        """Updates the holdings from the part of a transaction that the DSO party sees, and
+        returns its transfers to unexpected recipients."""
         if "events_by_id" not in update:
-            # A reassignment; no matching, but keep the contract map complete.
+            # A reassignment; no matching, but keep the holdings complete.
             created = update["event"].get("created_event")
             if created is not None:
                 self.store_if_tracked(created)
-            return None
+            return []
 
-        # Pre-order traversal is execution order, so contracts created earlier in this
-        # transaction are in the map before they can be exercised.
+        # Pre-order traversal is execution order, so holdings created earlier in this
+        # transaction are stored before they can be archived.
         ordered = preorder(update["events_by_id"], update["root_event_ids"])
-        found: List[Tuple[PartyId, Json]] = []
         senders: Set[PartyId] = set()
         for event in ordered:
             if event["event_type"] == "created_event":
-                found += [
-                    _reason(p, "created_signatory", event)
-                    for p in self.alerting_confirmations(event["signatories"])
-                ]
                 self.store_if_tracked(event)
-            else:
-                found += [
-                    _reason(p, "acting", event)
-                    for p in self.alerting_confirmations(event["acting_parties"])
-                ]
-                stored = self.store.lookup(event["contract_id"])
-                if stored is not None:
-                    found += [
-                        _reason(self.tracked_by_id[pid], "exercised_contract_signatory", event)
-                        for pid in stored.signatory_ids & self.confirmation_ids
-                    ]
-                    if event["consuming"]:
-                        if stored.holding_owner_id in self.tracked_by_id:
-                            senders.add(self.tracked_by_id[stored.holding_owner_id])
-                        self.store.delete_contract(event["contract_id"])
+            elif event["consuming"]:
+                owner_id = self.store.holding_owner_id(event["contract_id"])
+                if owner_id is not None:
+                    if owner_id in self.tracked_by_id:
+                        senders.add(self.tracked_by_id[owner_id])
+                    self.store.delete_holding(event["contract_id"])
 
         # A transfer moves holdings of a tracked party to holdings of other parties. With
         # several tracked senders, outputs can't be attributed to one of them, so each sender
@@ -927,35 +936,45 @@ class Monitor:
             for owner in [holding_owner(e)]
             if owner is not None
         ]
-        transfers = [
-            _reason(sender, "transfer", e, receiver=owner, amount=holding_amount(e))
+        return [
+            (
+                sender,
+                {
+                    "reason": "transfer",
+                    "event_id": e["event_id"],
+                    "template_id": e["template_id"],
+                    "receiver": owner,
+                    "amount": holding_amount(e),
+                },
+            )
             for sender in sorted(senders)
             for owner, e in created_holdings
             if owner not in self.config[sender].expected_recipients
         ]
 
-        update_position = position(update["migration_id"], update["record_time"])
-        all_found = found + transfers
-        unreported = {
-            p: [r for q, r in all_found if q == p]
-            for p in dict.fromkeys(q for q, _ in all_found)
-            if p not in self.reported_until or update_position > self.reported_until[p]
-        }
-        if not unreported:
-            return None
-        return {
-            "update_id": update["update_id"],
-            "migration_id": update["migration_id"],
-            "record_time": update["record_time"],
-            "scan_url": self.scan.url,
-            "parties": unreported,
-        }
+    def _verdict_reasons(self, verdict: Json) -> List[Tuple[PartyId, Json]]:
+        """The parties with `alert_confirmations` that confirmed or submitted a transaction."""
+        views = verdict["transaction_views"]["views"]
+        confirmers = [{p for quorum in v["confirming_parties"] for p in quorum["parties"]} for v in views]
+        submitters = set(verdict["submitting_parties"])
+        alerting = sorted(self.confirmation_parties)
+        confirming: List[Tuple[PartyId, Json]] = [
+            (p, {"reason": "confirming", "views": confirmed})
+            for p in alerting
+            for confirmed in [[v["view_id"] for v, c in zip(views, confirmers) if p in c]]
+            if confirmed
+        ]
+        submitting: List[Tuple[PartyId, Json]] = [(p, {"reason": "submitting"}) for p in alerting if p in submitters]
+        return confirming + submitting
 
-    def alerting_confirmations(self, parties: Iterable[str]) -> List[PartyId]:
-        """Those of `parties` that are tracked with alert_confirmations."""
-        ids = (self.store.party_ids.get(p) for p in parties)
-        return [self.tracked_by_id[pid] for pid in ids if pid is not None and pid in self.confirmation_ids]
 
+def event_position(item: Json) -> Tuple[int, str]:
+    """(migration id, record time) of an event of Scan's event stream."""
+    update = item.get("update")
+    if update is None:
+        return item["verdict"]["migration_id"], item["verdict"]["record_time"]
+    # Reassignments carry the migration id in their event.
+    return update.get("migration_id", update.get("event", {}).get("migration_id")), update["record_time"]
 
 def preorder(events: Json, root_ids: List[str]) -> List[Json]:
     """The events of a transaction in execution order."""
@@ -967,17 +986,6 @@ def preorder(events: Json, root_ids: List[str]) -> List[Json]:
             ordered.append(event)
             stack.extend(reversed(event.get("child_event_ids", [])))
     return ordered
-
-
-def _reason(party: PartyId, reason: str, event: Json, **details: Any) -> Tuple[PartyId, Json]:
-    choice = {"choice": event["choice"]} if "choice" in event else {}
-    return party, {
-        "reason": reason,
-        "event_id": event["event_id"],
-        "template_id": event["template_id"],
-        **choice,
-        **details,
-    }
 
 
 ### command line
@@ -1006,7 +1014,7 @@ def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
         "recipients, and optionally all transactions they confirm"
     )
     parser.add_argument("--scan-url", required=True, help="Base URL of the Scan instance, e.g. https://scan.sv-1.example.com")
-    parser.add_argument("--db", required=True, help="SQLite database file for the contract map and progress; created if missing")
+    parser.add_argument("--db", required=True, help="SQLite database file for the tracked parties' holdings and progress; created if missing")
     parser.add_argument("--config", required=True, help="JSON file with the tracked parties; see README.md")
     parser.add_argument(
         "--slack-webhook-url",
@@ -1028,9 +1036,9 @@ def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
     parser.add_argument(
         "--stop-at-record-time",
         type=timestamp,
-        help="Exit once all updates up to this record time have been processed, e.g. to replay a fixed time range",
+        help="Exit once all events up to this record time have been processed, e.g. to replay a fixed time range",
     )
-    parser.add_argument("--acs-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Contracts per ACS request (default: %(default)s)")
+    parser.add_argument("--acs-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Holdings per ACS request (default: %(default)s)")
     parser.add_argument(
         "--acs-requests-per-second",
         type=float,
@@ -1038,17 +1046,17 @@ def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
         help="Pace of ACS requests while seeding. Scan's ACS rate limit is shared by all of its clients; "
         "please don't raise this (default: %(default)s)",
     )
-    parser.add_argument("--updates-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Updates per request (default: %(default)s)")
+    parser.add_argument("--events-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Events per request (default: %(default)s)")
     parser.add_argument(
-        "--updates-requests-per-second",
+        "--events-requests-per-second",
         type=float,
         default=2.0,
-        help="Pace of update requests while catching up; shared rate limit as above (default: %(default)s)",
+        help="Pace of event requests while catching up; shared rate limit as above (default: %(default)s)",
     )
     parser.add_argument("--poll-interval-seconds", type=float, default=10, help="Wait between polls once caught up (default: %(default)s)")
     parser.add_argument("--progress-interval-seconds", type=float, default=10, help="Interval between ACS seed progress reports (default: %(default)s)")
     parser.add_argument("--heartbeat-interval-seconds", type=float, default=300, help="Interval between status logs while streaming (default: %(default)s)")
-    parser.add_argument("--exit-when-caught-up", action="store_true", help="Exit once all updates currently in Scan have been processed")
+    parser.add_argument("--exit-when-caught-up", action="store_true", help="Exit once all events currently in Scan have been processed")
     parser.add_argument("--stop-after-acs-pages", type=int, help="Stop after seeding this many ACS pages in this run (for testing resumption)")
     parser.add_argument("--loglevel", default="INFO", help="Log level (default: %(default)s)")
     return parser.parse_args(argv)
@@ -1070,7 +1078,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 store.set_meta(Meta.SCAN_URL, scan_url)
             elif stored_url != scan_url:
                 LOG.warning(f"{args.db} was created against {stored_url}; continuing with {scan_url}")
-            scan = ScanClient(scan_url, args.acs_requests_per_second, args.updates_requests_per_second)
+            scan = ScanClient(scan_url, args.acs_requests_per_second, args.events_requests_per_second)
             slack = SlackNotifier(args.slack_webhook_url) if args.slack_webhook_url else None
             monitor = Monitor(args, scan, store, slack, config)
             monitor.prepare()

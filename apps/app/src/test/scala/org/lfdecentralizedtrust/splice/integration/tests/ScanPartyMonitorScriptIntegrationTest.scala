@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.data.CantonTimestamp
 import io.circe.Json
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.http.scaladsl.server.Directives.{as, complete, entity, path, post}
@@ -17,6 +18,7 @@ import org.lfdecentralizedtrust.splice.unit.http.HttpServerSupport
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 
 import java.nio.file.{Files, Path}
+import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.mutable
@@ -73,12 +75,9 @@ class ScanPartyMonitorScriptIntegrationTest
       r <- m.hcursor.downField("parties").downField(party).focus.flatMap(_.asArray).toList.flatten
     } yield (updateId, r)
 
-  private def reasons(matches: Seq[Json], party: String): Seq[(String, Option[String])] =
+  private def reasons(matches: Seq[Json], party: String): Seq[String] =
     reasonsOf(matches, party).map { case (_, r) =>
-      (
-        r.hcursor.get[String]("reason").fold(e => fail(e), identity),
-        r.hcursor.get[String]("choice").toOption,
-      )
+      r.hcursor.get[String]("reason").fold(e => fail(e), identity)
     }
 
   /** (update id, receiver) of the transfer reasons of `party`. */
@@ -112,14 +111,16 @@ class ScanPartyMonitorScriptIntegrationTest
         val bob = bobParty.toProtoPrimitive
         val charlie = charlieParty.toProtoPrimitive
         aliceWalletClient.tap(100.0)
+        // a holding of bob from before the snapshot, which only a re-seed can store
+        bobWalletClient.tap(50.0)
         // pay for the preapprovals
         bobValidatorWalletClient.tap(10.0)
         aliceValidatorWalletClient.tap(10.0)
-        // these wait for scan to ingest the preapprovals, and hence alice's tap
+        // these wait for scan to ingest the preapprovals, and hence the taps
         createTransferPreapprovalEnsuringItExists(bobWalletClient, bobValidatorBackend)
         createTransferPreapprovalEnsuringItExists(charlieWalletClient, aliceValidatorBackend)
 
-        clue("Take an ACS snapshot containing alice's amulet and the preapprovals") {
+        clue("Take an ACS snapshot containing alice's and bob's amulets") {
           sv1ScanBackend.forceAcsSnapshotNow()
         }
 
@@ -136,7 +137,7 @@ class ScanPartyMonitorScriptIntegrationTest
           "1",
           "--acs-requests-per-second",
           "20",
-          "--updates-requests-per-second",
+          "--events-requests-per-second",
           "20",
           "--exit-when-caught-up",
         ) ++ extra
@@ -191,7 +192,7 @@ class ScanPartyMonitorScriptIntegrationTest
 
         clue("Only the transfers to charlie were reported") {
           // the transfer to bob came first, so it has been processed
-          reasons(transferMatches.toSeq, alice).map(_._1).toSet shouldBe Set("transfer")
+          reasons(transferMatches.toSeq, alice).toSet shouldBe Set("transfer")
           reasons(transferMatches.toSeq, bob) shouldBe empty
           reasons(transferMatches.toSeq, charlie) shouldBe empty
         }
@@ -217,21 +218,61 @@ class ScanPartyMonitorScriptIntegrationTest
           ),
         )
 
-        clue("Adding bob re-seeds, reports bob's transactions, and doesn't repeat alice's") {
+        clue("Adding bob re-seeds, reports bob's confirmations, and doesn't repeat alice's") {
           val slackBodiesBefore = slackBodies.size()
           val run = runScript(args(db, trackBob, "--slack-webhook-url", slackUrl))
           run.stderr.exists(_.contains("re-seeding")) shouldBe true
-          // bob's TransferPreapproval was created before the ACS snapshot, so this checks
-          // that the re-seed loaded the contracts of the added party.
-          reasons(run.matches, bob) should contain(
-            ("exercised_contract_signatory", Some("TransferPreapproval_Send"))
-          )
+          // through his preapproval, bob confirms alice's transfer to him
+          reasons(run.matches, bob) should contain("confirming")
           reasons(run.matches, alice) shouldBe empty
           val newBodies = slackBodies.asScala.toSeq.drop(slackBodiesBefore)
           inside(newBodies) { case Seq(body) =>
-            body should (include(bob) and include("TransferPreapproval_Send"))
+            body should (include(bob) and include("confirming party"))
           }
         }
+
+        val bobMatches = mutable.ListBuffer.empty[Json]
+        actAndCheck(
+          "Bob sends amulet to charlie",
+          bobWalletClient.transferPreapprovalSend(charlieParty, 1.0, UUID.randomUUID.toString),
+        )(
+          "The script reports bob's transfer, from holdings that the re-seed stored",
+          _ => {
+            bobMatches ++= runScript(args(db, trackBob)).matches
+            transfers(bobMatches.toSeq, bob).map(_._2) shouldBe Seq(charlie)
+          },
+        )
+
+        val aliceConfirmations = writeConfig(
+          dir.resolve("alice-confirmations.json"),
+          Json.obj(
+            "expected_recipients" -> Json.arr(Json.fromString(bob)),
+            "parties" -> Json.obj(
+              alice -> Json.obj("alert_confirmations" -> Json.True),
+              charlie -> Json.obj(),
+              bob -> Json.obj("alert_confirmations" -> Json.True),
+            ),
+          ),
+        )
+        val privateMatches = mutable.ListBuffer.empty[Json]
+        actAndCheck(
+          "Alice offers bob a transfer, which the DSO party does not see",
+          aliceWalletClient.createTransferOffer(
+            bobParty,
+            2.0,
+            "private offer",
+            CantonTimestamp.now().plus(Duration.ofMinutes(10)),
+            UUID.randomUUID.toString,
+          ),
+        )(
+          "The script reports alice confirming the private transaction",
+          _ => {
+            privateMatches ++= runScript(args(db, aliceConfirmations)).matches
+            val privateOnes =
+              privateMatches.toSeq.filter(_.hcursor.get[Boolean]("private").contains(true))
+            reasons(privateOnes, alice) should contain("confirming")
+          },
+        )
       }
   }
 }
