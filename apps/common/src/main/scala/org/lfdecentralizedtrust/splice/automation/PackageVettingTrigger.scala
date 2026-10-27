@@ -7,6 +7,7 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.PackageConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, ParticipantAdminConnection}
 import org.lfdecentralizedtrust.splice.util.{AmuletConfigSchedule, PackageVetting}
 
@@ -26,6 +27,8 @@ abstract class PackageVettingTrigger(
 
   private val previouslyRunInputRefForVetting = new AtomicReference[Set[String]](Set.empty)
   private val previouslyRunInputRefForUnvetting = new AtomicReference[Set[String]](Set.empty)
+  private val retainedPendingPackageConfigs =
+    new AtomicReference[(Option[String], Seq[PackageConfig])]((None, Seq.empty))
 
   def getSynchronizerId()(implicit tc: TraceContext): Future[SynchronizerId]
 
@@ -69,7 +72,10 @@ abstract class PackageVettingTrigger(
         )
       )
       currentPackageConfig = amuletRules.payload.configSchedule.initialValue.packageConfig
-      pendingPackageConfigs = newAmuletConfigVoteRequests.map(_._2.packageConfig)
+      pendingPackageConfigs = pendingPackageConfigsForUnvetting(
+        amuletRules.contractId.contractId,
+        newAmuletConfigVoteRequests.map(_._2.packageConfig),
+      )
       // ensure that unsupported versions are not vetted
       _ <- runIfInputChanged(
         Seq(
@@ -109,5 +115,16 @@ abstract class PackageVettingTrigger(
       Future.unit
     }
   }
+
+  // Keep executed configs pending until the (possibly cached) AmuletRules reflects them.
+  private def pendingPackageConfigsForUnvetting(
+      amuletRulesContractId: String,
+      pendingPackageConfigs: Seq[PackageConfig],
+  ): Seq[PackageConfig] =
+    retainedPendingPackageConfigs.updateAndGet { case (retainedContractId, retained) =>
+      if (retainedContractId.contains(amuletRulesContractId))
+        (retainedContractId, (retained ++ pendingPackageConfigs).distinct)
+      else (Some(amuletRulesContractId), pendingPackageConfigs)
+    }._2
 
 }
