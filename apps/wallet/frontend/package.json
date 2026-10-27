@@ -19,7 +19,7 @@
     "@canton-network/splice-common-frontend": "0.1.0",
     "@canton-network/splice-common-frontend-utils": "0.1.0",
     "@mui/icons-material": "^7.3.4",
-    "@mui/material": "^7.3.4",
+    "@mui/material": "^9.4.0",
     "@tanstack/react-query": "5.90.20",
     "bignumber.js": "9.1.1",
     "dompurify": "^3.4.16",
