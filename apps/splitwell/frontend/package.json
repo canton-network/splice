@@ -26,7 +26,7 @@
     "jsondiffpatch": "^0.7.6",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-helmet-async": "^2.0.5",
+    "react-helmet-async": "^3.0.0",
     "react-router": "^7.18.2",
     "uuid": "^14.0.3",
     "web-vitals": "4.2.4",
