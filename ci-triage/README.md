@@ -323,3 +323,8 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10679 | every app init several times slower on one runner, waitForInitialization timeouts | - | `2026-10-27b/10679.md`. One-off, close. |
 | 10690 | TokenStandardCli external-party balance 404 before the wallet exists -> MatchError | new family | `2026-10-27b/10690.md`. Production fix: NotFound case in GetExternalPartyBalance; test waits for the wallet. Keep open. |
 | 10691 | SvOnboardingAddl 1 min wait vs 60 s sequencer availableAfter + synchronizer-time lag | new family | `2026-10-27b/10691.md`. Test fix: 2 minutes. Keep open. |
+| 10693 | cimain deploy_basic on splice 74cdc0dc8 (AFTER the #8015 revert) | new, not 10683 | `2026-10-27c/10693.md`. Needs CircleCI job 525503 log; suspects #7977/#7996 key export/download. Puts the 10689 verdict in doubt. |
+| 10678 / 10692 | Mainnet / Devnet backup_status_cluster | 10643 | `2026-10-27c/10678-10692.md`. Backup jobs OOM (100 Mi request); log not readable (router refuses Actions). Close as dup. |
+| 10305 | dependencies_scan `fork/exec /bin/bash: operation not permitted` | - | `2026-10-27c/10305-10332-10493.md`. One-off runner fault, Oriol set no-repro. Close. |
+| 10332 | backup waits on a cometBFT snapshot on CantonBFT cimain | new, root-caused | `2026-10-27c/10305-10332-10493.md`. Concurrent deploy_basic force-push dropped the resolved config (Pawel); node-backup.sh `$pvc_name`/`$backupName` bug. Needs an owner. |
+| 10493 | deploy_cimain coursier `Stale file handle` on cache lock | - (NOT 10494) | `2026-10-27c/10305-10332-10493.md`. Infra one-off. Close. |
