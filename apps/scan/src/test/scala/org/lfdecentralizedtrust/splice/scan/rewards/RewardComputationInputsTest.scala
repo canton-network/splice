@@ -45,6 +45,17 @@ class RewardComputationInputsTest extends AnyWordSpec with BaseTest with BigDeci
 
   "RewardComputationInputs.deriveIssuanceParams" should {
 
+    val fields: Seq[(String, RewardIssuanceParams => BigDecimal)] = Seq(
+      "appMintingAllowanceCC" -> (_.appMintingAllowanceCC),
+      "assetMintingAllowanceCC" -> (_.assetMintingAllowanceCC),
+      "unclaimedMintingAllowanceCC" -> (_.unclaimedMintingAllowanceCC),
+      "issuancePerAppBurnCC" -> (_.issuancePerAppBurnCC),
+      "issuancePerAppBurnCCPerMB" -> (_.issuancePerAppBurnCCPerMB),
+      "issuancePerAssetBurnCC" -> (_.issuancePerAssetBurnCC),
+      "issuancePerAssetBurnCCPerMB" -> (_.issuancePerAssetBurnCCPerMB),
+      "appRewardCouponThresholdCC" -> (_.appRewardCouponThresholdCC),
+    )
+
     cases.foreach { tc =>
       tc.label in {
         val result =
@@ -52,38 +63,11 @@ class RewardComputationInputsTest extends AnyWordSpec with BaseTest with BigDeci
             tc.totalRoundAppActivityWeight,
             tc.totalFeaturedAssetWeight,
           )
-        result.appMintingAllowanceCC should beEqualUpTo(
-          tc.expected.appMintingAllowanceCC,
-          10,
-        )
-        result.assetMintingAllowanceCC should beEqualUpTo(
-          tc.expected.assetMintingAllowanceCC,
-          10,
-        )
-        result.unclaimedMintingAllowanceCC should beEqualUpTo(
-          tc.expected.unclaimedMintingAllowanceCC,
-          10,
-        )
-        result.issuancePerAppBurnCC should beEqualUpTo(
-          tc.expected.issuancePerAppBurnCC,
-          10,
-        )
-        result.issuancePerAppBurnCCPerMB should beEqualUpTo(
-          tc.expected.issuancePerAppBurnCCPerMB,
-          10,
-        )
-        result.issuancePerAssetBurnCC should beEqualUpTo(
-          tc.expected.issuancePerAssetBurnCC,
-          10,
-        )
-        result.issuancePerAssetBurnCCPerMB should beEqualUpTo(
-          tc.expected.issuancePerAssetBurnCCPerMB,
-          10,
-        )
-        result.appRewardCouponThresholdCC should beEqualUpTo(
-          tc.expected.appRewardCouponThresholdCC,
-          10,
-        )
+        fields.foreach { case (name, read) =>
+          withClue(name) {
+            read(result) should beEqualUpTo(read(tc.expected), 10)
+          }
+        }
       }
     }
   }
