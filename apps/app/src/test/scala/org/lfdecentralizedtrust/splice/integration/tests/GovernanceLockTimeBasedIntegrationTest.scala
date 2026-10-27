@@ -847,6 +847,91 @@ class GovernanceLockTimeBasedIntegrationTest
       )
   }
 
+  // Demonstrates a race between the amulet owner expiring a locked amulet and
+  // the expire vesting lock automation:
+  //
+  // 1. One of several vesting locks with the same key expires.
+  // 2. Before the trigger archives that lock, the owner expires its
+  //    locked amulet.
+  // 3. The owner proposes a lock transfer for the key.
+  // 4. The receiver tries to accept the transfer, but Scan can't build the
+  //    accept context: the expired lock is still active and points to the
+  //    archived locked amulet.
+  "lock transfer accept context fails if a source LockedAmulet is gone" in { implicit env =>
+    val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+    val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+    val alice = RichPartyId.local(aliceParty)
+    val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
+    val vestingStartTime =
+      truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+
+    aliceWalletClient.tap(walletAmuletToUsd(BigDecimal(100000)))
+    val lockCid = tsv1Operations.createGovernanceLock(
+      aliceParticipant,
+      alice,
+      lockKind,
+      lockSubject,
+      lockAmount,
+    )
+    tsv1Operations
+      .unlockGovernanceLock(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        unlockAmount = lockAmount,
+        vestingStartTime = vestingStartTime,
+        isValid = _.originalInstructionCid.toScala.exists(
+          _.contractId == lockCid.contractId
+        ),
+      )
+      .value
+    val (vestingLockCid, vestingLock) =
+      governanceLocks(aliceParticipant, aliceParty).loneElement
+
+    val (transferCid, _) = actAndCheck(
+      "alice proposes to transfer part of her vesting lock to bob",
+      tsv1Operations.transferVestingLock(vestingLock)(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        bobParty,
+        transferAmount = lockAmount / 4,
+      ),
+    )(
+      "Scan's accept context discloses the lock and its LockedAmulet",
+      transferCid =>
+        sv1ScanBackend
+          .getTransferInstructionAcceptContext(transferCid)
+          .disclosedContracts
+          .map(_.getContractId) should contain allOf (
+          vestingLockCid.contractId,
+          vestingLock.lockedAmulet.contractId
+        ),
+    )
+
+    // Past the vesting end time, the owner can release the time-lock of the
+    // LockedAmulet. The paused `ExpireVestingLockTrigger` and
+    // `ExpireGovernanceLockTransferTrigger` keep the lock and the expired
+    // transfer active.
+    advanceTime(vestingDuration.plusSeconds(10))
+    actAndCheck(
+      "alice releases the expired time-lock of the LockedAmulet",
+      ownerExpireLock(aliceParty, vestingLock.lockedAmulet),
+    )(
+      "Scan's accept context fails with the missing LockedAmulet and its lock",
+      _ =>
+        assertThrowsAndLogsCommandFailures(
+          sv1ScanBackend.getTransferInstructionAcceptContext(transferCid),
+          _.errorMessage should include(
+            s"LockedAmulet '${vestingLock.lockedAmulet.contractId}' of " +
+              s"GovernanceLock '${vestingLockCid.contractId}' not found"
+          ),
+        ),
+    )
+  }
+
   private def governanceLocks(
       participant: ParticipantClientReference,
       owner: PartyId,
