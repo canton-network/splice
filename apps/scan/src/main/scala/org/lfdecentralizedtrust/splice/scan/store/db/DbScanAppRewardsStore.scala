@@ -773,25 +773,37 @@ class DbScanAppRewardsStore(
   private def insertPartyTotals(historyId: Long, roundNumber: Long) =
     sql"""inserted_parties as (
             insert into #${Tables.appActivityPartyTotals}
-              (history_id, round_number, total_app_activity_weight,
-               app_provider_party, num_app_activity_records,
-               num_asset_activity_records, total_asset_activity_weight)
-            select $historyId, $roundNumber, total_app_weight, party,
+              (history_id,
+               round_number,
+               total_app_activity_weight,
+               app_provider_party,
+               num_app_activity_records,
+               num_asset_activity_records,
+               total_asset_activity_weight)
+            select $historyId,
+                   $roundNumber,
+                   total_app_weight,
+                   party,
                    num_app_activity_records,
                    num_asset_activity_records,
                    total_asset_weight
             from combined_parties
-            returning total_app_activity_weight, num_app_activity_records,
+            returning total_app_activity_weight,
+                      num_app_activity_records,
                       total_asset_activity_weight
           )"""
 
   /** Insert the round-level totals from the RETURNING output of insertPartyTotals. */
   private def insertRoundTotals(historyId: Long, roundNumber: Long) =
     sql"""insert into #${Tables.appActivityRoundTotals}
-            (history_id, round_number, total_round_app_activity_weight,
-             active_app_provider_parties_count, activity_records_count,
+            (history_id,
+             round_number,
+             total_round_app_activity_weight,
+             active_app_provider_parties_count,
+             activity_records_count,
              total_round_asset_activity_weight)
-          select $historyId, $roundNumber,
+          select $historyId,
+                 $roundNumber,
                  coalesce(sum(total_app_activity_weight), 0),
                  count(*) filter (where total_app_activity_weight > 0),
                  coalesce(sum(num_app_activity_records), 0),
