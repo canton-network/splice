@@ -45,7 +45,7 @@ import DA.Fail
 
 -- | Defined separately from the implementation's prefix so that the tests also check its value.
 trafficPurchaseMemoPrefix : Text
-trafficPurchaseMemoPrefix = "cip-128/memo:"
+trafficPurchaseMemoPrefix = "splice/memo:"
 
 -- | Use this to construct an empty 'ExtraArgs' record.
 emptyExtraArgs : ExtraArgs

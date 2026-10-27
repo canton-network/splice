@@ -83,8 +83,8 @@
   - Daml
 
     - **Implement traffic purchases via token standard transfers:** a V1 or V2 token standard transfer to the receiver party
-      `cip-128_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd`
-      with the memo set to `cip-128/memo:member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>[&forfeit-validator-reward-coupon=<true|false>]`
+      `splice_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd`
+      with the memo set to `splice/memo:member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>[&forfeit-validator-reward-coupon=<true|false>]`
       burns the full transfer `amount` and creates a `MemberTraffic` contract instead of transferring amulet.
       The purchased traffic is calculated from the CC price and traffic price in the referenced `ExternalPartyConfigState`
       and rounded down to whole bytes.
@@ -95,7 +95,7 @@
 
     - Traffic purchases, including those made through `AmuletRules_BuyMemberTraffic`, now include the purchased
       traffic in bytes and the memo in the `splice.lfdecentralizedtrust.org/reason` of their burn and transaction metadata:
-      `cip-128/memo:purchased-traffic-bytes=<int>&member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>`
+      `splice/memo:purchased-traffic-bytes=<int>&member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>`
 
     - Added three new fields: `trafficPrice`, `supportedSynchronizerIds` and
       `minTrafficTopupAmount` to `ExternalPartyConfigState`.

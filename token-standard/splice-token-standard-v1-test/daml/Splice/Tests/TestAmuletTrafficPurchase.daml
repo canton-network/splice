@@ -50,7 +50,7 @@ defaultMemoTag =
 
 defaultReason : Text
 defaultReason =
-  "cip-128/memo:purchased-traffic-bytes=1000000&member-id=" <> testMemberId <> "&synchronizer-id=" <> testSynchronizerId <> "&migration-id=0"
+  "splice/memo:purchased-traffic-bytes=1000000&member-id=" <> testMemberId <> "&synchronizer-id=" <> testSynchronizerId <> "&migration-id=0"
 
 data TestSetup = TestSetup with
   registry : AmuletRegistry.AmuletRegistry

@@ -348,7 +348,7 @@ data TransferCommand_ExpireResult = TransferCommand_ExpireResult
 trafficPurchaseReceiver : Party
 trafficPurchaseReceiver =
   fromSomeNote "trafficPurchaseReceiver: invalid party" $
-  partyFromText "cip-128_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd"
+  partyFromText "splice_traffic-purchase::1220000000000000000000000000000000000000000000000000000000000000abcd"
 
 
 -- Token standard transfer factory

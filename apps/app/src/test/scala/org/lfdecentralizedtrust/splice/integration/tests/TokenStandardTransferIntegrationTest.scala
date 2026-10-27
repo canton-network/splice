@@ -447,7 +447,7 @@ class TokenStandardTransferIntegrationTest
       val spentAmuletAmount = minimumCostAmulet * 2
       val purchasedTrafficAmount = computeTrafficForAmuletAmount(spentAmuletAmount)
       val memo =
-        s"cip-128/memo:member-id=${memberId.toProtoPrimitive}" +
+        s"splice/memo:member-id=${memberId.toProtoPrimitive}" +
           s"&synchronizer-id=${synchronizerId.toProtoPrimitive}" +
           s"&migration-id=${sv1ScanBackend.getMigrationId()}"
       val purchasedTrafficBefore = getTotalPurchasedTraffic(memberId, synchronizerId)
