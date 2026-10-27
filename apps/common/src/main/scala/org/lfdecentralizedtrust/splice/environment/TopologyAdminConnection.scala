@@ -89,7 +89,7 @@ abstract class TopologyAdminConnection(
     override protected[this] val retryProvider: RetryProvider,
     tokenProvider: AuthTokenProvider = AuthTokenSourceNone,
 )(implicit ec: ExecutionContextExecutor, tracer: Tracer)
-    extends AdminConnection(
+    extends AppConnection(
       config,
       apiLoggingConfig,
       loggerFactory,

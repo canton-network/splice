@@ -169,9 +169,9 @@ object BaseAppConnection {
 
 }
 
-/** Base class for connecting and calling Canton gRPC admin APIs.
+/** Base class for connecting and calling Canton gRPC APIs.
   */
-abstract class AdminConnection(
+abstract class AppConnection(
     config: ClientConfig,
     apiLoggingConfig: ApiLoggingConfig,
     override val loggerFactory: NamedLoggerFactory,

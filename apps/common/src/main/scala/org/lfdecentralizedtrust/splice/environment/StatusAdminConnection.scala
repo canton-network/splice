@@ -10,7 +10,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 trait StatusAdminConnection {
-  this: AdminConnection & RetryProvider.Has =>
+  this: AppConnection & RetryProvider.Has =>
   protected implicit val ec: ExecutionContextExecutor
   type Status <: NodeStatus.Status
   protected def getStatusRequest: GrpcAdminCommand[?, ?, NodeStatus[Status]]
