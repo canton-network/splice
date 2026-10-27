@@ -351,7 +351,7 @@ If the auto-bumper can't help (e.g. you want a minor/major bump), fall back to t
 1. Bump the version inside the `daml.yaml` file inside the updated module, and in all modules that (recursively) depend on it.
 2. Run `sbt damlBuild; sbt damlDarsLockFileUpdate` to compile the `.dar` files.
 3. Run `sbt updateDarResources` to update DarResources.
-4. Manually update `apps/package.json` to update the versions of the daml packages that were updated in step 1.
+4. Manually update `apps/generated-packages.json` to update the versions of the daml packages that were updated in step 1.
 5. Run `sbt npmInstall ; sbt compile`
 
 ## Daml Version Guards in Integration Tests

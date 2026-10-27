@@ -85,7 +85,7 @@ class RollForwardLsuDRIntegrationTest
   val trafficExportTimeFile = File.newTemporaryFile()
 
   // This needs to be long enough in the future that we can start Canton and initialize for SVs.
-  val maxSequencingTime = CantonTimestamp.now().plusSeconds(240)
+  val maxSequencingTime = CantonTimestamp.now().plusSeconds(300)
   // 5s chosen by fair dice roll
   val lowerBoundSequencingTimeExclusive = maxSequencingTime.plusSeconds(5)
   val upgradeTime = lowerBoundSequencingTimeExclusive
@@ -203,6 +203,8 @@ class RollForwardLsuDRIntegrationTest
       participants = false,
       enableBftSequencer = false,
       logSuffix = "roll-forward-lsu-before-dr",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
       extraSequencerConfig =
         Seq(s"parameters.lsu-repair.global-max-sequencing-time-exclusive=${maxSequencingTime}"),
       overrideSvDbsSuffix = Some("lsu_drbeforedr"),
@@ -261,6 +263,8 @@ class RollForwardLsuDRIntegrationTest
         participants = false,
         enableBftSequencer = true,
         logSuffix = "roll-forward-lsu-dr",
+        // LSU exports the sequencer and mediator keys
+        enableKeyDownload = true,
         extraSequencerConfig = Seq(
           s"parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=${lowerBoundSequencingTimeExclusive}",
           s"parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=${upgradeTime}",

@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.scan.store
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
@@ -10,7 +12,6 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice
@@ -24,18 +25,26 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMe
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes}
+import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.lfdecentralizedtrust.splice.store.{
+  AdditionalIngestionSink,
+  ActiveVotesStore,
   AppStore,
   DsoRulesStore,
   ExternalPartyConfigStateStore,
+  HistoricalVotesStore,
   Limit,
   MiningRoundsStore,
   MultiDomainAcsStore,
   TxLogAppStore,
   UpdateHistory,
-  VotesStore,
 }
-import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Contract,
+  ContractWithState,
+  GovernanceLockUtil,
+  TemplateJsonDecoder,
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -49,12 +58,16 @@ trait ScanStore
     with PackageIdResolver.HasAmuletRules
     with DsoRulesStore
     with MiningRoundsStore
-    with VotesStore
+    with ActiveVotesStore
+    with HistoricalVotesStore
     with ExternalPartyConfigStateStore {
 
   override def dsoPartyId = key.dsoParty
 
   def key: ScanStore.Key
+
+  /** The id of the TxLog store, which is also the id under which the votes are stored by [[db.DbVotesStore]]. */
+  private[splice] def txLogStoreId: TxLogStoreId
 
   protected[store] def domainMigrationId: Long
 
@@ -256,15 +269,15 @@ object ScanStore {
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
       txLogStoreDescriptorUserVersion: Option[Long] = None,
+      additionalIngestionSinks: Seq[AdditionalIngestionSink] = Seq.empty,
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
       close: CloseContext,
-  ): ScanStore = {
-    new CachingScanStore(
-      loggerFactory,
-      retryProvider,
-      new DbScanStore(
+      tc: TraceContext,
+  ): Future[ScanStore] = {
+    DbScanStore
+      .create(
         key = key,
         storage,
         loggerFactory,
@@ -276,10 +289,18 @@ object ScanStore {
         defaultLimit,
         acsStoreDescriptorUserVersion,
         txLogStoreDescriptorUserVersion,
-      ),
-      cacheConfigs,
-      metrics,
-    )
+        additionalIngestionSinks,
+      )
+      .map { dbStore =>
+        new CachingScanStore(
+          loggerFactory,
+          retryProvider,
+          dbStore,
+          cacheConfigs,
+          metrics,
+        )
+
+      }
   }
 
   def contractFilter(
@@ -479,6 +500,34 @@ object ScanStore {
               Some(Timestamp.assertFromInstant(contract.payload.transfer.executeBefore)),
           )
         },
+        mkFilter(splice.governancelock.GovernanceLock.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          val (lockType, lockSubject) =
+            GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = GovernanceLockUtil
+              .getVestingLockSpecification(contract.payload)
+              .map(v => Timestamp.assertFromInstant(v.endTime)),
+            governanceLockType = Some(lockType.storeValue),
+            governanceLockSubject = Some(lockSubject),
+          )
+        },
+        mkFilter(splice.governancelock.substitution.GovernanceLockSubstitution.COMPANION)(
+          co => co.payload.target.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        )(contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          )
+        ),
         mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
           co => co.payload.dso == dso,
           versionGuard = { case (pkgVersionSupport, now) =>

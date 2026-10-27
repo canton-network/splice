@@ -154,6 +154,13 @@ abstract class ExternalPartyWalletStoreTest
         }
       }
     }
+
+    testGovernanceLockIngestion(
+      externalParty1,
+      dsoParty,
+      externalParty2,
+      () => mkStore(externalParty1),
+    )
   }
 
   private lazy val externalParty1 = userParty(1)
@@ -200,18 +207,18 @@ class DbExternalPartyWalletStoreTest
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)
 
-    val store = new DbExternalPartyWalletStore(
-      key = storeKey(externalParty),
-      storage = storage,
-      loggerFactory = loggerFactory,
-      retryProvider =
-        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      migrationId,
-      participantId = mkParticipantId("ExternalPartyWalletStoreTest"),
-      IngestionConfig(),
-      defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-    )
     for {
+      store <- DbExternalPartyWalletStore.create(
+        key = storeKey(externalParty),
+        storage = storage,
+        loggerFactory = loggerFactory,
+        retryProvider =
+          RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
+        migrationId,
+        participantId = mkParticipantId("ExternalPartyWalletStoreTest"),
+        IngestionConfig(),
+        defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+      )
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
         .ingestAcs(acsOffset, Seq.empty, Seq.empty, Seq.empty)

@@ -135,7 +135,7 @@
         }
       ]
     },
-    "version": "1.11.1"
+    "version": "1.13.0"
   },
   "name": "validator1-wallet-gateway",
   "provider": "",
