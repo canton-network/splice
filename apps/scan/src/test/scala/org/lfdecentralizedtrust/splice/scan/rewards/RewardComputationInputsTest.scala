@@ -410,7 +410,7 @@ object RewardComputationInputsTest {
 
     // --- 6. Zero traffic: all rewards unclaimed ---
 
-    // MainNet: zero app burn → rate 0 per amendment lines 246-247.
+    // MainNet: zero app burn → zero issuance rate (per the amendment's zero-coupons rule).
     TestCase(
       label = "MainNet: zero traffic, all unclaimed",
       inputs = mainNet,
@@ -426,7 +426,7 @@ object RewardComputationInputsTest {
         appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
       ),
     ),
-    // Simple: zero app burn → rate 0 per amendment lines 246-247.
+    // Simple: zero app burn → zero issuance rate (per the amendment's zero-coupons rule).
     TestCase(
       label = "simple: zero traffic, all rewards unclaimed",
       inputs = simpleArithmetic,
