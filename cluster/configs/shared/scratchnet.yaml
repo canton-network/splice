@@ -32,6 +32,7 @@ validators:
   validator-runbook:
     walletGateway:
       enabled: true
+    enableInternalAutoOnboardingThroughSvTrafficFaucet: true
 svs:
   sv-1: !include(scratchnet-sv.yaml;$SPLICE_ROOT/cluster/configs/shared/validator-topology-metrics-export.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}
