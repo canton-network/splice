@@ -1,8 +1,8 @@
-# 26.10@sha256:9c3a42b7c0016cbf87ceb71fd72d26c0e73b37e532e2c6071707f124c489c118
+# 26.04@sha256:19fcd1bf268f02b60aca3bd30bd8a6d9a11759a430e32921833e65f16d87348a
 # Note that we don't currently support arm64 runners, so we build this only for amd64
-FROM --platform=$BUILDPLATFORM ubuntu@sha256:9c3a42b7c0016cbf87ceb71fd72d26c0e73b37e532e2c6071707f124c489c118
+FROM --platform=$BUILDPLATFORM ubuntu@sha256:19fcd1bf268f02b60aca3bd30bd8a6d9a11759a430e32921833e65f16d87348a
 
-LABEL org.opencontainers.image.base.name="ubuntu:26.10"
+LABEL org.opencontainers.image.base.name="ubuntu:26.04"
 # TODO(#495): consider whether we can move some of the things installed here (and with pip below) into nix
 RUN apt-get update && \
     apt-get install -y sudo git curl xz-utils pigz rsync jq unzip python3-pip && \
