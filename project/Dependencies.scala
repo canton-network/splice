@@ -21,13 +21,11 @@ object Dependencies {
     "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
   lazy val scalapb_json4 = "com.thesamet.scalapb" %% "scalapb-json4s" % "0.11.1"
 
-  lazy val auth0 = "com.auth0" % "auth0" % "1.44.1"
+  lazy val auth0 = "com.auth0" % "auth0" % "1.45.1"
 
-  lazy val java_jwt =
-    "com.auth0" % "java-jwt" % "4.1.0"
+  lazy val java_jwt = CantonDependencies.auth0_java
 
-  lazy val jwks_rsa =
-    "com.auth0" % "jwks-rsa" % "0.21.2"
+  lazy val jwks_rsa = CantonDependencies.auth0_jwks
 
   lazy val daml_lf_validation =
     "com.daml" %% "daml-lf-validation" % CantonDependencies.canton_library_version
@@ -36,7 +34,7 @@ object Dependencies {
     "org.apache.pekko" %% "pekko-http-cors" % CantonDependencies.pekko_http_version
 
   lazy val pekko_connectors_google_cloud_storage =
-    "org.apache.pekko" %% "pekko-connectors-google-cloud-storage" % "1.0.2"
+    "org.apache.pekko" %% "pekko-connectors-google-cloud-storage" % "1.3.0"
 
   lazy val spray_json =
     "io.spray" %% "spray-json" % "1.3.6"
@@ -51,15 +49,15 @@ object Dependencies {
 
   lazy val jaxb_abi = "javax.xml.bind" % "jaxb-api" % "2.3.1"
 
-  lazy val commons_compress = "org.apache.commons" % "commons-compress" % "1.27.1"
+  lazy val commons_compress = "org.apache.commons" % "commons-compress" % "1.28.0"
 
-  lazy val parallel_collections = "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4"
+  lazy val parallel_collections = "org.scala-lang.modules" %% "scala-parallel-collections" % "1.2.0"
 
-  lazy val zstd = "com.github.luben" % "zstd-jni" % "1.5.7-6"
+  lazy val zstd = CantonDependencies.zstd
 
   lazy val aws_s3 = "software.amazon.awssdk" % "s3" % CantonDependencies.aws_version
 
-  lazy val s3mock_testcontainers = "com.adobe.testing" % "s3mock-testcontainers" % "4.11.0" % "test"
+  lazy val s3mock_testcontainers = "com.adobe.testing" % "s3mock-testcontainers" % "4.12.4" % "test"
 
   private lazy val jackson_version = "2.22.3"
   private lazy val netty_version = "4.1.138.Final"
