@@ -648,6 +648,18 @@ object ScanHttpEncodings {
     definitions.EventHistoryActivityRecords(records = records)
   }
 
+  def encodeAssetActivityRecordOrEmpty(
+      recordO: Option[AppActivityRecordT]
+  ): definitions.EventHistoryActivityRecords =
+    recordO
+      .map(encodeAssetActivityRecord)
+      .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
+
+  def encodeSubmittingAppProvider(
+      recordO: Option[AppActivityRecordT]
+  ): Option[OmitNullString] =
+    recordO.flatMap(_.submittingAppProvider).map(OmitNullString(_))
+
   def fromDamlValueEncoding(encoding: definitions.DamlValueEncoding): ScanHttpEncodings =
     encoding match {
       case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()

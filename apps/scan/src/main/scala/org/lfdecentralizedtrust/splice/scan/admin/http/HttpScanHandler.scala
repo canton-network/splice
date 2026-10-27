@@ -63,7 +63,6 @@ import org.lfdecentralizedtrust.splice.http.{
   HttpFeatureSupportHandler,
   HttpValidatorLicensesHandler,
   HttpVotesHandler,
-  OmitNullString,
   UrlValidator,
 }
 import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
@@ -875,23 +874,19 @@ class HttpScanHandler(
             val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
               v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
             }
-            val appActivityRecordEncoded = appActivityRecordO.map(
-              ScanHttpEncodings.encodeAppActivityRecord
-            )
+            val appActivityRecordEncoded =
+              appActivityRecordO.map(ScanHttpEncodings.encodeAppActivityRecord)
             // TODO(#7837): cover these fields in the integration test.
-            val assetActivityRecordEncoded = appActivityRecordO
-              .map(ScanHttpEncodings.encodeAssetActivityRecord)
-              .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
-            val submittingAppProviderEncoded =
-              appActivityRecordO.flatMap(_.submittingAppProvider).map(OmitNullString(_))
             Right(
               definitions.EventHistoryItem(
-                encodedUpdateV2,
-                verdictEncoded,
-                trafficSummaryEncoded,
-                appActivityRecordEncoded,
-                assetActivityRecords = assetActivityRecordEncoded,
-                submittingAppProvider = submittingAppProviderEncoded,
+                update = encodedUpdateV2,
+                verdict = verdictEncoded,
+                trafficSummary = trafficSummaryEncoded,
+                appActivityRecords = appActivityRecordEncoded,
+                assetActivityRecords =
+                  ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appActivityRecordO),
+                submittingAppProvider =
+                  ScanHttpEncodings.encodeSubmittingAppProvider(appActivityRecordO),
               )
             )
           }
@@ -957,27 +952,21 @@ class HttpScanHandler(
         val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
           v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
         }
-        val appActivityRecordEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-          appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAppActivityRecord)
+        val appActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
+          appActivityRecordMap.get(v.rowId)
         }
+        val appActivityRecordEncoded =
+          appActivityRecordForEvent.map(ScanHttpEncodings.encodeAppActivityRecord)
         // TODO(#7837): cover these fields in the integration test.
-        val assetActivityRecordEncoded = verdictWithViewsO
-          .flatMap { case (v, _) =>
-            appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAssetActivityRecord)
-          }
-          .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
-        val submittingAppProviderEncoded = verdictWithViewsO
-          .flatMap { case (v, _) =>
-            appActivityRecordMap.get(v.rowId).flatMap(_.submittingAppProvider)
-          }
-          .map(OmitNullString(_))
         definitions.EventHistoryItem(
-          encodedUpdateV2,
-          verdictEncoded,
-          trafficSummaryEncoded,
-          appActivityRecordEncoded,
-          assetActivityRecords = assetActivityRecordEncoded,
-          submittingAppProvider = submittingAppProviderEncoded,
+          update = encodedUpdateV2,
+          verdict = verdictEncoded,
+          trafficSummary = trafficSummaryEncoded,
+          appActivityRecords = appActivityRecordEncoded,
+          assetActivityRecords =
+            ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appActivityRecordForEvent),
+          submittingAppProvider =
+            ScanHttpEncodings.encodeSubmittingAppProvider(appActivityRecordForEvent),
         )
       }.toVector
     }
