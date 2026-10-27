@@ -19,8 +19,6 @@
     "@canton-network/splice-common-frontend-utils": "0.1.0",
     "@dmsnell/diff-match-patch": "^1.1.0",
     "@canton-network/splice-common-typeface-termina": "1.0.0",
-    "@canton-network/splitwell-openapi": "0.0.1",
-    "@canton-network/sv-openapi": "0.0.1",
     "@tanstack/react-query": "5.90.20",
     "date-fns": "2.29.3",
     "decimal.js-light": "2.5.1",

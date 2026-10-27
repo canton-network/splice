@@ -3,10 +3,17 @@
 
 package org.lfdecentralizedtrust.splice.util
 
+import com.digitalasset.canton.topology.PartyId
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock as gl
 
 object GovernanceLockUtil {
+
+  /** Receiver of all governance lock requests, mirroring `lockManagerParty` in `Splice.GovernanceLock`. */
+  val lockManagerParty = PartyId.tryFromProtoPrimitive(
+    "cip-127_lock-manager::1220000000000000000000000000000000000000000000000000000000000000abcd"
+  )
+
   def foldSpecification[A](specification: gl.GovernanceLockSpecification)(
       onFull: gl.FullLockSpecification => A,
       onVesting: gl.VestingLockSpecification => A,

@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-nginxImage: nginxinc/nginx-unprivileged:1.31.6-alpine-slim@sha256:ac4d9c7e457c6510b95ac72dd84b27f7cc68ecb9a83fbd44f05a6460cf08aba4
+nginxImage: nginxinc/nginx-unprivileged:1.30.6-alpine-slim@sha256:5d8bb9437d74a600ec5dbf90c035451c724dc33eac8d3a71078f6f8612c345f6
 updaterImage: registry.gitlab.com/gitlab-ci-utils/curl-jq:5.0.3@sha256:eaf99ecea8b7e4fbbe161db8ba6fa2099a1d53b4e108926492d3c6577135b1f0
 contentType: "application/json"
 
