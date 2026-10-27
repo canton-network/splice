@@ -197,7 +197,7 @@ class DbScanRewardsReferenceStore(
             opsParties.foldLeft(acc) { (innerAcc, opsParty) =>
               innerAcc.get(opsParty) match {
                 // On conflict keep the lexicographically lowest provider
-                // TODO: consider emitting a warning on conflict
+                // TODO(#7837): consider emitting a warning on conflict
                 case Some(existingProvider) if existingProvider <= provider => innerAcc
                 case _ => innerAcc.updated(opsParty, provider)
               }
