@@ -410,7 +410,7 @@ export function activityWeightToOptional(weight: string): string | null {
   return weight.trim() === '' ? null : weight;
 }
 
-// appKind: '' (blank select) encodes the DAML default (None → FAK_General).
+// appKind: '' (blank select) encodes the DAML default (None → FAK_Basic).
 export function appKindToOptional(kind: string): FeaturedAppKind | null {
   return kind === '' ? null : (kind as FeaturedAppKind);
 }
@@ -437,16 +437,30 @@ export function diffOpsParties(
   };
 }
 
+// Friendly display labels for the FeaturedAppKind constructors; the raw DAML
+// names (FAK_Basic, …) leak internals, so mirror how proposal actions are labeled.
+const APP_KIND_LABELS: Record<string, string> = {
+  FAK_Basic: 'Basic',
+  FAK_AssetMoving: 'Asset Moving',
+  FAK_Asset: 'Asset',
+};
+
+// Label shown for an unset (None) appKind in change/diff displays.
+// DAML default is FAK_Basic (Amulet.daml `defaultAppKind`).
+const APP_KIND_DEFAULT_LABEL = 'Default (unset)';
+
+// Display label for an appKind value; '' (None) → the DAML default.
+export function appKindLabel(kind: string): string {
+  return kind === '' ? APP_KIND_DEFAULT_LABEL : (APP_KIND_LABELS[kind] ?? kind);
+}
+
 // Select options for the appKind field. Blank maps to the DAML default (None).
 export function appKindSelectOptions(): { key: string; value: string }[] {
   return [
-    { key: 'Default (General)', value: '' },
-    ...FeaturedAppKind.keys.map(k => ({ key: k, value: k })),
+    { key: APP_KIND_DEFAULT_LABEL, value: '' },
+    ...FeaturedAppKind.keys.map(k => ({ key: appKindLabel(k), value: k })),
   ];
 }
-
-// Label shown for an unset (None) appKind in change/diff displays.
-const APP_KIND_DEFAULT_LABEL = 'Default (General)';
 
 // Build the UI-facing view of a single provider's config amendment: scalar
 // changes (appKind / activityWeight) as ConfigChange rows (only changed fields), and the
@@ -465,8 +479,8 @@ export function buildFeaturedAppConfigUpdateEntry(
     scalarChanges.push({
       fieldName: 'appKind',
       label: 'App Kind',
-      currentValue: baseKind || APP_KIND_DEFAULT_LABEL,
-      newValue: newKind || APP_KIND_DEFAULT_LABEL,
+      currentValue: appKindLabel(baseKind),
+      newValue: appKindLabel(newKind),
     });
   }
 
