@@ -75,6 +75,9 @@ export const ValidatorAppConfigSchema = z.object({
 });
 
 export const ParticipantConfigSchema = z.object({
+  // Allow downloading the participant's private keys via its admin API,
+  // e.g., for identities backups of non-KMS participants.
+  enableKeyDownload: z.boolean().default(false),
   additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
   additionalJvmOptions: z.string().optional(),
   resources: K8sResourceSchema.default({

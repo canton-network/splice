@@ -30,6 +30,8 @@ validator1:
     enabled: true
 validators:
   validator-runbook:
+    participant:
+      enableKeyDownload: true
     walletGateway:
       enabled: true
 svs:

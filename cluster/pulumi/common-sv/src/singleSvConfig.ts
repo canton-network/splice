@@ -61,6 +61,8 @@ const SvParticipantConfigSchema = z
   .object({
     kms: KmsConfigSchema.optional(),
     bftSequencerConnection: z.boolean().optional(),
+    // Allow downloading the participant's private keys via its admin API (default: true)
+    enableKeyDownload: z.boolean().optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,

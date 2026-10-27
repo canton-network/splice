@@ -59,7 +59,7 @@
       },
       "disableAuth": false,
       "enableHealthProbes": true,
-      "enableKeyDownload": true,
+      "enableKeyDownload": false,
       "enablePostgresMetrics": true,
       "extraVolumeMounts": [
         {
