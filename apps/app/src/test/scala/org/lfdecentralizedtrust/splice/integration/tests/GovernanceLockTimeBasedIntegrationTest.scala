@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet as amuletCodegen, governancelock}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.install
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -25,7 +26,11 @@ import org.lfdecentralizedtrust.splice.util.{
   TokenStandardMetadata,
   WalletTestUtil,
 }
-import org.lfdecentralizedtrust.splice.wallet.store.{BalanceChangeTxLogEntry, TransferTxLogEntry}
+import org.lfdecentralizedtrust.splice.wallet.store.{
+  BalanceChangeTxLogEntry,
+  TransferTxLogEntry,
+  TxLogEntry,
+}
 import org.scalatest.Assertion
 
 import java.time.Duration
@@ -87,15 +92,19 @@ class GovernanceLockTimeBasedIntegrationTest
   private def checkLockKind(kind: governancelock.GovernanceLockKind): Assertion =
     kind shouldBe a[governancelock.governancelockkind.GLK_SuperValidatorRightsOwner]
 
-  private def latestAliceEventId()(implicit
-      env: SpliceTestConsoleEnvironment
-  ): Option[String] =
-    aliceWalletClient.listTransactions(None, pageSize = 1).headOption.map(_.eventId)
+  // Wallet automation runs in the background, e.g. to merge the amulets that a withdrawal unlocks,
+  // so its entries could appear after the cursor of the previous lock action
+  private def isWalletAutomationBatch(entry: TxLogEntry): Boolean =
+    entry match {
+      case t: TransferTxLogEntry =>
+        t.getSubtype.choice == install.WalletAppInstall.CHOICE_WalletAppInstall_ExecuteBatch.name
+      case _ => false
+    }
 
   private def checkLockActionHistory(
       previousEventId: Option[String],
       expectedBalanceChange: BigDecimal,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+  )(implicit env: SpliceTestConsoleEnvironment): Option[String] =
     checkTxHistory(
       aliceWalletClient,
       Seq({ case entry: TransferTxLogEntry =>
@@ -103,7 +112,8 @@ class GovernanceLockTimeBasedIntegrationTest
       }),
       previousEventId = previousEventId,
       trafficTopups = IgnoreTopupsDevNet,
-    )
+      ignore = isWalletAutomationBatch,
+    ).headOption.map(_.eventId)
 
   /** Checks alice's unlocked and locked balances after a lock action, and that
     * the action's wallet history entry captures expected balance change.
@@ -114,7 +124,7 @@ class GovernanceLockTimeBasedIntegrationTest
       expectedUnlocked: BigDecimal,
       expectedLocked: BigDecimal,
       expectedBalanceChange: BigDecimal,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+  )(implicit env: SpliceTestConsoleEnvironment): Option[String] =
     clue(s"alice's balances and wallet history after $action") {
       eventually() {
         val balance = aliceWalletClient.balance()
@@ -133,11 +143,14 @@ class GovernanceLockTimeBasedIntegrationTest
       val owner = RichPartyId.local(ownerParty)
 
       aliceWalletClient.tap(lockAmount)
-      val (beforeCreate, unlockedAfterTap) = eventually() {
-        val eventId = latestAliceEventId()
-        eventId should not be empty
-        (eventId, aliceWalletClient.balance().unlockedQty)
-      }
+      val beforeCreate = checkTxHistory(
+        aliceWalletClient,
+        Seq({ case e: BalanceChangeTxLogEntry =>
+          e.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+        }),
+        trafficTopups = IgnoreTopupsDevNet,
+      ).headOption.map(_.eventId)
+      val unlockedAfterTap = aliceWalletClient.balance().unlockedQty
 
       // Create the governance lock via a transfer to the magic party
       val governanceLockCid = ops.createGovernanceLock(
@@ -147,7 +160,7 @@ class GovernanceLockTimeBasedIntegrationTest
         lockSubject,
         amount = lockAmount,
       )
-      checkBalancesAndHistory(
+      val beforeUnlock = checkBalancesAndHistory(
         "creating the lock",
         beforeCreate,
         expectedUnlocked = unlockedAfterTap - lockAmount,
@@ -192,7 +205,6 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       // Withdraw the governance lock; it's relocked as a vesting GovernanceLock and funds remain locked
-      val beforeUnlock = latestAliceEventId()
       val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
       val (vestingLockCid, vestingLockView) = ops
         .unlockGovernanceLock(
@@ -229,7 +241,7 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       // The amulet remains locked while vesting
-      checkBalancesAndHistory(
+      val beforePartialWithdraw = checkBalancesAndHistory(
         "unlocking and starting to vest",
         beforeUnlock,
         expectedUnlocked = unlockedAfterTap - lockAmount,
@@ -241,7 +253,6 @@ class GovernanceLockTimeBasedIntegrationTest
       // withdraw time of 30 seconds into the vesting period
       advanceTime(Duration.ofSeconds(31))
 
-      val beforePartialWithdraw = latestAliceEventId()
       val (remainingVestingLockCid, remainingVestingLockView) = ops
         .withdrawVestingLock(
           aliceValidatorBackend.participantClientWithAdminToken,
@@ -269,7 +280,7 @@ class GovernanceLockTimeBasedIntegrationTest
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(remainingVestingLock))
       val remainingVestingAmount = BigDecimal(remainingVestingLock.amount)
       remainingVestingAmount shouldBe expectedRemainingLockAmount
-      checkBalancesAndHistory(
+      val beforeFullWithdraw = checkBalancesAndHistory(
         "withdrawing the vested funds mid-vesting",
         beforePartialWithdraw,
         expectedUnlocked = unlockedAfterTap - expectedRemainingLockAmount,
@@ -281,7 +292,6 @@ class GovernanceLockTimeBasedIntegrationTest
       // the exact end of the vesting period
       advanceTime(Duration.ofSeconds(90))
 
-      val beforeFullWithdraw = latestAliceEventId()
       ops.withdrawVestingLock(
         aliceValidatorBackend.participantClientWithAdminToken,
         owner,
@@ -489,7 +499,18 @@ class GovernanceLockTimeBasedIntegrationTest
         },
       )
 
-      val beforeExpiry = latestAliceEventId()
+      val beforeExpiry = clue("The proposer's wallet history shows the tap and each proposal") {
+        checkTxHistory(
+          aliceWalletClient,
+          Seq.fill[CheckTxHistoryFn](numSubstitutions)({ case e: TransferTxLogEntry =>
+            e.sender.value.amount shouldBe -lockAmount
+          }) :+ { case e: BalanceChangeTxLogEntry =>
+            e.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+          },
+          trafficTopups = IgnoreTopupsDevNet,
+          ignore = isWalletAutomationBatch,
+        ).headOption.map(_.eventId)
+      }
 
       clue("The substitutions are not yet expired, so the trigger has no work") {
         trigger.runOnce().futureValue shouldBe false
@@ -527,13 +548,15 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       clue("The proposer's wallet history shows each returned collateral") {
-        eventually() {
-          aliceWalletClient
-            .listTransactions(None, pageSize = 100)
-            .takeWhile(e => !beforeExpiry.contains(e.eventId))
-            .collect { case e: BalanceChangeTxLogEntry => e.amount } shouldBe
-            Seq.fill(numSubstitutions)(lockAmount)
-        }
+        checkTxHistory(
+          aliceWalletClient,
+          Seq.fill[CheckTxHistoryFn](numSubstitutions)({ case e: BalanceChangeTxLogEntry =>
+            e.amount shouldBe lockAmount
+          }),
+          previousEventId = beforeExpiry,
+          trafficTopups = IgnoreTopupsDevNet,
+          ignore = isWalletAutomationBatch,
+        )
       }
   }
 
