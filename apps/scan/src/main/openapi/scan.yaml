@@ -3732,7 +3732,9 @@ components:
 
         For networks where the SVs enable activity record computation,
         a traffic summary and app activity record are present when
-        a verdict is present.
+        a verdict is present. `asset_activity_records` is always present
+        (empty when there is no asset activity). `submitting_app_provider`
+        is present only when the submitter is a featured-app.
       required:
         - asset_activity_records
       properties:
@@ -3953,7 +3955,8 @@ components:
     EventHistoryActivityRecords:
       type: object
       description: |
-        Activity records computed from a single verdict and traffic summary.
+        Activity records computed from a single verdict and traffic summary
+        as per the TBAR v1.1 amendment to CIP-104.
         The round the records belong to is carried by the enclosing envelope.
       required:
         - records

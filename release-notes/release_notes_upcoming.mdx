@@ -4,10 +4,10 @@
 
   - Scan App
 
-    - `/v0/events` responses now include two optional per-event fields:
+    - `/v0/events` responses now include two new per-event fields:
 
-      - `asset_activity_records`: asset-side activity records parallel to `app_activity_records`.
-      - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app.
+      - `asset_activity_records`: asset-side activity records. Always present; empty records when there's no asset activity.
+      - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app. Omitted from JSON when absent.
 
     - `/v0/reward-accounting/.../activity-totals` responses include five new required fields describing the app- and asset-side split of featured-app rewards:
 
