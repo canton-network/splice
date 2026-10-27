@@ -313,3 +313,13 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10496 | docs job: root-workspace `npm ci` (Npm install Id 2) hangs 13:57:15 until the 40 min sbt timeout; same on 10-22 (10489) | new family | `10496-docs-npm-ci-hangs-no-timeout.md`. Build tooling: timeout per `npm ci` attempt in build-tools/npm-install.sh, stream npm output. |
 | 10497 | aliceParticipant SEQUENCER_NOT_ENOUGH_TRAFFIC_CREDIT WARNs at WalletNoDevNetIntegrationTest start (14:33:45) | 10474 | `10497-walletnodevnet-traffic-reset-dup-10474.md`. Fix PR #7923 open. Close as duplicate. |
 | 10479 / 10480 | cn-internal Purge Unused Databases / Auth0 User Cleanup workflow failures, backfilled issues | - | Logs not reachable from the sandbox (cn-internal Actions 403); need the failing step output. |
+| 10683 / 10688 / 10689 | deployment_test helm unittests `- at '/httpHealthProbes': false schema` (39 failed); CircleCI deploy_basic of the same splice commit | - (10688, 10689 dup of 10683) | `2026-10-27b/10683.md`, `2026-10-27b/10689.md`. #7178 schema vs #7976 value, FIXED by the #8015 revert. Close 10683/10688; 10689 once job 525405 confirms. |
+| 10677 | ciperiodic deploy_upgrade (0.9.x splice on cni main after #7703) | - | `2026-10-27b/10677.md`. CircleCI log not reachable; first suspect the `synchronizerMigration.active` config change. |
+| 10680 | reset_validator_runbook_devnet (release-line-0.9.4) | - | Log not reachable; previous instance 10334 was a slow submodule clone. |
+| 10637 | bump_splice 2026-10-26 | - | Recovered (cni #7690 merged 10-27). Close. |
+| 10681 / 10682 / 10684 / 10685 | `Killed SBT after timeout 40m` after a classes cache miss (#7989 scan.yaml, #7995 npm deps) | 10358 | `2026-10-27b/10681.md`, `2026-10-27b/10684-10685.md`. CI fix: fallback cache key. Close as dup. |
+| 10686 | BootstrapPackageConfigIntegrationTest.scala:494 vetting schedule | 10676 | `2026-10-27b/10686.md`. Second main hit of the #7922 regression. Close as dup. |
+| 10687 | aliceParticipant SEQUENCER_NOT_ENOUGH_TRAFFIC_CREDIT at WalletNoDevNet start | 10474 | `2026-10-27b/10687.md`. Close as dup. |
+| 10679 | every app init several times slower on one runner, waitForInitialization timeouts | - | `2026-10-27b/10679.md`. One-off, close. |
+| 10690 | TokenStandardCli external-party balance 404 before the wallet exists -> MatchError | new family | `2026-10-27b/10690.md`. Production fix: NotFound case in GetExternalPartyBalance; test waits for the wallet. Keep open. |
+| 10691 | SvOnboardingAddl 1 min wait vs 60 s sequencer availableAfter + synchronizer-time lag | new family | `2026-10-27b/10691.md`. Test fix: 2 minutes. Keep open. |

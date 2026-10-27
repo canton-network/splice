@@ -98,6 +98,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   executes: vote requests come uncached from Scan, AmuletRules from the BftScanConnection cache, so the pending config
   leaves the unvetting input before the new AmuletRules arrives. Confirm: `Running package unvetting` on the validator
   with `Vetting for schedule` still showing only the old entry, then re-vetting `valid from` the vote execution time.
+  Second main hit: 10686 (run 40520298067, resource-intensive (1), BootstrapPackageConfigIntegrationTest.scala:494).
 - 10495: offboarded mediator's in-flight aggregated send rejected `SEQUENCER_SUBMISSION_REQUEST_MALFORMED ... is not part
   of the mediator group` after the group change, in the standalone after-shutdown log. Reonboarding ignore files have the
   pattern; the mediator-offboarding file lacks it.
@@ -168,6 +169,15 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   automation submits 2-3 times a second during the suite. Confirming grep: `TrafficConsumedManager ... Consumed N for
   PAR::aliceValidator` with a sequencing timestamp between the two `TrafficControlState` responses. Fix
   `ray/fix-10179-member-traffic-status-consistent-read` (compare inside `eventually()`).
+- 10690: TokenStandardCliIntegrationTest reads an external party's balance before the validator's
+  ExternalPartyWalletManager created its wallet (404 `No wallet for external party`). The client
+  `GetExternalPartyBalance.handleOk` has no NotFound case, so it is a `MatchError` / CONSOLE_COMMAND_INTERNAL_ERROR that
+  `eventually()` does not retry. Confirm: `Creating wallet service and retry provider for external party <p>` logged
+  after `external-party/balance ... 404 Not Found`. Fix: NotFound case in the client (production) and wait for the
+  wallet in `ExternallySignedPartyTestUtil.checkExternalPartyExists`.
+- 10691: SvOnboardingAddlIntegrationTest waits 1 minute for sv4's own sequencer, which is published with a 60 s
+  `availableAfter`; synchronizer-time lag on an idle synchronizer pushes the reconcile past the deadline. Confirm:
+  sv4Validator's `For synchronizer 'global' at time` lines only list :5408 after the test failed. Fix: 2 minutes.
 
 
 ## K. Sim time: mediator pruning scheduler backoff after a jump of at least the retention period
@@ -206,4 +216,14 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   job start, every shard of the run at once. Fix: rerun failed jobs; ask runner owners to cache the flake inputs.
 - 10496 / 10489 docs job: root-workspace `npm ci` (`Npm install called for .../apps/common/frontend/../... Id: 2` with no
   `completed`) hangs until the 40 min sbt timeout. build-tools/npm-install.sh retries failures but has no per-attempt timeout.
+- 10358 family: `Killed SBT after timeout 40m` with no `Tests:` line after a precompiled-classes cache miss
+  (`Cache not found for input keys: classes-<v> branch:main dependencies:<hash>`), then a from-scratch compile of
+  ~13 min instead of ~6. Trigger: the first main run after a merge that changes a file in the cache key (openapi yaml,
+  npm/Maven dependencies): 10681/10682 (#7989 scan.yaml), 10684/10685 (#7995 npm), #7969 wall-clock (0). Fix in CI:
+  a fallback restore key without the dependencies hash, or Test/compile outside the timed step.
+- Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
+  (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
+  splice commit. 10683, 10688, likely 10689. Fixed by the #8015 revert.
+- 10679: one runner several times slower in every app init phase (Wait for user 17-35 s, Initialize app ~4 min),
+  `Condition never became true within 5 minutes` in waitForInitialization; cache hit, no 40001 storm. One-off.
 
