@@ -8,6 +8,7 @@ import io.circe.syntax.*
 import org.lfdecentralizedtrust.splice.http.OmitNullString
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryItem,
+  EventHistoryResponse,
   GetImportUpdatesResponse,
   GetUpdatesBeforeResponse,
   UpdateHistoryItem,
@@ -122,10 +123,21 @@ object ScanJsonSupport {
     )
 
   implicit val encodeEventHistoryItem: Encoder.AsObject[EventHistoryItem] =
+    omitWhenNone(
+      reEncode(
+        EventHistoryItem.encodeEventHistoryItem,
+        "update",
+        _.update,
+      ),
+      "submitting_app_provider",
+      _.submittingAppProvider,
+    )
+
+  implicit val encodeEventHistoryResponse: Encoder.AsObject[EventHistoryResponse] =
     reEncode(
-      EventHistoryItem.encodeEventHistoryItem,
-      "update",
-      _.update,
+      EventHistoryResponse.encodeEventHistoryResponse,
+      "events",
+      _.events,
     )
 
   implicit val encodeGetUpdatesBeforeResponse: Encoder.AsObject[GetUpdatesBeforeResponse] =
