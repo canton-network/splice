@@ -10,6 +10,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AppActivityRecord,
   CreatedEvent,
   EnvelopeTrafficSummary,
+  EventHistoryActivityRecords,
   EventHistoryAppActivityRecords,
   EventHistoryItem,
   EventHistoryTrafficSummary,
@@ -105,8 +106,6 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
     "EventHistoryItem.verdict",
     "EventHistoryItem.trafficSummary",
     "EventHistoryItem.appActivityRecords",
-    "EventHistoryItem.assetActivityRecords",
-    "EventHistoryItem.submittingAppProvider",
   )
 
   /** All types that participate in BFT consensus via the update history JSON encoding. */
@@ -214,6 +213,14 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
           )
         )
 
+      val eventHistoryItemJson = io.circe
+        .Encoder[EventHistoryItem]
+        .apply(
+          EventHistoryItem(
+            assetActivityRecords = EventHistoryActivityRecords(records = Vector.empty)
+          )
+        )
+
       val unhandled = (
         omitNullStringFields[UpdateHistoryTransaction].map { field =>
           val key = toSnakeCase(field)
@@ -229,6 +236,11 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
             val key = toSnakeCase(field)
             val present = txV2WithHashJson.hcursor.downField(key).focus.isDefined
             (s"UpdateHistoryTransactionV2WithHash.$field (JSON key: $key)", present)
+          } ++
+          omitNullStringFields[EventHistoryItem].map { field =>
+            val key = toSnakeCase(field)
+            val present = eventHistoryItemJson.hcursor.downField(key).focus.isDefined
+            (s"EventHistoryItem.$field (JSON key: $key)", present)
           }
       ).collect { case (desc, true) => desc }
 
