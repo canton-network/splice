@@ -28,7 +28,7 @@
     "@trivago/prettier-plugin-sort-imports": "5.2.2",
     "@types/node": "22.14.0",
     "@types/react": "18.3.12",
-    "@types/react-dom": "18.3.6",
+    "@types/react-dom": "19.3.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "10.1.1",
     "prettier": "3.5.3",
