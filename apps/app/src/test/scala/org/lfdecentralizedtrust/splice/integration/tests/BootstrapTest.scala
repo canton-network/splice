@@ -6,7 +6,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import com.digitalasset.canton.logging.SuppressionRule
-import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.slf4j.event.Level
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck

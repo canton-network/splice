@@ -525,7 +525,7 @@ class ValidatorApp(
 
   private def withParticipantAdminConnection[T](
       f: ParticipantAdminConnection => Future[T]
-  )(implicit traceContext: TraceContext) = {
+  ) = {
     val participantAdminConnection = createParticipantAdminConnection()
     f(participantAdminConnection).andThen { _ => participantAdminConnection.close() }
   }

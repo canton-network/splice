@@ -88,7 +88,7 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
 
   override val timeouts = parameters.processingTimeouts
 
-  private val clock = new WallClock(timeouts, loggerFactory)
+  private val wallClock: WallClock = new WallClock(timeouts, loggerFactory)
 
   private val isInitializedVar: AtomicReference[Boolean] = new AtomicReference(false)
 
@@ -333,9 +333,7 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
       )
     )(TraceContext.empty)
 
-  protected def createParticipantAdminConnection()(implicit
-      tc: TraceContext
-  ): ParticipantAdminConnection = {
+  protected def createParticipantAdminConnection(): ParticipantAdminConnection = {
     new ParticipantAdminConnection(
       participantClient.adminApi.clientConfig,
       parameters.loggingConfig.api,
@@ -359,10 +357,12 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
         val authTokenManager = new AuthTokenManager(
           () => other.getToken,
           this.isClosing,
-          clock,
+          // We use a wall clock here because clock refers to the ledger time which might not always
+          // make sense for token refreshing which is tied to IAM time.
+          wallClock,
           loggerFactory,
         )
-        implicit tc =>
+        implicit tc: TraceContext =>
           retryProvider.retry(
             RetryFor.WaitingOnInitDependency,
             "acquire_auth_token",
