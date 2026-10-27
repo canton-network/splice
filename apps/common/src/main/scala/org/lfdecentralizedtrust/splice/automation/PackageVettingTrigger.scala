@@ -68,11 +68,13 @@ abstract class PackageVettingTrigger(
           additionalPackagesToUnvet,
         )
       )
+      currentPackageConfig = amuletRules.payload.configSchedule.initialValue.packageConfig
+      pendingPackageConfigs = newAmuletConfigVoteRequests.map(_._2.packageConfig)
       // ensure that unsupported versions are not vetted
       _ <- runIfInputChanged(
         Seq(
-          amuletRules.payload.configSchedule.initialValue.packageConfig.toString
-        ) ++ additionalPackagesToUnvet.map(_.toString()),
+          currentPackageConfig.toString
+        ) ++ pendingPackageConfigs.map(_.toString) ++ additionalPackagesToUnvet.map(_.toString()),
         previouslyRunInputRefForUnvetting,
         "unvetting",
         enabled = enableUnvetting && enableUnsupportedDarsUnvetting,
@@ -80,7 +82,8 @@ abstract class PackageVettingTrigger(
         vetting.unvetPackages(
           domainId,
           additionalPackagesToUnvet,
-          amuletRules.payload.configSchedule.initialValue.packageConfig,
+          currentPackageConfig,
+          pendingPackageConfigs,
           Some((context.pollingClock, maxVettingDelay)),
         )
       )

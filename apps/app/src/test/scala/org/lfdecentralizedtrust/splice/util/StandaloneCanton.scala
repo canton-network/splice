@@ -48,6 +48,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       extraParticipantsEnvMap: Map[String, String] = Map.empty,
       enableBftSequencer: Boolean = IsTheCantonSequencerBFTEnabled,
       extraSequencerConfig: Seq[String] = Seq.empty,
+      enableKeyDownload: Boolean = false,
   )(extraEnv: (String, String)*)(test: => A)(implicit tc: TraceContext): A = {
 
     def conditionalConf(condition: Boolean, filename: String) =
@@ -131,7 +132,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       configs,
       extraSequencerConfig.flatMap(config =>
         sequencers.map(id => s"canton.sequencers.sv${id}StandaloneSequencer.$config")
-      ),
+      ) ++ Option.when(enableKeyDownload)(ProcessTestUtil.enableKeyDownloadConfig),
       logSuffix,
       allExtraEnv*
     )(test)

@@ -110,9 +110,9 @@
               "image": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/multi-participant:0.3.20",
               "livenessProbe": {
                 "failureThreshold": 5,
-                "grpc": {
-                  "port": 5061,
-                  "service": "liveness"
+                "httpGet": {
+                  "path": "/health/live",
+                  "port": 5071
                 },
                 "initialDelaySeconds": 60,
                 "periodSeconds": 60,
@@ -231,8 +231,9 @@
               ],
               "readinessProbe": {
                 "failureThreshold": 3,
-                "grpc": {
-                  "port": 5061
+                "httpGet": {
+                  "path": "/health/ready",
+                  "port": 5071
                 },
                 "initialDelaySeconds": 5,
                 "periodSeconds": 5,

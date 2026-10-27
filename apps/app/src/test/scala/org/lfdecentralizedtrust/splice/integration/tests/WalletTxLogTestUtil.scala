@@ -41,7 +41,7 @@ trait WalletTxLogTestUtil extends TestCommon with WalletTestUtil with TimeTestUt
       previousEventId: Option[String] = None,
       trafficTopups: TopupIgnoreStrategy = KeepTopups,
       ignore: TxLogEntry => Boolean = _ => false,
-  ): Unit = {
+  ): Seq[TxLogEntry.TransactionHistoryTxLogEntry] = {
 
     eventually() {
       val actual = wallet.listTransactions(None, pageSize = Limit.DefaultMaxPageSize)
@@ -87,6 +87,8 @@ trait WalletTxLogTestUtil extends TestCommon with WalletTestUtil with TimeTestUt
         .flatten
 
       paginatedResult should contain theSameElementsInOrderAs actual
+
+      toCompare
     }
   }
 

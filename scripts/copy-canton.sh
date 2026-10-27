@@ -69,6 +69,7 @@ rsync -av --delete \
     --exclude 'community/lib/wartremover-annotations' \
     --exclude 'community/bindings-java' --exclude "community/transcode" \
     --exclude 'community/kms-driver-api' \
+    --exclude 'community/util-observability' \
     --exclude 'community/ledger-api-scala' --exclude "**/ledger-api-proto" \
     --exclude '*/canton-community-app/test/scala/*/integration/tests' \
     --exclude 'community/ledger/ledger-api-core' \

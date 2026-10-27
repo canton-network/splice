@@ -61,6 +61,7 @@ const SvParticipantConfigSchema = z
   .object({
     kms: KmsConfigSchema.optional(),
     bftSequencerConnection: z.boolean().optional(),
+    enableKeyDownload: z.boolean().optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
