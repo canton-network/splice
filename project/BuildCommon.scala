@@ -305,6 +305,7 @@ object BuildCommon {
       Seq(
         organization := "org.lfdecentralizedtrust.splice",
         scalaVersion := scala_version,
+        dependencyOverrides ++= Dependencies.pinnedTransitiveVersions,
         // , scalacOptions += "-Ystatistics" // re-enable if you need to debug compile times
       )
     )
