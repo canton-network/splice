@@ -7,11 +7,11 @@ import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock as gl
 
 object GovernanceLockUtil {
-  def foldSpecification[A](lock: gl.GovernanceLock)(
+  def foldSpecification[A](specification: gl.GovernanceLockSpecification)(
       onFull: gl.FullLockSpecification => A,
       onVesting: gl.VestingLockSpecification => A,
   ): A =
-    lock.specification match {
+    specification match {
       case s: gl.governancelockspecification.GLS_FullLock => onFull(s.fullLockSpecificationValue)
       case s: gl.governancelockspecification.GLS_VestingLock =>
         onVesting(s.vestingLockSpecificationValue)
@@ -21,11 +21,33 @@ object GovernanceLockUtil {
           .asRuntimeException()
     }
 
+  def getSpecificationKind(specification: gl.GovernanceLockSpecification): gl.GovernanceLockKind =
+    foldSpecification(specification)(_.kind, _.kind)
+
   def getGovernanceLockKind(lock: gl.GovernanceLock): gl.GovernanceLockKind =
-    foldSpecification(lock)(_.kind, _.kind)
+    getSpecificationKind(lock.specification)
 
   def getVestingLockSpecification(lock: gl.GovernanceLock): Option[gl.VestingLockSpecification] =
-    foldSpecification(lock)(_ => None, Some(_))
+    foldSpecification(lock.specification)(_ => None, Some(_))
+
+  /** Parties observing a lock with this specification, mirroring `governanceLockObservers`
+    * in `Splice.GovernanceLock`.
+    */
+  def specificationObservers(specification: gl.GovernanceLockSpecification): Seq[String] =
+    getSpecificationKind(specification) match {
+      case kind: gl.governancelockkind.GLK_FeaturedApp => Seq(kind.provider)
+      case kind: gl.governancelockkind.GLK_ProvisionalFeaturedApp => Seq(kind.provider)
+      case _ => Seq.empty
+    }
+
+  def governanceLockInformees(lock: gl.GovernanceLock): Seq[String] =
+    (lock.owner +: specificationObservers(lock.specification)).distinct
+
+  def substitutionInformees(
+      substitution: gl.substitution.GovernanceLockSubstitution
+  ): Seq[String] =
+    (substitution.owner +: substitution.target.owner +:
+      specificationObservers(substitution.target.specification)).distinct
 
   sealed abstract class StoreType(val type_ : String)
   object StoreType {
@@ -48,10 +70,12 @@ object GovernanceLockUtil {
   }
 
   /** Encodes a lock as the `governance_lock_type` and `governance_lock_subject` index columns. */
-  def governanceLockTypeAndSubject(lock: gl.GovernanceLock): (StoreTypeAndKind, String) = {
+  def specificationTypeAndSubject(
+      specification: gl.GovernanceLockSpecification
+  ): (StoreTypeAndKind, String) = {
     val storeType =
-      foldSpecification[StoreType](lock)(_ => StoreType.Full, _ => StoreType.Vesting)
-    val (storeKind, subject) = getGovernanceLockKind(lock) match {
+      foldSpecification[StoreType](specification)(_ => StoreType.Full, _ => StoreType.Vesting)
+    val (storeKind, subject) = getSpecificationKind(specification) match {
       case kind: gl.governancelockkind.GLK_FeaturedApp =>
         // The type annotation is necessary to avoid a wartremover error that says
         // Inferred type containing Product
@@ -67,4 +91,7 @@ object GovernanceLockUtil {
     }
     (StoreTypeAndKind(storeType, storeKind), subject)
   }
+
+  def governanceLockTypeAndSubject(lock: gl.GovernanceLock): (StoreTypeAndKind, String) =
+    specificationTypeAndSubject(lock.specification)
 }

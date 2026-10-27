@@ -26,7 +26,6 @@ lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
-lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
@@ -1619,7 +1618,7 @@ lazy val `apps-common-frontend` = {
           (`splice-api-token-allocation-request-v2-daml` / Compile / damlBuild).value,
       damlTsCodegenDir := baseDirectory.value / "daml.js",
       damlTsCodegen := BuildCommon.damlTsCodegenTask.value,
-      npmInstallDeps := (baseDirectory.value / "package.json" +: damlTsCodegen.value) ++ (`splice-api-token-metadata-v1-daml` / Compile / npmInstall).value ++ (`token-standard-cli` / Compile / npmInstall).value,
+      npmInstallDeps := (baseDirectory.value / "package.json" +: baseDirectory.value / "generated-packages.json" +: baseDirectory.value / "scripts" / "link-generated-packages.mjs" +: damlTsCodegen.value) ++ (`splice-api-token-metadata-v1-daml` / Compile / npmInstall).value ++ (`token-standard-cli` / Compile / npmInstall).value,
       npmInstallOpenApiDeps :=
         Seq(
           (
@@ -1660,55 +1659,19 @@ lazy val `apps-common-frontend` = {
             // openapi-generator-cli only generates .ts files so we need to
             // compile to get .d.ts and .js files. We cannot run this as part of
             // apps-common-frontend-openapi/compile because that does not yet run
-            // npm install.
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "scan/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "sv/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "validator/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "validator/external-openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "validator/scan-proxy-openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "wallet/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "wallet/external-openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "splitwell/openapi-ts-client",
-              log,
-            )
+            // npm install. The clients are not npm workspaces (see
+            // apps/generated-packages.json), so they are compiled directly.
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "scan/openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "sv/openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "validator/openapi-ts-client", log)
+            BuildCommon.TS
+              .buildOpenApiClient(npmRootDir.value, "validator/external-openapi-ts-client", log)
+            BuildCommon.TS
+              .buildOpenApiClient(npmRootDir.value, "validator/scan-proxy-openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "wallet/openapi-ts-client", log)
+            BuildCommon.TS
+              .buildOpenApiClient(npmRootDir.value, "wallet/external-openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "splitwell/openapi-ts-client", log)
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",

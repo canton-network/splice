@@ -63,6 +63,7 @@ services:
       - CANTON_PARTICIPANT_POSTGRES_PASSWORD=${SPLICE_DB_PASSWORD}
       - CANTON_PARTICIPANT_POSTGRES_DB=${PARTICIPANT_DB_NAME}
       - CANTON_PARTICIPANT_POSTGRES_PORT=${SPLICE_DB_PORT}
+      - ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER=canton.participants.participant.monitoring.http-health-server.port=5071
     depends_on:
       postgres-splice:
         condition: service_healthy
