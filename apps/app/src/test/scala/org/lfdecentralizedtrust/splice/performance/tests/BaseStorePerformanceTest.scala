@@ -92,11 +92,22 @@ abstract class BaseStorePerformanceTest(
     */
   protected def dbExecSeq: Long = dbMetricsFactory.currentSeq
 
-  /** Stats for all `exectime` DB query samples recorded since `afterSeq` (i.e. during one
-    * operation): total/count/max in ns, plus a per-callsite breakdown.
+  /** Stats for all DB `exectime` samples recorded since `afterSeq` (i.e. during one operation):
+    * the time spent actually running SQL on a connection.
     */
-  protected def dbExecWindow(afterSeq: Long): DbExecWindow = {
-    val window = dbMetricsFactory.windowSamples(afterSeq, _.endsWith("exectime"))
+  protected def dbExecWindow(afterSeq: Long): DbExecWindow = windowFor(afterSeq, "exectime")
+
+  /** Stats for all DB `waittime` samples recorded since `afterSeq`: the time a query spent queued
+    * on the executor + acquiring a connection, before it started running (see the "wait" phase in
+    * scripts/performance/ledger_api_metrics.md).
+    */
+  protected def dbWaitWindow(afterSeq: Long): DbExecWindow = windowFor(afterSeq, "waittime")
+
+  /** Stats for all DB samples whose timer name ends with `suffix`, recorded since `afterSeq`:
+    * total/count/max in ns, plus a per-callsite breakdown.
+    */
+  private def windowFor(afterSeq: Long, suffix: String): DbExecWindow = {
+    val window = dbMetricsFactory.windowSamples(afterSeq, _.endsWith(suffix))
     DbExecWindow(
       count = window.size.toLong,
       totalNanos = window.map(_.nanos).sum,
