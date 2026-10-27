@@ -38,8 +38,8 @@ FETCH_OR_CLONE_RE = re.compile(r"\bgit\s+(fetch|clone)\b(?![-_])")
 BOUNDED_RE = re.compile(r"--(depth|deepen|shallow-|filter)")
 
 
-def check_file(path):
-    findings = []
+def check_file(path: str) -> list[str]:
+    findings: list[str] = []
     with open(path, encoding="utf-8", errors="replace") as f:
         prev = ""
         for lineno, line in enumerate(f, start=1):
@@ -55,10 +55,12 @@ def check_file(path):
     return findings
 
 
-def main():
+def main() -> None:
     repo = git.Repo(search_parent_directories=True)
+    if repo.working_tree_dir is None:
+        sys.exit("ERROR: not in a git working tree")
     os.chdir(repo.working_tree_dir)
-    paths = repo.git.ls_files("--", *PATHSPECS).splitlines()
+    paths: list[str] = repo.git.ls_files("--", *PATHSPECS).splitlines()
     findings = [
         finding
         for path in paths
