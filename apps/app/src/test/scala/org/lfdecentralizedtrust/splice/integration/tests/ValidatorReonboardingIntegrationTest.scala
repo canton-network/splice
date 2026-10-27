@@ -3,7 +3,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.config.{DbConfig, FullClientConfig}
-import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.{ForceFlag, ParticipantId, PartyId}
@@ -404,12 +403,11 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
 
       clue("Dumping participant identities fails if key downloads are disabled") {
         // The participant in this Canton instance does not allow key downloads
-        loggerFactory.assertThrowsAndLogsSeq[CommandFailure](
+        assertThrowsAndLogsCommandFailures(
           aliceValidatorLocalBackend.dumpParticipantIdentities(),
-          entries =>
-            forAtLeast(1, entries) {
-              _.toString should include("key downloads are disabled")
-            },
+          _.errorMessage should (include("400 Bad Request") and include(
+            "key downloads are disabled"
+          )),
         )
       }
 
