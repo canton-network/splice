@@ -6,7 +6,7 @@ import sbt.*
 /** Copied from Canton OSS repo. */
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
-  val canton_library_version = "3.6.1"
+  val canton_library_version = "3.7.0-snapshot.20261022.20797.0.vd0a4e6f2"
   // Canton does some sbt magic that depends on this field called version even though it is not explicitly used.
   val version = canton_library_version
   val daml_language_versions = Seq("2.1")
@@ -58,7 +58,7 @@ object CantonDependencies {
     "com.github.pureconfig" %% "pureconfig-generic" % pureconfig_version // TODO(SC) exclude ("com.chuusai", s"shapeless_$scala_version_short")
 
   lazy val scala_collection_contrib =
-    "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2"
+    "org.scala-lang.modules" %% "scala-collection-contrib" % "0.4.0"
   lazy val scala_reflect = "org.scala-lang" % "scala-reflect" % scala_version
   lazy val shapeless = "com.chuusai" %% "shapeless" % "2.3.12"
 
@@ -110,6 +110,8 @@ object CantonDependencies {
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
   lazy val canton_util_external = "com.daml" %% "util-external" % canton_library_version
+  lazy val canton_util_observability =
+    "com.daml" %% "util-observability" % canton_library_version
   lazy val canton_wartremover_annotations =
     "com.daml" %% "wartremover-annotations" % canton_library_version
 

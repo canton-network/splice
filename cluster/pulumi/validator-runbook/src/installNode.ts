@@ -45,6 +45,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
+  checkValidatorKeyDownloadForPeriodicBackups,
   installParticipant,
   installWalletGateway,
 } from '@canton-network/splice-pulumi-common-validator';
@@ -190,6 +191,7 @@ async function installValidator(
     supportsValidatorRunbookReset,
     validatorVersion
   );
+  checkValidatorKeyDownloadForPeriodicBackups(validatorName, validatorConfig, backupConfig);
   const participantAddress = (
     await installParticipant(
       validatorConfig,

@@ -60,8 +60,9 @@ export class MultiParticipant extends MultiNodeDeployment {
           resources: args.config.resources
             ?.participant as k8s.types.input.core.v1.ResourceRequirements,
           readinessProbe: {
-            grpc: {
-              port: 5061,
+            httpGet: {
+              path: '/health/ready',
+              port: 5071,
             },
             initialDelaySeconds: 5,
             periodSeconds: 5,
@@ -69,9 +70,9 @@ export class MultiParticipant extends MultiNodeDeployment {
             timeoutSeconds: 10,
           },
           livenessProbe: {
-            grpc: {
-              port: 5061,
-              service: 'liveness',
+            httpGet: {
+              path: '/health/live',
+              port: 5071,
             },
             initialDelaySeconds: 60,
             periodSeconds: 60,

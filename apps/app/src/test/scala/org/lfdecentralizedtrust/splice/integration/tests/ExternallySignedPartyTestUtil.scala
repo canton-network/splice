@@ -53,31 +53,11 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
   def onboardExternalParty(
       validatorBackend: ValidatorAppBackendReference,
       partyHint: Option[String] = None,
-  )(implicit env: SpliceTestConsoleEnvironment): OnboardingResult = {
-    val generatedKey: SigningPublicKey =
-      validatorBackend.participantClient.keys.secret
-        .generate_signing_key(
-          UUID.randomUUID().toString,
-          SigningKeyUsage.All,
-          Some(SigningKeySpec.EcCurve25519),
-        )
-    val truePartyHint = partyHint.getOrElse(UUID.randomUUID().toString)
-    val signingKeyPairByteString = validatorBackend.participantClient.keys.secret
-      .download(generatedKey.fingerprint, ProtocolVersion.dev)
-
-    // delete the key from the participant to ensure that it won't be actually used there for anything
-    validatorBackend.participantClient.keys.secret.delete(generatedKey.fingerprint, true)
-
-    val keyPair =
-      CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
-
-    submitTopologyAndOnboard(
+  )(implicit env: SpliceTestConsoleEnvironment): OnboardingResult =
+    onboardExternalParty(
       validatorBackend,
-      truePartyHint,
-      keyPair,
-      PartyId.tryCreate(truePartyHint, generatedKey.fingerprint),
+      preGenerateExternalParty(partyHint.getOrElse(UUID.randomUUID().toString)),
     )
-  }
 
   /** onboard external party with keys embedded in the p2p instead of a separate p2k mapping */
   def onboardExternalPartyWithEmbeddedKeys(
@@ -85,22 +65,13 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
       partyHint: Option[String] = None,
   )(implicit env: SpliceTestConsoleEnvironment): OnboardingResult = {
     val participantClient = validatorBackend.participantClient
-    val generatedKey: SigningPublicKey =
-      participantClient.keys.secret
-        .generate_signing_key(
-          UUID.randomUUID().toString,
-          SigningKeyUsage.All,
-          Some(SigningKeySpec.EcCurve25519),
-        )
-    val signingKeyPairByteString = participantClient.keys.secret
-      .download(generatedKey.fingerprint, ProtocolVersion.dev)
-    // delete the key from the participant to ensure that it won't be actually used there for anything
-    participantClient.keys.secret.delete(generatedKey.fingerprint, true)
-    val keyPair = CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
+    // Generate the key locally, as participants do not allow downloading private keys
+    val preGenerated = preGenerateExternalParty(partyHint.getOrElse(UUID.randomUUID().toString))
+    val keyPair = CryptoKeyPair.fromTrustedByteString(preGenerated.keyPairBytes).value
+    val generatedKey = keyPair.publicKey.asInstanceOf[SigningPublicKey]
     val privateKey = keyPair.privateKey.asInstanceOf[SigningPrivateKey]
 
-    val partyId =
-      PartyId.tryCreate(partyHint.getOrElse(UUID.randomUUID().toString), generatedKey.fingerprint)
+    val partyId = preGenerated.partyId
     val psid = participantClient.synchronizers
       .list_connected()
       .map(_.physicalSynchronizerId)
@@ -509,28 +480,17 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
       keyPairBytes: ByteString,
   )
 
-  /** Onboard an external party using a pre-generated key from [[preGenerateExternalParty]].
-    * Imports the key pair into the participant, then follows the standard onboarding flow.
-    */
+  /** Onboard an external party using a pre-generated key from [[preGenerateExternalParty]]. */
   def onboardExternalParty(
       validatorBackend: ValidatorAppBackendReference,
       preGenerated: PreGeneratedParty,
   )(implicit env: SpliceTestConsoleEnvironment): OnboardingResult = {
-    val truePartyHint = preGenerated.partyId.uid.identifier.unwrap
-
-    // Import the pre-generated key pair into the participant
-    validatorBackend.participantClient.keys.secret
-      .upload(preGenerated.keyPairBytes, Some(truePartyHint))
-
-    val fingerprint = preGenerated.partyId.fingerprint
-    val signingKeyPairByteString = validatorBackend.participantClient.keys.secret
-      .download(fingerprint, ProtocolVersion.dev)
-
-    // Delete from participant — same as standard onboarding
-    validatorBackend.participantClient.keys.secret.delete(fingerprint, true)
-
-    val keyPair = CryptoKeyPair.fromTrustedByteString(signingKeyPairByteString).value
-
-    submitTopologyAndOnboard(validatorBackend, truePartyHint, keyPair, preGenerated.partyId)
+    val keyPair = CryptoKeyPair.fromTrustedByteString(preGenerated.keyPairBytes).value
+    submitTopologyAndOnboard(
+      validatorBackend,
+      preGenerated.partyId.uid.identifier.unwrap,
+      keyPair,
+      preGenerated.partyId,
+    )
   }
 }
