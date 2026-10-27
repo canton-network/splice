@@ -94,6 +94,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   infinite retries)` until environment close. Confirm: `Stopping <scan> node` tens of ms before the first
   DB_STORAGE_DEGRADATION, and an incoming `HTTP GET` on that scan in between (peer trigger trace).
   Release lines only: main closes the HTTP admin server before the node since #7711; fix is backporting #7711.
+- 10676 (new, regression from #7922): validator PackageVettingTrigger unvets the packages of a config vote right after it
+  executes: vote requests come uncached from Scan, AmuletRules from the BftScanConnection cache, so the pending config
+  leaves the unvetting input before the new AmuletRules arrives. Confirm: `Running package unvetting` on the validator
+  with `Vetting for schedule` still showing only the old entry, then re-vetting `valid from` the vote execution time.
+- 10495: offboarded mediator's in-flight aggregated send rejected `SEQUENCER_SUBMISSION_REQUEST_MALFORMED ... is not part
+  of the mediator group` after the group change, in the standalone after-shutdown log. Reonboarding ignore files have the
+  pattern; the mediator-offboarding file lacks it.
 - 10121 / 10142 SummarizingMiningRoundTrigger ERROR on a retryable "totals not yet computed"
   (`ray/fix-summarizing-round-log-noise`).
 - 10084 re-triaged 2026-09-22: `IndexerState.ensureNoProcessingForSynchronizer` (reconnect path) retries at 200 ms
@@ -197,4 +204,6 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   setup, `unable to download https://github.com/nix-systems/default/archive/<rev>.tar.gz: HTTP error 504` after
   cache misses in the runner binary cache and cache.nixos.org. Signature: no `Tests:` line, failure within 2-6 min of
   job start, every shard of the run at once. Fix: rerun failed jobs; ask runner owners to cache the flake inputs.
+- 10496 / 10489 docs job: root-workspace `npm ci` (`Npm install called for .../apps/common/frontend/../... Id: 2` with no
+  `completed`) hangs until the 40 min sbt timeout. build-tools/npm-install.sh retries failures but has no per-attempt timeout.
 

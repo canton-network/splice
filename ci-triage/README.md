@@ -293,6 +293,11 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10612 | 40313835584 | main bb5b8554a9 (#7818) | 121541859078 `wall-clock-time (9)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
 | 10493 | CircleCI cn-internal pipeline 87085 `deploy_cimain` job 524319 | - | - | not reachable (403) |
 | 10637 | CircleCI cn-internal pipeline 87235 `bump_splice` job 525023 | - | - | not reachable (403) |
+| 10495 | 39963664449 | main 0c8c834609 (#7839) | 120448347997 `resource-intensive (0)` | 3.7.0-snapshot.20261022.20797.0.vd0a4e6f2 |
+| 10496 | 39963664449 | main 0c8c834609 (#7839) | 120447813053 `docs` | n/a (build) |
+| 10497 | 39966442655 | main c8542ad58a (#7909) | 120458028680 `wall-clock-time (7)` | 3.7.0-snapshot.20261022.20797.0.vd0a4e6f2 |
+| 10676 | 40494870697 | main ef7c41a0b6 (#7922) | 122158220021 `resource-intensive (1)` | 3.7.0-snapshot.20261023.20808.0.vf4863aea |
+| 10479 / 10480 | cn-internal GHA 38997942871 (Purge Unused Databases) / 36676064976 (Auth0 User Cleanup), backfilled for cni#7615 | - | - | not reachable (403) |
 
 ## Overview
 
@@ -303,3 +308,8 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10611 | aliceValidator circuit breaker WARN on 20x SUBMISSION_ALREADY_IN_FLIGHT; first top-up send rejected by sv1 BFT sequencer `P2P connectivity is not ready (authenticated = 1 < dissemination quorum = 2)` at 11:30:11.771, epoch 21 1 -> 4 at 11:30:09.636 | 10165 (family B) | `10611-topup-trigger-in-flight-circuit-breaker-bft-quorum.md`. Flake. Close as dup of 10165. |
 | 10612 | `Token refresh failed: RejectedExecutionException: event executor terminated` from sv1StandaloneSequencer in the after-shutdown standalone log (BFT P2P peer sender blocking close) | 10147 family | `10612-bft-standalone-token-refresh-after-shutdown.md`. Flake. Close as dup of 10147. |
 | 10493 / 10637 | CircleCI `deploy_cimain` / `bump_splice` failures | probably 10494 (CANTON_PROTOCOL_VERSION) | Logs not reachable from the sandbox; needs the failing step output pasted. |
+| 10676 | aliceValidator unvets the new package versions at 11:32:56.6 (vote closed 55.78, cached AmuletRules still old) and re-vets from 55.78; BootstrapPackageConfigIntegrationTest expects 49.796 | new, regression from #7922 | `10676-validator-unvets-pending-config-packages-stale-amuletrules.md`. Production fix in PackageVettingTrigger / ValidatorPackageVettingTrigger (owner #7922 author). Keep open. |
+| 10495 | 4 WARNs: sequencers reject an aggregated send from offboarded `MED::sv4SvOffboarding` (sent 14:06:43.9, sequenced 49.6 after the group change at 47.18), logged during shutdown | new occurrence | `10495-offboarded-mediator-in-flight-send-malformed.md`. Test-side: add the reonboarding ignore pattern for MED::sv4SvOffboarding to canton-standalone-mediator-offboarding.ignore.txt. |
+| 10496 | docs job: root-workspace `npm ci` (Npm install Id 2) hangs 13:57:15 until the 40 min sbt timeout; same on 10-22 (10489) | new family | `10496-docs-npm-ci-hangs-no-timeout.md`. Build tooling: timeout per `npm ci` attempt in build-tools/npm-install.sh, stream npm output. |
+| 10497 | aliceParticipant SEQUENCER_NOT_ENOUGH_TRAFFIC_CREDIT WARNs at WalletNoDevNetIntegrationTest start (14:33:45) | 10474 | `10497-walletnodevnet-traffic-reset-dup-10474.md`. Fix PR #7923 open. Close as duplicate. |
+| 10479 / 10480 | cn-internal Purge Unused Databases / Auth0 User Cleanup workflow failures, backfilled issues | - | Logs not reachable from the sandbox (cn-internal Actions 403); need the failing step output. |
