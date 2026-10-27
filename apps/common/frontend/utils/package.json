@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.4.4",
+    "date-fns": "^4.4.0",
     "dompurify": "^3.4.16",
     "jose": "^4.15.9",
     "jsondiffpatch": "^0.7.6",
