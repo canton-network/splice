@@ -3732,9 +3732,7 @@ components:
 
         For networks where the SVs enable activity record computation,
         a traffic summary and app activity record are present when
-        a verdict is present. `asset_activity_records` is always present
-        (empty when there is no asset activity). `submitting_app_provider`
-        is present only when the submitter is a featured-app.
+        a verdict is present.
       required:
         - asset_activity_records
       properties:
@@ -3755,7 +3753,6 @@ components:
         submitting_app_provider:
           description: |
             The submitting app provider party identifier, present only when the submitter is a featured-app.
-            This field is conditionally omitted from JSON when null (see OmitNullString).
           type: string
           x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullString
     EventLatestRecordTimeResponse:
@@ -4002,6 +3999,7 @@ components:
             Activity weight in bytes of traffic.
           type: integer
           format: int64
+
     ListUnclaimedDevelopmentFundCouponsResponse:
       type: object
       required: [ "unclaimed-development-fund-coupons" ]
