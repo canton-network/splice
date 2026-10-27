@@ -240,7 +240,7 @@ splitwell:
   walletGateway:
     enabled: false
     portfolioVersion: '1.12.2'
-    version: '1.11.1'
+    version: '1.13.0'
 sv:
   scan:
     externalRateLimits:
@@ -1657,7 +1657,7 @@ validator1:
   walletGateway:
     enabled: true
     portfolioVersion: '1.12.2'
-    version: '1.11.1'
+    version: '1.13.0'
 validators:
   validator-runbook:
     namespace: 'validator'
@@ -1667,4 +1667,4 @@ validators:
     walletGateway:
       enabled: true
       portfolioVersion: '1.12.2'
-      version: '1.11.1'
+      version: '1.13.0'

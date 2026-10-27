@@ -219,6 +219,8 @@ abstract class ScanStoreTest
       }
     }
 
+    testGovernanceLockIngestion(user1, dsoParty, userParty(2), () => mkStore())
+
     "lookupTransferPreapprovalByParty" should {
       "return the TransferPreapproval contract signed by the specified party if available" in {
         val wanted = transferPreapproval(userParty(1), providerParty(1), time(0), time(1))

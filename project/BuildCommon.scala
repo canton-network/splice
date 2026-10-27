@@ -376,42 +376,6 @@ object BuildCommon {
     headerResources / excludeFilter := "*",
   ) ++ sharedProtocSettings ++ Headers.NoHeaderSettings
 
-  lazy val `canton-util-observability` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-util-observability", file("canton/community/util-observability"))
-      .dependsOn(`canton-wartremover-extension`)
-      .settings(
-        sharedCantonSettings,
-        removeTestSources,
-        sharedSettings ++ cantonWarts,
-        scalacOptions += "-Wconf:src=src_managed/.*:silent",
-        libraryDependencies ++= Seq(
-          daml_grpc_utils,
-          better_files,
-          canton_base_errors,
-          canton_observability_metrics,
-          canton_contextualized_logging,
-          canton_util_external,
-          daml_lf_data,
-          daml_nonempty,
-          daml_tracing,
-          logback_classic,
-          logback_core,
-          scala_logging,
-          log4j_core,
-          log4j_api,
-          opentelemetry_api,
-          opentelemetry_sdk,
-          opentelemetry_sdk_autoconfigure,
-          opentelemetry_instrumentation_grpc,
-          opentelemetry_zipkin,
-          opentelemetry_trace,
-        ),
-        dependencyOverrides ++= Seq(log4j_core, log4j_api),
-      )
-  }
-
   lazy val `canton-community-app` = {
     import CantonDependencies._
     sbt.Project
@@ -992,8 +956,7 @@ object BuildCommon {
     sbt.Project
       .apply("canton-ledger-json-api", file("canton/community/ledger/ledger-json-api"))
       .dependsOn(
-        `canton-util-observability`,
-        `canton-community-testing` % Test,
+        `canton-community-testing` % Test
       )
       .disablePlugins(
         ScalafixPlugin,
@@ -1015,6 +978,7 @@ object BuildCommon {
           .mkString(",", ",", ""),
         libraryDependencies ++= Seq(
           CantonDependencies.canton_ledger_api_core,
+          CantonDependencies.canton_util_observability,
           CantonDependencies.canton_transcode_json,
           CantonDependencies.canton_transcode_proto_scala,
           CantonDependencies.canton_transcode_daml_lf,
@@ -1108,14 +1072,12 @@ object BuildCommon {
     import CantonDependencies._
     sbt.Project
       .apply("canton-sequencer-driver-api", file("canton/community/sequencer-driver"))
-      .dependsOn(
-        `canton-util-observability`
-      )
       .settings(
         sharedCantonSettings,
         removeTestSources,
         libraryDependencies ++= Seq(
           canton_util_external,
+          canton_util_observability,
           logback_classic,
           logback_core,
           scala_logging,
@@ -1144,7 +1106,6 @@ object BuildCommon {
         file("canton/community/traffic-enforcement/component"),
       )
       .dependsOn(
-        `canton-util-observability`,
         `canton-community-testing` % Test,
         `canton-community-common`,
       )
@@ -1160,6 +1121,7 @@ object BuildCommon {
           Seq(
             apache_commons_io,
             canton_traffic_enforcement_api,
+            canton_util_observability,
             canton_ledger_api_core,
             canton_ledger_api_scala,
             pekko_actor_typed,
