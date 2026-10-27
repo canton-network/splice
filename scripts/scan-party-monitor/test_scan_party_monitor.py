@@ -310,7 +310,7 @@ Respond = Callable[[str, str, Dict[str, str], Optional[Json]], Tuple[int, Any, D
 @contextlib.contextmanager
 def http_server(respond: Respond) -> Iterator[str]:
     """Serves HTTP on localhost with `respond(method, path, query, body) -> (status, body, headers)`,
-    and yields its base URL."""
+    and yields its base URL. A larger Content-Length in `headers` truncates the response."""
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
@@ -323,10 +323,8 @@ def http_server(respond: Respond) -> Iterator[str]:
             status, payload, headers = respond(self.command, url.path, dict(urllib.parse.parse_qsl(url.query)), body)
             data = json.dumps(payload).encode()
             self.send_response(status)
-            for k, v in headers.items():
+            for k, v in {"Content-Type": "application/json", "Content-Length": str(len(data)), **headers}.items():
                 self.send_header(k, v)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
 
@@ -340,6 +338,10 @@ def http_server(respond: Respond) -> Iterator[str]:
     finally:
         server.shutdown()
         server.server_close()
+
+
+# Headers for http_server that cut the response body short, as when the connection drops.
+TRUNCATED = {"Content-Length": "1000"}
 
 
 @contextlib.contextmanager
@@ -926,11 +928,18 @@ class HttpTest(unittest.TestCase):
         return self.responses.pop(0)
 
     def test_scan_client_retries_and_slows_down_when_rate_limited(self) -> None:
-        self.responses = [(503, {"error": "unavailable"}, {}), (429, {"error": "slow down"}, {}), (200, {"transactions": []}, {})]
+        self.responses = [
+            (503, {"error": "unavailable"}, {}),
+            (503, {"error": "unavailable"}, TRUNCATED),
+            (429, {"error": "slow down"}, {}),
+            (200, {"transactions": []}, TRUNCATED),
+            (200, {"transactions": []}, {}),
+        ]
         with no_proxy(), http_server(self.respond) as url, captured_logs() as logs:
             scan = spm.ScanClient(url, 0, 0)
             self.assertEqual(scan.get_updates(0, SNAPSHOT, 10), [])
-        self.assertEqual(len(self.requests), 3)
+        self.assertEqual(len(self.requests), 5)
+        self.assertTrue(any("IncompleteRead" in m for m in logs), logs)
         self.assertEqual(
             self.requests[-1],
             ("POST", "/api/scan/v2/updates", {"after": {"after_migration_id": 0, "after_record_time": SNAPSHOT}, "page_size": 10}),
@@ -957,6 +966,7 @@ class HttpTest(unittest.TestCase):
     def test_slack_notifier(self) -> None:
         self.responses = [
             (500, {}, {}),
+            (500, {}, TRUNCATED),
             (429, {}, {"Retry-After": "0"}),
             (200, {}, {}),
             (400, {"error": "invalid_payload"}, {}),
@@ -966,7 +976,7 @@ class HttpTest(unittest.TestCase):
             slack.post("hello")
             with self.assertRaisesRegex(spm.FatalError, "HTTP 400"):
                 slack.post("rejected")
-        self.assertEqual([body for _, _, body in self.requests], [{"text": "hello"}] * 3 + [{"text": "rejected"}])
+        self.assertEqual([body for _, _, body in self.requests], [{"text": "hello"}] * 4 + [{"text": "rejected"}])
 
     def test_main(self) -> None:
         scan = FakeScan(ACS, unexpected_transfers(2))

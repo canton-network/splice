@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import http.client
 import itertools
 import json
 import logging
@@ -271,7 +272,7 @@ def backoff_delay(attempt: int) -> float:
 def http_request(
     method: str, url: str, body: Optional[Json] = None, headers: Optional[Dict[str, str]] = None
 ) -> Tuple[int, Any, bytes]:
-    """Returns (status, response headers, response body); raises only on connection errors."""
+    """Returns (status, response headers, response body); raises only OSError, on connection errors."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
     request = urllib.request.Request(url, data=data, method=method)
     request.add_header("User-Agent", USER_AGENT)
@@ -281,11 +282,15 @@ def http_request(
     for k, v in (headers or {}).items():
         request.add_header(k, v)
     try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            return response.status, response.headers, response.read()
-    except urllib.error.HTTPError as e:
-        with e:
-            return e.code, e.headers, e.read()
+        try:
+            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+                return response.status, response.headers, response.read()
+        except urllib.error.HTTPError as e:
+            with e:
+                return e.code, e.headers, e.read()
+    except http.client.HTTPException as e:
+        # e.g. IncompleteRead, when the connection closes before the whole body was read
+        raise ConnectionError(repr(e)) from e
 
 
 class ScanClient:
