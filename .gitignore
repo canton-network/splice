@@ -8,7 +8,12 @@
 .DS_Store
 node_modules/
 build
-daml.js
+# Generated Daml TS codegen. Only the package.json files are tracked so that
+# Dependabot can resolve the file: dependencies on them.
+**/daml.js/*
+!**/daml.js/*/
+**/daml.js/*/*
+!**/daml.js/*/package.json
 found_problems.txt
 log/
 logfile
@@ -59,8 +64,12 @@ canton.patch
 *.tokens
 *.participants
 canton-classpath
-openapi-ts-client
-external-openapi-ts-client
+# Generated OpenAPI TS clients. Only the package.json files are tracked so that
+# Dependabot can resolve the workspaces and file: dependencies on them.
+**/openapi-ts-client/*
+!**/openapi-ts-client/package.json
+**/external-openapi-ts-client/*
+!**/external-openapi-ts-client/package.json
 /cluster/manifest/test-results/actual.json
 .direnv
 rust_mozprofile*

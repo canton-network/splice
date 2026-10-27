@@ -1,2 +1,3 @@
 jsonapi-proxy-ts-client
-scan-proxy-openapi-ts-client
+scan-proxy-openapi-ts-client/*
+!scan-proxy-openapi-ts-client/package.json
