@@ -846,15 +846,6 @@ class DbScanAppRewardsStore(
       roundNumber: Long,
       params: RewardIssuanceParams,
   ) = {
-    val appRatePerMB = params.issuancePerAppBurnCCPerMB
-    val assetRatePerMB = params.issuancePerAssetBurnCCPerMB
-    val appRatePerCC = params.issuancePerAppBurnCC
-    val assetRatePerCC = params.issuancePerAssetBurnCC
-    val threshold = params.appRewardCouponThresholdCC
-    val unclaimed = params.unclaimedMintingAllowanceCC
-    val totalAppRewardFromAppActivity = params.appMintingAllowanceCC
-    val totalAppRewardFromAssetActivity = params.assetMintingAllowanceCC
-
     (sql"""with combined as (
              -- Per the amendment's per-party reward formula:
              --   appBurnCC × issuancePerAppBurnCC + assetBurnCC × issuancePerAssetBurnCC.
@@ -862,9 +853,9 @@ class DbScanAppRewardsStore(
              -- saving one Numeric multiplication per row.
              select app_provider_party,
                     (cast(total_app_activity_weight as decimal(38,10)) / 1000000.0)
-                      * $appRatePerMB
+                      * ${params.issuancePerAppBurnCCPerMB}
                     + (cast(total_asset_activity_weight as decimal(38,10)) / 1000000.0)
-                      * $assetRatePerMB
+                      * ${params.issuancePerAssetBurnCCPerMB}
                       as combined_amount
              from #${Tables.appActivityPartyTotals}
              where history_id = $historyId and round_number = $roundNumber
@@ -879,7 +870,7 @@ class DbScanAppRewardsStore(
              from combined
              -- The amendment's threshold rule zeros below-threshold rewards;
              -- filtering is equivalent at the sum.
-             where combined_amount >= $threshold
+             where combined_amount >= ${params.appRewardCouponThresholdCC}
              returning total_app_reward_amount
            )
            insert into #${Tables.appRewardRoundTotals}
@@ -890,12 +881,12 @@ class DbScanAppRewardsStore(
               issuance_per_featured_app_activity, issuance_per_featured_asset_activity)
            select $historyId, $roundNumber,
              coalesce(sum(total_app_reward_amount), 0),
-             $totalAppRewardFromAppActivity + $totalAppRewardFromAssetActivity
+             ${params.appMintingAllowanceCC} + ${params.assetMintingAllowanceCC}
                - coalesce(sum(total_app_reward_amount), 0),
-             $unclaimed,
+             ${params.unclaimedMintingAllowanceCC},
              count(*),
-             $totalAppRewardFromAppActivity, $totalAppRewardFromAssetActivity,
-             $appRatePerCC, $assetRatePerCC
+             ${params.appMintingAllowanceCC}, ${params.assetMintingAllowanceCC},
+             ${params.issuancePerAppBurnCC}, ${params.issuancePerAssetBurnCC}
            from inserted_parties""").asUpdate
   }
 
