@@ -1551,7 +1551,7 @@ class UserWalletTxLogParser(
       sender: String,
       receiver: String,
   ): Option[BigDecimal] =
-    Option.when(receiver == GovernanceLockUtil.lockManagerParty)(
+    Option.when(receiver == GovernanceLockUtil.lockManagerParty.toProtoPrimitive)(
       lockedAmountOwnedBy(tree, exercised, sender)
     )
 

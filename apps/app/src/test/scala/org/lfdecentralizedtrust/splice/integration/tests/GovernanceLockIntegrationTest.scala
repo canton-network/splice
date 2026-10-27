@@ -194,7 +194,7 @@ class GovernanceLockIntegrationTest
             ops
               .listTransfers(bobParticipant, bob.partyId)
               .map(t => ops.transferValues.receiver(t._2)) shouldBe Seq(
-              lockManagerParty.toProtoPrimitive
+              GovernanceLockUtil.lockManagerParty.toProtoPrimitive
             )
 
             val bobLock = governanceLocksFor(bobParticipant, bob.partyId).loneElement
@@ -368,7 +368,7 @@ class GovernanceLockIntegrationTest
             ops
               .listTransfers(bobParticipant, bob.partyId)
               .map(t => ops.transferValues.receiver(t._2)) shouldBe Seq(
-              lockManagerParty.toProtoPrimitive
+              GovernanceLockUtil.lockManagerParty.toProtoPrimitive
             )
 
             val bobLock = vestingLocksFor(bobParticipant, bob.partyId).loneElement

@@ -176,7 +176,8 @@ class GovernanceLockTimeBasedIntegrationTest
           .loneElement
         cid.contractId shouldBe governanceLockCid.contractId
         ops.transferValues.sender(view) shouldBe ownerParty.toProtoPrimitive
-        ops.transferValues.receiver(view) shouldBe lockManagerParty.toProtoPrimitive
+        ops.transferValues.receiver(view) shouldBe
+          GovernanceLockUtil.lockManagerParty.toProtoPrimitive
         ops.transferValues.amount(view) shouldBe lockAmount
         compareLockMemo(
           ops.transferValues.meta(view).values.get(TokenStandardMetadata.reasonMetaKey),
@@ -213,7 +214,8 @@ class GovernanceLockTimeBasedIntegrationTest
           .data
       vestingLockCid.contractId should not be governanceLockCid.contractId
       ops.transferValues.sender(vestingLockView) shouldBe ownerParty.toProtoPrimitive
-      ops.transferValues.receiver(vestingLockView) shouldBe lockManagerParty.toProtoPrimitive
+      ops.transferValues.receiver(vestingLockView) shouldBe
+        GovernanceLockUtil.lockManagerParty.toProtoPrimitive
       ops.transferValues.amount(vestingLockView) shouldBe lockAmount
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(vestingLock))
       val vestingSpec = vestingLockSpecification(vestingLock)
@@ -262,7 +264,7 @@ class GovernanceLockTimeBasedIntegrationTest
       ops.transferValues.sender(remainingVestingLockView) shouldBe ownerParty.toProtoPrimitive
       ops.transferValues.receiver(
         remainingVestingLockView
-      ) shouldBe lockManagerParty.toProtoPrimitive
+      ) shouldBe GovernanceLockUtil.lockManagerParty.toProtoPrimitive
       ops.transferValues.amount(remainingVestingLockView) shouldBe expectedRemainingLockAmount
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(remainingVestingLock))
       val remainingVestingAmount = BigDecimal(remainingVestingLock.amount)
