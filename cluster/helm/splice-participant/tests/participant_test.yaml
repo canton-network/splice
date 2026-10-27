@@ -494,3 +494,54 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.priorityClassName
+
+  - it: "uses HTTP health probes by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health/live
+            port: 5071
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /health/ready
+            port: 5071
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.participants.participant.monitoring.http-health-server.port = 5071
+
+  - it: "uses gRPC health probes when httpHealthProbes is disabled"
+    set:
+      httpHealthProbes: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+          value:
+            port: 5061
+            service: liveness
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+          value:
+            port: 5061
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.participants.participant.monitoring.http-health-server.port = 5071

@@ -60,6 +60,9 @@
     "enableHealthProbes": {
       "type": "boolean"
     },
+    "httpHealthProbes": {
+      "type": "boolean"
+    },
     "enablePostgresMetrics": {
       "type": "boolean"
     },
