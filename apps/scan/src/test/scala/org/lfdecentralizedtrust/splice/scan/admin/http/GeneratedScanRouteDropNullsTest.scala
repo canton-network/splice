@@ -39,17 +39,7 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
 
     "drop external_transaction_hash null from getUpdateHistoryV2 responses" in {
       val handler = mock[ScanHandler[Unit]]
-      val txV2 = UpdateHistoryTransactionV2(
-        updateId = "update-1",
-        migrationId = 0L,
-        workflowId = "wf",
-        recordTime = "2024-01-01T00:00:00Z",
-        synchronizerId = "domain::1234",
-        effectiveAt = "2024-01-01T00:00:00Z",
-        rootEventIds = Vector.empty,
-        eventsById = SortedMap.empty,
-        externalTransactionHash = None, // <-- this should be dropped
-      )
+      val txV2 = sampleTxV2("update-1")
       // ignoring the result since it's obviously a Future.successful stub.
       val _ = doReturn(
         Future.successful(
@@ -88,17 +78,7 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
 
       // EventHistoryItem has several Option fields (update, verdict, etc.) — they should
       // remain as null in JSON. OmitNullString fields should be dropped when null.
-      val txV2 = UpdateHistoryTransactionV2(
-        updateId = "update-2",
-        migrationId = 0L,
-        workflowId = "wf",
-        recordTime = "2024-01-01T00:00:00Z",
-        synchronizerId = "domain::1234",
-        effectiveAt = "2024-01-01T00:00:00Z",
-        rootEventIds = Vector.empty,
-        eventsById = SortedMap.empty,
-        externalTransactionHash = None,
-      )
+      val txV2 = sampleTxV2("update-2")
       val eventItem = EventHistoryItem(
         update = Some(UpdateHistoryItemV2(txV2)),
         verdict = None, // should be preserved as null
@@ -163,4 +143,17 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
       }
     }
   }
+
+  private def sampleTxV2(updateId: String): UpdateHistoryTransactionV2 =
+    UpdateHistoryTransactionV2(
+      updateId = updateId,
+      migrationId = 0L,
+      workflowId = "wf",
+      recordTime = "2024-01-01T00:00:00Z",
+      synchronizerId = "domain::1234",
+      effectiveAt = "2024-01-01T00:00:00Z",
+      rootEventIds = Vector.empty,
+      eventsById = SortedMap.empty,
+      externalTransactionHash = None,
+    )
 }
