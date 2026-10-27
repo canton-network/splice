@@ -52,6 +52,12 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
     */
   private case class HasOptionInt(x: String, y: Option[Int] = None)
 
+  private final class TypeCheck[A](name: String, json: io.circe.Json)(implicit
+      tt: TypeTag[A]
+  ) {
+    def check: List[(String, Boolean)] = unhandledOmitNullStringFields[A](name, json)(tt)
+  }
+
   /** Returns all `Option[_]` fields that are NOT `Option[OmitNullString]`. */
   private def unsafeOptionFields[A: TypeTag]: List[String] = {
     val tpe = typeOf[A]
@@ -88,6 +94,19 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
   /** Converts a camelCase Scala field name to the snake_case JSON key that guardrail generates. */
   private def toSnakeCase(name: String): String =
     name.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase
+
+  /** Per `Option[OmitNullString]` field on `A`, a `(label, isPresent)` pair.
+    * `isPresent = true` is the failure case — `ScanJsonSupport` is NOT dropping the key when `None`.
+    */
+  private def unhandledOmitNullStringFields[A: TypeTag](
+      typeName: String,
+      encodedJson: io.circe.Json,
+  ): List[(String, Boolean)] =
+    omitNullStringFields[A].map { field =>
+      val key = toSnakeCase(field)
+      val present = encodedJson.hcursor.downField(key).focus.isDefined
+      (s"$typeName.$field (JSON key: $key)", present)
+    }
 
   /** Pre-existing `Option[_]` fields that are already part of the BFT consensus schema across
     * all SVs.  These were present before the `OmitNullString` mechanism was introduced and are
@@ -216,28 +235,15 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
           )
         )
 
-      val unhandled = (
-        omitNullStringFields[UpdateHistoryTransaction].map { field =>
-          val key = toSnakeCase(field)
-          val present = txV0Json.hcursor.downField(key).focus.isDefined
-          (s"UpdateHistoryTransaction.$field (JSON key: $key)", present)
-        } ++
-          omitNullStringFields[UpdateHistoryTransactionV2].map { field =>
-            val key = toSnakeCase(field)
-            val present = txV2Json.hcursor.downField(key).focus.isDefined
-            (s"UpdateHistoryTransactionV2.$field (JSON key: $key)", present)
-          } ++
-          omitNullStringFields[UpdateHistoryTransactionV2WithHash].map { field =>
-            val key = toSnakeCase(field)
-            val present = txV2WithHashJson.hcursor.downField(key).focus.isDefined
-            (s"UpdateHistoryTransactionV2WithHash.$field (JSON key: $key)", present)
-          } ++
-          omitNullStringFields[EventHistoryItem].map { field =>
-            val key = toSnakeCase(field)
-            val present = eventHistoryItemJson.hcursor.downField(key).focus.isDefined
-            (s"EventHistoryItem.$field (JSON key: $key)", present)
-          }
-      ).collect { case (desc, true) => desc }
+      val unhandled = Seq(
+        new TypeCheck[UpdateHistoryTransaction]("UpdateHistoryTransaction", txV0Json),
+        new TypeCheck[UpdateHistoryTransactionV2]("UpdateHistoryTransactionV2", txV2Json),
+        new TypeCheck[UpdateHistoryTransactionV2WithHash](
+          "UpdateHistoryTransactionV2WithHash",
+          txV2WithHashJson,
+        ),
+        new TypeCheck[EventHistoryItem]("EventHistoryItem", eventHistoryItemJson),
+      ).flatMap(_.check).collect { case (desc, true) => desc }
 
       if (unhandled.nonEmpty) {
         fail(
