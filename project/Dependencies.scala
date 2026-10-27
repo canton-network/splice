@@ -61,14 +61,14 @@ object Dependencies {
 
   lazy val s3mock_testcontainers = "com.adobe.testing" % "s3mock-testcontainers" % "4.11.0" % "test"
 
-  private lazy val jackson_version = "2.22.3"
+  private lazy val jackson_version = "2.22.4"
   private lazy val netty_version = "4.1.138.Final"
   private lazy val bouncy_castle_version = "1.86"
 
-  // Applied to all projects as dependencyOverrides. The older versions come from CantonDependencies.scala, which is
-  // replaced on every Canton fork bump, or from libraries that are already on their latest release
-  // (scala-compiler 2.13.18 -> jline, httpclient5 5.6.4 -> httpcore5) or would each need an upgrade
-  // (jackson-databind is requested by auth0, flyway, json4s and logstash).
+  // Applied to all projects as dependencyOverrides, so only these modules move and their parents stay as they are.
+  // The older versions come from Canton's direct dependencies in CantonDependencies.scala (circe 0.14.2 -> jawn),
+  // from libraries already on their latest release (scala-compiler 2.13.18 -> jline, httpclient5 5.6.4 -> httpcore5),
+  // or from several libraries at once (jackson-databind: auth0, flyway, json4s and logstash).
   // Remove an entry once the build resolves that version without it.
   lazy val pinnedTransitiveVersions: Seq[ModuleID] = Seq(
     "buffer",
@@ -92,6 +92,7 @@ object Dependencies {
     "org.jline" % "jline" % "3.30.17",
     "org.postgresql" % "postgresql" % "42.7.14",
     "org.typelevel" %% "jawn-parser" % "1.7.0",
+    "com.lihaoyi" %% "sourcecode" % "0.4.4",
     "org.apache.httpcomponents.core5" % "httpcore5" % "5.4.4",
     "org.apache.httpcomponents.core5" % "httpcore5-h2" % "5.4.4",
     "org.apache.httpcomponents.client5" % "httpclient5" % "5.6.4",
