@@ -237,7 +237,7 @@ data CreateSubstitutionArgs = CreateSubstitutionArgs with
 
 createSubstitution : CreateSubstitutionArgs -> Update (ContractId V1.TransferInstruction, V1.TransferInstruction, Optional (ContractId Amulet))
 createSubstitution CreateSubstitutionArgs {..} = do
-  assertDeadlineExceeded "requestedAt" requestedAt
+  assertInPast24Hours "requestedAt" requestedAt
   requireMinimumLock state amount
   -- A substitution proposed by the owner of the target lock is funded by the target lock on acceptance,
   -- so it locks no funds and ignores `inputHoldingCids`
