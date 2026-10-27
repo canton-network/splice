@@ -105,9 +105,8 @@ spec:
           value: {{ .Values.auth.targetAudience }}
         {{- end }}
         {{- if .Values.enableKeyDownload }}
-        # TODO(DACH-NY/canton-network-internal#7687): Switch to the dedicated `enable-key-download` flag once available.
         - name: ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD
-          value: canton.features.enable-preview-commands = yes
+          value: canton.parameters.enable-key-download = yes
         {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}

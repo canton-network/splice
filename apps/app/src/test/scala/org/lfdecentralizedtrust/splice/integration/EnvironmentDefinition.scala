@@ -638,17 +638,13 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
 
   private def loadConfigFromResources(paths: String*): SpliceConfig = {
     val rawConfig = ConfigFactory.parseString(paths.map(Resource.getAsString(_)).mkString("\n"))
-    withConsolePreviewCommands(SpliceConfig.loadOrThrow(rawConfig))
+    SpliceConfig.loadOrThrow(rawConfig)
   }
 
   def fromFiles(testName: String, files: File*): EnvironmentDefinition = {
     val config = SpliceConfig.parseAndLoadOrThrow(files.map(_.toJava))
-    EnvironmentDefinition(baseConfig = withConsolePreviewCommands(config), context = testName)
+    EnvironmentDefinition(baseConfig = config, context = testName)
   }
-
-  // TODO(DACH-NY/canton-network-internal#7687): Revisit usages once the dedicated `enable-key-download` flag is available
-  private def withConsolePreviewCommands(config: SpliceConfig): SpliceConfig =
-    config.focus(_.features.enablePreviewCommands).replace(true)
 
   def empty(testName: String): EnvironmentDefinition =
     EnvironmentDefinition(SpliceConfig.empty, context = testName)

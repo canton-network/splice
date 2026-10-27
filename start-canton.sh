@@ -215,9 +215,8 @@ if [[ $use_bft -eq 1 ]]; then
 fi;
 
 if [[ $enable_key_download -eq 1 ]]; then
-  # TODO(DACH-NY/canton-network-internal#7687): Switch to the dedicated `enable-key-download` flag once available.
-  config_overrides="$config_overrides -C canton.features.enable-preview-commands=yes"
-  config_overrides_simtime="$config_overrides_simtime -C canton.features.enable-preview-commands=yes"
+  config_overrides="$config_overrides -C canton.parameters.enable-key-download=yes"
+  config_overrides_simtime="$config_overrides_simtime -C canton.parameters.enable-key-download=yes"
 fi;
 
 

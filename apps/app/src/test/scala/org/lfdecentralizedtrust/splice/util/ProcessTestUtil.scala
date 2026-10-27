@@ -14,8 +14,7 @@ import scala.util.Using
 object ProcessTestUtil {
   val javaToolOptionsKey = "JAVA_TOOL_OPTIONS"
 
-  // TODO(DACH-NY/canton-network-internal#7687): Switch to the dedicated `enable-key-download` flag once available.
-  val enableKeyDownloadConfig = "canton.features.enable-preview-commands=yes"
+  val enableKeyDownloadConfig = "canton.parameters.enable-key-download=yes"
 
   final case class Process(process: java.lang.Process) {
     def destroyAndWait(): Unit = {

@@ -224,7 +224,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')].value
-          value: canton.features.enable-preview-commands = yes
+          value: canton.parameters.enable-key-download = yes
   - it: "pvc creates persistent volume claim and volume mount"
     set:
       pvc:

@@ -16,7 +16,8 @@
       For participants that do not use KMS, this breaks participant identities dumps, including periodic backups
       (`participantIdentitiesBackup`), the validator's `/v0/admin/participant/identities` endpoint, and SV identities dumps.
       To re-enable them, set `enableKeyDownload: true` in the `splice-participant` Helm chart,
-      or pass `--enable-key-download` to the Docker Compose validator's `start.sh`.
+      pass `--enable-key-download` to the Docker Compose validator's `start.sh`,
+      or set `canton.parameters.enable-key-download = yes` in the participant's Canton configuration.
       Participants that use KMS are not affected, as their identities dumps do not include private keys.
 
   - Scan App

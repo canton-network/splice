@@ -1834,9 +1834,8 @@ object TopologyAdminConnection {
       )
 
   object KeyDownloadDisabledException {
-    // TODO(DACH-NY/canton-network-internal#7687): Adapt this once Canton has a dedicated `enable-key-download` flag.
     val cantonErrorDescription =
-      "Remote export of private keys only allowed when preview is enabled"
+      "Remote export of private keys only allowed when explicitly enabled"
   }
 
   sealed trait TopologyTransactionType {
