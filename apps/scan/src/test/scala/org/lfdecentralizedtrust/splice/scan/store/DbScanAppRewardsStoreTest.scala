@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnles
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.RewardHash
+import slick.jdbc.PostgresProfile
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.Future
@@ -24,7 +25,10 @@ import scala.concurrent.Future
 class DbScanAppRewardsStoreTest
     extends StoreTestBase
     with HasExecutionContext
-    with SplicePostgresTest {
+    with SplicePostgresTest
+    with org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes {
+
+  val profile: slick.jdbc.JdbcProfile = PostgresProfile
 
   import DbScanAppRewardsStoreTest.{
     Activity,
@@ -1409,10 +1413,6 @@ class DbScanAppRewardsStoreTest
       assetWeights: Seq[Long] = Nil,
   ): Future[Unit] = {
     val verdictId = verdictCounter.getAndIncrement()
-    val appPartiesArray = appParties.mkString("{", ",", "}")
-    val appWeightsArray = appWeights.mkString("{", ",", "}")
-    val assetPartiesArray = assetParties.mkString("{", ",", "}")
-    val assetWeightsArray = assetWeights.mkString("{", ",", "}")
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(
         sqlu"""insert into scan_verdict_store
@@ -1432,10 +1432,8 @@ class DbScanAppRewardsStoreTest
                   app_provider_parties, app_activity_weights,
                   asset_activity_provider_parties, asset_activity_weights)
                  values ($historyId, $verdictId, $round,
-                         #${"'" + appPartiesArray + "'"},
-                         #${"'" + appWeightsArray + "'"},
-                         #${"'" + assetPartiesArray + "'"},
-                         #${"'" + assetWeightsArray + "'"})""",
+                         $appParties, $appWeights,
+                         $assetParties, $assetWeights)""",
           "test.insertActivityRecord",
         )
       )
