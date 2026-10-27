@@ -646,7 +646,6 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
     EnvironmentDefinition(baseConfig = withConsolePreviewCommands(config), context = testName)
   }
 
-  // `canton-basic.conf` disables preview commands for the Canton nodes; our tests use them in the console.
   private def withConsolePreviewCommands(config: SpliceConfig): SpliceConfig =
     config.focus(_.features.enablePreviewCommands).replace(true)
 
