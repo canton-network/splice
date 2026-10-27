@@ -88,7 +88,8 @@ template AnsRules
 
     -- Credential expiry. A positive amount burns CC. A zero amount with no
     -- holdings applies only the free period. The body is the v1 choice; v2
-    -- downcasts into it. The sender may be either the holder or the issuer.
+    -- downcasts into it and passes its actors. The sender pays. V2 actors
+    -- must also include the holder or the issuer. V1 passes only the sender.
     interface instance TransferV1.TransferFactory for AnsRules where
       view = TransferV1.TransferFactoryView with
         admin = dso
