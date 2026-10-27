@@ -23,7 +23,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 /** Provides implicit circe `Encoder` instances that omit `Option[OmitNullString]` fields when
   * `None`.
   *
-  * The `external_transaction_hash` field uses the
+  * Fields that opt into this omit-when-None treatment use the
   * [[org.lfdecentralizedtrust.splice.http.OmitNullString]] type in the OpenAPI spec (via
   * `x-scala-type`), making it explicit in both the spec and the generated Scala code which fields
   * receive this treatment.
