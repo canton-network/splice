@@ -824,6 +824,14 @@ class StreamTest(MonitorTestCase):
         self.assertEqual(self.meta(Meta.CURSOR_RECORD_TIME), at(2))
         self.assertEqual([m["update_id"] for m in self.run_monitor(ONLY_ALICE)], ["u3"])
 
+    def test_stop_at_the_record_time_of_the_last_update(self) -> None:
+        # No later update shows that the cutoff has passed, so this would poll until one comes,
+        # but for --exit-when-caught-up.
+        self.scan.updates = unexpected_transfers(2)
+        self.assertEqual(len(self.run_monitor(ONLY_ALICE, "--stop-at-record-time", at(2))), 2)
+        self.assertLogged(f"Reached --stop-at-record-time {at(2)}; exiting as requested")
+        self.assertNotLogged("Caught up with scan")
+
     def test_alerts_are_repeated_if_slack_fails(self) -> None:
         self.scan.updates = unexpected_transfers(1)
         self.slack.fail = True

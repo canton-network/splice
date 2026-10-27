@@ -815,7 +815,6 @@ class Monitor:
                 if stop_at is None
                 else list(itertools.takewhile(lambda u: parse_time(u["record_time"]) <= stop_at, updates))
             )
-            reached_stop = len(in_range) < len(updates)
             matches = [m for m in map(self.process_update_event, in_range) if m is not None]
             for m in matches:
                 print(json.dumps(m), flush=True)
@@ -832,6 +831,11 @@ class Monitor:
                 store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
                 self.stats["transactions"] += len(in_range)
                 self.forget_reported_until(position(migration_id, record_time))
+            # Scan only returns updates with later record times than the cursor, so none at or
+            # before the cutoff can follow once the cursor is at it.
+            reached_stop = len(in_range) < len(updates) or (
+                stop_at is not None and parse_time(record_time) >= stop_at
+            )
 
             deliver(caught_up or reached_stop)
 
