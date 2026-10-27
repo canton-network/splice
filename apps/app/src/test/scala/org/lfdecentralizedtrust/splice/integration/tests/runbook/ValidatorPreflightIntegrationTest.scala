@@ -51,6 +51,7 @@ abstract class ValidatorPreflightIntegrationTestBase
   protected val validatorAuth0Audience: String
   protected val validatorWalletUser: String
   protected lazy val includeSplitwellTests = true
+  protected def keyDownloadEnabled: Boolean = true
 
   protected lazy val walletUiUrl =
     s"https://wallet.${validatorName}.${sys.env("NETWORK_APPS_ADDRESS")}/"
@@ -442,10 +443,23 @@ abstract class ValidatorPreflightIntegrationTestBase
     }
   }
 
-  "can dump participant identities of validator" in { _ =>
-    if (isAuth0) {
-      eventuallySucceeds() {
-        validatorClient.dumpParticipantIdentities()
+  if (keyDownloadEnabled) {
+    "can dump participant identities of validator" in { _ =>
+      if (isAuth0) {
+        eventuallySucceeds() {
+          validatorClient.dumpParticipantIdentities()
+        }
+      }
+    }
+  } else {
+    "cannot dump participant identities of validator, as key downloads are disabled" in { _ =>
+      if (isAuth0) {
+        assertThrowsAndLogsCommandFailures(
+          validatorClient.dumpParticipantIdentities(),
+          _.errorMessage should (include("400 Bad Request") and include(
+            "key downloads are disabled"
+          )),
+        )
       }
     }
   }
@@ -627,6 +641,8 @@ class Validator1PreflightIntegrationTest extends ValidatorPreflightIntegrationTe
   override protected val isDevNet = true
   override protected val auth0 = auth0UtilFromEnvVars("dev")
   override protected val validatorName = "validator1"
+  // Key downloads are usually disabled for validator1 on testing clusters
+  override protected def keyDownloadEnabled = false
   override protected val validatorAuth0Secret =
     sys.env("SPLICE_OAUTH_DEV_CLIENT_ID_VALIDATOR1")
   override protected val validatorAuth0Audience = sys.env("OIDC_AUTHORITY_VALIDATOR_AUDIENCE")

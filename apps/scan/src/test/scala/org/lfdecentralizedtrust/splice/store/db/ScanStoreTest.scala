@@ -219,6 +219,8 @@ abstract class ScanStoreTest
       }
     }
 
+    testGovernanceLockIngestion(user1, dsoParty, userParty(2), () => mkStore())
+
     "lookupTransferPreapprovalByParty" should {
       "return the TransferPreapproval contract signed by the specified party if available" in {
         val wanted = transferPreapproval(userParty(1), providerParty(1), time(0), time(1))
@@ -1710,21 +1712,20 @@ class DbScanStoreTest
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)
 
-    val store = new DbScanStore(
-      key = ScanStore.Key(dsoParty),
-      storage,
-      loggerFactory,
-      RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      domainMigrationId,
-      participantId = mkParticipantId("ScanStoreTest"),
-      IngestionConfig(),
-      new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
-      defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-      acsStoreDescriptorUserVersion,
-      txLogStoreDescriptorUserVersion,
-    )(parallelExecutionContext, implicitly, implicitly)
-
     for {
+      store <- DbScanStore.create(
+        key = ScanStore.Key(dsoParty),
+        storage,
+        loggerFactory,
+        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
+        domainMigrationId,
+        participantId = mkParticipantId("ScanStoreTest"),
+        IngestionConfig(),
+        new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
+        defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+        acsStoreDescriptorUserVersion,
+        txLogStoreDescriptorUserVersion,
+      )(parallelExecutionContext, implicitly, implicitly, implicitly)
       initializeResult <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
