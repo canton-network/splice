@@ -1,12 +1,12 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# 26.10@sha256:c99db7323621802852e277a697aba0a09e44b30f3258d5b51dfc97d380b65e7e
+# 26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 # We don't currently have a need for multi-architecture support in this image,
 # so we're hard-coding amd64, and accepting that this will break on arm64.
 # check=skip=FromPlatformFlagConstDisallowed
-FROM --platform=linux/amd64 ubuntu@sha256:c99db7323621802852e277a697aba0a09e44b30f3258d5b51dfc97d380b65e7e
-LABEL org.opencontainers.image.base.name="ubuntu:26.10"
+FROM --platform=linux/amd64 ubuntu@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
+LABEL org.opencontainers.image.base.name="ubuntu:26.04"
 
 ARG KUBECTL_VERSION
 
