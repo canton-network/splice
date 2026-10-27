@@ -3733,6 +3733,8 @@ components:
         For networks where the SVs enable activity record computation,
         a traffic summary and app activity record are present when
         a verdict is present.
+      required:
+        - asset_activity_records
       properties:
         update:
           $ref: "#/components/schemas/UpdateHistoryItemV2"
@@ -3748,11 +3750,12 @@ components:
           nullable: true
         asset_activity_records:
           $ref: "#/components/schemas/EventHistoryActivityRecords"
-          nullable: true
         submitting_app_provider:
           description: |
             The submitting app provider party identifier, present only when the submitter is a featured-app.
+            This field is conditionally omitted from JSON when null (see OmitNullString).
           type: string
+          x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullString
     EventLatestRecordTimeResponse:
       type: object
       required:

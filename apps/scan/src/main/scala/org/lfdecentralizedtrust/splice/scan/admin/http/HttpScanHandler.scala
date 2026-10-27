@@ -62,6 +62,7 @@ import org.lfdecentralizedtrust.splice.http.{
   HttpFeatureSupportHandler,
   HttpValidatorLicensesHandler,
   HttpVotesHandler,
+  OmitNullString,
   UrlValidator,
 }
 import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
@@ -850,10 +851,11 @@ class HttpScanHandler(
               ScanHttpEncodings.encodeAppActivityRecord
             )
             // TODO(#7837): cover these fields in the integration test.
-            val assetActivityRecordEncoded = appActivityRecordO.map(
-              ScanHttpEncodings.encodeAssetActivityRecord
-            )
-            val submittingAppProviderEncoded = appActivityRecordO.flatMap(_.submittingAppProvider)
+            val assetActivityRecordEncoded = appActivityRecordO
+              .map(ScanHttpEncodings.encodeAssetActivityRecord)
+              .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
+            val submittingAppProviderEncoded =
+              appActivityRecordO.flatMap(_.submittingAppProvider).map(OmitNullString(_))
             Right(
               definitions.EventHistoryItem(
                 encodedUpdateV2,
@@ -931,12 +933,16 @@ class HttpScanHandler(
           appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAppActivityRecord)
         }
         // TODO(#7837): cover these fields in the integration test.
-        val assetActivityRecordEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-          appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAssetActivityRecord)
-        }
-        val submittingAppProviderEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-          appActivityRecordMap.get(v.rowId).flatMap(_.submittingAppProvider)
-        }
+        val assetActivityRecordEncoded = verdictWithViewsO
+          .flatMap { case (v, _) =>
+            appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAssetActivityRecord)
+          }
+          .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
+        val submittingAppProviderEncoded = verdictWithViewsO
+          .flatMap { case (v, _) =>
+            appActivityRecordMap.get(v.rowId).flatMap(_.submittingAppProvider)
+          }
+          .map(OmitNullString(_))
         definitions.EventHistoryItem(
           encodedUpdateV2,
           verdictEncoded,

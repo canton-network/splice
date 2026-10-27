@@ -11,6 +11,7 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   DamlValueEncoding,
+  EventHistoryActivityRecords,
   EventHistoryItem,
   FeatureSupportResponse,
   UpdateHistoryRequestV2,
@@ -104,6 +105,7 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
         verdict = None, // should be preserved as null
         trafficSummary = None, // should be preserved as null
         appActivityRecords = None, // should be preserved as null
+        assetActivityRecords = EventHistoryActivityRecords(records = Vector.empty),
       )
       // ignoring the result since it's obviously a Future.successful stub.
       val _ = doReturn(
