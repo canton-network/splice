@@ -93,6 +93,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `DB_STORAGE_DEGRADATION ... RejectedExecutionException ... [Terminated ...]` retried as `transient error (request
   infinite retries)` until environment close. Confirm: `Stopping <scan> node` tens of ms before the first
   DB_STORAGE_DEGRADATION, and an incoming `HTTP GET` on that scan in between (peer trigger trace).
+  Release lines only: main closes the HTTP admin server before the node since #7711; fix is backporting #7711.
 - 10121 / 10142 SummarizingMiningRoundTrigger ERROR on a retryable "totals not yet computed"
   (`ray/fix-summarizing-round-log-noise`).
 - 10084 re-triaged 2026-09-22: `IndexerState.ensureNoProcessingForSynchronizer` (reconnect path) retries at 200 ms

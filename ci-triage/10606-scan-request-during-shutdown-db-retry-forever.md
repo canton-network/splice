@@ -73,9 +73,14 @@ LsuIntegrationTest on main, so main can hit it too.
 
 ## Verdict
 
-New family, flake by timing (needs a peer-scan HTTP request inside the gap between scan storage close and HTTP
-unbind). Fix belongs in the app: ScanApp should stop accepting HTTP requests before closing its storage, or the
-store query should fail fast once the storage is closing instead of being retried as transient. Test-side
-mitigation: stop the SV apps (whose triggers poll peer scans) before the scans in the "stop apps manually" clue.
-No fix branch written (production shutdown order is the owner's call). Not verified: the ScanApp close order in
-code, and whether the Canton retry policy would also stop on its own once the storage's closing flag is set.
+Production defect on release-line-0.9.x, already fixed on main by #7711 (db78d9f773, 2026-10-12, "Close the HTTP
+admin server before the node on shutdown"). On release-line-0.9.x (and 0.9.0 .. 0.9.4)
+`NodeBootstrapBase.onClosed` closes `grpcAdminServers ++ getNode.toList ++ stores ++ List(clock, httpAdminService)`,
+so the HTTP admin server, which also serves the Scan API, keeps accepting requests while the node and its storage
+close. The log matches: ScanAppBootstrap closes ScanApp first (19.176), App state closes (19.184), the root-hash
+request is still received at 19.213, and its query then retries forever on the terminated executor. Main closes
+`List(httpAdminService) ++ grpcAdminServers ++ getNode.toList ++ ...`, so the request would no longer be accepted.
+
+Fix: backport #7711 to release-line-0.9.x. No test change. Remaining, not verified: Canton's DbStorage still
+classifies `RejectedExecutionException` from a terminated executor as transient with infinite retries, which only
+stops at environment close; worth raising with Canton separately.
