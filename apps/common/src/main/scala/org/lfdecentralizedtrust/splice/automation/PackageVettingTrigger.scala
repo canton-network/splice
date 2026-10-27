@@ -68,9 +68,7 @@ abstract class PackageVettingTrigger(
           additionalPackagesToUnvet,
         )
       )
-      currentPackageConfig = AmuletConfigSchedule(amuletRules)
-        .getConfigAsOf(context.clock.now)
-        .packageConfig
+      currentPackageConfig = amuletRules.payload.configSchedule.initialValue.packageConfig
       pendingPackageConfigs = newAmuletConfigVoteRequests.map(_._2.packageConfig)
       // ensure that unsupported versions are not vetted
       _ <- runIfInputChanged(
