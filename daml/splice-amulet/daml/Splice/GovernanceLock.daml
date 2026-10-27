@@ -312,7 +312,14 @@ fetchAndMergeGovernanceLocks' newFunds key context state reason =
       -- The lineage of the other merged locks ends here, as a lock can only have one original lock
       let originalLockCid = (\(cid, lock) -> fromOptional (toAnyContractId cid) lock.originalLockCid) <$> head locks
           forOwner = ForOwner with dso = key.dso; owner = key.owner
-          (initialAmount, initialInputs) = optional (0.0, []) (\(amount, inputs, _) -> (amount, inputs)) newFunds
+
+      (initialInputs, initialAmount) <- case newFunds of
+        None -> pure ([], 0.0)
+        Some (amount, inputs, _) -> do
+          -- Allowing amount to be 0 gives the ability to merge existing locks without locking new funds.
+          -- Note: this also means that a single existing lock could be cycled by creating a new lock with `amount = 0`.
+          require' ("amount", amount) isGreaterOrEqualR ("zero", 0.0)
+          pure (inputs, amount)
 
       (mergedAmount, inputHoldings) <- foldrA
         (\(lockCid, lock) (accAmount, accHoldings) -> do
