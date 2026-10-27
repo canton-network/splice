@@ -21,7 +21,7 @@
     "@mojotech/json-type-validation": "^3.1.0",
     "dompurify": "^3.4.16",
     "eslint": "^9.39.4",
-    "jose": "^4.15.9",
+    "jose": "^6.2.12",
     "jsondiffpatch": "^0.7.6",
     "msw": "^2.14.2",
     "uuid": "^14.0.0",
