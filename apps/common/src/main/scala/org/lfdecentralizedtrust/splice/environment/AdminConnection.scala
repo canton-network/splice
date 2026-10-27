@@ -41,7 +41,7 @@ import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, MediaType
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.util.ByteString
-import org.lfdecentralizedtrust.splice.auth.AuthToken
+import org.lfdecentralizedtrust.splice.auth.AuthTokenProvider
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -176,7 +176,7 @@ abstract class AdminConnection(
     apiLoggingConfig: ApiLoggingConfig,
     override val loggerFactory: NamedLoggerFactory,
     grpcClientMetrics: GrpcClientMetrics,
-    getToken: () => Future[Option[AuthToken]],
+    tokenProvider: AuthTokenProvider,
 )(implicit ec: ExecutionContextExecutor)
     extends BaseAppConnection(loggerFactory)
     with FlagCloseableAsync
@@ -214,7 +214,7 @@ abstract class AdminConnection(
         )
 
     for {
-      maybeToken <- getToken()
+      maybeToken <- tokenProvider.getToken
       dsoAuth = maybeToken match {
         case Some(token) => dso.withCallCredentials(new AuthCallCredentials(token.accessToken))
         case None => dso

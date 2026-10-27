@@ -7,8 +7,8 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.auth.CantonAdminTokenDispenser
 import org.lfdecentralizedtrust.splice.SpliceMetrics
 import org.lfdecentralizedtrust.splice.auth.{
-  AuthToken,
   AuthTokenManager,
+  AuthTokenProvider,
   AuthTokenSource,
   AuthTokenSourceNone,
 }
@@ -44,6 +44,7 @@ import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
+
 import java.time
 import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicReference
@@ -86,6 +87,8 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
     )
 
   override val timeouts = parameters.processingTimeouts
+
+  private val clock = new WallClock(timeouts, loggerFactory)
 
   private val isInitializedVar: AtomicReference[Boolean] = new AtomicReference(false)
 
@@ -142,12 +145,12 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
       loggerFactory,
     )
   } yield {
-    val getToken = createTokenProvider(authTokenSource)
+    val tokenProvider = createManagedTokenProviderWithRetries(authTokenSource)
     new SpliceLedgerClient(
       participantClient.ledgerApi.clientConfig,
       // Note: When ledger API auth is enabled, application ID must be equal to user ID
       serviceUser,
-      getToken,
+      tokenProvider,
       parameters.loggingConfig.api,
       loggerFactory,
       tracerProvider,
@@ -321,40 +324,45 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
     }
   }
 
+  private val participantAdminApiTokenProvider: AuthTokenProvider =
+    createManagedTokenProviderWithRetries(
+      tokenSource = AuthTokenSource.fromConfig(
+        participantClient.adminApi.authConfig,
+        nodeMetrics.httpClientMetrics,
+        loggerFactory,
+      )
+    )(TraceContext.empty)
+
   protected def createParticipantAdminConnection()(implicit
       tc: TraceContext
   ): ParticipantAdminConnection = {
-    val tokenSource = AuthTokenSource.fromConfig(
-      participantClient.adminApi.authConfig,
-      nodeMetrics.httpClientMetrics,
-      loggerFactory,
-    )
-    val tokenProvider = createTokenProvider(tokenSource)
     new ParticipantAdminConnection(
       participantClient.adminApi.clientConfig,
       parameters.loggingConfig.api,
       loggerFactory,
       nodeMetrics.grpcClientMetrics,
       retryProvider,
-      tokenProvider,
+      participantAdminApiTokenProvider,
     )
   }
 
-  private def createTokenProvider(
+  /** The lifetime of the resulting token provider is bound to the node lifetime so this method is not suitable for
+    * shorter-lived scopes.
+    */
+  private def createManagedTokenProviderWithRetries(
       tokenSource: AuthTokenSource
-  )(implicit tc: TraceContext): () => Future[Option[AuthToken]] =
+  )(implicit tc: TraceContext): AuthTokenProvider =
     tokenSource match {
       // AuthTokenSourceNone source does not work with AuthTokenManager which re-requests on None result
-      case none: AuthTokenSourceNone => () => none.getToken
+      case AuthTokenSourceNone => AuthTokenSourceNone
       case other =>
-        val clock = new WallClock(timeouts, loggerFactory)
         val authTokenManager = new AuthTokenManager(
           () => other.getToken,
           this.isClosing,
           clock,
           loggerFactory,
         )
-        () =>
+        implicit tc =>
           retryProvider.retry(
             RetryFor.WaitingOnInitDependency,
             "acquire_auth_token",

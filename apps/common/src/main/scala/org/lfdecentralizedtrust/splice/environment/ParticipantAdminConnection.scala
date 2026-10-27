@@ -55,7 +55,7 @@ import com.digitalasset.canton.util.ShowUtil.*
 import com.google.protobuf.ByteString
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
-import org.lfdecentralizedtrust.splice.auth.AuthToken
+import org.lfdecentralizedtrust.splice.auth.AuthTokenProvider
 import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection.{
   HasParticipantId,
@@ -81,7 +81,7 @@ class ParticipantAdminConnection(
     loggerFactory: NamedLoggerFactory,
     grpcClientMetrics: GrpcClientMetrics,
     retryProvider: RetryProvider,
-    getToken: () => Future[Option[AuthToken]],
+    tokenProvider: AuthTokenProvider,
 )(implicit protected val ec: ExecutionContextExecutor, tracer: Tracer)
     extends TopologyAdminConnection(
       config,
@@ -89,7 +89,7 @@ class ParticipantAdminConnection(
       loggerFactory,
       grpcClientMetrics,
       retryProvider,
-      getToken,
+      tokenProvider,
     )
     with HasParticipantId
     with ParticipantAdminDarsConnection
