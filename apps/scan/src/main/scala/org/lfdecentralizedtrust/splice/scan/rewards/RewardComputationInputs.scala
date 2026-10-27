@@ -11,28 +11,35 @@ import scala.jdk.OptionConverters.RichOptional
 /** Derived parameters passed to computeRewardTotals.
   *
   * Fields are BigDecimal because they flow into SQL queries.
+  *
+  * Under TBAR v1.1 (CIP-104 amendment) `unclaimedMintingAllowanceCC` carries the
+  * round-wide unclaimed amount — app-side's unclaimed cascades into asset-side's
+  * budget before any asset allocation, so there is no separate
+  * unclaimed asset portion.
   */
 final case class RewardIssuanceParams(
-    issuancePerFeaturedAppTraffic_CCperMB: BigDecimal,
-    threshold_CC: BigDecimal,
-    totalIssuanceForFeaturedAppRewards: BigDecimal,
-    unclaimedAppRewardAmount: BigDecimal,
+    // Common
+    appRewardCouponThresholdCC: BigDecimal,
+    unclaimedMintingAllowanceCC: BigDecimal,
+    // App side
+    appMintingAllowanceCC: BigDecimal,
+    issuancePerAppBurnCCPerMB: BigDecimal,
+    issuancePerAppBurnCC: BigDecimal,
+    // Asset side
+    assetMintingAllowanceCC: BigDecimal,
+    issuancePerAssetBurnCCPerMB: BigDecimal,
+    issuancePerAssetBurnCC: BigDecimal,
 )
 
-/** Raw contract inputs for app reward CC computation.
+/** Inputs for app reward CC computation.
   *
-  * Built by mirroring the code from `Splice.Issuance.daml` into Scala with the
-  * same scale (Numeric 10) and rounding mode (HALF_EVEN).
-  *
-  * All fields use `Numeric` to enforce Daml-compatible arithmetic throughout
-  *
-  * @see https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md#app-reward-computation-details
+  * Based on CIP-0104 text and using Daml decimal arithmetic
+  * (Numeric 10 with rounding mode HALF_EVEN).
   */
 final case class RewardComputationInputs(
     amuletToIssuePerYear: Numeric,
     appRewardPercentage: Numeric,
     featuredAppRewardCap: Numeric,
-    unfeaturedAppRewardCap: Numeric,
     developmentFundPercentage: Numeric,
     tickDurationMicros: Long,
     amuletPrice: Numeric,
@@ -41,64 +48,134 @@ final case class RewardComputationInputs(
 ) {
   import RewardComputationInputs.*
 
+  requirePositive("amuletToIssuePerYear", amuletToIssuePerYear)
+  requireNonNegative("appRewardPercentage", appRewardPercentage)
+  requireNonNegative("featuredAppRewardCap", featuredAppRewardCap)
+  requireNonNegative("developmentFundPercentage", developmentFundPercentage)
+  requirePositive("tickDurationMicros", tickDurationMicros)
+  requirePositive("amuletPrice", amuletPrice)
+  requireNonNegative("trafficPrice", trafficPrice)
+  requireNonNegative("appRewardCouponThreshold", appRewardCouponThreshold)
+
   private val microsPerYear: Long = 365L * 24 * 3600 * 1000000L
   private val roundsPerYear: Numeric = div(fromLong(microsPerYear), fromLong(tickDurationMicros))
-  private val amuletsToIssueInRound: Numeric = div(amuletToIssuePerYear, roundsPerYear)
-  private val adjustedAmuletsToIssueInRound: Numeric =
-    sub(amuletsToIssueInRound, mul(amuletsToIssueInRound, developmentFundPercentage))
-  private val trafficPriceInCCperMB: Numeric = div(trafficPrice, amuletPrice)
-
-  def deriveIssuanceParams(totalRoundAppActivityWeight: Long): RewardIssuanceParams = {
-    val totalCoupons_CC = mul(
-      div(fromLong(totalRoundAppActivityWeight), fromLong(1000000L)),
-      trafficPriceInCCperMB,
+  private val amuletsToIssueInRound_beforeDevFund: Numeric =
+    div(amuletToIssuePerYear, roundsPerYear)
+  private val amuletsToIssueInRound: Numeric =
+    sub(
+      amuletsToIssueInRound_beforeDevFund,
+      mul(amuletsToIssueInRound_beforeDevFund, developmentFundPercentage),
     )
-    val rewardsToIssue = mul(adjustedAmuletsToIssueInRound, appRewardPercentage)
-    val issuancePerCoupon = computeIssuanceTranche(
-      rewardsToIssue = rewardsToIssue,
+  private[scan] val trafficPriceInCCPerMB: Numeric = div(trafficPrice, amuletPrice)
+
+  def deriveIssuanceParams(
+      totalRoundAppActivityWeight: Long,
+      totalFeaturedAssetWeight: Long,
+  ): RewardIssuanceParams = {
+    requireNonNegative("totalRoundAppActivityWeight", totalRoundAppActivityWeight)
+    requireNonNegative("totalFeaturedAssetWeight", totalFeaturedAssetWeight)
+    val totalAppBurnCC = bytesToCC(totalRoundAppActivityWeight)
+    val roundMintingAllowanceCC = mul(amuletsToIssueInRound, appRewardPercentage)
+    val appTranche = computeIssuanceTranche(
+      rewardsToIssue = roundMintingAllowanceCC,
       capPerCoupon = featuredAppRewardCap,
-      totalCoupons = totalCoupons_CC,
+      totalCoupons = totalAppBurnCC,
     )
-    val unclaimed = sub(rewardsToIssue, mul(issuancePerCoupon, totalCoupons_CC))
 
-    // Convert Numeric → BigDecimal at the output boundary for SQL
-    RewardIssuanceParams(
-      issuancePerFeaturedAppTraffic_CCperMB =
-        BigDecimal(mul(trafficPriceInCCperMB, issuancePerCoupon)),
-      threshold_CC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
-      totalIssuanceForFeaturedAppRewards = BigDecimal(rewardsToIssue),
-      unclaimedAppRewardAmount = BigDecimal(if (unclaimed.compareTo(zero) < 0) zero else unclaimed),
+    // Asset side (CIP-104 amendment): same tranche formula and cap as the app
+    // side, consuming the app side's remainder as the asset budget.
+    val totalAssetBurnCC = bytesToCC(totalFeaturedAssetWeight)
+    val assetTranche = computeIssuanceTranche(
+      rewardsToIssue = appTranche.unclaimedAllowance,
+      capPerCoupon = featuredAppRewardCap,
+      totalCoupons = totalAssetBurnCC,
     )
+
+    // Convert Numeric → BigDecimal at the output boundary for SQL.
+    val issuanceParams = RewardIssuanceParams(
+      appRewardCouponThresholdCC = BigDecimal(div(appRewardCouponThreshold, amuletPrice)),
+      unclaimedMintingAllowanceCC = BigDecimal(assetTranche.unclaimedAllowance),
+      appMintingAllowanceCC = BigDecimal(appTranche.claimedAllowance),
+      issuancePerAppBurnCCPerMB = BigDecimal(mul(trafficPriceInCCPerMB, appTranche.issuanceRatio)),
+      issuancePerAppBurnCC = BigDecimal(appTranche.issuanceRatio),
+      assetMintingAllowanceCC = BigDecimal(assetTranche.claimedAllowance),
+      issuancePerAssetBurnCCPerMB =
+        BigDecimal(mul(trafficPriceInCCPerMB, assetTranche.issuanceRatio)),
+      issuancePerAssetBurnCC = BigDecimal(assetTranche.issuanceRatio),
+    )
+    // The tranche splits use only subtraction (no multiplication), so the
+    // three minting-allowance components reconstruct the round budget exactly.
+    val sumOfAllowances =
+      issuanceParams.appMintingAllowanceCC + issuanceParams.assetMintingAllowanceCC +
+        issuanceParams.unclaimedMintingAllowanceCC
+    val roundBudget = BigDecimal(roundMintingAllowanceCC)
+    require(
+      sumOfAllowances.compare(roundBudget) == 0,
+      s"minting-allowance conservation violated: " +
+        s"appMintingAllowanceCC + assetMintingAllowanceCC + unclaimedMintingAllowanceCC " +
+        s"($sumOfAllowances) != roundMintingAllowanceCC ($roundBudget)",
+    )
+    issuanceParams
   }
 
-  /** Replicates Daml computeIssuanceTranche (Splice/Issuance.daml:164-189) for
-    * totalUnfeaturedAppRewardCoupons = 0.
-    *
-    * The multiply-before-divide order `(cappedRewardsToIssue * capPerCoupon) / scaledTotalCoupons`
-    * matches the Daml source.
+  /** Convert a bytes-weight to CC via `trafficPriceInCCPerMB`.
+    * Used symmetrically for app traffic and asset burn.
     */
+  private def bytesToCC(bytesWeight: Long): Numeric =
+    mul(div(fromLong(bytesWeight), fromLong(1000000L)), trafficPriceInCCPerMB)
+
   private def computeIssuanceTranche(
       rewardsToIssue: Numeric,
       capPerCoupon: Numeric,
       totalCoupons: Numeric,
-  ): Numeric = {
-    if (totalCoupons.compareTo(zero) <= 0) capPerCoupon
-    else if (capPerCoupon.compareTo(zero) <= 0) zero
+  ): TrancheParameters = {
+    if (totalCoupons.compareTo(zero) <= 0 || capPerCoupon.compareTo(zero) <= 0)
+      TrancheParameters(zero, zero, rewardsToIssue)
     else {
       val scaledTotalCoupons = mul(capPerCoupon, totalCoupons)
-      val cappedRewardsToIssue =
+      val claimedAllowance =
         if (rewardsToIssue.compareTo(scaledTotalCoupons) < 0) rewardsToIssue
         else scaledTotalCoupons
-      div(mul(cappedRewardsToIssue, capPerCoupon), scaledTotalCoupons)
+      TrancheParameters(
+        issuanceRatio = div(claimedAllowance, totalCoupons),
+        claimedAllowance = claimedAllowance,
+        unclaimedAllowance = sub(rewardsToIssue, claimedAllowance),
+      )
     }
   }
 }
 
 object RewardComputationInputs {
   private val scale: Numeric.Scale = Numeric.Scale.assertFromInt(10)
-  private[scan] val zero: Numeric = fromLong(0L)
-  // Daml default for optDevelopmentFundPercentage
+  private[rewards] val zero: Numeric = fromLong(0L)
+  // Daml defaults for optional fields on IssuanceConfig.
   private val defaultDevelopmentFundPercentage: BigDecimal = BigDecimal("0.05")
+
+  private def requirePositive(name: String, value: Numeric): Unit =
+    require(value.compareTo(zero) > 0, s"$name must be strictly positive (received: $value)")
+
+  private def requireNonNegative(name: String, value: Numeric): Unit =
+    require(value.compareTo(zero) >= 0, s"$name must be non-negative (received: $value)")
+
+  private def requirePositive(name: String, value: Long): Unit =
+    require(value > 0L, s"$name must be strictly positive (received: $value)")
+
+  private def requireNonNegative(name: String, value: Long): Unit =
+    require(value >= 0L, s"$name must be non-negative (received: $value)")
+
+  /** Result of `computeIssuanceTranche`.
+    *
+    * `claimedAllowance + unclaimedAllowance == rewardsToIssue` (the input budget).
+    */
+  private[rewards] final case class TrancheParameters(
+      issuanceRatio: Numeric,
+      claimedAllowance: Numeric,
+      unclaimedAllowance: Numeric,
+  ) {
+    requireNonNegative("issuanceRatio", issuanceRatio)
+    requireNonNegative("claimedAllowance", claimedAllowance)
+    requireNonNegative("unclaimedAllowance", unclaimedAllowance)
+  }
 
   private[rewards] def fromLong(x: Long): Numeric =
     damlRight(Numeric.fromLong(scale, x))
@@ -125,7 +202,6 @@ object RewardComputationInputs {
         amuletToIssuePerYear = fromBigDecimal(issuance.amuletToIssuePerYear),
         appRewardPercentage = fromBigDecimal(issuance.appRewardPercentage),
         featuredAppRewardCap = fromBigDecimal(issuance.featuredAppRewardCap),
-        unfeaturedAppRewardCap = fromBigDecimal(issuance.unfeaturedAppRewardCap),
         developmentFundPercentage = fromBigDecimal(devFundPct),
         tickDurationMicros = round.tickDuration.microseconds,
         amuletPrice = fromBigDecimal(round.amuletPrice),

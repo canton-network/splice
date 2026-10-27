@@ -45,22 +45,29 @@ class RewardComputationInputsTest extends AnyWordSpec with BaseTest with BigDeci
 
   "RewardComputationInputs.deriveIssuanceParams" should {
 
+    val fields: Seq[(String, RewardIssuanceParams => BigDecimal)] = Seq(
+      "appMintingAllowanceCC" -> (_.appMintingAllowanceCC),
+      "assetMintingAllowanceCC" -> (_.assetMintingAllowanceCC),
+      "unclaimedMintingAllowanceCC" -> (_.unclaimedMintingAllowanceCC),
+      "issuancePerAppBurnCC" -> (_.issuancePerAppBurnCC),
+      "issuancePerAppBurnCCPerMB" -> (_.issuancePerAppBurnCCPerMB),
+      "issuancePerAssetBurnCC" -> (_.issuancePerAssetBurnCC),
+      "issuancePerAssetBurnCCPerMB" -> (_.issuancePerAssetBurnCCPerMB),
+      "appRewardCouponThresholdCC" -> (_.appRewardCouponThresholdCC),
+    )
+
     cases.foreach { tc =>
       tc.label in {
-        val result = tc.inputs.deriveIssuanceParams(tc.totalRoundAppActivityWeight)
-        result.issuancePerFeaturedAppTraffic_CCperMB should beEqualUpTo(
-          tc.expected.issuancePerFeaturedAppTraffic_CCperMB,
-          10,
-        )
-        result.threshold_CC should beEqualUpTo(tc.expected.threshold_CC, 10)
-        result.totalIssuanceForFeaturedAppRewards should beEqualUpTo(
-          tc.expected.totalIssuanceForFeaturedAppRewards,
-          10,
-        )
-        result.unclaimedAppRewardAmount should beEqualUpTo(
-          tc.expected.unclaimedAppRewardAmount,
-          10,
-        )
+        val result =
+          tc.inputs.deriveIssuanceParams(
+            tc.totalRoundAppActivityWeight,
+            tc.totalFeaturedAssetWeight,
+          )
+        fields.foreach { case (name, read) =>
+          withClue(name) {
+            read(result) should beEqualUpTo(read(tc.expected), 10)
+          }
+        }
       }
     }
   }
@@ -123,19 +130,18 @@ object RewardComputationInputsTest {
     *
     * Source: https://docs.global.canton.network.sync.global/dso
     *   amuletToIssuePerYear = 10e9, appRewardPercentage = 0.62
-    *   featuredAppRewardCap = 1.5, unfeaturedAppRewardCap = 0.6
+    *   featuredAppRewardCap = 1.5
     *   optDevelopmentFundPercentage = None → default 0.05
     *   trafficPrice = 60 $/MB, amuletPrice = 0.14877 $/CC
     *
-    * Derived: amuletsToIssueInRound ≈ 190258.75
-    *          adjustedAmuletsToIssueInRound ≈ 180745.81 (after 5% devfund)
-    *          rewardsToIssue ≈ 112062.40, trafficPriceInCCperMB ≈ 403.30, threshold_CC ≈ 3.36
+    * Derived: amuletsToIssueInRound_beforeDevFund ≈ 190258.75
+    *          amuletsToIssueInRound ≈ 180745.81 (after 5% devfund)
+    *          rewardsToIssue ≈ 112062.40, trafficPriceInCCPerMB ≈ 403.30, appRewardCouponThresholdCC ≈ 3.36
     */
   val mainNet = RewardComputationInputs(
     amuletToIssuePerYear = n(BigDecimal("10000000000")),
     appRewardPercentage = n(BigDecimal("0.62")),
     featuredAppRewardCap = n(BigDecimal("1.5")),
-    unfeaturedAppRewardCap = n(BigDecimal("0.6")),
     developmentFundPercentage = n(BigDecimal("0.05")),
     tickDurationMicros = tickDurationMicros,
     amuletPrice = n(BigDecimal("0.14877")),
@@ -145,18 +151,17 @@ object RewardComputationInputsTest {
 
   /** Baseline inputs: simple round numbers for easy manual verification.
     *
-    * amuletToIssuePerYear = 52560 → amuletsToIssueInRound = 1.0
-    * developmentFundPercentage = 0.1 → adjustedAmuletsToIssueInRound = 0.9
+    * amuletToIssuePerYear = 52560 → amuletsToIssueInRound_beforeDevFund = 1.0
+    * developmentFundPercentage = 0.1 → amuletsToIssueInRound = 0.9
     * appRewardPercentage = 0.5 → rewardsToIssue = 0.45
-    * amuletPrice = 1.0, trafficPrice = 1.0 → trafficPriceInCCperMB = 1.0
+    * amuletPrice = 1.0, trafficPrice = 1.0 → trafficPriceInCCPerMB = 1.0
     * featuredAppRewardCap = 100 (high, so cap doesn't bind)
-    * appRewardCouponThreshold = 0.5 → threshold_CC = 0.5
+    * appRewardCouponThreshold = 0.5 → appRewardCouponThresholdCC = 0.5
     */
   private val simpleArithmetic = RewardComputationInputs(
     amuletToIssuePerYear = n(roundsPerYear), // yields exactly 1.0 per round
     appRewardPercentage = n(BigDecimal("0.5")),
     featuredAppRewardCap = n(BigDecimal("100")),
-    unfeaturedAppRewardCap = n(BigDecimal("0")),
     developmentFundPercentage = n(BigDecimal("0.1")),
     tickDurationMicros = tickDurationMicros,
     amuletPrice = n(BigDecimal("1.0")),
@@ -164,11 +169,33 @@ object RewardComputationInputsTest {
     appRewardCouponThreshold = n(BigDecimal("0.5")),
   )
 
+  /** Inputs from the amendment's "Example: Tiered App Reward Distribution".
+    *
+    *   roundMintingAllowanceCC = 112,000 CC per round
+    *   featuredAppRewardCap = 0.79
+    *   trafficPrice = $60/MB, amuletPrice = $0.1/CC → trafficPriceInCCPerMB = 600 CC/MB
+    *
+    * Set amuletToIssuePerYear so amuletsToIssueInRound = 112,000, with
+    * appRewardPercentage = 1 and developmentFundPercentage = 0 to keep the
+    * minting allowance identity transparent.
+    */
+  private val dvpExample = RewardComputationInputs(
+    amuletToIssuePerYear = n(roundsPerYear * BigDecimal("112000")),
+    appRewardPercentage = n(BigDecimal("1")),
+    featuredAppRewardCap = n(BigDecimal("0.79")),
+    developmentFundPercentage = n(BigDecimal("0")),
+    tickDurationMicros = tickDurationMicros,
+    amuletPrice = n(BigDecimal("0.1")),
+    trafficPrice = n(BigDecimal("60")),
+    appRewardCouponThreshold = n(BigDecimal("0")),
+  )
+
   case class TestCase(
       label: String,
       inputs: RewardComputationInputs,
       totalRoundAppActivityWeight: Long,
       expected: RewardIssuanceParams,
+      totalFeaturedAssetWeight: Long = 0L,
   )
 
   // Test cases are grouped in pairs: MainNet-calibrated first (realistic values
@@ -186,10 +213,14 @@ object RewardComputationInputsTest {
       inputs = mainNet,
       totalRoundAppActivityWeight = 95129376L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("604.9606775559"),
-        threshold_CC = BigDecimal("3.3608926531"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("112062.4048706240"),
-        unclaimedAppRewardAmount = BigDecimal("54512.8731101940"),
+        appMintingAllowanceCC = BigDecimal("57549.5317604300"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("54512.8731101940"),
+        issuancePerAppBurnCC = BigDecimal("1.5"),
+        issuancePerAppBurnCCPerMB = BigDecimal("604.9606775559"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
       ),
     ),
     // Simple: 1 MB traffic, no cap binding
@@ -199,27 +230,35 @@ object RewardComputationInputsTest {
       inputs = simpleArithmetic,
       totalRoundAppActivityWeight = 1000000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.45"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0"),
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.45"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.45"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
 
     // --- 2. More traffic dilutes issuance per MB ---
 
     // MainNet: doubled traffic price $120/MB → enough coupons that cap no longer binds.
-    // trafficPriceInCCperMB = 120/0.14877 ≈ 806.60, totalCoupons ≈ 76681.78
+    // trafficPriceInCCPerMB = 120/0.14877 ≈ 806.60, totalCoupons ≈ 76681.78
     // issuancePerCoupon = 112062.40 / 76681.78 ≈ 1.46 < 1.5 (cap does not bind)
     TestCase(
       label = "MainNet: doubled traffic price $120/MB, cap does not bind",
       inputs = mainNet.copy(trafficPrice = n(BigDecimal("120"))),
       totalRoundAppActivityWeight = 95129376L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("1177.9999994354"),
-        threshold_CC = BigDecimal("3.3608926531"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("112062.4048706240"),
-        unclaimedAppRewardAmount = BigDecimal("0E-10"),
+        appMintingAllowanceCC = BigDecimal("112062.4048706240"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0E-10"),
+        issuancePerAppBurnCC = BigDecimal("1.4604254993"),
+        issuancePerAppBurnCCPerMB = BigDecimal("1177.9999994354"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
       ),
     ),
     // Simple: double traffic (2 MB) → half the issuance per featured app activity
@@ -229,10 +268,14 @@ object RewardComputationInputsTest {
       inputs = simpleArithmetic,
       totalRoundAppActivityWeight = 2000000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.225"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0"),
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.225"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.225"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
     // Simple: 10 MB traffic dilutes issuance per MB
@@ -242,10 +285,14 @@ object RewardComputationInputsTest {
       inputs = simpleArithmetic,
       totalRoundAppActivityWeight = 10000000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.045"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0"),
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.045"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.045"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
 
@@ -260,10 +307,14 @@ object RewardComputationInputsTest {
       inputs = mainNet,
       totalRoundAppActivityWeight = 500000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("604.9606775559"),
-        threshold_CC = BigDecimal("3.3608926531"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("112062.4048706240"),
-        unclaimedAppRewardAmount = BigDecimal("111759.9245318460"),
+        appMintingAllowanceCC = BigDecimal("302.4803387780"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("111759.9245318460"),
+        issuancePerAppBurnCC = BigDecimal("1.5"),
+        issuancePerAppBurnCCPerMB = BigDecimal("604.9606775559"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
       ),
     ),
     // Simple: cap = 0.1, 1 MB → cap binds, unclaimed = 0.35
@@ -272,10 +323,14 @@ object RewardComputationInputsTest {
       inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
       totalRoundAppActivityWeight = 1000000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.1"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0.35"),
+        appMintingAllowanceCC = BigDecimal("0.1"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0.35"),
+        issuancePerAppBurnCC = BigDecimal("0.1"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.1"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
 
@@ -287,17 +342,21 @@ object RewardComputationInputsTest {
       inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.2"))),
       totalRoundAppActivityWeight = 2000000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.2"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0.05"),
+        appMintingAllowanceCC = BigDecimal("0.4"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0.05"),
+        issuancePerAppBurnCC = BigDecimal("0.2"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.2"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
 
     // --- 5. Coin price affects threshold and conversion ---
 
     // MainNet: higher coin price $1.00/CC
-    // trafficPriceInCCperMB = 60/1.0 = 60, threshold_CC = 0.5/1.0 = 0.5
+    // trafficPriceInCCPerMB = 60/1.0 = 60, appRewardCouponThresholdCC = 0.5/1.0 = 0.5
     // totalCoupons = 95.13 * 60 = 5707.76, issuancePerCoupon = 112062.40/5707.76 ≈ 19.63
     // cap = 1.5 binds → issuancePerCoupon = 1.5
     TestCase(
@@ -305,49 +364,321 @@ object RewardComputationInputsTest {
       inputs = mainNet.copy(amuletPrice = n(BigDecimal("1.00"))),
       totalRoundAppActivityWeight = 95129376L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("90"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("112062.4048706240"),
-        unclaimedAppRewardAmount = BigDecimal("103500.7610306240"),
+        appMintingAllowanceCC = BigDecimal("8561.6438400000"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("103500.7610306240"),
+        issuancePerAppBurnCC = BigDecimal("1.5"),
+        issuancePerAppBurnCCPerMB = BigDecimal("90"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
-    // Simple: amuletPrice = 2.0 → trafficPriceInCCperMB = 0.5, threshold_CC = 0.25
+    // Simple: amuletPrice = 2.0 → trafficPriceInCCPerMB = 0.5, appRewardCouponThresholdCC = 0.25
     TestCase(
       label = "simple: amuletPrice affects threshold and traffic conversion",
       inputs = simpleArithmetic.copy(amuletPrice = n(BigDecimal("2.0"))),
       totalRoundAppActivityWeight = 1000000L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("0.45"),
-        threshold_CC = BigDecimal("0.25"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0"),
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.9"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.45"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.25"),
       ),
     ),
 
     // --- 6. Zero traffic: all rewards unclaimed ---
 
-    // MainNet: rate = trafficPriceInCCperMB * cap ≈ 403.30 * 1.5 ≈ 604.96
+    // MainNet: zero app burn → zero issuance rate (per the amendment's zero-coupons rule).
     TestCase(
       label = "MainNet: zero traffic, all unclaimed",
       inputs = mainNet,
       totalRoundAppActivityWeight = 0L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("604.9606775559"),
-        threshold_CC = BigDecimal("3.3608926531"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("112062.4048706240"),
-        unclaimedAppRewardAmount = BigDecimal("112062.4048706240"),
+        appMintingAllowanceCC = BigDecimal("0"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("112062.4048706240"),
+        issuancePerAppBurnCC = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
       ),
     ),
-    // Simple: rate = 1.0 * 100 = 100, all 0.45 unclaimed
+    // Simple: zero app burn → zero issuance rate (per the amendment's zero-coupons rule).
     TestCase(
       label = "simple: zero traffic, all rewards unclaimed",
       inputs = simpleArithmetic,
       totalRoundAppActivityWeight = 0L,
       expected = RewardIssuanceParams(
-        issuancePerFeaturedAppTraffic_CCperMB = BigDecimal("100"),
-        threshold_CC = BigDecimal("0.5"),
-        totalIssuanceForFeaturedAppRewards = BigDecimal("0.45"),
-        unclaimedAppRewardAmount = BigDecimal("0.45"),
+        appMintingAllowanceCC = BigDecimal("0"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0.45"),
+        issuancePerAppBurnCC = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // --- 7. TBAR v1.1 asset side ---
+
+    // 7a. Burn exceeds leftover → asset prorated
+
+    // MainNet: burn=100000 » leftover ≈ 54512.87 → rate ≈ 0.5451.
+    TestCase(
+      label = "MainNet+asset: burn exceeds leftover, asset prorated",
+      inputs = mainNet,
+      totalRoundAppActivityWeight = 95129376L,
+      totalFeaturedAssetWeight = 250000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("57549.5317604300"),
+        assetMintingAllowanceCC = BigDecimal("54512.8731101940"),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("1.5"),
+        issuancePerAppBurnCCPerMB = BigDecimal("604.9606775559"),
+        issuancePerAssetBurnCC = BigDecimal("0.5406586755"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("218.0514924380"),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
+      ),
+    ),
+    // Simple: cap=0.1 binds; burn=4 CC, cap×burn=0.4 » leftover=0.35 → rate = 0.35/4 = 0.0875.
+    TestCase(
+      label = "simple+asset: burn exceeds leftover, asset prorated",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 4000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0.1"),
+        assetMintingAllowanceCC = BigDecimal("0.35"),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.1"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.1"),
+        issuancePerAssetBurnCC = BigDecimal("0.0875"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("0.0875"),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7b. Cap not binding → asset arm vanishes
+
+    // MainNet: doubled traffic $120/MB — cap doesn't bind, asset arm vanishes.
+    TestCase(
+      label = "MainNet+asset: cap not binding, asset arm vanishes",
+      inputs = mainNet.copy(trafficPrice = n(BigDecimal("120"))),
+      totalRoundAppActivityWeight = 95129376L,
+      totalFeaturedAssetWeight = 1000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("112062.4048706240"),
+        assetMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("0E-10"),
+        issuancePerAppBurnCC = BigDecimal("1.4604254993"),
+        issuancePerAppBurnCCPerMB = BigDecimal("1177.9999994354"),
+        issuancePerAssetBurnCC = BigDecimal("0"),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
+      ),
+    ),
+    // Simple: cap=100 doesn't bind; assetBudget = 0.
+    TestCase(
+      label = "simple+asset: cap not binding, asset arm vanishes",
+      inputs = simpleArithmetic,
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 500000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.45"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.45"),
+        issuancePerAssetBurnCC = BigDecimal("0"),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7c. Non-terminating issuance at simple magnitudes
+    // 7 MB → 45/700 = 0.0642857143 (non-terminating in scale-10); the allowance
+    // equals rewardsToIssue exactly.
+    TestCase(
+      label = "simple+asset: non-terminating issuance (7 MB, cap not binding)",
+      inputs = simpleArithmetic,
+      totalRoundAppActivityWeight = 7000000L,
+      totalFeaturedAssetWeight = 100000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.0642857143"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.0642857143"),
+        issuancePerAssetBurnCC = BigDecimal("0"),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7d. Cap binds + asset burn fits within leftover
+
+    // MainNet: cap=1.5 × 4033.07 CC burn = 6049.60 fits within 54512.87 leftover.
+    TestCase(
+      label = "MainNet+asset: cap binds, asset fits within leftover",
+      inputs = mainNet,
+      totalRoundAppActivityWeight = 95129376L,
+      totalFeaturedAssetWeight = 10000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("57549.5317604300"),
+        assetMintingAllowanceCC = BigDecimal("6049.6067755590"),
+        unclaimedMintingAllowanceCC = BigDecimal("48463.2663346350"),
+        issuancePerAppBurnCC = BigDecimal("1.5"),
+        issuancePerAppBurnCCPerMB = BigDecimal("604.9606775559"),
+        issuancePerAssetBurnCC = BigDecimal("1.5"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("604.9606775559"),
+        appRewardCouponThresholdCC = BigDecimal("3.3608926531"),
+      ),
+    ),
+    // Simple: cap=0.1 × 0.1 CC burn = 0.01 fits within 0.35 leftover.
+    TestCase(
+      label = "simple+asset: cap binds, asset fits within leftover",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 100000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0.1"),
+        assetMintingAllowanceCC = BigDecimal("0.01"),
+        unclaimedMintingAllowanceCC = BigDecimal("0.34"),
+        issuancePerAppBurnCC = BigDecimal("0.1"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.1"),
+        issuancePerAssetBurnCC = BigDecimal("0.1"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("0.1"),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // --- 7e. Amendment "Tiered App Reward Distribution" DvP scenarios ---
+    // Each DvP contributes 25 kB app activity to the submitting asset mover
+    // and 2.5 kB asset activity for each of Bank1 and Bank2. Expected
+    // per-DvP rewards from the amendment table:
+    //   1k:  asset mover 11.85 CC, each bank 1.185 CC per DvP
+    //   8k:  asset mover 11.85 CC, each bank 1.075 CC per DvP
+    //   20k: asset mover  5.60 CC, each bank      0 CC per DvP
+
+    // 1,000 DvPs → 25 MB app burn (15,000 CC), 5 MB asset burn (3,000 CC).
+    // Cap binds on both tranches; room to spare.
+    TestCase(
+      label = "dvpExample: 1k DvPs, full app and asset rewards",
+      inputs = dvpExample,
+      totalRoundAppActivityWeight = 25000000L,
+      totalFeaturedAssetWeight = 5000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("11850"),
+        assetMintingAllowanceCC = BigDecimal("2370"),
+        unclaimedMintingAllowanceCC = BigDecimal("97780"),
+        issuancePerAppBurnCC = BigDecimal("0.79"),
+        issuancePerAppBurnCCPerMB = BigDecimal("474"),
+        issuancePerAssetBurnCC = BigDecimal("0.79"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("474"),
+        appRewardCouponThresholdCC = BigDecimal(0),
+      ),
+    ),
+    // 8,000 DvPs → 200 MB app burn (120,000 CC), 40 MB asset burn (24,000 CC).
+    // App cap binds; asset side exhausts the leftover (17,200 CC) before its cap kicks in.
+    TestCase(
+      label = "dvpExample: 8k DvPs, asset rewards scaled by leftover",
+      inputs = dvpExample,
+      totalRoundAppActivityWeight = 200000000L,
+      totalFeaturedAssetWeight = 40000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("94800"),
+        assetMintingAllowanceCC = BigDecimal("17200"),
+        unclaimedMintingAllowanceCC = BigDecimal(0),
+        issuancePerAppBurnCC = BigDecimal("0.79"),
+        issuancePerAppBurnCCPerMB = BigDecimal("474"),
+        issuancePerAssetBurnCC = BigDecimal("0.7166666667"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("430.00000002"),
+        appRewardCouponThresholdCC = BigDecimal(0),
+      ),
+    ),
+    // 20,000 DvPs → 500 MB app burn (300,000 CC), 100 MB asset burn (60,000 CC).
+    // App side allowance binds (112,000 < 0.79 × 300,000); no leftover for asset.
+    TestCase(
+      label = "dvpExample: 20k DvPs, no asset rewards",
+      inputs = dvpExample,
+      totalRoundAppActivityWeight = 500000000L,
+      totalFeaturedAssetWeight = 100000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("112000"),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal(0),
+        issuancePerAppBurnCC = BigDecimal("0.3733333333"),
+        issuancePerAppBurnCCPerMB = BigDecimal("223.99999998"),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal(0),
+      ),
+    ),
+
+    // --- 7f. Zero-branch coverage for computeIssuanceTranche ---
+    // Exercises both inner guards (totalCoupons <= 0 and capPerCoupon <= 0)
+    // on each side of the computation.
+
+    // 7f.1 — totalCoupons == 0 on the asset tranche call (zero asset burn).
+    TestCase(
+      label = "simple+asset: zero asset burn, asset-tranche zero-guard",
+      inputs = simpleArithmetic,
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 0L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0.45"),
+        assetMintingAllowanceCC = BigDecimal("0"),
+        unclaimedMintingAllowanceCC = BigDecimal("0"),
+        issuancePerAppBurnCC = BigDecimal("0.45"),
+        issuancePerAppBurnCCPerMB = BigDecimal("0.45"),
+        issuancePerAssetBurnCC = BigDecimal("0"),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7f.2 — totalCoupons == 0 on the app tranche call (zero app traffic);
+    // asset tranche sees the full round budget as its input.
+    TestCase(
+      label = "simple+asset: zero app traffic, app-tranche zero-guard",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0.1"))),
+      totalRoundAppActivityWeight = 0L,
+      totalFeaturedAssetWeight = 4000000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal("0"),
+        assetMintingAllowanceCC = BigDecimal("0.4"),
+        unclaimedMintingAllowanceCC = BigDecimal("0.05"),
+        issuancePerAppBurnCC = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal("0.1"),
+        issuancePerAssetBurnCCPerMB = BigDecimal("0.1"),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
+      ),
+    ),
+
+    // 7f.3 — capPerCoupon == 0 on both tranche calls: nothing is distributed,
+    // the full round budget stays unclaimed.
+    TestCase(
+      label = "simple+asset: zero cap, nothing distributed",
+      inputs = simpleArithmetic.copy(featuredAppRewardCap = n(BigDecimal("0"))),
+      totalRoundAppActivityWeight = 1000000L,
+      totalFeaturedAssetWeight = 100000L,
+      expected = RewardIssuanceParams(
+        appMintingAllowanceCC = BigDecimal(0),
+        assetMintingAllowanceCC = BigDecimal(0),
+        unclaimedMintingAllowanceCC = BigDecimal("0.45"),
+        issuancePerAppBurnCC = BigDecimal(0),
+        issuancePerAppBurnCCPerMB = BigDecimal(0),
+        issuancePerAssetBurnCC = BigDecimal(0),
+        issuancePerAssetBurnCCPerMB = BigDecimal(0),
+        appRewardCouponThresholdCC = BigDecimal("0.5"),
       ),
     ),
   )
