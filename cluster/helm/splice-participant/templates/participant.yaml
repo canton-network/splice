@@ -104,6 +104,10 @@ spec:
         - name: AUTH_TARGET_AUDIENCE
           value: {{ .Values.auth.targetAudience }}
         {{- end }}
+        {{- if .Values.httpHealthProbes }}
+        - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+          value: canton.participants.participant.monitoring.http-health-server.port = 5071
+        {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
         ports:
@@ -121,16 +125,28 @@ spec:
           protocol: TCP
         {{- if .Values.enableHealthProbes }}
         livenessProbe:
+          {{- if .Values.httpHealthProbes }}
+          httpGet:
+            path: /health/live
+            port: 5071
+          {{- else }}
           grpc:
             port: 5061
             service: liveness
+          {{- end }}
           initialDelaySeconds: {{ .Values.livenessProbeInitialDelaySeconds | default 600 }}
           periodSeconds: 60
           failureThreshold: 5
           timeoutSeconds: 10
         readinessProbe:
+          {{- if .Values.httpHealthProbes }}
+          httpGet:
+            path: /health/ready
+            port: 5071
+          {{- else }}
           grpc:
             port: 5061
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 5
           failureThreshold: 3
