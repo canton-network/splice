@@ -361,7 +361,7 @@ services:
     networks:
       - splice-sv-private
     healthcheck:
-      test: ["CMD-SHELL", "pidof nginx || exit 1"]
+      test: ["CMD-SHELL", "kill -0 $(cat /tmp/nginx.pid)"]
       interval: 30s
       timeout: 10s
       retries: 3
