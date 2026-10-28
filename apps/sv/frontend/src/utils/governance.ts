@@ -69,7 +69,11 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
-{ name: 'Update Featured Application Metadata (before Splice 0.10.0)', value: 'SRARC_UpdateFeaturedAppRight' },
+  // TODO(#8059): remove this legacy option in Splice 0.11.0
+  {
+    name: 'Update Featured Application Metadata (before Splice 0.10.0)',
+    value: 'SRARC_UpdateFeaturedAppRight',
+  },
   {
     name: 'Update Featured Application Metadata (since Splice 0.10.0)',
     value: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
