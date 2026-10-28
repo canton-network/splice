@@ -205,7 +205,7 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       // Withdraw the governance lock; it's relocked as a vesting GovernanceLock and funds remain locked
-      val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+      val vestingStartTime = getLedgerTime.plusSeconds(1).toInstant
       val (vestingLockCid, vestingLockView) = ops
         .unlockGovernanceLock(
           aliceValidatorBackend.participantClientWithAdminToken,
@@ -338,7 +338,7 @@ class GovernanceLockTimeBasedIntegrationTest
     val owner = RichPartyId.local(sv1Party)
     val participant = sv1Backend.participantClientWithAdminToken
 
-    val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+    val vestingStartTime = getLedgerTime.plusSeconds(1).toInstant
     val endTime = vestingStartTime.plus(vestingDuration)
 
     // `tsv1Operations.createGovernanceLock` feeds all of the owner's unlocked

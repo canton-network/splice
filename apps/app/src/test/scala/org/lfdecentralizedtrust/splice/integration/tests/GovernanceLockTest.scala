@@ -36,10 +36,8 @@ trait GovernanceLockTest extends TokenStandardTest {
 
   private def instantToMicros(i: Instant): Long = ChronoUnit.MICROS.between(Instant.EPOCH, i)
 
-  protected def truncateInstant(i: Instant): Instant = i.truncatedTo(ChronoUnit.SECONDS)
-
   private def formatInstant(i: Instant): String =
-    DateTimeFormatter.ISO_INSTANT.format(truncateInstant(i))
+    DateTimeFormatter.ISO_INSTANT.format(i.truncatedTo(ChronoUnit.MICROS))
 
   sealed abstract class LockKind(val kind: String)
   case object SuperValidatorLock extends LockKind("sv-lock")
