@@ -25,18 +25,24 @@ logger.info(
 )
 
 val startedAt = CantonTimestamp.now()
-// Per synchronizer, the smallest valid-from not yet checked
-var cursors: Map[SynchronizerId, CantonTimestamp] = Map.empty
+// Per synchronizer and kind (proposals or not), the smallest valid-from not yet checked
+var cursors: Map[(SynchronizerId, Boolean), CantonTimestamp] = Map.empty
 
 while (true) {
   Thread.sleep(pollIntervalSeconds * 1000)
   try {
     val synchronizerIds = participant.synchronizers.list_connected().map(_.synchronizerId)
-    val polled = synchronizerIds.map { synchronizerId =>
-      val from = cursors.getOrElse(synchronizerId, startedAt)
+    val polled = for {
+      synchronizerId <- synchronizerIds
+      proposals <- Seq(false, true)
+    } yield {
+      val from = cursors.getOrElse((synchronizerId, proposals), startedAt)
+      val kind = if (proposals) "proposals" else "transactions"
+      logger.info(s"Querying topology $kind on $synchronizerId from valid-from $from")
       val newTransactions = participant.topology.transactions
         .list(
           store = TopologyStoreId.Synchronizer(synchronizerId),
+          proposals = proposals,
           timeQuery = TimeQuery.Range(Some(from), None),
           operation = None,
         )
@@ -44,11 +50,11 @@ while (true) {
       // `from` is inclusive, so the cursor is moved past the last valid-from seen to exclude it
       val nextFrom =
         newTransactions.map(_.validFrom.value).maxOption.fold(from)(_.immediateSuccessor)
-      (synchronizerId, newTransactions, nextFrom)
+      ((synchronizerId, proposals), newTransactions, nextFrom)
     }
 
     for {
-      (synchronizerId, newTransactions, _) <- polled
+      ((synchronizerId, _), newTransactions, _) <- polled
       stored <- newTransactions
     } {
       val matchedKeys = stored.transaction.signatures
@@ -56,16 +62,15 @@ while (true) {
         .toSet
         .intersect(trackedKeys)
       if (matchedKeys.nonEmpty) {
+        val kind = if (stored.transaction.isProposal) "proposal" else "transaction"
         logger.warn(
-          s"Topology transaction on $synchronizerId signed by tracked key(s) " +
+          s"Topology $kind on $synchronizerId signed by tracked key(s) " +
             s"${matchedKeys.toSeq.sorted.mkString(", ")}: $stored"
         )
       }
     }
 
-    cursors = cursors ++ polled.map { case (synchronizerId, _, nextFrom) =>
-      synchronizerId -> nextFrom
-    }
+    cursors = cursors ++ polled.map { case (cursor, _, nextFrom) => cursor -> nextFrom }
   } catch {
     case scala.util.control.NonFatal(e) =>
       logger.warn(
