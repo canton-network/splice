@@ -5,6 +5,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
+import com.digitalasset.canton.topology.transaction.PartyToParticipant
 
 def requireEnv(name: String): String =
   sys.env.getOrElse(name, sys.error(s"Environment variable $name must be set"))
@@ -89,10 +90,14 @@ while (true) {
         .intersect(trackedKeys)
       if (matchedKeys.nonEmpty) {
         val kind = if (stored.transaction.isProposal) "proposal" else "transaction"
-        logger.warn(
-          s"Topology $kind on $synchronizerId signed by tracked key(s) " +
-            s"${matchedKeys.toSeq.sorted.mkString(", ")}: $stored"
-        )
+        val message = s"Topology $kind on $synchronizerId signed by tracked key(s) " +
+          s"${matchedKeys.toSeq.sorted.mkString(", ")}: $stored"
+        stored.mapping match {
+          // Unhosting all parties is usually the first step of a genuine recovery, so it is not warned about to avoid noise
+          case p2p: PartyToParticipant if p2p.participants.isEmpty =>
+            logger.info(s"Ignoring unhosting of ${p2p.partyId}. $message")
+          case _ => logger.warn(message)
+        }
       }
     }
 
