@@ -16,10 +16,11 @@ import json
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
 import requests
 from rich.console import Console
-from rich.progress import Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, TaskID, TaskProgressColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 console = Console(stderr=True)
@@ -58,7 +59,9 @@ EPOCH = "1970-01-01T00:00:00Z"
 # ---------------------------------------------------------------------------
 
 
-def _request_with_retries(method, url, progress=None, task_id=None, **kwargs):
+def _request_with_retries(
+    method: str, url: str, progress: Progress | None = None, task_id: TaskID | None = None, **kwargs: Any
+) -> requests.Response:
     """Execute an HTTP request with exponential-backoff retries on ConnectionError."""
     kwargs.setdefault("timeout", TIMEOUT)
     for attempt in range(MAX_RETRIES):
@@ -74,9 +77,12 @@ def _request_with_retries(method, url, progress=None, task_id=None, **kwargs):
                 time.sleep(1.5 ** attempt)
             else:
                 raise
+    raise AssertionError("MAX_RETRIES must be positive")
 
 
-def fetch_acs_snapshot_summary(base_url, migration_id, record_time, progress, task_id):
+def fetch_acs_snapshot_summary(
+    base_url: str, migration_id: int, record_time: str, progress: Progress, task_id: TaskID
+) -> tuple[int, str | None]:
     """Page through the full ACS snapshot, returning (event_count, sha256_hex).
 
     Uses bounded memory: each page's ``created_events`` JSON is fed into a
@@ -91,7 +97,7 @@ def fetch_acs_snapshot_summary(base_url, migration_id, record_time, progress, ta
         page += 1
         progress.update(task_id, status=f"[cyan]acs p={page} ev={event_count}")
 
-        payload = {
+        payload: dict[str, Any] = {
             "migration_id": migration_id,
             "record_time": record_time,
             "page_size": ACS_PAGE_SIZE,
@@ -129,7 +135,9 @@ def fetch_acs_snapshot_summary(base_url, migration_id, record_time, progress, ta
     return event_count, hasher.hexdigest()
 
 
-def fetch_row(base_url, migration_id, progress, task_id):
+def fetch_row(
+    base_url: str, migration_id: int, progress: Progress, task_id: TaskID
+) -> tuple[int, Any, str | None, str | None, int | None, str | None]:
     """Fetch migration-info, first-snapshot, last-snapshot, and ACS summary for one (base_url, migration_id) pair."""
     progress.update(task_id, status=f"[cyan]m={migration_id} migration-info")
 
@@ -189,12 +197,14 @@ def fetch_row(base_url, migration_id, progress, task_id):
     return migration_id, info, first_snapshot, last_snapshot, acs_size, acs_hash
 
 
-def fetch_all_migrations_for_url(base_url, progress, task_id):
+def fetch_all_migrations_for_url(
+    base_url: str, progress: Progress, task_id: TaskID
+) -> tuple[str, dict[int, tuple[Any, ...]]]:
     """Process all migrations sequentially for a single base URL.
 
     This ensures at most one request is in-flight per server at any time.
     """
-    url_results = {}
+    url_results: dict[int, tuple[Any, ...]] = {}
     for migration_id in MIGRATIONS:
         result = fetch_row(base_url, migration_id, progress, task_id)
         url_results[migration_id] = result[1:]  # (info, first_snap, last_snap, acs_size, acs_hash)

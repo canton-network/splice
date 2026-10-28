@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from dockerfile_parse import DockerfileParser
+from dockerfile_parse import DockerfileParser  # type: ignore[import-untyped]  # no stubs available
 
 # Matches concrete image references that pin a digest, e.g. ubuntu:24.04@sha256:<digest>
 # This intentionally does not match references that use variable digests
@@ -64,12 +64,12 @@ def main() -> int:
 
     failures = 0
     for (image, tag, digest), file in refs_by_file.items():
-        ref = f"{image}:{tag}@sha256:{digest}"
-        print(f"Inspecting {ref} (from {file})")
+        image_ref = f"{image}:{tag}@sha256:{digest}"
+        print(f"Inspecting {image_ref} (from {file})")
         if _inspect(image, digest):
-            print(f"  OK: {ref} is multi-arch")
+            print(f"  OK: {image_ref} is multi-arch")
         else:
-            print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
+            print(f"ERROR: {image_ref} (from {file}) is not pinned to a multi-arch digest")
             failures += 1
 
     if failures > 0:
