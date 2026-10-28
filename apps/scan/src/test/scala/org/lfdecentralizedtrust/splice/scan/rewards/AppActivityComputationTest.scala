@@ -409,8 +409,8 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   "findFASubmitter" should {
     val featuredAppParties = ScanRewardsReferenceStore.FeaturedAppParties(
       providers = Map(
-        "providerA" -> (FeaturedAppKind.FAK_GENERAL, BigDecimal(1)),
-        "providerB" -> (FeaturedAppKind.FAK_GENERAL, BigDecimal(1)),
+        "providerA" -> (FeaturedAppKind.FAK_BASIC, BigDecimal(1)),
+        "providerB" -> (FeaturedAppKind.FAK_BASIC, BigDecimal(1)),
       ),
       opsPartyProviders = Map(
         "opsA" -> "providerA",
@@ -469,7 +469,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       val verdict = mkVerdict(Map(0 -> mkView(Seq("Bob", "Bank1", "DSO"))))
       val summary = mkSummary(1000L, Seq(mkEnvelope(1000L, Seq(0))))
 
-      for (kind <- Seq(FeaturedAppKind.FAK_GENERAL, FeaturedAppKind.FAK_ASSET)) {
+      for (kind <- Seq(FeaturedAppKind.FAK_BASIC, FeaturedAppKind.FAK_ASSET)) {
         val result = computeFASubmitted(
           Map("Bob" -> (kind, BigDecimal(1)), asset("Bank1")),
           summary,
@@ -610,7 +610,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
     computeWithFeaturedAppParties(
       ScanRewardsReferenceStore.FeaturedAppParties(
         providers = featuredWeights.map { case (party, weight) =>
-          party -> (FeaturedAppKind.FAK_GENERAL, weight)
+          party -> (FeaturedAppKind.FAK_BASIC, weight)
         },
         opsPartyProviders = Map.empty,
       ),

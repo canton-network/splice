@@ -111,10 +111,10 @@ object DbScanRewardsReferenceStore {
   val DefaultAppActivityWeight: BigDecimal = BigDecimal(1)
 
   // same as `defaultAppKind` in the daml.
-  val DefaultAppKind: FeaturedAppKind = FeaturedAppKind.FAK_GENERAL
+  val DefaultAppKind: FeaturedAppKind = FeaturedAppKind.FAK_BASIC
 
   private def appKindPrecedence(kind: FeaturedAppKind): Int = kind match {
-    case FeaturedAppKind.FAK_GENERAL => 0
+    case FeaturedAppKind.FAK_BASIC => 0
     case FeaturedAppKind.FAK_ASSETMOVING => 1
     case FeaturedAppKind.FAK_ASSET => 2
   }

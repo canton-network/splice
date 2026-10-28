@@ -107,7 +107,7 @@ class DbScanRewardsReferenceStoreTest
         val far1a = featuredAppRight(
           p1,
           activityWeight = Some(BigDecimal(2)),
-          appKind = Some(FeaturedAppKind.FAK_GENERAL),
+          appKind = Some(FeaturedAppKind.FAK_BASIC),
           opsParties = Some(Seq(ops1)),
         )
         val far1b = featuredAppRight(
@@ -120,9 +120,9 @@ class DbScanRewardsReferenceStoreTest
         val far2b = featuredAppRight(p2, appKind = Some(FeaturedAppKind.FAK_ASSETMOVING))
         val far3 = featuredAppRight(p3)
         val p1Entry = (FeaturedAppKind.FAK_ASSET, BigDecimal(2))
-        val p1EntryAfterArchive = (FeaturedAppKind.FAK_GENERAL, BigDecimal(2))
+        val p1EntryAfterArchive = (FeaturedAppKind.FAK_BASIC, BigDecimal(2))
         val p2Entry = (FeaturedAppKind.FAK_ASSET, BigDecimal(1))
-        val p3Entry = (FeaturedAppKind.FAK_GENERAL, BigDecimal(1))
+        val p3Entry = (FeaturedAppKind.FAK_BASIC, BigDecimal(1))
         for {
           _ <- initWithAcs()(store.multiDomainAcsStore)
           _ <- MonadUtil.sequentialTraverse_(Seq(far1a, far1b, far2a, far2b, far3))(
@@ -177,9 +177,9 @@ class DbScanRewardsReferenceStoreTest
           activityWeight = Some(BigDecimal(3)),
           opsParties = Some(Seq(p1)),
         )
-        val p1Entry = (FeaturedAppKind.FAK_GENERAL, BigDecimal(1))
+        val p1Entry = (FeaturedAppKind.FAK_BASIC, BigDecimal(1))
         val p2Entry = (FeaturedAppKind.FAK_ASSETMOVING, BigDecimal(2))
-        val p3Entry = (FeaturedAppKind.FAK_GENERAL, BigDecimal(3))
+        val p3Entry = (FeaturedAppKind.FAK_BASIC, BigDecimal(3))
         for {
           _ <- initWithAcs()(store.multiDomainAcsStore)
           _ <- MonadUtil.sequentialTraverse_(Seq(far3, far2, far1))(
