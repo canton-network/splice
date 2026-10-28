@@ -60,6 +60,9 @@
     "enableHealthProbes": {
       "type": "boolean"
     },
+    "httpHealthProbes": {
+      "type": "boolean"
+    },
     "enablePostgresMetrics": {
       "type": "boolean"
     },
@@ -162,6 +165,12 @@
       }
     },
     "disableAuth": {
+      "type": "boolean"
+    },
+    "enableKeyDownload": {
+      "type": "boolean"
+    },
+    "enableRepairCommands": {
       "type": "boolean"
     },
     "if": {

@@ -18,6 +18,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{LogEntry, NamedLogging, SuppressionRule}
 import com.digitalasset.canton.protocol.LfContractId
+import com.digitalasset.canton.util.MonadUtil
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
@@ -326,6 +327,7 @@ abstract class StoreTestBase
       Instant.now().truncatedTo(ChronoUnit.MICROS),
       Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(600),
       java.util.Optional.of(numeric(1.0)), // optIssuancePerValidatorFaucetCoupon
+      Optional.empty(), // optIssuancePerFeaturedAssetRewardCoupon (CIP-0104)
     )
 
     contract(
@@ -546,6 +548,7 @@ abstract class StoreTestBase
       kind: governancelockCodegen.GovernanceLockKind =
         new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1"),
       vestingEndTime: Option[Instant] = None,
+      vestingPeriod: RelTime = new RelTime(1_000_000),
       contractId: String = nextCid(),
   ): Contract[
     governancelockCodegen.GovernanceLock.ContractId,
@@ -564,7 +567,7 @@ abstract class StoreTestBase
             new governancelockCodegen.governancelockspecification.GLS_VestingLock(
               new governancelockCodegen.VestingLockSpecification(
                 kind,
-                new RelTime(1_000_000),
+                vestingPeriod,
                 endTime,
               )
             )
@@ -575,6 +578,79 @@ abstract class StoreTestBase
         },
         Optional.empty(),
         Instant.now().truncatedTo(ChronoUnit.MICROS),
+      ),
+    )
+
+  protected def testGovernanceLockIngestion(
+      owner: PartyId,
+      dso: PartyId,
+      otherDso: PartyId,
+      mkStore: () => Future[AppStore],
+  ) =
+    "ingest GovernanceLocks of the DSO and skip those of other parties" in {
+      val wantedFull = governanceLock(owner, amount = BigDecimal(10), dso = dso)
+      val unwantedFull = governanceLock(owner, amount = BigDecimal(20), dso = otherDso)
+      val vestingEndTime = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.MICROS)
+      val wantedVesting = governanceLock(
+        owner,
+        amount = BigDecimal(10),
+        vestingEndTime = Some(vestingEndTime),
+        dso = dso,
+      )
+      val unwantedVesting = governanceLock(
+        owner,
+        amount = BigDecimal(20),
+        vestingEndTime = Some(vestingEndTime),
+        dso = otherDso,
+      )
+      for {
+        store <- mkStore()
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(wantedFull, unwantedFull, wantedVesting, unwantedVesting)
+        )(
+          dummyDomain.create(_, createdEventSignatories = Seq(dso, owner))(
+            store.multiDomainAcsStore
+          )
+        )
+        result <- store.multiDomainAcsStore.listContracts(
+          governancelockCodegen.GovernanceLock.COMPANION
+        )
+      } yield {
+        result.map(_.contractId) should contain theSameElementsAs
+          Seq(wantedFull, wantedVesting).map(_.contractId)
+      }
+    }
+
+  protected def governanceLockTransfer(
+      sender: PartyId,
+      receiver: PartyId,
+      expiresAt: Instant,
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    governancelockCodegen.transfer.GovernanceLockTransfer.ContractId,
+    governancelockCodegen.transfer.GovernanceLockTransfer,
+  ] =
+    contract(
+      identifier =
+        governancelockCodegen.transfer.GovernanceLockTransfer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new governancelockCodegen.transfer.GovernanceLockTransfer.ContractId(contractId),
+      payload = new governancelockCodegen.transfer.GovernanceLockTransfer(
+        new governancelockCodegen.GovernanceLockKey(
+          dso.toProtoPrimitive,
+          sender.toProtoPrimitive,
+          // The kind is always an SV lock here: an FA party is not a stakeholder of the
+          // transfer itself, so there is nothing extra to test for it.
+          new governancelockCodegen.governancelockspecification.GLS_FullLock(
+            new governancelockCodegen.FullLockSpecification(
+              new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1")
+            )
+          ),
+        ),
+        receiver.toProtoPrimitive,
+        BigDecimal(10).bigDecimal,
+        Instant.EPOCH,
+        expiresAt,
       ),
     )
 
@@ -763,6 +839,8 @@ abstract class StoreTestBase
       dsoParty.toProtoPrimitive,
       providerParty.toProtoPrimitive,
       activityWeight.map(_.bigDecimal).toJava,
+      Optional.empty(),
+      Optional.empty(),
     )
     contract(
       FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,

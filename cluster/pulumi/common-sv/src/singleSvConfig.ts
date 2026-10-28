@@ -8,6 +8,7 @@ import {
   KmsConfigSchema,
   LogLevelSchema,
   K8sResourceSchema,
+  TopologyKeyMonitorConfigSchema,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
@@ -61,6 +62,7 @@ const SvParticipantConfigSchema = z
   .object({
     kms: KmsConfigSchema.optional(),
     bftSequencerConnection: z.boolean().optional(),
+    enableKeyDownload: z.boolean().optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
@@ -208,6 +210,7 @@ const SingleSvConfigSchema = z
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
+    topologyKeyMonitor: TopologyKeyMonitorConfigSchema.optional(),
     testing: z.object({ catchup: CatchupTestSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })

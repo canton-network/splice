@@ -45,6 +45,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
+  checkValidatorKeyDownloadForPeriodicBackups,
   installParticipant,
   installWalletGateway,
 } from '@canton-network/splice-pulumi-common-validator';
@@ -190,6 +191,13 @@ async function installValidator(
     supportsValidatorRunbookReset,
     validatorVersion
   );
+  checkValidatorKeyDownloadForPeriodicBackups(validatorName, validatorConfig, backupConfig);
+  if (validatorConfig.migrateParty && !validatorConfig.participant.enableRepairCommands) {
+    throw new Error(
+      `${validatorName}: migrating the validator party requires importing its ACS through the participant's repair service. ` +
+        'Set `participant.enableRepairCommands: true` for this node in config.yaml.'
+    );
+  }
   const participantAddress = (
     await installParticipant(
       validatorConfig,

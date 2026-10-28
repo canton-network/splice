@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
-import org.lfdecentralizedtrust.splice.util.StandaloneCanton
+import org.lfdecentralizedtrust.splice.util.{ProcessTestUtil, StandaloneCanton}
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 
@@ -152,7 +152,7 @@ class ParticipantPlaintextIdentitiesIntegrationTest
           testResourcesPath / "standalone-participant-extra.conf",
           testResourcesPath / "standalone-participant-extra-no-auth.conf",
         ),
-        Seq(),
+        Seq(ProcessTestUtil.enableKeyDownloadConfig),
         "alice-plaintext-participant",
         "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
         "EXTRA_PARTICIPANT_DB" -> "participant_extra_identities_plaintext",

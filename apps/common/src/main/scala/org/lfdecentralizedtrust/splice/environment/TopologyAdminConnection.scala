@@ -7,6 +7,7 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits.catsSyntaxOptionId
 import cats.syntax.applicative.*
 import cats.syntax.either.*
+import com.daml.grpc.{GrpcException, GrpcStatus}
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
@@ -66,6 +67,7 @@ import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   AuthorizedStateChanged,
+  KeyDownloadDisabledException,
   TopologySnapshot,
   TopologyTransactionType,
 }
@@ -1581,6 +1583,13 @@ abstract class TopologyAdminConnection(
       traceContext: TraceContext
   ): Future[ByteString] = {
     runCmd(VaultAdminCommands.ExportKeyPair(fingerprint, ProtocolVersion.latest, password = None))
+      .recoverWith {
+        // Canton reports this as FAILED_PRECONDITION, which we otherwise retry.
+        // Fail with a non-retryable error instead so that misconfigurations surface quickly.
+        case GrpcException(GrpcStatus(Status.Code.FAILED_PRECONDITION, Some(description)), _)
+            if description.contains(KeyDownloadDisabledException.cantonErrorDescription) =>
+          Future.failed(new KeyDownloadDisabledException(serviceName, fingerprint))
+      }
   }
 
   def generateKeyPair(name: String, usage: NonEmpty[Set[SigningKeyUsage]])(implicit
@@ -1820,6 +1829,18 @@ abstract class TopologyAdminConnection(
 }
 
 object TopologyAdminConnection {
+
+  final class KeyDownloadDisabledException(serviceName: String, fingerprint: Fingerprint)
+      extends RuntimeException(
+        s"Failed to download private key $fingerprint via $serviceName: key downloads are disabled on this node. " +
+          "Please consult your deployment documentation for instructions on how to enable key downloads."
+      )
+
+  object KeyDownloadDisabledException {
+    val cantonErrorDescription =
+      "Remote export of private keys only allowed when explicitly enabled"
+  }
+
   sealed trait TopologyTransactionType {
     def proposals: Boolean
   }

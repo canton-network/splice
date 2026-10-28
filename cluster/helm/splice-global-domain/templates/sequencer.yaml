@@ -123,6 +123,10 @@ spec:
             - name: SEQUENCER_TOKEN_EXPIRATION_TIME
               value: "{{ . }}"
             {{- end }}
+            {{- if .Values.httpHealthProbes }}
+            - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+              value: canton.sequencers.sequencer.monitoring.http-health-server.port = 5071
+            {{- end }}
             {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 12}}
             {{- include "splice-util-lib.additional-env-vars" .Values.sequencer.additionalEnvVars | indent 12}}
             {{- include "splice-util-lib.log-level" .Values | indent 12}}
@@ -145,16 +149,28 @@ spec:
         {{- end }}
         {{- if .Values.enableHealthProbes }}
           livenessProbe:
+            {{- if .Values.httpHealthProbes }}
+            httpGet:
+              path: /health/live
+              port: 5071
+            {{- else }}
             grpc:
               port: 5061
               service: liveness
+            {{- end }}
             initialDelaySeconds: {{ .Values.livenessProbeInitialDelaySeconds | default 600 }}
             periodSeconds: 60
             failureThreshold: 5
             timeoutSeconds: 10
           readinessProbe:
+            {{- if .Values.httpHealthProbes }}
+            httpGet:
+              path: /health/ready
+              port: 5071
+            {{- else }}
             grpc:
               port: 5061
+            {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 3

@@ -17,7 +17,6 @@
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@canton-network/splice-common-frontend": "0.1.0",
-    "@canton-network/token-metadata-openapi": "file:../../../token-standard/splice-api-token-metadata-v1/openapi-ts-client",
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
     "@tanstack/react-query": "5.90.20",
@@ -31,7 +30,7 @@
     "react-intersection-observer": "^11.0.1",
     "uuid": "^14.0.0",
     "web-vitals": "4.2.4",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",

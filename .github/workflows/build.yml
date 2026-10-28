@@ -115,8 +115,23 @@ jobs:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-resource-intensive.log'
       start_canton_options: -w
-      parallelism: 2
+      parallelism: 1
       test_name: resource-intensive
+      commit_sha: ${{ inputs.commit_sha }}
+      daml_base_version: ${{ inputs.daml_base_version }}
+      protocol_version: ${{ inputs.protocol_version }}
+    secrets: inherit
+
+  scala_test_key_download:
+    uses: ./.github/workflows/build.scala_test.yml
+    with:
+      # x-large because of SvReonboardingIntegrationTest, which starts additional Canton instances
+      runs_on: self-hosted-k8s-x-large
+      test_names_file: 'test-full-class-names-key-download.log'
+      start_canton_options: -wk
+      parallelism: 1
+      test_name: key-download
+      with_gcp_creds: true
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
       protocol_version: ${{ inputs.protocol_version }}
@@ -140,7 +155,8 @@ jobs:
     with:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-lsu.log'
-      start_canton_options: -w
+      # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
+      start_canton_options: -wk
       parallelism: 1
       test_name: logical-sync-upgrade
       commit_sha: ${{ inputs.commit_sha }}
@@ -153,7 +169,8 @@ jobs:
     with:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-roll-forward-lsu.log'
-      start_canton_options: -w
+      # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
+      start_canton_options: -wk
       parallelism: 2
       test_name: roll-forward-lsu
       commit_sha: ${{ inputs.commit_sha }}
@@ -324,6 +341,7 @@ jobs:
     - daml_test
     - scala_test_sim_time
     - scala_test_resource_intensive
+    - scala_test_key_download
     - scala_test_record_time_tolerance
     - scala_test_logical_sync_upgrade
     - scala_test_roll_forward_lsu
