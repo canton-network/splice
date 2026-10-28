@@ -63,6 +63,9 @@ data OpenMiningRoundSummary = OpenMiningRoundSummary with
       -- ^ Introduced as part of CIP-3.
     optIssuancePerFeaturedAppRewardCoupon : Optional Decimal
       -- ^ If specified, the off-ledger computed value is used as it is in IssuingMiningRound.
+      -- The purpose of that value is to communicate it alongside the other
+      -- parameters in the `IssuingMiningRound` to explorers and like apps
+      -- via the DSO update stream.
     optUnclaimedAppRewards : Optional Decimal
       -- ^ If specified, the off-ledger computed value is used for UnclaimedReward.
     optTotalFeaturedAssetRewardCoupons : Optional Decimal

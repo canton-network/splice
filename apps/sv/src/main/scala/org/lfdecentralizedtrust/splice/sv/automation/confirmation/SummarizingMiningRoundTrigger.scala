@@ -282,6 +282,7 @@ object SummarizingMiningRoundTrigger {
         unfeaturedAppRewardCoupons.bigDecimal,
         svRewardCouponsWeightSum,
         Optional.of(validatorLivenessActivityRecords),
+        // TODO(#7613): wire these values up with the reward computation
         Optional.empty(), // optIssuancePerFeaturedAppRewardCoupon
         Optional.empty(), // optUnclaimedAppRewards
         Optional.empty(), // optTotalFeaturedAssetRewardCoupons (CIP-0104)

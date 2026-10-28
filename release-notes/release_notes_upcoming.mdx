@@ -97,11 +97,13 @@
         [CIP-104](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md).
         The new `FeaturedAppRight_UpdateConfig` choice patches the `appKind`, `activityWeight` and `opsParties`
         fields of a featured app right and supersedes the now deprecated `FeaturedAppRight_Update`.
+        
+      - Change `AmuletRules_DevNet_FeatureApp` to allow setting `appKind`, and `opsParties`.
 
       - Add `SRARC_CreateFeaturedAppConfigUpdateInstruction` vote action, which
         updates the config of one or more featured app rights.
 
-      - Add optional fields to `RewardConfig`:
+      - Add optional fields to `RewardConfig` in `AmuletConfig`:
         `extraFeaturedAssetActivityWeight` (default 0.2),
         `maxExtraFeaturedAssetActivityWeightPerAsset` (default 0.1) and
         `dsoAppActivityWeight` (default 0.1) .
