@@ -6,7 +6,7 @@
 - **transfers** of Amulet from a tracked party to a party that is not one of its expected
   recipients, and
 - for tracked parties with `alert_confirmations` set, every transaction in which the party
-  is a **confirming or submitting party**, according to the mediator's verdict. This includes
+  is a **confirming or submitting party**, according to the mediator verdict. This includes
   transactions that are private to other parties than the DSO party, and rejected ones.
 
 Matches are printed to stdout as one JSON object per transaction, and optionally posted to
@@ -88,7 +88,7 @@ One JSON line per matching transaction, e.g.:
 
 `verdict_result` is `VERDICT_RESULT_REJECTED` for a rejected transaction. `"private": true`
 marks an accepted transaction that the DSO party does not see at all, so that Scan only has
-the mediator's verdict on it.
+the mediator verdict on it.
 
 Look up the transaction and its verdict with `GET <scan-url>/api/scan/v0/events/<update_id>`.
 
@@ -105,7 +105,7 @@ A message lists a limited number of transactions; stdout always has all of them.
 ## Implementation details
 
 The script follows Scan's event stream (`/v0/events`), which pairs each transaction, as far
-as the DSO party sees it, with the mediator's verdict on it. The verdict names the confirming
+as the DSO party sees it, with the mediator verdict on it. The verdict names the confirming
 and submitting parties. A transfer archives holdings of the sender, but the stream doesn't
 say whose holdings were archived, so the script keeps the tracked parties' Amulet and
 LockedAmulet holdings in the SQLite file given by `--db`:
@@ -152,7 +152,7 @@ slows down Scan for everyone else, including other users of this script.
 
 - Transfers are detected from the parts of transactions visible to the DSO party, which
   include all Amulet holdings. Of a transaction that the DSO party does not see at all, Scan
-  only has the mediator's verdict, so it is only reported for parties with
+  only has the mediator verdict, so it is only reported for parties with
   `alert_confirmations`.
 - A transfer funded only from reward coupons, without consuming any of the sender's
   holdings, is not detected as a transfer; it is reported for parties with

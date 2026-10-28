@@ -8,14 +8,14 @@ Monitors a Scan instance for activity of a configured set of tracked parties, an
   - transfers of Amulet from a tracked party to a party that is not one of its expected
     recipients, and
   - for tracked parties with `alert_confirmations` set, every transaction that the party
-    confirms or submits, according to the mediator's verdict. This includes transactions that
+    confirms or submits, according to the mediator verdict. This includes transactions that
     are entirely private to other parties than the DSO party, and rejected ones.
 
 Matching transactions are printed to stdout as JSON lines and, optionally, posted to a Slack
 incoming webhook.
 
 The script follows Scan's event stream, which pairs each transaction visible to the DSO party
-with the mediator's verdict on it. A transfer archives holdings of the sender, but the stream
+with the mediator verdict on it. A transfer archives holdings of the sender, but the stream
 does not say whose holdings were archived, so the script keeps the holdings of the tracked
 parties in a local SQLite database. It is seeded from a Scan ACS snapshot and then kept up to
 date from the event stream. Both phases are resumable: stopping the script and restarting it
