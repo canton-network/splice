@@ -221,6 +221,8 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Cause: SV1Initializer takes the participant identity raw from the Authorized store (getIdentityTransactions) while
   mediator/sequencer use generateOnboardingTopologyTransactions(initialProtocolVersion); the outbox later sends the
   PV 36 form with another hash. Since 2026-10-24 (#7944 / #7910). Issue 10520 (per-job dups closed); SV app fix open.
+- Every nightly run files ~21 per-job issues (10-28: 10702-10720, 10722, 10723); cancelled shards (key-download) carry
+  the same error. Check each job with one grep for `SV1Initializer bootstrapping Dso failed`, then close as dups.
 
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
@@ -236,7 +238,8 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10358 family: `Killed SBT after timeout 40m` with no `Tests:` line after a precompiled-classes cache miss
   (`Cache not found for input keys: classes-<v> branch:main dependencies:<hash>`), then a from-scratch compile of
   ~13 min instead of ~6. Trigger: the first main run after a merge that changes a file in the cache key (openapi yaml,
-  npm/Maven dependencies): 10681/10682 (#7989 scan.yaml), 10684/10685 (#7995 npm), #7969 wall-clock (0). Fix in CI:
+  npm/Maven dependencies, daml/dars.lock): 10681/10682 (#7989 scan.yaml), 10684/10685 (#7995 npm), 10697 (#8003
+  dars.lock), #7969 wall-clock (0). Fix in CI:
   a fallback restore key without the dependencies hash, or Test/compile outside the timed step.
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that

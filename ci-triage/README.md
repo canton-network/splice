@@ -334,3 +334,15 @@ Refs as given by Raymond (cn-test-failures inbox after the 10-26 GHA fallout).
 | 10281 | TokenStandardTransfer treasury call REQUEST_TIME_OUT at 15:00:09.034; Phase 7 at alice 15:00:09.233, every BFT confirmation hop 1-4 s | - | `2026-10-27c/10281.md`. FIXED by #7909 (deadline 10 s -> 30 s, not in the failing sha). Close. |
 | 10302 | globalMediatorSv2 `Locked connection was lost` 14:39:55.691 after 3 read-only probes collided with the lock check | 10438 (#1283, cnn#15508) | `2026-10-27c/10302.md`. Canton race on the single KeepAliveConnection. Close as dup of 10438. |
 | 10520 | mainnet-Daml nightly (PV 36): SV1 bootstrap INITIAL_ONBOARDING_ERROR = TOPOLOGY_SERIAL_MISMATCH on sv1Participant identity txs, every run since 10-24 | new family | `2026-10-27c/10520.md`. Genesis takes participant identity raw from the Authorized store (hash differs from the PV 36 form the outbox sends); window #7944/#7910. SV app fix: generateOnboardingTopologyTransactions(initialProtocolVersion). Keep open. |
+
+# CI failure triage - 2026-10-28
+
+Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-10-28/`, host commands in
+`2026-10-28/host-commands-a.md` (splice GHA) and `host-commands-b.md` (infra).
+
+## Overview (a: splice GHA)
+
+| Ref | Failure | Family / dup of | Packet / action |
+|---|---|---|---|
+| 10702-10720, 10722, 10723 | mainnet-Daml nightly 40635877843 (dee813861c): every shard sv1 INITIAL_ONBOARDING_ERROR, sequencer TOPOLOGY_SERIAL_MISMATCH on `::36-0` | 10520 (N) | `2026-10-28/10702-10723-nightly-10520.md`. All 22 jobs checked (2 cancelled, same error). Close as dups; 10520 still unowned, 5th red nightly. |
+| 10697 | wall-clock-time (4), main dee813861c: `Killed SBT after timeout 40m` after a classes cache miss (#8003 changed daml/dars.lock) | 10358 | `2026-10-28/10697.md`. No test failed. Close as dup. |
