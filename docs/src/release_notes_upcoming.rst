@@ -36,3 +36,7 @@
         The Docker images use a `HEALTHCHECK` start period of 10 minutes, so containers report unhealthy if migrations take longer,
         and report healthy again once the migrations are done.
 
+
+  - Docker
+
+    - Upgrade base image to 1.0.18
