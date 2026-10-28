@@ -40,3 +40,7 @@
   - Docker
 
     - Upgrade base image to 1.0.18
+
+  - Deployment
+
+    - Added the `splice-topology-key-monitor` Helm chart, which logs a warning for every topology transaction that is signed by any key configured in the chart.
