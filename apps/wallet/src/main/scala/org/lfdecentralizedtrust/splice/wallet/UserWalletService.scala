@@ -9,10 +9,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.{HasHealth, SpliceCircuitBreaker}
-import org.lfdecentralizedtrust.splice.wallet.automation.{
-  OperatorBalanceMonitor,
-  UserWalletAutomationService,
-}
+import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
   RewardSharingConfig,
@@ -20,7 +17,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
   WalletSweepConfig,
 }
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
-import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
+import org.lfdecentralizedtrust.splice.wallet.treasury.{PartyBalanceMonitor, TreasuryService}
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
 import com.digitalasset.canton.lifecycle.{FlagCloseable, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -47,7 +44,7 @@ class UserWalletService(
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
-    operatorBalanceMonitorO: Option[OperatorBalanceMonitor],
+    partyBalanceMonitor: PartyBalanceMonitor,
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
     rewardSharingConfig: RewardSharingConfig,
@@ -86,6 +83,7 @@ class UserWalletService(
         retryProvider,
         scanConnection,
         mintUnassignedRewardCouponsV2 = rewardSharingConfig.mintUnassignedCoupons,
+        partyBalanceMonitor,
         loggerFactory,
       )
     } catch {
@@ -109,7 +107,7 @@ class UserWalletService(
         packageVersionSupport,
         loggerFactory,
         validatorTopupConfigO,
-        operatorBalanceMonitorO,
+        None,
         walletSweep,
         autoAcceptTransfers,
         rewardSharingConfig,

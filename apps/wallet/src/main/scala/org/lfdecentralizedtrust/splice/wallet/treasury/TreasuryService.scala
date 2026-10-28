@@ -133,6 +133,7 @@ class TreasuryService(
     override protected[this] val retryProvider: RetryProvider,
     scanConnection: BftScanConnection,
     mintUnassignedRewardCouponsV2: Boolean,
+    partyBalanceMonitor: PartyBalanceMonitor,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, mat: Materializer)
     extends NamedLogging
@@ -913,8 +914,22 @@ class TreasuryService(
       rules <- scanConnection.getAmuletRulesWithState()
     } yield (rules, rules.contractId)
 
+  /** Records the current balance (unlocked plus locked) of the party in the balance monitor,
+    * and returns whether rewards should still be collected for it.
+    */
+  private def observeBalanceAndCheckRewardCollection(round: Long)(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Boolean] =
+    for {
+      (unlockedBalance, _) <- userStore.getAmuletBalanceWithHoldingFees(round)
+      lockedBalance <- userStore.getLockedAmuletBalance()
+      _ <- partyBalanceMonitor.observe(unlockedBalance + lockedBalance)
+    } yield partyBalanceMonitor.shouldCollectRewards
+
   /** Select transfer inputs and transfer context to satisfy the amulet operations.
-    * Currently, this function selects all unlocked amulets and all currently redeemable app- and validator rewards.
+    * Currently, this function selects all unlocked amulets and all currently redeemable app- and validator rewards,
+    * unless the balance of the party has been above the allowed limit for too long, in which case no rewards are selected.
     * It checks that if the amulet-operation batch only consists of a merge operation, it makes
     * sense to run this operation (e.g. it doesn't cost more to collect rewards in fees than they grant).
     * Also returns the set of readAs parties required for the selected inputs.
@@ -955,42 +970,41 @@ class TreasuryService(
       amuletInputsAndQuantity <- userStore.listSortedAmuletsAndQuantity(
         PageLimit.tryCreate(maxNumInputs)
       )
+      collectRewards <- observeBalanceAndCheckRewardCollection(openRound.payload.round.number)
+      noRewards = (BigDecimal(0), Seq.empty)
       (validatorRewardsAmuletQuantity, validatorRewardCouponUsers, validatorRewardInputs) <-
-        getValidatorRewardsAndQuantity(
-          // We select the rewards to collect them through a transfer.
-          // Those rewards are then an input to a transfer.
-          // So we can't use more rewards than maxNumInputs.
-          // If there are more, we'll just collect maxNumInputs first and once that completes collect the remainder.
-          validatorRewardCouponsLimit = maxNumInputs,
-          issuingRoundsMap,
-        )
-      (validatorFaucetsAmuletQuantity, validatorFaucetInputs) <- getValidatorFaucetsAndQuantity(
-        maxNumInputs,
-        issuingRoundsMap,
-      )
+        if (collectRewards)
+          getValidatorRewardsAndQuantity(
+            // We select the rewards to collect them through a transfer.
+            // Those rewards are then an input to a transfer.
+            // So we can't use more rewards than maxNumInputs.
+            // If there are more, we'll just collect maxNumInputs first and once that completes collect the remainder.
+            validatorRewardCouponsLimit = maxNumInputs,
+            issuingRoundsMap,
+          )
+        else Future.successful((BigDecimal(0), Set.empty[PartyId], Seq.empty))
+      (validatorFaucetsAmuletQuantity, validatorFaucetInputs) <-
+        if (collectRewards) getValidatorFaucetsAndQuantity(maxNumInputs, issuingRoundsMap)
+        else Future.successful(noRewards)
       (validatorLivenessActivityRecordsAmuletQuantity, validatorActivityRecordsInputs) <-
-        getValidatorLivenessActivityRecordsAndQuantity(
-          maxNumInputs,
-          issuingRoundsMap,
-        )
-      (appRewardsTotalAmuletQuantity, appRewardInputs) <- getAppRewardsAndQuantity(
-        maxNumInputs,
-        issuingRoundsMap,
-      )
+        if (collectRewards)
+          getValidatorLivenessActivityRecordsAndQuantity(maxNumInputs, issuingRoundsMap)
+        else Future.successful(noRewards)
+      (appRewardsTotalAmuletQuantity, appRewardInputs) <-
+        if (collectRewards) getAppRewardsAndQuantity(maxNumInputs, issuingRoundsMap)
+        else Future.successful(noRewards)
       (rewardCouponV2TotalAmuletQuantity, rewardCouponV2Inputs) <-
-        getRewardCouponV2AndQuantity(maxNumInputs)
-      (svRewardsTotalAmuletQuantity, svRewardInputs) <- getSvRewardCouponsAndQuantity(
-        maxNumInputs,
-        issuingRoundsMap,
-      )
+        if (collectRewards) getRewardCouponV2AndQuantity(maxNumInputs)
+        else Future.successful(noRewards)
+      (svRewardsTotalAmuletQuantity, svRewardInputs) <-
+        if (collectRewards) getSvRewardCouponsAndQuantity(maxNumInputs, issuingRoundsMap)
+        else Future.successful(noRewards)
       (unclaimedActivityRecordsQuantity, unclaimedActivityRecordInputs) <-
-        getUnclaimedActivityRecordsAndQuantity(
-          maxNumInputs
-        )
+        if (collectRewards) getUnclaimedActivityRecordsAndQuantity(maxNumInputs)
+        else Future.successful(noRewards)
       (developmentFundCouponsQuantity, developmentFundCouponInputs) <-
-        getDevelopmentFundCouponsAndQuantity(
-          maxNumInputs
-        )
+        if (collectRewards) getDevelopmentFundCouponsAndQuantity(maxNumInputs)
+        else Future.successful(noRewards)
     } yield {
       if (
         isMergeOny && !shouldMergeOnlyTransferRun(

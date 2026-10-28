@@ -72,6 +72,9 @@ trait UserWalletStore extends TxLogAppStore[TxLogEntry] with TransferInputStore 
 
   def domainMigrationId: Long
 
+  /** Persists the balance-monitoring state of the end-user party of this store. */
+  def partyBalanceMonitorStore: PartyBalanceMonitorStore
+
   final def lookupInstall()(implicit tc: TraceContext): Future[
     Option[
       ContractWithState[installCodegen.WalletAppInstall.ContractId, installCodegen.WalletAppInstall]

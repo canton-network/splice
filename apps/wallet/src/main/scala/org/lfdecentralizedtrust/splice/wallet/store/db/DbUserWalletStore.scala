@@ -45,6 +45,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
   BuyTrafficRequestTxLogEntry,
   DevelopmentFundCouponArchivedTxLogEntry,
   DevelopmentFundCouponCreatedTxLogEntry,
+  PartyBalanceMonitorStore,
   TransferOfferTxLogEntry,
   TxLogEntry,
   UserWalletStore,
@@ -202,6 +203,9 @@ class DbUserWalletStore private (
   override protected def dbStorage: DbStorage = storage
 
   override def toString: String = show"DbUserWalletStore(endUserParty=${key.endUserParty})"
+
+  override lazy val partyBalanceMonitorStore: PartyBalanceMonitorStore =
+    new DbPartyBalanceMonitorStore(storage, acsStoreId)
 
   override def acsContractFilter
       : org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractFilter[

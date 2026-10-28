@@ -18,16 +18,11 @@ import org.lfdecentralizedtrust.splice.util.{
   TriggerTestUtil,
   WalletTestUtil,
 }
-import org.lfdecentralizedtrust.splice.validator.automation.{
-  ReceiveFaucetCouponTrigger,
-  TopupMemberTrafficTrigger,
-}
-import org.lfdecentralizedtrust.splice.wallet.automation.{
-  CollectRewardsAndMergeAmuletsTrigger,
-  OperatorBalanceMonitor,
-}
+import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
+import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletTrigger
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
 import monocle.macros.syntax.lens.*
 
@@ -46,8 +41,9 @@ class TimeBasedTreasuryIntegrationTest
   // without running into problematic because of, e.g., create fees.
   val holdingFee = BigDecimal(0.5)
 
-  // The limit above which alice's validator operator stops collecting rewards after a while.
-  private val maxOperatorBalance = BigDecimal(100)
+  // The limit above which parties on alice's validator stop collecting rewards after a while.
+  private val maxPartyBalance = BigDecimal(100)
+  private val maxTimeAboveBalanceLimit = NonNegativeFiniteDuration.ofHours(24)
 
   override def environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition
@@ -64,7 +60,11 @@ class TimeBasedTreasuryIntegrationTest
       )
       .addConfigTransforms((_, config) =>
         updateAllValidatorConfigs {
-          case ("aliceValidator", c) => c.copy(maxAllowedOperatorBalance = maxOperatorBalance)
+          case ("aliceValidator", c) =>
+            c.copy(
+              maxAllowedPartyBalance = maxPartyBalance,
+              maxTimeAboveBalanceLimit = maxTimeAboveBalanceLimit,
+            )
           case (_, c) => c
         }(config)
       )
@@ -137,27 +137,18 @@ class TimeBasedTreasuryIntegrationTest
     })
   }
 
-  "stop collecting the operator's rewards once its balance was above the limit for too long" in {
+  "stop collecting a party's rewards once its balance was above the limit for too long" in {
     implicit env =>
-      onboardAliceAndBob()
-      waitForWalletUser(aliceValidatorWalletClient)
-      val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+      val (alice, bob) = onboardAliceAndBob()
 
-      // The operator's top-ups are transfers that would collect reward coupons as inputs,
-      // which would hide whether CollectRewardsAndMergeAmuletsTrigger does so.
-      aliceValidatorBackend.appState.automation
-        .trigger[TopupMemberTrafficTrigger]
-        .pause()
-        .futureValue
-
-      def createOperatorRewardAndMakeItCollectable() = {
+      def createRewardAndMakeItCollectable() = {
         createRewards(
           validatorRewards = Seq.empty,
-          appRewards = Seq((aliceValidatorParty, 0.43, false)),
+          appRewards = Seq((alice, 0.43, false)),
         )
         eventually()(
-          aliceValidatorWalletClient
-            .listAppRewardCoupons() should have size 1 withClue "alice validator AppRewardCoupons"
+          aliceWalletClient
+            .listAppRewardCoupons() should have size 1 withClue "alice AppRewardCoupons"
         )
         // advance such that the issuing round of the coupon is open to rewards collection
         advanceRoundsToNextRoundOpening
@@ -166,29 +157,51 @@ class TimeBasedTreasuryIntegrationTest
         advanceTimeForRewardAutomationToRunForCurrentRound
       }
 
-      clue("Rewards are collected while the operator balance is below the limit") {
-        createOperatorRewardAndMakeItCollectable()
+      clue("Rewards are collected while the balance is below the limit") {
+        createRewardAndMakeItCollectable()
         eventually()(
-          aliceValidatorWalletClient
-            .listAppRewardCoupons() should have size 0 withClue "alice validator AppRewardCoupons"
+          aliceWalletClient
+            .listAppRewardCoupons() should have size 0 withClue "alice AppRewardCoupons"
         )
       }
 
-      clue("Push the operator balance above the limit for longer than allowed") {
-        aliceValidatorWalletClient.tap(maxOperatorBalance + 100)
-        advanceTime(OperatorBalanceMonitor.maxTimeAboveLimit.plus(Duration.ofHours(1)))
-      }
-
-      clue("Rewards are not collected anymore") {
+      clue("Push the balance above the limit for longer than allowed") {
+        aliceWalletClient.tap(maxPartyBalance + 100)
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-          createOperatorRewardAndMakeItCollectable(),
+          advanceTime(maxTimeAboveBalanceLimit.asJava.plus(Duration.ofHours(1))),
           logEntries =>
             forAtLeast(1, logEntries)(
-              _.warningMessage should include("Not collecting rewards")
+              _.warningMessage should include("rewards will no longer be collected")
             ),
         )
-        aliceValidatorWalletClient
-          .listAppRewardCoupons() should have size 1 withClue "alice validator AppRewardCoupons"
+      }
+
+      clue("Rewards are not collected anymore, but amulets are still merged") {
+        TriggerTestUtil.setTriggersWithin(
+          triggersToPauseAtStart = Seq(
+            aliceValidatorBackend
+              .userWalletAutomation(aliceWalletClient.config.ledgerApiUser)
+              .futureValue
+              .trigger[CollectRewardsAndMergeAmuletsTrigger]
+          )
+        ) {
+          createRewardAndMakeItCollectable()
+          aliceWalletClient.tap(10)
+          eventually()(aliceWalletClient.list().amulets should have size 2)
+        }
+        eventually() {
+          aliceWalletClient.list().amulets should have size 1
+          aliceWalletClient
+            .listAppRewardCoupons() should have size 1 withClue "alice AppRewardCoupons"
+        }
+      }
+
+      clue("Rewards are collected again once the balance drops below the limit") {
+        p2pTransfer(aliceWalletClient, bobWalletClient, bob, maxPartyBalance + 50)
+        eventually()(
+          aliceWalletClient
+            .listAppRewardCoupons() should have size 0 withClue "alice AppRewardCoupons"
+        )
       }
   }
 

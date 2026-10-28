@@ -14,13 +14,8 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  KeyValueStore,
-  Limit,
-  LimitHelpers,
-}
-import org.lfdecentralizedtrust.splice.wallet.automation.OperatorBalanceMonitor
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, Limit, LimitHelpers}
+import org.lfdecentralizedtrust.splice.wallet.treasury.PartyBalanceMonitor
 import org.lfdecentralizedtrust.splice.util.{Contract, HasHealth, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
@@ -64,8 +59,8 @@ class UserWalletManager(
     migrationId: Long,
     participantId: ParticipantId,
     validatorTopupConfig: ValidatorTopupConfig,
-    operatorBalanceStore: KeyValueStore,
-    maxAllowedOperatorBalance: BigDecimal,
+    maxAllowedPartyBalance: BigDecimal,
+    maxTimeAboveBalanceLimit: java.time.Duration,
     walletSweep: Map[String, WalletSweepConfig],
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig],
     rewardSharingConfigByParty: Map[String, RewardSharingConfig],
@@ -270,13 +265,12 @@ class UserWalletManager(
           scanConnection,
           packageVersionSupport,
           Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
-          Option.when(endUserParty == store.walletKey.validatorParty)(
-            new OperatorBalanceMonitor(
-              operatorBalanceStore,
-              maxAllowedOperatorBalance,
-              clock,
-              userLoggerFactory,
-            )
+          new PartyBalanceMonitor(
+            userStore.partyBalanceMonitorStore,
+            maxAllowedPartyBalance,
+            maxTimeAboveBalanceLimit,
+            clock,
+            userLoggerFactory,
           ),
           // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
           walletSweep.get(endUserParty.toProtoPrimitive),
