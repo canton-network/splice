@@ -63,6 +63,8 @@ spec:
               value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}"
             - name: TOPOLOGY_KEY_MONITOR_KEYS
               value: {{ join "," .Values.keys | quote }}
+            - name: TOPOLOGY_KEY_MONITOR_EXPECTED_SYNCHRONIZER_ALIASES
+              value: {{ join "," .Values.expectedSynchronizerAliases | quote }}
             - name: TOPOLOGY_KEY_MONITOR_POLL_INTERVAL
               value: {{ .Values.pollIntervalSeconds | quote }}
             - name: TOPOLOGY_KEY_MONITOR_SLOW_QUERY_THRESHOLD

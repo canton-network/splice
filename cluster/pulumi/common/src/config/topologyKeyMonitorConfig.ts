@@ -8,6 +8,7 @@ export const TopologyKeyMonitorConfigSchema = z
   .object({
     enable: z.boolean(),
     keys: z.array(z.string()).default([]),
+    expectedSynchronizerAliases: z.array(z.string()).min(1).default(['global']),
     pollIntervalSeconds: z.number().int().positive().default(60),
     slowQueryThresholdSeconds: z.number().int().positive().default(5),
     chartVersion: z.string().optional(),

@@ -23,6 +23,13 @@
         "type": "string"
       }
     },
+    "expectedSynchronizerAliases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
     "pollIntervalSeconds": {
       "type": "integer",
       "minimum": 1

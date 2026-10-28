@@ -12,6 +12,8 @@ participant:
 
 # Key fingerprints to track (required)
 keys: []
+expectedSynchronizerAliases:
+  - global
 pollIntervalSeconds: 60
 slowQueryThresholdSeconds: 5
 

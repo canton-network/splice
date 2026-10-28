@@ -9,20 +9,24 @@ import com.digitalasset.canton.topology.store.TimeQuery
 def requireEnv(name: String): String =
   sys.env.getOrElse(name, sys.error(s"Environment variable $name must be set"))
 
-val trackedKeys: Set[String] = requireEnv("TOPOLOGY_KEY_MONITOR_KEYS")
-  .split(",")
-  .map(_.trim)
-  .filter(_.nonEmpty)
-  .toSet
-if (trackedKeys.isEmpty) {
-  sys.error("TOPOLOGY_KEY_MONITOR_KEYS must contain at least one key fingerprint")
+def requireNonEmptyListEnv(name: String): Set[String] = {
+  val values = requireEnv(name).split(",").map(_.trim).filter(_.nonEmpty).toSet
+  if (values.isEmpty) {
+    sys.error(s"Environment variable $name must contain at least one value")
+  }
+  values
 }
+
+val trackedKeys = requireNonEmptyListEnv("TOPOLOGY_KEY_MONITOR_KEYS")
+val expectedSynchronizerAliases = requireNonEmptyListEnv(
+  "TOPOLOGY_KEY_MONITOR_EXPECTED_SYNCHRONIZER_ALIASES"
+)
 val pollIntervalSeconds = requireEnv("TOPOLOGY_KEY_MONITOR_POLL_INTERVAL").toLong
 val slowQueryThresholdSeconds = requireEnv("TOPOLOGY_KEY_MONITOR_SLOW_QUERY_THRESHOLD").toLong
 
 logger.info(
-  s"Starting topology key monitor for keys ${trackedKeys.toSeq.sorted.mkString(", ")}, " +
-    s"polling every ${pollIntervalSeconds}s"
+  s"Starting topology key monitor for keys ${trackedKeys.toSeq.sorted.mkString(", ")} " +
+    s"on synchronizers ${expectedSynchronizerAliases.toSeq.sorted.mkString(", ")}, polling every ${pollIntervalSeconds}s"
 )
 
 val startedAt = CantonTimestamp.now()
@@ -32,7 +36,20 @@ var cursors: Map[(SynchronizerId, Boolean), CantonTimestamp] = Map.empty
 while (true) {
   Thread.sleep(pollIntervalSeconds * 1000)
   try {
-    val synchronizerIds = participant.synchronizers.list_connected().map(_.synchronizerId)
+    val registered = participant.synchronizers
+      .list_registered()
+      .flatMap { case (config, psid, _) =>
+        psid.toOption.map(id => config.synchronizerAlias.unwrap -> id.logical)
+      }
+      .toMap
+    val missingAliases = expectedSynchronizerAliases.filterNot(registered.contains)
+    if (missingAliases.nonEmpty) {
+      logger.warn(
+        s"Synchronizer(s) ${missingAliases.toSeq.sorted.mkString(", ")} are not registered " +
+          s"on the participant with a known synchronizer id, so they are not monitored"
+      )
+    }
+    val synchronizerIds = expectedSynchronizerAliases.toSeq.sorted.flatMap(registered.get)
     val polled = for {
       synchronizerId <- synchronizerIds
       proposals <- Seq(false, true)

@@ -39,6 +39,7 @@ export function installTopologyKeyMonitor(
         address: participantAddress,
       },
       keys: config.keys,
+      expectedSynchronizerAliases: config.expectedSynchronizerAliases,
       pollIntervalSeconds: config.pollIntervalSeconds,
       slowQueryThresholdSeconds: config.slowQueryThresholdSeconds,
       ...(config.resources ? { resources: config.resources } : {}),
