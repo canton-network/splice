@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.automation
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
@@ -28,7 +29,7 @@ abstract class PackageVettingTrigger(
   private val previouslyRunInputRefForVetting = new AtomicReference[Set[String]](Set.empty)
   private val previouslyRunInputRefForUnvetting = new AtomicReference[Set[String]](Set.empty)
   private val retainedPendingPackageConfigs =
-    new AtomicReference[(Option[String], Seq[PackageConfig])]((None, Seq.empty))
+    new PackageVettingTrigger.RetainedPendingPackageConfigs()
 
   def getSynchronizerId()(implicit tc: TraceContext): Future[SynchronizerId]
 
@@ -72,8 +73,8 @@ abstract class PackageVettingTrigger(
         )
       )
       currentPackageConfig = amuletRules.payload.configSchedule.initialValue.packageConfig
-      pendingPackageConfigs = pendingPackageConfigsForUnvetting(
-        amuletRules.contractId.contractId,
+      pendingPackageConfigs = retainedPendingPackageConfigs.update(
+        context.clock.now,
         newAmuletConfigVoteRequests.map(_._2.packageConfig),
       )
       // ensure that unsupported versions are not vetted
@@ -116,15 +117,30 @@ abstract class PackageVettingTrigger(
     }
   }
 
-  // Keep executed configs pending until the (possibly cached) AmuletRules reflects them.
-  private def pendingPackageConfigsForUnvetting(
-      amuletRulesContractId: String,
-      pendingPackageConfigs: Seq[PackageConfig],
-  ): Seq[PackageConfig] =
-    retainedPendingPackageConfigs.updateAndGet { case (retainedContractId, retained) =>
-      if (retainedContractId.contains(amuletRulesContractId))
-        (retainedContractId, (retained ++ pendingPackageConfigs).distinct)
-      else (Some(amuletRulesContractId), pendingPackageConfigs)
-    }._2
+}
 
+object PackageVettingTrigger {
+
+  // Must exceed the client AmuletRules cache TTL (10 min default) plus scan's server-side cache (30s).
+  private val PendingConfigGracePeriod = NonNegativeFiniteDuration.ofMinutes(15)
+
+  // Keep configs of executed votes pending until the AmuletRules reflects them.
+  private[automation] final class RetainedPendingPackageConfigs(
+      gracePeriod: NonNegativeFiniteDuration = PendingConfigGracePeriod
+  ) {
+    private val lastSeen = new AtomicReference[Map[PackageConfig, CantonTimestamp]](Map.empty)
+
+    def update(
+        now: CantonTimestamp,
+        pendingPackageConfigs: Seq[PackageConfig],
+    ): Seq[PackageConfig] =
+      lastSeen
+        .updateAndGet { seen =>
+          (seen ++ pendingPackageConfigs.map(_ -> now)).filter { case (_, at) =>
+            at.plus(gracePeriod.asJava) >= now
+          }
+        }
+        .keys
+        .toSeq
+  }
 }
