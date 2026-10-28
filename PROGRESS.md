@@ -1,7 +1,7 @@
 # Progress: party balance gate (issue #7979)
 
 Plan: `PLAN-party-balance-gate.md` (same directory). Branch: `isegall/internal-party-balance`.
-Steps 1–4 are committed. Next: run the Step 4 integration test, then Steps 5–8.
+Steps 1–4 are committed and the Step 4 integration test passes. Next: Steps 5–8.
 
 ## Commits so far (oldest first, on top of `dee813861c`)
 
@@ -10,7 +10,8 @@ Steps 1–4 are committed. Next: run the Step 4 integration test, then Steps 5�
 | `c40a8e21d0` | Step 1+2: migration `V081__party_balance_monitor.sql` (table `wallet_party_balance_monitor`), added to the `TRUNCATE` list in `SpliceDbTest.scala`; `wallet/store/PartyBalanceMonitorStore.scala` (trait) and `wallet/store/db/DbPartyBalanceMonitorStore.scala` (upsert on `store_id`, takes the wallet `AcsStoreId`). |
 | `e1eca2fcc6`, `0f80248f47`, `486503bcca` | Cherry-picks of the operator-only prototype (`d351af27aa 8f0e286328 1ddb743c6c`). Partly superseded by later commits; leftovers removed in Step 5. |
 | `505c7adad0` | Step 3: `wallet/treasury/PartyBalanceMonitor.scala` + `PartyBalanceMonitorTest` (9 tests, in-memory fake store, passing). `test-full-class-names-non-integration.log` updated. |
-| `d150151e04` | Step 4: wiring + gate in `TreasuryService` + reworked integration test (compiled, **not yet run**). |
+| `d150151e04` | Step 4: wiring + gate in `TreasuryService` + reworked integration test. |
+| `708c9f747f`, `2b4d6a949b`, `7b0b732648` | `fixup!` commits for `d150151e04` (integration test fix), `c40a8e21d0` and `505c7adad0` (copyright year 2026 -> 2024, as the `copyright` hook enforces). Squash with `git rebase -i --autosquash`. |
 
 ## Decisions made along the way (deviations from / refinements of the plan)
 
@@ -26,30 +27,34 @@ Steps 1–4 are committed. Next: run the Step 4 integration test, then Steps 5�
 - **Config (done early, in Step 4)**: `ValidatorAppBackendConfig.maxAllowedOperatorBalance` replaced by `maxAllowedPartyBalance: BigDecimal = BigDecimal(Long.MaxValue)` and `maxTimeAboveBalanceLimit: NonNegativeFiniteDuration = 24h`. **Default intentionally still `Long.MaxValue`**; Step 6 changes it to 1000 and handles fallout in existing tests, plus cluster/docs wiring and the config parsing test.
 - **Step 5 leftovers in place**: `UserWalletService` passes `None` as the old monitor to `UserWalletAutomationService`; `automation/OperatorBalanceMonitor.scala`, the `operatorBalanceMonitorO` param and the gate in `CollectRewardsAndMergeAmuletsTrigger` still exist. Step 5 removes them (trigger file should end identical to `origin/main`).
 
-## Integration test (Step 4) — not yet run
+## Integration test (Step 4) — passing
 
 `TimeBasedTreasuryIntegrationTest`, case `"stop collecting a party's rewards once its balance was above the limit for too long"`.
 aliceValidator config: `maxAllowedPartyBalance = 100`, window 24h. Uses alice (non-operator):
 1. app reward for alice is collected while below the limit;
-2. tap 200, advance 25h → expects the warn `rewards will no longer be collected` (inside `assertEventuallyLogsSeq`);
+2. tap 200, advance 25h with `advanceTimeAndWaitForRoundAutomation` → expects the warn `rewards will no longer be collected`;
 3. with `CollectRewardsAndMergeAmuletsTrigger` paused, new collectable reward + tap 10 (2 amulets); after resuming, expects 1 amulet and the coupon still present;
 4. `p2pTransfer` 150 to bob → coupon gets collected.
 
-Possible issues to watch when running: the reopen `info` log / other WARNs needing suppression; whether the coupon from (3) survives until (4) (no rounds are advanced in between, so it should).
+The 25h jump must use `advanceTimeAndWaitForRoundAutomation`, not plain `advanceTime`: otherwise the next
+`advanceRoundsToNextRoundOpening` starts before the round automation caught up and sees two rounds advance instead of one.
+The whole suite (4 cases) passes with the low limit of 100. `checkErrors` not run yet (`log/` has stale entries).
 
 Run (needs Canton, simtime):
 ```
 ./start-canton.sh -s -p local
-direnv exec . sbt -batch "apps-app/testOnly org.lfdecentralizedtrust.splice.integration.tests.TimeBasedTreasuryIntegrationTest -- -z \"stop collecting a party\"" > it.log 2>&1
+direnv exec . sbt -batch "apps-app/testOnly org.lfdecentralizedtrust.splice.integration.tests.TimeBasedTreasuryIntegrationTest" > it.log 2>&1
 grep -E '^\[error\]|Tests:|FAILED' it.log
 ```
-Also run the whole `TimeBasedTreasuryIntegrationTest` suite: the low limit (100) applies to all its test cases (one taps 1100 but doesn't advance 24h).
 
-Memory note: on a 15 GB machine this was OOM-killed (`.envrc.vars` sets sbt `-Xmx16G`, Canton uses `-Xmx8g`). If memory is tight: `ADDITIONAL_JAVA_TOOLS_OPTIONS="-Xms3g -Xmx5g" ./start-canton.sh ...` and `direnv exec . env SBT_OPTS="-Xmx6G -Xms2G -Xss6M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M" sbt ...`. Run `./stop-canton.sh local` first if a stale tmux `canton` session remains.
+Environment notes (sandbox):
+- Memory: sbt `-Xmx16G` (from `.envrc.vars`) + Canton OOMs. Use `ADDITIONAL_JAVA_TOOLS_OPTIONS="-Xms3g -Xmx5g" ./start-canton.sh ...` and `SBT_OPTS="-Xmx6G -Xms2G -Xss6M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M"`. Run `./stop-canton.sh local` first if a stale tmux `canton` session remains.
+- Don't commit while a test runs: the `copyright` pre-commit hook starts an sbt server (`sbt --client headerCreate`), which competes for memory and the sbt lock. Stop it afterwards with `sbt --client shutdown`.
+- The `copyright` hook runs `headerCreate` on the whole project, so a commit fails if any other tracked file still has a wrong header (even if unstaged).
+- If `/nix` is read-only and direnv is missing, `direnv exec .` / `nix print-dev-env` don't work; source the exported variables of the cached `.direnv/flake-profile` JSON plus `.envrc.vars` instead (and set `USER`, which `build-tools/get-snapshot-version` needs).
 
 ## Remaining
 
-- Run/fix the Step 4 integration test (amend into `d150151e04` or add a fixup commit).
 - Step 5: remove the trigger-level gate and `OperatorBalanceMonitor` (see plan).
 - Step 6: default `maxAllowedPartyBalance = 1000`, fix affected tests, cluster/docs wiring, release notes, config test.
 - Steps 7–8: rebase on `origin/main` (check migration number V081 is still free), full test pass, compile all, format, check no `OperatorBalanceMonitor` / `maxAllowedOperatorBalance` / `validator_operator_last_below_balance_limit` leftovers.
