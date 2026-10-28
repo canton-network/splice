@@ -1,0 +1,30 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "description": "Logs of the topology key monitor with a severity level of warning or above",
+    "filter": "resource.labels.cluster_name=\"cn-mocknet\"\nresource.type=\"k8s_container\"\nresource.labels.container_name=\"topology-key-monitor\"\nseverity>=WARNING\n",
+    "labelExtractors": {
+      "cluster": "EXTRACT(resource.labels.cluster_name)",
+      "namespace": "EXTRACT(resource.labels.namespace_name)"
+    },
+    "metricDescriptor": {
+      "labels": [
+        {
+          "description": "Pod namespace",
+          "key": "namespace"
+        },
+        {
+          "description": "Cluster name",
+          "key": "cluster"
+        }
+      ],
+      "metricKind": "DELTA",
+      "valueType": "INT64"
+    },
+    "name": "topology_key_monitor_warnings_mock"
+  },
+  "name": "topology_key_monitor_warnings",
+  "provider": "",
+  "type": "gcp:logging/metric:Metric"
+}

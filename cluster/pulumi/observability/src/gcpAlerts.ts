@@ -14,6 +14,8 @@ import { type GcpQuotaAlertsConfig, monitoringConfig, type NatPortUsageConfig } 
 
 const enableChaosMesh = config.envFlag('ENABLE_CHAOS_MESH');
 
+const topologyKeyMonitorContainerName = 'topology-key-monitor';
+
 function ensureTrailingNewline(s: string): string {
   return s.endsWith('\n') ? s : `${s}\n`;
 }
@@ -207,6 +209,67 @@ ${ensureTrailingNewline(loggedSecretsFilter)}`;
           // No retest period -- any secret in logs is critical
           duration: '0s',
           filter: pulumi.interpolate`resource.type="k8s_container" AND metric.type = "logging.googleapis.com/user/${loggedSecretsMetric.name}"`,
+          trigger: {
+            count: 1,
+          },
+        },
+        displayName: displayName,
+      },
+    ],
+    displayName: displayName,
+    notificationChannels: [notificationChannel.name],
+  });
+}
+
+export function installTopologyKeyMonitorAlerts(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  const topologyKeyMonitorMetric = new gcp.logging.Metric('topology_key_monitor_warnings', {
+    name: `topology_key_monitor_warnings_${CLUSTER_BASENAME}`,
+    description: 'Logs of the topology key monitor with a severity level of warning or above',
+    filter: `resource.labels.cluster_name="${CLUSTER_NAME}"
+resource.type="k8s_container"
+resource.labels.container_name="${topologyKeyMonitorContainerName}"
+severity>=WARNING
+`,
+    labelExtractors: {
+      cluster: 'EXTRACT(resource.labels.cluster_name)',
+      namespace: 'EXTRACT(resource.labels.namespace_name)',
+    },
+    metricDescriptor: {
+      labels: [
+        {
+          description: 'Pod namespace',
+          key: 'namespace',
+        },
+        {
+          description: 'Cluster name',
+          key: 'cluster',
+        },
+      ],
+      metricKind: 'DELTA',
+      valueType: 'INT64',
+    },
+  });
+
+  const displayName = `Topology key monitor warnings in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('topologyKeyMonitorAlert', {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    conditions: [
+      {
+        conditionThreshold: {
+          aggregations: [
+            {
+              alignmentPeriod: '600s',
+              crossSeriesReducer: 'REDUCE_SUM',
+              groupByFields: ['metric.label.cluster'],
+              perSeriesAligner: 'ALIGN_SUM',
+            },
+          ],
+          comparison: 'COMPARISON_GT',
+          duration: '0s',
+          filter: pulumi.interpolate`resource.type="k8s_container" AND metric.type = "logging.googleapis.com/user/${topologyKeyMonitorMetric.name}"`,
           trigger: {
             count: 1,
           },
