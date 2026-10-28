@@ -1,7 +1,8 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.sun.net.httpserver.HttpServer
 import io.circe.Json
+import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.http.scaladsl.server.Directives.{as, complete, entity, path, post}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -12,17 +13,23 @@ import org.lfdecentralizedtrust.splice.scan.automation.{
   AcsSnapshotBackfillingTrigger,
   AcsSnapshotTrigger,
 }
+import org.lfdecentralizedtrust.splice.unit.http.HttpServerSupport
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 
-import java.net.InetSocketAddress
-import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 import scala.sys.process.ProcessLogger
 
-class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletTestUtil {
+class ScanPartyMonitorScriptIntegrationTest
+    extends IntegrationTest
+    with WalletTestUtil
+    with HttpServerSupport {
+
+  // the fake Slack webhook only serves the script
+  override def bindLocalhostOnly: Boolean = true
 
   override def environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition
@@ -95,21 +102,18 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
     implicit env =>
       val dir: Path = Files.createTempDirectory("scan-party-monitor")
       val db = dir.resolve("monitor.sqlite")
-      val slackBodies = new java.util.concurrent.ConcurrentLinkedQueue[String]()
-      val slack = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
-      slack.createContext(
-        "/slack",
-        exchange => {
-          slackBodies.add(
-            new String(exchange.getRequestBody.readAllBytes(), StandardCharsets.UTF_8)
-          )
-          exchange.sendResponseHeaders(200, -1)
-          exchange.close()
-        },
-      )
-      slack.start()
+      import env.{actorSystem, executionContext}
+      val slackBodies = new ConcurrentLinkedQueue[String]()
+      val slackRoute = path("slack") {
+        post {
+          entity(as[String]) { body =>
+            slackBodies.add(body)
+            complete(StatusCodes.OK)
+          }
+        }
+      }
 
-      try {
+      withHttpServer(slackRoute) { slack =>
         val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
         val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
         val charlieParty = onboardWalletUser(charlieWalletClient, aliceValidatorBackend)
@@ -129,7 +133,7 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
         }
 
         val scanUrl = sv1ScanBackend.httpClientConfig.url.toString()
-        val slackUrl = s"http://127.0.0.1:${slack.getAddress.getPort}/slack"
+        val slackUrl = s"http://127.0.0.1:${slack.localAddress.getPort}/slack"
         def args(db: Path, config: String, extra: String*): Seq[String] = Seq(
           "--scan-url",
           scanUrl,
@@ -237,8 +241,6 @@ class ScanPartyMonitorScriptIntegrationTest extends IntegrationTest with WalletT
             body should (include(bob) and include("TransferPreapproval_Send"))
           }
         }
-      } finally {
-        slack.stop(0)
       }
   }
 }
