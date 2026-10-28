@@ -84,6 +84,6 @@ org.lfdecentralizedtrust.splice.util.ValueJsonCodecProtobufTest
 org.lfdecentralizedtrust.splice.validator.store.DbValidatorConfigProviderTest
 org.lfdecentralizedtrust.splice.validator.store.DbValidatorStoreTest
 org.lfdecentralizedtrust.splice.validator.store.InMemoryPartyToParticipantStoreTest
-org.lfdecentralizedtrust.splice.wallet.automation.OperatorBalanceMonitorTest
+org.lfdecentralizedtrust.splice.wallet.treasury.PartyBalanceMonitorTest
 org.lfdecentralizedtrust.splice.wallet.util.ExtraTrafficTopupParametersTest
 org.lfdecentralizedtrust.splice.wart.ParTraverseTest
