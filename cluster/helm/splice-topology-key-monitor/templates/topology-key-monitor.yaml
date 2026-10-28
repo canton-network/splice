@@ -65,6 +65,8 @@ spec:
               value: {{ join "," .Values.keys | quote }}
             - name: TOPOLOGY_KEY_MONITOR_POLL_INTERVAL
               value: {{ .Values.pollIntervalSeconds | quote }}
+            - name: TOPOLOGY_KEY_MONITOR_SLOW_QUERY_THRESHOLD
+              value: {{ .Values.slowQueryThresholdSeconds | quote }}
           volumeMounts:
             - name: topology-key-monitor-config
               mountPath: /app/topology-key-monitor

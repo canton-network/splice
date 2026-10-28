@@ -40,6 +40,7 @@ export function installTopologyKeyMonitor(
       },
       keys: config.keys,
       pollIntervalSeconds: config.pollIntervalSeconds,
+      slowQueryThresholdSeconds: config.slowQueryThresholdSeconds,
       ...(config.resources ? { resources: config.resources } : {}),
       ...(serviceAccountName ? { serviceAccountName } : {}),
     },

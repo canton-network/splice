@@ -9,6 +9,7 @@ export const TopologyKeyMonitorConfigSchema = z
     enable: z.boolean(),
     keys: z.array(z.string()).default([]),
     pollIntervalSeconds: z.number().int().positive().default(60),
+    slowQueryThresholdSeconds: z.number().int().positive().default(5),
     chartVersion: z.string().optional(),
     resources: K8sResourceSchema,
   })

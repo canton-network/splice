@@ -13,6 +13,7 @@ participant:
 # Key fingerprints to track (required)
 keys: []
 pollIntervalSeconds: 60
+slowQueryThresholdSeconds: 5
 
 defaultJvmOptions: -XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75
 additionalJvmOptions: ""

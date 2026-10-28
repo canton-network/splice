@@ -27,6 +27,10 @@
       "type": "integer",
       "minimum": 1
     },
+    "slowQueryThresholdSeconds": {
+      "type": "integer",
+      "minimum": 1
+    },
     "serviceAccountName": {
       "type": "string"
     },

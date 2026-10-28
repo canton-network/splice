@@ -18,6 +18,7 @@ if (trackedKeys.isEmpty) {
   sys.error("TOPOLOGY_KEY_MONITOR_KEYS must contain at least one key fingerprint")
 }
 val pollIntervalSeconds = requireEnv("TOPOLOGY_KEY_MONITOR_POLL_INTERVAL").toLong
+val slowQueryThresholdSeconds = requireEnv("TOPOLOGY_KEY_MONITOR_SLOW_QUERY_THRESHOLD").toLong
 
 logger.info(
   s"Starting topology key monitor for keys ${trackedKeys.toSeq.sorted.mkString(", ")}, " +
@@ -39,6 +40,7 @@ while (true) {
       val from = cursors.getOrElse((synchronizerId, proposals), startedAt)
       val kind = if (proposals) "proposals" else "transactions"
       logger.info(s"Querying topology $kind on $synchronizerId from valid-from $from")
+      val queryStart = System.nanoTime()
       val newTransactions = participant.topology.transactions
         .list(
           store = TopologyStoreId.Synchronizer(synchronizerId),
@@ -47,6 +49,13 @@ while (true) {
           operation = None,
         )
         .result
+      val queryMillis = (System.nanoTime() - queryStart) / 1000000
+      if (queryMillis > slowQueryThresholdSeconds * 1000) {
+        logger.warn(
+          s"Querying topology $kind on $synchronizerId from valid-from $from took ${queryMillis}ms, " +
+            s"more than the threshold of ${slowQueryThresholdSeconds}s"
+        )
+      }
       // `from` is inclusive, so the cursor is moved past the last valid-from seen to exclude it
       val nextFrom =
         newTransactions.map(_.validFrom.value).maxOption.fold(from)(_.immediateSuccessor)
