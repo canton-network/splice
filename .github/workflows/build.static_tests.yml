@@ -143,6 +143,11 @@ jobs:
         with:
           cmd: ./scripts/check-npm-package-names.py
 
+      - name: Type check Python
+        uses: ./.github/actions/nix/run
+        with:
+          cmd: ./scripts/check-python-types.sh
+
       - name: SBT-based static checks
         uses: ./.github/actions/sbt/execute_sbt_command
         with:

@@ -1,0 +1,61 @@
+name: Python Tests
+on:
+  workflow_call:
+    inputs:
+      commit_sha:
+        type: string
+        required: true
+
+jobs:
+  python_tests:
+    runs-on: self-hosted-k8s-small
+    container:
+      image: us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12
+
+    steps:
+
+      - name: Check out repository code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Checkout the PR head commit to get the commit message first
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: "recursive"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if static only
+        uses: ./.github/actions/tests/skip_on_static
+        id: skip
+        with:
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out repository code
+        uses: actions/checkout@v6.0.2
+        if: inputs.commit_sha != ''
+        with:
+          ref: ${{ inputs.commit_sha }}
+          submodules: "recursive"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup
+        id: setup
+        if: steps.skip.outputs.skip != 'true'
+        uses: ./.github/actions/tests/common_test_setup
+        with:
+          cache_version: 10
+          test_name: python_tests
+
+      # Not part of static_tests, because this executes the code under test.
+      - name: Run Python unit tests
+        if: steps.skip.outputs.skip != 'true'
+        uses: ./.github/actions/nix/run
+        with:
+          cmd: ./scripts/run-python-tests.sh
+
+      - name: Report Failures on Slack & Github
+        if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
+        uses: ./.github/actions/tests/failure_notifications
+        with:
+          workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}'
+          notifications_url: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_URL }}'
+          slack_channel: '${{ secrets.FAILURE_NOTIFICATIONS_SLACK_CHANNEL }}'

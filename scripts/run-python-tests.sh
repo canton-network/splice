@@ -48,7 +48,7 @@ ran=0
 while IFS= read -r dir; do
   echo "unittest: $dir"
   ran=1
-  (cd "$root" && python3 -I -m unittest discover -s "$dir") || failed=1
+  (cd "$root" && python3 -m unittest discover -s "$dir") || failed=1
 done < <(grep -E '/test_[^/]*\.py$' <<<"$files" | sed -E 's|/[^/]+$||' | sort -u)
 
 if [[ $ran == 0 ]]; then

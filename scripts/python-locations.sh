@@ -27,7 +27,7 @@ python_pathspecs=(
 # (a file or directory, relative to $PWD) is given, only files at or under it.
 # Fails if nothing matches.
 python_files() {
-  local root sub= rel files
+  local root sub='' rel files
   root=$(git rev-parse --show-toplevel)
   if [[ -n ${1-} ]]; then
     sub=$(realpath -m -- "$1")
