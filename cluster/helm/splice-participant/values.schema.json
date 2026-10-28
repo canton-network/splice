@@ -170,6 +170,9 @@
     "enableKeyDownload": {
       "type": "boolean"
     },
+    "enableRepairCommands": {
+      "type": "boolean"
+    },
     "if": {
       "properties": {
         "disableAuth": {

@@ -308,7 +308,8 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
       ),
-      Seq(),
+      // Required for importing the ACS of the migrated parties
+      Seq(ProcessTestUtil.enableRepairCommandsConfig),
       "alice-reonboard-participant",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> newParticipantDb,
@@ -544,7 +545,8 @@ class ValidatorReonboardingWithPartiesToMigrateIntegrationTest
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
       ),
-      Seq(),
+      // Required for importing the ACS of the migrated parties
+      Seq(ProcessTestUtil.enableRepairCommandsConfig),
       "alice-reonboard-participant",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> newParticipantDb,
