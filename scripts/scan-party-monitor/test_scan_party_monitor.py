@@ -22,7 +22,6 @@ import io
 import json
 import logging
 import os
-import sqlite3
 import sys
 import tempfile
 import threading
@@ -61,6 +60,7 @@ SNAPSHOT = "2026-01-02T00:00:00Z"
 
 def at(second: int) -> str:
     """A record time `second` seconds after SNAPSHOT."""
+    assert 0 <= second <= 59, f"{second} is not a second of a minute"
     return f"2026-01-02T00:00:{second:02d}.123456Z"
 
 
@@ -103,7 +103,16 @@ def locked_amulet(cid: str, owner: str, holders: List[str], amount: str) -> Json
 
 
 def preapproval(cid: str, receiver: str) -> Json:
-    return created(cid, PREAPPROVAL, [receiver, DSO], {"receiver": receiver, "dso": DSO})
+    """A self-managed TransferPreapproval, i.e. its provider is the receiver."""
+    arguments = {
+        "dso": DSO,
+        "receiver": receiver,
+        "provider": receiver,
+        "validFrom": "2026-01-01T00:00:00Z",
+        "lastRenewedAt": "2026-01-01T00:00:00Z",
+        "expiresAt": "2027-01-01T00:00:00Z",
+    }
+    return created(cid, PREAPPROVAL, [receiver, DSO], arguments)
 
 
 def exercised(
@@ -160,19 +169,24 @@ def transfer(
     """An AmuletRules_Transfer of one holding of `sender`, optionally through a preapproval
     and with change for the sender."""
     u = update_id
-    outputs = [f"{u}:output"] + ([f"{u}:change"] if change_cid else [])
-    events = [
+    send = (
+        [exercised(f"{u}:send", preapproval_cid, PREAPPROVAL, "TransferPreapproval_Send", [sender], False,
+                   [f"{u}:transfer"])]
+        if preapproval_cid
+        else []
+    )
+    output = amulet(f"{u}-output", receiver, amount, f"{u}:output")
+    change = [amulet(change_cid, sender, "1.0", f"{u}:change")] if change_cid else []
+    return transaction(
+        update_id,
+        record_time,
+        *send,
         exercised(f"{u}:transfer", "amulet-rules", AMULET_RULES, "AmuletRules_Transfer", [sender], False,
-                  [f"{u}:archive", *outputs]),
+                  [f"{u}:archive", *(e["event_id"] for e in [output, *change])]),
         exercised(f"{u}:archive", input_cid, AMULET, "Archive", [DSO, sender], True),
-        amulet(f"{u}-output", receiver, amount, f"{u}:output"),
-    ]
-    if change_cid:
-        events.append(amulet(change_cid, sender, "1.0", f"{u}:change"))
-    if preapproval_cid:
-        events.insert(0, exercised(f"{u}:send", preapproval_cid, PREAPPROVAL, "TransferPreapproval_Send",
-                                   [sender], False, [f"{u}:transfer"]))
-    return transaction(update_id, record_time, *events)
+        output,
+        *change,
+    )
 
 
 ACS = [
@@ -617,12 +631,9 @@ class MonitorTestCase(unittest.TestCase):
         self.assertFalse(any(fragment in m for m in self.logs), f"{fragment!r} in {self.logs}")
 
     def meta(self, key: Meta) -> Optional[str]:
-        conn = sqlite3.connect(self.db)
-        try:
-            row = conn.execute("SELECT value FROM meta WHERE key = ?", (key.value,)).fetchone()
-            return row[0] if row else None
-        finally:
-            conn.close()
+        """The committed value of `key`, read with a fresh connection like the next run would."""
+        with contextlib.closing(spm.Store(self.db)) as store:
+            return store.get_meta(key)
 
 
 ONLY_ALICE: Json = {"parties": {ALICE: {}}}
@@ -779,10 +790,11 @@ class MatchingTest(MonitorTestCase):
 
 def unexpected_transfers(n: int) -> List[Json]:
     """n transfers alice -> charlie, at(1) .. at(n), each spending the previous one's change."""
-    inputs = ["alice-1"] + [f"alice-change-{i}" for i in range(1, n)]
+    changes = [f"alice-change-{i}" for i in range(1, n + 1)]
+    inputs = ["alice-1", *changes[:-1]]
     return [
-        transfer(f"u{i}", at(i), ALICE, inputs[i - 1], CHARLIE, "1.0", f"alice-change-{i}", "charlie-preapproval")
-        for i in range(1, n + 1)
+        transfer(f"u{i}", at(i), ALICE, input_cid, CHARLIE, "1.0", change_cid, "charlie-preapproval")
+        for i, (input_cid, change_cid) in enumerate(zip(inputs, changes), start=1)
     ]
 
 
