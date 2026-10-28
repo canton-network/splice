@@ -23,7 +23,9 @@ import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletA
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
+import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
@@ -95,6 +97,24 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           backend.participantClient.upload_dar_unless_exists(tokenStandardTestDarPath)
         }
       })
+      // Test with older amulet version (before the 104 amendement is
+      // effective), to confirm we have no regression
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(c =>
+          c.copy(initialPackageConfig =
+            InitialPackageConfig(
+              amuletVersion = DarResources.amulet_0_1_24.metadata.version.toString,
+              amuletNameServiceVersion =
+                DarResources.amuletNameService_0_1_25.metadata.version.toString,
+              dsoGovernanceVersion = DarResources.dsoGovernance_0_1_30.metadata.version.toString,
+              validatorLifecycleVersion =
+                DarResources.validatorLifecycle_0_1_9.metadata.version.toString,
+              walletVersion = DarResources.wallet_0_1_25.metadata.version.toString,
+              walletPaymentsVersion = DarResources.walletPayments_0_1_24.metadata.version.toString,
+            )
+          )
+        )(config)
+      )
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
@@ -377,7 +397,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId4",
         Set(aliceParty, venueParty),
         expectedRound = 7,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -390,7 +409,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "aliceCreateId",
         Set(aliceParty),
         expectedRound = 7,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -411,7 +429,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId5",
         Set(aliceParty, venueParty),
         expectedRound = 9,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -423,7 +440,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId6",
         Set(aliceParty, venueParty),
         expectedRound = 10,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -437,7 +453,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId7",
         Set(aliceParty),
         expectedRound = 11,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -675,7 +690,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       cluePrefix: String,
       expectedProviders: Set[PartyId],
       expectedRound: Long,
-      scaledProvider: Option[(PartyId, BigDecimal)] = None,
   ): Unit = {
     withClue(s"$cluePrefix should have app activity") {
       event.appActivityRecords shouldBe defined
@@ -693,21 +707,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           r.weight should be > 0L
         }
       }
+      val weightSum = activity.records.map(_.weight).sum
       val numFeaturedAppParties = expectedProviders.size.toLong
-
-      // Convert the assigned activity back to burn amount using app weight
-      val reconstructedBurnSum = activity.records.map { r =>
-        val activityWeight = scaledProvider match {
-          case Some((party, w)) if r.party == party.toProtoPrimitive => w
-          case _ => BigDecimal(1)
-        }
-        BigDecimal(r.weight) / activityWeight
-      }.sum
       withClue(
-        s"$cluePrefix reconstructed burn should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
+        s"$cluePrefix sum of weights should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
       ) {
-        reconstructedBurnSum should be >= BigDecimal(totalTrafficCost - numFeaturedAppParties)
-        reconstructedBurnSum should be <= BigDecimal(totalTrafficCost)
+        weightSum should be >= (totalTrafficCost - numFeaturedAppParties)
+        weightSum should be <= totalTrafficCost
       }
     }
   }
