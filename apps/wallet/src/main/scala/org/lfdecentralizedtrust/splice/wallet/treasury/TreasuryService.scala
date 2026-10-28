@@ -133,7 +133,7 @@ class TreasuryService(
     override protected[this] val retryProvider: RetryProvider,
     scanConnection: BftScanConnection,
     mintUnassignedRewardCouponsV2: Boolean,
-    partyBalanceMonitor: PartyBalanceMonitor,
+    partyBalanceMonitorO: Option[PartyBalanceMonitor],
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, mat: Materializer)
     extends NamedLogging
@@ -916,16 +916,19 @@ class TreasuryService(
 
   /** Records the current balance (unlocked plus locked) of the party in the balance monitor,
     * and returns whether rewards should still be collected for it.
+    * Without a monitor (no balance limit), rewards are always collected.
     */
   private def observeBalanceAndCheckRewardCollection(round: Long)(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Boolean] =
-    for {
-      (unlockedBalance, _) <- userStore.getAmuletBalanceWithHoldingFees(round)
-      lockedBalance <- userStore.getLockedAmuletBalance()
-      _ <- partyBalanceMonitor.observe(unlockedBalance + lockedBalance)
-    } yield partyBalanceMonitor.shouldCollectRewards
+    partyBalanceMonitorO.fold(Future.successful(true)) { partyBalanceMonitor =>
+      for {
+        (unlockedBalance, _) <- userStore.getAmuletBalanceWithHoldingFees(round)
+        lockedBalance <- userStore.getLockedAmuletBalance()
+        _ <- partyBalanceMonitor.observe(unlockedBalance + lockedBalance)
+      } yield partyBalanceMonitor.shouldCollectRewards
+    }
 
   /** Select transfer inputs and transfer context to satisfy the amulet operations.
     * Currently, this function selects all unlocked amulets and all currently redeemable app- and validator rewards,

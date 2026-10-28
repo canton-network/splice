@@ -90,6 +90,16 @@
        `canton.validator-apps.validator_backend.support-embedded-party-signing-keys = false` but it is recommended to instead make sure that the
        `ValidatorRight` contracts are [configured such that they won't start automation](https://docs.canton.network/global-synchronizer/production-operations/scalability#bypassing-the-limit).
 
+     - **Behavior change** The wallet no longer collects rewards (app, validator, SV and development fund coupons,
+       validator faucets and activity records) for a party whose balance (unlocked plus locked) has been above
+       100,000 CC for more than 24 hours. Rewards are collected again once the balance drops to or below the limit.
+       Merging amulets is not affected. This applies to all parties onboarded to the validator's wallet,
+       including the validator operator party. It does not apply to SV validators.
+       Both values can be configured, e.g. through an `ADDITIONAL_CONFIG_*` environment variable
+       (`additionalEnvVars` in the `splice-validator` Helm chart):
+       `canton.validator-apps.validator_backend.max-allowed-party-balance = 5000` and
+       `canton.validator-apps.validator_backend.max-time-above-balance-limit = 48h`.
+
 
 ## Upcoming for next minor release (template):
 

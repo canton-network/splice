@@ -178,8 +178,9 @@ case class ValidatorAppBackendConfig(
     /** The maximum balance (unlocked plus locked) an onboarded party is allowed to hold.
       * If the balance stays above this limit for longer than `maxTimeAboveBalanceLimit`,
       * the treasury no longer collects rewards for that party.
+      * Ignored on SV validators.
       */
-    maxAllowedPartyBalance: BigDecimal = BigDecimal(Long.MaxValue),
+    maxAllowedPartyBalance: BigDecimal = BigDecimal(100000),
     maxTimeAboveBalanceLimit: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
     sequencerRequestAmplificationPatience: NonNegativeFiniteDuration =
       ValidatorAppBackendConfig.DefaultSequencerRequestAmplificationPatience,

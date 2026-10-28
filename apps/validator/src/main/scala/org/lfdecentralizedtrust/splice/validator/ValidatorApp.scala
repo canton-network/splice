@@ -741,7 +741,8 @@ class ValidatorApp(
             domainMigrationId,
             participantId,
             validatorTopupConfig,
-            config.maxAllowedPartyBalance,
+            // SVs are not subject to the party balance limit.
+            Option.when(!config.svValidator)(config.maxAllowedPartyBalance),
             config.maxTimeAboveBalanceLimit.asJava,
             config.walletSweep,
             config.autoAcceptTransfers,

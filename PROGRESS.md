@@ -1,7 +1,10 @@
 # Progress: party balance gate (issue #7979)
 
 Plan: `PLAN-party-balance-gate.md` (same directory). Branch: `isegall/internal-party-balance`.
-Steps 1–4 are committed and the Step 4 integration test passes. Next: Steps 5–8.
+Steps 1–6 are committed; the Step 4 integration test passes. Steps 5–6 are compiled but their tests are not run yet. Next: Steps 7–8.
+
+Work happens in the worktree `.claude/worktrees/party-balance` on branch `isegall/internal-party-balance-wt` (branched from `3139f73b41`),
+so host-side checkouts of `isegall/internal-party-balance` don't interfere.
 
 ## Commits so far (oldest first, on top of `dee813861c`)
 
@@ -13,7 +16,17 @@ Steps 1–4 are committed and the Step 4 integration test passes. Next: Steps 5�
 | `d150151e04` | Step 4: wiring + gate in `TreasuryService` + reworked integration test. |
 | `708c9f747f`, `2b4d6a949b`, `7b0b732648` | `fixup!` commits for `d150151e04` (integration test fix), `c40a8e21d0` and `505c7adad0` (copyright year 2026 -> 2024, as the `copyright` hook enforces). Squash with `git rebase -i --autosquash`. |
 
+| `2899dc11c8` | Step 5: removed `OperatorBalanceMonitor` and the trigger-level gate; `CollectRewardsAndMergeAmuletsTrigger` and `UserWalletAutomationService` are identical to `main`. |
+| `071d33d56a` + next | Step 6: default limit 100,000 (changed from 1000 at the user's request), SV validators exempt, release note. |
+
 ## Decisions made along the way (deviations from / refinements of the plan)
+
+- **SV validators are exempt** (user decision): the config stays non-optional (`maxAllowedPartyBalance: BigDecimal = 100000`); `ValidatorApp` passes
+  `Option.when(!config.svValidator)(config.maxAllowedPartyBalance)` to `UserWalletManager`, so the limit is ignored on SV validators.
+  No limit means no monitor: `UserWalletService`/`TreasuryService` take `Option[PartyBalanceMonitor]`, and with `None` the balance is not even looked up.
+- **No config parsing test** (user removed it from the plan).
+- **No Helm/Compose values**: operators set the options via `ADDITIONAL_CONFIG_*` / `additionalEnvVars`; documented in `release-notes/release_notes_upcoming.mdx`
+  (operator docs no longer live in this repo, see #7812). So no `make update-expected` needed.
 
 - **No `DbPartyBalanceMonitorStoreTest`**: user deemed it overkill and it was deleted. The DB store is covered only indirectly (integration test).
 - **PartyBalanceMonitor** (user-requested refinements):
@@ -55,7 +68,13 @@ Environment notes (sandbox):
 
 ## Remaining
 
-- Step 5: remove the trigger-level gate and `OperatorBalanceMonitor` (see plan).
-- Step 6: default `maxAllowedPartyBalance = 1000`, fix affected tests, cluster/docs wiring, release notes, config test.
+- Tests for Steps 5–6 (not run yet, per user): `WalletRewardsTimeBasedIntegrationTest`, `TimeBasedTreasuryIntegrationTest`, `PartyBalanceMonitorTest`,
+  plus the simtime suites that may now hit the 100,000 default on alice/bob/splitwell validators (balance > 100,000 for > 24h simulated → gate closes and
+  logs a WARN, which `checkErrors` rejects). Candidates (advance >= 24h): `WalletTimeBasedIntegrationTest`, `WalletMintingDelegationTimeBasedIntegrationTest`,
+  `WalletTxLogWithRewardsCollectionTimeBasedIntegrationTest`, `WalletTransactionHistoryFrontendTimeBasedIntegrationTest`, `WalletFrontendTimeBasedIntegrationTest`,
+  `DevelopmentFundFrontendTimeBasedIntegrationTest`, `UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest`, `TokenStandardCliTestDataTimeBasedIntegrationTest`,
+  `ScanTimeBasedIntegrationTest`, `DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest`, `SvTimeBasedBootstrappingRoundIntegrationTest`.
+  With the 100,000 default fewer are likely to break (no test taps >= 100,000 in one literal), but balances can accumulate.
+  Where they break, override `maxAllowedPartyBalance` (e.g. `Some(BigDecimal(Long.MaxValue))`) in that suite's config transform.
 - Steps 7–8: rebase on `origin/main` (check migration number V081 is still free), full test pass, compile all, format, check no `OperatorBalanceMonitor` / `maxAllowedOperatorBalance` / `validator_operator_last_below_balance_limit` leftovers.
 - Commits: `git commit -s`, **no Co-Authored-By trailer**, last commit message ends with `[ci]`. Don't push unless asked.

@@ -44,7 +44,7 @@ class UserWalletService(
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
-    partyBalanceMonitor: PartyBalanceMonitor,
+    partyBalanceMonitorO: Option[PartyBalanceMonitor],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
     rewardSharingConfig: RewardSharingConfig,
@@ -83,7 +83,7 @@ class UserWalletService(
         retryProvider,
         scanConnection,
         mintUnassignedRewardCouponsV2 = rewardSharingConfig.mintUnassignedCoupons,
-        partyBalanceMonitor,
+        partyBalanceMonitorO,
         loggerFactory,
       )
     } catch {

@@ -17,7 +17,7 @@ Decisions already made (do not revisit):
 - Observation of the balance happens in `TreasuryService.getTransferContextAndInputs`.
 - Persistence is a new DB table (not the key-value store), keyed per party.
 - New store lives in the wallet app's store package (`apps/wallet/.../wallet/store/`).
-- Default `maxAllowedPartyBalance = 1000`.
+- Default `maxAllowedPartyBalance = 100000`.
 - The 24h window is configurable, default 24h.
 - Out of scope: the "after 4 weeks assert on startup that the config is <= some ceiling" item from the issue.
 
@@ -182,10 +182,10 @@ once the trigger gate is gone.
 ## Step 6: Config
 
 In `ValidatorAppConfig.scala` (`ValidatorAppBackendConfig`), replace `maxAllowedOperatorBalance` with:
-- `maxAllowedPartyBalance: BigDecimal = BigDecimal(1000)`: max balance (unlocked + locked) an onboarded
+- `maxAllowedPartyBalance: BigDecimal = BigDecimal(100000)`: max balance (unlocked + locked) an onboarded
   party may hold; above it for longer than `maxTimeAboveBalanceLimit`, the party's rewards are no longer
-  collected by the treasury. The default is 1000, so the gate is active
-  out of the box. Existing integration tests that run in simulated time and hold more than 1000 for over 24h
+  collected by the treasury. The default is 100,000, so the gate is active
+  out of the box. Existing integration tests that run in simulated time and hold more than 100,000 for over 24h
   (simulated) would now stop collecting rewards: find such suites (e.g. those that tap large amounts and advance time
   by days; run the time-based wallet/treasury/reward suites) and override `maxAllowedPartyBalance` to a large value
   in their config transform where they break (see `ConfigTransforms.scala`), keeping the new integration test on the
@@ -194,10 +194,6 @@ In `ValidatorAppConfig.scala` (`ValidatorAppBackendConfig`), replace `maxAllowed
 Follow AGENTS.md config conventions. Then check whether the options need wiring in `cluster/images/*/app.conf`,
 `cluster/compose/`, `cluster/helm/`, `cluster/pulumi/`, `docs/src/`; if cluster files change run
 `make update-expected`. Add a release note entry if the repo keeps one (look for `docs/src/release_notes.rst`).
-
-Tests for this step: add (or extend an existing) config parsing test checking that the defaults are
-1000 and 24h and that both options can be overridden from HOCON; if cluster files changed, `make
-update-expected` and confirm no diff remains.
 
 ## Step 7: Final test pass
 

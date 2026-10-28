@@ -59,7 +59,7 @@ class UserWalletManager(
     migrationId: Long,
     participantId: ParticipantId,
     validatorTopupConfig: ValidatorTopupConfig,
-    maxAllowedPartyBalance: BigDecimal,
+    maxAllowedPartyBalance: Option[BigDecimal],
     maxTimeAboveBalanceLimit: java.time.Duration,
     walletSweep: Map[String, WalletSweepConfig],
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig],
@@ -265,12 +265,14 @@ class UserWalletManager(
           scanConnection,
           packageVersionSupport,
           Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
-          new PartyBalanceMonitor(
-            userStore.partyBalanceMonitorStore,
-            maxAllowedPartyBalance,
-            maxTimeAboveBalanceLimit,
-            clock,
-            userLoggerFactory,
+          maxAllowedPartyBalance.map(
+            new PartyBalanceMonitor(
+              userStore.partyBalanceMonitorStore,
+              _,
+              maxTimeAboveBalanceLimit,
+              clock,
+              userLoggerFactory,
+            )
           ),
           // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
           walletSweep.get(endUserParty.toProtoPrimitive),
