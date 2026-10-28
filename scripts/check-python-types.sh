@@ -51,7 +51,7 @@ while IFS= read -r dir; do
   # pyproject.toml) in the tree. Such a file can load plugins, which execute
   # arbitrary code, so a PR from a fork could otherwise run code in CI by
   # modifying it.
-  (cd "$root" && mypy --config-file= --python-version 3.14 --strict --explicit-package-bases "${dir_files[@]}") || failed=1
+  (cd "$root" && MYPYPATH=$dir mypy --config-file= --python-version 3.14 --strict --explicit-package-bases "${dir_files[@]}") || failed=1
 done < <(sed -E 's|/[^/]+$||' <<<"$files" | sort -u)
 
 exit "$failed"
