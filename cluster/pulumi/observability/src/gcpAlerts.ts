@@ -524,6 +524,44 @@ export function installNatAlerts(
   });
 }
 
+export function installSequencerParticipantRegistrationAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  const displayName = `Participant registered with sv-1 sequencer in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('sequencerParticipantRegistrationAlert', {
+    alertStrategy: {
+      autoClose: '1800s',
+      // Minimum allowed for log match alerts; registrations within this period are not notified separately.
+      notificationRateLimit: { period: '300s' },
+    },
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    userLabels: { cluster: CLUSTER_BASENAME },
+    displayName,
+    documentation: {
+      subject: `Participant \${log.extracted_label.participant} registered in ${CLUSTER_BASENAME}`,
+      content: `Participant \`\${log.extracted_label.participant}\` was registered in ${CLUSTER_BASENAME}.`,
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName,
+        conditionMatchedLog: {
+          filter: `resource.type="k8s_container"
+resource.labels.cluster_name="${CLUSTER_NAME}"
+resource.labels.namespace_name="sv-1"
+resource.labels.container_name="sequencer"
+jsonPayload.message:"Topology change has triggered sequencer registration of member PAR::"`,
+          labelExtractors: {
+            participant:
+              'REGEXP_EXTRACT(jsonPayload.message, "registration of member (PAR::[^ ]+)")',
+          },
+        },
+      },
+    ],
+  });
+}
+
 export function installCloudSqlTxIdUtilizationAlert(
   notificationChannel: gcp.monitoring.NotificationChannel
 ): void {

@@ -33,6 +33,7 @@ import io.circe.syntax.*
 import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.environment.BftCallFailed
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.KeyDownloadDisabledException
 
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
@@ -67,10 +68,6 @@ object HttpErrorHandler {
   // 501
   def notImplemented(message: String) =
     HttpErrorWithHttpCode(StatusCodes.NotImplemented, message);
-
-  // 503
-  def serviceUnavailable(message: String) =
-    HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, message);
 
   private def grpcErrorCatcher[T](
       grpcCondition: (Status.Code => Boolean),
@@ -187,6 +184,11 @@ final class HttpErrorHandler(
             e,
           )
           completeErrorResponse(e.getStatus, e.getStatus.getDescription)
+        }
+      case e: KeyDownloadDisabledException =>
+        extractUri { uri =>
+          logger.info(s"Request to $uri failed as key downloads are disabled: ${e.getMessage}")
+          completeErrorResponse(StatusCodes.BadRequest, e.getMessage)
         }
       case e: IllegalArgumentException =>
         extractUri { uri =>

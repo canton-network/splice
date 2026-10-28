@@ -45,7 +45,7 @@ class RecoverExternalPartyIntegrationTest
     )
     val synchronizerId = physicalSynchronizerId.logical
 
-    val onboarding @ OnboardingResult(aliceParty, alicePublicKey, alicePrivateKey) =
+    val onboarding @ OnboardingResult(aliceParty, _, alicePrivateKey) =
       onboardExternalParty(aliceValidatorBackend, Some("aliceExternal"))
 
     aliceValidatorWalletClient.tap(5000.0)
@@ -58,7 +58,7 @@ class RecoverExternalPartyIntegrationTest
 
     actAndCheck(
       "Transfer 2000.0 to Alice via Token Standard", {
-        executeTransferViaTokenStandard(
+        executeTransferViaTokenStandardV1(
           aliceValidatorBackend.participantClientWithAdminToken,
           RichPartyId.local(aliceValidatorBackend.getValidatorPartyId()),
           aliceParty,
@@ -201,7 +201,7 @@ class RecoverExternalPartyIntegrationTest
       verboseHashing = true,
     )
 
-    eventually() {
+    eventuallySucceeds() {
       bobValidatorBackend
         .getExternalPartyBalance(aliceParty)
         .totalUnlockedCoin shouldBe "2000.0000000000"
@@ -210,7 +210,7 @@ class RecoverExternalPartyIntegrationTest
     // Check that alice can transfer through bob's node
     actAndCheck(
       "alice transfer 1000 cc to bob's validator",
-      executeTransferViaTokenStandard(
+      executeTransferViaTokenStandardV1(
         bobValidatorBackend.participantClientWithAdminToken,
         onboarding.richPartyId,
         bobValidatorBackend.getValidatorUserInfo().primaryParty,

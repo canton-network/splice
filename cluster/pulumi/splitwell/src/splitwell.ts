@@ -23,6 +23,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
+  checkValidatorKeyDownloadForPeriodicBackups,
   installParticipant,
   splitwellDarPaths,
 } from '@canton-network/splice-pulumi-common-validator';
@@ -63,6 +64,7 @@ export async function installSplitwell(
 
   installIngress(xns, imagePullDeps);
 
+  checkValidatorKeyDownloadForPeriodicBackups('splitwell', splitwellConfig, backupConfig);
   const participant = await installParticipant(
     splitwellConfig,
     xns,

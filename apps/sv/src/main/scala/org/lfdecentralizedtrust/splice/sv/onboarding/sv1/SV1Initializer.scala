@@ -251,13 +251,13 @@ class SV1Initializer(
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
       domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
-      svStore = newSvStore(
+      svStore <- newSvStore(
         storeKey,
         domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
-      dsoStore = newDsoStore(
+      dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
         participantId,
@@ -516,10 +516,8 @@ class SV1Initializer(
                 mediatorState,
               ) <- (
                 for {
-                  participantIdentity <- participantAdminConnection.getIdentityTransactions(
-                    participantId.uid,
-                    TopologyStoreId.Authorized,
-                  )
+                  participantIdentity <- participantAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
                   mediatorIdentity <- synchronizerNode.mediatorAdminConnection
                     .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
                   sequencerIdentity <- synchronizerNode.sequencerAdminConnection
@@ -681,6 +679,8 @@ class SV1Initializer(
                     sv1Config.initialExternalPartyConfigStateTickDuration,
                   optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
                   initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
+                  initialGovernanceLockConfig =
+                    sv1Config.initialGovernanceLockConfig.map(_.toGovernanceLockConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(

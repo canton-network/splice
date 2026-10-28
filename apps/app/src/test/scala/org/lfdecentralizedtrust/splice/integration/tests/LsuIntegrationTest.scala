@@ -249,6 +249,8 @@ class LsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "cancel-global-synchronizer-upgrade",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
@@ -362,6 +364,8 @@ class LsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "global-synchronizer-upgrade",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
@@ -707,7 +711,7 @@ class LsuIntegrationTest
 
         actAndCheck(
           "external party transfer 10 cc",
-          executeTransferViaTokenStandard(
+          executeTransferViaTokenStandardV1(
             aliceValidatorBackend.participantClientWithAdminToken,
             externalPartyOnboarding.richPartyId,
             aliceValidatorBackend.getValidatorPartyId(),

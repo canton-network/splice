@@ -30,7 +30,7 @@ function _info(){
 }
 
 function usage() {
-  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E] [-g]"
+  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E] [-g] [--enable-key-download]"
   echo "  -s <sponsor_sv_address>: The full URL of the sponsor SV"
   echo "  -o <onboarding_secret>: The onboarding secret to use. May be empty (\"\") if you are already onboarded."
   echo "  -p <party_hint>: The party hint to use for the validator operator, by default also your participant identifier."
@@ -49,6 +49,7 @@ function usage() {
   echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
   echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
   echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
+  echo "  --enable-key-download: Allow downloading the participant's private keys via its admin API. Required for participant identities dumps (e.g., for backups)."
   echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). Requires LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE to be equal, and with -a also WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
 
   echo ""
@@ -83,6 +84,21 @@ bft_custom_svs=""
 bft_custom_threshold=""
 enable_participant_db_conflict_check=1
 wallet_gateway=0
+enable_key_download=0
+
+# Long options (getopts only supports short ones)
+args=()
+for arg in "$@"; do
+  case "${arg}" in
+    --enable-key-download)
+      enable_key_download=1
+      ;;
+    *)
+      args+=("${arg}")
+      ;;
+  esac
+done
+set -- ${args[@]+"${args[@]}"}
 
 while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:kg' arg; do
   case ${arg} in
@@ -336,6 +352,9 @@ if [ "${local_compose_sv}" -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-local-compose-sv.yaml")
 fi
 extra_compose_files+=("-f" "${script_dir}/compose-traffic-topups.yaml")
+if [ $enable_key_download -eq 1 ]; then
+  extra_compose_files+=("-f" "${script_dir}/compose-enable-key-download.yaml")
+fi
 if [ $bft_custom -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-bft-custom.yaml")
 fi

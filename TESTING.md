@@ -101,6 +101,9 @@ toxyproxy. You can switch between those with `Ctrl-b w`.
 
 We recommend including a mode flag (`-w` for wallclock tests or `-s` for simtime tests); running `./start-canton.sh` without one will double what is needed. In that case, you will end up with 2 tmux windows.
 
+Like our participant images, Canton started this way does not allow downloading private keys by default.
+Tests that need to do such things need Canton to be started with `-k`, e.g., `./start-canton.sh -wk`.
+
 You should only need to restart it if you change
 `apps/app/src/test/resources/simple-topology-canton.conf`. If you
 encounter an error like the following, there might have been a problem

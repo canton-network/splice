@@ -83,9 +83,20 @@ data RewardConfig = RewardConfig with
     dryRunVersion : Optional RewardVersion -- ^ What scheme to use for dry-running reward minting. If None, dry-runs are disabled.
     batchSize : Int -- ^ Batch size to use for building the Merkle-tree over minting allowances.
     rewardCouponTimeToLive : RelTime -- ^ Time to live for reward coupons, default 36h to support batching of collection across 12h with a 24h prepare-submission delay.
-    appRewardCouponThreshold : Decimal -- ^ Threshold for minting reward coupons, in USD.
-    -- This threshold is not enforced in daml, but it must be used while building the Merkle-tree
-    -- to ignore minting allowances lower than this value.
+    appRewardCouponThreshold : Decimal
+      -- ^ Threshold for minting reward coupons, in USD.
+      -- This threshold is not enforced in daml, but it must be used while
+      -- building the Merkle-tree to ignore minting allowances lower than this
+      -- value.
+    extraFeaturedAssetActivityWeight : Optional Decimal
+      -- ^ Extra weight for featured asset activity within a transaction by a
+      -- featured asset moving app. Default: 0.2.
+    maxExtraFeaturedAssetActivityWeightPerAsset : Optional Decimal
+      -- ^ Maximum extra weight for featured asset activity per asset within a
+      -- transaction by a featured asset moving app. Default: 0.1.
+    dsoAppActivityWeight : Optional Decimal
+      -- ^ Weight for DSO-level app activity records attributed to the submitting
+      -- featured asset moving app. Default: 0.1.
   deriving (Eq, Show, Serializable)
 
 
@@ -119,6 +130,7 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ Minimum delay between allocation and minting. Default: 0 days.
     amuletSwitchOverTimes : Optional (TextMap Time)
       -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
+    governanceLockConfig : Optional GovernanceLockConfig -- ^ Governance lock configuration.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -194,10 +206,17 @@ validRewardConfig (RewardConfig
   _dryRunVersion
   batchSize
   rewardCouponTimeToLive
-  appRewardCouponThreshold) =
+  appRewardCouponThreshold
+  extraFeaturedAssetActivityWeight
+  maxExtraFeaturedAssetActivityWeightPerAsset
+  dsoAppActivityWeight
+  ) =
     batchSize > 0 &&
     rewardCouponTimeToLive > hours 0 &&
-    appRewardCouponThreshold >= 0.0
+    appRewardCouponThreshold >= 0.0 &&
+    optional True (>= 0.0) extraFeaturedAssetActivityWeight &&
+    optional True (>= 0.0) maxExtraFeaturedAssetActivityWeightPerAsset &&
+    optional True (>= 0.0) dsoAppActivityWeight
 
 -- | The package config defines for each daml package (identified by name)
 -- the package version that should be used for command submissions
@@ -217,6 +236,31 @@ data PackageConfig = PackageConfig
 -- no version of that package should be vetted.
 validPackageConfig : PackageConfig -> Bool
 validPackageConfig _ = True
+
+-- | Config record grouping config values for governance locks.
+--
+-- All fields are optional to support changes to individual fields without requiring
+-- the specification of the default values for other fields.
+data GovernanceLockConfig = GovernanceLockConfig with
+    minimumLockAmount : Optional Decimal
+      -- ^ Minimum amount for a governance lock. Default: 10k Amulet.
+    superValidatorLockVestingDuration : Optional RelTime
+      -- ^ Vesting duration for an SV governance lock. Default: 365.25 days.
+    featuredAppLockVestingDuration : Optional RelTime
+      -- ^ Vesting duration for an FA governance lock. Default: 60 days.
+  deriving (Show, Eq, Serializable)
+
+getGovernanceLockConfigValue : a -> (GovernanceLockConfig -> Optional a) -> Optional GovernanceLockConfig -> a
+getGovernanceLockConfigValue defaultValue getValue config = fromOptional defaultValue $ config >>= getValue
+
+governanceLockMinimumLockAmount : Optional GovernanceLockConfig -> Decimal
+governanceLockMinimumLockAmount = getGovernanceLockConfigValue 10000.0 (.minimumLockAmount)
+
+governanceLockSuperValidatorLockVestingDuration : Optional GovernanceLockConfig -> RelTime
+governanceLockSuperValidatorLockVestingDuration = getGovernanceLockConfigValue (days 365 + hours 6) (.superValidatorLockVestingDuration)
+
+governanceLockFeaturedAppLockVestingDuration : Optional GovernanceLockConfig -> RelTime
+governanceLockFeaturedAppLockVestingDuration = getGovernanceLockConfigValue (days 60) (.featuredAppLockVestingDuration)
 
 instance Patchable RewardVersion where
   patch = patchScalar
@@ -238,6 +282,7 @@ instance Patchable (AmuletConfig USD) where
     transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration
     minDevelopmentFundMintingDelay = patch new.minDevelopmentFundMintingDelay base.minDevelopmentFundMintingDelay current.minDevelopmentFundMintingDelay
     amuletSwitchOverTimes = patch new.amuletSwitchOverTimes base.amuletSwitchOverTimes current.amuletSwitchOverTimes
+    governanceLockConfig = patch new.governanceLockConfig base.governanceLockConfig current.governanceLockConfig
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with
@@ -246,6 +291,9 @@ instance Patchable RewardConfig where
     batchSize = patch new.batchSize base.batchSize current.batchSize
     rewardCouponTimeToLive = patch new.rewardCouponTimeToLive base.rewardCouponTimeToLive current.rewardCouponTimeToLive
     appRewardCouponThreshold = patch new.appRewardCouponThreshold base.appRewardCouponThreshold current.appRewardCouponThreshold
+    extraFeaturedAssetActivityWeight = patch new.extraFeaturedAssetActivityWeight base.extraFeaturedAssetActivityWeight current.extraFeaturedAssetActivityWeight
+    maxExtraFeaturedAssetActivityWeightPerAsset = patch new.maxExtraFeaturedAssetActivityWeightPerAsset base.maxExtraFeaturedAssetActivityWeightPerAsset current.maxExtraFeaturedAssetActivityWeightPerAsset
+    dsoAppActivityWeight = patch new.dsoAppActivityWeight base.dsoAppActivityWeight current.dsoAppActivityWeight
 
 instance Patchable (TransferConfig USD) where
   patch new base current = TransferConfig with
@@ -267,3 +315,9 @@ instance Patchable PackageConfig where
     validatorLifecycle = patch new.validatorLifecycle base.validatorLifecycle current.validatorLifecycle
     wallet = patch new.wallet base.wallet current.wallet
     walletPayments = patch new.walletPayments base.walletPayments current.walletPayments
+
+instance Patchable GovernanceLockConfig where
+  patch new base current = GovernanceLockConfig with
+    minimumLockAmount = patch new.minimumLockAmount base.minimumLockAmount current.minimumLockAmount
+    superValidatorLockVestingDuration = patch new.superValidatorLockVestingDuration base.superValidatorLockVestingDuration current.superValidatorLockVestingDuration
+    featuredAppLockVestingDuration = patch new.featuredAppLockVestingDuration base.featuredAppLockVestingDuration current.featuredAppLockVestingDuration

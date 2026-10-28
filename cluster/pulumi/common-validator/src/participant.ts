@@ -5,7 +5,9 @@ import {
   activeVersion,
   Auth0Config,
   auth0UserNameEnvVarSource,
+  BucketConfig,
   ChartValues,
+  checkKeyDownloadForPeriodicBackups,
   ExactNamespace,
   getAdditionalJvmOptions,
   getParticipantKmsHelmResources,
@@ -20,6 +22,18 @@ import {
 import { ValidatorNodeConfig } from '@canton-network/splice-pulumi-common-validator';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
 import { Output } from '@pulumi/pulumi';
+
+export function checkValidatorKeyDownloadForPeriodicBackups(
+  nodeName: string,
+  validatorConfig: ValidatorNodeConfig,
+  periodicBackupConfig?: BucketConfig
+): void {
+  checkKeyDownloadForPeriodicBackups(nodeName, {
+    usesKms: validatorConfig.kms !== undefined,
+    enableKeyDownload: validatorConfig.participant.enableKeyDownload,
+    periodicBackups: periodicBackupConfig !== undefined,
+  });
+}
 
 export async function installParticipant(
   validatorConfig: ValidatorNodeConfig,
@@ -61,6 +75,7 @@ export async function installParticipant(
     metrics: {
       enable: true,
     },
+    enableKeyDownload: validatorConfig.participant.enableKeyDownload,
   };
 
   const participantValuesWithSpecifiedAud: ChartValues = {

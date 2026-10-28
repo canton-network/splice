@@ -91,7 +91,6 @@ monitoring:
           seconds: 3600
         computeDuration:
           seconds: 1200
-        usePv36Metrics: false
       acsSnapshots:
         saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
@@ -101,7 +100,7 @@ monitoring:
         deniedRequests:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
-          threshold: 100
+          threshold: 300
         throttleRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
@@ -109,7 +108,7 @@ monitoring:
         wafRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
-          threshold: 10
+          threshold: 50
       cloudSql:
         maintenance: false
       cometbft:
@@ -241,7 +240,7 @@ splitwell:
   walletGateway:
     enabled: false
     portfolioVersion: '1.12.2'
-    version: '1.11.1'
+    version: '1.13.0'
 sv:
   scan:
     externalRateLimits:
@@ -1658,14 +1657,16 @@ validator1:
   walletGateway:
     enabled: true
     portfolioVersion: '1.12.2'
-    version: '1.11.1'
+    version: '1.13.0'
 validators:
   validator-runbook:
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
+    participant:
+      enableKeyDownload: true
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: true
       portfolioVersion: '1.12.2'
-      version: '1.11.1'
+      version: '1.13.0'

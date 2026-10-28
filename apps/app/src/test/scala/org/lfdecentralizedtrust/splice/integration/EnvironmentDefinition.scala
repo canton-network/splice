@@ -638,13 +638,16 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
 
   private def loadConfigFromResources(paths: String*): SpliceConfig = {
     val rawConfig = ConfigFactory.parseString(paths.map(Resource.getAsString(_)).mkString("\n"))
-    SpliceConfig.loadOrThrow(rawConfig)
+    withConsolePreviewCommands(SpliceConfig.loadOrThrow(rawConfig))
   }
 
   def fromFiles(testName: String, files: File*): EnvironmentDefinition = {
     val config = SpliceConfig.parseAndLoadOrThrow(files.map(_.toJava))
-    EnvironmentDefinition(baseConfig = config, context = testName)
+    EnvironmentDefinition(baseConfig = withConsolePreviewCommands(config), context = testName)
   }
+
+  private def withConsolePreviewCommands(config: SpliceConfig): SpliceConfig =
+    config.focus(_.features.enablePreviewCommands).replace(true)
 
   def empty(testName: String): EnvironmentDefinition =
     EnvironmentDefinition(SpliceConfig.empty, context = testName)

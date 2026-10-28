@@ -409,10 +409,10 @@ class UpdateHistory private (
     val safePackageName = lengthLimited(event.createdEvent.getPackageName)
     val createArguments =
       String256M.tryCreate(ProtobufCodec.serializeValue(event.createdEvent.getArguments))
-    val contractKey =
-      event.createdEvent.getContractKey.toScala
-        .map(ProtobufCodec.serializeValue)
-        .map(s => String256M.tryCreate(s))
+    // Contract keys are not stored, as they can be computed from the contract payload. Scan's HTTP API
+    // does not expose them, and storing them would make the history of an SV that ingests an update
+    // differ from the history of an SV that backfills the same update through that API.
+    val contractKey = Option.empty[String256M]
     val safeCreatedAt = CantonTimestamp.assertFromInstant(event.createdEvent.createdAt)
     val safeSignatories = event.createdEvent.getSignatories.asScala.toSeq.map(lengthLimited)
     val safeObservers = event.createdEvent.getObservers.asScala.toSeq.map(lengthLimited)
@@ -527,9 +527,10 @@ class UpdateHistory private (
     val templateIdPackageId = lengthLimited(templateId.getPackageId)
     val safePackageName = lengthLimited(event.getPackageName)
     val createArguments = String256M.tryCreate(ProtobufCodec.serializeValue(event.getArguments))
-    val contractKey = event.getContractKey.toScala
-      .map(ProtobufCodec.serializeValue)
-      .map(s => String256M.tryCreate(s))
+    // Contract keys are not stored, as they can be computed from the contract payload. Scan's HTTP API
+    // does not expose them, and storing them would make the history of an SV that ingests an update
+    // differ from the history of an SV that backfills the same update through that API.
+    val contractKey = Option.empty[String256M]
     val safeCreatedAt = CantonTimestamp.assertFromInstant(event.createdAt)
     val safeSignatories = event.getSignatories.asScala.toSeq.map(lengthLimited)
     val safeObservers = event.getObservers.asScala.toSeq.map(lengthLimited)
@@ -746,37 +747,6 @@ class UpdateHistory private (
       .queryAndUpdate(
         deleteAction.transactionally,
         "deleteAcsSnapshotsAfter",
-      )
-  }
-
-  def verifyNoRolledBackAcsSnapshots(
-      historyId: Long,
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Unit] = {
-    val action = sql"""
-          select snapshot_record_time from acs_snapshot
-          where history_id = $historyId and migration_id = $migrationId and snapshot_record_time > $recordTime
-        """
-      .as[CantonTimestamp]
-      .map(times =>
-        if (times.length > 0) {
-          throw new IllegalStateException(
-            s"Found acs snapshots at $times for $updateStreamParty where migration_id = $migrationId and record_time > $recordTime, " +
-              "but the configuration says the domain was paused during the migration. " +
-              "Check the domain migration configuration and the content of the update history database"
-          )
-        } else {
-          logger.debug(
-            s"No updates found for $updateStreamParty where migration_id = $migrationId and record_time > $recordTime"
-          )
-        }
-      )
-
-    storage
-      .query(
-        action,
-        "verifyNoRolledBackAcsSnapshots",
       )
   }
 
