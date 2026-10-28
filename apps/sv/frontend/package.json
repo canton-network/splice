@@ -21,7 +21,7 @@
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
     "@mui/x-data-grid": "^8.14.1",
-    "@mui/x-date-pickers": "^8.14.1",
+    "@mui/x-date-pickers": "^9.14.0",
     "@tanstack/react-form": "^1.23.0",
     "dayjs": "^1.11.9",
     "dompurify": "^3.4.16",
