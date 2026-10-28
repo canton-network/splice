@@ -1,7 +1,6 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/schema#",
   "type": "object",
-  "unevaluatedProperties": false,
   "required": ["db", "persistence", "imageName"],
   "properties": {
     "securityContexts": {
@@ -24,21 +23,6 @@
     },
     "serviceAccountName": {
       "type": "string"
-    },
-    "pod": {
-      "type": "object"
-    },
-    "extraArgs": {
-      "type": "array"
-    },
-    "splice-util-lib": {
-      "type": "object"
-    },
-    "cluster": {
-      "type": "object"
-    },
-    "appsAffinityAndTolerations": {
-      "type": "object"
     },
     "automountServiceAccountToken": {
       "type": "boolean"

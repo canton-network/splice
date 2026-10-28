@@ -55,6 +55,9 @@ sv:
             fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.24'
+  participant:
+    # Required for periodic identities backups, as this participant does not use KMS
+    enableKeyDownload: true
   participantPruningSchedule:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
@@ -149,6 +152,8 @@ monitoring:
     alerts:
       cloudSql:
         maintenance: true
+      sequencerParticipantRegistration:
+        enabled: true
       svNames:
         - Dummy-SV-1
         - Dummy-SV-2
@@ -219,6 +224,12 @@ svs:
     appsPg:
       cloudSql:
         tier: "apps-pg-override-tier-sv-1"
+    topologyKeyMonitor:
+      enable: true
+      pollIntervalSeconds: 1
+      keys:
+        - '12205e1643ef9bcc12dd3450d02f7c538de011dc92290672cb66dd47053ab4a67cae'
+        - '122057b07227114d122f5954a770c1ba30586cc51efd1dd644f6c85bfb9916eac967'
     periodicSnapshots:
       topology:
         backupInterval: '12h'
@@ -477,6 +488,8 @@ validators:
       maxDuration: "5m"
       retention: "30d"
     participant:
+      # Required for periodic identities backups, as this participant does not use KMS
+      enableKeyDownload: true
       additionalEnvVars:
         - name: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_NAME
           value: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_VALUE

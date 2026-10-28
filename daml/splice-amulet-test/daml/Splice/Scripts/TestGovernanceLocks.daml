@@ -238,6 +238,27 @@ testGovernanceLockProvisionalUnlockScenario ops = do
   remainingLocks <- query @GovernanceLock alice
   remainingLocks === []
 
+testGovernanceLockMergeOnLockScenario' : Decimal -> GovernanceLockOperations i r t -> Script ()
+testGovernanceLockMergeOnLockScenario' amountToMerge ops = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+      someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  let totalAmount = 20000.0 + amountToMerge
+  AmuletRegistryV2.tapFaucet registry alice totalAmount
+  firstLockCid <- expectSuccess $ ops.governanceLock (testEnvRegistries env) alice 20000.0 someSvKind
+  mergedLockCid <- expectSuccess $ ops.governanceLock (testEnvRegistries env) alice amountToMerge someSvKind
+
+  [(lockCid, lock)] <- query @GovernanceLock alice
+  lockCid === mergedLockCid
+  lock.amount === totalAmount
+  lock.originalLockCid === Some (toAnyContractId firstLockCid)
+  checkLockedHolding alice lockCid totalAmount
+  archivedLock <- queryContractId alice firstLockCid
+  archivedLock === None
+  -- setupTest taps 1000.0, all other funds tapped in this test should be locked
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+
 testGovernanceLockMergeOnLockTSv1 : Script ()
 testGovernanceLockMergeOnLockTSv1 = testGovernanceLockMergeOnLockScenario tsv1Operations
 
@@ -245,23 +266,16 @@ testGovernanceLockMergeOnLockTSv2 : Script ()
 testGovernanceLockMergeOnLockTSv2 = testGovernanceLockMergeOnLockScenario tsv2Operations
 
 testGovernanceLockMergeOnLockScenario : GovernanceLockOperations i r t -> Script ()
-testGovernanceLockMergeOnLockScenario ops = do
-  env@TestEnv{..} <- setupTest
-  let registry = registriesEnv.amuletV2
-      someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+testGovernanceLockMergeOnLockScenario = testGovernanceLockMergeOnLockScenario' 5000.0
 
-  AmuletRegistryV2.tapFaucet registry alice 30000.0
-  firstLockCid <- expectSuccess $ ops.governanceLock (testEnvRegistries env) alice 20000.0 someSvKind
-  mergedLockCid <- expectSuccess $ ops.governanceLock (testEnvRegistries env) alice 5000.0 someSvKind
+testGovernanceLockMergeOnLockWithZeroAmountTSv1 : Script ()
+testGovernanceLockMergeOnLockWithZeroAmountTSv1 = testGovernanceLockMergeOnLockWithZeroAmountScenario tsv1Operations
 
-  [(lockCid, lock)] <- query @GovernanceLock alice
-  lockCid === mergedLockCid
-  lock.amount === 25000.0
-  lock.originalLockCid === Some (toAnyContractId firstLockCid)
-  checkLockedHolding alice lockCid 25000.0
-  archivedLock <- queryContractId alice firstLockCid
-  archivedLock === None
-  WalletClientV2.checkUnlockedBalance alice instrId 6000.0
+testGovernanceLockMergeOnLockWithZeroAmountTSv2 : Script ()
+testGovernanceLockMergeOnLockWithZeroAmountTSv2 = testGovernanceLockMergeOnLockWithZeroAmountScenario tsv2Operations
+
+testGovernanceLockMergeOnLockWithZeroAmountScenario : GovernanceLockOperations i r t -> Script ()
+testGovernanceLockMergeOnLockWithZeroAmountScenario = testGovernanceLockMergeOnLockScenario' 0.0
 
 testGovernanceLockMergeOnUnlockTSv1 : Script ()
 testGovernanceLockMergeOnUnlockTSv1 = testGovernanceLockMergeOnUnlockScenario tsv1Operations

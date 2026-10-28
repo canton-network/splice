@@ -5,9 +5,13 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.topology.PartyId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet as amuletCodegen, governancelock}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.install
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
+import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -25,6 +29,12 @@ import org.lfdecentralizedtrust.splice.util.{
   TokenStandardMetadata,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.wallet.store.{
+  BalanceChangeTxLogEntry,
+  PartyAndAmount,
+  TransferTxLogEntry,
+  TxLogEntry,
+}
 import org.scalatest.Assertion
 
 import java.time.Duration
@@ -35,6 +45,7 @@ import scala.jdk.OptionConverters.*
 class GovernanceLockTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
+    with WalletTxLogTestUtil
     with TimeTestUtil
     with GovernanceLockTest {
 
@@ -85,6 +96,48 @@ class GovernanceLockTimeBasedIntegrationTest
   private def checkLockKind(kind: governancelock.GovernanceLockKind): Assertion =
     kind shouldBe a[governancelock.governancelockkind.GLK_SuperValidatorRightsOwner]
 
+  // Wallet automation runs in the background, e.g. to merge the amulets that a withdrawal unlocks,
+  // so its entries could appear after the cursor of the previous lock action
+  private def isWalletAutomationBatch(entry: TxLogEntry): Boolean =
+    entry match {
+      case t: TransferTxLogEntry =>
+        t.getSubtype.choice == install.WalletAppInstall.CHOICE_WalletAppInstall_ExecuteBatch.name
+      case _ => false
+    }
+
+  private def checkLockActionHistory(
+      previousEventId: Option[String],
+      expectedBalanceChange: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Option[String] =
+    checkTxHistory(
+      aliceWalletClient,
+      Seq({ case entry: TransferTxLogEntry =>
+        entry.sender.value.amount shouldBe expectedBalanceChange
+      }),
+      previousEventId = previousEventId,
+      trafficTopups = IgnoreTopupsDevNet,
+      ignore = isWalletAutomationBatch,
+    ).headOption.map(_.eventId)
+
+  /** Checks alice's unlocked and locked balances after a lock action, and that
+    * the action's wallet history entry captures expected balance change.
+    */
+  private def checkBalancesAndHistory(
+      action: String,
+      previousEventId: Option[String],
+      expectedUnlocked: BigDecimal,
+      expectedLocked: BigDecimal,
+      expectedBalanceChange: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Option[String] =
+    clue(s"alice's balances and wallet history after $action") {
+      eventually() {
+        val balance = aliceWalletClient.balance()
+        balance.unlockedQty shouldBe expectedUnlocked
+        balance.lockedQty shouldBe expectedLocked
+      }
+      checkLockActionHistory(previousEventId, expectedBalanceChange)
+    }
+
   private def testTokenStandardCompat[CId <: ContractId[?], View](
       ops: TokenStandardOps[CId, View]
   ) =
@@ -94,6 +147,14 @@ class GovernanceLockTimeBasedIntegrationTest
       val owner = RichPartyId.local(ownerParty)
 
       aliceWalletClient.tap(lockAmount)
+      val beforeCreate = checkTxHistory(
+        aliceWalletClient,
+        Seq({ case e: BalanceChangeTxLogEntry =>
+          e.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+        }),
+        trafficTopups = IgnoreTopupsDevNet,
+      ).headOption.map(_.eventId)
+      val unlockedAfterTap = aliceWalletClient.balance().unlockedQty
 
       // Create the governance lock via a transfer to the magic party
       val governanceLockCid = ops.createGovernanceLock(
@@ -102,6 +163,13 @@ class GovernanceLockTimeBasedIntegrationTest
         lockKind,
         lockSubject,
         amount = lockAmount,
+      )
+      val beforeUnlock = checkBalancesAndHistory(
+        "creating the lock",
+        beforeCreate,
+        expectedUnlocked = unlockedAfterTap - lockAmount,
+        expectedLocked = lockAmount,
+        expectedBalanceChange = -lockAmount,
       )
 
       clue("the GovernanceLock has the correct kind") {
@@ -125,7 +193,8 @@ class GovernanceLockTimeBasedIntegrationTest
           .loneElement
         cid.contractId shouldBe governanceLockCid.contractId
         ops.transferValues.sender(view) shouldBe ownerParty.toProtoPrimitive
-        ops.transferValues.receiver(view) shouldBe lockManagerParty.toProtoPrimitive
+        ops.transferValues.receiver(view) shouldBe
+          GovernanceLockUtil.lockManagerParty.toProtoPrimitive
         ops.transferValues.amount(view) shouldBe lockAmount
         compareLockMemo(
           ops.transferValues.meta(view).values.get(TokenStandardMetadata.reasonMetaKey),
@@ -161,7 +230,8 @@ class GovernanceLockTimeBasedIntegrationTest
           .data
       vestingLockCid.contractId should not be governanceLockCid.contractId
       ops.transferValues.sender(vestingLockView) shouldBe ownerParty.toProtoPrimitive
-      ops.transferValues.receiver(vestingLockView) shouldBe lockManagerParty.toProtoPrimitive
+      ops.transferValues.receiver(vestingLockView) shouldBe
+        GovernanceLockUtil.lockManagerParty.toProtoPrimitive
       ops.transferValues.amount(vestingLockView) shouldBe lockAmount
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(vestingLock))
       val vestingSpec = vestingLockSpecification(vestingLock)
@@ -174,9 +244,14 @@ class GovernanceLockTimeBasedIntegrationTest
           .disclosedContracts should not be empty
       }
 
-      clue("the amulet remains locked while vesting") {
-        aliceWalletClient.balance().lockedQty shouldBe lockAmount
-      }
+      // The amulet remains locked while vesting
+      val beforePartialWithdraw = checkBalancesAndHistory(
+        "unlocking and starting to vest",
+        beforeUnlock,
+        expectedUnlocked = unlockedAfterTap - lockAmount,
+        expectedLocked = lockAmount,
+        expectedBalanceChange = BigDecimal(0),
+      )
 
       // Advance part of the way into the 2 minute vesting period and withdraw with an explicit
       // withdraw time of 30 seconds into the vesting period
@@ -204,12 +279,18 @@ class GovernanceLockTimeBasedIntegrationTest
       ops.transferValues.sender(remainingVestingLockView) shouldBe ownerParty.toProtoPrimitive
       ops.transferValues.receiver(
         remainingVestingLockView
-      ) shouldBe lockManagerParty.toProtoPrimitive
+      ) shouldBe GovernanceLockUtil.lockManagerParty.toProtoPrimitive
       ops.transferValues.amount(remainingVestingLockView) shouldBe expectedRemainingLockAmount
       checkLockKind(GovernanceLockUtil.getGovernanceLockKind(remainingVestingLock))
       val remainingVestingAmount = BigDecimal(remainingVestingLock.amount)
       remainingVestingAmount shouldBe expectedRemainingLockAmount
-      aliceWalletClient.balance().lockedQty shouldBe expectedRemainingLockAmount
+      val beforeFullWithdraw = checkBalancesAndHistory(
+        "withdrawing the vested funds mid-vesting",
+        beforePartialWithdraw,
+        expectedUnlocked = unlockedAfterTap - expectedRemainingLockAmount,
+        expectedLocked = expectedRemainingLockAmount,
+        expectedBalanceChange = lockAmount - expectedRemainingLockAmount,
+      )
 
       // Advance past the end of the vesting period and withdraw with an explicit withdraw time of
       // the exact end of the vesting period
@@ -228,6 +309,15 @@ class GovernanceLockTimeBasedIntegrationTest
           ownerParty,
           c => isVestingLock(c.data),
         ) shouldBe empty
+      // The vested funds stay in the expired LockedAmulet, which the wallet
+      // still counts as locked, so neither balance changes
+      checkBalancesAndHistory(
+        "withdrawing the fully vested funds",
+        beforeFullWithdraw,
+        expectedUnlocked = unlockedAfterTap - expectedRemainingLockAmount,
+        expectedLocked = expectedRemainingLockAmount,
+        expectedBalanceChange = BigDecimal(0),
+      )
 
       clue("the only LockedAmulet of the owner is the expired LockedAmulet of the vesting lock") {
         val now = getLedgerTime.toInstant
@@ -413,6 +503,19 @@ class GovernanceLockTimeBasedIntegrationTest
         },
       )
 
+      val beforeExpiry = clue("The proposer's wallet history shows the tap and each proposal") {
+        checkTxHistory(
+          aliceWalletClient,
+          Seq.fill[CheckTxHistoryFn](numSubstitutions)({ case e: TransferTxLogEntry =>
+            e.sender.value.amount shouldBe -lockAmount
+          }) :+ { case e: BalanceChangeTxLogEntry =>
+            e.subtype.value shouldBe TxLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+          },
+          trafficTopups = IgnoreTopupsDevNet,
+          ignore = isWalletAutomationBatch,
+        ).headOption.map(_.eventId)
+      }
+
       clue("The substitutions are not yet expired, so the trigger has no work") {
         trigger.runOnce().futureValue shouldBe false
         listLockSubstitutions should have length numSubstitutions.toLong
@@ -447,6 +550,405 @@ class GovernanceLockTimeBasedIntegrationTest
           ) should not be empty
         }
       }
+
+      clue("The proposer's wallet history shows each returned collateral") {
+        checkTxHistory(
+          aliceWalletClient,
+          Seq.fill[CheckTxHistoryFn](numSubstitutions)({ case e: BalanceChangeTxLogEntry =>
+            e.amount shouldBe lockAmount
+          }),
+          previousEventId = beforeExpiry,
+          trafficTopups = IgnoreTopupsDevNet,
+          ignore = isWalletAutomationBatch,
+        )
+      }
+  }
+
+  "a received lock is merged with the receiver's own lock when transferred on, and the final receiver can unlock and withdraw it" in {
+    implicit env =>
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+      val charlieParty = onboardWalletUser(charlieWalletClient, aliceValidatorBackend)
+      val alice = RichPartyId.local(aliceParty)
+      val bob = RichPartyId.local(bobParty)
+      val charlie = RichPartyId.local(charlieParty)
+      val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
+      val bobParticipant = bobValidatorBackend.participantClientWithAdminToken
+      val tapAmount = BigDecimal(100000)
+      val initialAliceLockAmount = BigDecimal(80000)
+      val initialBobLockAmount = BigDecimal(30000)
+      val lockTransferAmount = BigDecimal(50000)
+      val onwardTransferAmount = BigDecimal(60000)
+
+      aliceWalletClient.tap(walletAmuletToUsd(tapAmount))
+      bobWalletClient.tap(walletAmuletToUsd(tapAmount))
+      tsv1Operations.createGovernanceLock(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        initialAliceLockAmount,
+      )
+      tsv1Operations.createGovernanceLock(
+        bobParticipant,
+        bob,
+        lockKind,
+        lockSubject,
+        initialBobLockAmount,
+      )
+      val (aliceLockCid, aliceLock) = governanceLocks(aliceParticipant, aliceParty).loneElement
+
+      val aliceToBobCid = tsv1Operations.transferGovernanceLock(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        bobParty,
+        transferAmount = lockTransferAmount,
+      )
+
+      clue("bob sees the proposal as an incoming transfer of the transferred amount") {
+        eventually() {
+          val (_, view) = listTransferInstructions(bobParticipant, bobParty)
+            .filter(_._1 == aliceToBobCid)
+            .loneElement
+          view.transfer.sender shouldBe aliceParty.toProtoPrimitive
+          view.transfer.receiver shouldBe bobParty.toProtoPrimitive
+          BigDecimal(view.transfer.amount) shouldBe lockTransferAmount
+          compareLockMemo(
+            view.transfer.meta.values.get(TokenStandardMetadata.reasonMetaKey),
+            makeAcceptTransferLockMemo(lockKind, lockSubject),
+          )
+        }
+      }
+
+      clue("Scan's accept context discloses alice's lock") {
+        sv1ScanBackend
+          .getTransferInstructionAcceptContext(aliceToBobCid)
+          .disclosedContracts
+          .map(_.getContractId) should contain(aliceLockCid.contractId)
+      }
+
+      val (_, bobLocks) = actAndCheck(
+        "bob accepts the transfer on his own participant",
+        acceptTransferInstructionV1(bobParticipant, bob, aliceToBobCid),
+      )(
+        "alice keeps the remainder, and bob owns a new lock next to his own",
+        _ => {
+          governanceLocks(aliceParticipant, aliceParty)
+            .map(lock => BigDecimal(lock._2.amount)) shouldBe Seq(
+            initialAliceLockAmount - lockTransferAmount
+          )
+          val bobLocks = governanceLocks(bobParticipant, bobParty)
+          bobLocks.map(lock => BigDecimal(lock._2.amount)) should contain theSameElementsAs
+            Seq(initialBobLockAmount, lockTransferAmount)
+          val (_, receivedLock) =
+            bobLocks.filter(lock => BigDecimal(lock._2.amount) == lockTransferAmount).loneElement
+          receivedLock.specification shouldBe aliceLock.specification
+          receivedLock.originalLockCid.toScala.map(_.contractId) shouldBe
+            Some(aliceToBobCid.contractId)
+          aliceWalletClient.balance().lockedQty shouldBe initialAliceLockAmount - lockTransferAmount
+          bobWalletClient.balance().lockedQty shouldBe initialBobLockAmount + lockTransferAmount
+          bobLocks
+        },
+      )
+
+      val checkAccept: CheckTxHistoryFn = { case entry: TransferTxLogEntry =>
+        entry.subtype.value shouldBe TxLogEntry.TransferTransactionSubtype.TransferInstruction_Accept.toProto
+        entry.sender.value shouldBe PartyAndAmount(aliceParty.toProtoPrimitive, BigDecimal(0))
+        entry.receivers shouldBe Seq(PartyAndAmount(bobParty.toProtoPrimitive, BigDecimal(0)))
+      }
+
+      val checkPropose: CheckTxHistoryFn = { case entry: TransferTxLogEntry =>
+        entry.subtype.value shouldBe TxLogEntry.TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
+        entry.sender.value shouldBe PartyAndAmount(aliceParty.toProtoPrimitive, BigDecimal(0))
+        entry.receivers shouldBe empty
+        entry.transferInstructionReceiver shouldBe
+          GovernanceLockUtil.lockManagerParty.toProtoPrimitive
+        entry.transferInstructionAmount shouldBe Some(BigDecimal(0))
+        compareLockMemo(
+          entry.description,
+          makeInputLockMemo(TransferLock, lockKind, lockSubject)(
+            (Locked, bobParty, lockTransferAmount, None, None)
+          ),
+        )
+      }
+      checkTxHistory(
+        aliceWalletClient,
+        Seq(checkAccept, checkPropose),
+        ignore = isUnrelatedTo(aliceToBobCid),
+      )
+      checkTxHistory(bobWalletClient, Seq(checkAccept), ignore = isUnrelatedTo(aliceToBobCid))
+
+      // Neither of bob's locks alone covers the transferred amount
+      val bobToCharlieCid = tsv1Operations.transferGovernanceLock(
+        bobParticipant,
+        bob,
+        lockKind,
+        lockSubject,
+        charlieParty,
+        transferAmount = onwardTransferAmount,
+      )
+
+      clue("Scan's accept context discloses both of bob's locks") {
+        sv1ScanBackend
+          .getTransferInstructionAcceptContext(bobToCharlieCid)
+          .disclosedContracts
+          .map(_.getContractId) should contain allElementsOf bobLocks.map(_._1.contractId)
+      }
+
+      actAndCheck(
+        "charlie accepts the transfer on a participant that does not host bob",
+        acceptTransferInstructionV1(aliceParticipant, charlie, bobToCharlieCid),
+      )(
+        "bob's locks are merged into the remainder, and charlie owns the transferred amount",
+        _ => {
+          governanceLocks(bobParticipant, bobParty)
+            .map(lock => BigDecimal(lock._2.amount)) shouldBe Seq(
+            initialBobLockAmount + lockTransferAmount - onwardTransferAmount
+          )
+          val (_, charlieLock) = governanceLocks(aliceParticipant, charlieParty).loneElement
+          BigDecimal(charlieLock.amount) shouldBe onwardTransferAmount
+        },
+      )
+
+      val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+      tsv1Operations
+        .unlockGovernanceLock(
+          aliceParticipant,
+          charlie,
+          lockKind,
+          lockSubject,
+          unlockAmount = onwardTransferAmount,
+          vestingStartTime = vestingStartTime,
+          // The lineage of charlie's lock starts at the accepted proposal
+          isValid = _.originalInstructionCid.toScala.exists(
+            _.contractId == bobToCharlieCid.contractId
+          ),
+        )
+        .value
+      val charlieVestingLock = governanceLocks(aliceParticipant, charlieParty).loneElement._2
+
+      advanceTime(vestingDuration.plusSeconds(1))
+
+      actAndCheck(
+        "charlie withdraws the fully vested lock",
+        tsv1Operations.withdrawVestingLock(
+          aliceParticipant,
+          charlie,
+          lockKind,
+          lockSubject,
+          charlieVestingLock,
+          vestedUntilTime = vestingStartTime.plus(vestingDuration),
+        ),
+      )(
+        "charlie has no lock left",
+        _ => governanceLocks(aliceParticipant, charlieParty) shouldBe empty,
+      )
+  }
+
+  "rejected and withdrawn transfers leave the lock unchanged, and a vesting lock can be transferred" in {
+    implicit env =>
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+      val alice = RichPartyId.local(aliceParty)
+      val bob = RichPartyId.local(bobParty)
+      val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
+      val bobParticipant = bobValidatorBackend.participantClientWithAdminToken
+      val tapAmount = BigDecimal(100000)
+      val initialLockAmount = BigDecimal(40000)
+      val vestingTransferAmount = BigDecimal(10000)
+
+      aliceWalletClient.tap(walletAmuletToUsd(tapAmount))
+      val lockCid = tsv1Operations.createGovernanceLock(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        initialLockAmount,
+      )
+
+      def proposeFullTransfer() = tsv1Operations.transferGovernanceLock(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        bobParty,
+        transferAmount = initialLockAmount,
+      )
+
+      def checkClosedAndLockUnchanged(
+          proposalCid: transferinstructionv1.TransferInstruction.ContractId
+      ) = {
+        listTransferInstructions(aliceParticipant, aliceParty).map(_._1) should not contain
+          proposalCid
+        governanceLocks(aliceParticipant, aliceParty).map(_._1.contractId) shouldBe
+          Seq(lockCid.contractId)
+        governanceLocks(bobParticipant, bobParty) shouldBe empty
+      }
+
+      val rejectedCid = proposeFullTransfer()
+      actAndCheck(
+        "bob rejects the transfer",
+        rejectTransferInstructionV1(bobParticipant, bob, rejectedCid),
+      )(
+        "the proposal is archived and alice's lock is unchanged",
+        _ => checkClosedAndLockUnchanged(rejectedCid),
+      )
+
+      val withdrawnCid = proposeFullTransfer()
+      actAndCheck(
+        "alice withdraws the transfer",
+        withdrawTransferInstructionV1(aliceParticipant, alice, withdrawnCid),
+      )(
+        "the proposal is archived and alice's lock is unchanged",
+        _ => checkClosedAndLockUnchanged(withdrawnCid),
+      )
+
+      val (vestingLockCid, _) = tsv1Operations
+        .unlockGovernanceLock(
+          aliceParticipant,
+          alice,
+          lockKind,
+          lockSubject,
+          unlockAmount = initialLockAmount,
+          vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant),
+          isValid = _.originalInstructionCid.toScala.exists(
+            _.contractId == lockCid.contractId
+          ),
+        )
+        .value
+      val (_, vestingLock) = governanceLocks(aliceParticipant, aliceParty).loneElement
+
+      val vestingTransferCid = tsv1Operations.transferVestingLock(vestingLock)(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        bobParty,
+        transferAmount = vestingTransferAmount,
+      )
+
+      actAndCheck(
+        "bob accepts the transfer of part of the vesting lock",
+        acceptTransferInstructionV1(bobParticipant, bob, vestingTransferCid),
+      )(
+        "alice and bob own vesting locks with the same vesting schedule",
+        _ => {
+          val (aliceRemainderCid, aliceRemainder) =
+            governanceLocks(aliceParticipant, aliceParty).loneElement
+          aliceRemainderCid.contractId should not be vestingLockCid.contractId
+          BigDecimal(aliceRemainder.amount) shouldBe initialLockAmount - vestingTransferAmount
+          aliceRemainder.specification shouldBe vestingLock.specification
+          val (_, bobLock) = governanceLocks(bobParticipant, bobParty).loneElement
+          BigDecimal(bobLock.amount) shouldBe vestingTransferAmount
+          bobLock.specification shouldBe vestingLock.specification
+        },
+      )
+  }
+
+  // Demonstrates a race between the amulet owner expiring a locked amulet and
+  // the expire vesting lock automation:
+  //
+  // 1. One of several vesting locks with the same key expires.
+  // 2. Before the trigger archives that lock, the owner expires its
+  //    locked amulet.
+  // 3. The owner proposes a lock transfer for the key.
+  // 4. The receiver tries to accept the transfer, but Scan can't build the
+  //    accept context: the expired lock is still active and points to the
+  //    archived locked amulet.
+  "lock transfer accept context fails if a source LockedAmulet is gone" in { implicit env =>
+    val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+    val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+    val alice = RichPartyId.local(aliceParty)
+    val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
+    val vestingStartTime =
+      truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+
+    aliceWalletClient.tap(walletAmuletToUsd(BigDecimal(100000)))
+    val lockCid = tsv1Operations.createGovernanceLock(
+      aliceParticipant,
+      alice,
+      lockKind,
+      lockSubject,
+      lockAmount,
+    )
+    tsv1Operations
+      .unlockGovernanceLock(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        unlockAmount = lockAmount,
+        vestingStartTime = vestingStartTime,
+        isValid = _.originalInstructionCid.toScala.exists(
+          _.contractId == lockCid.contractId
+        ),
+      )
+      .value
+    val (vestingLockCid, vestingLock) =
+      governanceLocks(aliceParticipant, aliceParty).loneElement
+
+    val (transferCid, _) = actAndCheck(
+      "alice proposes to transfer part of her vesting lock to bob",
+      tsv1Operations.transferVestingLock(vestingLock)(
+        aliceParticipant,
+        alice,
+        lockKind,
+        lockSubject,
+        bobParty,
+        transferAmount = lockAmount / 4,
+      ),
+    )(
+      "Scan's accept context discloses the lock and its LockedAmulet",
+      transferCid =>
+        sv1ScanBackend
+          .getTransferInstructionAcceptContext(transferCid)
+          .disclosedContracts
+          .map(_.getContractId) should contain allOf (
+          vestingLockCid.contractId,
+          vestingLock.lockedAmulet.contractId
+        ),
+    )
+
+    // Past the vesting end time, the owner can release the time-lock of the
+    // LockedAmulet. The paused `ExpireVestingLockTrigger` and
+    // `ExpireGovernanceLockTransferTrigger` keep the lock and the expired
+    // transfer active.
+    advanceTime(vestingDuration.plusSeconds(10))
+    actAndCheck(
+      "alice releases the expired time-lock of the LockedAmulet",
+      ownerExpireLock(aliceParty, vestingLock.lockedAmulet),
+    )(
+      "Scan's accept context fails with the missing LockedAmulet and its lock",
+      _ =>
+        assertThrowsAndLogsCommandFailures(
+          sv1ScanBackend.getTransferInstructionAcceptContext(transferCid),
+          _.errorMessage should include(
+            s"LockedAmulet '${vestingLock.lockedAmulet.contractId}' of " +
+              s"GovernanceLock '${vestingLockCid.contractId}' not found"
+          ),
+        ),
+    )
+  }
+
+  private def governanceLocks(
+      participant: ParticipantClientReference,
+      owner: PartyId,
+  ): Seq[(governancelock.GovernanceLock.ContractId, governancelock.GovernanceLock)] =
+    participant.ledger_api_extensions.acs
+      .filterJava(governancelock.GovernanceLock.COMPANION)(
+        owner,
+        _.data.owner == owner.toProtoPrimitive,
+      )
+      .map(lock => (lock.id, lock.data))
+
+  /** Ignores all wallet history entries that are not about the given transfer instruction */
+  private def isUnrelatedTo(
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
+  ): TxLogEntry => Boolean = {
+    case entry: TransferTxLogEntry => entry.transferInstructionCid != instructionCid.contractId
+    case _ => true
   }
 
   private def listLockSubstitutions(implicit env: SpliceTestConsoleEnvironment) =

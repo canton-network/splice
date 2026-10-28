@@ -337,7 +337,11 @@ class HttpWalletHandler(
           Future.successful(
             installCid
               .exerciseWalletAppInstall_FeaturedAppRights_SelfGrant(
-                amuletRules.contractId
+                amuletRules.contractId,
+                // TODO(#8057): allow setting these fields
+                java.util.Optional.empty(),
+                java.util.Optional.empty(),
+                java.util.Optional.empty(),
               )
               .map(_.exerciseResult.featuredAppRight)
           )

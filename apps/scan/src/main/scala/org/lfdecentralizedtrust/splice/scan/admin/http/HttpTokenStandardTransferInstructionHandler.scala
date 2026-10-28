@@ -463,6 +463,29 @@ class HttpTokenStandardTransferInstructionHandler(
                 substitution.lockedAmulet.toScala,
                 substitution.lockedAmulet.isPresent,
               )
+            // Only the lock transfer accept moves the source locks and call
+            // this with `requireLockedAmulet=true`; reject and withdraw just
+            // archive the proposal
+            case lockTransfer: splice.governancelock.transfer.GovernanceLockTransfer =>
+              if (requireLockedAmulet)
+                util.ChoiceContextBuilder.getGovernanceLockTransferAcceptContext[
+                  DisclosedContract,
+                  ChoiceContext,
+                  Builder,
+                ](
+                  description("GovernanceLockTransfer"),
+                  lockTransfer.source,
+                  store,
+                  contractFetcher,
+                  clock,
+                  newBuilder,
+                )
+              else
+                getGovernanceLockContext(
+                  "GovernanceLockTransfer",
+                  None,
+                  requireLockedAmulet = false,
+                )
             case _ => transferInstructionNotFound(transferInstructionId, Some(contract.identifier))
           }
         case None => transferInstructionNotFound(transferInstructionId, None)

@@ -235,6 +235,8 @@ class RollForwardLsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "roll-forward-lsu",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
       extraSequencerConfig = Seq(
         s"parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=${upgradeTime}",
         s"parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=${upgradeTime}",

@@ -208,6 +208,40 @@ tests:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='AUTH_JWKS_URL')].value
       - notExists:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='AUTH_TARGET_AUDIENCE')].value
+  - it: "does not enable key download by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')]
+  - it: "supports enabling key download"
+    set:
+      enableKeyDownload: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')].value
+          value: canton.parameters.enable-key-download = yes
+  - it: "does not enable repair commands by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS')]
+  - it: "supports enabling repair commands"
+    set:
+      enableRepairCommands: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS')].value
+          value: canton.features.enable-repair-commands = yes
   - it: "pvc creates persistent volume claim and volume mount"
     set:
       pvc:
