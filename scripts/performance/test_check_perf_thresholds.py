@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO(#8088): add real unit tests for scripts/performance; this is only a smoke test
+
 import unittest
 
 import check_perf_thresholds

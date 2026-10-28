@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO(#8092): add real unit tests for the sarif-unused-symbols skill; this is only a smoke test
+
 import unittest
 
 import sarif_unused

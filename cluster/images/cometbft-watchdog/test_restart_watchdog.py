@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO(#8090): add real unit tests for cluster; this is only a smoke test
+
 import importlib.util
 import unittest
 from pathlib import Path

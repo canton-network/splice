@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO(#8086): add real unit tests for scripts/*.py; this is only a smoke test
+
 import importlib.util
 import unittest
 from datetime import timedelta

@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO(#8089): add real unit tests for build-tools; this is only a smoke test
+
 import unittest
 
 import delete_ghcr_package_version

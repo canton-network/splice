@@ -9,7 +9,7 @@
 # Git pathspecs (relative to the repo root) of the Python code that is type
 # checked and unit tested. Not covered: canton/ (vendored) and
 # scripts/scan-txlog (too many strict-mode errors for now).
-# scripts/scan-txlog should be added here once it type checks (issue to be filed).
+# TODO(#8085): type check scripts/scan-txlog and add it here
 python_pathspecs=(
   ':(glob)scripts/*.py'
   'scripts/external-signing/*.py'
