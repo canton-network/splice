@@ -516,10 +516,8 @@ class SV1Initializer(
                 mediatorState,
               ) <- (
                 for {
-                  participantIdentity <- participantAdminConnection.getIdentityTransactions(
-                    participantId.uid,
-                    TopologyStoreId.Authorized,
-                  )
+                  participantIdentity <- participantAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
                   mediatorIdentity <- synchronizerNode.mediatorAdminConnection
                     .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
                   sequencerIdentity <- synchronizerNode.sequencerAdminConnection
