@@ -15,6 +15,7 @@ import {
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
+  installSequencerParticipantRegistrationAlert,
 } from './gcpAlerts';
 import { istioMonitoring } from './istio';
 import { configureObservability } from './observability';
@@ -59,6 +60,9 @@ if (enableAlerts && !clusterIsResetPeriodically) {
     }
     installGcpQuotaAlerts(notificationChannel, monitoringConfig.alerting.alerts.gcpQuotas);
     installCloudSqlTxIdUtilizationAlert(notificationChannel);
+    if (monitoringConfig.alerting.alerts.sequencerParticipantRegistration.enabled) {
+      installSequencerParticipantRegistrationAlert(notificationChannel);
+    }
     installNatAlerts(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
   }
 }
