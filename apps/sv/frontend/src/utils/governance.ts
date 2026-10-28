@@ -69,9 +69,9 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
-  { name: 'Update Featured Application', value: 'SRARC_UpdateFeaturedAppRight' },
+{ name: 'Update Featured Application Metadata (before Splice 0.10.0)', value: 'SRARC_UpdateFeaturedAppRight' },
   {
-    name: 'Amend Featured Application Configuration',
+    name: 'Update Featured Application Metadata (since Splice 0.10.0)',
     value: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
   },
   {
