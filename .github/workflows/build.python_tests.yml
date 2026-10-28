@@ -44,6 +44,12 @@ jobs:
           cache_version: 10
           test_name: python_tests
 
+      - name: Type check Python
+        if: steps.skip.outputs.skip != 'true'
+        uses: ./.github/actions/nix/run
+        with:
+          cmd: ./scripts/check-python-types.sh
+
       # Not part of static_tests, because this executes the code under test.
       - name: Run Python unit tests
         if: steps.skip.outputs.skip != 'true'

@@ -135,32 +135,12 @@ let
     pigz
     pre-commit
     python3
-    python3Packages.aiohttp
-    python3Packages.auth0-python
-    python3Packages.colorlog
     python3Packages.dockerfile-parse
-    python3Packages.gitpython
-    python3Packages.jsonpickle
-    python3Packages.kubernetes
-    python3Packages.mypy
-    python3Packages.prometheus-client
-    python3Packages.pycryptodome
-    python3Packages.pydantic
-    python3Packages.pygithub
-    python3Packages.pyjwt
-    python3Packages.pyyaml
-    python3Packages.requests
-    python3Packages.rich
-    python3Packages.semver
-    python3Packages.types-docutils
-    python3Packages.types-pyyaml
-    python3Packages.types-requests
     ripgrep
     sbt
     scala_2_13
     shellcheck
     skopeo
-    sphinx
     which
   ] ++ linuxOnly;
 
