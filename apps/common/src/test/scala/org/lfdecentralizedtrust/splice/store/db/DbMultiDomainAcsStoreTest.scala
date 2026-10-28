@@ -783,6 +783,7 @@ class DbMultiDomainAcsStoreTest
         filter,
         testTxLogConfig,
         migrationId,
+        d1,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

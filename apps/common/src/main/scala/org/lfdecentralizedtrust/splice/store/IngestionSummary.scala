@@ -6,10 +6,6 @@ package org.lfdecentralizedtrust.splice.store
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.ledger.javaapi.data.{CreatedEvent, ExercisedEvent}
 import com.daml.metrics.api.MetricsContext
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{
-  ContractStateEvent,
-  ReassignmentId,
-}
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.Pretty
@@ -26,13 +22,9 @@ final case class IngestionSummary(
     numFilteredCreatedEvents: Int,
     ingestedArchivedEvents: Vector[ExercisedEvent],
     numFilteredArchivedEvents: Int,
-    updatedContractStates: Vector[ContractStateEvent],
-    addedAssignEvents: Vector[(ContractId[?], ReassignmentId)],
     numFilteredAssignEvents: Int,
-    removedAssignEvents: Vector[(ContractId[?], ReassignmentId)],
-    addedUnassignEvents: Vector[(ContractId[?], ReassignmentId)],
+    ingestedUnassignEvents: Vector[ContractId[?]],
     numFilteredUnassignEvents: Int,
-    removedUnassignEvents: Vector[(ContractId[?], ReassignmentId)],
     prunedContracts: Vector[ContractId[?]],
     ingestedTxLogEntries: Seq[(String3, String)],
 )
@@ -45,16 +37,12 @@ private[store] object IngestionSummary {
     synchronizerIdToRecordTime = Map.empty,
     acsSizeDiff = 0,
     ingestedCreatedEvents = Vector.empty,
-    updatedContractStates = Vector.empty,
     numFilteredCreatedEvents = 0,
     ingestedArchivedEvents = Vector.empty,
     numFilteredArchivedEvents = 0,
-    addedAssignEvents = Vector.empty,
     numFilteredAssignEvents = 0,
-    removedAssignEvents = Vector.empty,
-    addedUnassignEvents = Vector.empty,
+    ingestedUnassignEvents = Vector.empty,
     numFilteredUnassignEvents = 0,
-    removedUnassignEvents = Vector.empty,
     prunedContracts = Vector.empty,
     ingestedTxLogEntries = Seq.empty,
   )
@@ -75,13 +63,9 @@ private[store] object IngestionSummary {
       paramIfNonZero("numFilteredCreatedEvents", _.numFilteredCreatedEvents),
       paramIfNonEmpty("ingestedArchivedEvents", _.ingestedArchivedEvents),
       paramIfNonZero("numFilteredArchivedEvents", _.numFilteredArchivedEvents),
-      paramIfNonEmpty("updatedContractStates", _.updatedContractStates),
-      paramIfNonEmpty("addedAssignEvents", _.addedAssignEvents),
       paramIfNonZero("numFilteredAssignEvents", _.numFilteredAssignEvents),
-      paramIfNonEmpty("removedAssignEvents", _.removedAssignEvents),
-      paramIfNonEmpty("addedUnassignEvents", _.addedUnassignEvents),
+      paramIfNonEmpty("ingestedUnassignEvents", _.ingestedUnassignEvents),
       paramIfNonZero("numFilteredUnassignEvents", _.numFilteredUnassignEvents),
-      paramIfNonEmpty("removedUnassignEvents", _.removedUnassignEvents),
       paramIfNonEmpty("prunedContracts", _.prunedContracts),
       paramIfNonEmpty(
         "ingestedTxLogEntries",
@@ -91,13 +75,6 @@ private[store] object IngestionSummary {
       ),
     )
   }
-
-  private[this] implicit def prettyReassignmentId: Pretty[ReassignmentId] =
-    prettyNode(
-      "ReassignmentId",
-      param("source", _.source),
-      param[ReassignmentId, String]("id", _.id)(prettyString),
-    )
 }
 
 /** Like [[IngestionSummary]], but with all fields mutable to simplify collecting the content from helper methods */
@@ -107,17 +84,14 @@ case class MutableIngestionSummary(
     var numFilteredCreatedEvents: Int,
     ingestedArchivedEvents: mutable.ArrayBuffer[ExercisedEvent],
     var numFilteredArchivedEvents: Int,
-    updatedContractStates: mutable.ArrayBuffer[ContractStateEvent],
-    addedAssignEvents: mutable.ArrayBuffer[(ContractId[?], ReassignmentId)],
     var numFilteredAssignEvents: Int,
-    removedAssignEvents: mutable.ArrayBuffer[(ContractId[?], ReassignmentId)],
-    addedUnassignEvents: mutable.ArrayBuffer[(ContractId[?], ReassignmentId)],
+    ingestedUnassignEvents: mutable.ArrayBuffer[ContractId[?]],
     var numFilteredUnassignEvents: Int,
-    removedUnassignEvents: mutable.ArrayBuffer[(ContractId[?], ReassignmentId)],
     prunedContracts: mutable.ArrayBuffer[ContractId[?]],
     ingestedTxLogEntries: mutable.ArrayBuffer[(String3, String)],
 ) {
-  def acsSizeDiff: Int = ingestedCreatedEvents.size - ingestedArchivedEvents.size
+  def acsSizeDiff: Int =
+    ingestedCreatedEvents.size - ingestedArchivedEvents.size - ingestedUnassignEvents.size
 
   def toIngestionSummary(
       synchronizerIdToRecordTime: Map[SynchronizerId, CantonTimestamp],
@@ -153,13 +127,9 @@ case class MutableIngestionSummary(
       numFilteredCreatedEvents = this.numFilteredCreatedEvents,
       ingestedArchivedEvents = this.ingestedArchivedEvents.toVector,
       numFilteredArchivedEvents = this.numFilteredArchivedEvents,
-      updatedContractStates = this.updatedContractStates.toVector,
-      addedAssignEvents = this.addedAssignEvents.toVector,
       numFilteredAssignEvents = this.numFilteredAssignEvents,
-      removedAssignEvents = this.removedAssignEvents.toVector,
-      addedUnassignEvents = this.addedUnassignEvents.toVector,
+      ingestedUnassignEvents = this.ingestedUnassignEvents.toVector,
       numFilteredUnassignEvents = this.numFilteredUnassignEvents,
-      removedUnassignEvents = this.removedUnassignEvents.toVector,
       prunedContracts = Vector.empty,
       ingestedTxLogEntries = this.ingestedTxLogEntries.toSeq,
     )
@@ -168,18 +138,14 @@ case class MutableIngestionSummary(
 
 object MutableIngestionSummary {
   def empty: MutableIngestionSummary = MutableIngestionSummary(
-    mutable.ArrayBuffer.empty,
-    0,
-    mutable.ArrayBuffer.empty,
-    0,
-    mutable.ArrayBuffer.empty,
-    mutable.ArrayBuffer.empty,
-    0,
-    mutable.ArrayBuffer.empty,
-    mutable.ArrayBuffer.empty,
-    0,
-    mutable.ArrayBuffer.empty,
-    mutable.ArrayBuffer.empty,
-    mutable.ArrayBuffer.empty,
+    ingestedCreatedEvents = mutable.ArrayBuffer.empty,
+    numFilteredCreatedEvents = 0,
+    ingestedArchivedEvents = mutable.ArrayBuffer.empty,
+    numFilteredArchivedEvents = 0,
+    numFilteredAssignEvents = 0,
+    ingestedUnassignEvents = mutable.ArrayBuffer.empty,
+    numFilteredUnassignEvents = 0,
+    prunedContracts = mutable.ArrayBuffer.empty,
+    ingestedTxLogEntries = mutable.ArrayBuffer.empty,
   )
 }

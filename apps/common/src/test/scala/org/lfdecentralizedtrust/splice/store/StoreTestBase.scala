@@ -1287,45 +1287,53 @@ abstract class StoreTestBase
       incompleteIn: Seq[StoreTestBase.AcsImportIncompleteEntry] = Seq.empty,
       acsOffset: Long = nextOffset(),
   )(implicit store: MultiDomainAcsStore): Future[Unit] = for {
-    _ <- store.testIngestionSink.ingestAcs(
+    _ <- store.testIngestionSink.ingestAcsStreamInBatches(
+      Source.single(
+        acs.map[BaseLedgerConnection.ActiveContractsItem](entry =>
+          BaseLedgerConnection.ActiveContractsItem.ActiveContract(
+            acsImportEntryToActiveContract(entry)
+          )
+        ) ++ incompleteOut.map {
+          case StoreTestBase.AcsImportIncompleteEntry(
+                c,
+                sourceDomain,
+                targetDomain,
+                tfid,
+                counter,
+                implementedInterfaces,
+              ) =>
+            BaseLedgerConnection.ActiveContractsItem.IncompleteUnassign(
+              toIncompleteUnassign(
+                c,
+                tfid,
+                sourceDomain,
+                targetDomain,
+                counter,
+                implementedInterfaces,
+              )
+            )
+        } ++ incompleteIn.map {
+          case StoreTestBase.AcsImportIncompleteEntry(
+                c,
+                sourceDomain,
+                targetDomain,
+                tfid,
+                counter,
+                implementedInterfaces,
+              ) =>
+            BaseLedgerConnection.ActiveContractsItem.IncompleteAssign(
+              toIncompleteAssign(
+                c,
+                tfid,
+                sourceDomain,
+                targetDomain,
+                counter,
+                implementedInterfaces,
+              )
+            )
+        }
+      ),
       acsOffset,
-      acs.map(acsImportEntryToActiveContract),
-      incompleteOut.map {
-        case StoreTestBase.AcsImportIncompleteEntry(
-              c,
-              sourceDomain,
-              targetDomain,
-              tfid,
-              counter,
-              implementedInterfaces,
-            ) =>
-          toIncompleteUnassign(
-            c,
-            tfid,
-            sourceDomain,
-            targetDomain,
-            counter,
-            implementedInterfaces,
-          )
-      },
-      incompleteIn.map {
-        case StoreTestBase.AcsImportIncompleteEntry(
-              c,
-              sourceDomain,
-              targetDomain,
-              tfid,
-              counter,
-              implementedInterfaces,
-            ) =>
-          toIncompleteAssign(
-            c,
-            tfid,
-            sourceDomain,
-            targetDomain,
-            counter,
-            implementedInterfaces,
-          )
-      },
     )
   } yield ()
 

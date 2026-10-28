@@ -45,6 +45,7 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{AcsStoreId, SelectFr
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsJdbcTypes,
   AcsQueries,
+  SingleSynchronizerAcsQueries,
   AcsTables,
   DbAppStore,
   StoreDescriptor,
@@ -88,6 +89,7 @@ object DbSvDsoStore {
       outerLoggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -111,6 +113,7 @@ object DbSvDsoStore {
           outerLoggerFactory = outerLoggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,
@@ -151,6 +154,7 @@ class DbSvDsoStore private (
     override protected val outerLoggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -168,11 +172,12 @@ class DbSvDsoStore private (
         DbSvDsoStore.acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
     )
     with SvDsoStore
     with AcsTables
-    with AcsQueries
+    with SingleSynchronizerAcsQueries
     with AcsJdbcTypes
     with DbVotesAcsStoreQueryBuilder
     with LimitHelpers {
@@ -407,7 +412,7 @@ class DbSvDsoStore private (
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[AppRewardCoupon.ContractId, AppRewardCoupon]]] =
-    listRewardCouponsOnDomain(AppRewardCoupon.COMPANION, round, synchronizerId, limit)
+    listRewardCouponsOnDomain(AppRewardCoupon.COMPANION, round, limit)
 
   override def sumAppRewardCouponsOnDomain(round: Long, synchronizerId: SynchronizerId)(implicit
       tc: TraceContext
@@ -418,7 +423,6 @@ class DbSvDsoStore private (
               sum(case app_reward_is_featured when true then 0 else reward_amount end)""",
       PackageQualifiedName.fromJavaCodegenCompanion(AppRewardCoupon.COMPANION),
       round,
-      synchronizerId,
     )
   } yield sums.headOption
     .map { case (featured, unfeatured) =>
@@ -433,7 +437,7 @@ class DbSvDsoStore private (
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorRewardCoupon.ContractId, ValidatorRewardCoupon]]] =
-    listRewardCouponsOnDomain(ValidatorRewardCoupon.COMPANION, round, synchronizerId, limit)
+    listRewardCouponsOnDomain(ValidatorRewardCoupon.COMPANION, round, limit)
 
   override def sumValidatorRewardCouponsOnDomain(round: Long, synchronizerId: SynchronizerId)(
       implicit tc: TraceContext
@@ -442,7 +446,6 @@ class DbSvDsoStore private (
       sql"select sum(reward_amount)",
       PackageQualifiedName.fromJavaCodegenCompanion(ValidatorRewardCoupon.COMPANION),
       round,
-      synchronizerId,
     ).map(_.headOption.flatten.getOrElse(BigDecimal(0)))
 
   override def listValidatorFaucetCouponsOnDomain(
@@ -452,7 +455,7 @@ class DbSvDsoStore private (
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorFaucetCoupon.ContractId, ValidatorFaucetCoupon]]] =
-    listRewardCouponsOnDomain(ValidatorFaucetCoupon.COMPANION, round, synchronizerId, limit)
+    listRewardCouponsOnDomain(ValidatorFaucetCoupon.COMPANION, round, limit)
 
   override def listValidatorLivenessActivityRecordsOnDomain(
       round: Long,
@@ -466,7 +469,6 @@ class DbSvDsoStore private (
     listRewardCouponsOnDomain(
       ValidatorLivenessActivityRecord.COMPANION,
       round,
-      synchronizerId,
       limit,
     )
 
@@ -477,7 +479,7 @@ class DbSvDsoStore private (
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[SvRewardCoupon.ContractId, SvRewardCoupon]]] =
-    listRewardCouponsOnDomain(SvRewardCoupon.COMPANION, round, synchronizerId, limit)
+    listRewardCouponsOnDomain(SvRewardCoupon.COMPANION, round, limit)
 
   override protected def listClosedMiningRoundsWithoutCouponsOnDomain(
       domain: SynchronizerId,
@@ -508,7 +510,6 @@ class DbSvDsoStore private (
                   and rc.template_id_qualified_name = ${pqn.qualifiedName}
                   and rc.reward_round = cr.mining_round
                   and rc.reward_party is not null
-                  and rc.assigned_domain = $domain
               )"""
       }
       .reduce((a, b) => (a ++ b).toActionBuilder)
@@ -524,7 +525,6 @@ class DbSvDsoStore private (
                      and cr.migration_id = $domainMigrationId
                      and cr.package_name = ${closedRoundPqn.packageName}
                      and cr.template_id_qualified_name = ${closedRoundPqn.qualifiedName}
-                     and cr.assigned_domain = $domain
                 """ ++ notExistsClauses ++ sql"""
                    order by cr.event_number
                    limit ${sqlLimit(limit)}
@@ -542,7 +542,6 @@ class DbSvDsoStore private (
     sql"select count(*)",
     PackageQualifiedName.fromJavaCodegenCompanion(ValidatorFaucetCoupon.COMPANION),
     round,
-    synchronizerId,
   ).map(_.headOption.flatten.getOrElse(0L))
 
   override def countValidatorLivenessActivityRecordsOnDomain(
@@ -554,7 +553,6 @@ class DbSvDsoStore private (
     sql"select count(*)",
     PackageQualifiedName.fromJavaCodegenCompanion(ValidatorLivenessActivityRecord.COMPANION),
     round,
-    synchronizerId,
   ).map(_.headOption.flatten.getOrElse(0L))
 
   override def sumSvRewardCouponWeightsOnDomain(round: Long, synchronizerId: SynchronizerId)(
@@ -563,13 +561,11 @@ class DbSvDsoStore private (
     sql"select sum(reward_weight)",
     PackageQualifiedName.fromJavaCodegenCompanion(SvRewardCoupon.COMPANION),
     round,
-    synchronizerId,
   ).map(_.headOption.flatten.getOrElse(0L))
 
   private def listRewardCouponsOnDomain[C, TCId <: ContractId[?], T](
       companion: C,
       round: Long,
-      synchronizerId: SynchronizerId,
       limit: Limit,
   )(implicit
       companionClass: ContractCompanion[C, TCId, T],
@@ -579,7 +575,6 @@ class DbSvDsoStore private (
       sql"select #${SelectFromAcsTableResult.sqlColumnsCommaSeparated()}",
       companionClass.packageQualifiedName(companion),
       round,
-      synchronizerId,
       limit = limit,
     ).map(_.map(contractFromRow(companion)(_)))
   }
@@ -588,7 +583,6 @@ class DbSvDsoStore private (
       selectClause: SQLActionBuilder,
       packageQualifiedName: PackageQualifiedName,
       round: Long,
-      synchronizerId: SynchronizerId,
       limit: Limit = defaultLimit,
   )(implicit
       tc: TraceContext
@@ -605,7 +599,6 @@ class DbSvDsoStore private (
                      and migration_id = $domainMigrationId
                      and package_name = ${packageQualifiedName.packageName}
                      and template_id_qualified_name = ${packageQualifiedName.qualifiedName}
-                     and assigned_domain = $synchronizerId
                      and reward_round = $round
                      and reward_party is not null -- otherwise index is not used
                    limit ${sqlLimit(limit)}
@@ -627,7 +620,6 @@ class DbSvDsoStore private (
   ): Future[Seq[RoundBatch[Contract[AppRewardCoupon.ContractId, AppRewardCoupon]]]] =
     listCouponsGroupedByRound(
       AppRewardCoupon.COMPANION,
-      domain,
       batchSize,
       numBatches,
       ignoredParties,
@@ -643,7 +635,6 @@ class DbSvDsoStore private (
   ): Future[Seq[RoundBatch[Contract[ValidatorRewardCoupon.ContractId, ValidatorRewardCoupon]]]] =
     listCouponsGroupedByRound(
       ValidatorRewardCoupon.COMPANION,
-      domain,
       batchSize,
       numBatches,
       ignoredParties,
@@ -659,7 +650,6 @@ class DbSvDsoStore private (
   ): Future[Seq[RoundBatch[Contract[ValidatorFaucetCoupon.ContractId, ValidatorFaucetCoupon]]]] =
     listCouponsGroupedByRound(
       ValidatorFaucetCoupon.COMPANION,
-      domain,
       batchSize,
       numBatches,
       ignoredParties,
@@ -677,7 +667,6 @@ class DbSvDsoStore private (
   ]]] =
     listCouponsGroupedByRound(
       ValidatorLivenessActivityRecord.COMPANION,
-      domain,
       batchSize,
       numBatches,
       ignoredParties,
@@ -693,7 +682,6 @@ class DbSvDsoStore private (
   ): Future[Seq[RoundBatch[Contract[SvRewardCoupon.ContractId, SvRewardCoupon]]]] =
     listCouponsGroupedByRound(
       SvRewardCoupon.COMPANION,
-      domain,
       batchSize,
       numBatches,
       ignoredParties,
@@ -701,7 +689,6 @@ class DbSvDsoStore private (
 
   private def listCouponsGroupedByRound[C, TCId <: ContractId[?], T](
       companion: C,
-      domain: SynchronizerId,
       batchSize: Limit,
       numBatches: Limit,
       ignoredParties: Set[PartyId],
@@ -740,7 +727,6 @@ class DbSvDsoStore private (
                     and migration_id = $domainMigrationId
                     and package_name = ${packageQualifiedName.packageName}
                     and template_id_qualified_name = ${packageQualifiedName.qualifiedName}
-                    and assigned_domain = $domain
                     and reward_party is not null -- otherwise index is not used
                     and reward_round is not null -- otherwise index is not used
                     """ ++ partyFilter ++ sql"""
@@ -780,7 +766,6 @@ class DbSvDsoStore private (
                   domainMigrationId,
                   ClosedMiningRound.COMPANION,
                   additionalWhere = sql"""
-                    and assigned_domain = ${dsoRules.domain}
                     and mining_round is not null""",
                   orderLimit = sql"""order by mining_round limit 1""",
                 ).headOption,
@@ -872,11 +857,11 @@ class DbSvDsoStore private (
       result <- storage
         .query(
           (sql"""
-             select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+             select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated(
               "sample."
             )}
              from (
-               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+               select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated()}
                from #${DsoTables.acsTableName} acs
                where acs.store_id = $acsStoreId
                  and acs.migration_id = $domainMigrationId
@@ -889,7 +874,7 @@ class DbSvDsoStore private (
              ) sample
              order by random()
              limit ${sqlLimit(limit)}
-           """).as[AcsQueries.SelectFromAcsTableWithStateResult],
+           """).as[AcsQueries.SelectFromAcsTableResult],
           "listProcessRewardsV2Sample",
         )
       limited = applyLimit("listProcessRewardsV2Sample", limit, result)
@@ -1314,7 +1299,6 @@ class DbSvDsoStore private (
               domainMigrationId,
               splice.amuletallocation.AmuletAllocation.COMPANION,
               additionalWhere = (sql"""
-                and assigned_domain = $synchronizerId
                 and acs.contract_expires_at < ${now}
               """ ++ filterClause).toActionBuilder,
               orderLimit = sql"""limit ${sqlLimit(limit)}""",
@@ -1359,7 +1343,6 @@ class DbSvDsoStore private (
               domainMigrationId,
               splice.governancelock.transfer.GovernanceLockTransfer.COMPANION,
               additionalWhere = (sql"""
-                and assigned_domain = $synchronizerId
                 and acs.contract_expires_at < ${now}
               """ ++ filterClause).toActionBuilder,
               orderLimit = sql"""limit ${sqlLimit(limit)}""",
@@ -1409,7 +1392,6 @@ class DbSvDsoStore private (
               domainMigrationId,
               splice.governancelock.substitution.GovernanceLockSubstitution.COMPANION,
               additionalWhere = (sql"""
-                and assigned_domain = $synchronizerId
                 and acs.contract_expires_at < ${now}
               """ ++ filterClause).toActionBuilder,
               orderLimit = sql"""limit ${sqlLimit(limit)}""",
@@ -1455,7 +1437,6 @@ class DbSvDsoStore private (
               domainMigrationId,
               splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
               additionalWhere = (sql"""
-                and assigned_domain = $synchronizerId
                 and acs.contract_expires_at < ${now}
               """ ++ filterClause).toActionBuilder,
               orderLimit = sql"""limit ${sqlLimit(limit)}""",
@@ -1500,7 +1481,6 @@ class DbSvDsoStore private (
               domainMigrationId,
               splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION,
               additionalWhere = (sql"""
-                and assigned_domain = $synchronizerId
                 and acs.contract_expires_at < ${now}
               """ ++ filterClause).toActionBuilder,
               orderLimit = sql"""limit ${sqlLimit(limit)}""",
@@ -1531,7 +1511,6 @@ class DbSvDsoStore private (
               domainMigrationId,
               companion,
               additionalWhere = (sql"""
-                and assigned_domain = $synchronizerId
                 and acs.amulet_round_of_expiry <= (
                   select mining_round - 2
                   from dso_acs_store
@@ -2019,13 +1998,12 @@ class DbSvDsoStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             DsoTables.acsTableName,
             acsStoreId,
             domainMigrationId,
             AnsEntry.COMPANION,
             where = sql"""ans_entry_name = ${lengthLimited(name)}
-                      and assigned_domain is not null
                       and acs.contract_expires_at >= $now""",
             orderLimit = sql"limit 1",
           ).headOption,
@@ -2049,13 +2027,12 @@ class DbSvDsoStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             DsoTables.acsTableName,
             acsStoreId,
             domainMigrationId,
             SubscriptionInitialPayment.COMPANION,
-            where = sql"""contract_id = $paymentCid
-                      and assigned_domain is not null""",
+            where = sql"""contract_id = $paymentCid""",
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupSubscriptionInitialPaymentWithOffset",
@@ -2078,13 +2055,12 @@ class DbSvDsoStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             DsoTables.acsTableName,
             acsStoreId,
             domainMigrationId,
             FeaturedAppRight.COMPANION,
-            where = sql"""featured_app_right_provider = $providerPartyId
-                      and assigned_domain is not null""",
+            where = sql"""featured_app_right_provider = $providerPartyId""",
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupFeaturedAppRightWithOffset",
@@ -2122,11 +2098,11 @@ class DbSvDsoStore private (
           synchronizerId <- getDsoRules().map(_.domain)
           result <- storage.query(
             (sql"""
-          select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+          select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated(
                 "sample."
               )}
           from (
-            select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+            select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated()}
             from #${DsoTables.acsTableName} acs
             where acs.store_id = $acsStoreId
               and acs.migration_id = $domainMigrationId
@@ -2134,7 +2110,6 @@ class DbSvDsoStore private (
               and acs.template_id_qualified_name = ${QualifiedName(
                 splice.governancelock.GovernanceLock.TEMPLATE_ID_WITH_PACKAGE_ID
               )}
-              and acs.assigned_domain = $synchronizerId
               and acs.governance_lock_type = ${GovernanceLockUtil.StoreTypeAndKind.provisionalFeaturedApp.storeValue}
               and exists (
                 select 1
@@ -2145,7 +2120,6 @@ class DbSvDsoStore private (
                   and fa_right.template_id_qualified_name = ${QualifiedName(
                 FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
               )}
-                  and fa_right.assigned_domain is not null
                   and fa_right.featured_app_right_provider = acs.governance_lock_subject
               )
               """ ++ filterClause ++ sql"""
@@ -2153,7 +2127,7 @@ class DbSvDsoStore private (
           ) sample
           order by random()
           limit ${sqlLimit(limit)}
-          """).toActionBuilder.as[AcsQueries.SelectFromAcsTableWithStateResult],
+          """).toActionBuilder.as[AcsQueries.SelectFromAcsTableResult],
             "listProvisionalGovernanceLocksWithFeaturedAppRightSample",
           )
         } yield result.map(
@@ -2202,8 +2176,7 @@ class DbSvDsoStore private (
                   acsStoreId,
                   domainMigrationId,
                   ClosedMiningRound.COMPANION,
-                  where =
-                    (sql"""assigned_domain = $synchronizerId AND """ ++ roundNumbersClause).toActionBuilder,
+                  where = roundNumbersClause.toActionBuilder,
                   orderLimit = sql"""limit ${sqlLimit(limit)}""",
                 ),
                 "listClosedRounds",
@@ -2320,7 +2293,7 @@ class DbSvDsoStore private (
       (for {
         resultWithOffset <- storage
           .querySingle(
-            selectFromAcsTableWithStateAndOffset(
+            selectFromAcsTableWithOffset(
               DsoTables.acsTableName,
               acsStoreId,
               domainMigrationId,

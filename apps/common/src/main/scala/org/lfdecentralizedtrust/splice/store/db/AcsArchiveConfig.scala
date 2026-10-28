@@ -14,14 +14,11 @@ case class AcsArchiveConfig(
 
 object AcsArchiveConfig {
 
-  /** Default base columns matching acs_store_template (18 columns). */
+  /** Default base columns matching acs_store_template (11 columns). */
   val defaultBaseColumns: String =
     "store_id, migration_id, event_number, contract_id, " +
       "template_id_package_id, template_id_qualified_name, package_name, " +
-      "create_arguments, created_event_blob, created_at, contract_expires_at, " +
-      "state_number, assigned_domain, reassignment_counter, " +
-      "reassignment_target_domain, reassignment_source_domain, " +
-      "reassignment_submitter, reassignment_unassign_id"
+      "create_arguments, created_event_blob, created_at, contract_expires_at"
 
   def withIndexColumns(
       archiveTableName: String,
