@@ -249,7 +249,7 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
         "alice-participant",
         "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
         "EXTRA_PARTICIPANT_DB" -> oldParticipantDb,
-        "EXTRA_PARTICIPANT_IDENTIFIER" -> aliceValidatorParticipantNameHint,
+        "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
       ) {
         aliceValidatorBackend.startSync()
         val aliceValidatorWalletParty =

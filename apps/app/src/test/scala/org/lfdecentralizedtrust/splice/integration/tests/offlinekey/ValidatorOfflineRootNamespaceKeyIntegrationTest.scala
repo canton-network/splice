@@ -92,7 +92,7 @@ class ValidatorOfflineRootNamespaceKeyIntegrationTest
       "aliceValidatorExtra",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> "alice_participant_offline_key_2",
-      "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidator",
+      "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
     ) {
       clue("participant starts and works normally") {
         aliceValidatorBackend.startSync()

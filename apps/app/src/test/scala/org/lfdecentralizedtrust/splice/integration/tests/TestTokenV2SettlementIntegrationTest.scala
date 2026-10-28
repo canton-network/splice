@@ -199,7 +199,7 @@ class TestTokenV2SettlementIntegrationTest
       "test_token_v2_settlement",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> ttAdminValidator.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> dbName,
-      "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
+      "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(ttAdminValidator),
     ) {
       withValidatorsInitializedForTest { () =>
         val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)

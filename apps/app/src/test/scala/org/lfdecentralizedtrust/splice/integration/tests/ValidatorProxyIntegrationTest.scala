@@ -51,7 +51,7 @@ class ValidatorProxyIntegrationTest
           "validator-proxy-test",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
-          "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorLocalBackend),
           "JAVA_TOOL_OPTIONS" -> props.toJvmOptionString,
         ) {
           aliceValidatorLocalBackend.startSync()
@@ -134,7 +134,7 @@ class ValidatorProxyIntegrationTest
           "validator-proxy-nonproxy-hosts-test",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
-          "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorLocalBackend),
           "JAVA_TOOL_OPTIONS" -> props.toJvmOptionString,
         ) {
           aliceValidatorLocalBackend.startSync()

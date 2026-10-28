@@ -42,7 +42,7 @@ class WalletSurviveCantonRestartIntegrationTest
           "wallet-survive-canton-restarts-1",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
-          "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorLocalBackend),
         ) {
           aliceValidatorLocalBackend.startSync()
           actAndCheck(
@@ -67,7 +67,7 @@ class WalletSurviveCantonRestartIntegrationTest
           "wallet-survive-canton-restarts-2",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
-          "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorLocalBackend),
         ) {
           clue("We can tap and list after Canton restart and domain reconnection") {
             loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
