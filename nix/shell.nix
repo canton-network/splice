@@ -73,7 +73,9 @@ let
     python3Packages.jsonpickle
     python3Packages.kubernetes
     python3Packages.marshmallow-dataclass
+    python3Packages.mypy
     python3Packages.polib
+    python3Packages.prometheus-client
     python3Packages.pydantic
     python3Packages.pygithub
     python3Packages.pyjwt
@@ -89,6 +91,9 @@ let
     python3Packages.sphinx-copybutton
     python3Packages.sphinxcontrib-openapi
     python3Packages.sphinx-autobuild
+    python3Packages.types-docutils
+    python3Packages.types-pyyaml
+    python3Packages.types-requests
     python3Packages.waitress
     python3.pkgs.pip  # TODO(DACH-NY/canton-network-internal#565): Remove this once we switch to poetry
     python3.pkgs.sphinx-reredirects
@@ -130,12 +135,32 @@ let
     pigz
     pre-commit
     python3
+    python3Packages.aiohttp
+    python3Packages.auth0-python
+    python3Packages.colorlog
     python3Packages.dockerfile-parse
+    python3Packages.gitpython
+    python3Packages.jsonpickle
+    python3Packages.kubernetes
+    python3Packages.mypy
+    python3Packages.prometheus-client
+    python3Packages.pycryptodome
+    python3Packages.pydantic
+    python3Packages.pygithub
+    python3Packages.pyjwt
+    python3Packages.pyyaml
+    python3Packages.requests
+    python3Packages.rich
+    python3Packages.semver
+    python3Packages.types-docutils
+    python3Packages.types-pyyaml
+    python3Packages.types-requests
     ripgrep
     sbt
     scala_2_13
     shellcheck
     skopeo
+    sphinx
     which
   ] ++ linuxOnly;
 
