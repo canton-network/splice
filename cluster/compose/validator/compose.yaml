@@ -178,12 +178,12 @@ services:
       - ${DOCKER_NETWORK:-splice_validator}
 
   nginx:
-    image: "nginx:${NGINX_VERSION}"
+    image: "nginx/nginx-unprivileged:${NGINX_VERSION}"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./nginx:/etc/nginx/includes
     ports:
-      - "${HOST_BIND_IP:-127.0.0.1}:80:80"
+      - "${HOST_BIND_IP:-127.0.0.1}:80:8080"
     depends_on:
       - ans-web-ui
       - wallet-web-ui
@@ -192,7 +192,7 @@ services:
     networks:
       - ${DOCKER_NETWORK:-splice_validator}
     healthcheck:
-      test: ["CMD", "service", "nginx", "status"]
+      test: ["CMD-SHELL", "pidof nginx || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
