@@ -71,7 +71,12 @@ import org.lfdecentralizedtrust.splice.history.{
   DevelopmentFundCoupon_Withdraw,
   DirectTokenStandardTransfer,
   DirectTokenStandardTransferV2,
-  GovernanceLockSubstitutionExercise,
+  GovernanceLockSubstitutionAccept,
+  GovernanceLockSubstitutionReject,
+  GovernanceLockSubstitutionWithdraw,
+  GovernanceLockTransferAccept,
+  GovernanceLockTransferReject,
+  GovernanceLockTransferWithdraw,
   LockedAmuletExpireAmulet,
   LockedAmuletExpireAmuletV2,
   LockedAmuletOwnerExpireLock,
@@ -92,9 +97,11 @@ import org.lfdecentralizedtrust.splice.history.{
 }
 import org.lfdecentralizedtrust.splice.store.TxLogStore
 import org.lfdecentralizedtrust.splice.util.{
+  Contract,
   EventId,
   ExerciseNode,
   ExerciseNodeCompanion,
+  GovernanceLockUtil,
   TokenStandardAccount,
   TokenStandardMetadata,
 }
@@ -152,14 +159,6 @@ class UserWalletTxLogParser(
     root match {
       case exercised: ExercisedEvent =>
         exercised match {
-
-          // Governance lock substitutions are not shown in the wallet history.
-          // This is a limitation we've accepted, as accepting a substitution does not result in a
-          // transfer, but instead in a lock being created, so it's not simple to parse them.
-          // Their acceptance and withdrawal unlock amulets without any of the choices below, so
-          // they must be matched before the generic token standard choices.
-          case GovernanceLockSubstitutionExercise(_) =>
-            now(State.empty)
 
           // ------------------------------------------------------------------
           // Treasury service
@@ -655,6 +654,12 @@ class UserWalletTxLogParser(
                   childState
                 } else {
                   val sender = node.argument.value.transfer.sender
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver,
+                  ).getOrElse(BigDecimal(node.argument.value.transfer.amount))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -664,7 +669,7 @@ class UserWalletTxLogParser(
                       TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
                     ),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(PartyAndAmount(sender, -node.argument.value.transfer.amount)),
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers =
                       Seq.empty, // This only locks CC so there is not actually any receiver
                     senderHoldingFees = BigDecimal(0.0),
@@ -694,6 +699,32 @@ class UserWalletTxLogParser(
                 )
             }
 
+          case DirectTokenStandardTransfer(node)
+              if node.argument.value.transfer.receiver == TokenStandardMetadata.trafficPurchaseReceiver =>
+            now(
+              State.fromTrafficPurchaseTransfer(
+                tree,
+                exercised,
+                sender = node.argument.value.transfer.sender,
+                transferMeta = node.argument.value.transfer.meta,
+                resultMeta = node.result.value.meta,
+              )
+            )
+
+          case DirectTokenStandardTransferV2(node)
+              if node.argument.value.transfer.receiver.owner.toScala
+                .contains(TokenStandardMetadata.trafficPurchaseReceiver) =>
+            val admin = node.argument.value.transfer.instrumentId.admin
+            now(
+              State.fromTrafficPurchaseTransfer(
+                tree,
+                exercised,
+                sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin),
+                transferMeta = node.argument.value.transfer.meta,
+                resultMeta = node.result.value.meta,
+              )
+            )
+
           case DirectTokenStandardTransfer(node) =>
             // TODO(tech-debt): deduplicate with the V2 version
             defer {
@@ -708,15 +739,25 @@ class UserWalletTxLogParser(
                 if (childState.hasTransfer) {
                   childState
                 } else {
-                  // We hit this only for self-transfers after the 24 submission delay change.
+                  // We hit this only for self-transfers after the 24 submission delay change,
+                  // and for governance lock requests.
                   val sender = node.argument.value.transfer.sender
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver,
+                  ).getOrElse(BigDecimal(0))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(
-                      PartyAndAmount(sender, 0)
-                    ), // This is the net amount, without fees this is always zero.
+                    // The net amount:
+                    //
+                    // - for self-transfers: it is always zero without fees, and
+                    // - for governance lock requests: negative of all amulet
+                    //   locks, amulet unlocks are merged in below.
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers = Seq.empty, // receivers never includes the sender
                     senderHoldingFees = BigDecimal(0.0),
                     appRewardsUsed = BigDecimal(0.0),
@@ -765,6 +806,12 @@ class UserWalletTxLogParser(
                 } else {
                   val admin = node.argument.value.transfer.instrumentId.admin
                   val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin),
+                  ).getOrElse(BigDecimal(node.argument.value.transfer.amount))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
@@ -774,7 +821,7 @@ class UserWalletTxLogParser(
                       TransferTransactionSubtype.CreateTokenStandardTransferInstruction.toProto
                     ),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(PartyAndAmount(sender, -node.argument.value.transfer.amount)),
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers =
                       Seq.empty, // This only locks CC so there is not actually any receiver
                     senderHoldingFees = BigDecimal(0.0),
@@ -819,16 +866,26 @@ class UserWalletTxLogParser(
                 if (childState.hasTransfer) {
                   childState
                 } else {
-                  // We hit this only for self-transfers after the 24 submission delay change.
+                  // We hit this only for self-transfers after the 24 submission delay change,
+                  // and for governance lock requests.
                   val admin = node.argument.value.transfer.instrumentId.admin
                   val sender = node.argument.value.transfer.sender.owner.toScala.getOrElse(admin)
+                  val lockedAmount = governanceLockRequestLockedAmount(
+                    tree,
+                    exercised,
+                    sender,
+                    node.argument.value.transfer.receiver.owner.toScala.getOrElse(admin),
+                  ).getOrElse(BigDecimal(0))
                   val transferEntry = TransferTxLogEntry(
                     eventId =
                       EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId),
                     date = Some(tree.getEffectiveAt),
-                    sender = Some(
-                      PartyAndAmount(sender, 0)
-                    ), // This is the net amount, without fees this is always zero.
+                    // The net amount:
+                    //
+                    // - for self-transfers: it is always zero without fees, and
+                    // - for governance lock requests: negative of all amulet
+                    //   locks, amulet unlocks are merged in below.
+                    sender = Some(PartyAndAmount(sender, -lockedAmount)),
                     receivers = Seq.empty, // receivers never includes the sender
                     senderHoldingFees = BigDecimal(0.0),
                     appRewardsUsed = BigDecimal(0.0),
@@ -846,6 +903,64 @@ class UserWalletTxLogParser(
                   node.argument.value.transfer.meta.values
                     .getOrDefault(TokenStandardMetadata.reasonMetaKey, "")
                 )
+            }
+
+          // The target lock returns the substituted funds to its owner, and the funds that the
+          // proposer locked move into the new lock, so only the target lock owner's balance changes
+          case GovernanceLockSubstitutionAccept(_) =>
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive = true,
+              )
+            }.map { childState =>
+              // All unlocks are of the target lock funds
+              val targetOwner = unlockedAmuletOwner(tree, childState)
+              val proposer = createdGovernanceLockOwners(tree, exercised)
+                .find(_ != targetOwner)
+                .getOrElse(targetOwner)
+              val receivers =
+                if (proposer == targetOwner) Seq.empty
+                else
+                  Seq(
+                    PartyAndAmount(targetOwner, -lockedAmountOwnedBy(tree, exercised, targetOwner))
+                  )
+              governanceLockAcceptState(
+                tree,
+                exercised,
+                childState,
+                PartyAndAmount(proposer, -lockedAmountOwnedBy(tree, exercised, proposer)),
+                receivers,
+              )
+            }
+
+          // The sender's unlocked funds are locked again for the receiver, so neither unlocked
+          // balance changes
+          case GovernanceLockTransferAccept(_) =>
+            defer {
+              parseTrees(
+                tree,
+                tree.getChildNodeIds(exercised).asScala.toList,
+                synchronizerId,
+                ignoreUnexpectedAmuletCreateArchive = true,
+              )
+            }.map { childState =>
+              // All unlocks are of the source lock funds
+              val sender = unlockedAmuletOwner(tree, childState)
+              val receiver = createdGovernanceLockOwners(tree, exercised).find(_ != sender)
+              // The sender funds all new locks, including the one of the receiver
+              val lockedAmount = createdLockedAmulets(tree, exercised)
+                .map(c => BigDecimal(c.payload.amulet.amount.initialAmount))
+                .sum
+              governanceLockAcceptState(
+                tree,
+                exercised,
+                childState,
+                PartyAndAmount(sender, -lockedAmount),
+                receiver.map(PartyAndAmount(_, BigDecimal(0))).toList,
+              )
             }
 
           case TransferInstruction_Accept(node) =>
@@ -913,7 +1028,8 @@ class UserWalletTxLogParser(
                 )
             }
 
-          case TransferInstruction_Withdraw(_) =>
+          case TransferInstruction_Withdraw(_) | GovernanceLockSubstitutionWithdraw(_) |
+              GovernanceLockTransferWithdraw(_) =>
             defer {
               parseTrees(
                 tree,
@@ -932,7 +1048,8 @@ class UserWalletTxLogParser(
                 )
             }
 
-          case TransferInstruction_Reject(_) =>
+          case TransferInstruction_Reject(_) | GovernanceLockSubstitutionReject(_) |
+              GovernanceLockTransferReject(_) =>
             defer {
               parseTrees(
                 tree,
@@ -1432,6 +1549,118 @@ class UserWalletTxLogParser(
     roots.foldMap(parseTree(tree, _, synchronizerId, ignoreUnexpectedAmuletCreateArchive))
   }
 
+  /** The amount the request locks for `sender` if a token standard transfer is
+    * a governance lock request. None for other transfers.
+    *
+    * Governance lock requests ignore the requested transfer amount per
+    * CIP-127. `GovernanceLock(unlockAmulet)` calls `LockedAmulet_UnlockV2`
+    * choice, but `lockAmulet` calls bare `executeExternalPartyTransfer` without
+    * a choice. As a result, unlock amount is being parsed into a
+    * `BalanceChangeTxLogEntry` while lock amount is being ignored by this
+    * parser.
+    *
+    * This method helps in a corrective logic:
+    *
+    * 1. collect lock amounts from events directly
+    * 2. negate and use it to set the initial "sender amount" of a transfer
+    *    tx log entry
+    * 3. let `mergeBalanceChangesIntoTransfer` add balance changes produced
+    *    by `GovernanceLock(unlockAmulet)` calls to the initial sender amount.
+    *
+    * All governance lock requests are transfers to `lockManagerParty`. Some of
+    * them, e.g., lock transfer proposals and substitutions proposed by the
+    * owner of the target lock, lock no funds at all.
+    */
+  private def governanceLockRequestLockedAmount(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+      sender: String,
+      receiver: String,
+  ): Option[BigDecimal] =
+    Option.when(receiver == GovernanceLockUtil.lockManagerParty.toProtoPrimitive)(
+      lockedAmountOwnedBy(tree, exercised, sender)
+    )
+
+  private def createdLockedAmulets(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+  ): Seq[Contract[amuletCodegen.LockedAmulet.ContractId, amuletCodegen.LockedAmulet]] =
+    tree
+      .preorderDescendants(exercised)
+      .collect { case created: CreatedEvent =>
+        Contract.fromCreatedEvent(amuletCodegen.LockedAmulet.COMPANION)(created)
+      }
+      .flatten
+      .toSeq
+
+  /** Total amount of the amulets locked for `owner` below `exercised`. */
+  private def lockedAmountOwnedBy(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+      owner: String,
+  ): BigDecimal =
+    createdLockedAmulets(tree, exercised)
+      .filter(_.payload.amulet.owner == owner)
+      .map(c => BigDecimal(c.payload.amulet.amount.initialAmount))
+      .sum
+
+  private def createdGovernanceLockOwners(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+  ): Seq[String] =
+    tree
+      .preorderDescendants(exercised)
+      .collect { case created: CreatedEvent =>
+        Contract.fromCreatedEvent(splice.governancelock.GovernanceLock.COMPANION)(created)
+      }
+      .flatten
+      .map(_.payload.owner)
+      .toSeq
+
+  /** The owner of the amulets that the accepted governance lock proposal unlocks.
+    * Accepting a substitution or transfer always unlocks funds of exactly one owner.
+    */
+  private def unlockedAmuletOwner(tree: Transaction, childState: State): String =
+    childState.entries
+      .collectFirst { case b: BalanceChangeTxLogEntry => b.receiver }
+      .getOrElse(
+        throw new RuntimeException(
+          s"Expected an unlocked amulet when accepting a governance lock proposal in transaction ${tree.getUpdateId}"
+        )
+      )
+
+  /** Transfer entry of an accepted governance lock proposal. Its amounts start
+    * at the negated new locks of each party, and the unlocks of the child
+    * state are merged into them.
+    */
+  private def governanceLockAcceptState(
+      tree: Transaction,
+      exercised: ExercisedEvent,
+      childState: State,
+      sender: PartyAndAmount,
+      receivers: Seq[PartyAndAmount],
+  ): State = {
+    val eventId = EventId.prefixedFromUpdateIdAndNodeId(tree.getUpdateId, exercised.getNodeId)
+    val transferEntry = TransferTxLogEntry(
+      eventId = eventId,
+      subtype = Some(TransferTransactionSubtype.TransferInstruction_Accept.toProto),
+      date = Some(tree.getEffectiveAt),
+      sender = Some(sender),
+      receivers = receivers,
+      senderHoldingFees = BigDecimal(0.0),
+      appRewardsUsed = BigDecimal(0.0),
+      validatorRewardsUsed = BigDecimal(0.0),
+      svRewardsUsed = Some(BigDecimal(0.0)),
+      transferInstructionCid = exercised.getContractId,
+    )
+    childState
+      .appended(State(entries = immutable.Queue[TxLogEntry](transferEntry)))
+      .mergeBalanceChangesIntoTransfer(
+        TransferTransactionSubtype.TransferInstruction_Accept,
+        Some(eventId),
+      )
+  }
+
   override def tryParse(tx: Transaction, synchronizerId: SynchronizerId)(implicit
       tc: TraceContext
   ): Seq[TxLogEntry] = {
@@ -1929,30 +2158,70 @@ object UserWalletTxLogParser {
         event: ExercisedEvent,
     ): State = {
       val sender = node.argument.value.provider
-      // Hack to grab the DSO party-id from the balance changes, which list both sender and the DSO
-      val receivers = node.result.value.summary.balanceChanges.keySet().asScala.toSeq.collect {
-        case party if party != sender => PartyAndAmount(party, BigDecimal(0.0))
-      }
       val summary = node.result.value.summary
       val netSenderInput = summary.inputAmuletAmount - summary.holdingFees
       val senderBalanceChange = BigDecimal(summary.senderChangeAmount) - netSenderInput
 
+      trafficPurchaseEntry(
+        tx,
+        event,
+        sender,
+        senderBalanceChange,
+        summary.holdingFees,
+        BigDecimal(summary.inputAppRewardAmount),
+        BigDecimal(summary.inputValidatorRewardAmount),
+        summary.inputDevelopmentFundAmount.toScala.map(BigDecimal(_)),
+        "",
+      )
+    }
+
+    def fromTrafficPurchaseTransfer(
+        tx: Transaction,
+        event: ExercisedEvent,
+        sender: String,
+        transferMeta: splice.api.token.metadatav1.Metadata,
+        resultMeta: splice.api.token.metadatav1.Metadata,
+    ): State = {
+      val burned = resultMeta.values.asScala
+        .get(TokenStandardMetadata.burnedMetaKey)
+        .fold(BigDecimal(0))(BigDecimal(_))
+      trafficPurchaseEntry(
+        tx,
+        event,
+        sender,
+        -burned,
+        BigDecimal(0),
+        BigDecimal(0),
+        BigDecimal(0),
+        None,
+        transferMeta.values.asScala.getOrElse(TokenStandardMetadata.reasonMetaKey, ""),
+      )
+    }
+
+    private def trafficPurchaseEntry(
+        tx: Transaction,
+        event: ExercisedEvent,
+        sender: String,
+        senderAmount: BigDecimal,
+        holdingFees: BigDecimal,
+        appRewardsUsed: BigDecimal,
+        validatorRewardsUsed: BigDecimal,
+        developmentFundCouponsUsed: Option[BigDecimal],
+        description: String,
+    ): State = {
       val newEntry = TransferTxLogEntry(
         eventId = EventId.prefixedFromUpdateIdAndNodeId(tx.getUpdateId, event.getNodeId),
         subtype = Some(TransferTransactionSubtype.ExtraTrafficPurchase.toProto),
         date = Some(tx.getEffectiveAt),
-        sender = Some(PartyAndAmount(sender, senderBalanceChange)),
-        receivers = receivers,
-        senderHoldingFees = node.result.value.summary.holdingFees,
-        appRewardsUsed = BigDecimal(node.result.value.summary.inputAppRewardAmount),
-        validatorRewardsUsed = BigDecimal(node.result.value.summary.inputValidatorRewardAmount),
-        developmentFundCouponsUsed =
-          node.result.value.summary.inputDevelopmentFundAmount.toScala.map(BigDecimal(_)),
+        sender = Some(PartyAndAmount(sender, senderAmount)),
+        receivers = Seq.empty,
+        senderHoldingFees = holdingFees,
+        appRewardsUsed = appRewardsUsed,
+        validatorRewardsUsed = validatorRewardsUsed,
+        developmentFundCouponsUsed = developmentFundCouponsUsed,
+        description = description,
       )
-
-      State(
-        entries = immutable.Queue(newEntry)
-      )
+      State(entries = immutable.Queue(newEntry))
     }
 
     def fromCreateExternalPartySetupProposal(

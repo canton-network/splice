@@ -7,18 +7,23 @@ import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
-import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
+import org.lfdecentralizedtrust.splice.console.{
+  ParticipantClientReference,
+  WalletAppClientReference,
+}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.util.{GovernanceLockUtil, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.wallet.store.{BalanceChangeTxLogEntry, TransferTxLogEntry}
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class GovernanceLockIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with WalletTestUtil
+    with WalletTxLogTestUtil
     with GovernanceLockTest {
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
@@ -52,6 +57,43 @@ class GovernanceLockIntegrationTest
       )
       .map(_.data)
 
+  private def latestEventId(wallet: WalletAppClientReference): Option[String] =
+    wallet.listTransactions(None, pageSize = 1).headOption.map(_.eventId)
+
+  /** Checks that the only new wallet history entry is a transfer with the given sender and receiver amounts. */
+  private def checkTransferHistory(
+      wallet: WalletAppClientReference,
+      previousEventId: Option[String],
+      sender: (PartyId, BigDecimal),
+      receivers: Seq[(PartyId, BigDecimal)],
+  ): Unit =
+    checkTxHistory(
+      wallet,
+      Seq({ case entry: TransferTxLogEntry =>
+        entry.sender.value.party shouldBe sender._1.toProtoPrimitive
+        entry.sender.value.amount shouldBe sender._2
+        entry.receivers.map(r => (r.party, r.amount)) shouldBe
+          receivers.map { case (party, amount) => (party.toProtoPrimitive, amount) }
+      }),
+      previousEventId = previousEventId,
+      trafficTopups = IgnoreTopupsDevNet,
+    )
+
+  /** Checks that the only new wallet history entry is a balance change of `amount`. */
+  private def checkBalanceChangeHistory(
+      wallet: WalletAppClientReference,
+      previousEventId: Option[String],
+      amount: BigDecimal,
+  ): Unit =
+    checkTxHistory(
+      wallet,
+      Seq({ case entry: BalanceChangeTxLogEntry =>
+        entry.amount shouldBe amount
+      }),
+      previousEventId = previousEventId,
+      trafficTopups = IgnoreTopupsDevNet,
+    )
+
   private def testTokenStandardCompat[CId <: ContractId[?], View](
       ops: TokenStandardOps[CId, View]
   ) = {
@@ -73,7 +115,10 @@ class GovernanceLockIntegrationTest
         amount = targetLockAmount,
       )
       val targetLock = governanceLocksFor(aliceParticipant, aliceParty).loneElement
-      eventually()(aliceWalletClient.balance().lockedQty shouldBe targetLockAmount)
+      eventually() {
+        aliceWalletClient.balance().lockedQty shouldBe targetLockAmount
+        bobWalletClient.balance().unlockedQty should be > BigDecimal(0)
+      }
 
       (alice, bob, targetLock)
     }
@@ -97,6 +142,7 @@ class GovernanceLockIntegrationTest
     s"A GovernanceLock substitution created via TSv${ops.version} can be accepted by the owner of the target lock" in {
       implicit env =>
         val (alice, bob, targetLock) = setup(bobFunds = partialSubstitutionAmount)
+        val bobBeforeCreate = latestEventId(bobWalletClient)
 
         val substitutionCid = ops.substituteGovernanceLock(targetLock)(
           bobParticipant,
@@ -116,6 +162,15 @@ class GovernanceLockIntegrationTest
           )
         }
 
+        clue("bob's wallet history shows the funds he locked for the substitution") {
+          checkTransferHistory(
+            bobWalletClient,
+            bobBeforeCreate,
+            sender = (bob.partyId, -partialSubstitutionAmount),
+            receivers = Seq.empty,
+          )
+        }
+
         clue("Scan serves accept and withdraw choice contexts for the substitution") {
           ops
             .getAcceptContext(substitutionCid)
@@ -126,6 +181,8 @@ class GovernanceLockIntegrationTest
         }
 
         val aliceUnlockedBefore = aliceWalletClient.balance().unlockedQty
+        val aliceBeforeAccept = latestEventId(aliceWalletClient)
+        val bobBeforeAccept = latestEventId(bobWalletClient)
 
         actAndCheck(
           "alice accepts the substitution",
@@ -137,7 +194,7 @@ class GovernanceLockIntegrationTest
             ops
               .listTransfers(bobParticipant, bob.partyId)
               .map(t => ops.transferValues.receiver(t._2)) shouldBe Seq(
-              lockManagerParty.toProtoPrimitive
+              GovernanceLockUtil.lockManagerParty.toProtoPrimitive
             )
 
             val bobLock = governanceLocksFor(bobParticipant, bob.partyId).loneElement
@@ -153,6 +210,18 @@ class GovernanceLockIntegrationTest
               .unlockedQty shouldBe aliceUnlockedBefore + partialSubstitutionAmount
           },
         )
+
+        clue("the wallet histories show the substituted funds returned to alice") {
+          val expectedSender = (bob.partyId, BigDecimal(0))
+          val expectedReceivers = Seq((alice.partyId, partialSubstitutionAmount))
+          checkTransferHistory(
+            aliceWalletClient,
+            aliceBeforeAccept,
+            expectedSender,
+            expectedReceivers,
+          )
+          checkTransferHistory(bobWalletClient, bobBeforeAccept, expectedSender, expectedReceivers)
+        }
     }
 
     s"A GovernanceLock substitution created via TSv${ops.version} can be withdrawn by the proposer" in {
@@ -172,6 +241,9 @@ class GovernanceLockIntegrationTest
           eventually()(bobWalletClient.balance().lockedQty shouldBe partialSubstitutionAmount)
         }
 
+        val aliceBeforeWithdraw = latestEventId(aliceWalletClient)
+        val bobBeforeWithdraw = latestEventId(bobWalletClient)
+
         actAndCheck(
           "bob withdraws the substitution",
           ops.withdrawTransfer(bobParticipant, bob, substitutionCid),
@@ -186,6 +258,11 @@ class GovernanceLockIntegrationTest
             ) shouldBe targetLockAmount
           },
         )
+
+        clue("the wallet histories show bob's funds unlocked") {
+          checkBalanceChangeHistory(bobWalletClient, bobBeforeWithdraw, partialSubstitutionAmount)
+          checkBalanceChangeHistory(aliceWalletClient, aliceBeforeWithdraw, BigDecimal(0))
+        }
     }
 
     s"A GovernanceLock substitution created via TSv${ops.version} can be rejected by the owner of the target lock" in {
@@ -207,6 +284,10 @@ class GovernanceLockIntegrationTest
             .disclosedContracts should not be empty
         }
 
+        eventually()(bobWalletClient.balance().lockedQty shouldBe partialSubstitutionAmount)
+        val aliceBeforeReject = latestEventId(aliceWalletClient)
+        val bobBeforeReject = latestEventId(bobWalletClient)
+
         actAndCheck(
           "alice rejects the substitution",
           ops.rejectTransfer(aliceParticipant, alice, substitutionCid),
@@ -221,6 +302,11 @@ class GovernanceLockIntegrationTest
             ) shouldBe targetLockAmount
           },
         )
+
+        clue("the wallet histories show bob's funds unlocked") {
+          checkBalanceChangeHistory(bobWalletClient, bobBeforeReject, partialSubstitutionAmount)
+          checkBalanceChangeHistory(aliceWalletClient, aliceBeforeReject, BigDecimal(0))
+        }
     }
 
     s"A vesting GovernanceLock substitution created via TSv${ops.version} can be accepted by the owner of the target lock" in {
@@ -260,6 +346,18 @@ class GovernanceLockIntegrationTest
           )
         }
 
+        // Wait for the wallets to ingest the unlock and the substitution
+        val aliceBeforeAccept = eventually() {
+          val latest = aliceWalletClient.listTransactions(None, pageSize = 1).loneElement
+          inside(latest) { case entry: TransferTxLogEntry =>
+            entry.transferInstructionCid shouldBe vestingLockCid.contractId
+          }
+          Some(latest.eventId)
+        }
+        eventually()(bobWalletClient.balance().lockedQty shouldBe BigDecimal(vestingLock.amount))
+        val bobBeforeAccept = latestEventId(bobWalletClient)
+        val aliceUnlockedBefore = aliceWalletClient.balance().unlockedQty
+
         actAndCheck(
           "alice accepts the substitution",
           ops.acceptTransfer(aliceParticipant, alice, substitutionCid),
@@ -270,7 +368,7 @@ class GovernanceLockIntegrationTest
             ops
               .listTransfers(bobParticipant, bob.partyId)
               .map(t => ops.transferValues.receiver(t._2)) shouldBe Seq(
-              lockManagerParty.toProtoPrimitive
+              GovernanceLockUtil.lockManagerParty.toProtoPrimitive
             )
 
             val bobLock = vestingLocksFor(bobParticipant, bob.partyId).loneElement
@@ -283,8 +381,23 @@ class GovernanceLockIntegrationTest
               GovernanceLockUtil.getGovernanceLockKind(vestingLock)
 
             vestingLocksFor(aliceParticipant, alice.partyId) shouldBe empty
+            aliceWalletClient
+              .balance()
+              .unlockedQty shouldBe aliceUnlockedBefore + BigDecimal(vestingLock.amount)
           },
         )
+
+        clue("the wallet histories show the substituted funds returned to alice") {
+          val expectedSender = (bob.partyId, BigDecimal(0))
+          val expectedReceivers = Seq((alice.partyId, BigDecimal(vestingLock.amount)))
+          checkTransferHistory(
+            aliceWalletClient,
+            aliceBeforeAccept,
+            expectedSender,
+            expectedReceivers,
+          )
+          checkTransferHistory(bobWalletClient, bobBeforeAccept, expectedSender, expectedReceivers)
+        }
     }
   }
 

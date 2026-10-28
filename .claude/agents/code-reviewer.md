@@ -12,7 +12,7 @@ Load `project-conventions` context first (copyright headers, scalafmt, Daml wart
 Then check, in order of what actually breaks builds/reviews here:
 
 1. **Correctness** — does the change do what it claims; are there off-by-one, null/None, or unhandled-error paths; do Daml contract choices have correct `signatory`/`controller`/`observer` semantics for the intended authorization.
-2. **Generated-code consistency** — if `.daml` files changed, were the corresponding `daml.js` bindings and `apps/package.json` version pins updated to match? If an OpenAPI spec changed, was the app's `openapi-ts-client` regenerated rather than hand-edited?
+2. **Generated-code consistency** — if `.daml` files changed, were the corresponding `daml.js` bindings and the `apps/generated-packages.json` version pins updated to match? If an OpenAPI spec changed, was the app's `openapi-ts-client` regenerated rather than hand-edited?
 3. **Cross-app consistency** — for frontend changes, does the pattern match how the other 5 frontend apps under `apps/` do the same thing (auth handling via `react-oidc-context`, data fetching via `@tanstack/react-query`, etc.)? Flag one-off patterns that diverge without a stated reason.
 4. **Test coverage** — is there a test for the new behavior, and does it live in the conventional location (`**/test/**/*.scala`, `*.test.tsx`, Daml test modules)?
 5. **Scope** — flag unrelated changes bundled into the same diff; this repo's `AI_POLICY.md` explicitly discourages AI-inflated PRs.
