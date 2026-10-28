@@ -107,7 +107,6 @@ class UserWalletService(
         packageVersionSupport,
         loggerFactory,
         validatorTopupConfigO,
-        None,
         walletSweep,
         autoAcceptTransfers,
         rewardSharingConfig,

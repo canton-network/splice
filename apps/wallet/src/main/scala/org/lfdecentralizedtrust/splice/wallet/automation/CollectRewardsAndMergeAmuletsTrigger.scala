@@ -29,7 +29,6 @@ class CollectRewardsAndMergeAmuletsTrigger(
     treasury: TreasuryService,
     scanConnection: BftScanConnection,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
-    operatorBalanceMonitorO: Option[OperatorBalanceMonitor],
     clock: Clock,
 )(implicit
     override val ec: ExecutionContext,
@@ -58,23 +57,6 @@ class CollectRewardsAndMergeAmuletsTrigger(
     )
 
   private def collectRewardsAndMergeAmulets()(implicit
-      traceContext: TraceContext
-  ): Future[Boolean] =
-    for {
-      _ <- operatorBalanceMonitorO.fold(Future.unit)(observeOperatorBalance)
-      result <-
-        if (operatorBalanceMonitorO.forall(_.shouldCollectRewards))
-          doCollectRewardsAndMergeAmulets()
-        else {
-          logger.warn(
-            "Not collecting rewards because the balance of the validator operator party has been above " +
-              s"the allowed maximum for more than ${OperatorBalanceMonitor.maxTimeAboveLimit}"
-          )
-          Future.successful(false)
-        }
-    } yield result
-
-  private def doCollectRewardsAndMergeAmulets()(implicit
       traceContext: TraceContext
   ): Future[Boolean] =
     for {
@@ -111,14 +93,4 @@ class CollectRewardsAndMergeAmuletsTrigger(
           case Failure(err) => Failure(err)
         }
     } yield result
-
-  private def observeOperatorBalance(monitor: OperatorBalanceMonitor)(implicit
-      traceContext: TraceContext
-  ): Future[Unit] =
-    for {
-      round <- scanConnection.getLatestOpenMiningRound().map(_.payload.round.number)
-      (unlockedBalance, _) <- store.getAmuletBalanceWithHoldingFees(round)
-      lockedBalance <- store.getLockedAmuletBalance()
-      _ <- monitor.observe(unlockedBalance + lockedBalance)
-    } yield ()
 }
