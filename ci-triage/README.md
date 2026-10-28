@@ -358,6 +358,19 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 
 # CI failure triage - 2026-10-28 afternoon (2026-10-28b)
 
+## Overview (a: splice GHA)
+
+| Ref | Failure | Family / dup of | Packet / action |
+|---|---|---|---|
+| 10729 | logical-sync-upgrade (0), main 24bfde02b2: sv2Participant crashes itself (AcsCommitmentSender close waits on a 1267 s randomized send delay), sv2 auth 403, vote step CommandFailure | new (O), Canton 3.7 | `2026-10-28b/10729-lsu-sv2-participant-crash-acs-commitment-sender.md`. Canton bug in the prod disconnect path (DSO party migration). Keep open, Canton owner. |
+| 10731 | wall-clock-time (1), main 02f4b1a11e: TokenStandardV2TransferIntegrationTest:597 `8000000 was not equal to 2000000` | new (P), #8012 test race | `2026-10-28b/10731-traffic-purchase-test-race-topup.md`. Validator top-up (6M) in the same second. Keep open, Simon Meier. |
+| 10728 / 10735 | simtime (0) 0.9.x 3514d7e8ad / wall-clock-time (2) 0.9.3 94b51bbed3: javac `cannot infer type-variable(s)` on generated Daml codegen | new (Q) | `2026-10-28b/10728-10735-release-line-javac-codegen-inference.md`. 1 job per run, next run green; cause open. Close 10735 onto 10728. |
+| 10732 | wall-clock-time (8), main 8585c2a759: WalletMetricsTest `Found 2 matching metrics` (trigger.completed DomainIngestionService) | new | `2026-10-28b/10726-10727-10730-10732-10734-dups.md`. Lookup not unique; keep open. |
+| 10726 | wall-clock-time (9), main fbd84db9b3: 6 aliceParticipant NOT_ENOUGH_TRAFFIC WARNs at WalletNoDevNet start | 10474 | same packet. Fix #7923 approved, unmerged. Close as dup. |
+| 10727 | wall-clock-time (4), main 5bd1eb08fe: `Killed SBT after timeout 40m` after #8007 cache miss | 10358 | same packet. Close as dup. |
+| 10730 | resource-intensive (0), main 8585c2a759: BootstrapPackageConfigIntegrationTest:494 | 10676 | same packet. Third main hit. Close as dup. |
+| 10734 | wall-clock-time (4), main 8585c2a759: external-party balance 404 -> internal error | 10690 | same packet. Fixed by #8020 (open). Close as dup. |
+
 ## Overview (b: infra)
 
 | Ref | Failure | Family / dup of | Packet / action |

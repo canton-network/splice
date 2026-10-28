@@ -228,6 +228,32 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   (sv_reonboard, lsu_operator, non_devnet) have been red since 10-23 17:05; Pawel closes the per-job issues as dups.
   deploy_upgrade is NOT this family (its base is the 0.9.x release, see J). Confirm with
   sv-1 `INITIAL_ONBOARDING_ERROR` in the CircleCI step output or GCP logs (da-cn-ci, cn-ciperiodicnet, sv-app).
+- Fix: PR #8065 (participant part from generateOnboardingTopologyTransactions too), reproduced locally at PV 36.
+
+## O. Participant crashes itself on disconnect: AcsCommitmentSender close hangs on a randomized send delay (Canton 3.7)
+- Signature: `Task closing pipeline completion future did not complete within 60 seconds` and `Closing
+  'AsyncCloseable(name=pipeline completion future)' failed!` on `AcsCommitmentSenderImpl:participant=X`, then `Fatal
+  error occurred, crashing the node to recover from invalid state: Failed to disconnect from Synchronizer 'global'`.
+  Downstream in splice: every Ledger API call to X is `UNAVAILABLE/io exception`, `ActAsKnownPartyAuthExtractor`
+  answers 403 `Authorization Failed ... Reason: UNAVAILABLE: io exception`, console CommandFailure.
+- Confirm: `Delaying sending commitment by N seconds` on X logged right after `killSwitch shutdown` closed. The delay
+  (up to 0.9 x the 30 min interval) is not interrupted by the kill switch, so `onClosed` times out after
+  shutdownProcessing (60 s).
+- Trigger: any participant disconnect, in splice mostly the SV onboarding DSO party migration
+  (`Starting onboarding with DSO party migration`). 10729 (LsuIntegrationTest, sv2Participant). Canton fix needed.
+
+## P. Test race with the validator's own traffic top-up
+- 10731 (TokenStandardV2TransferIntegrationTest "buy traffic through a transfer to the traffic purchase receiver",
+  #8012): asserts the member's total purchased traffic grows by exactly its own purchase; `TopupMemberTrafficTrigger`
+  (`topupAmount = 6000000`) bought in the same second -> `8000000 was not equal to 2000000`. Fix: pause the trigger
+  for the test or assert on its own MemberTraffic contract.
+
+## Q. Release-line javac inference failure on generated Daml codegen (cold compile)
+- Signature: `[error] .../target/daml-codegen-java/... .java:NN:33: incompatible types: cannot infer type-variable(s)
+  T,T,T,T,T,T ... inference variable T has incompatible equality constraints X,java.util.Optional<T>` on a
+  `JsonLfDecoders.record(...)` decoder, `javac returned non-zero exit code`; 1 job of a run, other shards compile fine,
+  tests may all pass. 10728 (0.9.x, Allocation_Settle.java), 10735 (0.9.3, OpenMiningRoundSummary.java), both
+  2026-10-28, both cold compiles. Cause open (concurrent codegen into shared API packages? runner/JDK change?).
 
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
@@ -244,7 +270,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   (`Cache not found for input keys: classes-<v> branch:main dependencies:<hash>`), then a from-scratch compile of
   ~13 min instead of ~6. Trigger: the first main run after a merge that changes a file in the cache key (openapi yaml,
   npm/Maven dependencies, daml/dars.lock): 10681/10682 (#7989 scan.yaml), 10684/10685 (#7995 npm), 10697 (#8003
-  dars.lock), #7969 wall-clock (0). Fix in CI:
+  dars.lock), #7969 wall-clock (0), 10727 (#8007 Maven). Fix in CI:
   a fallback restore key without the dependencies hash, or Test/compile outside the timed step.
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
