@@ -90,6 +90,15 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
 
   private val wallClock: WallClock = new WallClock(timeouts, loggerFactory)
 
+  private val participantAdminApiTokenProvider: AuthTokenProvider =
+    createManagedTokenProviderWithRetries(
+      tokenSource = AuthTokenSource.fromConfig(
+        participantClient.adminApi.authConfig,
+        nodeMetrics.httpClientMetrics,
+        loggerFactory,
+      )
+    )(TraceContext.empty)
+
   private val isInitializedVar: AtomicReference[Boolean] = new AtomicReference(false)
 
   protected def isInitialized = isInitializedVar.get()
@@ -323,15 +332,6 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
       )
     }
   }
-
-  private val participantAdminApiTokenProvider: AuthTokenProvider =
-    createManagedTokenProviderWithRetries(
-      tokenSource = AuthTokenSource.fromConfig(
-        participantClient.adminApi.authConfig,
-        nodeMetrics.httpClientMetrics,
-        loggerFactory,
-      )
-    )(TraceContext.empty)
 
   protected def createParticipantAdminConnection(): ParticipantAdminConnection = {
     new ParticipantAdminConnection(
