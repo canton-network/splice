@@ -10,7 +10,7 @@
     "@daml/types": "^3.5.2",
     "@trivago/prettier-plugin-sort-imports": "5.2.2",
     "@types/node": "22.14.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.11.0",
     "eslint-config-prettier": "10.1.1",
     "msw": "^2.14.2",
     "nodemon": "^3.1.9",
