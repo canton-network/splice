@@ -192,12 +192,14 @@ class TestTokenV2SettlementIntegrationTest
     initDso()
     withCanton(
       Seq(
-        testResourcesPath / "standalone-participant-extra.conf"
+        testResourcesPath / "standalone-participant-extra.conf",
+        testResourcesPath / "standalone-participant-extra-auto-init.conf",
       ),
       Seq(),
       "test_token_v2_settlement",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> ttAdminValidator.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> dbName,
+      "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
     ) {
       withValidatorsInitializedForTest { () =>
         val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)

@@ -44,12 +44,14 @@ class ValidatorProxyIntegrationTest
       withProperties(props) {
         withCanton(
           Seq(
-            testResourcesPath / "standalone-participant-extra.conf"
+            testResourcesPath / "standalone-participant-extra.conf",
+            testResourcesPath / "standalone-participant-extra-auto-init.conf",
           ),
           Seq.empty,
           "validator-proxy-test",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
           "JAVA_TOOL_OPTIONS" -> props.toJvmOptionString,
         ) {
           aliceValidatorLocalBackend.startSync()
@@ -125,12 +127,14 @@ class ValidatorProxyIntegrationTest
       withProperties(props) {
         withCanton(
           Seq(
-            testResourcesPath / "standalone-participant-extra.conf"
+            testResourcesPath / "standalone-participant-extra.conf",
+            testResourcesPath / "standalone-participant-extra-auto-init.conf",
           ),
           Seq.empty,
           "validator-proxy-nonproxy-hosts-test",
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> dbName,
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> "aliceValidatorLocal",
           "JAVA_TOOL_OPTIONS" -> props.toJvmOptionString,
         ) {
           aliceValidatorLocalBackend.startSync()
