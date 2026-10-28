@@ -14,6 +14,7 @@
     ]
   },
   "dependencies": {
+    "@eslint/js": "^10.0.1",
     "@js-temporal/polyfill": "^0.4.4",
     "dompurify": "^3.4.16",
     "jose": "^4.15.9",
