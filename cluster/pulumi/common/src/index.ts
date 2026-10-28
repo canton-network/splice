@@ -27,6 +27,8 @@ export * from './participantKms';
 export * from './config/migrationSchema';
 export * from './pruning';
 export * from './config/loadTesterConfig';
+export * from './config/topologyKeyMonitorConfig';
+export * from './topologyKeyMonitor';
 export * from './config/networkWideConfig';
 export * from './ratelimit';
 export * from './config/config';
