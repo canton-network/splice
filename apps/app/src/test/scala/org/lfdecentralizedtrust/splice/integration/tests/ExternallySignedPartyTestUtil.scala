@@ -429,6 +429,11 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     provider.scanProxy.lookupTransferPreapprovalByParty(
       externalParty
     ) should not be empty withClue s"TransferPreapproval for $externalParty via scan-proxy"
+    provider.appState.walletManager.foreach(
+      _.externalPartyWalletManager.lookupExternalPartyWallet(
+        externalParty
+      ) should not be empty withClue s"Wallet for $externalParty"
+    )
   }
 
   /** Pre-generate an Ed25519 key pair and compute the external party's ID
