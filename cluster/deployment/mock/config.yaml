@@ -151,6 +151,8 @@ monitoring:
         usePv36Metrics: true
       cloudSql:
         maintenance: true
+      sequencerParticipantRegistration:
+        enabled: true
       svNames:
         - Dummy-SV-1
         - Dummy-SV-2
