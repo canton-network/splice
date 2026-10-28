@@ -60,4 +60,42 @@ object Dependencies {
   lazy val aws_s3 = "software.amazon.awssdk" % "s3" % CantonDependencies.aws_version
 
   lazy val s3mock_testcontainers = "com.adobe.testing" % "s3mock-testcontainers" % "4.11.0" % "test"
+
+  private lazy val jackson_version = "2.22.3"
+  private lazy val netty_version = "4.1.138.Final"
+  private lazy val bouncy_castle_version = "1.86"
+
+  // Applied to all projects as dependencyOverrides. The older versions come from CantonDependencies.scala, which is
+  // replaced on every Canton fork bump, or from libraries that are already on their latest release
+  // (scala-compiler 2.13.18 -> jline, httpclient5 5.6.4 -> httpcore5) or would each need an upgrade
+  // (jackson-databind is requested by auth0, flyway, json4s and logstash).
+  // Remove an entry once the build resolves that version without it.
+  lazy val pinnedTransitiveVersions: Seq[ModuleID] = Seq(
+    "buffer",
+    "codec",
+    "codec-http",
+    "codec-http2",
+    "common",
+    "handler",
+    "resolver",
+    "transport",
+    "transport-classes-epoll",
+    "transport-native-unix-common",
+  ).map(module => "io.netty" % s"netty-$module" % netty_version) ++ Seq(
+    "bcprov",
+    "bcpkix",
+    "bcutil",
+  ).map(module => "org.bouncycastle" % s"$module-jdk18on" % bouncy_castle_version) ++ Seq(
+    "com.fasterxml.jackson.core" % "jackson-core" % jackson_version,
+    "com.fasterxml.jackson.core" % "jackson-databind" % jackson_version,
+    "com.fasterxml.jackson.core" % "jackson-annotations" % "2.22",
+    "org.jline" % "jline" % "3.30.17",
+    "org.postgresql" % "postgresql" % "42.7.14",
+    "org.typelevel" %% "jawn-parser" % "1.7.0",
+    "org.apache.httpcomponents.core5" % "httpcore5" % "5.4.4",
+    "org.apache.httpcomponents.core5" % "httpcore5-h2" % "5.4.4",
+    "org.apache.httpcomponents.client5" % "httpclient5" % "5.6.4",
+    "org.apache.logging.log4j" % "log4j-core" % "2.25.5",
+    "org.apache.logging.log4j" % "log4j-api" % "2.25.5",
+  )
 }

@@ -2361,6 +2361,9 @@ function subcmd_request_pam() {
 
 ###
 subcommand_whitelist[dump_identities]="Dump all node identities to a file"
+# Nodes that disallow key downloads cannot serve an identities dump; their IDs are reported as this marker instead.
+# TODO(DACH-NY/canton-network-internal#7687): Add dedicated endpoints to validators and SVs that return just the node IDs, so that this command works for all deployed nodes again.
+KEY_DOWNLOADS_DISABLED="<key downloads disabled>"
 function subcmd_dump_identities() {
     _cluster_must_exist
 
@@ -2376,8 +2379,12 @@ function subcmd_dump_identities() {
         token=$(subcmd_get_token $i sv)
         url="https://sv.${domain}.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/admin/domain/identities-dump"
         echo "Getting identities from $url"
-        full_identities=$(curl -sSLf -H "authorization: Bearer $token" "$url")
-        identities=$(echo "$full_identities" | jq "{\"$i\": {participant: .identities.participant.id, sequencer: .identities.sequencer.id, mediator: .identities.mediator.id}}")
+        full_identities=$(_get_identities_dump "$url" "$token")
+        if [ -n "$full_identities" ]; then
+            identities=$(echo "$full_identities" | jq "{\"$i\": {participant: .identities.participant.id, sequencer: .identities.sequencer.id, mediator: .identities.mediator.id}}")
+        else
+            identities=$(jq -n --arg m "$KEY_DOWNLOADS_DISABLED" "{\"$i\": {participant: \$m, sequencer: \$m, mediator: \$m}}")
+        fi
         all=$(echo "$all" "$identities" | jq -s add)
     done
 
@@ -2398,10 +2405,37 @@ function _add_validator_identities() {
     token=$(subcmd_get_token "$namespace" validator)
     url="https://wallet.${namespace}.${GCP_CLUSTER_HOSTNAME}/api/validator/v0/admin/participant/identities"
     echo "Getting identities from $url"
-    full_identities=$(curl -sSLf -H "authorization: Bearer $token" "$url")
-    identities=$(echo "$full_identities" | jq "{\"${namespace}\": {participant: .id}}")
+    full_identities=$(_get_identities_dump "$url" "$token")
+    if [ -n "$full_identities" ]; then
+        identities=$(echo "$full_identities" | jq "{\"${namespace}\": {participant: .id}}")
+    else
+        identities=$(jq -n --arg m "$KEY_DOWNLOADS_DISABLED" "{\"${namespace}\": {participant: \$m}}")
+    fi
 
     all=$(echo "$all" "$identities" | jq -s add)
+}
+
+# Prints the identities dump served at the given URL, or nothing if the node disallows key downloads.
+# Fails if the node is unavailable or returns any other error.
+function _get_identities_dump() {
+    local url="$1"
+    local token="$2"
+    local response
+    local status
+    local body
+
+    if ! response=$(curl -sSL -w '\n%{http_code}' -H "authorization: Bearer $token" "$url"); then
+        _error "Failed to reach $url"
+    fi
+    status=$(tail -n 1 <<< "$response")
+    body=$(sed '$d' <<< "$response")
+    if [ "$status" == "200" ]; then
+        echo "$body"
+    elif [ "$status" == "400" ] && jq -e '.error | contains("key downloads are disabled")' <<< "$body" > /dev/null 2>&1; then
+        echo "Key downloads are disabled on the node serving $url, reporting $KEY_DOWNLOADS_DISABLED instead of its IDs" >&2
+    else
+        _error "Failed to get identities from $url (HTTP $status): $body"
+    fi
 }
 
 ###

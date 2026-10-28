@@ -72,17 +72,23 @@ object DarLockChecker {
     }
   }
 
-  def rewritePackageJson(
+  // Rewrites the alias targets in apps/generated-packages.json, e.g.
+  // "splice-amulet": "splice-amulet-0.1.18" -> "splice-amulet-0.1.19".
+  // The version suffix must follow the package name directly, so a package
+  // whose name is a prefix of another (splice-amulet vs splice-amulet-name-service)
+  // does not match the other's entry.
+  def rewriteGeneratedPackages(
       content: String,
       packageName: PackageName,
       newVersion: PackageVersion,
   ): String = {
     val escapedName = java.util.regex.Pattern.quote(packageName.toString)
-    val pattern =
-      ("""("file:common/frontend/daml\.js/""" + escapedName + """)-[0-9]+\.[0-9]+\.[0-9]+(")""").r
+    val pattern = ("""(": ")""" + escapedName + """-[0-9]+\.[0-9]+\.[0-9]+(")""").r
     pattern.replaceAllIn(
       content,
-      m => java.util.regex.Matcher.quoteReplacement(s"${m.group(1)}-$newVersion${m.group(2)}"),
+      m =>
+        java.util.regex.Matcher
+          .quoteReplacement(s"${m.group(1)}$packageName-$newVersion${m.group(2)}"),
     )
   }
 
@@ -153,11 +159,11 @@ object DarLockChecker {
                 val updated = rewriteDamlYamlVersion(yamlFile.contentAsString, t.toVersion)
                 val _ = yamlFile.overwrite(updated)
               }
-              val packageJson = File("apps/package.json")
-              val updatedJson = targets.foldLeft(packageJson.contentAsString) { (acc, t) =>
-                rewritePackageJson(acc, t.name, t.toVersion)
+              val generatedPackages = File("apps/generated-packages.json")
+              val updatedJson = targets.foldLeft(generatedPackages.contentAsString) { (acc, t) =>
+                rewriteGeneratedPackages(acc, t.name, t.toVersion)
               }
-              val _ = packageJson.overwrite(updatedJson)
+              val _ = generatedPackages.overwrite(updatedJson)
             }
           case _ =>
             printHelpAndError(s"unknown command '$cmd'")

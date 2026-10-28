@@ -21,6 +21,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
+  checkValidatorKeyDownloadForPeriodicBackups,
   installParticipant,
   installWalletGateway,
   splitwellDarPaths,
@@ -81,6 +82,7 @@ export async function installValidator1(
 
   const participantDependsOn: CnInput<pulumi.Resource>[] = imagePullDeps.concat(loopback);
 
+  checkValidatorKeyDownloadForPeriodicBackups('validator1', validator1Config, backupConfig);
   const participant = await installParticipant(
     validator1Config,
     xns,

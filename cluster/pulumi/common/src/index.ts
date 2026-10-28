@@ -24,6 +24,7 @@ export * from './artifacts';
 export * from './dockerConfig';
 export * from './serviceAccount';
 export * from './participantKms';
+export * from './participantKeyDownload';
 export * from './config/migrationSchema';
 export * from './pruning';
 export * from './config/loadTesterConfig';

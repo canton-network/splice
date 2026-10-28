@@ -230,6 +230,8 @@ class SvReonboardingIntegrationTest
         (None, None, None, Some(sv4Backend)),
         logSuffix = "sv4-reonboarding",
         svs123 = false,
+        // required for dumping sv4's participant identities
+        enableKeyDownload = true,
       )() {
         startAllSync(
           (sv1Nodes ++ sv2Nodes ++ sv3Nodes ++ sv4Nodes)*

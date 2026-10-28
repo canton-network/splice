@@ -55,6 +55,9 @@ sv:
             fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.24'
+  participant:
+    # Required for periodic identities backups, as this participant does not use KMS
+    enableKeyDownload: true
   participantPruningSchedule:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
@@ -477,6 +480,8 @@ validators:
       maxDuration: "5m"
       retention: "30d"
     participant:
+      # Required for periodic identities backups, as this participant does not use KMS
+      enableKeyDownload: true
       additionalEnvVars:
         - name: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_NAME
           value: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_VALUE

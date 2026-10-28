@@ -10,3 +10,7 @@ else
   # shellcheck disable=SC2015
   for _ in {1..5}; do npm ci --no-audit && break || sleep 15; done
 fi
+
+if [ -f scripts/link-generated-packages.mjs ]; then
+  node scripts/link-generated-packages.mjs
+fi
