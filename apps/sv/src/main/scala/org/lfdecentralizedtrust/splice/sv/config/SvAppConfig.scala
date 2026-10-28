@@ -290,7 +290,7 @@ final case class InitialRewardConfig(
         rewardCouponTimeToLiveMicros
       ),
       appRewardCouponThreshold.bigDecimal,
-      // TODO(#7613): allow setting these fields
+      // TODO(#7837): allow setting these fields
       java.util.Optional.empty(),
       java.util.Optional.empty(),
       java.util.Optional.empty(),
