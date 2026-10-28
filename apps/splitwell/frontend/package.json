@@ -39,7 +39,7 @@
     "@tanstack/eslint-plugin-query": "5.91.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.4.3",
-    "@trivago/prettier-plugin-sort-imports": "5.2.2",
+    "@trivago/prettier-plugin-sort-imports": "6.0.2",
     "@types/google-protobuf": "3.15.6",
     "@types/node": "22.14.0",
     "@types/react": "18.3.12",
