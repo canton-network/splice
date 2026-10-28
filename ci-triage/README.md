@@ -346,3 +346,12 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 |---|---|---|---|
 | 10702-10720, 10722, 10723 | mainnet-Daml nightly 40635877843 (dee813861c): every shard sv1 INITIAL_ONBOARDING_ERROR, sequencer TOPOLOGY_SERIAL_MISMATCH on `::36-0` | 10520 (N) | `2026-10-28/10702-10723-nightly-10520.md`. All 22 jobs checked (2 cancelled, same error). Close as dups; 10520 still unowned, 5th red nightly. |
 | 10697 | wall-clock-time (4), main dee813861c: `Killed SBT after timeout 40m` after a classes cache miss (#8003 changed daml/dars.lock) | 10358 | `2026-10-28/10697.md`. No test failed. Close as dup. |
+
+## Overview (b: infra)
+
+| Ref | Failure | Family / dup of | Packet / action |
+|---|---|---|---|
+| 10694 / 10698 / 10700 / 10724 | Devnet backup_status_cluster `Stale backups found` (log not readable: router refuses cni Actions) | 10643 | `2026-10-28/10694-10698-10700-10724-backup-10643.md`. Backup jobs OOM on the 100 Mi runner request; Devnet now fails every ~3 h run (17 issues since 10-23). Close as dups, ping 10643. |
+| 10699 / 10701 | ciperiodic deploy_lsu_operator (CircleCI 525633) / deploy_ciperiodic_non_devnet (525660) | likely 10520 (N) | `2026-10-28/10699-10701-ciperiodic-pv36.md`. Every ciperiodic workflow red since 10-23 17:05 (#7944/#7910 window); ciperiodic is the only cluster pinned to PV 36 (`cluster/deployment/ciperiodic/sv.yaml`). Needs the CircleCI log to confirm INITIAL_ONBOARDING_ERROR; 10677 likely the same. |
+| 10695 / 10696 | manual scratchneta deploy_basic (run 40580340029, pasindutennage-da): preflight_check_docker + deploy_arm_compose_validator | - | `2026-10-28/10695-10696-scratchneta-arm-compose.md`. First occurrences, deploy_cluster passed; ask Pasindu, needs GHA logs. |
+| 10721 | Auth0 User Cleanup (GHA run 40641314724), second weekly failure | 10480 | `2026-10-28/10721-auth0-cleanup.md`. Suspect: GHA port runs `timeout 15m sbt tools/run` without the setup_sbt cache step the CircleCI job had (tools depends on apps-app compile->test). Close as dup, comment on 10480. |

@@ -223,6 +223,10 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   PV 36 form with another hash. Since 2026-10-24 (#7944 / #7910). Issue 10520 (per-job dups closed); SV app fix open.
 - Every nightly run files ~21 per-job issues (10-28: 10702-10720, 10722, 10723); cancelled shards (key-download) carry
   the same error. Check each job with one grep for `SV1Initializer bootstrapping Dso failed`, then close as dups.
+- Cluster instance (likely, 10699/10701, unconfirmed): ciperiodic pins the SV synchronizer to PV 36
+  (`cluster/deployment/ciperiodic/sv.yaml`, cni TODO #7542) and every ciperiodic workflow (sv_reonboard, lsu_operator,
+  non_devnet, deploy_upgrade) has been red since 10-23 17:05; Pawel closes the per-job issues as dups. Confirm with
+  sv-1 `INITIAL_ONBOARDING_ERROR` in the CircleCI step output or GCP logs (da-cn-ci, cn-ciperiodicnet, sv-app).
 
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
@@ -244,6 +248,10 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
   splice commit. 10683, 10688, likely 10689. Fixed by the #8015 revert.
+- 10643 backup jobs OOM (100 Mi GHA runner request, ~360 Mi peak): backup_status_cluster `Stale backups found: ...`
+  on Mainnet and Devnet. Devnet fails every ~3 h run since 10-27 18:00 (10692 10694 10698 10700 10724). Close as dups.
+- Auth0 User Cleanup on GHA (10480, 10721, weekly Wed 06:00): suspected `timeout 15m sbt tools/run` without the
+  setup_sbt cache step (tools depends on apps-app compile->test). Close as dup of 10480.
 - 10679: one runner several times slower in every app init phase (Wait for user 17-35 s, Initialize app ~4 min),
   `Condition never became true within 5 minutes` in waitForInitialization; cache hit, no 40001 storm. One-off.
 
