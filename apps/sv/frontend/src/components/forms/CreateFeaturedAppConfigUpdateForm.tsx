@@ -264,7 +264,7 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
             >
               {field => (
                 <field.TextField
-                  title="Activity Weight"
+                  title="App Composition Weight"
                   id={`${idPrefix}-activityWeight`}
                   subtitle="Optional. Leave blank to use the default weight"
                 />
