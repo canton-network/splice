@@ -1,0 +1,48 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "alertStrategy": {
+      "autoClose": "3600s",
+      "notificationChannelStrategies": [
+        {
+          "notificationChannelNames": [
+            null
+          ],
+          "renotifyInterval": "14400s"
+        }
+      ]
+    },
+    "combiner": "OR",
+    "conditions": [
+      {
+        "conditionThreshold": {
+          "aggregations": [
+            {
+              "alignmentPeriod": "600s",
+              "crossSeriesReducer": "REDUCE_SUM",
+              "groupByFields": [
+                "metric.label.cluster"
+              ],
+              "perSeriesAligner": "ALIGN_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "duration": "0s",
+          "filter": "resource.type=\"k8s_container\" AND metric.type = \"logging.googleapis.com/user/topology_key_monitor_warnings_mock\"",
+          "trigger": {
+            "count": 1
+          }
+        },
+        "displayName": "Topology key monitor warnings in mock"
+      }
+    ],
+    "displayName": "Topology key monitor warnings in mock",
+    "notificationChannels": [
+      null
+    ]
+  },
+  "name": "topologyKeyMonitorAlert",
+  "provider": "",
+  "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+}
