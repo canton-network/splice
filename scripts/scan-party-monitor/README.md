@@ -159,11 +159,15 @@ slows down Scan for everyone else, including other users of this script.
 ## Tests
 
 `test_scan_party_monitor.py` has unit tests against an in-process fake of Scan. They only need
-Python 3 and take a few seconds. Run them from the repository root with
+Python 3 and take a few seconds. Run them from anywhere in the repository with
 
 ```bash
-python3 -m unittest discover -s scripts/scan-party-monitor -v
+scripts/run-python-tests.sh scripts/scan-party-monitor
 ```
 
-`ScanPartyMonitorScriptIntegrationTest` runs these unit tests, and the script against
-a more realistic local Scan instance like other Scala integration tests.
+(paths are relative to the current directory; without an argument the script runs the tests
+of all Python code in the repository). The script is also type checked in CI, which you can do
+locally with `scripts/check-python-types.sh scripts/scan-party-monitor`.
+
+`ScanPartyMonitorScriptIntegrationTest` runs the script against a more realistic local Scan
+instance like other Scala integration tests.
