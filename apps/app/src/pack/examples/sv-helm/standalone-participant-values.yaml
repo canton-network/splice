@@ -10,5 +10,5 @@ persistence:
   databaseName: participant_MIGRATION_ID
   schema: participant
 
-# Enable only while restoring the validator from an identities dump or importing an ACS.
+# Enable only if needed, e.g., while restoring the validator from an identities dump or importing an ACS.
 enableRepairCommands: false
