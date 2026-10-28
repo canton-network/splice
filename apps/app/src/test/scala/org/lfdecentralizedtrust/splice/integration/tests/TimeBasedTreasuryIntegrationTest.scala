@@ -168,7 +168,9 @@ class TimeBasedTreasuryIntegrationTest
       clue("Push the balance above the limit for longer than allowed") {
         aliceWalletClient.tap(maxPartyBalance + 100)
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-          advanceTime(maxTimeAboveBalanceLimit.asJava.plus(Duration.ofHours(1))),
+          advanceTimeAndWaitForRoundAutomation(
+            maxTimeAboveBalanceLimit.asJava.plus(Duration.ofHours(1))
+          ),
           logEntries =>
             forAtLeast(1, logEntries)(
               _.warningMessage should include("rewards will no longer be collected")
