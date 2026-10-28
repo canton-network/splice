@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.testTxLogConfig
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
+  IngestionSummary,
   Limit,
   MultiDomainAcsStore,
   MultiDomainAcsStoreTest,
@@ -24,6 +25,7 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, TemplateJsonDecoder}
 import com.digitalasset.canton.concurrent.FutureSupervisor
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
@@ -43,6 +45,8 @@ import org.slf4j.event.Level
 import slick.jdbc.JdbcProfile
 
 import java.time.Instant
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.jdk.CollectionConverters.*
 import scala.concurrent.{Future, Promise}
 import StoreTestBase.*
 import cats.data.NonEmptyList
@@ -60,6 +64,41 @@ class DbMultiDomainAcsStoreTest
   override lazy val profile: JdbcProfile = storage.api.jdbcProfile
 
   "DbMultiDomainAcsStore" should {
+    "track assigns separately from creates in the ingestion summary" in {
+      val summaries = new ConcurrentLinkedQueue[IngestionSummary]()
+      implicit val store: Store = mkStoreWithAcsRowDataF(
+        0,
+        Some(1),
+        0L,
+        ParticipantId("DbMultiDomainAcsStoreTest"),
+        defaultContractFilter,
+        "acs_store_template",
+        Some("txlog_store_template"),
+        Some("interface_views_template"),
+        handleIngestionSummary = summaries.add(_).discard,
+      )
+      val coupon1 = c(1)
+      val coupon2 = c(2)
+      for {
+        _ <- initWithAcs()
+        _ <- d1.create(coupon1)
+        _ <- d1.unassign(coupon1 -> d2, nextReassignmentId, 1)
+        _ <- d1.assign(coupon2 -> d2, nextReassignmentId, 1)
+      } yield {
+        val all = summaries.asScala.toSeq
+        all.flatMap(_.ingestedCreatedEvents.map(_.getContractId)) shouldBe Seq(
+          coupon1.contractId.contractId
+        )
+        all.flatMap(_.ingestedAssignEvents.map(_.getContractId)) shouldBe Seq(
+          coupon2.contractId.contractId
+        )
+        all.flatMap(_.ingestedUnassignEvents.map(_.contractId)) shouldBe Seq(
+          coupon1.contractId.contractId
+        )
+        all.map(_.acsSizeDiff).sum shouldBe 1
+      }
+    }
+
     "allow creating & deleting same contract id in different stores" in {
       val store1 = mkStore(acsId = 1, txLogId = Some(1))
       val store1MigrationId1 = mkStore(acsId = 1, txLogId = Some(1), migrationId = 1L)
@@ -763,6 +802,7 @@ class DbMultiDomainAcsStoreTest
       acsTableName: String,
       txLogTableName: Option[String],
       interfaceViewsTableNameOpt: Option[String],
+      handleIngestionSummary: IngestionSummary => Unit = _ => (),
   ) = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
@@ -783,8 +823,10 @@ class DbMultiDomainAcsStoreTest
         filter,
         testTxLogConfig,
         migrationId,
+        d1,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         IngestionConfig(),
+        handleIngestionSummary = handleIngestionSummary,
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       )
       .futureValue

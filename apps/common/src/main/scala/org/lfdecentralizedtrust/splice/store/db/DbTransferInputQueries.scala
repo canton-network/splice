@@ -27,7 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
   * (store_id, migration_id, package_name, template_id_qualified_name,
   * reward_coupon_round) WHERE (reward_coupon_round IS NOT NULL)
   */
-trait DbTransferInputQueries extends AcsQueries with AcsTables with LimitHelpers {
+trait DbTransferInputQueries extends SingleSynchronizerAcsQueries with AcsTables with LimitHelpers {
   self: TransferInputStore =>
 
   protected def acsTableName: String

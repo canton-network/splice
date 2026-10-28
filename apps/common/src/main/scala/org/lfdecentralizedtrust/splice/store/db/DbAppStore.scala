@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnles
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
@@ -26,6 +27,7 @@ abstract class DbTxLogAppStore[TXE](
     txLogStoreDescriptor: StoreDescriptor,
     storeIds: DbMultiDomainAcsStore.StoreIds,
     migrationId: Long,
+    synchronizerId: SynchronizerId,
     ingestionConfig: IngestionConfig,
     acsArchiveConfigOpt: Option[AcsArchiveConfig] = None,
     additionalIngestionSinks: Seq[AdditionalIngestionSink] = Seq.empty,
@@ -40,6 +42,7 @@ abstract class DbTxLogAppStore[TXE](
       acsStoreDescriptor = acsStoreDescriptor,
       storeIds = storeIds,
       migrationId = migrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
       acsArchiveConfigOpt = acsArchiveConfigOpt,
     )
@@ -58,6 +61,7 @@ abstract class DbTxLogAppStore[TXE](
       acsContractFilter,
       txLogConfig,
       migrationId,
+      synchronizerId,
       retryProvider,
       ingestionConfig,
       handleIngestionSummary,
@@ -74,6 +78,7 @@ abstract class DbAppStore(
     acsStoreDescriptor: StoreDescriptor,
     storeIds: DbMultiDomainAcsStore.StoreIds,
     migrationId: Long,
+    synchronizerId: SynchronizerId,
     ingestionConfig: IngestionConfig,
     acsArchiveConfigOpt: Option[AcsArchiveConfig] = None,
 )(implicit
@@ -100,6 +105,7 @@ abstract class DbAppStore(
       acsContractFilter,
       TxLogStore.Config.empty,
       migrationId,
+      synchronizerId,
       retryProvider,
       ingestionConfig,
       handleIngestionSummary,
@@ -108,6 +114,8 @@ abstract class DbAppStore(
     )
 
   override lazy val storeName: String = multiDomainAcsStore.storeName
+
+  protected def acsSynchronizerId: SynchronizerId = multiDomainAcsStore.synchronizerId
 
   override lazy val domains: InMemorySynchronizerStore =
     new InMemorySynchronizerStore(

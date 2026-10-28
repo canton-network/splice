@@ -6,7 +6,6 @@ package org.lfdecentralizedtrust.splice.splitwell.automation
 import org.apache.pekko.stream.Materializer
 import cats.syntax.apply.*
 import org.lfdecentralizedtrust.splice.automation.{
-  AssignTrigger,
   AutomationServiceCompanion,
   SpliceAppAutomationService,
   SqlIndexInitializationTrigger,
@@ -105,15 +104,6 @@ class SplitwellAutomationService(
       scanConnection.getAmuletRulesDomain,
       store.key.providerParty,
       splitwellCodegen.TransferInProgress.COMPANION,
-    )
-  )
-
-  registerTrigger(
-    new AssignTrigger(
-      triggerContext,
-      store,
-      connection(SpliceLedgerConnectionPriority.Low),
-      store.key.providerParty,
     )
   )
 

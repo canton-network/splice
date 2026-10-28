@@ -600,6 +600,7 @@ class TxLogBackfillingStoreTest
         filter,
         testTxLogConfig,
         migrationId,
+        sync1,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

@@ -17,8 +17,6 @@ import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ActiveContract,
-  IncompleteReassignmentEvent,
-  ReassignmentEvent,
   TreeUpdateOrOffsetCheckpoint,
 }
 import org.lfdecentralizedtrust.splice.environment.PackageVersionSupport
@@ -34,13 +32,11 @@ import org.lfdecentralizedtrust.splice.util.{
   TemplateJsonDecoder,
 }
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLogging}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.participant.pretty.Implicits.prettyContractId
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
@@ -60,6 +56,8 @@ import scala.jdk.CollectionConverters.*
 trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with NamedLogging {
   protected def storeName: String
   def storeParty: PartyId
+
+  def synchronizerId: SynchronizerId
 
   def defaultLimit: Limit
 
@@ -210,7 +208,7 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
       companionClass: ContractCompanion[C, TCid, T]
   ): ListExpiredContracts[TCid, T]
 
-  /** Stream all ready contracts that can be acted upon.
+  /** Stream all contracts that can be acted upon.
     * Note that the same contract can be returned multiple
     * times as it moves across domains.
     */
@@ -220,21 +218,6 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
       companionClass: ContractCompanion[C, TCid, T],
       traceContext: TraceContext,
   ): Source[AssignedContract[TCid, T], NotUsed]
-
-  /** Stream all unassign events that are ready for assign.
-    * The only guarantee provided is that a unassign that does not get transferred in
-    * will eventually appear on the stream.
-    */
-  def streamReadyForAssign()(implicit
-      tc: TraceContext
-  ): Source[ReassignmentEvent.Unassign, NotUsed]
-
-  /** Returns true if the unassign event can still potentially be transferred in.
-    * Intended to be used as a staleness check for the results of `streamReadyForAssign`.
-    */
-  def isReadyForAssign(contractId: ContractId[?], out: ReassignmentId)(implicit
-      tc: TraceContext
-  ): Future[Boolean]
 
   def findInterfaceViewByContractId[C, ICid <: ContractId[?], View <: DamlRecord[View]](
       companion: C
@@ -265,11 +248,6 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
   ): Future[Unit]
 
   def ingestionSink: MultiDomainAcsStore.IngestionSink
-
-  /** Testing API: returns all contracts that have in-flight reassignments */
-  private[store] def listIncompleteReassignments()(implicit
-      tc: TraceContext
-  ): Future[Map[ContractId[?], NonEmpty[Set[ReassignmentId]]]]
 
   /** Testing API: lookup last ingested offset */
   private[store] def lookupLastIngestedOffset()(implicit tc: TraceContext): Future[Option[Long]]
@@ -303,7 +281,7 @@ object MultiDomainAcsStore extends StoreErrors {
     def ingestionFilter: IngestionFilter
 
     /** Whether the event is in scope. */
-    def contains(ev: CreatedEvent, synchronizerId: SynchronizerId)(implicit
+    def contains(ev: CreatedEvent)(implicit
         elc: ErrorLoggingContext
     ): Boolean
 
@@ -386,7 +364,6 @@ object MultiDomainAcsStore extends StoreErrors {
         Identifier, // interfaces are not (currently) upgradeable, so we match by package-id
         InterfaceFilter[?, ?, ?, IR],
       ],
-      synchronizerFilter: Option[SynchronizerId] = None,
   )(implicit
       hasAcsIndexColumns: AcsRowData.HasIndexColumns[R],
       hasInterfaceViewsIndexColumns: AcsRowData.HasIndexColumns[IR],
@@ -404,29 +381,27 @@ object MultiDomainAcsStore extends StoreErrors {
     def getInterfaceViewsIndexColumnNames: Seq[String] =
       hasInterfaceViewsIndexColumns.indexColumnNames
 
-    override def contains(ev: CreatedEvent, synchronizerId: SynchronizerId)(implicit
+    override def contains(ev: CreatedEvent)(implicit
         elc: ErrorLoggingContext
     ): Boolean = {
-      synchronizerFilter.forall(_ == synchronizerId) && {
-        val matchesTemplate = templateFilters
-          .get(PackageQualifiedName.fromEvent(ev))
-          .exists(_.evPredicate(ev))
-        lazy val interfaceViews = ev.getInterfaceViews.asScala.filter { case (identifier, _) =>
-          interfaceFilters.get(identifier).exists(_.evPredicate(ev))
-        }
-        lazy val interfaceToFailureMap = ev.getFailedInterfaceViews.asScala.filter {
-          case (identifier, _) =>
-            interfaceFilters.contains(identifier)
-        }
-        if (interfaceToFailureMap.nonEmpty) {
-          elc.error(
-            show"Found failed interface views that match an interface id in a filter: $interfaceToFailureMap. " +
-              show"This might be a bug in the daml definition of the interface's view. " +
-              show"Resolve the error, and if required, reingest the data."
-          )
-        }
-        matchesTemplate || interfaceViews.nonEmpty
+      val matchesTemplate = templateFilters
+        .get(PackageQualifiedName.fromEvent(ev))
+        .exists(_.evPredicate(ev))
+      lazy val interfaceViews = ev.getInterfaceViews.asScala.filter { case (identifier, _) =>
+        interfaceFilters.get(identifier).exists(_.evPredicate(ev))
       }
+      lazy val interfaceToFailureMap = ev.getFailedInterfaceViews.asScala.filter {
+        case (identifier, _) =>
+          interfaceFilters.contains(identifier)
+      }
+      if (interfaceToFailureMap.nonEmpty) {
+        elc.error(
+          show"Found failed interface views that match an interface id in a filter: $interfaceToFailureMap. " +
+            show"This might be a bug in the daml definition of the interface's view. " +
+            show"Resolve the error, and if required, reingest the data."
+        )
+      }
+      matchesTemplate || interfaceViews.nonEmpty
     }
 
     override def shouldArchive(
@@ -800,13 +775,6 @@ object MultiDomainAcsStore extends StoreErrors {
       type T <: Template
     }
 
-  final case class ReassignmentId(source: SynchronizerId, id: String)
-
-  object ReassignmentId {
-    def fromUnassign(out: ReassignmentEvent.Unassign) =
-      ReassignmentId(out.source, out.unassignId)
-  }
-
   sealed abstract class ContractState extends PrettyPrinting with Product with Serializable {
     def isAssigned: Boolean
 
@@ -843,20 +811,12 @@ object MultiDomainAcsStore extends StoreErrors {
     def ingestAcs(
         offset: Long,
         acs: Seq[ActiveContract],
-        incompleteOut: Seq[IncompleteReassignmentEvent.Unassign],
-        incompleteIn: Seq[IncompleteReassignmentEvent.Assign],
     )(implicit mat: Materializer, traceContext: TraceContext): Future[Unit] = {
       ingestAcsStreamInBatches(
         Source.single[Seq[BaseLedgerConnection.ActiveContractsItem]](
           acs.map[BaseLedgerConnection.ActiveContractsItem](
             BaseLedgerConnection.ActiveContractsItem.ActiveContract(_)
-          ) ++
-            incompleteOut.iterator.map(
-              BaseLedgerConnection.ActiveContractsItem.IncompleteUnassign(_)
-            ) ++
-            incompleteIn.iterator.map(
-              BaseLedgerConnection.ActiveContractsItem.IncompleteAssign(_)
-            )
+          )
         ),
         offset,
       )
@@ -908,50 +868,6 @@ object MultiDomainAcsStore extends StoreErrors {
       ) extends IngestionStart
     }
 
-  }
-
-  // The state of a contract in the store. Note that, contrary to `ContractState`, this can
-  // also include archived contracts.
-  sealed abstract class StoreContractState extends PrettyPrinting
-  object StoreContractState {
-
-    /** Observed activation (assign/create).
-      */
-    final case class Assigned(domain: SynchronizerId) extends StoreContractState {
-      override def pretty: Pretty[this.type] = prettyOfClass(
-        param("domain", _.domain)
-      )
-    }
-
-    /** Observed unassign but not assign.
-      */
-    final case class InFlight(out: ReassignmentEvent.Unassign) extends StoreContractState {
-      override def pretty: Pretty[this.type] = prettyOfClass(
-        param("out", _.out)
-      )
-    }
-
-    /** Observed archive but there are still incomplete transfers.
-      */
-    final case object Archived extends StoreContractState {
-      override def pretty: Pretty[this.type] = prettyOfObject[Archived.type]
-    }
-  }
-
-  /** The "most recent" state for a contract where "most recent"
-    * is defined based as the highest transfer counter
-    */
-  case class ContractStateEvent(
-      contractId: ContractId[?],
-      transferCounter: Long,
-      state: StoreContractState,
-  ) extends PrettyPrinting {
-
-    override def pretty: Pretty[this.type] = prettyOfClass(
-      param("contractId", _.contractId),
-      param("transferCounter", _.transferCounter),
-      param("state", _.state),
-    )
   }
 
   private def orContractIdNotFound[A, C](found: Future[Option[A]])(companion: C, id: ContractId[?])(
