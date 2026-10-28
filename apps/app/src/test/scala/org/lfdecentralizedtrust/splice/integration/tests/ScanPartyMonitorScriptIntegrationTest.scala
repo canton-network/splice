@@ -104,6 +104,7 @@ class ScanPartyMonitorScriptIntegrationTest
       val db = dir.resolve("monitor.sqlite")
       import env.{actorSystem, executionContext}
       val slackBodies = new ConcurrentLinkedQueue[String]()
+      // mock Slack webhook to capture the posted messages
       val slackRoute = path("slack") {
         post {
           entity(as[String]) { body =>
