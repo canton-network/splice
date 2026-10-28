@@ -355,3 +355,13 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10699 / 10701 | ciperiodic deploy_lsu_operator (CircleCI 525633) / deploy_ciperiodic_non_devnet (525660) | likely 10520 (N) | `2026-10-28/10699-10701-ciperiodic-pv36.md`. Every ciperiodic workflow red since 10-23 17:05 (#7944/#7910 window); ciperiodic is the only cluster pinned to PV 36 (`cluster/deployment/ciperiodic/sv.yaml`). Needs the CircleCI log to confirm INITIAL_ONBOARDING_ERROR; 10677 likely the same. |
 | 10695 / 10696 | manual scratchneta deploy_basic (run 40580340029, pasindutennage-da): preflight_check_docker + deploy_arm_compose_validator | - | `2026-10-28/10695-10696-scratchneta-arm-compose.md`. First occurrences, deploy_cluster passed; ask Pasindu, needs GHA logs. |
 | 10721 | Auth0 User Cleanup (GHA run 40641314724), second weekly failure | 10480 | `2026-10-28/10721-auth0-cleanup.md`. Suspect: GHA port runs `timeout 15m sbt tools/run` without the setup_sbt cache step the CircleCI job had (tools depends on apps-app compile->test). Close as dup, comment on 10480. |
+
+# CI failure triage - 2026-10-28 afternoon (2026-10-28b)
+
+## Overview (b: infra)
+
+| Ref | Failure | Family / dup of | Packet / action |
+|---|---|---|---|
+| 10725 | Mainnet backup_status_cluster (GHA run 40661475825, 10-28 09:06) | 10643 | `2026-10-28b/10725-backup-10643.md`. Ran before cni #7727 (backup step timeout removed, merged 09:47); 10643's final diagnosis is the 90 min timeout, not OOM. Close as dup. |
+| 10733 | deploy_cimain (CircleCI 87435, job 525868), cni 1451bfce38, splice d0a311567d | - | `2026-10-28b/10733-deploy-cimain.md`. No deploy_basic issue for cimain, so likely wait_for_previous_pipeline or dependencies_scan; not 10693 (#7718 included). Needs the job log. |
+| 10736 | ciperiodic deploy_upgrade (CircleCI 87425, job 525815), base splice 3514d7e8ad (0.9.x) | 10677 | `2026-10-28b/10736-deploy-upgrade.md`. Not family N (base is the 0.9.x release); first 10:00 runs after cni #7703 (synchronizerMigration.active). Close as dup of 10677, needs the log. |

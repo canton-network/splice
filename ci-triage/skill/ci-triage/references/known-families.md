@@ -224,8 +224,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Every nightly run files ~21 per-job issues (10-28: 10702-10720, 10722, 10723); cancelled shards (key-download) carry
   the same error. Check each job with one grep for `SV1Initializer bootstrapping Dso failed`, then close as dups.
 - Cluster instance (likely, 10699/10701, unconfirmed): ciperiodic pins the SV synchronizer to PV 36
-  (`cluster/deployment/ciperiodic/sv.yaml`, cni TODO #7542) and every ciperiodic workflow (sv_reonboard, lsu_operator,
-  non_devnet, deploy_upgrade) has been red since 10-23 17:05; Pawel closes the per-job issues as dups. Confirm with
+  (`cluster/deployment/ciperiodic/sv.yaml`, cni TODO #7542) and the ciperiodic workflows that bootstrap on main
+  (sv_reonboard, lsu_operator, non_devnet) have been red since 10-23 17:05; Pawel closes the per-job issues as dups.
+  deploy_upgrade is NOT this family (its base is the 0.9.x release, see J). Confirm with
   sv-1 `INITIAL_ONBOARDING_ERROR` in the CircleCI step output or GCP logs (da-cn-ci, cn-ciperiodicnet, sv-app).
 
 ## J. Infra, no code change
@@ -248,8 +249,15 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
   splice commit. 10683, 10688, likely 10689. Fixed by the #8015 revert.
-- 10643 backup jobs OOM (100 Mi GHA runner request, ~360 Mi peak): backup_status_cluster `Stale backups found: ...`
-  on Mainnet and Devnet. Devnet fails every ~3 h run since 10-27 18:00 (10692 10694 10698 10700 10724). Close as dups.
+- 10643 backup jobs cancelled by the 90 min `Backup node` step timeout (Krzysztof's final diagnosis 10-28, not the
+  runner OOM first suspected): backup_status_cluster `Stale backups found: ...` on Mainnet and Devnet (10692 10694
+  10698 10700 10724 10725). Fixed by cni #7727 (1451bfce38, 10-28 09:47: timeout removed, one backup run per net).
+  Runs before that are dups; status stays red until stale nodes have a fresh backup. Reopen 10643 if it persists.
+- ciperiodic deploy_upgrade (10677, 10736; 10:00 runs since 10-27): base = latest release (0.9.x submodule), then
+  upgrade to main. Not family N. First runs after cni #7703 (synchronizerMigration.active added on the branch). Needs
+  the CircleCI step output.
+- deploy_cimain issues come from the wrapper's notify-fail jobs (wait_for_previous_pipeline, dependencies_scan); a
+  failing cimain deploy files a deploy_basic issue for build/cimain-deploy-basic instead. 10305, 10493, 10733.
 - Auth0 User Cleanup on GHA (10480, 10721, weekly Wed 06:00): suspected `timeout 15m sbt tools/run` without the
   setup_sbt cache step (tools depends on apps-app compile->test). Close as dup of 10480.
 - 10679: one runner several times slower in every app init phase (Wait for user 17-35 s, Initialize app ~4 min),
