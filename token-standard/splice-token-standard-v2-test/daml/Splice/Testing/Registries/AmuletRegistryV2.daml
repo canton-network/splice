@@ -221,6 +221,8 @@ featureApp registry provider = do
   result <- submit (actAs provider <> readAs registry.dso) $ exerciseCmd amuletRulesCid AmuletRules_DevNet_FeatureApp with
     provider
     activityWeight = None
+    appKind = None
+    opsParties = None
   return result.featuredAppRightCid
 
 -- | Mark a particular registry provider part as featured.
@@ -230,6 +232,8 @@ featureApp' registry provider weight = do
   result <- submit (actAs provider <> readAs registry.dso) $ exerciseCmd amuletRulesCid AmuletRules_DevNet_FeatureApp with
     provider
     activityWeight = Some weight
+    appKind = None
+    opsParties = None
   return result.featuredAppRightCid
 
 -- | Encode a list of beneficiaries as metadata to pass in via token standard choices.

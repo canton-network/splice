@@ -418,10 +418,12 @@ template AmuletRules
       with
         provider : Party
         activityWeight : Optional Decimal
+        appKind : Optional FeaturedAppKind
+        opsParties : Optional [Party]
       controller provider
       do
         require "isDevNet flag is true" isDevNet
-        featuredAppRightCid <- create FeaturedAppRight with dso; provider; activityWeight; appKind = None; opsParties = None
+        featuredAppRightCid <- create FeaturedAppRight with dso; provider; activityWeight; appKind; opsParties
         return AmuletRules_DevNet_FeatureAppResult with ..
 
     -- Bootstrap the open mining rounds by creating
