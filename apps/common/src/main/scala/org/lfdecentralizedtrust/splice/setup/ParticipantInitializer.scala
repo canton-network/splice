@@ -109,11 +109,8 @@ class ParticipantInitializer(
       case None =>
         logger.info(s"Initializing participant $identifierName")
         for {
-          _ <- nodeInitializer.initializeWithNewIdentityIfNeeded(
-            identifierName,
-            ParticipantId.apply,
-          )
           _ <- nodeInitializer.waitForNodeInitialized()
+          _ <- nodeInitializer.ensureIdentityMatches(identifierName)
         } yield {
           logger.info(s"Participant $identifierName is initialized")
         }

@@ -62,6 +62,41 @@ class NodeInitializer(
       logger,
     )
 
+  /** Verifies that the identity Canton created during auto-initialization
+    * uses the identifier this app expects. Guards against an operator
+    * setting the app's identifier without the matching Canton config.
+    */
+  def ensureIdentityMatches(identifierName: String)(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Unit] =
+    for {
+      nodeId <- connection.getIdOption()
+      _ <- nodeId.uniqueIdentifier match {
+        case Some(id) if id.identifier.unwrap == identifierName =>
+          logger.info(
+            s"Node has identity $id, matching expected identifier " +
+              s"$identifierName."
+          )
+          Future.unit
+        case Some(id) =>
+          val msg =
+            s"Node has identity $id, but identifier $identifierName " +
+              s"was expected."
+          logger.error(msg)
+          Future.failed(Status.INTERNAL.withDescription(msg).asRuntimeException())
+        case None =>
+          Future.failed(
+            Status.INTERNAL
+              .withDescription(
+                s"${connection.serviceName} reports as initialized but " +
+                  s"has no identity."
+              )
+              .asRuntimeException()
+          )
+      }
+    } yield ()
+
   // Note: this method is not idempotent or crash fault tolerant. We accept that it may brick a node if initialization
   // fails, since we can easily recover by resetting the node.
   private def initializeWithNewIdentity(
