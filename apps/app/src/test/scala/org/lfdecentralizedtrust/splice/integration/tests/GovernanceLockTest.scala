@@ -27,10 +27,6 @@ trait GovernanceLockTest extends TokenStandardTest {
   // Same as `defaultGovernanceLockMinimumLockAmount` in Daml.
   protected val minimumLockAmount = BigDecimal(10000.0)
 
-  val lockManagerParty = PartyId.tryFromProtoPrimitive(
-    s"${lockCipPrefix}_lock-manager::1220000000000000000000000000000000000000000000000000000000000000abcd"
-  )
-
   private val lockStatusMetaKey = "lock-status"
   private val lockVestingDurationMetaKey = "lock-vesting-duration-micros"
   private val lockVestingEndTimeMetaKey = "lock-vesting-end-time-micros"
@@ -265,7 +261,7 @@ trait GovernanceLockTest extends TokenStandardTest {
         executeTransfer(
           participant,
           owner,
-          lockManagerParty,
+          GovernanceLockUtil.lockManagerParty,
           amount,
           description = Some(description),
           wait = wait,
@@ -293,7 +289,7 @@ trait GovernanceLockTest extends TokenStandardTest {
         amount,
         makeInputLockMemo(CreateLock, lockKind, lockSubject)(()),
         wait = true,
-        defaultIsValid(lockManagerParty, existingCids),
+        defaultIsValid(GovernanceLockUtil.lockManagerParty, existingCids),
       ).loneElement._1
     }
 
@@ -327,7 +323,9 @@ trait GovernanceLockTest extends TokenStandardTest {
             (unlockAmount, vestingStartTime)
           ),
           wait = false,
-          (cid, view) => defaultIsValid(lockManagerParty, existingCids)(cid, view) && isValid(view),
+          (cid, view) =>
+            defaultIsValid(GovernanceLockUtil.lockManagerParty, existingCids)(cid, view) &&
+              isValid(view),
         )
       )
     }

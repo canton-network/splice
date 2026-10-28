@@ -167,6 +167,9 @@
     "disableAuth": {
       "type": "boolean"
     },
+    "enableKeyDownload": {
+      "type": "boolean"
+    },
     "if": {
       "properties": {
         "disableAuth": {

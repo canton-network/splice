@@ -63,6 +63,10 @@ extraInitContainers: []
 # set to true to disable auth (this is highly insecure)
 disableAuth: false
 
+# Set to true to allow downloading the participant's private keys via its admin API.
+# Required for participant identities backups and dumps if the participant does not use KMS.
+enableKeyDownload: false
+
 #auth:
 #  secretOverrides:
 #    ledgerApiUser: ""

@@ -62,6 +62,7 @@
         "name": "cn-mocknet"
       },
       "enableHealthProbes": true,
+      "enableKeyDownload": true,
       "enablePostgresMetrics": true,
       "extraVolumeMounts": [
         {

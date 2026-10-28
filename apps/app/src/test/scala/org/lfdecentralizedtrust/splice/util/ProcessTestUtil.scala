@@ -13,6 +13,9 @@ import scala.util.Using
   */
 object ProcessTestUtil {
   val javaToolOptionsKey = "JAVA_TOOL_OPTIONS"
+
+  val enableKeyDownloadConfig = "canton.parameters.enable-key-download=yes"
+
   final case class Process(process: java.lang.Process) {
     def destroyAndWait(): Unit = {
       process.destroy()

@@ -97,6 +97,8 @@ When you change a Daml package, bump the version of that package and of every pa
 
 Frontend code projects are managed via `npm workspaces`.
 
+The generated Daml TS bindings (`apps/common/frontend/daml.js`) and OpenAPI clients (`*/openapi-ts-client`) are not npm dependencies or workspaces: `apps/generated-packages.json` lists them and `apps/scripts/link-generated-packages.mjs` links them into `node_modules` on `npm install`. A new OpenAPI client must be added to that file; a Daml version bump updates its aliases (`sbt damlBumpPackageVersions` does this).
+
 ### New Packages
 
 To add a new package to the workspace:

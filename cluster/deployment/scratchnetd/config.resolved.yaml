@@ -1663,6 +1663,8 @@ validators:
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
+    participant:
+      enableKeyDownload: true
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: true
