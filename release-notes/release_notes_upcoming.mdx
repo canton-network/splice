@@ -49,6 +49,14 @@
       or set `canton.parameters.enable-key-download = yes` in the participant's Canton configuration.
       Participants that use KMS are not affected, as their identities dumps do not include private keys.
 
+    - **Breaking** The participant's repair service (`canton.features.enable-repair-commands`) is now disabled by default.
+      **SVs must enable it**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump,
+      exports the ACS through it. To enable it, set `enableRepairCommands: true` in the `splice-participant` Helm chart
+      (see updated example `participant-values.yaml` for SVs).
+      Validators only need it while restoring from an identities dump (`migrateValidatorParty`) or while running
+      repair commands such as `participant.repair.import_acs`.
+      The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
+
   - Scan App
 
     - The following request fields now have a `maxItems` bound of 1000; requests exceeding it are rejected with 400:
