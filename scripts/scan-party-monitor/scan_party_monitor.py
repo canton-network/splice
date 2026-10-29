@@ -46,7 +46,7 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, NewType, Optional, Set, Tuple
 
 VERSION = "0.2.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
@@ -72,6 +72,9 @@ LOG = logging.getLogger("scan-party-monitor")
 Json = Dict[str, Any]
 # (migration id, record time): the order of updates in Scan.
 Position = Tuple[int, datetime]
+# A party id from the configuration. Only _check_party_id creates one, so it has passed that
+# check; party ids from Scan are plain strs.
+PartyId = NewType("PartyId", str)
 
 
 class Meta(Enum):
@@ -163,11 +166,11 @@ def holding_amount(created: Json) -> Optional[str]:
 @dataclass(frozen=True)
 class PartyConfig:
     # Includes the common expected recipients, the party's additional ones, and the party itself.
-    expected_recipients: FrozenSet[str]
+    expected_recipients: FrozenSet[PartyId]
     alert_confirmations: bool
 
 
-def _check_party_id(party: object, where: str) -> str:
+def _check_party_id(party: object, where: str) -> PartyId:
     if not isinstance(party, str) or not re.fullmatch(
         rf"\S.*::[0-9a-f]{{{MIN_FINGERPRINT_LENGTH},}}", party
     ):
@@ -175,10 +178,10 @@ def _check_party_id(party: object, where: str) -> str:
             f"{where}: {party!r} is not a party id (expected <hint>::<fingerprint>, with a "
             f"fingerprint of at least {MIN_FINGERPRINT_LENGTH} lowercase hex digits)"
         )
-    return party
+    return PartyId(party)
 
 
-def _party_list(value: object, where: str) -> List[str]:
+def _party_list(value: object, where: str) -> List[PartyId]:
     if not isinstance(value, list):
         raise FatalError(f"{where} must be a list of party ids")
     return [_check_party_id(p, where) for p in value]
@@ -190,8 +193,7 @@ def _check_keys(obj: Json, allowed: Set[str], where: str) -> None:
         raise FatalError(f"{where}: unknown keys {sorted(unknown)}; expected some of {sorted(allowed)}")
 
 
-def _party_config(party: str, settings: object, common: List[str]) -> PartyConfig:
-    _check_party_id(party, "parties")
+def _party_config(party: PartyId, settings: object, common: List[PartyId]) -> PartyConfig:
     where = f"parties.{party}"
     if not isinstance(settings, dict):
         raise FatalError(f"{where} must be an object")
@@ -206,7 +208,7 @@ def _party_config(party: str, settings: object, common: List[str]) -> PartyConfi
     )
 
 
-def parse_config(raw: object) -> Dict[str, PartyConfig]:
+def parse_config(raw: object) -> Dict[PartyId, PartyConfig]:
     if not isinstance(raw, dict):
         raise FatalError("The configuration must be a JSON object")
     _check_keys(raw, {"expected_recipients", "parties"}, "configuration")
@@ -216,10 +218,11 @@ def parse_config(raw: object) -> Dict[str, PartyConfig]:
         raise FatalError("The configuration must list the tracked parties in a non-empty 'parties' object")
     if len(parties) > MAX_TRACKED_PARTIES:
         raise FatalError(f"At most {MAX_TRACKED_PARTIES} parties can be tracked, got {len(parties)}")
-    return {party: _party_config(party, settings, common) for party, settings in parties.items()}
+    checked = {_check_party_id(party, "parties"): settings for party, settings in parties.items()}
+    return {party: _party_config(party, settings, common) for party, settings in checked.items()}
 
 
-def load_config(path: str) -> Dict[str, PartyConfig]:
+def load_config(path: str) -> Dict[PartyId, PartyConfig]:
     try:
         with open(path) as f:
             raw = json.load(f)
@@ -357,7 +360,7 @@ class ScanClient:
         self,
         migration_id: int,
         record_time: str,
-        party_ids: List[str],
+        party_ids: List[PartyId],
         page_size: int,
         after: Optional[str],
     ) -> Json:
@@ -584,7 +587,7 @@ class Monitor:
         scan: ScanClient,
         store: Store,
         slack: Optional[SlackNotifier],
-        config: Dict[str, PartyConfig],
+        config: Dict[PartyId, PartyConfig],
     ) -> None:
         self.args = args
         self.scan = scan
@@ -596,9 +599,9 @@ class Monitor:
             pid for pid, p in self.tracked_by_id.items() if config[p].alert_confirmations
         }
         # Per party, the position up to which its matches were already reported before a re-seed.
-        self.reported_until: Dict[str, Position] = {
-            p: position(m, t)
-            for p, (m, t) in json.loads(store.get_meta(Meta.REPORTED_UNTIL) or "{}").items()
+        reported_until = json.loads(store.get_meta(Meta.REPORTED_UNTIL) or "{}")
+        self.reported_until: Dict[PartyId, Position] = {
+            p: position(*reported_until[p]) for p in config if p in reported_until
         }
         self.stats: Dict[str, int] = {"transactions": 0, "matches": 0}
 
@@ -642,7 +645,7 @@ class Monitor:
             cursor = position(cursor_migration_id, cursor_record_time)
             self.reported_until = {
                 **self.reported_until,
-                **{p: max(self.reported_until.get(p, cursor), cursor) for p in stored & set(configured)},
+                **{p: max(self.reported_until.get(p, cursor), cursor) for p in configured if p in stored},
             }
             self._save_reported_until()
             store.set_meta(Meta.SNAPSHOT_MIGRATION_ID, cursor_migration_id)
@@ -889,21 +892,19 @@ class Monitor:
         # Pre-order traversal is execution order, so contracts created earlier in this
         # transaction are in the map before they can be exercised.
         ordered = preorder(update["events_by_id"], update["root_event_ids"])
-        found: List[Tuple[str, Json]] = []
-        senders: Set[str] = set()
+        found: List[Tuple[PartyId, Json]] = []
+        senders: Set[PartyId] = set()
         for event in ordered:
             if event["event_type"] == "created_event":
                 found += [
                     _reason(p, "created_signatory", event)
-                    for p in event["signatories"]
-                    if self.store.party_ids.get(p) in self.confirmation_ids
+                    for p in self.alerting_confirmations(event["signatories"])
                 ]
                 self.store_if_tracked(event)
             else:
                 found += [
                     _reason(p, "acting", event)
-                    for p in event["acting_parties"]
-                    if self.store.party_ids.get(p) in self.confirmation_ids
+                    for p in self.alerting_confirmations(event["acting_parties"])
                 ]
                 stored = self.store.lookup(event["contract_id"])
                 if stored is not None:
@@ -950,6 +951,11 @@ class Monitor:
             "parties": unreported,
         }
 
+    def alerting_confirmations(self, parties: Iterable[str]) -> List[PartyId]:
+        """Those of `parties` that are tracked with alert_confirmations."""
+        ids = (self.store.party_ids.get(p) for p in parties)
+        return [self.tracked_by_id[pid] for pid in ids if pid is not None and pid in self.confirmation_ids]
+
 
 def preorder(events: Json, root_ids: List[str]) -> List[Json]:
     """The events of a transaction in execution order."""
@@ -963,7 +969,7 @@ def preorder(events: Json, root_ids: List[str]) -> List[Json]:
     return ordered
 
 
-def _reason(party: str, reason: str, event: Json, **details: Any) -> Tuple[str, Json]:
+def _reason(party: PartyId, reason: str, event: Json, **details: Any) -> Tuple[PartyId, Json]:
     choice = {"choice": event["choice"]} if "choice" in event else {}
     return party, {
         "reason": reason,

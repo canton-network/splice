@@ -38,8 +38,8 @@ import scan_party_monitor as spm  # noqa: E402
 from scan_party_monitor import Json, Meta  # noqa: E402
 
 
-def party(hint: str) -> str:
-    return f"{hint}::1220{hashlib.sha256(hint.encode()).hexdigest()}"
+def party(hint: str) -> spm.PartyId:
+    return spm._check_party_id(f"{hint}::1220{hashlib.sha256(hint.encode()).hexdigest()}", "test party")
 
 
 DSO = party("dso")
