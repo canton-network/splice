@@ -254,9 +254,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $baselineRound FA event: per-record asset weight for $assetParty is ~10% of burn (cap=0.1, weight=1)"
     ) {
-      val faEvent = findFaSubmittedEvent(baselineEvents, assetParty)
-      assertAssetRatioInEvent(
-        event = faEvent,
+      assertFaSendRatio(
+        events = baselineEvents,
         submitter = assetMoverParty,
         assetParty = assetParty,
         expectedPct = 10,
@@ -268,9 +267,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $baselineRound FA event: per-record asset weight for $doomedAssetParty is ~10% of burn (same baseline — still active)"
     ) {
-      val faEvent = findFaSubmittedEvent(baselineEvents, doomedAssetParty)
-      assertAssetRatioInEvent(
-        event = faEvent,
+      assertFaSendRatio(
+        events = baselineEvents,
         submitter = assetMoverParty,
         assetParty = doomedAssetParty,
         expectedPct = 10,
@@ -294,9 +292,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       val noFaUpdateId = userSubmittedEvent.verdict
         .map(_.updateId)
         .getOrElse(fail("User-submitted event should carry a verdict with an updateId"))
-      val noFaEvent = sv1ScanBackend
-        .getEventById(noFaUpdateId, None)
-        .getOrElse(fail(s"scan.getEventById($noFaUpdateId) returned None"))
+      val noFaEvent = fetchEvent(noFaUpdateId, s"non-FA $noFaUpdateId")
       noFaEvent.submittingAppProvider shouldBe None withClue
         s"Non-FA-submitted event $noFaUpdateId should have no submitting_app_provider"
     }
@@ -308,9 +304,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       val faUpdateId = faEvent.verdict
         .map(_.updateId)
         .getOrElse(fail("FA-submitted event should carry a verdict with an updateId"))
-      val reloaded = sv1ScanBackend
-        .getEventById(faUpdateId, None)
-        .getOrElse(fail(s"scan.getEventById($faUpdateId) returned None"))
+      val reloaded = fetchEvent(faUpdateId, s"FA $faUpdateId")
       reloaded.submittingAppProvider.map(_.value) shouldBe Some(
         assetMoverParty.toProtoPrimitive
       ) withClue
@@ -380,9 +374,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $postVoteRound cap-crossed event (alice→$assetParty, w=1, cap=0.05): per-record asset ratio ~5%"
     ) {
-      val event = findFaSubmittedEvent(postVoteEvents, assetParty)
-      assertAssetRatioInEvent(
-        event = event,
+      assertFaSendRatio(
+        events = postVoteEvents,
         submitter = assetMoverParty,
         assetParty = assetParty,
         expectedPct = 5,
@@ -394,9 +387,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $postVoteRound weight-tripled event (alice→$highWeightAssetParty, w=3, cap=0.05): per-record asset ratio ~15%"
     ) {
-      val event = findFaSubmittedEvent(postVoteEvents, highWeightAssetParty)
-      assertAssetRatioInEvent(
-        event = event,
+      assertFaSendRatio(
+        events = postVoteEvents,
         submitter = assetMoverParty,
         assetParty = highWeightAssetParty,
         expectedPct = 15,
@@ -408,31 +400,13 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $postVoteRound post-revocation event (alice→$doomedAssetParty): no asset record for the revoked party; only DSO-share re-attributed to $assetMoverParty"
     ) {
-      // The revoked-receiver send is identified by its asset-records shape: the
-      // only FA-submitted event in the window whose assetActivityRecords has
-      // exactly one entry (the submitter, from DSO re-attribution). Sends to
-      // active FAK_ASSET confirmers in this same round have two entries (the
-      // confirmer + the submitter).
-      val submitterProto = assetMoverParty.toProtoPrimitive
-      val assetPartyProtos: Set[String] = postVoteEvents.iterator
-        .flatMap { e =>
-          for {
-            app <- e.appActivityRecords.filter(_.records.exists(_.party == submitterProto))
-            asset <- e.assetActivityRecords.filter(r =>
-              r.value.sizeIs == 1 && r.value.exists(_.party == submitterProto)
-            )
-            _ = app // used only for the filter above
-          } yield asset.value.map(_.party).toSet
-        }
-        .nextOption()
-        .getOrElse(
-          fail(
-            s"Expected a post-revocation FA-submitted event with only $assetMoverParty in assetActivityRecords"
-          )
-        )
+      // The revoked-receiver send is identified by its asset-records shape:
+      // sends to active FAK_ASSET confirmers in this round have two entries
+      // (confirmer + submitter); the revoked send has only one (submitter).
+      val assetPartyProtos = findDsoShareOnlyAssetPartyProtos(postVoteEvents, assetMoverParty)
       assetPartyProtos should not contain doomedAssetParty.toProtoPrimitive withClue
         s"$doomedAssetParty was revoked; its FA grant should no longer attribute asset activity"
-      assetPartyProtos shouldBe Set(submitterProto) withClue
+      assetPartyProtos shouldBe Set(assetMoverParty.toProtoPrimitive) withClue
         s"Only DSO's share should remain, re-attributed to the submitting app $assetMoverParty"
     }
 
@@ -615,6 +589,42 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
   }
 
+  // Picks out the asset-party set of the first FA-submitted event in `events`
+  // whose assetActivityRecords contain only the submitter (i.e., no FAK_ASSET
+  // confirmer in the envelope — only the DSO's share, re-attributed to the
+  // submitting app). Used to identify post-revocation sends whose intended
+  // receiver no longer holds a FAK_ASSET grant.
+  private def findDsoShareOnlyAssetPartyProtos(
+      events: Seq[definitions.EventHistoryItem],
+      submitter: PartyId,
+  ): Set[String] = {
+    val submitterProto = submitter.toProtoPrimitive
+    events.iterator
+      .flatMap { e =>
+        for {
+          _ <- e.appActivityRecords.filter(_.records.exists(_.party == submitterProto))
+          asset <- e.assetActivityRecords.filter(r =>
+            r.value.sizeIs == 1 && r.value.exists(_.party == submitterProto)
+          )
+        } yield asset.value.map(_.party).toSet
+      }
+      .nextOption()
+      .getOrElse(
+        fail(s"Expected an FA-submitted event with only $submitter in assetActivityRecords")
+      )
+  }
+
+  // Resolves a specific event by its updateId, wrapping the OrElse-fail boilerplate
+  // and labelling the lookup. Mirrors the pre-amendment sibling test's helper.
+  private def fetchEvent(updateId: String, label: String)(implicit
+      env: SpliceTestConsoleEnvironment
+  ): definitions.EventHistoryItem =
+    clue(s"Fetch event $label") {
+      sv1ScanBackend
+        .getEventById(updateId, None)
+        .getOrElse(fail(s"scan.getEventById($updateId) returned None"))
+    }
+
   // Asserts that `event`'s per-record asset weight for `assetParty` matches
   // `expectedPct` of the submitter's app weight (= total burn attributed to the
   // submitter in computeForFASubmitted), within ± tolerancePct. The ratio check
@@ -652,6 +662,25 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     actualPct should be <= upper withClue
       s"$label: asset/app ratio $actualPct% should be <= $upper% (expected ~$expectedPct%)"
   }
+
+  // Convenience that pairs findFaSubmittedEvent with assertAssetRatioInEvent for
+  // the common "find alice→X event, then assert its ratio" pattern.
+  private def assertFaSendRatio(
+      events: Seq[definitions.EventHistoryItem],
+      submitter: PartyId,
+      assetParty: PartyId,
+      expectedPct: Int,
+      tolerancePct: Int,
+      label: String,
+  ): Unit =
+    assertAssetRatioInEvent(
+      event = findFaSubmittedEvent(events, assetParty),
+      submitter = submitter,
+      assetParty = assetParty,
+      expectedPct = expectedPct,
+      tolerancePct = tolerancePct,
+      label = label,
+    )
 }
 
 object TrafficBasedRewardsV11TimeBasedIntegrationTestBase {
