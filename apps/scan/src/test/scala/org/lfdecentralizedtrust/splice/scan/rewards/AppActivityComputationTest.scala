@@ -568,7 +568,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
     provider -> (FeaturedAppKind.FAK_ASSET, weight)
 
   private def assertAppActivity(
-      record: DbAppActivityRecordStore.AppActivityRecordT,
+      record: DbAppActivityRecordStore.AppAndAssetActivityRecordT,
       expected: (String, Long)*
   ) = {
     record.roundNumber shouldBe 7L
@@ -577,7 +577,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   }
 
   private def assertAssetActivity(
-      record: DbAppActivityRecordStore.AppActivityRecordT,
+      record: DbAppActivityRecordStore.AppAndAssetActivityRecordT,
       expected: (String, Long)*
   ) =
     record.assetActivityProviderParties.zip(record.assetActivityWeights) shouldBe
@@ -589,7 +589,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       verdict: v30.Verdict,
       dsoParty: String = "DSO",
       params: AssetActivityParams = defaultAssetParams,
-  ): DbAppActivityRecordStore.AppActivityRecordT =
+  ): DbAppActivityRecordStore.AppAndAssetActivityRecordT =
     new AppActivityComputation(mock[ScanRewardsReferenceStore], loggerFactory)(
       directExecutionContext
     ).computeForFASubmitted(
@@ -604,14 +604,14 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
 
   private val roundOpensAt = CantonTimestamp.ofEpochSecond(0)
 
-  /** Run computation and extract just the AppActivityRecordT results.
+  /** Run computation and extract just the AppAndAssetActivityRecordT results.
     * All featured providers use the default activity weight of 1.0.
     */
   private def computeWith(
       featured: Set[String],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
       svParticipantIds: Set[String] = Set("someSvParticipant"),
-  ): Seq[DbAppActivityRecordStore.AppActivityRecordT] =
+  ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] =
     computeWithWeights(featured.map(_ -> BigDecimal(1)).toMap, input, svParticipantIds)
 
   /** Run computation with explicit per-provider activity weights. */
@@ -619,7 +619,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       featuredWeights: Map[String, BigDecimal],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
       svParticipantIds: Set[String] = Set("someSvParticipant"),
-  ): Seq[DbAppActivityRecordStore.AppActivityRecordT] =
+  ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] =
     computeWithFeaturedAppParties(
       ScanRewardsReferenceStore.FeaturedAppParties(
         providers = featuredWeights.map { case (party, weight) =>
@@ -639,7 +639,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
         defaultAssetParams
       ),
       amuletVersion: Option[String] = Some(DarResources.amulet.latest.metadata.version.toString),
-  ): Seq[DbAppActivityRecordStore.AppActivityRecordT] = {
+  ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
     val store = mock[ScanRewardsReferenceStore]
     val amuletConfig = amuletVersion.map { version =>
       val packageConfig = SpliceUtil.readPackageConfig()

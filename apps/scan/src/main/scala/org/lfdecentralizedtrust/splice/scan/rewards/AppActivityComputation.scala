@@ -123,7 +123,7 @@ class AppActivityComputation(
     (
         DbScanVerdictStore.TrafficSummaryT,
         v30.Verdict,
-        Option[DbAppActivityRecordStore.AppActivityRecordT],
+        Option[DbAppActivityRecordStore.AppAndAssetActivityRecordT],
         Option[Long],
     )
   ]] = {
@@ -226,7 +226,7 @@ class AppActivityComputation(
       featuredAppParties: ScanRewardsReferenceStore.FeaturedAppParties,
       assetActivityParams: Option[AssetActivityParams],
       computeFASubmitted: Boolean,
-  ): Option[DbAppActivityRecordStore.AppActivityRecordT] = {
+  ): Option[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
     val confirmers = verdict.getTransactionViews.views.values
       .flatMap(_.confirmingParties.flatMap(_.parties))
       .toSet
@@ -261,7 +261,7 @@ class AppActivityComputation(
       verdict: v30.Verdict,
       roundNumber: Long,
       featuredAppProviders: Map[String, (FeaturedAppKind, BigDecimal)],
-  ): Option[DbAppActivityRecordStore.AppActivityRecordT] = {
+  ): Option[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
     val envelopesWithFeaturedAppConfirmers =
       summary.envelopeTrafficSummarys.flatMap { envelope =>
         val envelopeConfirmers =
@@ -282,7 +282,7 @@ class AppActivityComputation(
       )
 
       Some(
-        DbAppActivityRecordStore.AppActivityRecordT(
+        DbAppActivityRecordStore.AppAndAssetActivityRecordT(
           verdictRowId = DbAppActivityRecordStore.DUMMY_VERDICT_ROW_ID,
           roundNumber = roundNumber,
           appProviderParties = aggregatedBurn.keys.toSeq,
@@ -311,7 +311,7 @@ class AppActivityComputation(
       featuredAppProviders: Map[String, (FeaturedAppKind, BigDecimal)],
       dsoParty: String,
       paramsO: Option[AssetActivityParams],
-  ): DbAppActivityRecordStore.AppActivityRecordT = {
+  ): DbAppActivityRecordStore.AppAndAssetActivityRecordT = {
     val assetActivity = (featuredAppProviders.get(submittingApp), paramsO) match {
       case (
             Some((FeaturedAppKind.FAK_ASSETMOVING, submittingAppWeight)),
@@ -329,7 +329,7 @@ class AppActivityComputation(
       case _ => SortedMap.empty[String, Long]
     }
 
-    DbAppActivityRecordStore.AppActivityRecordT(
+    DbAppActivityRecordStore.AppAndAssetActivityRecordT(
       verdictRowId = DbAppActivityRecordStore.DUMMY_VERDICT_ROW_ID,
       roundNumber = roundNumber,
       appProviderParties = Seq(submittingApp),

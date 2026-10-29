@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, definitions as httpApi}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{
   TrafficSummaryT,
   TransactionViewT,
@@ -622,7 +622,7 @@ object ScanHttpEncodings {
   }
 
   def encodeAppActivityRecord(
-      record: AppActivityRecordT
+      record: AppAndAssetActivityRecordT
   ): definitions.EventHistoryAppActivityRecords = {
     val records = record.appProviderParties
       .zip(record.appActivityWeights)
@@ -637,7 +637,7 @@ object ScanHttpEncodings {
   }
 
   def encodeAssetActivityRecord(
-      record: AppActivityRecordT
+      record: AppAndAssetActivityRecordT
   ): definitions.EventHistoryActivityRecords = {
     val records = record.assetActivityProviderParties
       .zip(record.assetActivityWeights)
@@ -649,14 +649,14 @@ object ScanHttpEncodings {
   }
 
   def encodeAssetActivityRecordOrEmpty(
-      recordO: Option[AppActivityRecordT]
+      recordO: Option[AppAndAssetActivityRecordT]
   ): definitions.EventHistoryActivityRecords =
     recordO
       .map(encodeAssetActivityRecord)
       .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
 
   def encodeSubmittingAppProvider(
-      recordO: Option[AppActivityRecordT]
+      recordO: Option[AppAndAssetActivityRecordT]
   ): Option[OmitNullString] =
     recordO.flatMap(_.submittingAppProvider).map(OmitNullString(_))
 

@@ -34,7 +34,7 @@ import org.lfdecentralizedtrust.splice.store.{
   TimestampWithMigrationId,
   UpdateHistory,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 
 object DbScanVerdictStore {
   import com.digitalasset.canton.mediator.admin.{v30}
@@ -545,7 +545,7 @@ class DbScanVerdictStore(
     */
   def insertVerdictsWithAppActivityRecords(
       items: NonEmptyList[(VerdictT, Long => Seq[TransactionViewT])],
-      appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
+      appActivityRecords: Seq[(CantonTimestamp, AppAndAssetActivityRecordT)],
       hasTrafficSummaries: Boolean,
       firstActiveRoundO: Option[Long] = None,
       lastArchivedRoundO: Option[Long] = None,
@@ -609,7 +609,7 @@ class DbScanVerdictStore(
   }
 
   private def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT],
+      items: Seq[AppAndAssetActivityRecordT],
       firstRecordTimeMicros: Long,
       hasTrafficSummaries: Boolean,
       firstActiveRoundO: Option[Long],
