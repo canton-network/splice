@@ -30,7 +30,11 @@ import {
   extraSvConfigsBasic,
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
-import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import {
+  allValidatorsConfig,
+  deployedValidators,
+  SweepConfig,
+} from '@canton-network/splice-pulumi-common-validator';
 import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
@@ -929,6 +933,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
   const sweepConfigs: SweepConfig[] = extraSvConfigsBasic
     .concat(standardSvConfigsBasic)
     .map(sv => sv.sweep!)
+    .concat(deployedValidators.map(validator => allValidatorsConfig[validator].sweep!))
     .filter(e => e != undefined);
   const cantonBftEnabled =
     DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
