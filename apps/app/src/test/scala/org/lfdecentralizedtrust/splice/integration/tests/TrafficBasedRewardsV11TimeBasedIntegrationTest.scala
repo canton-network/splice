@@ -40,6 +40,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -305,13 +306,20 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         s"FA-submitted event $faUpdateId should report $assetMoverParty as submitting_app_provider"
     }
 
-    // Mid-flow: two governance votes share the same propagation window.
+    // Mid-flow: three governance changes share the same propagation window.
     // - Halve the per-asset cap: round-10 scenario exercises cap clamping (w=1) and
     //   step-8 weight scaling (w=3) via two parallel sends.
     // - Revoke doomedAssetParty's FA grant: round-10 scenario also exercises the
     //   post-revocation absence via a parallel alice→doomedAssetParty send.
-    clue("Lower per-asset cap and revoke doomedAssetParty's grant in one governance window") {
-      updateTbarV11RewardConfig(maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"))
+    // - Lower appRewardCouponThreshold: in round 10, alice's combined (app+asset)
+    //   reward clears the lowered threshold while bob/charlie (asset-only, lower
+    //   per-party totals) fall below — exercising the thresholding/minting-allowance
+    //   split in a single round.
+    clue("Lower per-asset cap, lower threshold, and revoke doomedAssetParty in one window") {
+      updateTbarV11RewardConfig(
+        maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"),
+        appRewardCouponThreshold = BigDecimal("5"),
+      )
       revokeFeaturedAppRight(doomedAssetParty)
     }
     for (round <- 8 to 10) {
@@ -416,17 +424,41 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       assetPartyProtos shouldBe Set(submitterProto) withClue
         s"Only DSO's share should remain, re-attributed to the submitting app $assetMoverParty"
     }
+
+    clue(
+      s"Round $capWeightRound combined-threshold mix of above/below (threshold lowered to 5 USD mid-flow)"
+    ) {
+      // With the mid-flow vote lowering appRewardCouponThreshold to 5 USD:
+      // - assetMoverParty's combined (app + DSO-share asset) reward across 3
+      //   submitter envelopes clears 5 USD → contributes to minting allowance.
+      // - assetParty / highWeightAssetParty (asset-only, per-send, lower per-party
+      //   totals) fall below 5 USD → contribute to thresholded.
+      // Pinning both non-zero exercises the mixed above/below branch — any
+      // regression that pushed all parties into one bucket (all above or all
+      // below) would flip one of these to zero.
+      assertRoundTotalsOk(capWeightRound) { t =>
+        BigDecimal(t.totalAppRewardMintingAllowance) should be > BigDecimal(0) withClue
+          s"Round $capWeightRound: at least one party should clear the lowered 5 USD threshold"
+        BigDecimal(t.totalAppRewardThresholded) should be > BigDecimal(0) withClue
+          s"Round $capWeightRound: at least one party should fall below the lowered 5 USD threshold"
+      }
+    }
   }
 
   // Votes an AmuletConfig update that sets the three TBAR v1.1 RewardConfig
-  // Optional fields. InitialRewardConfig leaves them None at bootstrap, so until
+  // Optional fields and (optionally) overrides the base appRewardCouponThreshold.
+  // InitialRewardConfig leaves the TBAR v1.1 fields None at bootstrap, so until
   // this runs computeForFASubmitted short-circuits (no asset activity records).
-  // Defaults match the CIP-104 recommended values; override individual fields to
-  // exercise different asset-side configurations (e.g. a lower per-asset cap).
+  // Defaults match the CIP-104 recommended values plus the test's bootstrap
+  // threshold; override individual fields to exercise different configurations
+  // (e.g. a lower per-asset cap or a lowered threshold where some parties clear
+  // and others fall below).
   private def updateTbarV11RewardConfig(
       extraFeaturedAssetActivityWeight: BigDecimal = BigDecimal("0.2"),
       maxExtraFeaturedAssetActivityWeightPerAsset: BigDecimal = BigDecimal("0.1"),
       dsoAppActivityWeight: BigDecimal = BigDecimal("0.1"),
+      appRewardCouponThreshold: BigDecimal =
+        TrafficBasedRewardsV11TimeBasedIntegrationTestBase.appRewardCouponThreshold,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val amuletRules = sv1Backend.getDsoInfo().amuletRules
     val existing = AmuletConfigSchedule(amuletRules).getConfigAsOf(env.environment.clock.now)
@@ -436,7 +468,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       rc.dryRunVersion,
       rc.batchSize,
       rc.rewardCouponTimeToLive,
-      rc.appRewardCouponThreshold,
+      appRewardCouponThreshold.bigDecimal,
       Optional.of(extraFeaturedAssetActivityWeight.bigDecimal),
       Optional.of(maxExtraFeaturedAssetActivityWeightPerAsset.bigDecimal),
       Optional.of(dsoAppActivityWeight.bigDecimal),
@@ -541,6 +573,20 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       }
     }
   }
+
+  // Waits (eventually) for scan to return RewardAccountingActivityTotalsOk for the
+  // given round and then runs `check` against the totals. Fails loudly if scan
+  // ever responds with Undetermined/CannotProvide once the timeout elapses.
+  private def assertRoundTotalsOk(round: Long, timeout: FiniteDuration = 30.seconds)(
+      check: definitions.RewardAccountingActivityTotalsOk => Unit
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    eventually(timeUntilSuccess = timeout) {
+      inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+        case GetRewardAccountingActivityTotalsResponse.members
+              .RewardAccountingActivityTotalsOk(t) =>
+          check(t)
+      }
+    }
 
   // Picks the first event whose assetActivityRecords includes `assetParty` as a
   // record party. Used to disambiguate parallel per-round sends by their target
