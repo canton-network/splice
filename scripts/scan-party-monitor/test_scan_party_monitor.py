@@ -449,8 +449,10 @@ class ConfigTest(unittest.TestCase):
             ({"parties": {ALICE: {"recipients": [BOB]}}}, "unknown keys ['recipients']"),
             ({"parties": {ALICE: []}}, "must be an object"),
             ({"parties": {"alice": {}}}, "'alice' is not a party id"),
-            ({"parties": {"alice::1220abcd": {}}}, "at least 68 hex digits"),
+            ({"parties": {"alice::1220abcd": {}}}, "at least 68 lowercase hex digits"),
             ({"parties": {ALICE + "x": {}}}, "is not a party id"),
+            # Party ids compare case-sensitively, and namespaces are lowercase.
+            ({"parties": {ALICE.upper(): {}}}, "is not a party id"),
             ({"expected_recipients": ["bob"], "parties": {ALICE: {}}}, "expected_recipients: 'bob' is not a party id"),
             ({"parties": {ALICE: {"additional_recipients": BOB}}}, "must be a list of party ids"),
             ({"parties": {ALICE: {"alert_confirmations": "yes"}}}, "must be true or false"),

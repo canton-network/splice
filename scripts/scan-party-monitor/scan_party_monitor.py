@@ -169,11 +169,11 @@ class PartyConfig:
 
 def _check_party_id(party: object, where: str) -> str:
     if not isinstance(party, str) or not re.fullmatch(
-        rf"\S.*::[0-9a-fA-F]{{{MIN_FINGERPRINT_LENGTH},}}", party
+        rf"\S.*::[0-9a-f]{{{MIN_FINGERPRINT_LENGTH},}}", party
     ):
         raise FatalError(
             f"{where}: {party!r} is not a party id (expected <hint>::<fingerprint>, with a "
-            f"fingerprint of at least {MIN_FINGERPRINT_LENGTH} hex digits)"
+            f"fingerprint of at least {MIN_FINGERPRINT_LENGTH} lowercase hex digits)"
         )
     return party
 
