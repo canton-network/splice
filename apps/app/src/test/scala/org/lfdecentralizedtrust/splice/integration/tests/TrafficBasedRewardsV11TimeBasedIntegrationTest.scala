@@ -132,7 +132,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         opsParties = Seq(bobValidatorBackend.getValidatorPartyId()),
       )
     }
-    enableTbarV11AssetSide()
+    updateTbarV11RewardConfig()
 
     // Receiver's TransferPreapproval is required so the sender submits the
     // amulet transfer directly — makes assetMoverParty the Daml submitter so
@@ -299,13 +299,73 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       noFaEvent.submittingAppProvider shouldBe None withClue
         s"User-submitted event $noFaUpdateId should have no submitting_app_provider"
     }
+
+    // Capture the earlier round's asset:app ratio for the cap-crossing comparison below.
+    val sendRoundTotals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(sendRound)) {
+      case GetRewardAccountingActivityTotalsResponse.members
+            .RewardAccountingActivityTotalsOk(t) =>
+        t
+    }
+
+    clue(
+      "Lower maxExtraFeaturedAssetActivityWeightPerAsset mid-flow so the next asset-moving send crosses the per-asset cap"
+    ) {
+      updateTbarV11RewardConfig(maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"))
+    }
+
+    // The cap-lower vote took effect at the current simtime; new rounds opening
+    // after this point see the lowered cap in lookupAmuletConfigAsOf.
+    for (round <- 9 to 11) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
+    }
+
+    val capCrossRound = 11L
+    clue(
+      s"CIP-104 cap enforcement: send in round $capCrossRound against the lowered per-asset cap (0.05)"
+    ) {
+      aliceWalletClient.transferPreapprovalSend(
+        assetParty,
+        BigDecimal(10),
+        UUID.randomUUID().toString,
+      )
+    }
+    for (round <- 12 to 13) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
+    }
+
+    clue(
+      s"Round $capCrossRound asset ratio should be ~half of round $sendRound's (cap 0.05 vs 0.1)"
+    ) {
+      assertRoundTotalsOk(capCrossRound) { t =>
+        t.totalAppActivityWeight should be > 0L
+        t.totalAssetActivityWeight should be > 0L withClue
+          s"Round $capCrossRound should still have asset activity (cap is lower, not zero)"
+        // Baseline round saw asset ~0.11 × app. With cap halved from 0.1 to 0.05,
+        // the per-asset share halves, so asset should land near ~0.055 × app.
+        // Pin the halving relationship directly rather than tracking absolute values.
+        val baselineRatioPct = sendRoundTotals.totalAssetActivityWeight * 100L /
+          sendRoundTotals.totalAppActivityWeight
+        val capCrossRatioPct = t.totalAssetActivityWeight * 100L / t.totalAppActivityWeight
+        capCrossRatioPct should be < baselineRatioPct withClue
+          s"Cap-lowered round ratio ($capCrossRatioPct%) should be smaller than baseline round $sendRound's ratio ($baselineRatioPct%)"
+        capCrossRatioPct * 3L should be < baselineRatioPct * 2L withClue
+          s"Cap-lowered round ratio ($capCrossRatioPct%) should be well under 2/3 of baseline ($baselineRatioPct%) — expect ~half"
+      }
+    }
   }
 
-  // Flips on asset-side computation by voting a RewardConfig update that
-  // populates the three TBAR v1.1 Optional fields. The InitialRewardConfig
-  // bootstrap leaves them None, so until this runs computeForFASubmitted
-  // short-circuits and no asset activity records are produced.
-  private def enableTbarV11AssetSide()(implicit env: SpliceTestConsoleEnvironment): Unit = {
+  // Votes an AmuletConfig update that sets the three TBAR v1.1 RewardConfig
+  // Optional fields. InitialRewardConfig leaves them None at bootstrap, so until
+  // this runs computeForFASubmitted short-circuits (no asset activity records).
+  // Defaults match the CIP-104 recommended values; override individual fields to
+  // exercise different asset-side configurations (e.g. a lower per-asset cap).
+  private def updateTbarV11RewardConfig(
+      extraFeaturedAssetActivityWeight: BigDecimal = BigDecimal("0.2"),
+      maxExtraFeaturedAssetActivityWeightPerAsset: BigDecimal = BigDecimal("0.1"),
+      dsoAppActivityWeight: BigDecimal = BigDecimal("0.1"),
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val amuletRules = sv1Backend.getDsoInfo().amuletRules
     val existing = AmuletConfigSchedule(amuletRules).getConfigAsOf(env.environment.clock.now)
     val rc = existing.rewardConfig.get()
@@ -315,9 +375,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       rc.batchSize,
       rc.rewardCouponTimeToLive,
       rc.appRewardCouponThreshold,
-      Optional.of(BigDecimal("0.2").bigDecimal),
-      Optional.of(BigDecimal("0.1").bigDecimal),
-      Optional.of(BigDecimal("0.1").bigDecimal),
+      Optional.of(extraFeaturedAssetActivityWeight.bigDecimal),
+      Optional.of(maxExtraFeaturedAssetActivityWeightPerAsset.bigDecimal),
+      Optional.of(dsoAppActivityWeight.bigDecimal),
     )
     val newConfig = new AmuletConfig[USD](
       existing.transferConfig,
