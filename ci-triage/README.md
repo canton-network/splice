@@ -397,3 +397,13 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10894 10895 10896 10897 10898 10899 10900 | GCS SA key for splice-data-export-tests@da-cn-splice rejected ("Invalid JWT Signature") since ~09:40, all branches; umbrella 10896 | `2026-10-29b/creds-and-singles.md` |
 | 10901 10902 | Auth0 CLI client-credentials login access_denied in compose-with-auth (0.9.3/0.9.4); umbrella 10901 | same |
 | 10893 | SplitwellFrontendIntegrationTest error-on-unknown-party, first hit, open | same |
+
+### 2026-10-29c (10903-10911)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 10903 10905 10909 | Auth0 secret rotation (401 / access_denied), dup 10901 | `2026-10-29c/rotation-and-singles.md` |
+| 10908 | GCS secret rotation (invalid_grant), dup 10896 | same |
+| 10904 10906 10910 | ParticipantKmsIdentitiesIntegrationTest hangs to job timeout on GCP KMS UNAUTHENTICATED (rotation), dup 10896 | same |
+| 10907 | NEW family U: sv4 join IMPORT_ACS_ERROR 'last event is a topology offset' (Canton 3.7 check), open | same |
+| 10911 | family B ack DEADLINE_EXCEEDED (0.9.x, after rotation), dup 10165 | same |

@@ -314,3 +314,15 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   PeriodicTopologySnapshotIntegrationTest / key-download; whole CI on all branches; fix = new SA key in GHA secret.
 - Auth0: compose validator "with auth": `Failed to start secret machine login ... oauth2: "access_denied"` from
   build-tools/splice-compose.sh auth0 login (AUTH0_TESTS_MANAGEMENT_API_CLIENT_*). Umbrellas 10896 / 10901.
+- Cause: planned CI secret rotation on 10-29 (GCP keys ~09:57 UTC, AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET ~10:15 UTC).
+  More signatures of the same window: frontend `allow login via auth0` -> `com.auth0.exception.APIException: Request
+  failed with status code 401: Unauthorized` (Auth0Util.requestManagementAPIToken); ParticipantKmsIdentitiesIntegrationTest
+  hangs until the 60 min job timeout (`Received SIGINT`, job cancelled) with GcpKms `UNAUTHENTICATED` /
+  REGISTER_KMS_KEY_INTERNAL_ERROR in canton-standalone-kms-identities-validator.clog. Close as dups after a green run.
+
+## U. Joining SV's ACS import refused: last event is a topology offset (Canton 3.7)
+- Signature: `sv4 app initialization: JoiningNodeInitializer joining Dso with key failed` caused by
+  `INVALID_ARGUMENT: IMPORT_ACS_ERROR ... Cannot apply a repair command as the last event is a topology offset. Please
+  reconnect to the synchronizer to move the ledger end` -> SV app exits the JVM (evidence loss for the shard).
+- Check introduced with the Canton 3.7 fork (canton/.../participant/admin/repair/RepairServiceHelpers.scala:223,
+  #7944, 10-23). First hit 10907 (SvTimeBasedOnboardingIntegrationTest, simtime, main 3568cba969, 10-29).
