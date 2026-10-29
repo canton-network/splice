@@ -51,6 +51,11 @@
       as the previous default (14) is reaching end-of-life on November 12, 2026 and won't be supported by Splice nor receive updates from upstream Postgres.
       If you cannot yet upgrade, you must restore the previous volume in `compose.yaml` AND change the Postgres version in the `.env` file back to `14.24-trixie@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446`.
 
+    - The nginx containers of the Docker Compose deployments (validator, sv and localnet) now use the `nginx/nginx-unprivileged` image.
+      The nginx process runs as a non-root user and listens on container port 8080 instead of 80.
+      The published host ports are unchanged. If you use a custom `nginx.conf`, update its `listen` directives to 8080
+      and set `pid /tmp/nginx.pid,` so the unprivileged user can write the pid file.
+
   - Participant
 
     - **Breaking** Downloading the participant's private keys via its admin API is now disabled by default.
