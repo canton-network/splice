@@ -46,7 +46,7 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, FrozenSet, List, NewType, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, NewType, Optional, Set, Tuple, Union
 
 VERSION = "0.3.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
@@ -73,6 +73,7 @@ LOG = logging.getLogger("scan-party-monitor")
 Json = Dict[str, Any]
 # (migration id, record time): the order of events in Scan.
 Position = Tuple[int, datetime]
+BEFORE_EVERYTHING: Position = (-1, datetime.min.replace(tzinfo=timezone.utc))
 # A party id from the configuration. Only _check_party_id creates one, so it has passed that
 # check; party ids from Scan are plain strs.
 PartyId = NewType("PartyId", str)
@@ -141,24 +142,378 @@ def qualified_name(template_id: str) -> str:
     return template_id.split(":", 1)[-1]
 
 
-def _holding_arguments(created: Json) -> Optional[Json]:
-    """The Amulet arguments of a created Amulet or LockedAmulet, None for other templates."""
-    name = qualified_name(created["template_id"])
-    arguments: Json = created.get("create_arguments") or {}
-    if name == AMULET:
-        return arguments
-    return arguments.get("amulet") or {} if name == LOCKED_AMULET else None
+### Scan's JSON, parsed into what the monitor uses
 
 
-def holding_owner(created: Json) -> Optional[str]:
-    """The owner of a created Amulet or LockedAmulet, None for other templates."""
-    owner = (_holding_arguments(created) or {}).get("owner")
-    return owner if isinstance(owner, str) else None
+class JsonObject:
+    """A JSON object from Scan, with typed accessors that raise FatalError naming the path of
+    an unexpected value."""
+
+    def __init__(self, value: object, path: str = "$") -> None:
+        if not isinstance(value, dict):
+            raise _unexpected(path, "an object", value)
+        self.value: Json = value
+        self.path = path
+
+    def _field(self, key: str) -> Tuple[object, str]:
+        if key not in self.value:
+            raise FatalError(f"Unexpected response from Scan: {self.path} lacks {key!r}")
+        return self.value[key], f"{self.path}.{key}"
+
+    def string(self, key: str) -> str:
+        value, path = self._field(key)
+        if not isinstance(value, str):
+            raise _unexpected(path, "a string", value)
+        return value
+
+    def optional_string(self, key: str) -> Optional[str]:
+        return None if self.value.get(key) is None else self.string(key)
+
+    def integer(self, key: str) -> int:
+        value, path = self._field(key)
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise _unexpected(path, "an integer", value)
+        return value
+
+    def boolean(self, key: str) -> bool:
+        value, path = self._field(key)
+        if not isinstance(value, bool):
+            raise _unexpected(path, "true or false", value)
+        return value
+
+    def obj(self, key: str) -> JsonObject:
+        value, path = self._field(key)
+        return JsonObject(value, path)
+
+    def optional_obj(self, key: str) -> Optional[JsonObject]:
+        return None if self.value.get(key) is None else self.obj(key)
+
+    def _list(self, key: str) -> Tuple[List[object], str]:
+        value, path = self._field(key)
+        if not isinstance(value, list):
+            raise _unexpected(path, "a list", value)
+        return value, path
+
+    def objs(self, key: str) -> List[JsonObject]:
+        values, path = self._list(key)
+        return [JsonObject(v, f"{path}[{i}]") for i, v in enumerate(values)]
+
+    def strings(self, key: str) -> List[str]:
+        values, path = self._list(key)
+        for i, v in enumerate(values):
+            if not isinstance(v, str):
+                raise _unexpected(f"{path}[{i}]", "a string", v)
+        return [str(v) for v in values]
 
 
-def holding_amount(created: Json) -> Optional[str]:
-    amount = ((_holding_arguments(created) or {}).get("amount") or {}).get("initialAmount")
-    return amount if isinstance(amount, str) else None
+def _unexpected(path: str, expected: str, value: object) -> FatalError:
+    return FatalError(f"Unexpected response from Scan: {path} is not {expected}: {json.dumps(value)[:200]}")
+
+
+@dataclass(frozen=True)
+class Holding:
+    """The parts of an Amulet or LockedAmulet that the monitor uses."""
+
+    owner: str
+    amount: Optional[str]
+
+    @staticmethod
+    def of(template_id: str, create_arguments: object) -> Optional[Holding]:
+        """The holding of a contract, None for other templates. Daml values are read leniently."""
+        name = qualified_name(template_id)
+        amulet: object = None
+        if name == AMULET:
+            amulet = create_arguments
+        elif name == LOCKED_AMULET and isinstance(create_arguments, dict):
+            amulet = create_arguments.get("amulet")
+        if not isinstance(amulet, dict) or not isinstance(amulet.get("owner"), str):
+            return None
+        amount = amulet.get("amount")
+        initial_amount = amount.get("initialAmount") if isinstance(amount, dict) else None
+        return Holding(amulet["owner"], initial_amount if isinstance(initial_amount, str) else None)
+
+
+@dataclass(frozen=True)
+class Contract:
+    """An ActiveContract, or the contract of a CreatedEvent."""
+
+    contract_id: str
+    template_id: str
+    created_at: str
+    holding: Optional[Holding]
+
+    @staticmethod
+    def from_json(o: JsonObject) -> Contract:
+        template_id = o.string("template_id")
+        return Contract(
+            contract_id=o.string("contract_id"),
+            template_id=template_id,
+            created_at=o.string("created_at"),
+            holding=Holding.of(template_id, o.value.get("create_arguments")),
+        )
+
+
+@dataclass(frozen=True)
+class HoldingsPage:
+    """An AcsResponseV2 of /v2/holdings/state."""
+
+    contracts: List[Contract]
+    next_page_token: Optional[str]
+
+    @staticmethod
+    def from_json(o: JsonObject) -> HoldingsPage:
+        return HoldingsPage(
+            contracts=[Contract.from_json(c) for c in o.objs("created_events")],
+            next_page_token=o.optional_string("next_page_token"),
+        )
+
+
+@dataclass(frozen=True)
+class CreatedEvent:
+    event_id: str
+    contract: Contract
+
+
+@dataclass(frozen=True)
+class ExercisedEvent:
+    event_id: str
+    contract_id: str
+    consuming: bool
+
+
+TreeEvent = Union[CreatedEvent, ExercisedEvent]
+
+
+def _created_event(o: JsonObject) -> CreatedEvent:
+    return CreatedEvent(event_id=o.string("event_id"), contract=Contract.from_json(o))
+
+
+@dataclass(frozen=True)
+class Transaction:
+    """An UpdateHistoryTransactionV2, with its events in execution order."""
+
+    update_id: str
+    migration_id: int
+    record_time: str
+    events_in_order: List[TreeEvent]
+
+    @staticmethod
+    def from_json(o: JsonObject) -> Transaction:
+        events = o.obj("events_by_id")
+        # Pre-order traversal is execution order. Scan only has the events that the DSO party
+        # sees, so children may be missing.
+        ordered: List[TreeEvent] = []
+        stack = list(reversed(o.strings("root_event_ids")))
+        while stack:
+            event = events.optional_obj(stack.pop())
+            if event is None:
+                continue
+            event_type = event.string("event_type")
+            if event_type == "created_event":
+                ordered.append(_created_event(event))
+            elif event_type == "exercised_event":
+                ordered.append(
+                    ExercisedEvent(
+                        event_id=event.string("event_id"),
+                        contract_id=event.string("contract_id"),
+                        consuming=event.boolean("consuming"),
+                    )
+                )
+                stack.extend(reversed(event.strings("child_event_ids")))
+            else:
+                raise _unexpected(f"{event.path}.event_type", "created_event or exercised_event", event_type)
+        return Transaction(
+            update_id=o.string("update_id"),
+            migration_id=o.integer("migration_id"),
+            record_time=o.string("record_time"),
+            events_in_order=ordered,
+        )
+
+
+@dataclass(frozen=True)
+class Reassignment:
+    """An UpdateHistoryReassignment: an assignment, with its created event, or an unassignment."""
+
+    update_id: str
+    migration_id: int
+    record_time: str
+    created: Optional[CreatedEvent]
+
+    @staticmethod
+    def from_json(o: JsonObject) -> Reassignment:
+        event = o.obj("event")
+        created = event.optional_obj("created_event")
+        return Reassignment(
+            update_id=o.string("update_id"),
+            migration_id=event.integer("migration_id"),
+            record_time=o.string("record_time"),
+            created=None if created is None else _created_event(created),
+        )
+
+
+@dataclass(frozen=True)
+class View:
+    view_id: int
+    # All parties of the view's confirmation quorums
+    confirming_parties: FrozenSet[str]
+
+    @staticmethod
+    def from_json(o: JsonObject) -> View:
+        return View(
+            view_id=o.integer("view_id"),
+            confirming_parties=frozenset(p for q in o.objs("confirming_parties") for p in q.strings("parties")),
+        )
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """An EventHistoryVerdict: the mediator verdict on a transaction."""
+
+    update_id: str
+    migration_id: int
+    record_time: str
+    verdict_result: str
+    views: List[View]
+
+    @property
+    def rejected(self) -> bool:
+        return self.verdict_result == VERDICT_REJECTED
+
+    @staticmethod
+    def from_json(o: JsonObject) -> Verdict:
+        return Verdict(
+            update_id=o.string("update_id"),
+            migration_id=o.integer("migration_id"),
+            record_time=o.string("record_time"),
+            verdict_result=o.string("verdict_result"),
+            views=[View.from_json(v) for v in o.obj("transaction_views").objs("views")],
+        )
+
+
+@dataclass(frozen=True)
+class EventHistoryItem:
+    """An item of Scan's event stream: the part of a transaction that the DSO party sees, the
+    mediator verdict on it, or both; or a reassignment. It has at least one of them."""
+
+    update: Optional[Union[Transaction, Reassignment]]
+    verdict: Optional[Verdict]
+
+    @staticmethod
+    def from_json(o: JsonObject) -> EventHistoryItem:
+        update = o.optional_obj("update")
+        verdict = o.optional_obj("verdict")
+        if update is None and verdict is None:
+            raise FatalError(f"Unexpected response from Scan: {o.path} has neither an update nor a verdict")
+        return EventHistoryItem(
+            update=(
+                None
+                if update is None
+                else Transaction.from_json(update)
+                if "events_by_id" in update.value
+                else Reassignment.from_json(update)
+            ),
+            verdict=None if verdict is None else Verdict.from_json(verdict),
+        )
+
+    @property
+    def _part(self) -> Union[Transaction, Reassignment, Verdict]:
+        part = self.update if self.update is not None else self.verdict
+        assert part is not None, "from_json requires an update or a verdict"
+        return part
+
+    @property
+    def update_id(self) -> str:
+        return self._part.update_id
+
+    @property
+    def migration_id(self) -> int:
+        return self._part.migration_id
+
+    @property
+    def record_time(self) -> str:
+        return self._part.record_time
+
+    @property
+    def position(self) -> Position:
+        return position(self.migration_id, self.record_time)
+
+    @property
+    def private(self) -> bool:
+        """An accepted transaction that the DSO party doesn't see at all."""
+        return self.update is None and self.verdict is not None and not self.verdict.rejected
+
+
+### match records
+
+
+@dataclass(frozen=True)
+class TransferReason:
+    """A tracked party's holdings went to `receiver`, who is not an expected recipient."""
+
+    event_id: str
+    template_id: str
+    receiver: str
+    amount: Optional[str]
+
+    def to_json(self) -> Json:
+        return {
+            "reason": "transfer",
+            "event_id": self.event_id,
+            "template_id": self.template_id,
+            "receiver": self.receiver,
+            "amount": self.amount,
+        }
+
+
+@dataclass(frozen=True)
+class ConfirmingReason:
+    """A tracked party with alert_confirmations confirmed these views of a transaction."""
+
+    views: List[int]
+
+    def to_json(self) -> Json:
+        return {"reason": "confirming", "views": self.views}
+
+
+Reason = Union[TransferReason, ConfirmingReason]
+
+
+@dataclass(frozen=True)
+class Match:
+    """A transaction to report, with the reasons per tracked party."""
+
+    update_id: str
+    migration_id: int
+    record_time: str
+    scan_url: str
+    # None for a reassignment
+    verdict_result: Optional[str]
+    private: bool
+    parties: Dict[PartyId, List[Reason]]
+
+    @property
+    def rejected(self) -> bool:
+        return self.verdict_result == VERDICT_REJECTED
+
+    def to_json(self) -> Json:
+        """The match as printed to stdout."""
+        return {
+            "update_id": self.update_id,
+            "migration_id": self.migration_id,
+            "record_time": self.record_time,
+            "scan_url": self.scan_url,
+            **({} if self.verdict_result is None else {"verdict_result": self.verdict_result}),
+            **({"private": True} if self.private else {}),
+            "parties": {p: [r.to_json() for r in rs] for p, rs in self.parties.items()},
+        }
+
+
+def group_by_party(found: List[Tuple[PartyId, Reason]]) -> Dict[PartyId, List[Reason]]:
+    """The reasons per party, in the order the parties were first found."""
+    grouped: Dict[PartyId, List[Reason]] = {}
+    for party, reason in found:
+        grouped.setdefault(party, []).append(reason)
+    return grouped
 
 
 ### configuration
@@ -364,7 +719,7 @@ class ScanClient:
         owner_party_ids: List[PartyId],
         page_size: int,
         after: Optional[str],
-    ) -> Json:
+    ) -> HoldingsPage:
         """A page of the Amulet and LockedAmulet holdings of the given owners in an ACS snapshot."""
         body: Json = {
             "migration_id": migration_id,
@@ -374,7 +729,8 @@ class ScanClient:
         }
         if after is not None:
             body["after"] = after
-        return self._call(self.acs_pacer, "POST", "/v2/holdings/state", body)
+        response = self._call(self.acs_pacer, "POST", "/v2/holdings/state", body)
+        return HoldingsPage.from_json(JsonObject(response, "/v2/holdings/state"))
 
     def get_events(
         self,
@@ -382,7 +738,7 @@ class ScanClient:
         after_record_time: str,
         page_size: int,
         on_retry: Callable[[], None] = lambda: None,
-    ) -> List[Json]:
+    ) -> List[EventHistoryItem]:
         body: Json = {
             "after": {
                 "after_migration_id": after_migration_id,
@@ -390,10 +746,8 @@ class ScanClient:
             },
             "page_size": page_size,
         }
-        events: List[Json] = self._call(
-            self.events_pacer, "POST", "/v0/events", body, on_retry=on_retry
-        )["events"]
-        return events
+        response = self._call(self.events_pacer, "POST", "/v0/events", body, on_retry=on_retry)
+        return [EventHistoryItem.from_json(e) for e in JsonObject(response, "/v0/events").objs("events")]
 
 
 ### local store
@@ -509,18 +863,18 @@ class SlackNotifier:
             time.sleep(delay)
 
 
-def format_reason(reason: Json) -> str:
-    if reason["reason"] == "transfer":
-        amount = reason.get("amount") or "an unknown amount"
-        return f"transfer of {amount} to `{reason['receiver']}` (not an expected recipient)"
-    return f"{reason['reason']} party"
+def format_reason(reason: Reason) -> str:
+    if isinstance(reason, TransferReason):
+        amount = reason.amount or "an unknown amount"
+        return f"transfer of {amount} to `{reason.receiver}` (not an expected recipient)"
+    return "confirming party"
 
 
-def _kind(match: Json) -> Optional[str]:
+def _kind(match: Match) -> Optional[str]:
     """How a transaction differs from one that Scan shows in full, if it does."""
-    if match.get("verdict_result") == VERDICT_REJECTED:
+    if match.rejected:
         return "rejected"
-    return "private" if match.get("private") else None
+    return "private" if match.private else None
 
 
 def _plural(n: int, singular: str, plural: str) -> str:
@@ -541,33 +895,33 @@ def _join_capped(header: List[str], lines: List[str], omitted_what: str) -> str:
     return "\n".join(header + kept + omitted)
 
 
-def _update_line(match: Json) -> str:
+def _update_line(match: Match) -> str:
     """One line of a grouped Slack message."""
-    reasons = [f"`{party}`: {format_reason(r)}" for party, rs in match["parties"].items() for r in rs]
+    reasons = [f"`{party}`: {format_reason(r)}" for party, rs in match.parties.items() for r in rs]
     more = len(reasons) - SLACK_MAX_REASONS_PER_UPDATE
     shown = "; ".join(reasons[:SLACK_MAX_REASONS_PER_UPDATE] + ([f"+{more} more"] if more > 0 else []))
     kind = _kind(match)
-    return f"• `{match['update_id']}` at `{match['record_time']}`{f' ({kind})' if kind else ''}: {shown}"
+    return f"• `{match.update_id}` at `{match.record_time}`{f' ({kind})' if kind else ''}: {shown}"
 
 
-def format_slack_message(matches: List[Json]) -> str:
+def format_slack_message(matches: List[Match]) -> str:
     """One Slack message for all of `matches`, which must not be empty."""
     first = matches[0]
     if len(matches) == 1:
-        parties = first["parties"]
+        parties = first.parties
         kind = _kind(first)
         header = [
             f":rotating_light: Alert for tracked {_plural(len(parties), 'party', 'parties')} "
-            f"on {first['scan_url']}",
-            f"update `{first['update_id']}` at record time `{first['record_time']}` "
-            f"(migration {first['migration_id']}{f', {kind}' if kind else ''})",
+            f"on {first.scan_url}",
+            f"update `{first.update_id}` at record time `{first.record_time}` "
+            f"(migration {first.migration_id}{f', {kind}' if kind else ''})",
         ]
         lines = [f"• `{party}`: {format_reason(r)}" for party, rs in parties.items() for r in rs]
         return _join_capped(header, lines, "reasons")
 
     header = [
-        f":rotating_light: {len(matches)} alerts for tracked parties on {first['scan_url']}, "
-        f"record times `{first['record_time']}` – `{matches[-1]['record_time']}`"
+        f":rotating_light: {len(matches)} alerts for tracked parties on {first.scan_url}, "
+        f"record times `{first.record_time}` – `{matches[-1].record_time}`"
     ]
     return _join_capped(header, [_update_line(m) for m in matches], "updates")
 
@@ -723,13 +1077,12 @@ class Monitor:
                     f"The ACS snapshot at {record_time} (migration id {migration_id}) is no longer "
                     f"available on {self.scan.url}. Delete {self.args.db} and start over."
                 )
-            events = page["created_events"]
-            token = page.get("next_page_token")
+            token = page.next_page_token
             pages += 1
             pages_this_run += 1
             store.begin()
-            for e in events:
-                if self.store_if_tracked(e):
+            for contract in page.contracts:
+                if self.store_if_tracked(contract):
                     holdings += 1
                     holdings_this_run += 1
             store.set_meta(Meta.ACS_NEXT_PAGE_TOKEN, token)
@@ -745,7 +1098,7 @@ class Monitor:
             if token is None or now - last_report >= self.args.progress_interval_seconds:
                 last_report = now
                 rate = holdings_this_run / max(now - started, 1e-6)
-                created_at = events[-1]["created_at"] if events else "-"
+                created_at = page.contracts[-1].created_at if page.contracts else "-"
                 LOG.info(
                     f"ACS seed: {pages} pages, {holdings} holdings stored "
                     f"({rate:.0f} holdings/s), reached holdings created at {created_at}"
@@ -757,12 +1110,11 @@ class Monitor:
                 LOG.info(f"Stopping after {pages_this_run} ACS pages as requested; rerun to resume")
                 raise StopRequested()
 
-    def store_if_tracked(self, created: Json) -> bool:
-        """Stores a created holding if a tracked party owns it."""
-        owner = holding_owner(created)
-        if owner is None or owner not in self.config:
+    def store_if_tracked(self, contract: Contract) -> bool:
+        """Stores a holding if a tracked party owns it."""
+        if contract.holding is None or contract.holding.owner not in self.config:
             return False
-        self.store.put_holding(created["contract_id"], owner)
+        self.store.put_holding(contract.contract_id, contract.holding.owner)
         return True
 
     ### event stream
@@ -779,7 +1131,7 @@ class Monitor:
         last_heartbeat = time.monotonic()
         # Matches not yet posted to Slack. Their events are only committed to the store,
         # together with the cursor, once they have been posted.
-        unposted: List[Json] = []
+        unposted: List[Match] = []
         oldest_unposted = 0.0
 
         def deliver(now: bool) -> None:
@@ -809,17 +1161,17 @@ class Monitor:
             in_range = (
                 events
                 if stop_at is None
-                else list(itertools.takewhile(lambda e: parse_time(event_position(e)[1]) <= stop_at, events))
+                else list(itertools.takewhile(lambda e: parse_time(e.record_time) <= stop_at, events))
             )
             matches = [m for m in map(self.process_event_history_item, in_range) if m is not None]
             for m in matches:
-                print(json.dumps(m), flush=True)
+                print(json.dumps(m.to_json()), flush=True)
             if matches and not unposted:
                 oldest_unposted = time.monotonic()
             unposted = unposted + matches
             self.stats["matches"] += len(matches)
             if in_range:
-                migration_id, record_time = event_position(in_range[-1])
+                migration_id, record_time = in_range[-1].migration_id, in_range[-1].record_time
                 store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
                 store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
                 self.stats["transactions"] += len(in_range)
@@ -871,117 +1223,74 @@ class Monitor:
             f"{self.stats['transactions']} transactions, {self.stats['matches']} matching"
         )
 
-    def process_event_history_item(self, item: Json) -> Optional[Json]:
-        """Updates the holdings from an event of Scan's event stream; returns its match, if any."""
-        update: Optional[Json] = item.get("update")
-        verdict: Optional[Json] = item.get("verdict")
-        found = (self._update_reasons(update) if update is not None else []) + (
-            self._verdict_reasons(verdict) if verdict is not None else []
+    def process_event_history_item(self, item: EventHistoryItem) -> Optional[Match]:
+        """Updates the holdings from an item of Scan's event stream; returns its match, if any."""
+        found = (self._update_reasons(item.update) if item.update is not None else []) + (
+            self._verdict_reasons(item.verdict) if item.verdict is not None else []
         )
-        migration_id, record_time = event_position(item)
-        at = position(migration_id, record_time)
+        at = item.position
         unreported = {
-            p: [r for q, r in found if q == p]
-            for p in dict.fromkeys(q for q, _ in found)
-            if p not in self.reported_until or at > self.reported_until[p]
+            p: reasons
+            for p, reasons in group_by_party(found).items()
+            if self.reported_until.get(p, BEFORE_EVERYTHING) < at
         }
         if not unreported:
             return None
-        details: Json = {}
-        if verdict is not None:
-            details["verdict_result"] = verdict["verdict_result"]
-            # An accepted transaction without an update is private to parties other than the DSO.
-            if update is None and verdict["verdict_result"] != VERDICT_REJECTED:
-                details["private"] = True
-        return {
-            "update_id": (update if update is not None else item["verdict"])["update_id"],
-            "migration_id": migration_id,
-            "record_time": record_time,
-            "scan_url": self.scan.url,
-            **details,
-            "parties": unreported,
-        }
+        return Match(
+            update_id=item.update_id,
+            migration_id=item.migration_id,
+            record_time=item.record_time,
+            scan_url=self.scan.url,
+            verdict_result=None if item.verdict is None else item.verdict.verdict_result,
+            private=item.private,
+            parties=unreported,
+        )
 
-    def _update_reasons(self, update: Json) -> List[Tuple[PartyId, Json]]:
+    def _update_reasons(self, update: Union[Transaction, Reassignment]) -> List[Tuple[PartyId, Reason]]:
         """Updates the holdings from the part of a transaction that the DSO party sees, and
         returns its transfers to unexpected recipients."""
-        if "events_by_id" not in update:
-            # A reassignment; no matching, but keep the holdings complete.
-            created = update["event"].get("created_event")
-            if created is not None:
-                self.store_if_tracked(created)
+        if isinstance(update, Reassignment):
+            # No matching, but keep the holdings complete.
+            if update.created is not None:
+                self.store_if_tracked(update.created.contract)
             return []
 
-        # Pre-order traversal is execution order, so holdings created earlier in this
-        # transaction are stored before they can be archived.
-        ordered = preorder(update["events_by_id"], update["root_event_ids"])
+        # In execution order, holdings created earlier in this transaction are stored before
+        # they can be archived.
         senders: Set[PartyId] = set()
-        for event in ordered:
-            if event["event_type"] == "created_event":
-                self.store_if_tracked(event)
-            elif event["consuming"]:
-                owner_id = self.store.holding_owner_id(event["contract_id"])
+        for event in update.events_in_order:
+            if isinstance(event, CreatedEvent):
+                self.store_if_tracked(event.contract)
+            elif event.consuming:
+                owner_id = self.store.holding_owner_id(event.contract_id)
                 if owner_id is not None:
                     if owner_id in self.tracked_by_id:
                         senders.add(self.tracked_by_id[owner_id])
-                    self.store.delete_holding(event["contract_id"])
+                    self.store.delete_holding(event.contract_id)
 
         # A transfer moves holdings of a tracked party to holdings of other parties. With
         # several tracked senders, outputs can't be attributed to one of them, so each sender
         # is checked against all outputs.
         created_holdings = [
-            (owner, e)
-            for e in ordered
-            if e["event_type"] == "created_event"
-            for owner in [holding_owner(e)]
-            if owner is not None
+            (e, e.contract.holding)
+            for e in update.events_in_order
+            if isinstance(e, CreatedEvent) and e.contract.holding is not None
         ]
         return [
-            (
-                sender,
-                {
-                    "reason": "transfer",
-                    "event_id": e["event_id"],
-                    "template_id": e["template_id"],
-                    "receiver": owner,
-                    "amount": holding_amount(e),
-                },
-            )
+            (sender, TransferReason(e.event_id, e.contract.template_id, holding.owner, holding.amount))
             for sender in sorted(senders)
-            for owner, e in created_holdings
-            if owner not in self.config[sender].expected_recipients
+            for e, holding in created_holdings
+            if holding.owner not in self.config[sender].expected_recipients
         ]
 
-    def _verdict_reasons(self, verdict: Json) -> List[Tuple[PartyId, Json]]:
+    def _verdict_reasons(self, verdict: Verdict) -> List[Tuple[PartyId, Reason]]:
         """The parties with `alert_confirmations` that confirmed a transaction."""
-        views = verdict["transaction_views"]["views"]
-        confirmers = [{p for quorum in v["confirming_parties"] for p in quorum["parties"]} for v in views]
         return [
-            (p, {"reason": "confirming", "views": confirmed})
+            (p, ConfirmingReason(confirmed))
             for p in sorted(self.confirmation_parties)
-            for confirmed in [[v["view_id"] for v, c in zip(views, confirmers) if p in c]]
+            for confirmed in [[v.view_id for v in verdict.views if p in v.confirming_parties]]
             if confirmed
         ]
-
-
-def event_position(item: Json) -> Tuple[int, str]:
-    """(migration id, record time) of an event of Scan's event stream."""
-    update = item.get("update")
-    if update is None:
-        return item["verdict"]["migration_id"], item["verdict"]["record_time"]
-    # Reassignments carry the migration id in their event.
-    return update.get("migration_id", update.get("event", {}).get("migration_id")), update["record_time"]
-
-def preorder(events: Json, root_ids: List[str]) -> List[Json]:
-    """The events of a transaction in execution order."""
-    ordered: List[Json] = []
-    stack = list(reversed(root_ids))
-    while stack:
-        event = events.get(stack.pop())
-        if event is not None:
-            ordered.append(event)
-            stack.extend(reversed(event.get("child_event_ids", [])))
-    return ordered
 
 
 ### command line

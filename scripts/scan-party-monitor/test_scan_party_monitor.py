@@ -269,6 +269,20 @@ ACS = [
 ]
 
 
+def parse_item(item: Json) -> spm.EventHistoryItem:
+    return spm.EventHistoryItem.from_json(spm.JsonObject(item))
+
+
+def holding(contract: Json) -> Optional[spm.Holding]:
+    return spm.Contract.from_json(spm.JsonObject(contract)).holding
+
+
+def process(monitor: spm.Monitor, item: Json) -> Optional[Json]:
+    """The match of an event history item, as printed to stdout."""
+    match = monitor.process_event_history_item(parse_item(item))
+    return None if match is None else match.to_json()
+
+
 def summary(match: Optional[Json]) -> Dict[str, List[Tuple[str, str]]]:
     """party -> sorted (reason, receiver or "-")"""
     if match is None:
@@ -333,7 +347,7 @@ class FakeScan(spm.ScanClient):
                 raise KeyboardInterrupt()
             if body["migration_id"] != 0 or body["record_time"] != SNAPSHOT:
                 raise spm.NotFound("no such snapshot")
-            matching = [c for c in self.acs if spm.holding_owner(c) in body["owner_party_ids"]]
+            matching = [c for c in self.acs if (h := holding(c)) is not None and h.owner in body["owner_party_ids"]]
             start = int(body.get("after", 0))
             end = start + body["page_size"]
             page: Json = {"record_time": SNAPSHOT, "migration_id": 0, "created_events": matching[start:end]}
@@ -346,7 +360,7 @@ class FakeScan(spm.ScanClient):
             if self.interrupt_events_request == len(self.events_requests):
                 raise KeyboardInterrupt()
             after = spm.position(body["after"]["after_migration_id"], body["after"]["after_record_time"])
-            later = [e for e in self.events if spm.position(*spm.event_position(e)) > after]
+            later = [e for e in self.events if parse_item(e).position > after]
             return {"events": later[: body["page_size"]]}
         raise spm.NotFound(f"{method} {path}")
 
@@ -470,13 +484,10 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(spm.qualified_name(AMULET), "Splice.Amulet:Amulet")
 
     def test_holdings(self) -> None:
-        self.assertEqual(spm.holding_owner(amulet("a", ALICE, "1.5")), ALICE)
-        self.assertEqual(spm.holding_amount(amulet("a", ALICE, "1.5")), "1.5")
-        locked = locked_amulet("l", ALICE, [CHARLIE], "2.5")
-        self.assertEqual(spm.holding_owner(locked), ALICE)
-        self.assertEqual(spm.holding_amount(locked), "2.5")
-        self.assertIsNone(spm.holding_owner(preapproval("p", BOB)))
-        self.assertIsNone(spm.holding_owner(created("c", AMULET, [DSO, ALICE])))
+        self.assertEqual(holding(amulet("a", ALICE, "1.5")), spm.Holding(ALICE, "1.5"))
+        self.assertEqual(holding(locked_amulet("l", ALICE, [CHARLIE], "2.5")), spm.Holding(ALICE, "2.5"))
+        self.assertIsNone(holding(preapproval("p", BOB)))
+        self.assertIsNone(holding(created("c", AMULET, [DSO, ALICE])))
 
     def test_timestamp_argument(self) -> None:
         self.assertEqual(spm.timestamp("2026-10-26T12:00:00Z"), "2026-10-26T12:00:00Z")
@@ -678,19 +689,75 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(list(spm.load_config(path)), [ALICE])
 
 
+class ParseTest(unittest.TestCase):
+    def test_transaction_events_are_in_execution_order(self) -> None:
+        update = transaction(
+            "u1",
+            at(1),
+            exercised("u1:0", "c0", OTHER, "Root", [ALICE], False, ["u1:1", "u1:3"]),
+            exercised("u1:1", "c1", OTHER, "Child", [ALICE], True, ["u1:2", "u1:missing"]),
+            amulet("a2", ALICE, "1.0", "u1:2"),
+            amulet("a3", BOB, "2.0", "u1:3"),
+        )
+        item = parse_item(event(update))
+        assert isinstance(item.update, spm.Transaction)
+        self.assertEqual([e.event_id for e in item.update.events_in_order], ["u1:0", "u1:1", "u1:2", "u1:3"])
+        self.assertEqual(item.update.events_in_order[1], spm.ExercisedEvent("u1:1", "c1", True))
+        created_event = item.update.events_in_order[2]
+        assert isinstance(created_event, spm.CreatedEvent)
+        self.assertEqual(created_event.contract.holding, spm.Holding(ALICE, "1.0"))
+        self.assertEqual((item.update_id, item.position, item.private), ("u1", spm.position(0, at(1)), False))
+
+    def test_reassignments(self) -> None:
+        assigned = parse_item(event(assignment("r1", at(1), amulet("moved", ALICE, "7.0", "r1:0"))))
+        assert isinstance(assigned.update, spm.Reassignment) and assigned.update.created is not None
+        self.assertEqual(assigned.update.created.contract.contract_id, "moved")
+        unassignment = assignment("r2", at(2), amulet("moved", ALICE, "7.0", "r2:0"))
+        unassignment["event"] = {**unassignment["event"], "contract_id": "moved"}
+        del unassignment["event"]["created_event"]
+        unassigned = parse_item(event(unassignment))
+        self.assertEqual(unassigned.update, spm.Reassignment("r2", 0, at(2), None))
+
+    def test_verdict_only(self) -> None:
+        item = parse_item(event(verdict=verdict("u1", at(1), [[ALICE, BOB], [BOB]])))
+        self.assertIsNone(item.update)
+        assert item.verdict is not None
+        self.assertEqual(
+            item.verdict.views, [spm.View(0, frozenset({ALICE, BOB})), spm.View(1, frozenset({BOB}))]
+        )
+        self.assertEqual((item.update_id, item.record_time, item.private), ("u1", at(1), True))
+        rejected = parse_item(event(verdict=verdict("u2", at(2), [[ALICE]], result="VERDICT_RESULT_REJECTED")))
+        self.assertFalse(rejected.private)
+
+    def test_unexpected_json_is_fatal(self) -> None:
+        bad_time = transfer("u1", at(1), ALICE, "alice-1", BOB, "1.0")
+        bad_time["update"]["record_time"] = 5
+        bad_event_type = with_verdict(transaction("u2", at(2), amulet("a", ALICE, "1.0", "u2:0")))
+        bad_event_type["update"]["events_by_id"]["u2:0"]["event_type"] = "archived_event"
+        for item, message in [
+            (event(), "$ has neither an update nor a verdict"),
+            (bad_time, "$.update.record_time is not a string: 5"),
+            (bad_event_type, "$.update.events_by_id.u2:0.event_type is not created_event or exercised_event"),
+            ({"update": None, "verdict": {"update_id": "u3"}}, "$.verdict lacks 'migration_id'"),
+        ]:
+            with self.subTest(message=message), self.assertRaises(spm.FatalError) as raised:
+                parse_item(item)
+            self.assertIn(message, str(raised.exception))
+
+
 class SlackFormatTest(unittest.TestCase):
     @staticmethod
-    def match(update_id: str, record_time: str, parties: Dict[str, List[Json]]) -> Json:
-        return {
-            "update_id": update_id,
-            "migration_id": 0,
-            "record_time": record_time,
-            "scan_url": "https://scan.example.com",
-            "parties": parties,
-        }
+    def match(
+        update_id: str,
+        record_time: str,
+        parties: Dict[spm.PartyId, List[spm.Reason]],
+        verdict_result: Optional[str] = "VERDICT_RESULT_ACCEPTED",
+        private: bool = False,
+    ) -> spm.Match:
+        return spm.Match(update_id, 0, record_time, "https://scan.example.com", verdict_result, private, parties)
 
-    TRANSFER: Json = {"reason": "transfer", "event_id": "u:1", "template_id": AMULET, "receiver": CHARLIE, "amount": "10.0"}
-    CONFIRMING: Json = {"reason": "confirming", "views": [0]}
+    TRANSFER = spm.TransferReason("u:1", AMULET, CHARLIE, "10.0")
+    CONFIRMING = spm.ConfirmingReason([0])
 
     def test_single_match(self) -> None:
         text = spm.format_slack_message([self.match("u1", at(1), {ALICE: [self.TRANSFER, self.CONFIRMING]})])
@@ -705,8 +772,8 @@ class SlackFormatTest(unittest.TestCase):
         )
 
     def test_private_and_rejected_transactions_are_marked(self) -> None:
-        private = {**self.match("u1", at(1), {ALICE: [self.CONFIRMING]}), "verdict_result": "VERDICT_RESULT_ACCEPTED", "private": True}
-        rejected = {**self.match("u2", at(2), {ALICE: [self.CONFIRMING]}), "verdict_result": "VERDICT_RESULT_REJECTED"}
+        private = self.match("u1", at(1), {ALICE: [self.CONFIRMING]}, private=True)
+        rejected = self.match("u2", at(2), {ALICE: [self.CONFIRMING]}, "VERDICT_RESULT_REJECTED")
         self.assertIn(f"update `u1` at record time `{at(1)}` (migration 0, private)", spm.format_slack_message([private]))
         self.assertIn(f"update `u2` at record time `{at(2)}` (migration 0, rejected)", spm.format_slack_message([rejected]))
         lines = spm.format_slack_message([private, rejected]).splitlines()
@@ -905,7 +972,7 @@ class MatchingTest(MonitorTestCase):
                 self.setUp()
                 monitor = self.seeded(config)
                 item = transfer("u1", at(1), ALICE, "alice-1", BOB, "10.0", "alice-change", "bob-preapproval")
-                self.assertIsNone(monitor.process_event_history_item(item))
+                self.assertIsNone(process(monitor, item))
                 # The holdings follow the transaction.
                 self.assertIsNone(monitor.store.holding_owner_id("alice-1"))
                 self.assertIsNotNone(monitor.store.holding_owner_id("alice-change"))
@@ -914,7 +981,7 @@ class MatchingTest(MonitorTestCase):
         monitor = self.seeded({"parties": {ALICE: {"additional_recipients": [BOB]}, CHARLIE: {}}})
         item = transfer("u1", at(1), ALICE, "alice-1", CHARLIE, "10.0", "alice-change", "charlie-preapproval")
         self.assertEqual(
-            monitor.process_event_history_item(item),
+            process(monitor, item),
             {
                 "update_id": "u1",
                 "migration_id": 0,
@@ -931,20 +998,20 @@ class MatchingTest(MonitorTestCase):
 
     def test_transfer_of_an_untracked_party_is_not_reported(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
-        self.assertIsNone(monitor.process_event_history_item(transfer("u1", at(1), CHARLIE, "charlie-1", BOB, "10.0")))
+        self.assertIsNone(process(monitor, transfer("u1", at(1), CHARLIE, "charlie-1", BOB, "10.0")))
 
     def test_alert_confirmations_reports_confirming(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
         item = transfer("u1", at(1), ALICE, "alice-1", CHARLIE, "10.0", "alice-change", "charlie-preapproval")
         self.assertEqual(
-            summary(monitor.process_event_history_item(item)),
+            summary(process(monitor, item)),
             {ALICE: [("confirming", "-"), ("transfer", CHARLIE)]},
         )
 
     def test_confirming_parties_come_from_the_verdict_views(self) -> None:
         monitor = self.seeded({"parties": {BOB: {"alert_confirmations": True}, CHARLIE: {"alert_confirmations": True}}})
         item = event(verdict=verdict("u1", at(1), [[DSO, ALICE], [BOB, DSO], [CHARLIE, BOB]]))
-        match = monitor.process_event_history_item(item)
+        match = process(monitor, item)
         assert match is not None
         self.assertEqual(
             match["parties"],
@@ -953,18 +1020,18 @@ class MatchingTest(MonitorTestCase):
 
     def test_submitters_that_do_not_confirm_are_not_reported(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
-        self.assertIsNone(monitor.process_event_history_item(event(verdict=verdict("u1", at(1), [[DSO]], [ALICE]))))
+        self.assertIsNone(process(monitor, event(verdict=verdict("u1", at(1), [[DSO]], [ALICE]))))
 
     def test_informees_do_not_confirm(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
         item = event(verdict=verdict("u1", at(1), [[DSO]]))
         item["verdict"]["transaction_views"]["views"][0]["informees"].append(ALICE)
-        self.assertIsNone(monitor.process_event_history_item(item))
+        self.assertIsNone(process(monitor, item))
 
     def test_private_transactions_are_reported(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
         self.assertEqual(
-            monitor.process_event_history_item(event(verdict=verdict("u1", at(1), [[ALICE, BOB]], [BOB]))),
+            process(monitor, event(verdict=verdict("u1", at(1), [[ALICE, BOB]], [BOB]))),
             {
                 "update_id": "u1",
                 "migration_id": 0,
@@ -978,7 +1045,7 @@ class MatchingTest(MonitorTestCase):
 
     def test_rejected_transactions_are_reported(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
-        match = monitor.process_event_history_item(event(verdict=verdict("u1", at(1), [[ALICE]], [ALICE], "VERDICT_RESULT_REJECTED")))
+        match = process(monitor, event(verdict=verdict("u1", at(1), [[ALICE]], [ALICE], "VERDICT_RESULT_REJECTED")))
         assert match is not None
         self.assertEqual(match["verdict_result"], "VERDICT_RESULT_REJECTED")
         self.assertNotIn("private", match)
@@ -986,7 +1053,7 @@ class MatchingTest(MonitorTestCase):
 
     def test_verdicts_are_only_reported_with_alert_confirmations(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
-        self.assertIsNone(monitor.process_event_history_item(event(verdict=verdict("u1", at(1), [[ALICE]], [ALICE]))))
+        self.assertIsNone(process(monitor, event(verdict=verdict("u1", at(1), [[ALICE]], [ALICE]))))
 
     def test_holding_created_and_spent_in_one_transaction(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
@@ -998,15 +1065,15 @@ class MatchingTest(MonitorTestCase):
             exercised("u1:2", "fresh", AMULET, "Archive", [DSO, ALICE], True),
             amulet("charlie-2", CHARLIE, "5.0", "u1:3"),
         )
-        self.assertEqual(summary(monitor.process_event_history_item(with_verdict(update))), {ALICE: [("transfer", CHARLIE)]})
+        self.assertEqual(summary(process(monitor, with_verdict(update))), {ALICE: [("transfer", CHARLIE)]})
 
     def test_holdings_created_after_the_seed_are_tracked(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
         received = transfer("u1", at(1), CHARLIE, "charlie-1", ALICE, "5.0")
-        self.assertIsNone(monitor.process_event_history_item(received))
+        self.assertIsNone(process(monitor, received))
         self.assertEqual(monitor.store.holding_owner_id("u1-output"), monitor.store.party_id(ALICE))
         self.assertEqual(
-            summary(monitor.process_event_history_item(transfer("u2", at(2), ALICE, "u1-output", BOB, "5.0"))),
+            summary(process(monitor, transfer("u2", at(2), ALICE, "u1-output", BOB, "5.0"))),
             {ALICE: [("transfer", BOB)]},
         )
 
@@ -1018,13 +1085,13 @@ class MatchingTest(MonitorTestCase):
             exercised("u1:0", "alice-locked", LOCKED_AMULET, "LockedAmulet_Unlock", [CHARLIE], True, ["u1:1"]),
             amulet("bob-2", BOB, "20.0", "u1:1"),
         )
-        self.assertEqual(summary(monitor.process_event_history_item(with_verdict(update))), {ALICE: [("transfer", BOB)]})
+        self.assertEqual(summary(process(monitor, with_verdict(update))), {ALICE: [("transfer", BOB)]})
 
     def test_assigned_holdings_are_tracked(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
-        self.assertIsNone(monitor.process_event_history_item(event(assignment("r1", at(1), amulet("moved", ALICE, "7.0", "r1:0")))))
+        self.assertIsNone(process(monitor, event(assignment("r1", at(1), amulet("moved", ALICE, "7.0", "r1:0")))))
         item = transfer("u2", at(2), ALICE, "moved", CHARLIE, "7.0")
-        self.assertEqual(summary(monitor.process_event_history_item(item)), {ALICE: [("transfer", CHARLIE)]})
+        self.assertEqual(summary(process(monitor, item)), {ALICE: [("transfer", CHARLIE)]})
 
 
 def unexpected_transfers(n: int) -> List[Json]:
