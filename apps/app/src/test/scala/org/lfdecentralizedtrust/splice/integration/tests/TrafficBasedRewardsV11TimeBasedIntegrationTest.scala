@@ -1,6 +1,12 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.topology.PartyId
+import java.time.Duration
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
@@ -21,6 +27,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 
 import scala.concurrent.duration.*
+import scala.jdk.OptionConverters.*
 
 // Sibling to TrafficBasedRewardsTimeBasedIntegrationTest covering TBAR v1.1
 // (asset-side activity introduced by the CIP-104 amendment). The pre-amendment
@@ -38,7 +45,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     with ExternallySignedPartyTestUtil
     with TokenStandardTest {
 
-  protected def rewardConfigMode: TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode
+  protected def rewardConfigMode
+      : TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode
 
   private def dryRunEnabled: Boolean =
     rewardConfigMode == TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode.DryRun
@@ -112,6 +120,50 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     ) {
       assertZeroTotals(sv1ScanBackend, 0L to 2L)
     }
+
+    // Onboard two wallet-ready parties to exercise asset-side attribution. Reusing the
+    // alice/bob wallet clients avoids the UNKNOWN_SUBMITTERS race that onboardUser hits
+    // when it tries to submit WalletAppInstall from a freshly-allocated party before
+    // topology propagation; the clients' ledgerApiUser already has a propagated party.
+    val assetMoverParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+    val assetParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+
+    clue(s"Grant FAK_AssetMoving right to $assetMoverParty") {
+      grantFeaturedAppRightWithKind(assetMoverParty, FeaturedAppKind.FAK_ASSETMOVING)
+    }
+    clue(s"Grant FAK_Asset right to $assetParty") {
+      grantFeaturedAppRightWithKind(assetParty, FeaturedAppKind.FAK_ASSET)
+    }
+  }
+
+  // Grants a featured-app right directly with the specified kind via
+  // DsoRules_GrantFeaturedAppRight (controller: dso). Blocks until scan
+  // observes the right with the expected kind and weight.
+  private def grantFeaturedAppRightWithKind(
+      party: PartyId,
+      kind: FeaturedAppKind,
+      weight: BigDecimal = BigDecimal(1),
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val action = new ARC_DsoRules(
+      new SRARC_GrantFeaturedAppRight(
+        new DsoRules_GrantFeaturedAppRight(
+          party.toProtoPrimitive,
+          java.util.Optional.of(weight.bigDecimal),
+          java.util.Optional.of(kind),
+          java.util.Optional.empty(),
+        )
+      )
+    )
+    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
+    clue(s"Wait for $party FA right to be ingested with kind=$kind weight=$weight") {
+      eventually() {
+        val right = sv1ScanBackend.lookupFeaturedAppRight(party).value
+        right.payload.appKind.toScala shouldBe Some(kind)
+        right.payload.activityWeight.toScala
+          .map(BigDecimal(_))
+          .getOrElse(BigDecimal(1)) shouldBe weight
+      }
+    }
   }
 
   // Asserts both the pre-amendment totals (app-side + minting allowance) and the
@@ -152,7 +204,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     clue(s"Asserting oldest open round=$expectedOldestRound") {
       eventually() {
-        sv1ScanBackend.getOpenAndIssuingMiningRounds()._1
+        sv1ScanBackend
+          .getOpenAndIssuingMiningRounds()
+          ._1
           .map(_.payload.round.number)
           .min shouldBe expectedOldestRound
       }
