@@ -7,6 +7,13 @@
 
 .. release-notes:: Upcoming
 
+  - LocalNet
+
+    - **Behavior change** All host ports published by LocalNet (Postgres, the participant Ledger, Admin and JSON APIs,
+      the validator admin APIs and the Swagger UI) are now bound to `127.0.0.1` instead of all interfaces.
+      These services use default credentials or no authentication, so they must not be reachable from the network.
+      To expose them on another interface, set `HOST_BIND_IP` (as already supported for the web UIs), for example `HOST_BIND_IP=0.0.0.0`.
+
   - Health checks of Canton nodes
 
     - **Behavior change** The health checks of all Canton nodes (participant, sequencer and mediator) now use Canton's HTTP health endpoints
