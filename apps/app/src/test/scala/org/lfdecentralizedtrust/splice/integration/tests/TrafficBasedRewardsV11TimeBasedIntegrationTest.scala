@@ -10,9 +10,15 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   RewardConfig,
   USD,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_GrantFeaturedAppRight,
+  DsoRules_RevokeFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_GrantFeaturedAppRight,
+  SRARC_RevokeFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
@@ -328,6 +334,59 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         label = s"weight-tripled alice→$highWeightAssetParty",
       )
     }
+
+    // Revoke highWeightAssetParty's FA grant mid-flow. Subsequent sends to
+    // highWeightAssetParty should no longer attribute asset activity to them
+    // (lookupFeaturedAppPartiesAsOf no longer surfaces the grant), while the
+    // DSO's weighted share still flows through — re-attributed to the submitter.
+    clue(s"Revoke $highWeightAssetParty's FA grant mid-flow") {
+      revokeFeaturedAppRight(highWeightAssetParty)
+    }
+    for (round <- 13 to 15) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
+    }
+
+    val revokedRound = 15L
+    val cursorBeforeRevokedSend = eventuallySucceeds() {
+      latestEventHistoryCursor(sv1ScanBackend)
+    }
+    clue(
+      s"Round $revokedRound: alice→$highWeightAssetParty after revocation should have no asset record for the revoked party"
+    ) {
+      aliceWalletClient.transferPreapprovalSend(
+        highWeightAssetParty,
+        BigDecimal(10),
+        UUID.randomUUID().toString,
+      )
+    }
+    for (round <- 16 to 17) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
+    }
+
+    clue(
+      s"Round $revokedRound: assetActivityRecords omits revoked $highWeightAssetParty; DSO share still re-attributes to $assetMoverParty"
+    ) {
+      val revokedEvents = sv1ScanBackend.getEventHistory(
+        count = 1000,
+        after = Some(cursorBeforeRevokedSend),
+        encoding = CompactJson,
+      )
+      // Find an FA-submitted event whose assetActivityRecords includes the
+      // submitter (= DSO share re-attribution). This is the alice→highWeightAssetParty
+      // transfer post-revocation; without a FAK_ASSET confirmer, only the DSO's
+      // share flows through, and it's re-attributed to the submitting app.
+      val revokedEvent = findFaSubmittedEvent(revokedEvents, assetMoverParty)
+      val assetRecords = revokedEvent.assetActivityRecords
+        .getOrElse(fail("revoked event should still carry DSO-share asset records"))
+        .value
+      val assetPartyProtos = assetRecords.map(_.party).toSet
+      assetPartyProtos should not contain highWeightAssetParty.toProtoPrimitive withClue
+        s"$highWeightAssetParty was revoked; its FA grant should no longer attribute asset activity"
+      assetPartyProtos should contain(assetMoverParty.toProtoPrimitive) withClue
+        s"DSO's share should still re-attribute to the submitting app $assetMoverParty"
+    }
   }
 
   // Votes an AmuletConfig update that sets the three TBAR v1.1 RewardConfig
@@ -412,6 +471,30 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         right.payload.activityWeight.toScala
           .map(BigDecimal(_))
           .getOrElse(BigDecimal(1)) shouldBe weight
+      }
+    }
+  }
+
+  // Votes a DsoRules_RevokeFeaturedAppRight choice, which withdraws the FA right.
+  // Blocks until scan no longer observes the right for `party`. From this point
+  // lookupFeaturedAppPartiesAsOf will not surface `party` as a provider for any
+  // subsequent round opening — the compute's findFASubmitter / asset-confirmer
+  // paths will treat `party` as non-featured.
+  private def revokeFeaturedAppRight(
+      party: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val rightCid = clue(s"Look up featured app right for $party") {
+      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
+    }
+    val action = new ARC_DsoRules(
+      new SRARC_RevokeFeaturedAppRight(
+        new DsoRules_RevokeFeaturedAppRight(rightCid)
+      )
+    )
+    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
+    clue(s"Wait for $party FA right to be withdrawn from scan") {
+      eventually() {
+        sv1ScanBackend.lookupFeaturedAppRight(party) shouldBe None
       }
     }
   }
