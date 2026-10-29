@@ -5,11 +5,7 @@ import { z } from 'zod';
 
 import { ConfigReader } from '../config';
 
-export class ConfigProvider<
-  A extends z.ZodRawShape,
-  B extends z.ZodTypeAny,
-  T extends z.ZodObject<A, 'strip', B>,
-> extends Component<{
+export class ConfigProvider<T extends z.ZodObject> extends Component<{
   children: React.ReactNode;
   configScheme: T;
   configContext: Context<z.infer<T> | undefined>;

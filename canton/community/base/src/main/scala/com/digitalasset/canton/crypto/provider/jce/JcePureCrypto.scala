@@ -46,10 +46,10 @@ import java.security.{
   GeneralSecurityException,
   InvalidKeyException,
   NoSuchAlgorithmException,
-  PrivateKey as JPrivateKey,
-  PublicKey as JPublicKey,
   SecureRandom,
   Security,
+  PrivateKey as JPrivateKey,
+  PublicKey as JPublicKey,
   Signature as JSignature,
 }
 import javax.crypto.spec.{GCMParameterSpec, SecretKeySpec}
@@ -325,7 +325,7 @@ class JcePureCrypto(
         SymmetricKey.create(CryptoKeyFormat.Raw, bytes.unwrap, scheme)
     }
 
-  override def signBytes(
+  override private[crypto] def signBytes(
       bytes: ByteString,
       signingKey: SigningPrivateKey,
       usage: NonEmpty[Set[SigningKeyUsage]],

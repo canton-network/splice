@@ -87,6 +87,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
 import org.lfdecentralizedtrust.splice.store.{
@@ -101,6 +102,7 @@ import org.lfdecentralizedtrust.splice.util.HasHealth
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import cats.implicits.*
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 /** Class representing a Scan app instance.
   *
@@ -208,7 +210,8 @@ class ScanApp(
       domainMigrationId <- appInitStep("Resolving domain migration id") {
         resolveDomainMigrationId()
       }
-      store = ScanStore(
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
+      store <- ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
         storage,
         loggerFactory,
@@ -221,6 +224,7 @@ class ScanApp(
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,
+        additionalIngestionSinks = Seq(new DbVotesStore.IngestionSink(kvStore, loggerFactory)),
       )
       internedStringStore <- InternedStringStore.createAndWarmupCache(
         storage,
@@ -229,17 +233,17 @@ class ScanApp(
         loggerFactory,
         retryProvider.metricsFactory,
       )
-      updateHistory = new UpdateHistory(
+      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
+      updateHistory <- UpdateHistory.create(
         storage,
         domainMigrationId,
         store.storeName,
-        participantId,
+        StoreMemberId(participantId),
         store.acsContractFilter.ingestionFilter.primaryParty,
         BackfillingRequirement.NeedsBackfilling,
         internedStringStore,
         config.analyzableTimeWindow.duration,
         loggerFactory,
-        enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
       )
@@ -266,8 +270,6 @@ class ScanApp(
         retryProvider,
         loggerFactory,
       )
-      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
-      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       historyStart = new ScanHistoryStart(
         new KvHistoryStartStore(kvProvider),
         new ParticipantHistoryStartSources(
@@ -391,24 +393,23 @@ class ScanApp(
         dsoParty,
         config.spliceInstanceNames.nameServiceNameAcronym.toLowerCase(),
       )
-      rewardsReferenceStore = {
-        val rewardsStore = ScanRewardsReferenceStore(
-          key = ScanRewardsReferenceStore.Key(
-            dsoParty = dsoParty,
-            synchronizerId = synchronizerId,
-          ),
-          storage,
-          loggerFactory,
-          retryProvider,
-          domainMigrationId,
-          participantId,
-          config.automation.ingestion,
-          config.parameters.defaultLimit,
-        )
-        automation.registerRewardsReferenceStoreIngestion(rewardsStore)
-        automation.registerRewardComputationTrigger(rewardsStore)
-        automation.registerPruneRewardAccountingTrigger(rewardsStore, scanVerdictStore)
-        rewardsStore
+      rewardsReferenceStore <- ScanRewardsReferenceStore(
+        key = ScanRewardsReferenceStore.Key(
+          dsoParty = dsoParty,
+          synchronizerId = synchronizerId,
+        ),
+        storage,
+        loggerFactory,
+        retryProvider,
+        domainMigrationId,
+        participantId,
+        config.automation.ingestion,
+        config.parameters.defaultLimit,
+      )
+      _ = {
+        automation.registerRewardsReferenceStoreIngestion(rewardsReferenceStore)
+        automation.registerRewardComputationTrigger(rewardsReferenceStore)
+        automation.registerPruneRewardAccountingTrigger(rewardsReferenceStore, scanVerdictStore)
       }
       verdictAutomation = new ScanVerdictAutomationService(
         config,
@@ -435,6 +436,7 @@ class ScanApp(
         appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
+        store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,

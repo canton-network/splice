@@ -161,7 +161,6 @@ const MonitoringConfigSchema = z
           seconds: z.number(),
         }),
         acsCommitments: z.object({
-          usePv36Metrics: z.boolean().default(false),
           checkpointDelay: z.object({
             seconds: z.number(),
           }),
@@ -212,6 +211,12 @@ const MonitoringConfigSchema = z
           // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
           droppedSentPacketsThreshold: 30,
         }),
+        // Notifies on every new participant
+        sequencerParticipantRegistration: z
+          .object({
+            enabled: z.boolean(),
+          })
+          .default({ enabled: false }),
         globalSynchronizerHealth: z.object({
           // Fraction (0-1) of sequenced confirmation requests that were discarded
           // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
@@ -241,13 +246,28 @@ export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('m
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
 
-const PrometheusConfigSchema = z.object({
-  prometheus: z.object({
-    storageSize: z.string(),
-    retentionDuration: z.string(),
-    retentionSize: z.string(),
-    installPrometheusPushgateway: z.boolean().default(false),
-  }),
+const PrometheusPushgatewayExternalAccessSchema = z.object({
+  enabled: z.boolean().default(false),
 });
 
-export const prometheusConfig = PrometheusConfigSchema.parse(clusterSubConfig('infra')).prometheus;
+const PrometheusConfigSchema = z.object({
+  prometheus: z
+    .object({
+      storageSize: z.string(),
+      retentionDuration: z.string(),
+      retentionSize: z.string(),
+      installPrometheusPushgateway: z.boolean().default(false),
+      pushgatewayExternalAccess: PrometheusPushgatewayExternalAccessSchema.prefault({}),
+    })
+    .refine(
+      access => !access.pushgatewayExternalAccess.enabled || access.installPrometheusPushgateway,
+      {
+        message: 'pushgatewayExternalAccess.enabled requires installPrometheusPushgateway',
+        path: ['pushgatewayExternalAccess', 'enabled'],
+      }
+    ),
+});
+
+const infraSubConfig = PrometheusConfigSchema.parse(clusterSubConfig('infra'));
+
+export const prometheusConfig = infraSubConfig.prometheus;

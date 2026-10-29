@@ -1,5 +1,10 @@
 services:
 
+  participant:
+    environment:
+      # Importing the ACS of the migrated parties requires the participant's repair service
+      - ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS=canton.features.enable-repair-commands = yes
+
   chown-participant-bootstrapping-dump:
     image: busybox:1.37.0
     volumes:

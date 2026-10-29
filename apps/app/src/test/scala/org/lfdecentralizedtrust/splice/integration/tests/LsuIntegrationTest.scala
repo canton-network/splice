@@ -84,7 +84,7 @@ class LsuIntegrationTest
     SynchronizerUpgradeUtil.migrationDumpDir.delete(swallowIOExceptions = true)
   }
 
-  private val successorPv = ProtocolVersion.v36
+  private val successorPv = ProtocolVersion.v37
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -95,11 +95,7 @@ class LsuIntegrationTest
           .updateAllSvAppConfigs { (name, config) =>
             config.copy(
               localSynchronizerNodes = config.localSynchronizerNodes
-                .copy(successor =
-                  config.localSynchronizerNodes.current
-                    .copy(protocolVersion = successorPv)
-                    .some
-                ),
+                .copy(successor = config.localSynchronizerNodes.current.some),
               domainMigrationDumpPath = Some(
                 (SynchronizerUpgradeUtil.migrationTestDumpDir(
                   name
@@ -253,11 +249,18 @@ class LsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "cancel-global-synchronizer-upgrade",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
       clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
-        scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
+        scheduleLsu(
+          topologyFreezeTime,
+          upgradeTime,
+          newSynchronizerSerial.value.toLong,
+          successorPv,
+        )
       }
 
       clue("Wait for LSU announcement to be proposed") {
@@ -361,6 +364,8 @@ class LsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "global-synchronizer-upgrade",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
@@ -479,7 +484,12 @@ class LsuIntegrationTest
       // and finish sequencer initialization so we can then publish the sequencer announcement before the upgrade time.
       val upgradeTime = CantonTimestamp.now().plusSeconds(150)
       clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
-        scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
+        scheduleLsu(
+          topologyFreezeTime,
+          upgradeTime,
+          newSynchronizerSerial.value.toLong,
+          successorPv,
+        )
       }
       val allBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
       val initialSvNodesDoingTheLsu = Seq(sv1Backend, sv2Backend, sv3Backend)
@@ -701,7 +711,7 @@ class LsuIntegrationTest
 
         actAndCheck(
           "external party transfer 10 cc",
-          executeTransferViaTokenStandard(
+          executeTransferViaTokenStandardV1(
             aliceValidatorBackend.participantClientWithAdminToken,
             externalPartyOnboarding.richPartyId,
             aliceValidatorBackend.getValidatorPartyId(),

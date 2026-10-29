@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 }
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
+import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.SubscriptionReadyForPaymentTrigger
@@ -129,6 +130,21 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
             )
           )
         )(c)
+      )
+      .addConfigTransforms((_, config) =>
+        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
+          // Use a version that supports downgrading ExternalPartyConfigState
+          _.copy(initialPackageConfig =
+            InitialPackageConfig(
+              amuletVersion = "0.1.24",
+              amuletNameServiceVersion = "0.1.25",
+              dsoGovernanceVersion = "0.1.30",
+              validatorLifecycleVersion = "0.1.9",
+              walletVersion = "0.1.25",
+              walletPaymentsVersion = "0.1.24",
+            )
+          )
+        )(config)
       )
 
   protected val danglingSubscriptionCid = new Subscription.ContractId("00" * 33 + "01")
@@ -381,16 +397,17 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 }
 
 /** Tests that expiry triggers ignore parties whose participant has no vetted amulet.
-  * Only Amulet contracts are covered in this test, as the ignore logic is shared across expiry triggers.
+  * Amulets are covered as a representative of the triggers based on `BatchedMultiDomainExpiredContractTrigger`;
+  * reward coupons are covered separately as `ExpireRewardCouponsTrigger` has its own batching logic.
   */
 class ExpiryWithNoVettedAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
   override protected val enablePersistedUnavailableParties: Boolean = true
 
-  "Amulet expiry ignores parties with no vetted amulet version" in { implicit env =>
-    val alice = setupAliceWithDustAmulets()
-
+  private def unvetAllAmuletVersionsOnAlice()(implicit
+      env: SpliceTestConsoleEnvironment
+  ): scala.Unit =
     clue("Alice unvets every amulet version") {
       aliceValidatorBackend.validatorAutomation
         .trigger[ValidatorPackageVettingTrigger]
@@ -411,6 +428,16 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
       }
     }
 
+  private def ignoredParties()(implicit env: SpliceTestConsoleEnvironment) =
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue
+
+  "Amulet expiry ignores parties with no vetted amulet version" in { implicit env =>
+    val alice = setupAliceWithDustAmulets()
+
+    unvetAllAmuletVersionsOnAlice()
+
     actAndCheck(timeUntilSuccess = 60.seconds)(
       "Advance 4 rounds and resume the amulet expiry trigger", {
         (1 to 4).foreach(_ => advanceRoundsByOneTickViaAutomation())
@@ -423,12 +450,57 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     )(
       "Alice is ignored and her dust amulets are not expired",
       _ => {
-        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
-          .listParties()(TraceContext.empty)
-          .futureValue
+        val ignored = ignoredParties()
         ignored should contain(alice)
         ignored should not contain dsoParty
         aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"
+      },
+    )
+  }
+
+  "Reward coupon expiry ignores parties with no vetted amulet version" in { implicit env =>
+    val alice = setupAliceWithDustAmulets()
+    val aliceId = alice.toProtoPrimitive
+    val dsoId = dsoParty.toProtoPrimitive
+
+    advanceRoundsByOneTickViaAutomation()
+    advanceRoundsByOneTickViaAutomation()
+    val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+    val currentRound = openRounds.toList.headOption.value.payload.round
+
+    // created before unvetting, as alice's participant must vet the package to be an informee
+    clue("Create an app reward coupon for alice") {
+      createAsDso()(
+        new AppRewardCoupon(
+          dsoId,
+          aliceId,
+          false,
+          BigDecimal(10.0).bigDecimal,
+          currentRound,
+          java.util.Optional.empty(),
+        ).create
+      )
+    }
+
+    unvetAllAmuletVersionsOnAlice()
+
+    actAndCheck(timeUntilSuccess = 60.seconds)(
+      "Advance 4 rounds and resume the reward coupon expiry trigger", {
+        (1 to 4).foreach(_ => advanceRoundsByOneTickViaAutomation())
+        env.svs.local.foreach(
+          _.dsoDelegateBasedAutomation.trigger[ExpireRewardCouponsTrigger].resume()
+        )
+      },
+    )(
+      "Alice is ignored and her reward coupon is not expired",
+      _ => {
+        val ignored = ignoredParties()
+        ignored should contain(alice)
+        ignored should not contain dsoParty
+        dsoAcs.filterJava(AppRewardCoupon.COMPANION)(
+          dsoParty,
+          _.data.provider == aliceId,
+        ) should have size 1L withClue "app reward coupon"
       },
     )
   }

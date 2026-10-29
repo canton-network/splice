@@ -21,6 +21,7 @@ import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import io.circe.Json
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 import scala.concurrent.Future
 
@@ -426,7 +427,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         ctx <- newEventStore()
         // First assignment
         recordTs1 = CantonTimestamp.now()
-        assignment1 <- insertAssign(ctx.updateHistory, recordTs1, "assign-cap-1")
+        _ <- insertAssign(ctx.updateHistory, recordTs1, "assign-cap-1")
 
         recordTs2 = recordTs1.plusSeconds(1)
         _ <- insertVerdict(ctx.verdictStore, "verdict-1", recordTs2)
@@ -515,7 +516,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         ctx <- newEventStore()
         // First unassignment
         recordTs1 = CantonTimestamp.now()
-        unassignment1 <- insertUnassign(ctx.updateHistory, recordTs1, "unassign-cap-1")
+        _ <- insertUnassign(ctx.updateHistory, recordTs1, "unassign-cap-1")
 
         recordTs2 = recordTs1.plusSeconds(1)
         _ <- insertVerdict(ctx.verdictStore, "verdict-1", recordTs2)
@@ -1057,21 +1058,22 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       migrationId: Long
   ): Future[UpdateHistory] = {
     val participantId = mkParticipantId("ScanEventStoreTest")
-    val uh = new UpdateHistory(
-      storage.underlying,
-      migrationId,
-      "scan_event_store_test",
-      participantId,
-      dsoParty,
-      BackfillingRequirement.BackfillingNotRequired,
-      internedStringStore(storage),
-      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
-      loggerFactory,
-      enableissue12777Workaround = true,
-      enableImportUpdateBackfill = true,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
-    )
-    uh.ingestionSink.initialize().map(_ => uh)
+    for {
+      updateHistory <- UpdateHistory.create(
+        storage.underlying,
+        migrationId,
+        "scan_event_store_test",
+        StoreMemberId(participantId),
+        dsoParty,
+        BackfillingRequirement.BackfillingNotRequired,
+        internedStringStore(storage),
+        analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
+        loggerFactory,
+        enableImportUpdateBackfill = true,
+        HistoryMetrics(NoOpMetricsFactory, migrationId),
+      )
+      _ <- updateHistory.ingestionSink.initialize()
+    } yield updateHistory
   }
 
   private def newVerdictStore(updateHistory: UpdateHistory) =

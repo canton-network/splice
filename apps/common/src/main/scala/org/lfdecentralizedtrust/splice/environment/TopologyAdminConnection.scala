@@ -7,6 +7,7 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits.catsSyntaxOptionId
 import cats.syntax.applicative.*
 import cats.syntax.either.*
+import com.daml.grpc.{GrpcException, GrpcStatus}
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
@@ -15,6 +16,7 @@ import com.digitalasset.canton.admin.api.client.commands.{
   VaultAdminCommands,
 }
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Init.GetIdResult
+import com.digitalasset.canton.admin.api.client.data.SequencingParametersAccess.*
 import com.digitalasset.canton.admin.api.client.data.topology
 import com.digitalasset.canton.admin.api.client.data.topology.{
   BaseResult,
@@ -64,6 +66,7 @@ import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   AuthorizedStateChanged,
+  KeyDownloadDisabledException,
   TopologySnapshot,
   TopologyTransactionType,
 }
@@ -489,6 +492,13 @@ abstract class TopologyAdminConnection(
       ),
       filterNamespace = Some(id.namespace),
     ).map(_.map(_.transaction))
+
+  def generateOnboardingTopologyTransactions(protocolVersion: ProtocolVersion)(implicit
+      traceContext: TraceContext
+  ): Future[Seq[GenericSignedTopologyTransaction]] =
+    runCmd(
+      TopologyAdminCommands.Read.GenerateOnboardingTopologyTransactions(protocolVersion, None)
+    ).map(_.transactions)
 
   def listAllTransactions(
       store: TopologyStoreId,
@@ -933,6 +943,22 @@ abstract class TopologyAdminConnection(
                           s"Submitted proposal ${signed.mapping} for $description, waiting until the proposal gets accepted"
                         )
                         signed.mapping
+                      }.recoverWith {
+                        // From PV37 a p2p proposal that switches active -> onboarding is rejected as an invalid hosting state transition even if this is just caused because it was built on a stale base and has an invalid serial
+                        case ex: StatusRuntimeException
+                            if ex.getStatus.getCode == Status.Code.INVALID_ARGUMENT &&
+                              Option(ex.getStatus.getDescription)
+                                .exists(_.contains("Invalid hosting state transitions")) =>
+                          check(AuthorizedState)
+                            .fold(_.map(_.base.serial), r => Some(r.base.serial))
+                            .flatMap {
+                              case Some(currentSerial)
+                                  if !resultBeforeProposingChange
+                                    .map(_.base.serial)
+                                    .contains(currentSerial) =>
+                                Future.failed(AuthorizedStateChanged(currentSerial))
+                              case _ => Future.failed(ex)
+                            }
                       }
                     }
                   }
@@ -1470,26 +1496,6 @@ abstract class TopologyAdminConnection(
     )
   }
 
-  def lookupSynchronizerParametersState(
-      storeId: TopologyStoreId,
-      synchronizerId: SynchronizerId,
-      topologyTransactionType: TopologyTransactionType,
-  )(implicit tc: TraceContext): Future[Option[TopologyResult[SynchronizerParametersState]]] = {
-    runCommandM(
-      storeId,
-      topologyTransactionType,
-      TimeQuery.HeadState,
-    )(
-      baseQuery =>
-        TopologyAdminCommands.Read.ListSynchronizerParametersState(
-          baseQuery,
-          synchronizerId.filterString,
-        ),
-      (item: ListSynchronizerParametersStateResult) =>
-        TopologyResult(item.context, SynchronizerParametersState(synchronizerId, item.item)),
-    ).map(_.headOption)
-  }
-
   private def listNamespaceDelegation(namespace: Namespace, target: Option[SigningPublicKey])(
       implicit traceContext: TraceContext
   ): Future[Seq[TopologyResult[NamespaceDelegation]]] =
@@ -1574,6 +1580,13 @@ abstract class TopologyAdminConnection(
       traceContext: TraceContext
   ): Future[ByteString] = {
     runCmd(VaultAdminCommands.ExportKeyPair(fingerprint, ProtocolVersion.latest, password = None))
+      .recoverWith {
+        // Canton reports this as FAILED_PRECONDITION, which we otherwise retry.
+        // Fail with a non-retryable error instead so that misconfigurations surface quickly.
+        case GrpcException(GrpcStatus(Status.Code.FAILED_PRECONDITION, Some(description)), _)
+            if description.contains(KeyDownloadDisabledException.cantonErrorDescription) =>
+          Future.failed(new KeyDownloadDisabledException(serviceName, fingerprint))
+      }
   }
 
   def generateKeyPair(name: String, usage: NonEmpty[Set[SigningKeyUsage]])(implicit
@@ -1813,6 +1826,18 @@ abstract class TopologyAdminConnection(
 }
 
 object TopologyAdminConnection {
+
+  final class KeyDownloadDisabledException(serviceName: String, fingerprint: Fingerprint)
+      extends RuntimeException(
+        s"Failed to download private key $fingerprint via $serviceName: key downloads are disabled on this node. " +
+          "Please consult your deployment documentation for instructions on how to enable key downloads."
+      )
+
+  object KeyDownloadDisabledException {
+    val cantonErrorDescription =
+      "Remote export of private keys only allowed when explicitly enabled"
+  }
+
   sealed trait TopologyTransactionType {
     def proposals: Boolean
   }

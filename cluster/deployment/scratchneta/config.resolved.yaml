@@ -41,6 +41,11 @@ cloudArmor:
       - 'grafana'
 cluster:
   nodePools:
+    additionalInfra:
+      - maxNodes: 3
+        minNodes: 0
+        nodeType: 'c3d-standard-8'
+        zones: '*'
     apps:
       maxNodes: 40
       minNodes: 0
@@ -86,7 +91,6 @@ monitoring:
           seconds: 3600
         computeDuration:
           seconds: 1200
-        usePv36Metrics: false
       acsSnapshots:
         saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
@@ -96,7 +100,7 @@ monitoring:
         deniedRequests:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
-          threshold: 100
+          threshold: 300
         throttleRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
@@ -104,7 +108,7 @@ monitoring:
         wafRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
-          threshold: 10
+          threshold: 50
       cloudSql:
         maintenance: false
       cometbft:
@@ -179,26 +183,6 @@ monitoring:
     loggedSecretsFilter: "(\n  (\n    jsonPayload.message=~\"(?i)(secret|token|(private|secret)(-)?key|password)=[^, ]+\" AND\n    -jsonPayload.message=~\"(?i)(secret|token|(private|secret)(-)?key|password)=(\\\"\\*\\*\\*\\*\\\"|hidden)\" AND\n    -jsonPayload.message=~\"(?i)page(_|-)?token=[^, ]+\"\n  ) OR\n  jsonPayload.message=~\"eyJhbGc[A-Za-z0-9_-]{2,}\\.[A-Za-z0-9_-]{2,}\\.[A-Za-z0-9_-]{2,}\" OR\n  jsonPayload.message=~\"Bearer\\s+eyJ[A-Za-z0-9_-]{2,}\"\n)\n"
     muteTimeIntervals: []
   enableGrafanaServiceAccountToken: true
-multiValidator:
-  postgresPvcSize: '100Gi'
-  resources:
-    participant:
-      limits:
-        memory: '16Gi'
-      requests:
-        cpu: '1'
-        memory: '8Gi'
-    postgres:
-      limits:
-        memory: '12Gi'
-      requests:
-        memory: '5Gi'
-    validator:
-      limits:
-        memory: '8Gi'
-      requests:
-        cpu: '0.5'
-        memory: '2400Mi'
 operatorDeployment:
   reference:
     deploymentDir: 'cluster/deployment'
@@ -242,6 +226,7 @@ pulumiStacks:
     resources:
       requests:
         memory: '2Gi'
+    retryMaxBackoffDurationSeconds: 60
   multi-validator:
     parallelism: 10
     resources:
@@ -255,7 +240,7 @@ splitwell:
   walletGateway:
     enabled: false
     portfolioVersion: '1.12.2'
-    version: '1.11.1'
+    version: '1.13.0'
 sv:
   scan:
     externalRateLimits:
@@ -278,47 +263,6 @@ sv:
           fillInterval: '60s'
           maxTokens: 10000
           tokensPerFill: 10000
-        rateLimits:
-          /com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/:
-            fillInterval: '60s'
-            maxTokens: 10000
-            name: 'sequencer-authentication'
-            perIpLimits:
-              fillInterval: '60s'
-              maxTokens: 100
-              tokensPerFill: 100
-            tokensPerFill: 10000
-            type: 'limited'
-          /com.digitalasset.canton.sequencer.api.v30.SequencerConnectService/:
-            fillInterval: '60s'
-            maxTokens: 10000
-            name: 'sequencer-connect'
-            perIpLimits:
-              fillInterval: '60s'
-              maxTokens: 100
-              tokensPerFill: 100
-            tokensPerFill: 10000
-            type: 'limited'
-          /com.digitalasset.canton.sequencer.api.v30.SequencerService/DownloadTopologyStateForInit:
-            fillInterval: '60s'
-            maxTokens: 600
-            name: 'sequencer-download-topology-state-for-init'
-            perIpLimits:
-              fillInterval: '60s'
-              maxTokens: 20
-              tokensPerFill: 20
-            tokensPerFill: 600
-            type: 'limited'
-          /com.digitalasset.canton.sequencer.api.v30.SequencerService/Subscribe:
-            fillInterval: '60s'
-            maxTokens: 10000
-            name: 'sequencer-subscribe'
-            perIpLimits:
-              fillInterval: '60s'
-              maxTokens: 100
-              tokensPerFill: 100
-            tokensPerFill: 10000
-            type: 'limited'
 svs:
   sv:
     cometbft:
@@ -1713,14 +1657,16 @@ validator1:
   walletGateway:
     enabled: true
     portfolioVersion: '1.12.2'
-    version: '1.11.1'
+    version: '1.13.0'
 validators:
   validator-runbook:
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
+    participant:
+      enableKeyDownload: true
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: true
       portfolioVersion: '1.12.2'
-      version: '1.11.1'
+      version: '1.13.0'

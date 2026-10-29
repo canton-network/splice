@@ -34,10 +34,16 @@ paths:
     $ref: "../../../../common/src/main/openapi/common-external.yaml#/paths/~1version"
 
   /v0/dso:
+    # TODO (#7882): remove
     get:
-      tags: [external, scan]
+      deprecated: true
+      tags: [deprecated]
       x-jvm-package: scan
       operationId: "getDsoInfo"
+      description: |
+        Deprecated. Please use /v1/dso instead, and /v0/sv-info for the `sv_user` and
+        `sv_party_id` fields. These fields differ between Scan instances, so responses
+        cannot be compared across SVs.
       responses:
         "200":
           description: ok
@@ -45,6 +51,37 @@ paths:
             application/json:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponse"
+
+  /v1/dso:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getDsoInfoV1"
+      description: |
+        Returns information about the DSO. Can be used in BFT reads.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponseV1"
+
+  /v0/sv-info:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getSvInfo"
+      description: |
+        Returns the SV operating this Scan instance. The response differs between
+        Scan instances, so it cannot be used in BFT reads.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetSvInfoResponse"
 
   /v0/validators/validator-faucets:
     get:
@@ -367,9 +404,8 @@ paths:
         order of events in the transaction, for this you should rely on the order of `root_event_ids` and `child_event_ids`.
         Updates are ordered lexicographically by `(migration id, record time)`.
         For a given migration id, each update has a unique record time.
-        The record time ranges of different migrations may overlap, i.e.,
-        it is not guaranteed that the maximum record time of one migration is smaller than the minimum record time of the next migration,
-        and there may be two updates with the same record time but different migration ids.
+        Record times also increase across migrations: every update of a migration has a greater record time
+        than all updates of earlier migrations.
       requestBody:
         required: true
         content:
@@ -436,9 +472,8 @@ paths:
 
         Updates are ordered lexicographically by `(migration id, record time)`.
         For a given migration id, each update has a unique record time.
-        The record time ranges of different migrations may overlap, i.e.,
-        it is not guaranteed that the maximum record time of one migration is smaller than the minimum record time of the next migration,
-        and there may be two updates with the same record time but different migration ids.
+        Record times also increase across migrations: every update of a migration has a greater record time
+        than all updates of earlier migrations.
         The order of items in events_by_id is not defined.
       requestBody:
         required: true
@@ -1459,9 +1494,8 @@ paths:
         An event bears some combination of a transaction, a contract reassignment, and a verdict.
         Events are ordered lexicographically by `(migration id, record time)`.
         For a given migration id, each event has a unique record time.
-        The record time ranges of different migrations may overlap, i.e.,
-        it is not guaranteed that the maximum record time of one migration is smaller than the minimum record time of the next migration,
-        and there may be two updates with the same record time but different migration ids.
+        Record times also increase across migrations: every event of a migration has a greater record time
+        than all events of earlier migrations.
       requestBody:
         required: true
         content:
@@ -1804,6 +1838,18 @@ components:
       required: ["dso_party_id"]
       properties:
         dso_party_id:
+          type: string
+    GetSvInfoResponse:
+      type: object
+      required:
+        - sv_user
+        - sv_party_id
+      properties:
+        sv_user:
+          description: User ID representing the SV
+          type: string
+        sv_party_id:
+          description: Party representing the SV
           type: string
     GetClosedRoundsResponse:
       type: object
@@ -4047,6 +4093,7 @@ components:
           description: |
             The list of keys of the bulk storage objects for which checksums are requested.
           type: array
+          maxItems: 1000
           items:
             type: string
 

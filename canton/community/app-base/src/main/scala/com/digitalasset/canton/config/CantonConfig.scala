@@ -37,6 +37,7 @@ import com.digitalasset.canton.config.InitConfigBase.NodeIdentifierConfig
 import com.digitalasset.canton.config.PackageMetadataViewConfig
 import com.digitalasset.canton.config.RequireTypes.*
 import com.digitalasset.canton.config.StartupMemoryCheckConfig.ReportingLevel
+import com.digitalasset.canton.config.TopologyConfigConverters.*
 import com.digitalasset.canton.console.{AmmoniteConsoleConfig, FeatureFlag}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.kms.KmsKeyId
@@ -249,8 +250,6 @@ object ConsoleCommandTimeout {
     config.NonNegativeDuration.tryFromDuration(30.seconds)
   val defaultTestingBongTimeout: config.NonNegativeDuration =
     config.NonNegativeDuration.tryFromDuration(1.minute)
-  val defaultRequestTimeout: NonNegativeDuration =
-    config.NonNegativeDuration.tryFromDuration(20.seconds)
 }
 
 /** Timeout settings configuration */
@@ -530,6 +529,7 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
         crashAfterFailedValidation = participantParameters.crashAfterFailedValidation,
         validateLegacyContractsV11 = participantParameters.validateLegacyContractsV11,
         acsCommitments = participantParameters.acsCommitments,
+        deprecatedApis = participantConfig.features.deprecated,
       )
     }
 
@@ -567,8 +567,6 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
           sequencerNodeConfig.parameters.enableRejectDeliveredAggregationsOnPv35,
         disableSubmissionChecksForTesting =
           sequencerNodeConfig.parameters.disableSubmissionChecksForTesting,
-        disableAggregationRuleSizeCheckForTesting =
-          sequencerNodeConfig.parameters.disableAggregationRuleSizeCheckForTesting,
         lsuConfig = sequencerNodeConfig.parameters.lsu,
         disableReleaseVersionHandshakeCheck =
           sequencerNodeConfig.parameters.disableReleaseVersionHandshakeCheck,
@@ -1182,6 +1180,9 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererP2PConnectionManagementConfigReader
         : ConfigReader[BftBlockOrdererConfig.P2PConnectionManagementConfig] =
       deriveReader[BftBlockOrdererConfig.P2PConnectionManagementConfig]
+    lazy implicit val bftBlockOrdererP2PTransportMetricsConfigReader
+        : ConfigReader[BftBlockOrdererConfig.P2PTransportMetricsConfig] =
+      deriveReader[BftBlockOrdererConfig.P2PTransportMetricsConfig]
     lazy implicit val bftBlockOrdererP2PNetworkConfigReader
         : ConfigReader[BftBlockOrdererConfig.P2PNetworkConfig] =
       deriveReader[BftBlockOrdererConfig.P2PNetworkConfig]
@@ -1213,6 +1214,9 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererBftBlockOrderingStandaloneTestSlowdownTopologyDelayConfigReader
         : ConfigReader[BftBlockOrdererConfig.BftBlockOrderingStandaloneTopologyDelayConfig] =
       deriveReader[BftBlockOrdererConfig.BftBlockOrderingStandaloneTopologyDelayConfig]
+    lazy implicit val bftBlockOrdererBftBlockOrderingStandaloneTestSlowdownComputeDelayConfigReader
+        : ConfigReader[BftBlockOrdererConfig.BftBlockOrderingStandaloneComputeDelayConfig] =
+      deriveReader[BftBlockOrdererConfig.BftBlockOrderingStandaloneComputeDelayConfig]
     lazy implicit val bftBlockOrdererBftBlockOrderingStandaloneTestSlowdownConfigReader
         : ConfigReader[BftBlockOrdererConfig.BftBlockOrderingStandaloneTestSlowdownConfig] =
       deriveReader[BftBlockOrdererConfig.BftBlockOrderingStandaloneTestSlowdownConfig]
@@ -1474,7 +1478,8 @@ object CantonConfig {
       implicit val deprecatedFields: DeprecatedFieldsFor[LedgerApiServerParametersConfig] =
         new DeprecatedFieldsFor[LedgerApiServerParametersConfig] {
           override def deprecatePath: List[DeprecatedConfigPath[?]] = List(
-            DeprecatedConfigPath[String]("contract-id-seeding", since = "3.6.0")
+            DeprecatedConfigPath[String]("contract-id-seeding", since = "3.6.0"),
+            DeprecatedConfigPath[String]("use-weighted-batching", since = "3.7.0"),
           )
         }
 
@@ -1544,6 +1549,9 @@ object CantonConfig {
           : ConfigReader[AlphaOnlinePartyReplicationConfig.TestInterceptor] =
         (_: ConfigCursor) =>
           sys.error("party replicator test interceptor cannot be created from pureconfig")
+      implicit val onlinePartyReplicationTargetConfig
+          : ConfigReader[OnlinePartyReplicationTargetConfig] =
+        deriveReader[OnlinePartyReplicationTargetConfig]
       implicit val alphaOnlinePartyReplicationConfig
           : ConfigReader[AlphaOnlinePartyReplicationConfig] =
         deriveReader[AlphaOnlinePartyReplicationConfig]
@@ -1614,6 +1622,8 @@ object CantonConfig {
 
     implicit val participantReplicationConfigReader: ConfigReader[ReplicationConfig] =
       deriveReader[ReplicationConfig]
+    lazy implicit final val deprecatedApiConfigReader: ConfigReader[DeprecatedApiConfig] =
+      deriveReader[DeprecatedApiConfig]
     implicit val participantFeaturesConfigReader: ConfigReader[ParticipantFeaturesConfig] =
       deriveReader[ParticipantFeaturesConfig]
 
@@ -2032,6 +2042,9 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererBftP2PNetworkAuthenticationConfigWriter
         : ConfigWriter[BftBlockOrdererConfig.P2PNetworkAuthenticationConfig] =
       deriveWriter[BftBlockOrdererConfig.P2PNetworkAuthenticationConfig]
+    lazy implicit val bftBlockOrdererBftP2PTransportMetricsConfigWriter
+        : ConfigWriter[BftBlockOrdererConfig.P2PTransportMetricsConfig] =
+      deriveWriter[BftBlockOrdererConfig.P2PTransportMetricsConfig]
     lazy implicit val bftBlockOrdererBftP2PNetworkConfigWriter
         : ConfigWriter[BftBlockOrdererConfig.P2PNetworkConfig] =
       deriveWriter[BftBlockOrdererConfig.P2PNetworkConfig]
@@ -2063,6 +2076,9 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererBftBlockOrderingStandaloneTestSlowdownTopologyDelayConfigWriter
         : ConfigWriter[BftBlockOrdererConfig.BftBlockOrderingStandaloneTopologyDelayConfig] =
       deriveWriter[BftBlockOrdererConfig.BftBlockOrderingStandaloneTopologyDelayConfig]
+    lazy implicit val bftBlockOrdererBftBlockOrderingStandaloneTestSlowdownComputeDelayConfigWriter
+        : ConfigWriter[BftBlockOrdererConfig.BftBlockOrderingStandaloneComputeDelayConfig] =
+      deriveWriter[BftBlockOrdererConfig.BftBlockOrderingStandaloneComputeDelayConfig]
     lazy implicit val bftBlockOrdererBftBlockOrderingStandaloneTestSlowdownConfigWriter
         : ConfigWriter[BftBlockOrdererConfig.BftBlockOrderingStandaloneTestSlowdownConfig] =
       deriveWriter[BftBlockOrdererConfig.BftBlockOrderingStandaloneTestSlowdownConfig]
@@ -2362,6 +2378,9 @@ object CantonConfig {
       implicit val partyReplicatorTestInterceptorWriter
           : ConfigWriter[AlphaOnlinePartyReplicationConfig.TestInterceptor] =
         ConfigWriter.toString(_ => "None")
+      implicit val onlinePartyReplicationTargetConfigWriter
+          : ConfigWriter[OnlinePartyReplicationTargetConfig] =
+        deriveWriter[OnlinePartyReplicationTargetConfig]
       implicit val alphaOnlinePartyReplicationConfigWriter
           : ConfigWriter[AlphaOnlinePartyReplicationConfig] =
         deriveWriter[AlphaOnlinePartyReplicationConfig]
@@ -2429,6 +2448,8 @@ object CantonConfig {
 
     implicit val participantReplicationConfigWriter: ConfigWriter[ReplicationConfig] =
       deriveWriter[ReplicationConfig]
+    lazy implicit final val deprecatedApiConfigWriter: ConfigWriter[DeprecatedApiConfig] =
+      deriveWriter[DeprecatedApiConfig]
     implicit val participantFeaturesConfigWriter: ConfigWriter[ParticipantFeaturesConfig] =
       deriveWriter[ParticipantFeaturesConfig]
 
@@ -2491,7 +2512,7 @@ object CantonConfig {
     * @return
     *   [[scala.Right]] [[com.typesafe.config.Config]] if parsing was successful.
     */
-  def parseAndMergeConfigs(
+  private def parseAndMergeConfigs(
       files: NonEmpty[Seq[File]]
   )(implicit elc: ErrorLoggingContext): Either[CantonConfigError, Config] = {
     val baseConfig = ConfigFactory.load()

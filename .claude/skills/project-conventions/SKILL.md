@@ -22,7 +22,7 @@ These are enforced by `.pre-commit-config.yaml` and CI; matching them up front a
 - Avoid Daml warts flagged by `scripts/check-daml-warts.sh` (e.g. unsafe patterns the repo has banned).
 - All Daml return types must satisfy `scripts/check-daml-return-types.sh` — avoid inferred/implicit return types where the script expects explicit ones.
 - Changing `daml.yaml` or `.daml` files requires the `dars_lock` file to stay in sync (`damlDarsLockFileUpdate`).
-- Frontend packages depend on generated JS bindings pinned by version, e.g. `@daml.js/splice-wallet` in `apps/package.json` (`file:common/frontend/daml.js/splice-wallet-0.1.23`). Bumping a Daml package version means regenerating and re-pinning these — check `apps/package.json` and the relevant frontend `package.json` for stale versions after Daml model changes.
+- Frontend packages import generated JS bindings such as `@daml.js/splice-wallet`. These are not npm dependencies: `apps/generated-packages.json` maps each alias to its generated directory (e.g. `splice-wallet-0.1.23`) and `apps/scripts/link-generated-packages.mjs` links them into `node_modules` on `npm install`. Bumping a Daml package version means regenerating and updating that mapping (`sbt damlBumpPackageVersions` does it); check it for stale versions after Daml model changes.
 
 ## TypeScript / frontend
 - Format via `scripts/fix-ts.py`, not raw prettier — it wraps prettier with repo-specific behavior. Skip `*.prettierrc.cjs` files.

@@ -2,6 +2,61 @@
 
 {/* Add all release notes in this section */}
 
+  - Health checks of Canton nodes
+
+    - **Behavior change** The health checks of all Canton nodes (participant, sequencer and mediator) now use Canton's HTTP health endpoints
+      (`/health/live` and `/health/ready`) instead of the gRPC health service. This affects:
+
+      - Helm charts: the liveness and readiness probes of `splice-participant` and `splice-global-domain`.
+        The charts enable the HTTP health endpoints on port 5071 through the `ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER` environment variable.
+        Set `httpHealthProbes: false` to restore the previous gRPC probes.
+      - Docker images: the `HEALTHCHECK` of `canton-participant` and `canton-domain`.
+        The `canton-participant` healthcheck expects the HTTP health endpoints on port 5071, which the Docker Compose deployments enable.
+        If you run the `canton-participant` image with your own deployment, set
+        `ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER=canton.participants.participant.monitoring.http-health-server.port=5071`.
+        The `canton-domain` image serves the HTTP health endpoints on ports 5071 (mediator) and 5072 (sequencer).
+        The gRPC health service on port 5061 (5061 and 5062 for `canton-domain`) remains available.
+      - Docker Compose deployments: the participant in the validator and SV deployments, the synchronizer node in the SV deployment,
+        and the `canton` container in LocalNet.
+
+      Liveness is unchanged. Readiness, however, now only reports ready once the node has completed its database migrations and initialized its storage.
+      Previously, nodes reported ready while database migrations were still running, even though they could not serve any requests yet.
+      After an upgrade with long-running database migrations, nodes therefore stay not ready (Kubernetes) or unhealthy (Docker) for the duration of the migrations.
+      If you use tooling that waits for readiness, you may need to increase its timeouts, for example:
+
+      - `helm install` and `helm upgrade` with `--wait` (default `--timeout` is 5 minutes)
+      - the `progressDeadlineSeconds` of Kubernetes Deployments (default is 10 minutes), as observed by `kubectl rollout status` or GitOps tools
+      - `docker compose up --wait` (including the `-w` flag of the `start.sh` scripts of the Docker Compose deployments),
+        and services that depend on Canton containers with `condition: service_healthy`.
+        The Docker images use a `HEALTHCHECK` start period of 10 minutes, so containers report unhealthy if migrations take longer,
+        and report healthy again once the migrations are done.
+
+  - Docker Compose deployments and localnet
+
+    - **Breaking** The Docker Compose deployments (validator, sv and localnet) now set the default Postgres version to 18.
+      Additionally, due to [upstream image's changes](https://github.com/docker-library/postgres/pull/1259) the data volume is now mounted to `/var/lib/postgresql` instead of `/var/lib/postgresql/data`.
+      You should [upgrade](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration),
+      as the previous default (14) is reaching end-of-life on November 12, 2026 and won't be supported by Splice nor receive updates from upstream Postgres.
+      If you cannot yet upgrade, you must restore the previous volume in `compose.yaml` AND change the Postgres version in the `.env` file back to `14.24-trixie@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446`.
+
+  - Participant
+
+    - **Breaking** Downloading the participant's private keys via its admin API is now disabled by default.
+      For participants that do not use KMS, this breaks participant identities dumps, including periodic backups
+      (`participantIdentitiesBackup`), the validator's `/v0/admin/participant/identities` endpoint, and SV identities dumps.
+      To re-enable them, set `enableKeyDownload: true` in the `splice-participant` Helm chart,
+      pass `--enable-key-download` to the Docker Compose validator's `start.sh`,
+      or set `canton.parameters.enable-key-download = yes` in the participant's Canton configuration.
+      Participants that use KMS are not affected, as their identities dumps do not include private keys.
+
+    - **Breaking** The participant's repair service (`canton.features.enable-repair-commands`) is now disabled by default.
+      **SVs must enable it**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump,
+      exports the ACS through it. To enable it, set `enableRepairCommands: true` in the `splice-participant` Helm chart
+      (see updated example `participant-values.yaml` for SVs).
+      Validators only need it while restoring from an identities dump (`migrateValidatorParty`) or while running
+      repair commands such as `participant.repair.import_acs`.
+      The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
+
   - Scan App
 
     - The following request fields now have a `maxItems` bound of 1000; requests exceeding it are rejected with 400:
@@ -13,11 +68,44 @@
       - `/v0/voterequest`: `vote_request_contract_ids`
       - `/v0/validators/validator-faucets`: `validator_ids`
 
+    - Add `/v1/dso`, which returns the same DSO information as `/v0/dso` without the
+      `sv_user` and `sv_party_id` fields of the SV operating the Scan instance, so that
+      responses match across Scan instances. `/v0/dso` is now deprecated.
+
+    - Add `/v0/sv-info`, which returns the `sv_user` and `sv_party_id` of the SV operating the Scan instance.
+
   - SV App
 
     - The following request fields now have a `maxItems` bound of 1000; requests exceeding it are rejected with 400:
 
       - `/v0/admin/sv/voterequest`: `vote_request_contract_ids`
+
+  - Grafana
+
+    - **Breaking**: The Grafana dashboards in the release bundle now use the V2 resource format.
+      Upgrade to Grafana 13 or newer before importing them.
+      Dashboard UIDs are unchanged, so existing dashboard links will keep working.
+
+  - Validator app
+
+     - Add `/v1/scan-proxy/dso`, which serves the DSO information from Scan's `/v1/dso`.
+       `/v0/scan-proxy/dso` is deprecated: it fails when the validator is connected to more than one Scan
+       instance, as the `sv_user` and `sv_party_id` fields differ between Scan instances.
+
+     - The validator now starts automation external parties with keys embedded in a
+       `PartyToParticipant` mapping by default. The prior behavior can
+       be restored with the
+       `canton.validator-apps.validator_backend.support-embedded-party-signing-keys = false` but it is recommended to instead make sure that the
+       `ValidatorRight` contracts are [configured such that they won't start automation](https://docs.canton.network/global-synchronizer/production-operations/scalability#bypassing-the-limit).
+
+   - Docker images
+
+     - Upgrade base image to 1.0.18
+
+  - Deployment
+
+    - Added the `splice-topology-key-monitor` Helm chart, which logs a warning for every topology transaction that is signed by any key configured in the chart.
+
 
 ## Upcoming for next minor release (template):
 
@@ -31,7 +119,7 @@
 
     | Breaking API Changes | Protocol Changes  | Daml Model Changes |
     | :------------------- | :---------------- | :----------------- |
-    | yes/no               | yes/no            | yes/no             |
+    | no                   | no                | yes                |
 
     Details:
 
@@ -43,13 +131,73 @@
 
     - Daml Model Changes:
 
+      - **Add governance locks**, which implement on-chain enforcement of Featured App (FA) and Super Validator (SV)
+        locking as specified in [CIP-127](https://github.com/canton-foundation/cips/blob/main/cip-0127/cip-0127.md).
+        This release implements the following increments of the
+        [CIP-127 incremental delivery plan](https://github.com/canton-foundation/cips/blob/main/cip-0127/cip-0127.md#incremental-delivery-plan):
+
+        - Increment 1, compatibility mode for SV and FA locks: wallets create and manage locks via token standard
+          V1 and V2 transfers to the lock manager party, as described in the
+          [compatibility mode section](https://github.com/canton-foundation/cips/blob/main/cip-0127/cip-0127.md#compatibility-mode).
+
+        - Increment 2, provisional FA locks: the Daml model supports provisional FA locks and their conversion
+          into full FA locks via `DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock`.
+
+        Locks with custom controllers (Increment 3) are not yet supported. All locks are controlled by their owner.
+
+      - Add an optional `governanceLockConfig` field to `AmuletConfig` with the minimum lock amount (default 10,000 CC)
+        and the vesting durations for SV locks (default 365.25 days) and FA locks (default 60 days).
+
+      - Add optional `appKind` and `opsParties` fields to `FeaturedAppRight` as
+        specified in
+        [CIP-104](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md).
+        The new `FeaturedAppRight_UpdateConfig` choice patches the `appKind`, `activityWeight` and `opsParties`
+        fields of a featured app right and supersedes the now deprecated `FeaturedAppRight_Update`.
+
+      - Changed `WalletAppInstall_FeaturedAppRights_SelfGrant` and `AmuletRules_DevNet_FeatureApp` to allow setting `activityWeight`, `appKind`, and `opsParties`.
+
+      - Add `SRARC_CreateFeaturedAppConfigUpdateInstruction` vote action, which
+        updates the config of one or more featured app rights.
+
+      - Add optional fields to `RewardConfig` in `AmuletConfig`:
+        `extraFeaturedAssetActivityWeight` (default 0.2),
+        `maxExtraFeaturedAssetActivityWeightPerAsset` (default 0.1) and
+        `dsoAppActivityWeight` (default 0.1) .
+
+      - Once the CIP-104 is enabled, the issuance per featured app activity, and
+        issuance per featured asset activity of a round will be computed
+        off-ledger, and these values will be added to `IssuingMiningRound` so
+        that explorers and other third-party apps can learn about the round's
+        mint/burn ratio for asset activity.
+
+      - **Implement traffic purchases via token standard transfers:** a V1 or V2 token standard transfer to the receiver party
+        `splice_traffic-manager::1220000000000000000000000000000000000000000000000000000000000000abcd`
+        with the memo set to `splice/memo:member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>[&forfeit-validator-reward-coupon=<true|false>]`
+        burns the full transfer `amount` and creates a `MemberTraffic` contract instead of transferring amulet.
+        The purchased traffic is calculated from the CC price and traffic price in the referenced `ExternalPartyConfigState`
+        and rounded down to whole bytes.
+        Any sub-byte remainder is also burned. Purchases below the minimum traffic top-up amount are rejected.
+        By default, the transaction must be executed within about 10 minutes after it is prepared
+        due to its dependency on the `OpenMiningRound` contract of the current round.
+        If you need more time, set the optional `forfeit-validator-reward-coupon` memo key to `true` to skip the validator reward coupon for the traffic burn.
+
+      - Traffic purchases, including those made through `AmuletRules_BuyMemberTraffic`, now include the purchased
+        traffic in bytes and the memo in the `splice.lfdecentralizedtrust.org/reason` of their burn and transaction metadata:
+        `splice/memo:purchased-traffic-bytes=<int>&member-id=<member>&synchronizer-id=<synchronizer>&migration-id=<int>`
+
+      - Added three new fields: `trafficPrice`, `supportedSynchronizerIds` and
+        `minTrafficTopupAmount` to `ExternalPartyConfigState`.
+
+      - Forbid using `splice/memo` or `cip-[0-9]*/memo` as the prefix of a normal token standard transfer
+        to avoid confusion with the special transfers introduced for governance locks and traffic purchases.
+
       - These changes require a Daml upgrade to the following versions:
 
         | name | version |
         | :--- | :--- |
-        | amulet | XXX |
-        | amuletNameService | XXX |
-        | dsoGovernance | XXX |
-        | validatorLifecycle | XXX |
-        | wallet | XXX |
-        | walletPayments | XXX |
+        | amulet | 0.1.25 |
+        | amuletNameService | 0.1.26 |
+        | dsoGovernance | 0.1.31 |
+        | validatorLifecycle | 0.1.10 |
+        | wallet | 0.1.26 |
+        | walletPayments | 0.1.25 |

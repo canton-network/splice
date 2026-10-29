@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
+import com.daml.ledger.javaapi.data.Identifier
+import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
@@ -26,6 +28,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   DarResourcesUtil,
+  GovernanceLockUtil,
   TokenStandardAccount,
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1
@@ -34,6 +37,7 @@ import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2
 import java.time.ZoneOffset
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.util.{Failure, Success, Try}
 
 class HttpTokenStandardTransferInstructionHandler(
@@ -294,7 +298,7 @@ class HttpTokenStandardTransferInstructionHandler(
       tc: TraceContext
   ): Future[FactoryResponse] = {
     for {
-      choiceContextBuilder <- getAmuletRulesTransferContextV1(excludeDebugFields)
+      _ <- getAmuletRulesTransferContextV1(excludeDebugFields)
       externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
       // pre-approval and featured app rights are only provided if they exist and are required
       isSelfTransfer = receiver == sender
@@ -387,32 +391,123 @@ class HttpTokenStandardTransferInstructionHandler(
   }
 
   /** Generic method to fetch choice contexts for all choices on a transfer instruction */
+  private def getTransferInstructionChoiceContext[
+      DisclosedContract,
+      ChoiceContext,
+      Builder <: util.ChoiceContextBuilder[
+        DisclosedContract,
+        ChoiceContext,
+        Builder,
+      ],
+  ](
+      transferInstructionId: String,
+      requireLockedAmulet: Boolean,
+      newBuilder: String => Builder,
+  )(implicit tc: TraceContext): Future[ChoiceContext] = {
+    def description(type_ : String): String = s"$type_ '$transferInstructionId'"
+
+    def getGovernanceLockContext(
+        tpe: String,
+        lockedAmuletId: Option[splice.amulet.LockedAmulet.ContractId],
+        requireLockedAmulet: Boolean,
+    ) =
+      util.ChoiceContextBuilder.getGovernanceLockContext[
+        DisclosedContract,
+        ChoiceContext,
+        Builder,
+      ](
+        description(tpe),
+        lockedAmuletId,
+        requireLockedAmulet,
+        store,
+        contractFetcher,
+        clock,
+        newBuilder,
+      )
+
+    contractFetcher
+      .lookupGenericContractById(new ContractId(transferInstructionId))
+      .flatMap {
+        case Some(contract) =>
+          contract.payload match {
+            case amuletInstr: splice.amulettransferinstruction.AmuletTransferInstruction =>
+              util.ChoiceContextBuilder.getTwoStepTransferContext[
+                DisclosedContract,
+                ChoiceContext,
+                Builder,
+              ](
+                description("AmuletTransferInstruction"),
+                Some(amuletInstr.lockedAmulet),
+                Some(amuletInstr.transfer.executeBefore),
+                requireLockedAmulet,
+                None,
+                store,
+                contractFetcher,
+                clock,
+                newBuilder,
+              )
+            case governanceLock: splice.governancelock.GovernanceLock =>
+              val requireLockedAmulet = GovernanceLockUtil
+                .getVestingLockSpecification(governanceLock)
+                .fold(true)(v => clock.now.toInstant.isBefore(v.endTime))
+              getGovernanceLockContext(
+                "GovernanceLock",
+                Some(governanceLock.lockedAmulet),
+                requireLockedAmulet,
+              )
+            // A substitution proposed by the target lock owner locks no funds,
+            // so it has no LockedAmulet
+            case substitution: splice.governancelock.substitution.GovernanceLockSubstitution =>
+              getGovernanceLockContext(
+                "GovernanceLockSubstitution",
+                substitution.lockedAmulet.toScala,
+                substitution.lockedAmulet.isPresent,
+              )
+            // Only the lock transfer accept moves the source locks and call
+            // this with `requireLockedAmulet=true`; reject and withdraw just
+            // archive the proposal
+            case lockTransfer: splice.governancelock.transfer.GovernanceLockTransfer =>
+              if (requireLockedAmulet)
+                util.ChoiceContextBuilder.getGovernanceLockTransferAcceptContext[
+                  DisclosedContract,
+                  ChoiceContext,
+                  Builder,
+                ](
+                  description("GovernanceLockTransfer"),
+                  lockTransfer.source,
+                  store,
+                  contractFetcher,
+                  clock,
+                  newBuilder,
+                )
+              else
+                getGovernanceLockContext(
+                  "GovernanceLockTransfer",
+                  None,
+                  requireLockedAmulet = false,
+                )
+            case _ => transferInstructionNotFound(transferInstructionId, Some(contract.identifier))
+          }
+        case None => transferInstructionNotFound(transferInstructionId, None)
+      }
+  }
+
   private def getTransferInstructionChoiceContextV1(
       transferInstructionId: String,
       requireLockedAmulet: Boolean,
       excludeDebugFields: Boolean,
   )(implicit
       tc: TraceContext
-  ): Future[v1.definitions.ChoiceContext] = {
-    for {
-      amuletInstr <- getAmuletTransferInstruction(transferInstructionId)
-      context <- util.ChoiceContextBuilder.getTwoStepTransferContext[
-        v1.definitions.DisclosedContract,
-        v1.definitions.ChoiceContext,
-        V1ChoiceContextBuilder,
-      ](
-        s"AmuletTransferInstruction '$transferInstructionId'",
-        Some(amuletInstr.payload.lockedAmulet),
-        Some(amuletInstr.payload.transfer.executeBefore),
-        requireLockedAmulet,
-        None,
-        store,
-        contractFetcher,
-        clock,
-        new V1ChoiceContextBuilder(_, excludeDebugFields),
-      )
-    } yield context
-  }
+  ): Future[v1.definitions.ChoiceContext] =
+    getTransferInstructionChoiceContext[
+      v1.definitions.DisclosedContract,
+      v1.definitions.ChoiceContext,
+      V1ChoiceContextBuilder,
+    ](
+      transferInstructionId,
+      requireLockedAmulet,
+      new V1ChoiceContextBuilder(_, excludeDebugFields),
+    )
 
   private def getTransferInstructionChoiceContextV2(
       transferInstructionId: String,
@@ -420,47 +515,29 @@ class HttpTokenStandardTransferInstructionHandler(
       excludeDebugFields: Boolean,
   )(implicit
       tc: TraceContext
-  ): Future[v2.definitions.ChoiceContext] = {
-    for {
-      amuletInstr <- getAmuletTransferInstruction(transferInstructionId)
-      context <- util.ChoiceContextBuilder.getTwoStepTransferContext[
-        v2.definitions.DisclosedContract,
-        v2.definitions.ChoiceContext,
-        V2ChoiceContextBuilder,
-      ](
-        s"AmuletTransferInstruction '$transferInstructionId'",
-        Some(amuletInstr.payload.lockedAmulet),
-        Some(amuletInstr.payload.transfer.executeBefore),
-        requireLockedAmulet,
-        None,
-        store,
-        contractFetcher,
-        clock,
-        new V2ChoiceContextBuilder(_, excludeDebugFields),
-      )
-    } yield context
-  }
+  ): Future[v2.definitions.ChoiceContext] =
+    getTransferInstructionChoiceContext[
+      v2.definitions.DisclosedContract,
+      v2.definitions.ChoiceContext,
+      V2ChoiceContextBuilder,
+    ](
+      transferInstructionId,
+      requireLockedAmulet,
+      new V2ChoiceContextBuilder(_, excludeDebugFields),
+    )
 
-  private def getAmuletTransferInstruction(
-      transferInstructionId: String
-  )(implicit tc: TraceContext) = {
-    contractFetcher
-      .lookupContractById(
-        splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION
-      )(
-        new splice.amulettransferinstruction.AmuletTransferInstruction.ContractId(
-          transferInstructionId
-        )
+  private def transferInstructionNotFound[A](
+      transferInstructionId: String,
+      foundContractTemplateId: Option[Identifier],
+  ): A =
+    throw io.grpc.Status.NOT_FOUND
+      .withDescription(
+        s"TransferInstruction '$transferInstructionId' not found." +
+          foundContractTemplateId.fold("")(templateId =>
+            s" Found contract of type $templateId but it did not match a known TransferInstruction type."
+          )
       )
-      .map(
-        _.getOrElse(
-          throw io.grpc.Status.NOT_FOUND
-            .withDescription(s"AmuletTransferInstruction '$transferInstructionId' not found.")
-            .asRuntimeException()
-        )
-      )
-  }
-
+      .asRuntimeException()
 }
 
 object HttpTokenStandardTransferInstructionHandler {

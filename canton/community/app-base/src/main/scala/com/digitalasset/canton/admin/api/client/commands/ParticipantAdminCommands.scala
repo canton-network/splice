@@ -41,15 +41,20 @@ import com.digitalasset.canton.admin.pruning.v30.WaitCommitmentsSetup
 import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.data.{CantonTimestamp, CantonTimestampSecond}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, TracedLogger}
 import com.digitalasset.canton.participant.admin.ResourceLimits
 import com.digitalasset.canton.participant.admin.data.{
+  AcsReplicationStatus,
   ContractImportMode,
   PartyReplicationStatus,
   RepresentativePackageIdOverride,
 }
-import com.digitalasset.canton.participant.admin.party.PartyParticipantPermission
+import com.digitalasset.canton.participant.admin.party.acsreplication.PartyParticipantPermission
 import com.digitalasset.canton.participant.admin.traffic.TrafficStateAdmin
 import com.digitalasset.canton.participant.commitment.DigestConsistencyCheckProcessor
 import com.digitalasset.canton.participant.pruning.AcsCommitmentProcessor.{
@@ -90,13 +95,12 @@ import io.grpc.stub.StreamObserver
 import io.grpc.{Context, ManagedChannel}
 import io.scalaland.chimney.dsl.*
 
-import java.io.{File, FileInputStream, IOException, SequenceInputStream}
+import java.io.{File, FileInputStream, IOException}
 import java.nio.file.{Files, Path, Paths}
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration.{Duration, MILLISECONDS}
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters.*
 
 object ParticipantAdminCommands {
 
@@ -651,6 +655,33 @@ object ParticipantAdminCommands {
           .leftMap(_.toString)
     }
 
+    final case class GetAcsReplicationStatus(requestId: String)
+        extends GrpcAdminCommand[
+          v30.GetAcsReplicationStatusRequest,
+          v30.GetAcsReplicationStatusResponse,
+          AcsReplicationStatus,
+        ] {
+      override type Svc = PartyManagementServiceStub
+
+      override def createService(channel: ManagedChannel): PartyManagementServiceStub =
+        v30.PartyManagementServiceGrpc.stub(channel)
+
+      override protected def createRequest(): Either[String, v30.GetAcsReplicationStatusRequest] =
+        Right(v30.GetAcsReplicationStatusRequest(requestId))
+
+      override protected def submitRequest(
+          service: PartyManagementServiceStub,
+          request: v30.GetAcsReplicationStatusRequest,
+      ): Future[v30.GetAcsReplicationStatusResponse] = service.getAcsReplicationStatus(request)
+
+      override protected def handleResponse(
+          response: v30.GetAcsReplicationStatusResponse
+      ): Either[String, AcsReplicationStatus] =
+        ProtoConverter
+          .parseRequired(AcsReplicationStatus.fromProtoV30, "status", response.status)
+          .leftMap(_.toString)
+    }
+
     final case class GetHighestOffsetByTimestamp(
         synchronizerId: SynchronizerId,
         timestamp: Instant,
@@ -734,7 +765,7 @@ object ParticipantAdminCommands {
 
     final case class ImportPartyAcs(
         inputStream: java.io.InputStream,
-        synchronizer: Synchronizer,
+        synchronizerId: SynchronizerId,
         workflowIdPrefix: String,
         contractImportMode: ContractImportMode,
         representativePackageIdOverride: RepresentativePackageIdOverride,
@@ -754,6 +785,7 @@ object ParticipantAdminCommands {
       override protected def createRequest(): Either[String, Unit] =
         Right(())
 
+      @SuppressWarnings(Array("com.digitalasset.canton.ProtobufToByteString"))
       override protected def submitRequest(
           service: PartyManagementServiceStub,
           request: Unit,
@@ -765,7 +797,7 @@ object ParticipantAdminCommands {
             val isFirst = isFirstChunk.getAndSet(false)
             v30.ImportPartyAcsRequest(
               bytes,
-              synchronizerId = Option.when(isFirst)(synchronizer.toProtoPrimitive),
+              synchronizerId = Option.when(isFirst)(synchronizerId.toProtoPrimitive),
               workflowIdPrefix =
                 if (isFirst) OptionUtil.emptyStringAsNone(workflowIdPrefix) else None,
               contractImportMode = Option.when(isFirst)(contractImportMode.toProtoV30),
@@ -956,6 +988,7 @@ object ParticipantAdminCommands {
         representativePackageIdOverride: RepresentativePackageIdOverride,
         excludedStakeholders: Set[PartyId],
         synchronizerId: SynchronizerId,
+        forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean,
     )(implicit ec: ExecutionContext, loggingContext: ErrorLoggingContext)
         extends GrpcAdminCommand[
           Unit,
@@ -987,55 +1020,10 @@ object ParticipantAdminCommands {
               excludedStakeholders.map(_.toProtoPrimitive).toSeq,
               Option.when(isFirst)(representativePackageIdOverride.toProtoV30),
               Option.when(isFirst)(synchronizerId.toProtoPrimitive),
+              forceRepairWhenTopologyTransactionAtLedgerEnd,
             )
           },
           new FileInputStream(importFilePath),
-        )
-      }
-
-      override protected def handleResponse(
-          response: v30.ImportAcsResponse
-      ): Either[String, Unit] = Right(())
-    }
-
-    final case class ImportAcsBytes(
-        acsChunk: Seq[ByteString],
-        workflowIdPrefix: String,
-        contractImportMode: ContractImportMode,
-        representativePackageIdOverride: RepresentativePackageIdOverride,
-        excludedStakeholders: Set[PartyId],
-        synchronizerId: SynchronizerId,
-    )(implicit ec: ExecutionContext, loggingContext: ErrorLoggingContext)
-        extends GrpcAdminCommand[
-          Unit,
-          v30.ImportAcsResponse,
-          Unit,
-        ] {
-
-      override type Svc = ParticipantRepairServiceStub
-
-      override def createService(channel: ManagedChannel): ParticipantRepairServiceStub =
-        v30.ParticipantRepairServiceGrpc.stub(channel)
-
-      override protected def createRequest(): Either[String, Unit] =
-        Right(())
-
-      override protected def submitRequest(
-          service: ParticipantRepairServiceStub,
-          request: Unit,
-      ): Future[v30.ImportAcsResponse] = {
-        GrpcStreamingUtils.streamToServer(
-          service.importAcs,
-          (chunk: ByteString) =>
-            v30.ImportAcsRequest(
-              chunk,
-              Some(workflowIdPrefix),
-              Some(contractImportMode.toProtoV30),
-              excludedStakeholders.map(_.toProtoPrimitive).toSeq,
-              Some(representativePackageIdOverride.toProtoV30),
-              Some(synchronizerId.toProtoPrimitive),
-            ),
-          new SequenceInputStream(acsChunk.iterator.map(_.newInput()).asJavaEnumeration),
         )
       }
 
@@ -1048,6 +1036,7 @@ object ParticipantAdminCommands {
         synchronizerAlias: SynchronizerAlias,
         contracts: Seq[LfContractId],
         ignoreAlreadyPurged: Boolean,
+        forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean,
     ) extends GrpcAdminCommand[v30.PurgeContractsRequest, v30.PurgeContractsResponse, Unit] {
 
       override type Svc = ParticipantRepairServiceStub
@@ -1061,6 +1050,8 @@ object ParticipantAdminCommands {
             synchronizerAlias = synchronizerAlias.toProtoPrimitive,
             contractIds = contracts.map(_.coid),
             ignoreAlreadyPurged = ignoreAlreadyPurged,
+            forceRepairWhenTopologyTransactionAtLedgerEnd =
+              forceRepairWhenTopologyTransactionAtLedgerEnd,
           )
         )
 
@@ -1079,6 +1070,7 @@ object ParticipantAdminCommands {
         sourceSynchronizerAlias: SynchronizerAlias,
         targetSynchronizerConfig: InternalSynchronizerConnectionConfig,
         force: Boolean,
+        forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean,
     ) extends GrpcAdminCommand[
           v30.MigrateSynchronizerRequest,
           v30.MigrateSynchronizerResponse,
@@ -1100,6 +1092,8 @@ object ParticipantAdminCommands {
             sourceSynchronizerAlias.toProtoPrimitive,
             Some(targetSynchronizerConfig.toProtoV30),
             force = force,
+            forceRepairWhenTopologyTransactionAtLedgerEnd =
+              forceRepairWhenTopologyTransactionAtLedgerEnd,
           )
         )
 
@@ -1117,6 +1111,7 @@ object ParticipantAdminCommands {
         targetSynchronizerAlias: SynchronizerAlias,
         skipInactive: Boolean,
         contracts: Seq[(LfContractId, Option[ReassignmentCounter])],
+        forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean,
     ) extends GrpcAdminCommand[v30.ChangeAssignationRequest, v30.ChangeAssignationResponse, Unit] {
       override type Svc = ParticipantRepairServiceStub
 
@@ -1140,6 +1135,8 @@ object ParticipantAdminCommands {
                 reassignmentCounter.map(_.toProtoPrimitive),
               )
             },
+            forceRepairWhenTopologyTransactionAtLedgerEnd =
+              forceRepairWhenTopologyTransactionAtLedgerEnd,
           )
         )
 
@@ -1255,6 +1252,7 @@ object ParticipantAdminCommands {
         reassignmentId: String,
         source: SynchronizerId,
         target: SynchronizerId,
+        forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean,
     ) extends GrpcAdminCommand[
           v30.RollbackUnassignmentRequest,
           v30.RollbackUnassignmentResponse,
@@ -1271,6 +1269,8 @@ object ParticipantAdminCommands {
             reassignmentId = reassignmentId,
             sourceSynchronizerId = source.toProtoPrimitive,
             targetSynchronizerId = target.toProtoPrimitive,
+            forceRepairWhenTopologyTransactionAtLedgerEnd =
+              forceRepairWhenTopologyTransactionAtLedgerEnd,
           )
         )
 
@@ -2723,14 +2723,16 @@ object ParticipantAdminCommands {
     final case class NoWaitCommitments(
         counterParticipant: ParticipantId,
         synchronizers: Seq[SynchronizerId],
-    ) extends PrettyPrinting {
-      override protected def pretty: Pretty[NoWaitCommitments] = prettyOfClass(
+    ) extends PrettyPrintingFromCompanion {
+      override def prettyCompanion: PrettyPrintingCompanion[NoWaitCommitments] = NoWaitCommitments
+    }
+
+    object NoWaitCommitments extends PrettyPrintingCompanion[NoWaitCommitments] {
+      override protected val pretty: Pretty[NoWaitCommitments] = prettyOfClass(
         param("no-wait counter-participant", _.counterParticipant),
         param("synchronizers", _.synchronizers),
       )
-    }
 
-    object NoWaitCommitments {
       def fromSetup(setup: Seq[WaitCommitmentsSetup]): Either[String, Seq[NoWaitCommitments]] = {
         val s = setup.map(setup =>
           for {
@@ -2792,14 +2794,16 @@ object ParticipantAdminCommands {
     final case class WaitCommitments(
         counterParticipant: ParticipantId,
         synchronizers: Seq[SynchronizerId],
-    ) extends PrettyPrinting {
-      override protected def pretty: Pretty[WaitCommitments] = prettyOfClass(
+    ) extends PrettyPrintingFromCompanion {
+      override def prettyCompanion: PrettyPrintingCompanion[WaitCommitments] = WaitCommitments
+    }
+
+    object WaitCommitments extends PrettyPrintingCompanion[WaitCommitments] {
+      override protected val pretty: Pretty[WaitCommitments] = prettyOfClass(
         param("wait counter-participant", _.counterParticipant),
         param("synchronizers", _.synchronizers),
       )
-    }
 
-    object WaitCommitments {
       def fromSetup(setup: Seq[WaitCommitmentsSetup]): Either[String, Seq[WaitCommitments]] = {
         val s = setup.map(setup =>
           for {
@@ -2965,8 +2969,9 @@ object ParticipantAdminCommands {
   }
 
   object Health {
-    final case class ParticipantStatusCommand()
-        extends GrpcAdminCommand[
+    final case class ParticipantStatusCommand(
+        synchronizerId: Option[Synchronizer] = None
+    ) extends GrpcAdminCommand[
           v30.ParticipantStatusRequest,
           v30.ParticipantStatusResponse,
           admin.NodeStatus[admin.ParticipantStatus],
@@ -2984,7 +2989,7 @@ object ParticipantAdminCommands {
         service.participantStatus(request)
 
       override protected def createRequest(): Either[String, v30.ParticipantStatusRequest] = Right(
-        v30.ParticipantStatusRequest()
+        v30.ParticipantStatusRequest(synchronizerId = synchronizerId.map(_.toProtoV30))
       )
 
       override protected def handleResponse(

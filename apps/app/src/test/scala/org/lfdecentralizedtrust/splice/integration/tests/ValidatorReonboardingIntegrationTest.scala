@@ -244,7 +244,7 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
           // in tests for Canton does not work for standalone instances.
           testResourcesPath / "standalone-participant-extra-no-auth.conf",
         ),
-        Seq.empty,
+        Seq(ProcessTestUtil.enableKeyDownloadConfig),
         "alice-participant",
         "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
         "EXTRA_PARTICIPANT_DB" -> oldParticipantDb,
@@ -308,7 +308,8 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
       ),
-      Seq(),
+      // Required for importing the ACS of the migrated parties
+      Seq(ProcessTestUtil.enableRepairCommandsConfig),
       "alice-reonboard-participant",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> newParticipantDb,
@@ -401,6 +402,16 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
           .effectiveAmount shouldBe lockedAmount
       }
 
+      clue("Dumping participant identities fails if key downloads are disabled") {
+        // The participant in this Canton instance does not allow key downloads
+        assertThrowsAndLogsCommandFailures(
+          aliceValidatorLocalBackend.dumpParticipantIdentities(),
+          _.errorMessage should (include("400 Bad Request") and include(
+            "key downloads are disabled"
+          )),
+        )
+      }
+
       clue("Restart validator without migration config") {
         aliceValidatorLocalBackend.stop()
         aliceValidatorLocalRestart.startSync()
@@ -469,7 +480,7 @@ class ValidatorReonboardingWithPartiesToMigrateIntegrationTest
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
       ),
-      Seq.empty,
+      Seq(ProcessTestUtil.enableKeyDownloadConfig),
       "alice-reonboard-from-key-database",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> oldParticipantDb,
@@ -534,7 +545,8 @@ class ValidatorReonboardingWithPartiesToMigrateIntegrationTest
         testResourcesPath / "standalone-participant-extra.conf",
         testResourcesPath / "standalone-participant-extra-no-auth.conf",
       ),
-      Seq(),
+      // Required for importing the ACS of the migrated parties
+      Seq(ProcessTestUtil.enableRepairCommandsConfig),
       "alice-reonboard-participant",
       "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
       "EXTRA_PARTICIPANT_DB" -> newParticipantDb,

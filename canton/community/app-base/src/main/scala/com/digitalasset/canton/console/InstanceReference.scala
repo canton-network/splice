@@ -408,7 +408,7 @@ trait RemoteInstanceReference extends InstanceReference {
 
   def config: NodeConfig
 
-  override def adminCommand[Result](
+  override protected[console] def adminCommand[Result](
       grpcCommand: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result] =
     consoleEnvironment.grpcAdminCommandRunner.runCommand(
@@ -450,13 +450,13 @@ class ExternalLedgerApiClient(
   override val loggerFactory: NamedLoggerFactory =
     consoleEnvironment.environment.loggerFactory.append("client", name)
 
-  override def ledgerApiCommand[Result](
+  override protected[console] def ledgerApiCommand[Result](
       command: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result] =
     consoleEnvironment.grpcLedgerCommandRunner
       .runCommand("sourceLedger", command, FullClientConfig(hostname, port, tls), token)
 
-  override def optionallyAwait[Tx](
+  override private[canton] def optionallyAwait[Tx](
       tx: Tx,
       txId: String,
       txSynchronizerId: String,
@@ -718,7 +718,7 @@ class RemoteParticipantReference(environment: ConsoleEnvironment, override val n
   def config: RemoteParticipantConfig =
     consoleEnvironment.environment.config.remoteParticipantsByString(name)
 
-  override def ledgerApiCommand[Result](
+  override protected[console] def ledgerApiCommand[Result](
       command: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result] =
     consoleEnvironment.grpcLedgerCommandRunner.runCommand(
@@ -803,7 +803,7 @@ class LocalParticipantReference(
   @Help.Group("Commitments")
   override def commitments: LocalCommitmentsAdministrationGroup = commitments_
 
-  override def ledgerApiCommand[Result](
+  override protected[console] def ledgerApiCommand[Result](
       command: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result] =
     runCommandIfRunning(
@@ -944,7 +944,9 @@ abstract class SequencerReference(
         val mediators = active ++ observers
 
         mediators.foreach { mediator =>
-          val identityState = mediator.topology.transactions.identity_transactions()
+          val identityState = mediator.topology.transactions.generate_onboarding_transactions(
+            physical_synchronizer_id.protocolVersion
+          )
 
           topology.transactions.load(
             identityState,
@@ -1002,7 +1004,9 @@ abstract class SequencerReference(
           (additionalActive ++ additionalObservers).filterNot(m => current.contains(m.id))
 
         newMediators.foreach { med =>
-          val identityState = med.topology.transactions.identity_transactions()
+          val identityState = med.topology.transactions.generate_onboarding_transactions(
+            physical_synchronizer_id.protocolVersion
+          )
 
           topology.transactions.load(
             identityState,
@@ -1132,6 +1136,10 @@ abstract class SequencerReference(
         |- for each member when they were registered and whether they are enabled
         |- a list of clients for each member, their last acknowledgement, and whether they are
         |  enabled
+        |Members that are not registered yet are not included: those that only had traffic
+        |purchased for them, and those disabled before their registration. As they have no
+        |events, they do not affect pruning. Use `traffic_control.traffic_state_of_members`
+        |to inspect their traffic.
         """
     )
     def status(): SequencerPruningStatus =
@@ -1455,7 +1463,7 @@ class LocalSequencerReference(
         .asSequencerConnection(sequencerAlias = SequencerAlias.tryCreate(name), sequencerId = None)
     )
 
-  val nodes: SequencerNodes =
+  protected[console] val nodes: SequencerNodes =
     consoleEnvironment.environment.sequencers
 
   override protected[console] def runningNode: Option[SequencerNodeBootstrap] =
@@ -1596,7 +1604,7 @@ class LocalMediatorReference(consoleEnvironment: ConsoleEnvironment, val name: S
   override def config: MediatorNodeConfig =
     consoleEnvironment.environment.config.mediatorsByString(name)
 
-  val nodes: MediatorNodes = consoleEnvironment.environment.mediators
+  protected[console] val nodes: MediatorNodes = consoleEnvironment.environment.mediators
 
   override protected[console] def runningNode: Option[MediatorNodeBootstrap] =
     nodes.getRunning(name)

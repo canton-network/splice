@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.sv.store
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import cats.implicits.toTraverseOps
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
@@ -48,11 +50,11 @@ import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
@@ -753,6 +755,47 @@ trait SvDsoStore
       : ListExpiredContracts[so.SvOnboardingConfirmed.ContractId, so.SvOnboardingConfirmed] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(so.SvOnboardingConfirmed.COMPANION)
 
+  def listExpiredVestingLocks(
+      unavailablePartiesStore: Option[UnavailablePartiesStore]
+  ): ListExpiredContracts[
+    splice.governancelock.GovernanceLock.ContractId,
+    splice.governancelock.GovernanceLock,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.governancelock.GovernanceLock.COMPANION,
+      unavailablePartiesStore,
+      // TODO(canton-network/splice-sv-fa-locking#76): Make sure custom
+      // controllers parties are listed here as well when they are implemented
+      // in Daml.
+      ignoredPartyFields = Seq("owner"),
+    )
+
+  /** List lock transfer proposals that are past their `expiresAt`.
+    *
+    * Implemented in `DbSvDsoStore` rather than through
+    * `listExpiredFromPayloadExpiry`, whose `ignoredPartyFields` resolves a
+    * single JSON level. The parties to skip are nested: the sender is at
+    * `transfer.source.owner` and the receiver at `transfer.receiver`.
+    */
+  def listExpiredGovernanceLockTransfers(
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None
+  ): ListExpiredContracts[
+    splice.governancelock.transfer.GovernanceLockTransfer.ContractId,
+    splice.governancelock.transfer.GovernanceLockTransfer,
+  ]
+
+  /** List substitution proposals that are past their `expiresAt`.
+    *
+    * Implemented in `DbSvDsoStore` because the lock owner is nested at
+    * `target.owner`, which `ignoredPartyFields` cannot reach.
+    */
+  def listExpiredGovernanceLockSubstitutions(
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None
+  ): ListExpiredContracts[
+    splice.governancelock.substitution.GovernanceLockSubstitution.ContractId,
+    splice.governancelock.substitution.GovernanceLockSubstitution,
+  ]
+
   def listExpiredAnsEntries(
       unavailablePartiesStore: Option[UnavailablePartiesStore]
   ): ListExpiredContracts[
@@ -890,8 +933,12 @@ trait SvDsoStore
       )
     } yield unclaimedRewards map (_.contract)
 
-  def listMemberTrafficContracts(memberId: Member, synchronizerId: SynchronizerId, limit: Limit)(
-      implicit tc: TraceContext
+  def listMemberTrafficContracts(
+      memberId: StoreMemberId,
+      synchronizerId: SynchronizerId,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
   ): Future[
     Seq[Contract[
       splice.decentralizedsynchronizer.MemberTraffic.ContractId,
@@ -953,8 +1000,8 @@ trait SvDsoStore
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]]
 
-  def getTotalPurchasedMemberTraffic(memberId: Member, synchronizerId: SynchronizerId)(implicit
-      tc: TraceContext
+  def getTotalPurchasedMemberTraffic(memberId: StoreMemberId, synchronizerId: SynchronizerId)(
+      implicit tc: TraceContext
   ): Future[Long]
 
   def lookupVoteByThisSvAndVoteRequestWithOffset(
@@ -1037,6 +1084,13 @@ trait SvDsoStore
         AssignedContract[splice.amulet.FeaturedAppRight.ContractId, splice.amulet.FeaturedAppRight]
       ]
     ]
+  ]
+
+  def listProvisionalGovernanceLocksWithFeaturedAppRightSample(
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None
+  ): ListExpiredContracts[
+    splice.governancelock.GovernanceLock.ContractId,
+    splice.governancelock.GovernanceLock,
   ]
 
   def lookupFeaturedAppRight(
@@ -1212,8 +1266,9 @@ object SvDsoStore {
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
       closeContext: CloseContext,
-  ): SvDsoStore = {
-    new DbSvDsoStore(
+      tc: TraceContext,
+  ): Future[SvDsoStore] = {
+    DbSvDsoStore.create(
       key,
       storage,
       loggerFactory,
@@ -1488,7 +1543,7 @@ object SvDsoStore {
               // we ignore cases where the member id is invalid instead of throwing an exception
               // to avoid killing the entire ingestion pipeline as a result
               _ => None,
-              Some(_),
+              member => Some(StoreMemberId(member)),
             ),
           memberTrafficDomain = Some(SynchronizerId.tryFromString(contract.payload.synchronizerId)),
           totalTrafficPurchased = Some(contract.payload.totalPurchased),
@@ -1662,6 +1717,50 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.governancelock.GovernanceLock.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        val expiresAt = GovernanceLockUtil
+          .getVestingLockSpecification(contract.payload)
+          .map(v => Timestamp.assertFromInstant(v.endTime))
+        val (lockType, lockSubject) =
+          GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+        DsoAcsStoreRowData(
+          contract,
+          governanceLockType = Some(lockType.storeValue),
+          governanceLockSubject = Some(lockSubject),
+          contractExpiresAt = expiresAt,
+        )
+      },
+      mkFilter(splice.governancelock.transfer.GovernanceLockTransfer.COMPANION)(
+        co => co.payload.source.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.governancelock.substitution.GovernanceLockSubstitution.COMPANION)(
+        co => co.payload.target.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        val (lockType, lockSubject) =
+          GovernanceLockUtil.specificationTypeAndSubject(contract.payload.target.specification)
+        DsoAcsStoreRowData(
+          contract,
+          governanceLockType = Some(lockType.storeValue),
+          governanceLockSubject = Some(lockSubject),
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },

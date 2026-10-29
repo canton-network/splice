@@ -10,8 +10,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions 
 import org.lfdecentralizedtrust.splice.store.db.{AcsRowData, AcsTables, IndexColumnValue}
 import org.lfdecentralizedtrust.splice.util.Contract
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import io.circe.Json
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.AcsRowData.HasIndexColumns
 
 object DsoTables extends AcsTables with NamedLogging {
@@ -42,7 +43,7 @@ object DsoTables extends AcsTables with NamedLogging {
       voteRequestTrackingCid: Option[VoteRequest.ContractId] = None,
       requester: Option[PartyId] = None,
       requesterName: Option[String] = None,
-      memberTrafficMember: Option[Member] = None,
+      memberTrafficMember: Option[StoreMemberId] = None,
       memberTrafficDomain: Option[SynchronizerId] = None,
       ansEntryName: Option[String] = None,
       actionAnsEntryContextCid: Option[splice.ans.AnsEntryContext.ContractId] = None,
@@ -56,6 +57,8 @@ object DsoTables extends AcsTables with NamedLogging {
       walletParty: Option[PartyId] = None,
       conversionRateFeedPublisher: Option[PartyId] = None,
       rewardBeneficiaryIsObserver: Option[Boolean] = None,
+      governanceLockType: Option[String] = None,
+      governanceLockSubject: Option[String] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       DsoAcsStoreRowData.IndexColumns.amulet_round_of_expiry -> amuletRoundOfExpiry,
@@ -91,6 +94,10 @@ object DsoTables extends AcsTables with NamedLogging {
       DsoAcsStoreRowData.IndexColumns.wallet_party -> walletParty,
       DsoAcsStoreRowData.IndexColumns.conversion_rate_feed_publisher -> conversionRateFeedPublisher,
       DsoAcsStoreRowData.IndexColumns.reward_beneficiary_is_observer -> rewardBeneficiaryIsObserver,
+      DsoAcsStoreRowData.IndexColumns.governance_lock_type -> governanceLockType.map(lengthLimited),
+      DsoAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject.map(
+        lengthLimited
+      ),
     )
   }
   object DsoAcsStoreRowData {
@@ -133,6 +140,8 @@ object DsoTables extends AcsTables with NamedLogging {
       val wallet_party = "wallet_party"
       val conversion_rate_feed_publisher = "conversion_rate_feed_publisher"
       val reward_beneficiary_is_observer = "reward_beneficiary_is_observer"
+      val governance_lock_type = "governance_lock_type"
+      val governance_lock_subject = "governance_lock_subject"
       val All = Seq(
         amulet_round_of_expiry,
         reward_round,
@@ -166,6 +175,8 @@ object DsoTables extends AcsTables with NamedLogging {
         wallet_party,
         conversion_rate_feed_publisher,
         reward_beneficiary_is_observer,
+        governance_lock_type,
+        governance_lock_subject,
       )
     }
   }

@@ -94,7 +94,7 @@ case class EnvironmentDefinition(
       .withMultiSyncFeatureFlag()
       .withTrafficTopupsEnabled
       .withInitialPackageVersions
-      .withProtocolVersion(ProtocolVersion.v36)
+      .withProtocolVersion(ProtocolVersion.v37)
       .withProtocolVersionFromEnv
       .withEagerAppActivityMarkerConversion
 
@@ -178,10 +178,8 @@ case class EnvironmentDefinition(
 
   def withProtocolVersion(protocolVersion: ProtocolVersion): EnvironmentDefinition =
     addConfigTransforms((_, config) =>
-      ConfigTransforms.updateAllSvAppConfigs_(
-        updateAllSynchronizerNodeConfigs(
-          _.focus(_.protocolVersion).replace(protocolVersion)
-        )
+      ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
+        _.focus(_.initialProtocolVersion).replace(protocolVersion)
       )(config)
     )
 
@@ -640,13 +638,23 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
 
   private def loadConfigFromResources(paths: String*): SpliceConfig = {
     val rawConfig = ConfigFactory.parseString(paths.map(Resource.getAsString(_)).mkString("\n"))
-    SpliceConfig.loadOrThrow(rawConfig)
+    withConsolePreviewAndRepairCommands(SpliceConfig.loadOrThrow(rawConfig))
   }
 
   def fromFiles(testName: String, files: File*): EnvironmentDefinition = {
     val config = SpliceConfig.parseAndLoadOrThrow(files.map(_.toJava))
-    EnvironmentDefinition(baseConfig = config, context = testName)
+    EnvironmentDefinition(
+      baseConfig = withConsolePreviewAndRepairCommands(config),
+      context = testName,
+    )
   }
+
+  private def withConsolePreviewAndRepairCommands(config: SpliceConfig): SpliceConfig =
+    config
+      .focus(_.features.enablePreviewCommands)
+      .replace(true)
+      .focus(_.features.enableRepairCommands)
+      .replace(true)
 
   def empty(testName: String): EnvironmentDefinition =
     EnvironmentDefinition(SpliceConfig.empty, context = testName)

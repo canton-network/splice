@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.ValidatorRewardCoupon
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
@@ -39,9 +40,12 @@ class RecoverExternalPartyIntegrationTest
 
   "External parties can recover from key" in { implicit env =>
     // Canton endpoint is kinda slow for this so we only resolve it once.
-    val synchronizerId = decentralizedSynchronizerId
+    val physicalSynchronizerId = sv1Backend.participantClient.synchronizers.physical_id_of(
+      sv1Backend.config.domains.global.alias
+    )
+    val synchronizerId = physicalSynchronizerId.logical
 
-    val onboarding @ OnboardingResult(aliceParty, alicePublicKey, alicePrivateKey) =
+    val onboarding @ OnboardingResult(aliceParty, _, alicePrivateKey) =
       onboardExternalParty(aliceValidatorBackend, Some("aliceExternal"))
 
     aliceValidatorWalletClient.tap(5000.0)
@@ -54,7 +58,7 @@ class RecoverExternalPartyIntegrationTest
 
     actAndCheck(
       "Transfer 2000.0 to Alice via Token Standard", {
-        executeTransferViaTokenStandard(
+        executeTransferViaTokenStandardV1(
           aliceValidatorBackend.participantClientWithAdminToken,
           RichPartyId.local(aliceValidatorBackend.getValidatorPartyId()),
           aliceParty,
@@ -96,7 +100,7 @@ class RecoverExternalPartyIntegrationTest
         )
       )
 
-      val signedTxs = txs.map(sign(_, alicePrivateKey))
+      val signedTxs = txs.map(sign(_, alicePrivateKey, physicalSynchronizerId.protocolVersion))
 
       // Note: This only signs it does not upload.
       bobValidatorBackend.participantClient.topology.transactions.sign(
@@ -197,7 +201,7 @@ class RecoverExternalPartyIntegrationTest
       verboseHashing = true,
     )
 
-    eventually() {
+    eventuallySucceeds() {
       bobValidatorBackend
         .getExternalPartyBalance(aliceParty)
         .totalUnlockedCoin shouldBe "2000.0000000000"
@@ -206,7 +210,7 @@ class RecoverExternalPartyIntegrationTest
     // Check that alice can transfer through bob's node
     actAndCheck(
       "alice transfer 1000 cc to bob's validator",
-      executeTransferViaTokenStandard(
+      executeTransferViaTokenStandardV1(
         bobValidatorBackend.participantClientWithAdminToken,
         onboarding.richPartyId,
         bobValidatorBackend.getValidatorUserInfo().primaryParty,
@@ -227,6 +231,7 @@ class RecoverExternalPartyIntegrationTest
   def sign(
       tx: TopologyTransaction[TopologyChangeOp, TopologyMapping],
       privateKey: PrivateKey,
+      protocolVersion: ProtocolVersion,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): SignedTopologyTransaction[TopologyChangeOp, TopologyMapping] = {
@@ -241,7 +246,7 @@ class RecoverExternalPartyIntegrationTest
       tx,
       NonEmpty(Seq, SingleTransactionSignature(tx.hash, sig): TopologyTransactionSignature),
       isProposal = false,
-      sv1Backend.config.localSynchronizerNodes.current.protocolVersion,
+      protocolVersion,
     )
   }
 }

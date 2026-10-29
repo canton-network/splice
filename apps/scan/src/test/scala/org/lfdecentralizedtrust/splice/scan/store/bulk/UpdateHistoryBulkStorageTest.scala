@@ -10,6 +10,7 @@ import com.daml.metrics.api.testing.InMemoryMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.data.CantonTimestampExtensions.*
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{SuppressingLogger, SuppressionRule}
 import com.digitalasset.canton.protocol.LfContractId
@@ -393,7 +394,7 @@ class UpdateHistoryBulkStorageTest
           .toInstant(ZoneOffset.UTC)
           .toEpochMilli * 1000
 
-      val (retryProvider, bulkStorage, svc, progress) =
+      val (retryProvider, _, svc, progress) =
         newRetryProviderAndUpdatesBulkStorageService()
       Using.resources(
         svc,
@@ -421,7 +422,7 @@ class UpdateHistoryBulkStorageTest
       // then start a new one with the new migration and ingest updates in the new migration
 
       mockStore.mockMigration()
-      val (retryProvider1, bulkStorage1, svc1, progress1) =
+      val (retryProvider1, _, svc1, progress1) =
         newRetryProviderAndUpdatesBulkStorageService()
       Using.resources(svc1, retryProvider1) { (_, _) =>
         clue("500 more updates in the new migration, up to 15:03") {

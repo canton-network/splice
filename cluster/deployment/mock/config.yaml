@@ -15,7 +15,10 @@ validator1:
         value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
   walletGateway:
     enabled: true
-multiValidator:
+multiValidator: !include(../../configs/shared/multi-validator.yaml)
+  # Load Tests
+  # 5 deployments with 10 validators in each so 50 total
+  instanceCount: 5
   postgresPvcSize: '100Gi'
   # Dummy values for testing
   extraValidatorEnvVars:
@@ -51,7 +54,10 @@ sv:
             tokensPerFill: 250
             fillInterval: 60s
 splitwell:
-  maxDarVersion: '0.1.8'
+  maxDarVersion: '0.1.24'
+  participant:
+    # Required for periodic identities backups, as this participant does not use KMS
+    enableKeyDownload: true
   participantPruningSchedule:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
@@ -144,10 +150,10 @@ monitoring:
     enableNoDataAlerts: true
     enableExtraHighPrioAlerts: true
     alerts:
-      acsCommitments:
-        usePv36Metrics: true
       cloudSql:
         maintenance: true
+      sequencerParticipantRegistration:
+        enabled: true
       svNames:
         - Dummy-SV-1
         - Dummy-SV-2
@@ -218,6 +224,12 @@ svs:
     appsPg:
       cloudSql:
         tier: "apps-pg-override-tier-sv-1"
+    topologyKeyMonitor:
+      enable: true
+      pollIntervalSeconds: 1
+      keys:
+        - '12205e1643ef9bcc12dd3450d02f7c538de011dc92290672cb66dd47053ab4a67cae'
+        - '122057b07227114d122f5954a770c1ba30586cc51efd1dd644f6c85bfb9916eac967'
     periodicSnapshots:
       topology:
         backupInterval: '12h'
@@ -237,12 +249,20 @@ svs:
     validatorApp:
       sweep:
         fromEnv: SV1
+    cantonBft:
+      cloudSql:
+        tier: "cantonbft-tier-sv-1"
     physicalSynchronizerOverrides:
       9:
         sequencer:
           additionalEnvVars:
             - name: PS9_SEQUENCER_ENV_VAR_NAME
               value: PS9_SEQUENCER_ENV_VAR_VALUE
+          cloudSql:
+            tier: "sequencer-ps9-override-tier-sv-1"
+        cantonBft:
+          cloudSql:
+            tier: "cantonbft-ps9-override-tier-sv-1"
   sv-2: !include(sv.yaml) {}
   sv-da-1: !include(sv.yaml) # non "sv-X" key => additional SV that is always deployed (key == node name == k8s namespace)
     publicName: Digital-Asset-1
@@ -280,6 +300,14 @@ svs:
       appsLogLevel: INFO
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
+    physicalSynchronizerOverrides:
+      10:
+        sequencer:
+          cloudSql:
+            tier: "sequencer-ps10-override-tier-sv-da-1"
+        cantonBft:
+          cloudSql:
+            tier: "cantonbft-ps10-override-tier-sv-da-1"
 infra:
   gkeGateway:
     proxyForIstioHttp: true
@@ -442,6 +470,9 @@ gha:
     ]
 networkWide:
   maxVettingDelay: 1m
+pulumiStacks:
+  default:
+    retryMaxBackoffDurationSeconds: 900
 validators:
   validator-runbook:
     postgresPvcSize: '200Gi'
@@ -457,6 +488,8 @@ validators:
       maxDuration: "5m"
       retention: "30d"
     participant:
+      # Required for periodic identities backups, as this participant does not use KMS
+      enableKeyDownload: true
       additionalEnvVars:
         - name: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_NAME
           value: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_VALUE
@@ -472,7 +505,7 @@ validators:
           value: ADDITIONAL_ENV_VAR_VALIDATOR_NAME
       additionalJvmOptions: -Dparticipantoption
   extra-validator:
-    namespace: validator
+    namespace: extra-validator
     partyHint: 'extra-validator'
     walletGateway: !include(../../configs/shared/wallet_gateway.yaml) {}
 cloudArmor:

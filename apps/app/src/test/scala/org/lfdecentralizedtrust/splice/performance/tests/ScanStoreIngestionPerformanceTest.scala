@@ -1,5 +1,7 @@
 package org.lfdecentralizedtrust.splice.performance.tests
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
@@ -20,7 +22,7 @@ import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
 import java.nio.file.Path
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 class ScanStoreIngestionPerformanceTest(
     dsoParty: PartyId,
@@ -44,7 +46,7 @@ class ScanStoreIngestionPerformanceTest(
   override protected val tablesToSanityCheck: Seq[String] =
     Seq(ScanTables.acsTableName, ScanTables.txLogTableName)
 
-  override protected def mkStore(storage: DbStorage): MultiDomainAcsStore = {
+  override protected def mkStore(storage: DbStorage): Future[MultiDomainAcsStore] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
         DarResources.amulet.all ++
@@ -53,19 +55,21 @@ class ScanStoreIngestionPerformanceTest(
       )
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)
-    new DbScanStore(
-      ScanStore.Key(dsoParty),
-      storage,
-      loggerFactory,
-      RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
-        NoReportingTracerProvider.tracer
-      ),
-      migrationId,
-      participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
-      IngestionConfig(),
-      new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
-      defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-    )(ec, templateJsonDecoder, closeContext).multiDomainAcsStore
+    DbScanStore
+      .create(
+        ScanStore.Key(dsoParty),
+        storage,
+        loggerFactory,
+        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
+          NoReportingTracerProvider.tracer
+        ),
+        migrationId,
+        participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
+        IngestionConfig(),
+        new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
+        defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+      )(ec, templateJsonDecoder, closeContext, TraceContext.empty)
+      .map(_.multiDomainAcsStore)
   }
 
 }

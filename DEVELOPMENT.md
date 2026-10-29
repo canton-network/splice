@@ -351,7 +351,7 @@ If the auto-bumper can't help (e.g. you want a minor/major bump), fall back to t
 1. Bump the version inside the `daml.yaml` file inside the updated module, and in all modules that (recursively) depend on it.
 2. Run `sbt damlBuild; sbt damlDarsLockFileUpdate` to compile the `.dar` files.
 3. Run `sbt updateDarResources` to update DarResources.
-4. Manually update `apps/package.json` to update the versions of the daml packages that were updated in step 1.
+4. Manually update `apps/generated-packages.json` to update the versions of the daml packages that were updated in step 1.
 5. Run `sbt npmInstall ; sbt compile`
 
 ## Daml Version Guards in Integration Tests
@@ -403,6 +403,8 @@ with the other splice maintainers.
 
 To bump the minimum version, go to `apps/dar-resources-generator/.../DarResourcesGenerator.scala`,
 edit the `minimumInitialization` map and run `sbt updateDarResources`.
+If you bump the minimum splitwell version, also bump `minDarVersion` in
+`cluster/pulumi/common-validator/src/splitwellDars.ts` and run `make update-expected`.
 After doing that you can trigger CI. All the
 version checks from from `PackageVersionSupport` will warn for checks
 that are now redundant because the version they are testing against is

@@ -8,7 +8,7 @@ import com.digitalasset.canton.caching.ScaffeineCache
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, SyncCloseable}
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.github.blemale.scaffeine.Scaffeine
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
@@ -22,6 +22,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
+  GovernanceLock,
+  GovernanceLockKey,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -31,6 +35,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{CacheConfig, ScanCacheConfig}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
+import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.lfdecentralizedtrust.splice.store.{
   Limit,
   MiningRoundsStore,
@@ -129,8 +135,11 @@ class CachingScanStore(
       store.getValidatorLicenseByValidator,
     ).get(validator)
 
-  override def getTotalPurchasedMemberTraffic(memberId: Member, synchronizerId: SynchronizerId)(
-      implicit tc: TraceContext
+  override def getTotalPurchasedMemberTraffic(
+      memberId: StoreMemberId,
+      synchronizerId: SynchronizerId,
+  )(implicit
+      tc: TraceContext
   ): Future[Long] =
     getCache(
       "totalPurchasedMemberTraffic",
@@ -180,6 +189,11 @@ class CachingScanStore(
       cacheConfig.cachedByParty,
       store.lookupTransferPreapprovalByParty,
     ).get(partyId)
+
+  override def listGovernanceLocksByKey(key: GovernanceLockKey, limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
+    store.listGovernanceLocksByKey(key, limit)
 
   override def lookupTransferCommandCounterByParty(partyId: PartyId)(implicit
       tc: TraceContext
@@ -275,6 +289,8 @@ class CachingScanStore(
   override def domains: SynchronizerStore = store.domains
 
   override def multiDomainAcsStore: MultiDomainAcsStore = store.multiDomainAcsStore
+
+  override private[splice] def txLogStoreId: TxLogStoreId = store.txLogStoreId
 
   @SuppressWarnings(
     Array("org.wartremover.warts.AsInstanceOf", "com.digitalasset.canton.RequireBlocking")

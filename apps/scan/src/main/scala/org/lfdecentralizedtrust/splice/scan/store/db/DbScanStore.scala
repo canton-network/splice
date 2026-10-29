@@ -3,6 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.digitalasset.canton.tracing.TraceContext
+
+import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
+
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
@@ -15,8 +19,7 @@ import com.digitalasset.canton.lifecycle.{
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
-import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   AmuletRules,
@@ -31,6 +34,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
+  GovernanceLock,
+  GovernanceLockKey,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -57,17 +64,19 @@ import org.lfdecentralizedtrust.splice.store.db.{
   TxLogQueries,
 }
 import org.lfdecentralizedtrust.splice.store.{
+  AdditionalIngestionSink,
   DbVotesAcsStoreQueryBuilder,
   DbVotesTxLogStoreQueryBuilder,
   Limit,
-  VoteResultsFilters,
   ResultsPage,
   TxLogStore,
   UpdateHistory,
+  VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
+  GovernanceLockUtil,
   PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
@@ -76,6 +85,7 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistoryQueries.UpdateHistoryQueries
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 
@@ -97,10 +107,98 @@ class DbScanTxLogStoreConfig(loggerFactory: NamedLoggerFactory)
 }
 
 object DbScanStore {
-  type CacheKey = java.lang.Long // caffeine metrics function demands AnyRefs
-  type CacheValue = BigDecimal
+
+  /** Looks up the store ids, and creates the store. */
+  def create(
+      key: ScanStore.Key,
+      storage: DbStorage,
+      loggerFactory: NamedLoggerFactory,
+      retryProvider: RetryProvider,
+      domainMigrationId: Long,
+      participantId: ParticipantId,
+      ingestionConfig: IngestionConfig,
+      storeMetrics: DbScanStoreMetrics,
+      defaultLimit: Limit,
+      acsStoreDescriptorUserVersion: Option[Long] = None,
+      txLogStoreDescriptorUserVersion: Option[Long] = None,
+      additionalIngestionSinks: Seq[AdditionalIngestionSink] = Seq.empty,
+  )(implicit
+      ec: ExecutionContext,
+      templateJsonDecoder: TemplateJsonDecoder,
+      closeContext: CloseContext,
+      tc: TraceContext,
+  ): Future[DbScanStore] =
+    DbMultiDomainAcsStore
+      .lookupStoreIds(
+        storage,
+        acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
+        Some(txLogStoreDescriptor(key, participantId, txLogStoreDescriptorUserVersion)),
+      )
+      .map { storeIds =>
+        new DbScanStore(
+          key = key,
+          storage = storage,
+          loggerFactory = loggerFactory,
+          retryProvider = retryProvider,
+          domainMigrationId = domainMigrationId,
+          participantId = participantId,
+          ingestionConfig = ingestionConfig,
+          storeIds,
+          storeMetrics = storeMetrics,
+          defaultLimit = defaultLimit,
+          acsStoreDescriptorUserVersion = acsStoreDescriptorUserVersion,
+          txLogStoreDescriptorUserVersion = txLogStoreDescriptorUserVersion,
+          additionalIngestionSinks = additionalIngestionSinks,
+        )
+      }
+
+  // Any change in the store descriptor will lead to previously deployed applications
+  // forgetting all persisted data once they upgrade to the new version.
+  // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+  // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+  // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+  // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+  // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+  // and notify the person coordinating the deployment.
+  def acsStoreDescriptor(
+      key: ScanStore.Key,
+      participantId: ParticipantId,
+      acsStoreDescriptorUserVersion: Option[Long],
+  ): StoreDescriptor =
+    StoreDescriptor(
+      version = 3,
+      name = "DbScanStore",
+      party = key.dsoParty,
+      participant = participantId,
+      key = Map(
+        "dsoParty" -> key.dsoParty.toProtoPrimitive
+      ),
+      userVersion = acsStoreDescriptorUserVersion,
+    )
+
+  // WARNING: Do not change the txlog store descriptor.
+  //
+  // The TxLog store id identifies the ingestion sinks that store historical data and must witness
+  // every single update: the TxLog and the votes store. Unlike the ACS, their content cannot be rebuilt
+  // from the current state of the ledger. A new descriptor yields a new store id, and the history
+  // ingested under the old one is lost.
+  def txLogStoreDescriptor(
+      key: ScanStore.Key,
+      participantId: ParticipantId,
+      txLogStoreDescriptorUserVersion: Option[Long],
+  ): StoreDescriptor =
+    StoreDescriptor(
+      version = 1,
+      name = "DbScanStore",
+      party = key.dsoParty,
+      participant = participantId,
+      key = Map(
+        "dsoParty" -> key.dsoParty.toProtoPrimitive
+      ),
+      userVersion = txLogStoreDescriptorUserVersion,
+    )
 }
-class DbScanStore(
+class DbScanStore private (
     override val key: ScanStore.Key,
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
@@ -108,10 +206,12 @@ class DbScanStore(
     val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
+    storeIds: DbMultiDomainAcsStore.StoreIds,
     storeMetrics: DbScanStoreMetrics,
     override val defaultLimit: Limit,
-    acsStoreDescriptorUserVersion: Option[Long] = None,
-    txLogStoreDescriptorUserVersion: Option[Long] = None,
+    acsStoreDescriptorUserVersion: Option[Long],
+    txLogStoreDescriptorUserVersion: Option[Long],
+    additionalIngestionSinks: Seq[AdditionalIngestionSink],
 )(implicit
     override protected val ec: ExecutionContext,
     templateJsonDecoder: TemplateJsonDecoder,
@@ -121,36 +221,14 @@ class DbScanStore(
       ScanTables.acsTableName,
       ScanTables.txLogTableName,
       interfaceViewsTableNameOpt = None,
-      // Any change in the store descriptor will lead to previously deployed applications
-      // forgetting all persisted data once they upgrade to the new version.
-      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
-      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
-      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
-      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
-      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
-      // and notify the person coordinating the deployment.
-      acsStoreDescriptor = StoreDescriptor(
-        version = 3,
-        name = "DbScanStore",
-        party = key.dsoParty,
-        participant = participantId,
-        key = Map(
-          "dsoParty" -> key.dsoParty.toProtoPrimitive
-        ),
-        userVersion = acsStoreDescriptorUserVersion,
-      ),
-      txLogStoreDescriptor = StoreDescriptor(
-        version = 1,
-        name = "DbScanStore",
-        party = key.dsoParty,
-        participant = participantId,
-        key = Map(
-          "dsoParty" -> key.dsoParty.toProtoPrimitive
-        ),
-        userVersion = txLogStoreDescriptorUserVersion,
-      ),
-      domainMigrationId,
-      ingestionConfig,
+      acsStoreDescriptor =
+        DbScanStore.acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
+      txLogStoreDescriptor =
+        DbScanStore.txLogStoreDescriptor(key, participantId, txLogStoreDescriptorUserVersion),
+      storeIds = storeIds,
+      migrationId = domainMigrationId,
+      ingestionConfig = ingestionConfig,
+      additionalIngestionSinks = additionalIngestionSinks,
     )
     with ScanStore
     with AcsTables
@@ -179,10 +257,7 @@ class DbScanStore(
   }
 
   private[splice] def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  private[splice] def txLogStoreId: TxLogStoreId = multiDomainAcsStore.txLogStoreId
-  // Round totals are derived from TxLog entries, and are therefore linked to that store
-  private[splice] def roundTotalsStoreId: TxLogStoreId = txLogStoreId
-
+  override private[splice] def txLogStoreId: TxLogStoreId = multiDomainAcsStore.txLogStoreId
   override def lookupAmuletRules()(implicit
       tc: TraceContext
   ): Future[Option[ContractWithState[AmuletRules.ContractId, AmuletRules]]] =
@@ -368,6 +443,43 @@ class DbScanStore(
     } yield contractWithStateFromRow(TransferPreapproval.COMPANION)(row)).value
   }
 
+  override def listGovernanceLocksByKey(
+      key: GovernanceLockKey,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
+    waitUntilAcsIngested {
+      val (lockType, lockSubject) =
+        GovernanceLockUtil.specificationTypeAndSubject(key.specification)
+      val specification = payloadJsonFromDefinedDataType(key.specification)
+      for {
+        rows <- storage.query(
+          selectFromAcsTableWithState(
+            ScanTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            GovernanceLock.COMPANION,
+            // The type and subject use the index, but only the specification
+            // also matches the vesting period and end time.
+            additionalWhere = sql"""
+              and governance_lock_type = ${lengthLimited(lockType.storeValue)}
+              and governance_lock_subject = ${lengthLimited(lockSubject)}
+              and create_arguments->>'owner' = ${key.owner}
+              and create_arguments->'specification' = $specification
+            """,
+            orderLimit = sql"""
+              order by (create_arguments->>'amount')::numeric desc, event_number
+              limit ${sqlLimit(limit)}
+            """,
+          ),
+          "listGovernanceLocksByKey",
+        )
+      } yield applyLimit("listGovernanceLocksByKey", limit, rows).map(
+        contractWithStateFromRow(GovernanceLock.COMPANION)(_)
+      )
+    }
+
   override def lookupTransferCommandCounterByParty(
       partyId: PartyId
   )(implicit tc: TraceContext): Future[
@@ -529,8 +641,11 @@ class DbScanStore(
     }
   }
 
-  override def getTotalPurchasedMemberTraffic(memberId: Member, synchronizerId: SynchronizerId)(
-      implicit tc: TraceContext
+  override def getTotalPurchasedMemberTraffic(
+      memberId: StoreMemberId,
+      synchronizerId: SynchronizerId,
+  )(implicit
+      tc: TraceContext
   ): Future[Long] = waitUntilAcsIngested {
     for {
       sum <- storage
@@ -544,7 +659,7 @@ class DbScanStore(
                 and template_id_qualified_name = ${QualifiedName(
               MemberTraffic.TEMPLATE_ID_WITH_PACKAGE_ID
             )}
-                and member_traffic_member = ${lengthLimited(memberId.toProtoPrimitive)}
+                and member_traffic_member = $memberId
                 and member_traffic_domain = ${lengthLimited(synchronizerId.toProtoPrimitive)}
              """.as[Long].headOption,
           "getTotalPurchasedMemberTraffic",

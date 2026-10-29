@@ -1,5 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.admin.api.client.data.NodeStatus
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
@@ -21,7 +23,10 @@ import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection
 import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTest,
+  SpliceTestConsoleEnvironment,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
   ExpireIssuingMiningRoundTrigger,
@@ -132,6 +137,41 @@ class WalletNoDevNetIntegrationTest
           else c
         }(config)
       })
+      .copy(
+        preAppStart = implicit env => {
+          // Reset traffic state for alice and bob such that extraTrafficRemainder is below the reserved traffic
+          // amount to make sure we hit the cases where command priority matters. Leave half the reserve so that
+          // the apps' own start-up submissions and the High priority accepts do not depend on base traffic.
+          sv1Backend.sequencerClient.health.status match {
+            case _: NodeStatus.Success[?] =>
+              Seq(aliceValidatorBackend, bobValidatorBackend).foreach { validator =>
+                setExtraTrafficRemainder(
+                  validator,
+                  validator.config.domains.global.reservedTraffic.value / 2,
+                )
+              }
+            case _ =>
+          }
+        }
+      )
+  }
+
+  private def setExtraTrafficRemainder(
+      validator: ValidatorAppBackendReference,
+      remainder: Long,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val member = validator.participantClient.id.member
+    sv1Backend.sequencerClient.traffic_control
+      .traffic_state_of_members(Seq(member))
+      .trafficStates
+      .get(member)
+      .foreach(ts =>
+        sv1Backend.sequencerClient.traffic_control.set_traffic_balance(
+          member,
+          serial = ts.serial.fold(PositiveInt.one)(_ + PositiveInt.one),
+          newBalance = NonNegativeLong.tryCreate(ts.extraTrafficConsumed.value + remainder),
+        )
+      )
   }
 
   "A validator wallet" should {
@@ -368,6 +408,12 @@ class WalletNoDevNetIntegrationTest
       }
       clue("Nothing changed: the transfer is still pending") {
         aliceWalletClient.listTokenStandardTransfers() should have size 1
+      }
+
+      clue("Give alice and bob one top-up of extra traffic back for the suites that follow") {
+        Seq(aliceValidatorBackend, bobValidatorBackend).foreach { validator =>
+          setExtraTrafficRemainder(validator, getTopupParameters(validator, now).topupAmount)
+        }
       }
     }
   }

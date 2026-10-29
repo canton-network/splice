@@ -46,7 +46,7 @@ class BulkStorageReader(
                 s"Latest snapshot in committed bulk storage is at $ts, which is before the requested timestamp $atOrBeforeTimestamp, returning that one"
               )
               ts
-            case Some(ts) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
+            case Some(_) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
           }
       objects <- getAcsSnapshotObjects(
         snapshotTs,
@@ -75,7 +75,7 @@ class BulkStorageReader(
             s"Latest snapshot in staging bulk storage is at $ts, which is not after the requested timestamp $afterTimestamp"
           )
           Future.successful(None)
-        case Some(ts) if afterTimestamp == CantonTimestamp.MinValue =>
+        case Some(_) if afterTimestamp == CantonTimestamp.MinValue =>
           logger.debug(
             "snapshots exist in staging bulk storage, but `afterTimestamp` is at minimum value, finding the first snapshot expected in staging bulk storage"
           )
@@ -154,7 +154,7 @@ class BulkStorageReader(
             s"Latest updates in staging bulk storage ending at $latestStagingTs, which is not after the requested timestamp $minTs, returning None for segment starting at $minTs"
           )
           Future.successful(None)
-        case Some(latestStagingTs) =>
+        case Some(_) =>
           getSegmentStartingAt(startTimestamp)
       }
   }
@@ -189,14 +189,13 @@ class BulkStorageReader(
   def getObjectChecksums(
       objectKeys: Seq[String]
   ): Future[Seq[Option[String]]] = {
+    def checksumMap(objects: Seq[S3BucketConnection.ObjectKeyAndChecksum]) =
+      objects.view.map(obj => obj.key -> obj.checksum).toMap
     for {
       committed <- committedS3Connection.getChecksums(objectKeys)
-      staging <- stagingS3Connection.getChecksums(objectKeys)
-    } yield {
-      objectKeys.map { key =>
-        committed.find(_.key == key).orElse(staging.find(_.key == key)).map(_.checksum)
-      }
-    }
+      committedByKey = checksumMap(committed)
+      staging <- stagingS3Connection.getChecksums(objectKeys filterNot committedByKey.keySet)
+    } yield objectKeys map (committedByKey orElse checksumMap(staging)).lift
   }
 
   private def getSegmentStartingAt(
@@ -287,7 +286,7 @@ class BulkStorageReader(
               s"Cannot parse folder name $folder, error: $err"
             )
             .asRuntimeException()
-        case Right((folderStart, folderEnd)) =>
+        case Right((_, folderEnd)) =>
           folderEnd <= lastSegmentEnd
       }
     }

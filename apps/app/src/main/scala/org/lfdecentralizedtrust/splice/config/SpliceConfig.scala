@@ -55,6 +55,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 }
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.config.CantonConfigAccess.*
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.ConfigErrors.{
   CantonConfigError,
@@ -62,6 +63,8 @@ import com.digitalasset.canton.config.ConfigErrors.{
   NoConfigFiles,
   SubstitutionError,
 }
+import com.digitalasset.canton.config.NonNegativeFiniteDurationAccess.*
+import com.digitalasset.canton.config.PositiveFiniteDurationAccess.*
 import com.digitalasset.canton.config.{PerClientIpRateLimitConfig as _, RateLimitersConfig as _, *}
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.discard.Implicits.DiscardOps
@@ -71,7 +74,9 @@ import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
   SubscriptionLivenessLimits,
+  AcsCommitmentLimits,
   SynchronizerLimits,
+  TopologyLimits,
   TransactionProtocolLimits,
 }
 import com.digitalasset.canton.tracing.TraceContext
@@ -400,10 +405,7 @@ object SpliceConfig {
 
   private val cantonConfigReaders = new CantonConfig.ConfigReaders()(elc)
 
-  class ConfigReaders(implicit
-      private val
-      elc: ErrorLoggingContext
-  ) {
+  class ConfigReaders() {
     // TODO(#7525) Fail on unknown keys.
     import BaseCantonConfig.Readers.{preventAllUnknownKeys as _, *}
 
@@ -599,6 +601,8 @@ object SpliceConfig {
       deriveReader[SynchronizerFeesConfig]
     implicit val initialRewardConfigReader: ConfigReader[InitialRewardConfig] =
       deriveReader[InitialRewardConfig]
+    implicit val initialGovernanceLockConfigReader: ConfigReader[InitialGovernanceLockConfig] =
+      deriveReader[InitialGovernanceLockConfig]
     implicit val svOnboardingFoundDsoReader: ConfigReader[SvOnboardingConfig.FoundDso] =
       deriveReader[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyReader: ConfigReader[SvOnboardingConfig.JoinWithKey] =
@@ -655,6 +659,10 @@ object SpliceConfig {
       deriveReader[SvScanConfig]
     implicit val transactionProtocolLimitsReader: ConfigReader[TransactionProtocolLimits] =
       deriveReader[TransactionProtocolLimits]
+    implicit val topologyLimitsReader: ConfigReader[TopologyLimits] =
+      deriveReader[TopologyLimits]
+    implicit val acsCommitmentLimitsReader: ConfigReader[AcsCommitmentLimits] =
+      deriveReader[AcsCommitmentLimits]
     implicit val synchronizerLimitsReader: ConfigReader[SynchronizerLimits] =
       deriveReader[SynchronizerLimits]
     implicit val svSynchronizerNodeConfig: ConfigReader[SvSynchronizerNodeConfig] =
@@ -1144,6 +1152,8 @@ object SpliceConfig {
       deriveWriter[SynchronizerFeesConfig]
     implicit val initialRewardConfigWriter: ConfigWriter[InitialRewardConfig] =
       deriveWriter[InitialRewardConfig]
+    implicit val initialGovernanceLockConfigWriter: ConfigWriter[InitialGovernanceLockConfig] =
+      deriveWriter[InitialGovernanceLockConfig]
     implicit val svOnboardingFoundDsoWriter: ConfigWriter[SvOnboardingConfig.FoundDso] =
       deriveWriter[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyWriter: ConfigWriter[SvOnboardingConfig.JoinWithKey] =
@@ -1189,6 +1199,10 @@ object SpliceConfig {
       deriveWriter[SvScanConfig]
     implicit val transactionProtocolLimitsWriter: ConfigWriter[TransactionProtocolLimits] =
       deriveWriter[TransactionProtocolLimits]
+    implicit val topologyLimitsWriter: ConfigWriter[TopologyLimits] =
+      deriveWriter[TopologyLimits]
+    implicit val acsCommitmentLimitsWriter: ConfigWriter[AcsCommitmentLimits] =
+      deriveWriter[AcsCommitmentLimits]
     implicit val synchronizerLimitsWriter: ConfigWriter[SynchronizerLimits] =
       deriveWriter[SynchronizerLimits]
     implicit val svSynchronizerNodeConfig: ConfigWriter[SvSynchronizerNodeConfig] =
@@ -1306,10 +1320,8 @@ object SpliceConfig {
       deriveWriter[SpliceConfig]
   }
 
-  private implicit def configReader(implicit
-      elc: ErrorLoggingContext
-  ): ConfigReader[SpliceConfig] = {
-    val readers = new ConfigReaders()(elc)
+  private implicit def configReader: ConfigReader[SpliceConfig] = {
+    val readers = new ConfigReaders()
     readers.spliceConfigReader
   }
 

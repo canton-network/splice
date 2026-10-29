@@ -12,6 +12,9 @@ import cats.implicits.{
 import cats.syntax.functorFilter.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.SynchronizerTimeTrackerConfig
 import com.digitalasset.canton.data.CantonTimestamp
@@ -44,7 +47,6 @@ import com.digitalasset.canton.topology.transaction.{
 }
 import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
@@ -249,13 +251,13 @@ class SV1Initializer(
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
       domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
-      svStore = newSvStore(
+      svStore <- newSvStore(
         storeKey,
         domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
-      dsoStore = newDsoStore(
+      dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
         participantId,
@@ -455,7 +457,7 @@ class SV1Initializer(
           )
         )
         val initialValues =
-          DynamicSynchronizerParameters.initialValues(synchronizerNode.config.protocolVersion)
+          DynamicSynchronizerParameters.initialValues(sv1Config.initialProtocolVersion)
         val values = initialValues.tryUpdate(
           trafficControlParameters = Some(initialTrafficControlParameters),
           reconciliationInterval =
@@ -513,19 +515,14 @@ class SV1Initializer(
                 sequencerState,
                 mediatorState,
               ) <- (
-                MonadUtil
-                  .sequentialTraverse(
-                    List(
-                      participantAdminConnection,
-                      synchronizerNode.mediatorAdminConnection,
-                      synchronizerNode.sequencerAdminConnection,
-                    )
-                  ) { con =>
-                    con
-                      .getId()
-                      .flatMap(con.getIdentityTransactions(_, TopologyStoreId.Authorized))
-                  }
-                  .map(_.flatten),
+                for {
+                  participantIdentity <- participantAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
+                  mediatorIdentity <- synchronizerNode.mediatorAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
+                  sequencerIdentity <- synchronizerNode.sequencerAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
+                } yield participantIdentity ++ mediatorIdentity ++ sequencerIdentity,
                 participantAdminConnection.proposeInitialDomainParameters(
                   synchronizerId,
                   values,
@@ -561,7 +558,10 @@ class SV1Initializer(
                   )
               _ <- synchronizerNode.sequencerAdminConnection.initializeFromBeginning(
                 StoredTopologyTransactions(bootstrapTransactions),
-                synchronizerNode.staticSynchronizerParameters(NonNegativeInt.zero),
+                synchronizerNode.staticSynchronizerParameters(
+                  NonNegativeInt.zero,
+                  sv1Config.initialProtocolVersion,
+                ),
               )
             } yield (),
             logger,
@@ -679,6 +679,8 @@ class SV1Initializer(
                     sv1Config.initialExternalPartyConfigStateTickDuration,
                   optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
                   initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
+                  initialGovernanceLockConfig =
+                    sv1Config.initialGovernanceLockConfig.map(_.toGovernanceLockConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(

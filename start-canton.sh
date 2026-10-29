@@ -20,6 +20,7 @@ function usage() {
   echo "  -m               collect metrics and send them to our CI prometheus instance"
   echo "  -c <canton>      start a custom canton binary instead of the one on the PATH"
   echo "  -B <script>      path to a custom canton bootstrap script"
+  echo "  -k               allow downloading private keys via the admin API (needed, e.g., for identities dumps)"
 }
 
 # default values
@@ -33,9 +34,10 @@ start_cometbft=0
 use_cometbft=0
 use_bft=0
 collect_metrics=0
+enable_key_download=0
 logFileHint=canton
 
-args=$(getopt -o "hdDap:cB:wsbtfFegm" -l "help" -- "$@")
+args=$(getopt -o "hdDap:cB:wsbtfFegmk" -l "help" -- "$@")
 
 eval set -- "$args"
 
@@ -92,6 +94,10 @@ do
             ;;
         -m)
             collect_metrics=1
+            ;;
+        -k)
+            enable_key_download=1
+            echo "allowing downloads of private keys"
             ;;
         -B)
             bootstrapScriptPath="$2"
@@ -208,6 +214,11 @@ if [[ $use_bft -eq 1 ]]; then
   config_overrides="$config_overrides -c ./apps/app/src/test/resources/bft-sequencer-global-domain-overrides.conf"
 fi;
 
+if [[ $enable_key_download -eq 1 ]]; then
+  config_overrides="$config_overrides -C canton.parameters.enable-key-download=yes"
+  config_overrides_simtime="$config_overrides_simtime -C canton.parameters.enable-key-download=yes"
+fi;
+
 
 tmux_cmd_canton() {
   windowName="$1" tokensFile="$2" participantsFile="$3" baseConfig="$4" confOverrides="$5" logFileHint="$6"
@@ -217,7 +228,7 @@ tmux_cmd_canton() {
     "EXTRA_CLASSPATH=$COMETBFT_DRIVER/driver.jar \
      COMETBFT_DOCKER_IP=${COMETBFT_DOCKER_IP-} \
      LOG_LEVEL_API_REQUEST=DEBUG \
-     CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" $CANTON \
+     CANTON_PROTOCOL_VERSION=${CANTON_PROTOCOL_VERSION:-37} CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" $CANTON \
       -c $baseConfig $confOverrides \
       --log-level-canton=DEBUG \
       --log-encoder json \

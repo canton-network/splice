@@ -15,6 +15,7 @@ import org.lfdecentralizedtrust.splice.admin.api.client.{
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import com.digitalasset.canton.admin.api.client.commands.AdminCommandAccess.*
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   CustomClientTimeout,
@@ -23,6 +24,7 @@ import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   ServerEnforcedTimeout,
   TimeoutType,
 }
+import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommandAccess.*
 import com.digitalasset.canton.config.{ApiLoggingConfig, ClientConfig}
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.lifecycle.LifeCycle.CloseableChannel
@@ -32,7 +34,6 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.ClientChannelBuilder
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
 import com.digitalasset.canton.util.EitherTUtil
-import com.digitalasset.canton.util.ShowUtil.*
 import io.circe.Json
 import io.grpc.{CallCredentials, Deadline, Status}
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, MediaTypes, StatusCode, Uri}
@@ -272,16 +273,6 @@ abstract class HttpAppConnection(
       config.url,
       HttpAdminAppClient.GetHealthStatus[SpliceStatus](basePath, SpliceStatus.fromHttp),
     )
-
-  // Fails the future if the node is not active for easy use in waitUntil
-  def checkActive(): Future[Unit] =
-    getStatus().map { status =>
-      if (!status.isActive.getOrElse(false)) {
-        throw Status.FAILED_PRECONDITION
-          .withDescription(show"Node is not active, current status $status")
-          .asRuntimeException()
-      }
-    }
 
   private def getHttpAppVersionInfo(): Future[HttpAdminAppClient.VersionInfo] = {
     runHttpCmd(

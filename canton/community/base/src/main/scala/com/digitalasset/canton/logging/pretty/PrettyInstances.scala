@@ -16,8 +16,6 @@ import com.digitalasset.canton.util.{HexString, ThrowableUtil}
 import com.digitalasset.canton.{LedgerUserId, LfPartyId, LfTimestamp, LfVersioned, Uninhabited}
 import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.data.Ref.{DottedName, PackageId, QualifiedName}
-import com.digitalasset.daml.lf.transaction.LegacyContractStateMachine.ActiveLedgerState
-import com.digitalasset.daml.lf.transaction.LegacyTransactionErrors.*
 import com.digitalasset.daml.lf.transaction.{CreationTime, Versioned}
 import com.digitalasset.daml.lf.value.Value
 import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
@@ -70,6 +68,8 @@ trait PrettyInstances {
 
   implicit def prettyBigDecimal: Pretty[BigDecimal] = prettyOfString(_.toString)
 
+  implicit def prettyBigInt: Pretty[BigInt] = prettyOfString(_.toString)
+
   implicit def prettyJLong: Pretty[JLong] = prettyOfString(_.toString)
 
   implicit def prettyBoolean: Pretty[Boolean] = prettyOfString(_.toString)
@@ -112,7 +112,7 @@ trait PrettyInstances {
     elements =>
       treeOfIterable("Map", elements.map { case (k, v) => Tree.Infix(k.toTree, "->", v.toTree) })
 
-  def treeOfIterable[T: Pretty](prefix: String, elements: Iterable[T]): Tree =
+  private def treeOfIterable[T: Pretty](prefix: String, elements: Iterable[T]): Tree =
     if (elements.sizeCompare(1) == 0) {
       elements.iterator.next().toTree
     } else {
@@ -174,7 +174,7 @@ trait PrettyInstances {
 
   implicit val prettyNodeId: Pretty[LfNodeId] = prettyOfParam(_.index)
 
-  protected def prettyUidString(partyStr: String): String =
+  private def prettyUidString(partyStr: String): String =
     UniqueIdentifier.fromProtoPrimitive_(partyStr) match {
       case Right(uid) => uid.show
       case Left(_) => partyStr
@@ -302,22 +302,6 @@ trait PrettyInstances {
     unnamedParam(_.value),
     unnamedParam(_.traceContext),
   )
-
-  implicit val prettyKeyInputError: Pretty[KeyInputError] = {
-    case InconsistentContractKeyKIError(e: InconsistentContractKey) =>
-      prettyOfClass[InconsistentContractKey](unnamedParam(_.key)).treeOf(e)
-    case DuplicateContractKeyKIError(e: DuplicateContractKey) =>
-      prettyOfClass[DuplicateContractKey](unnamedParam(_.key)).treeOf(e)
-    case DuplicateContractIdKIError(e: DuplicateContractId) =>
-      prettyOfClass[DuplicateContractId](unnamedParam(_.contractId)).treeOf(e)
-  }
-
-  implicit def prettyActiveLedgerState[T: Pretty]: Pretty[ActiveLedgerState[T]] =
-    prettyOfClass[ActiveLedgerState[T]](
-      param("locallyCreatedThisTimeline", _.locallyCreatedThisTimeline),
-      param("consumedBy", _.consumedBy),
-      param("localActiveKeys", _.localActiveKeys),
-    )
 
   implicit val prettyPort: Pretty[Port] = prettyOfString(_.unwrap.toString)
 

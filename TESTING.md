@@ -80,9 +80,10 @@ There are two types of cluster tests that can be requested on a PR:
 - A basic cluster test, which deploys a scratch cluster, and runs the test suite against it.
 - A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
 
-To request a cluster test to be run on your PR, comment on your pr `/cluster_test`, `/upgrade_test`, `/hdm_test` or `/lsu_test`
-for a basic test, a hard-migration test or a logical synchronizer upgrade test respectively. After commenting,
-the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
+To request a cluster test to be run on your PR, comment `/cluster_test` on the PR. The job will paste a comment with instructions for
+maintainers.
+To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
+comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
 contact an existing maintainer to approve it.
 
 ## Running Tests Locally
@@ -99,6 +100,9 @@ There are 3 tmux windows open in the tmux session for Canton in wallclock time, 
 toxyproxy. You can switch between those with `Ctrl-b w`.
 
 We recommend including a mode flag (`-w` for wallclock tests or `-s` for simtime tests); running `./start-canton.sh` without one will double what is needed. In that case, you will end up with 2 tmux windows.
+
+Like our participant images, Canton started this way does not allow downloading private keys by default.
+Tests that need to do such things need Canton to be started with `-k`, e.g., `./start-canton.sh -wk`.
 
 You should only need to restart it if you change
 `apps/app/src/test/resources/simple-topology-canton.conf`. If you

@@ -26,7 +26,6 @@ lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
-lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
@@ -137,6 +136,10 @@ lazy val root: Project = (project in file("."))
     `canton-ledger-api-value`,
     `canton-fork-community-common-test`,
     `canton-fork-logback-test`,
+    `canton-fork-app-base`,
+    `canton-fork-base`,
+    `canton-fork-common`,
+    `canton-fork-testing`,
     pulumi,
     `load-tester`,
     tools,
@@ -1199,12 +1202,44 @@ lazy val `canton-fork-community-common-test` =
       Headers.ApacheDAHeaderSettings,
     )
 
+lazy val `canton-fork-base` =
+  project
+    .in(file("canton-fork/base"))
+    .dependsOn(`canton-community-base`)
+    .settings(Headers.ApacheDAHeaderSettings)
+
+lazy val `canton-fork-common` =
+  project
+    .in(file("canton-fork/common"))
+    .dependsOn(`canton-community-common`)
+    .settings(Headers.ApacheDAHeaderSettings)
+
+lazy val `canton-fork-testing` =
+  project
+    .in(file("canton-fork/testing"))
+    .dependsOn(`canton-community-testing`)
+    .settings(
+      scalacOptions --= JvmRulesPlugin.scalacOptionsToDisableForTests,
+      Headers.ApacheDAHeaderSettings,
+    )
+
+lazy val `canton-fork-app-base` =
+  project
+    .in(file("canton-fork/app-base"))
+    .dependsOn(`canton-community-app-base`)
+    .settings(
+      Headers.ApacheDAHeaderSettings,
+      CantonDependencies.excludeTranscodeConflictingDependencies,
+    )
+
 lazy val `apps-common` =
   project
     .in(file("apps/common"))
     .dependsOn(
       `canton-community-common`,
       `canton-community-app`,
+      `canton-fork-app-base`,
+      `canton-fork-base`,
       `canton-community-testing` % Test,
       `canton-fork-community-common-test` % Test,
       `lf-value-json`,
@@ -1247,7 +1282,6 @@ lazy val `apps-common` =
           "com.google.api.grpc",
           "proto-google-common-protos",
         )),
-        kubernetes_client,
         Dependencies.daml_lf_validation,
         scalatestScalacheck % Test,
         CantonDependencies.pekko_http_testkit % Test,
@@ -1584,7 +1618,7 @@ lazy val `apps-common-frontend` = {
           (`splice-api-token-allocation-request-v2-daml` / Compile / damlBuild).value,
       damlTsCodegenDir := baseDirectory.value / "daml.js",
       damlTsCodegen := BuildCommon.damlTsCodegenTask.value,
-      npmInstallDeps := (baseDirectory.value / "package.json" +: damlTsCodegen.value) ++ (`splice-api-token-metadata-v1-daml` / Compile / npmInstall).value ++ (`token-standard-cli` / Compile / npmInstall).value,
+      npmInstallDeps := (baseDirectory.value / "package.json" +: baseDirectory.value / "generated-packages.json" +: baseDirectory.value / "scripts" / "link-generated-packages.mjs" +: damlTsCodegen.value) ++ (`splice-api-token-metadata-v1-daml` / Compile / npmInstall).value ++ (`token-standard-cli` / Compile / npmInstall).value,
       npmInstallOpenApiDeps :=
         Seq(
           (
@@ -1625,55 +1659,19 @@ lazy val `apps-common-frontend` = {
             // openapi-generator-cli only generates .ts files so we need to
             // compile to get .d.ts and .js files. We cannot run this as part of
             // apps-common-frontend-openapi/compile because that does not yet run
-            // npm install.
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "scan/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "sv/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "validator/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "validator/external-openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "validator/scan-proxy-openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "wallet/openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "wallet/external-openapi-ts-client",
-              log,
-            )
-            BuildCommon.TS.runWorkspaceCommand(
-              npmRootDir.value,
-              "build",
-              "splitwell/openapi-ts-client",
-              log,
-            )
+            // npm install. The clients are not npm workspaces (see
+            // apps/generated-packages.json), so they are compiled directly.
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "scan/openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "sv/openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "validator/openapi-ts-client", log)
+            BuildCommon.TS
+              .buildOpenApiClient(npmRootDir.value, "validator/external-openapi-ts-client", log)
+            BuildCommon.TS
+              .buildOpenApiClient(npmRootDir.value, "validator/scan-proxy-openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "wallet/openapi-ts-client", log)
+            BuildCommon.TS
+              .buildOpenApiClient(npmRootDir.value, "wallet/external-openapi-ts-client", log)
+            BuildCommon.TS.buildOpenApiClient(npmRootDir.value, "splitwell/openapi-ts-client", log)
             BuildCommon.TS.runWorkspaceCommand(
               npmRootDir.value,
               "build",
@@ -1910,6 +1908,7 @@ lazy val `apps-splitwell` =
     .dependsOn(
       `apps-common` % "compile->compile;test->test",
       `apps-scan` % "compile->compile;test->test",
+      `canton-fork-common`,
       `splitwell-daml`,
     )
     .settings(
@@ -2432,6 +2431,7 @@ lazy val `apps-app`: Project =
       `canton-community-app`,
       `canton-community-base`,
       `canton-community-integration-testing` % "test",
+      `canton-fork-testing` % "test",
       `splice-amulet-test-daml` % "test",
       `splice-util-featured-app-proxies-daml` % "test",
       // necessary for token-standard-cli to get `npm install`ed so that TokenStandardCliSanityCheckPlugin can run
@@ -2446,7 +2446,6 @@ lazy val `apps-app`: Project =
       libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.44.0" % "test",
       libraryDependencies += "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4" % "test",
       libraryDependencies += auth0,
-      libraryDependencies += kubernetes_client,
       libraryDependencies += "com.monovore" %% "decline" % "2.5.0" % "test",
       // Force SBT to use the right version of opentelemetry libs.
       dependencyOverrides ++= Seq(
@@ -2536,6 +2535,17 @@ updateTestConfigForParallelRuns := {
       "SvOffboardingIntegrationTest",
       "ManualStartIntegrationTest",
     ).exists(name.contains)
+  // These are tests that download private keys from participants (e.g., for identities dumps),
+  // which needs to be explicitly allowed in Canton (`start-canton.sh -k`).
+  def isKeyDownloadTest(name: String): Boolean =
+    Seq(
+      "CombinedDumpDirectoryExportIntegrationTest",
+      "PeriodicBackupIntegrationTest",
+      "ParticipantPlaintextIdentitiesIntegrationTest",
+      "SvIdentitiesDumpIntegrationTest",
+      "SvReonboardingIntegrationTest",
+      "ValidatorReonboarding",
+    ).exists(name.contains)
   def isManualSignatureIntegrationTest(name: String): Boolean =
     Seq(
       "ManualSignatureIntegrationTest"
@@ -2547,8 +2557,6 @@ updateTestConfigForParallelRuns := {
   def isWithDockerWithSimtimeCantonTest(name: String): Boolean =
     Seq("ScanTimeBasedIntegrationTest", "ScanNewNetworkBackfillingTimeBasedIntegrationTest")
       .exists(name.contains)
-  def isCometBftTest(name: String): Boolean =
-    name contains "CometBft"
   def isDynamicSynchronizerParamsReconciliationTest(name: String): Boolean =
     name contains "DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest"
   def isLSUTest(name: String): Boolean =
@@ -2605,13 +2613,7 @@ updateTestConfigForParallelRuns := {
     (
       "Preflight tests against core nodes",
       "test-full-class-names-core-preflight.log",
-      (t: String) =>
-        isCoreDeploymentPreflightIntegrationTest(t) && !isNonDevNetTest(t) && !isCometBftTest(t),
-    ),
-    (
-      "Preflight tests against core nodes for cometBft",
-      "test-full-class-names-core-preflight-cometbft.log",
-      (t: String) => isCoreDeploymentPreflightIntegrationTest(t) && isCometBftTest(t),
+      (t: String) => isCoreDeploymentPreflightIntegrationTest(t) && !isNonDevNetTest(t),
     ),
     (
       "Preflight tests against validator1",
@@ -2626,13 +2628,7 @@ updateTestConfigForParallelRuns := {
     (
       "Preflight tests against runbook SV",
       "test-full-class-names-sv-preflight.log",
-      (t: String) =>
-        isRunbookSvPreflightIntegrationTest(t) && !isNonDevNetTest(t) && !isCometBftTest(t),
-    ),
-    (
-      "Preflight tests against runbook SV for cometBft",
-      "test-full-class-names-sv-preflight-cometbft.log",
-      (t: String) => isRunbookSvPreflightIntegrationTest(t) && isCometBftTest(t),
+      (t: String) => isRunbookSvPreflightIntegrationTest(t) && !isNonDevNetTest(t),
     ),
     (
       "Non-DevNet Preflight tests against runbook SV",
@@ -2655,6 +2651,11 @@ updateTestConfigForParallelRuns := {
       (t: String) => !isTimeBasedTest(t) && isAppUpgradeTest(t),
     ),
     (
+      "tests that download participant keys",
+      "test-full-class-names-key-download.log",
+      (t: String) => isKeyDownloadTest(t),
+    ),
+    (
       "resource intensive tests",
       "test-full-class-names-resource-intensive.log",
       (t: String) => isResourceIntensiveTest(t),
@@ -2663,11 +2664,6 @@ updateTestConfigForParallelRuns := {
       "tests using docker images",
       "test-full-class-names-docker-based.log",
       (t: String) => isDockerComposeBasedTest(t),
-    ),
-    (
-      "tests with wall clock time using CometBFT",
-      "test-cometbft-full-class-names.log",
-      (t: String) => !isTimeBasedTest(t) && !isFrontEndTest(t) && isCometBftTest(t),
     ),
     (
       "tests to check logical sync roll-forward upgrade",
