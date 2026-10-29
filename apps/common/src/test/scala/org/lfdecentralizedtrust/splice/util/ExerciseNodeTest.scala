@@ -34,7 +34,9 @@ class ExerciseNodeTest extends AnyWordSpec with BaseTest {
     Seq.empty.asJava,
     true,
     1,
-    companion.resToValue(amulet.SvRewardCoupon_ArchiveAsBeneficiaryResult.SVREWARDCOUPON_ARCHIVEASBENEFICIARYRESULT),
+    companion.resToValue(
+      amulet.SvRewardCoupon_ArchiveAsBeneficiaryResult.SVREWARDCOUPON_ARCHIVEASBENEFICIARYRESULT
+    ),
     Seq.empty.asJava,
     false,
   )
