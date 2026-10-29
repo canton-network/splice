@@ -1,0 +1,52 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "canton"
+
+participant:
+  address: "participant"
+  adminApiPort: 5002
+  # Required by the Canton remote participant config but not used by the monitor
+  ledgerApiPort: 5001
+
+# Key fingerprints to track (required)
+keys: []
+expectedSynchronizerAliases:
+  - global
+pollIntervalSeconds: 60
+slowQueryThresholdSeconds: 5
+
+defaultJvmOptions: -XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:InitialRAMPercentage=75
+additionalJvmOptions: ""
+
+resources:
+  limits:
+    memory: 2Gi
+  requests:
+    cpu: 100m
+    memory: 1Gi
+
+# Custom annotations and labels for deployed resources
+pod:
+  annotations: {}
+  labels: {}
+
+# k8s affinity for all deployed pods (optional)
+# affinity:
+
+# k8s nodeSelector for all deployed pods (optional)
+# nodeSelector:
+
+# k8s tolerations for all deployed pods (optional)
+# tolerations:
+
+# should stakater reloader annotation be added (note: reloader needs to be installed separately)
+enableReloader: true
+
+securityContexts:
+  pod:
+    security_context_profile: pod_security_context
+  containers:
+    topologyKeyMonitor:
+      security_context_profile: app_security_context
