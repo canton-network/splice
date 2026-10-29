@@ -247,7 +247,7 @@ test_spec_unlockFaLockNeedsVestingStartTime = do
 
   request <- lockRequestV1 registriesEnv.amuletV2 a 0.0
     "cip-127/memo:request=unlock-and-start-vesting&unlock-amount=1000000&lock-kind=fa-lock&lock-subject=X"
-  expectFailureContaining (missingMetadataMessage vestingStartTimeMetaKey) =<< submitLockRequestV1 registries request
+  expectFailureContaining (missingMemoKeyMessage vestingStartTimeMetaKey) =<< submitLockRequestV1 registries request
   checkLockUntouched a (fromInterfaceContractId @GovernanceLock lockCid) lock
 
 -- Substituting Locks
