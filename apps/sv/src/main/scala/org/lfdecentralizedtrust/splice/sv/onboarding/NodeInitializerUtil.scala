@@ -86,6 +86,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected def newSvStore(
       key: SvStore.Key,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
@@ -99,6 +100,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     loggerFactory,
     retryProvider,
     migrationId,
+    synchronizerId,
     participantId,
     config.automation.ingestion,
     config.parameters.defaultLimit,
@@ -138,6 +140,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected def newDsoStore(
       key: SvStore.Key,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
@@ -152,6 +155,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,

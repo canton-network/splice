@@ -25,7 +25,7 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
-  AcsQueries,
+  SingleSynchronizerAcsQueries,
   AcsTables,
   DbAppStore,
 }
@@ -54,6 +54,7 @@ object DbValidatorStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -77,6 +78,7 @@ object DbValidatorStore {
           loggerFactory = loggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,
@@ -117,6 +119,7 @@ class DbValidatorStore private (
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -134,11 +137,12 @@ class DbValidatorStore private (
         DbValidatorStore.acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
     )
     with ValidatorStore
     with AcsTables
-    with AcsQueries
+    with SingleSynchronizerAcsQueries
     with LimitHelpers {
 
   override val walletKey = WalletStore.Key(
@@ -227,7 +231,7 @@ class DbValidatorStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -281,7 +285,7 @@ class DbValidatorStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -311,7 +315,7 @@ class DbValidatorStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -340,7 +344,7 @@ class DbValidatorStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -371,7 +375,7 @@ class DbValidatorStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,

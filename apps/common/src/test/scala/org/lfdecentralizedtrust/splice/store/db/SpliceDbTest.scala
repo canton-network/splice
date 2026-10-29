@@ -75,7 +75,6 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
                 acs_store_template,
                 txlog_store_template,
                 interface_views_template,
-                incomplete_reassignments,
                 store_descriptors,
                 store_last_ingested_offsets,
                 update_history_descriptors,

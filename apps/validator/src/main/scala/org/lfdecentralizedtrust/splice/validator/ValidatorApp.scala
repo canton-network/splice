@@ -660,12 +660,14 @@ class ValidatorApp(
         validatorParty = validatorParty,
         dsoParty = dsoParty,
       )
+      synchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
       store <- ValidatorStore(
         key,
         storage,
         loggerFactory,
         retryProvider,
         domainMigrationId,
+        synchronizerId,
         participantId,
         config.automation.ingestion,
         config.parameters.defaultLimit,
@@ -688,7 +690,6 @@ class ValidatorApp(
         com.google.protobuf.duration.Duration
           .toJavaProto(DurationConversion.toProto(config.deduplicationDuration.asJavaApproximation))
       )
-      synchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
       cantonIdentifierConfig =
         ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
       _ <- ParticipantInitializer.ensureInitializedWithRotatedOTK(

@@ -251,20 +251,21 @@ class SV1Initializer(
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
       domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
+      synchronizerId = psid.logical
       svStore <- newSvStore(
         storeKey,
         domainMigrationId,
+        synchronizerId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
+        synchronizerId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
-      psid <- participantAdminConnection.getPhysicalSynchronizerId(config.domains.global.alias)
-      synchronizerId = psid.logical
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
         synchronizerId,
         initConnection,

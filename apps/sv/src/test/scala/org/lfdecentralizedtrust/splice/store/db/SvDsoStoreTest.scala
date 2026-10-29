@@ -2696,13 +2696,14 @@ class DbSvDsoStoreTest
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         domainMigrationId,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("SvDsoStoreTest"),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
-        .ingestAcs(acsOffset, Seq.empty, Seq.empty, Seq.empty)
+        .ingestAcs(acsOffset, Seq.empty)
       _ <- store.domains.ingestionSink.ingestConnectedDomains(
         Map(SynchronizerAlias.tryCreate(domain) -> dummyDomain)
       )

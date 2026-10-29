@@ -185,13 +185,14 @@ class DbSvSvStoreTest
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         0,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("SvSvStoreTest"),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
-        .ingestAcs(acsOffset, Seq.empty, Seq.empty, Seq.empty)
+        .ingestAcs(acsOffset, Seq.empty)
       _ <- store.domains.ingestionSink.ingestConnectedDomains(
         Map(SynchronizerAlias.tryCreate(domain) -> dummyDomain)
       )

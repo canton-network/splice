@@ -11,7 +11,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
+import com.digitalasset.canton.topology.ParticipantId
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
@@ -124,6 +124,7 @@ class DbScanRewardsReferenceStore private (
       acsStoreDescriptor = DbScanRewardsReferenceStore.acsStoreDescriptor(key, participantId),
       storeIds = storeIds,
       migrationId = migrationId,
+      synchronizerId = key.synchronizerId,
       ingestionConfig = ingestionConfig,
       acsArchiveConfigOpt = Some(
         AcsArchiveConfig.withIndexColumns(
@@ -139,10 +140,7 @@ class DbScanRewardsReferenceStore private (
 
   override def waitUntilInitialized: Future[Unit] = multiDomainAcsStore.waitUntilAcsIngested()
 
-  private val tcsStore = new DbTcsStore(
-    multiDomainAcsStore,
-    descriptor => SynchronizerId.tryFromString(descriptor.key("synchronizerId")),
-  )
+  private val tcsStore = new DbTcsStore(multiDomainAcsStore)
 
   override def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]

@@ -9,7 +9,6 @@ import com.digitalasset.canton.time.Clock
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
-  AssignTrigger,
   AutomationServiceCompanion,
   SpliceAppAutomationService,
   TransferFollowTrigger,
@@ -226,7 +225,6 @@ object UserWalletAutomationService extends AutomationServiceCompanion {
       aTrigger[CompleteBuyTrafficRequestTrigger],
       aTrigger[CollectRewardsAndMergeAmuletsTrigger],
       aTrigger[UnassignTrigger.Template[?, ?]],
-      aTrigger[AssignTrigger],
       aTrigger[TransferFollowTrigger],
       aTrigger[WalletTransferOfferSweepTrigger],
       aTrigger[WalletPreapprovalSweepTrigger],

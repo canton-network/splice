@@ -375,13 +375,14 @@ class DbValidatorStoreTest
         retryProvider =
           RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         domainMigrationId,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("ValidatorStoreTest"),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       )
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
-        .ingestAcs(nextOffset(), Seq.empty, Seq.empty, Seq.empty)
+        .ingestAcs(nextOffset(), Seq.empty)
       _ <- store.domains.ingestionSink.ingestConnectedDomains(
         Map(synchronizerAlias -> dummyDomain)
       )

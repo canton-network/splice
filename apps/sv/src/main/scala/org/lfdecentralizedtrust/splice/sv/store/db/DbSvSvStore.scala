@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.store.db
 
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
@@ -34,6 +35,7 @@ class DbSvSvStore private (
     override protected val outerLoggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -51,6 +53,7 @@ class DbSvSvStore private (
         DbSvSvStore.acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
     )
     with SvSvStore
@@ -130,6 +133,7 @@ object DbSvSvStore {
       outerLoggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -153,6 +157,7 @@ object DbSvSvStore {
           outerLoggerFactory = outerLoggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,

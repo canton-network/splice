@@ -18,7 +18,7 @@ import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, MultiDomainAcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
-  AcsQueries,
+  SingleSynchronizerAcsQueries,
   AcsTables,
   DbAppStore,
 }
@@ -49,6 +49,7 @@ object DbSplitwellStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -69,6 +70,7 @@ object DbSplitwellStore {
           loggerFactory = loggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,
@@ -107,6 +109,7 @@ class DbSplitwellStore private (
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -122,10 +125,11 @@ class DbSplitwellStore private (
       acsStoreDescriptor = DbSplitwellStore.acsStoreDescriptor(key, participantId),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
     )
     with AcsTables
-    with AcsQueries
+    with SingleSynchronizerAcsQueries
     with LimitHelpers
     with SplitwellStore {
 
@@ -150,20 +154,20 @@ class DbSplitwellStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             SplitwellTables.acsTableName,
             acsStoreId,
             domainMigrationId,
             splitwellCodegen.SplitwellInstall.COMPANION,
-            where = sql"""assigned_domain = $synchronizerId and install_user = $user""",
+            where = sql"""install_user = $user""",
             orderLimit = sql"limit 1",
           ).headOption,
           "lookupInstallWithOffset",
         )
         .getOrElse(throw offsetExpectedError())
-      assigned = resultWithOffset.row.map(r =>
-        contractFromRow(splitwellCodegen.SplitwellInstall.COMPANION)(r.acsRow)
-      )
+      assigned = resultWithOffset.row
+        .filter(_ => synchronizerId == acsSynchronizerId)
+        .map(r => contractFromRow(splitwellCodegen.SplitwellInstall.COMPANION)(r))
     } yield MultiDomainAcsStore.QueryResult(
       resultWithOffset.offset,
       assigned,
@@ -181,7 +185,7 @@ class DbSplitwellStore private (
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             SplitwellTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -365,7 +369,6 @@ class DbSplitwellStore private (
             splitwellCodegen.SplitwellInstall.COMPANION,
             additionalWhere = sql"""
               and install_user = $user
-              and assigned_domain is not null
               """,
           ),
           "listSplitwellInstalls",
@@ -392,9 +395,6 @@ class DbSplitwellStore private (
             acsStoreId,
             domainMigrationId,
             splitwellCodegen.SplitwellRules.COMPANION,
-            additionalWhere = sql"""
-               and assigned_domain is not null
-              """,
           ),
           "listSplitwellRules",
         )
@@ -417,21 +417,18 @@ class DbSplitwellStore private (
     for {
       row <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             SplitwellTables.acsTableName,
             acsStoreId,
             domainMigrationId,
             splitwellCodegen.SplitwellRules.COMPANION,
-            where = sql"""assigned_domain = $synchronizerId""",
           ).headOption,
           "lookupSplitwellRules",
         )
         .getOrRaise(offsetExpectedError())
-      result = row.row.map(r =>
-        contractFromRow(
-          splitwellCodegen.SplitwellRules.COMPANION
-        )(r.acsRow)
-      )
+      result = row.row
+        .filter(_ => synchronizerId == acsSynchronizerId)
+        .map(r => contractFromRow(splitwellCodegen.SplitwellRules.COMPANION)(r))
     } yield QueryResult(
       row.offset,
       result,
@@ -521,14 +518,13 @@ class DbSplitwellStore private (
     for {
       row <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             SplitwellTables.acsTableName,
             acsStoreId,
             domainMigrationId,
             splitwellCodegen.TransferInProgress.COMPANION,
             where = sql"""
                   payment_request_contract_id = $paymentRequest
-              and assigned_domain is not null
               """,
           ).headOption,
           "lookupTransferInProgress",

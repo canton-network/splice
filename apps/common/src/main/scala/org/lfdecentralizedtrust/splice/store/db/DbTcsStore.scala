@@ -17,29 +17,21 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 
-// The DbTcsStore is currently implemented with support for single synchronizer only.
-// Specifically the lookup APIs have wait mechanism ensuring record_time
-// reached for a single synchronizer only.
-// But since the SQL queries do not perform filtering of contracts on
-// 'assigned_domain' due to performance constraints.
-// It is expected that the DbMultiDomainAcsStore only has ingestion happening
-// for a single synchronizer, and that the Store is itself keyed on the SynchronizerId.
-// Here we make use of its StoreDescriptor to derive SynchronizerId to make this requirement explicit.
 class DbTcsStore(
-    val acsStore: DbMultiDomainAcsStore[?],
-    synchronizerIdFromDescriptor: StoreDescriptor => SynchronizerId,
+    val acsStore: DbMultiDomainAcsStore[?]
 )(implicit
     ec: ExecutionContext,
     templateJsonDecoder: TemplateJsonDecoder,
     closeContext: CloseContext,
 ) extends TcsStore
     with AcsTables
-    with AcsQueries
     with TcsQueries {
 
   import profile.api.jdbcActionExtensionMethods
 
-  private val synchronizerId = synchronizerIdFromDescriptor(acsStore.acsStoreDescriptor)
+  private val synchronizerId = acsStore.synchronizerId
+
+  override protected def acsSynchronizerId: SynchronizerId = synchronizerId
 
   private val archiveTableName = acsStore.acsArchiveConfigOpt
     .getOrElse(
@@ -132,8 +124,8 @@ class DbTcsStore(
         )
         withState = result.map { row =>
           TcsStore.TemporalContractWithState(
-            contractWithState = contractWithStateFromRow(companion)(row.withStateRow),
-            createdAt = CantonTimestamp.assertFromLong(row.withStateRow.acsRow.createdAt.micros),
+            contractWithState = contractWithStateFromRow(companion)(row.acsRow),
+            createdAt = CantonTimestamp.assertFromLong(row.acsRow.createdAt.micros),
             archivedAt = row.archivedAt,
           )
         }

@@ -47,9 +47,10 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
         storeDescriptor(0, participantId, synchronizerId),
         Some(storeDescriptor(1, participantId, synchronizerId)),
         loggerFactory,
-        contractFilter(synchronizerId),
+        contractFilter,
         testTxLogConfig,
         0L,
+        synchronizerId,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
@@ -61,10 +62,7 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
         ),
       )
       .futureValue
-    new DbTcsStore(
-      acsStore,
-      descriptor => SynchronizerId.tryFromString(descriptor.key("synchronizerId")),
-    )
+    new DbTcsStore(acsStore)
   }
 
   protected def c(i: Int): Contract[AppRewardCoupon.ContractId, AppRewardCoupon] =
@@ -468,7 +466,7 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
       }
   }
 
-  private def contractFilter(synchronizerId: SynchronizerId) = {
+  private def contractFilter = {
     import MultiDomainAcsStore.mkFilter
 
     MultiDomainAcsStore
@@ -480,7 +478,6 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
           }
         ),
         interfaceFilters = Map.empty,
-        synchronizerFilter = Some(synchronizerId),
       )
   }
 
