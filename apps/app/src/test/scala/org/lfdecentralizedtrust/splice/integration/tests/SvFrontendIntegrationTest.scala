@@ -652,20 +652,12 @@ class SvFrontendIntegrationTest
         }
       }
 
-      // Amend the featured app config via the new instruction flow (CIP-104 1.1).
-      // #7674 scope: confirm the UI creates the SRARC_CreateFeaturedAppConfigUpdateInstruction
-      // vote request carrying the amended config. Executing the instruction (patching the
-      // right itself) is covered by #7675.
       val amendedActivityWeight = BigDecimal("3.5")
       val amendProposalContractId = assertCreateProposal(
         "SRARC_CreateFeaturedAppConfigUpdateInstruction",
         "amend-featured-app",
       ) { implicit webDriver =>
         fillOutTextField("amend-featured-app-partyId", providerPartyId)
-        // Selecting the right fetches its current config and prepopulates the form once
-        // (baseConfig). Wait for that one-shot prepopulation to land, then clear and retype
-        // the weight so newConfig differs from baseConfig (fillOutTextField appends, it does
-        // not clear).
         selectFirstMuiOption("amend-featured-app-rightCid-dropdown")
         eventually() {
           inside(find(id("amend-featured-app-activityWeight"))) { case Some(element) =>
