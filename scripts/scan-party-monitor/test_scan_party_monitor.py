@@ -461,6 +461,18 @@ class HelpersTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
                 spm.timestamp(value)
 
+    def test_deprecated_updates_options(self) -> None:
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            args = spm.parse_cli_args(
+                ["--scan-url", "http://scan", "--config", "c.json", "--db", "d.db"]
+                + ["--updates-page-size", "5", "--updates-requests-per-second", "0.5"]
+            )
+        self.assertEqual((args.events_page_size, args.events_requests_per_second), (5, 0.5))
+        self.assertIn("--updates-page-size is deprecated; use --events-page-size", stderr.getvalue())
+        self.assertIn("--updates-requests-per-second is deprecated; use --events-requests-per-second", stderr.getvalue())
+        defaults = spm.parse_cli_args(["--scan-url", "http://scan", "--config", "c.json", "--db", "d.db"])
+        self.assertEqual((defaults.events_page_size, defaults.events_requests_per_second), (spm.MAX_PAGE_SIZE, 2.0))
+
 
 class ConfigTest(unittest.TestCase):
     def test_expected_recipients_combine(self) -> None:

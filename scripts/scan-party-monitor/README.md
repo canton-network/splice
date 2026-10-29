@@ -147,6 +147,8 @@ or the DSO party unless you really need alerts on them.
 
 Please do not raise `--acs-requests-per-second` or `--events-requests-per-second`: doing so
 slows down Scan for everyone else, including other users of this script.
+(`--updates-page-size` and `--updates-requests-per-second` are deprecated names of the
+`--events-*` options.)
 
 ## Limitations
 

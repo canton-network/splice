@@ -596,7 +596,7 @@ class Monitor:
         self.reported_until: Dict[PartyId, Position] = {
             p: position(*reported_until[p]) for p in config if p in reported_until
         }
-        self.stats: Dict[str, int] = {"events": 0, "matches": 0}
+        self.stats: Dict[str, int] = {"transactions": 0, "matches": 0}
 
     ### configuration changes
 
@@ -822,7 +822,7 @@ class Monitor:
                 migration_id, record_time = event_position(in_range[-1])
                 store.set_meta(Meta.CURSOR_MIGRATION_ID, migration_id)
                 store.set_meta(Meta.CURSOR_RECORD_TIME, record_time)
-                self.stats["events"] += len(in_range)
+                self.stats["transactions"] += len(in_range)
                 self.forget_reported_until(position(migration_id, record_time))
             # Scan only returns events with later record times than the cursor, so none at or
             # before the cutoff can follow once the cursor is at it.
@@ -868,7 +868,7 @@ class Monitor:
         LOG.info(
             f"At record time {record_time} (migration id {migration_id}, "
             f"{'unknown' if lag is None else f'{lag}s'} behind); this run: "
-            f"{self.stats['events']} events, {self.stats['matches']} matching"
+            f"{self.stats['transactions']} transactions, {self.stats['matches']} matching"
         )
 
     def process_event(self, item: Json) -> Optional[Json]:
@@ -1008,6 +1008,17 @@ def page_size(value: str) -> int:
     return n
 
 
+class DeprecatedAlias(argparse.Action):
+    """A former name of the option with the same dest; warns and stores into that dest."""
+
+    def __call__(
+        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: Optional[str] = None
+    ) -> None:
+        replacement = "--" + self.dest.replace("_", "-")
+        sys.stderr.write(f"{parser.prog}: warning: {option_string} is deprecated; use {replacement}\n")
+        setattr(namespace, self.dest, values)
+
+
 def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Alert on Scan transactions of tracked parties: transfers to unexpected "
@@ -1053,6 +1064,9 @@ def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
         default=2.0,
         help="Pace of event requests while catching up; shared rate limit as above (default: %(default)s)",
     )
+    deprecated: Dict[str, Any] = {"action": DeprecatedAlias, "default": argparse.SUPPRESS, "help": argparse.SUPPRESS}
+    parser.add_argument("--updates-page-size", dest="events_page_size", type=page_size, **deprecated)
+    parser.add_argument("--updates-requests-per-second", dest="events_requests_per_second", type=float, **deprecated)
     parser.add_argument("--poll-interval-seconds", type=float, default=10, help="Wait between polls once caught up (default: %(default)s)")
     parser.add_argument("--progress-interval-seconds", type=float, default=10, help="Interval between ACS seed progress reports (default: %(default)s)")
     parser.add_argument("--heartbeat-interval-seconds", type=float, default=300, help="Interval between status logs while streaming (default: %(default)s)")
