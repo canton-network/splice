@@ -146,6 +146,23 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         weight = BigDecimal(3),
       )
     }
+    // Third FAK_ASSET party whose grant will be revoked between the baseline and
+    // cap+weight scenario rounds. Lets both the pre-revocation (baseline-equivalent)
+    // and post-revocation (asset-side absence) assertions land in the same two
+    // scenario rounds as the other sends.
+    // sv1's SV party, validator party, and wallet-user party are all the same
+    // party in simple-topology-1sv, so opsParties MUST be empty: Amulet.daml's
+    // validFeaturedAppRight requires `provider notElem opsParties`. The party is
+    // only ever a receiver here, never a submitter, so no ops-party resolution
+    // in findFASubmitter is needed.
+    val doomedAssetParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
+    clue(s"Grant FAK_Asset right (weight=1) to $doomedAssetParty (will be revoked mid-flow)") {
+      grantFeaturedAppRightWithKind(
+        doomedAssetParty,
+        FeaturedAppKind.FAK_ASSET,
+        opsParties = Seq.empty,
+      )
+    }
     updateTbarV11RewardConfig()
 
     // Receivers' TransferPreapprovals so the sender submits the amulet transfer
@@ -153,6 +170,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     // attributes the transaction to the FAK_ASSETMOVING grant.
     bobWalletClient.createTransferPreapproval()
     charlieWalletClient.createTransferPreapproval()
+    sv1WalletClient.createTransferPreapproval()
     aliceWalletClient.tap(1000.0)
 
     // Non-FA submitter for the baseline round's negative-case leg: splitwell's
@@ -187,9 +205,13 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     // - splitwell→bob (non-FA submitter, FAK_ASSET confirmer): negative; app records
     //   only, no asset-side (findFASubmitter returns None → computeForFASubmitted
     //   never runs).
+    // - alice→doomedAssetParty (FA submitter + FAK_ASSET confirmer, weight=1): same
+    //   expected ratio as alice→bob while doomedAssetParty still has its grant. The
+    //   revocation voted below between rounds 5 and 10 makes the parallel round-10
+    //   send to doomedAssetParty exercise the post-revocation path.
     val baselineRound = 5L
     val cursorBeforeBaseline = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
-    clue(s"Round $baselineRound: FA alice→$assetParty + non-FA splitwell→$assetParty in parallel") {
+    clue(s"Round $baselineRound: three parallel sends (FA, non-FA, FA-to-doomed)") {
       aliceWalletClient.transferPreapprovalSend(
         assetParty,
         BigDecimal(10),
@@ -198,6 +220,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       splitwellWalletClient.transferPreapprovalSend(
         assetParty,
         BigDecimal(5),
+        UUID.randomUUID().toString,
+      )
+      aliceWalletClient.transferPreapprovalSend(
+        doomedAssetParty,
+        BigDecimal(10),
         UUID.randomUUID().toString,
       )
     }
@@ -223,6 +250,20 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         expectedPct = 10,
         tolerancePct = 3,
         label = s"baseline alice→$assetParty",
+      )
+    }
+
+    clue(
+      s"Round $baselineRound FA event: per-record asset weight for $doomedAssetParty is ~10% of burn (same baseline — still active)"
+    ) {
+      val faEvent = findFaSubmittedEvent(baselineEvents, doomedAssetParty)
+      assertAssetRatioInEvent(
+        event = faEvent,
+        submitter = assetMoverParty,
+        assetParty = doomedAssetParty,
+        expectedPct = 10,
+        tolerancePct = 3,
+        label = s"baseline alice→$doomedAssetParty (pre-revocation)",
       )
     }
 
@@ -264,26 +305,31 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         s"FA-submitted event $faUpdateId should report $assetMoverParty as submitting_app_provider"
     }
 
-    // Mid-flow: halve the per-asset cap so the next scenario round exercises both
-    // cap clamping and step-8 weight scaling via two parallel sends.
-    clue(
-      "Lower maxExtraFeaturedAssetActivityWeightPerAsset mid-flow for the cap+weight scenario round"
-    ) {
+    // Mid-flow: two governance votes share the same propagation window.
+    // - Halve the per-asset cap: round-10 scenario exercises cap clamping (w=1) and
+    //   step-8 weight scaling (w=3) via two parallel sends.
+    // - Revoke doomedAssetParty's FA grant: round-10 scenario also exercises the
+    //   post-revocation absence via a parallel alice→doomedAssetParty send.
+    clue("Lower per-asset cap and revoke doomedAssetParty's grant in one governance window") {
       updateTbarV11RewardConfig(maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"))
+      revokeFeaturedAppRight(doomedAssetParty)
     }
     for (round <- 8 to 10) {
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
 
-    // Round 10 scenario: both cap=0.05 cases in parallel.
+    // Round 10 scenario: three cap=0.05 cases in parallel.
     // - alice→assetParty (weight=1): exercises cap clamp (~5% per-record asset ratio).
     // - alice→highWeightAssetParty (weight=3): exercises step-8 weight application
     //   atop the same cap (~15% per-record asset ratio).
+    // - alice→doomedAssetParty (revoked): exercises post-revocation attribution —
+    //   doomedAssetParty is no longer a FAK_ASSET confirmer so its asset activity
+    //   record is absent; only DSO's share remains, re-attributed to the submitter.
     val capWeightRound = 10L
     val cursorBeforeCapWeight = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
     clue(
-      s"Round $capWeightRound: cap-crossed alice→$assetParty (w=1) + weight-tripled alice→$highWeightAssetParty (w=3)"
+      s"Round $capWeightRound: cap-crossed (w=1) + weight-tripled (w=3) + post-revocation (doomed) in parallel"
     ) {
       aliceWalletClient.transferPreapprovalSend(
         assetParty,
@@ -292,6 +338,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
       aliceWalletClient.transferPreapprovalSend(
         highWeightAssetParty,
+        BigDecimal(10),
+        UUID.randomUUID().toString,
+      )
+      aliceWalletClient.transferPreapprovalSend(
+        doomedAssetParty,
         BigDecimal(10),
         UUID.randomUUID().toString,
       )
@@ -335,57 +386,35 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
     }
 
-    // Revoke highWeightAssetParty's FA grant mid-flow. Subsequent sends to
-    // highWeightAssetParty should no longer attribute asset activity to them
-    // (lookupFeaturedAppPartiesAsOf no longer surfaces the grant), while the
-    // DSO's weighted share still flows through — re-attributed to the submitter.
-    clue(s"Revoke $highWeightAssetParty's FA grant mid-flow") {
-      revokeFeaturedAppRight(highWeightAssetParty)
-    }
-    for (round <- 13 to 15) {
-      advanceRoundsToNextRoundOpening
-      assertOldestOpenRound(round.toLong)
-    }
-
-    val revokedRound = 15L
-    val cursorBeforeRevokedSend = eventuallySucceeds() {
-      latestEventHistoryCursor(sv1ScanBackend)
-    }
     clue(
-      s"Round $revokedRound: alice→$highWeightAssetParty after revocation should have no asset record for the revoked party"
+      s"Round $capWeightRound post-revocation event (alice→$doomedAssetParty): no asset record for the revoked party; only DSO-share re-attributed to $assetMoverParty"
     ) {
-      aliceWalletClient.transferPreapprovalSend(
-        highWeightAssetParty,
-        BigDecimal(10),
-        UUID.randomUUID().toString,
-      )
-    }
-    for (round <- 16 to 17) {
-      advanceRoundsToNextRoundOpening
-      assertOldestOpenRound(round.toLong)
-    }
-
-    clue(
-      s"Round $revokedRound: assetActivityRecords omits revoked $highWeightAssetParty; DSO share still re-attributes to $assetMoverParty"
-    ) {
-      val revokedEvents = sv1ScanBackend.getEventHistory(
-        count = 1000,
-        after = Some(cursorBeforeRevokedSend),
-        encoding = CompactJson,
-      )
-      // Find an FA-submitted event whose assetActivityRecords includes the
-      // submitter (= DSO share re-attribution). This is the alice→highWeightAssetParty
-      // transfer post-revocation; without a FAK_ASSET confirmer, only the DSO's
-      // share flows through, and it's re-attributed to the submitting app.
-      val revokedEvent = findFaSubmittedEvent(revokedEvents, assetMoverParty)
-      val assetRecords = revokedEvent.assetActivityRecords
-        .getOrElse(fail("revoked event should still carry DSO-share asset records"))
-        .value
-      val assetPartyProtos = assetRecords.map(_.party).toSet
-      assetPartyProtos should not contain highWeightAssetParty.toProtoPrimitive withClue
-        s"$highWeightAssetParty was revoked; its FA grant should no longer attribute asset activity"
-      assetPartyProtos should contain(assetMoverParty.toProtoPrimitive) withClue
-        s"DSO's share should still re-attribute to the submitting app $assetMoverParty"
+      // The revoked-receiver send is identified by its asset-records shape: the
+      // only FA-submitted event in the window whose assetActivityRecords has
+      // exactly one entry (the submitter, from DSO re-attribution). Sends to
+      // active FAK_ASSET confirmers in this same round have two entries (the
+      // confirmer + the submitter).
+      val submitterProto = assetMoverParty.toProtoPrimitive
+      val assetPartyProtos: Set[String] = capWeightEvents.iterator
+        .flatMap { e =>
+          for {
+            app <- e.appActivityRecords.filter(_.records.exists(_.party == submitterProto))
+            asset <- e.assetActivityRecords.filter(r =>
+              r.value.sizeIs == 1 && r.value.exists(_.party == submitterProto)
+            )
+            _ = app // used only for the filter above
+          } yield asset.value.map(_.party).toSet
+        }
+        .nextOption()
+        .getOrElse(
+          fail(
+            s"Expected a post-revocation FA-submitted event with only $assetMoverParty in assetActivityRecords"
+          )
+        )
+      assetPartyProtos should not contain doomedAssetParty.toProtoPrimitive withClue
+        s"$doomedAssetParty was revoked; its FA grant should no longer attribute asset activity"
+      assetPartyProtos shouldBe Set(submitterProto) withClue
+        s"Only DSO's share should remain, re-attributed to the submitting app $assetMoverParty"
     }
   }
 
