@@ -99,6 +99,7 @@ class SequencerPruningIntegrationTest
       Seq(),
       "stop-validator-before-pruning-sequencer",
       "VALIDATOR_ADMIN_USER" -> bobValidatorLocalBackend.config.ledgerApiUser,
+      "VALIDATOR_IDENTIFIER" -> participantIdentifier(bobValidatorLocalBackend),
     ) {
       startAllSync(bobValidatorLocalBackend)
       val walletUserParty = onboardWalletUser(bobWalletClient, bobValidatorLocalBackend)

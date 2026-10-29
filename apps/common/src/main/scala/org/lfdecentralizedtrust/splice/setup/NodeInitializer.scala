@@ -66,7 +66,10 @@ class NodeInitializer(
     * uses the identifier this app expects. Guards against an operator
     * setting the app's identifier without the matching Canton config.
     */
-  def ensureIdentityMatches(identifierName: String)(implicit
+  def ensureIdentityMatches(
+      identifierName: String,
+      nodeIdentity: UniqueIdentifier => Member & NodeIdentity,
+  )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Unit] =
@@ -78,7 +81,9 @@ class NodeInitializer(
             s"Node has identity $id, matching expected identifier " +
               s"$identifierName."
           )
-          Future.unit
+          // fixes previously initialized nodes with messed up keys
+          // TODO(#3115): we probably don't need this anymore; consider removing
+          rotateSigningKeyIfSameAsNamespaceKey(id, nodeIdentity)
         case Some(id) =>
           val msg =
             s"Node has identity $id, but identifier $identifierName " +

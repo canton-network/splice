@@ -86,9 +86,14 @@ class BootstrapPackageConfigDarUploadIntegrationTest
         "boostrap-package-config-dar-upload",
         sv4 = false,
         extraParticipantsConfigFileNames =
-          Seq("standalone-participant-extra.conf", "standalone-participant-extra-no-auth.conf"),
+          Seq(
+            "standalone-participant-extra.conf",
+            "standalone-participant-extra-no-auth.conf",
+            "standalone-participant-extra-auto-init.conf",
+          ),
         extraParticipantsEnvMap = Map(
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
           "EXTRA_PARTICIPANT_DB" -> ("participant_extra_" + dbsSuffix),
         ),
       )() {
