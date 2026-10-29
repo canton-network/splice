@@ -6,7 +6,7 @@
 - **transfers** of Amulet from a tracked party to a party that is not one of its expected
   recipients, and
 - for tracked parties with `alert_confirmations` set, every transaction in which the party
-  is a **confirming or submitting party**, according to the mediator verdict. This includes
+  is a **confirming party**, according to the mediator verdict. This includes
   transactions that are private to other parties than the DSO party, and rejected ones.
 
 Matches are printed to stdout as one JSON object per transaction, and optionally posted to
@@ -69,10 +69,14 @@ Each match has a reason:
 |--------------|------------------------------------|-------------------------------------------------------------------------|
 | `transfer`   | all tracked parties                | the transaction archives a holding of the party and creates one for `receiver`, who is not an expected recipient |
 | `confirming` | parties with `alert_confirmations` | the party is a confirming party of the transaction views in `views`    |
-| `submitting` | parties with `alert_confirmations` | the transaction was submitted on behalf of the party                   |
 
 Transfers directly, through a transfer preapproval, or through a token standard
 transfer instruction are all detected.
+
+A view's confirming parties are the signatories and acting parties of its action and, for
+the root views, the admin party of the submitting participant. So a participant's admin
+party confirms every transaction submitted through that participant; tracking it with
+`alert_confirmations` reports all of them.
 
 ### Output
 
@@ -106,7 +110,7 @@ A message lists a limited number of transactions; stdout always has all of them.
 
 The script follows Scan's event stream (`/v0/events`), which pairs each transaction, as far
 as the DSO party sees it, with the mediator verdict on it. The verdict names the confirming
-and submitting parties. A transfer archives holdings of the sender, but the stream doesn't
+parties of each view. A transfer archives holdings of the sender, but the stream doesn't
 say whose holdings were archived, so the script keeps the tracked parties' Amulet and
 LockedAmulet holdings in the SQLite file given by `--db`:
 

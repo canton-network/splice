@@ -538,10 +538,9 @@ class SlackFormatTest(unittest.TestCase):
 
     TRANSFER: Json = {"reason": "transfer", "event_id": "u:1", "template_id": AMULET, "receiver": CHARLIE, "amount": "10.0"}
     CONFIRMING: Json = {"reason": "confirming", "views": [0]}
-    SUBMITTING: Json = {"reason": "submitting"}
 
     def test_single_match(self) -> None:
-        text = spm.format_slack_message([self.match("u1", at(1), {ALICE: [self.TRANSFER, self.CONFIRMING, self.SUBMITTING]})])
+        text = spm.format_slack_message([self.match("u1", at(1), {ALICE: [self.TRANSFER, self.CONFIRMING]})])
         self.assertEqual(
             text.splitlines(),
             [
@@ -549,13 +548,12 @@ class SlackFormatTest(unittest.TestCase):
                 f"update `u1` at record time `{at(1)}` (migration 0)",
                 f"• `{ALICE}`: transfer of 10.0 to `{CHARLIE}` (not an expected recipient)",
                 f"• `{ALICE}`: confirming party",
-                f"• `{ALICE}`: submitting party",
             ],
         )
 
     def test_private_and_rejected_transactions_are_marked(self) -> None:
         private = {**self.match("u1", at(1), {ALICE: [self.CONFIRMING]}), "verdict_result": "VERDICT_RESULT_ACCEPTED", "private": True}
-        rejected = {**self.match("u2", at(2), {ALICE: [self.SUBMITTING]}), "verdict_result": "VERDICT_RESULT_REJECTED"}
+        rejected = {**self.match("u2", at(2), {ALICE: [self.CONFIRMING]}), "verdict_result": "VERDICT_RESULT_REJECTED"}
         self.assertIn(f"update `u1` at record time `{at(1)}` (migration 0, private)", spm.format_slack_message([private]))
         self.assertIn(f"update `u2` at record time `{at(2)}` (migration 0, rejected)", spm.format_slack_message([rejected]))
         lines = spm.format_slack_message([private, rejected]).splitlines()
@@ -563,7 +561,7 @@ class SlackFormatTest(unittest.TestCase):
             lines[1:],
             [
                 f"• `u1` at `{at(1)}` (private): `{ALICE}`: confirming party",
-                f"• `u2` at `{at(2)}` (rejected): `{ALICE}`: submitting party",
+                f"• `u2` at `{at(2)}` (rejected): `{ALICE}`: confirming party",
             ],
         )
 
@@ -782,12 +780,12 @@ class MatchingTest(MonitorTestCase):
         monitor = self.seeded(ONLY_ALICE)
         self.assertIsNone(monitor.process_event(transfer("u1", at(1), CHARLIE, "charlie-1", BOB, "10.0")))
 
-    def test_alert_confirmations_reports_confirming_and_submitting(self) -> None:
+    def test_alert_confirmations_reports_confirming(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
         item = transfer("u1", at(1), ALICE, "alice-1", CHARLIE, "10.0", "alice-change", "charlie-preapproval")
         self.assertEqual(
             summary(monitor.process_event(item)),
-            {ALICE: [("confirming", "-"), ("submitting", "-"), ("transfer", CHARLIE)]},
+            {ALICE: [("confirming", "-"), ("transfer", CHARLIE)]},
         )
 
     def test_confirming_parties_come_from_the_verdict_views(self) -> None:
@@ -799,6 +797,10 @@ class MatchingTest(MonitorTestCase):
             match["parties"],
             {BOB: [{"reason": "confirming", "views": [1, 2]}], CHARLIE: [{"reason": "confirming", "views": [2]}]},
         )
+
+    def test_submitters_that_do_not_confirm_are_not_reported(self) -> None:
+        monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
+        self.assertIsNone(monitor.process_event(event(verdict=verdict("u1", at(1), [[DSO]], [ALICE]))))
 
     def test_informees_do_not_confirm(self) -> None:
         monitor = self.seeded({"parties": {ALICE: {"alert_confirmations": True}}})
@@ -827,7 +829,7 @@ class MatchingTest(MonitorTestCase):
         assert match is not None
         self.assertEqual(match["verdict_result"], "VERDICT_RESULT_REJECTED")
         self.assertNotIn("private", match)
-        self.assertEqual(summary(match), {ALICE: [("confirming", "-"), ("submitting", "-")]})
+        self.assertEqual(summary(match), {ALICE: [("confirming", "-")]})
 
     def test_verdicts_are_only_reported_with_alert_confirmations(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
@@ -999,7 +1001,7 @@ class ReconfigurationTest(MonitorTestCase):
         self.assertNotLogged("re-seeding")
         self.assertEqual(
             [summary(m) for m in matches],
-            [{CHARLIE: [("confirming", "-"), ("submitting", "-"), ("transfer", BOB)]}],
+            [{CHARLIE: [("confirming", "-"), ("transfer", BOB)]}],
         )
 
     def test_other_changes_do_not_reseed(self) -> None:

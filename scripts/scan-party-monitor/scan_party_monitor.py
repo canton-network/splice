@@ -953,19 +953,15 @@ class Monitor:
         ]
 
     def _verdict_reasons(self, verdict: Json) -> List[Tuple[PartyId, Json]]:
-        """The parties with `alert_confirmations` that confirmed or submitted a transaction."""
+        """The parties with `alert_confirmations` that confirmed a transaction."""
         views = verdict["transaction_views"]["views"]
         confirmers = [{p for quorum in v["confirming_parties"] for p in quorum["parties"]} for v in views]
-        submitters = set(verdict["submitting_parties"])
-        alerting = sorted(self.confirmation_parties)
-        confirming: List[Tuple[PartyId, Json]] = [
+        return [
             (p, {"reason": "confirming", "views": confirmed})
-            for p in alerting
+            for p in sorted(self.confirmation_parties)
             for confirmed in [[v["view_id"] for v, c in zip(views, confirmers) if p in c]]
             if confirmed
         ]
-        submitting: List[Tuple[PartyId, Json]] = [(p, {"reason": "submitting"}) for p in alerting if p in submitters]
-        return confirming + submitting
 
 
 def event_position(item: Json) -> Tuple[int, str]:
