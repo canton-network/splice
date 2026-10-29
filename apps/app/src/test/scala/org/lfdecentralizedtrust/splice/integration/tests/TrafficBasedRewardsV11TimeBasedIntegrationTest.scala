@@ -188,6 +188,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     assertOldestOpenRound(6L)
 
     val sendRoundNoFa = 6L
+    val cursorBeforeNoFaSend = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
     clue(
       s"CIP-104 negative: non-FA submitter ($nonFaSubmitterParty) produces app-only, no asset activity in round $sendRoundNoFa"
     ) {
@@ -268,6 +269,55 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
               s"Round $sendRoundNoFa must have zero asset activity: non-FA submitter means findFASubmitter returns None → computeForFASubmitted never runs → no asset-side split"
         }
       }
+    }
+
+    clue("scan.getEventById surfaces submitting_app_provider per compute path") {
+      // FA-submitted path (round 5): submitting_app_provider = Some(assetMoverParty).
+      val postSendEvents = sv1ScanBackend.getEventHistory(
+        count = 1000,
+        after = Some(cursorBeforeSend),
+        encoding = CompactJson,
+      )
+      val faSubmittedEvent = postSendEvents
+        .find(_.assetActivityRecords.exists(_.value.nonEmpty))
+        .getOrElse(
+          fail(s"Expected an FA-submitted event with asset records after $cursorBeforeSend")
+        )
+      val faUpdateId = faSubmittedEvent.verdict
+        .map(_.updateId)
+        .getOrElse(fail("FA-submitted event should carry a verdict with an updateId"))
+      val faEvent = sv1ScanBackend
+        .getEventById(faUpdateId, None)
+        .getOrElse(fail(s"scan.getEventById($faUpdateId) returned None"))
+      faEvent.submittingAppProvider.map(_.value) shouldBe Some(
+        assetMoverParty.toProtoPrimitive
+      ) withClue
+        s"FA-submitted event $faUpdateId should report $assetMoverParty as submitting_app_provider"
+
+      // User-submitted path (round 6): submitting_app_provider absent — the field
+      // is only populated by computeForFASubmitted, not computeForUserSubmitted.
+      val postNoFaEvents = sv1ScanBackend.getEventHistory(
+        count = 1000,
+        after = Some(cursorBeforeNoFaSend),
+        encoding = CompactJson,
+      )
+      val userSubmittedEvent = postNoFaEvents
+        .find(e =>
+          e.appActivityRecords.exists(_.records.nonEmpty) && e.assetActivityRecords.isEmpty
+        )
+        .getOrElse(
+          fail(
+            s"Expected a user-submitted event with app records (and no asset records) after $cursorBeforeNoFaSend"
+          )
+        )
+      val noFaUpdateId = userSubmittedEvent.verdict
+        .map(_.updateId)
+        .getOrElse(fail("User-submitted event should carry a verdict with an updateId"))
+      val noFaEvent = sv1ScanBackend
+        .getEventById(noFaUpdateId, None)
+        .getOrElse(fail(s"scan.getEventById($noFaUpdateId) returned None"))
+      noFaEvent.submittingAppProvider shouldBe None withClue
+        s"User-submitted event $noFaUpdateId should have no submitting_app_provider"
     }
   }
 
