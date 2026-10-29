@@ -39,6 +39,7 @@ import {
   ProposalVotingInformation,
   VoteStatus,
 } from '../../utils/types';
+import { appKindLabel } from '../../utils/governance';
 import { ProposalVoteForm } from './ProposalVoteForm';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
 import { OpsPartiesDiff, OpsPartiesDisplay } from './OpsPartiesDisplay';
@@ -845,7 +846,7 @@ const FeatureAppSection = ({
       />
       <DetailItem
         label="App Kind"
-        value={appKind || 'Default (General)'}
+        value={appKindLabel(appKind ?? '')}
         labelId="proposal-details-feature-app-kind-label"
         valueId="proposal-details-feature-app-kind-value"
       />
