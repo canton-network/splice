@@ -307,3 +307,10 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Whole runs red (every job incl. docs/static_tests) with one compile error = main broken by two individually green
   PRs (10-28: #8097 removed `truncateInstant`, #8056 used it; fixed by #8109). Close all per-job issues as fixed by the
   unbreak PR; check whether nightlies ran before the fix.
+
+## T. CI test credentials invalid (2026-10-29)
+- GCS: `StorageException: Error getting access token for service account: 400 ... invalid_grant ... Invalid JWT
+  Signature ... iss: splice-data-export-tests@da-cn-splice` in GcpBucketPeriodicBackupIntegrationTest /
+  PeriodicTopologySnapshotIntegrationTest / key-download; whole CI on all branches; fix = new SA key in GHA secret.
+- Auth0: compose validator "with auth": `Failed to start secret machine login ... oauth2: "access_denied"` from
+  build-tools/splice-compose.sh auth0 login (AUTH0_TESTS_MANAGEMENT_API_CLIENT_*). Umbrellas 10896 / 10901.

@@ -389,3 +389,11 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10745 | Devnet Backup backup_cluster (cni GHA 40721834944) | - | needs log |
 | 10741, 10892 | ciperiodic deploy_sv_reonboard (526074, 526417) | - | needs log; cni #7748 |
 | 10843, 10844, 10846 | ciperiodic monitor_sv_catchup_test / deploy_lsu_operator / non_devnet (526215, 526299, 526332) | lead: main compile break | needs log; 10844 = first LSU after cni #7746 |
+
+## 2026-10-29b (round 2 of the day)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 10894 10895 10896 10897 10898 10899 10900 | GCS SA key for splice-data-export-tests@da-cn-splice rejected ("Invalid JWT Signature") since ~09:40, all branches; umbrella 10896 | `2026-10-29b/creds-and-singles.md` |
+| 10901 10902 | Auth0 CLI client-credentials login access_denied in compose-with-auth (0.9.3/0.9.4); umbrella 10901 | same |
+| 10893 | SplitwellFrontendIntegrationTest error-on-unknown-party, first hit, open | same |
