@@ -4,6 +4,13 @@
 
   - Scan App
 
+    - `/v0/events` responses now include two new per-event fields:
+
+      - `asset_activity_records`: asset-side activity records (CIP-104). Omitted from JSON when there is no asset activity.
+      - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app. Omitted from JSON when absent.
+
+    - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
+
     - The following request fields now have a `maxItems` bound of 1000; requests exceeding it are rejected with 400:
 
       - `/v0/open-and-issuing-mining-rounds`: `cached_open_mining_round_contract_ids`, `cached_issuing_round_contract_ids`

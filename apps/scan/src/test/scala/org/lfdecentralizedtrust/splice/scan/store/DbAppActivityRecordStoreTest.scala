@@ -35,7 +35,7 @@ class DbAppActivityRecordStoreTest
         (store, historyId) <- newStore()
         verdictRowId <- insertVerdictRow(historyId, CantonTimestamp.now(), "update-1")
 
-        record = AppActivityRecordT(
+        record = AppAndAssetActivityRecordT(
           verdictRowId = verdictRowId,
           roundNumber = roundNumber,
           appProviderParties = Seq("app1::provider", "app2::provider"),
@@ -1268,8 +1268,8 @@ class DbAppActivityRecordStoreTest
       roundNumber: Long,
       appProviderParties: Seq[String],
       appActivityWeights: Seq[Long],
-  ): AppActivityRecordT =
-    AppActivityRecordT(
+  ): AppAndAssetActivityRecordT =
+    AppAndAssetActivityRecordT(
       verdictRowId = verdictRowId,
       roundNumber = roundNumber,
       appProviderParties = appProviderParties,

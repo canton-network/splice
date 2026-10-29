@@ -128,8 +128,10 @@ import org.lfdecentralizedtrust.splice.store.{
   VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
+import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 
 import java.lang.IllegalStateException
 import scala.collection.immutable.SortedMap
@@ -805,6 +807,43 @@ class HttpScanHandler(
     }
   }
 
+  // TODO(#7837): cover the asset_activity_records and submitting_app_provider fields in the
+  // integration test.
+  private def buildEventHistoryItem(
+      verdictWithViewsO: Option[eventStore.Verdict],
+      updateO: Option[TreeUpdateWithMigrationId],
+      appAndAssetActivityRecordO: Option[AppAndAssetActivityRecordT],
+      encoding: definitions.DamlValueEncoding,
+  )(implicit tc: TraceContext): definitions.EventHistoryItem = {
+    val encodedUpdateV2 = updateO.map(
+      ScanHttpEncodings.encodeUpdateV2(
+        _,
+        encoding,
+        ScanHttpEncodings.V1,
+        hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
+        externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
+      )
+    )
+    val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
+      ScanHttpEncodings.encodeVerdict(v, views)
+    }
+    val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
+      v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
+    }
+    val appActivityRecordEncoded =
+      appAndAssetActivityRecordO.map(ScanHttpEncodings.encodeAppActivityRecord)
+    definitions.EventHistoryItem(
+      update = encodedUpdateV2,
+      verdict = verdictEncoded,
+      trafficSummary = trafficSummaryEncoded,
+      appActivityRecords = appActivityRecordEncoded,
+      assetActivityRecords =
+        ScanHttpEncodings.encodeAssetActivityRecord(appAndAssetActivityRecordO),
+      submittingAppProvider =
+        ScanHttpEncodings.encodeSubmittingAppProvider(appAndAssetActivityRecordO),
+    )
+  }
+
   def getEventById(
       updateId: String,
       encoding: definitions.DamlValueEncoding,
@@ -824,40 +863,19 @@ class HttpScanHandler(
         case Some((verdictWithViewsO, updateO)) =>
           val verdictRowIdO = verdictWithViewsO.map { case (v, _) => v.rowId }
           for {
-            appActivityRecordO <- verdictRowIdO match {
+            appAndAssetActivityRecordO <- verdictRowIdO match {
               case Some(rowId) =>
-                eventStore.getAppActivityRecords(Seq(rowId)).map(_.get(rowId))
+                eventStore.getAppAndAssetActivityRecords(Seq(rowId)).map(_.get(rowId))
               case None => Future.successful(None)
             }
-          } yield {
-            val encodedUpdateV2 = updateO
-              .map(
-                ScanHttpEncodings.encodeUpdateV2(
-                  _,
-                  encoding,
-                  ScanHttpEncodings.V1,
-                  hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
-                  externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
-                )
-              )
-            val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-              ScanHttpEncodings.encodeVerdict(v, views)
-            }
-            val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-              v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
-            }
-            val appActivityRecordEncoded = appActivityRecordO.map(
-              ScanHttpEncodings.encodeAppActivityRecord
+          } yield Right(
+            buildEventHistoryItem(
+              verdictWithViewsO,
+              updateO,
+              appAndAssetActivityRecordO,
+              encoding,
             )
-            Right(
-              definitions.EventHistoryItem(
-                encodedUpdateV2,
-                verdictEncoded,
-                trafficSummaryEncoded,
-                appActivityRecordEncoded,
-              )
-            )
-          }
+          )
       }
     } yield result
   }
@@ -902,32 +920,16 @@ class HttpScanHandler(
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
           verdictWithViewsO.map { case (v, _) => v.rowId }
         }
-        appActivityRecordMap <- eventStore.getAppActivityRecords(verdictRowIds)
+        appAndAssetActivityRecordMap <- eventStore.getAppAndAssetActivityRecords(verdictRowIds)
       } yield events.map { case (verdictWithViewsO, updateO) =>
-        val encodedUpdateV2 = updateO
-          .map(
-            ScanHttpEncodings.encodeUpdateV2(
-              _,
-              encoding,
-              ScanHttpEncodings.V1,
-              hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
-              externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
-            )
-          )
-        val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-          ScanHttpEncodings.encodeVerdict(v, views)
+        val appAndAssetActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
+          appAndAssetActivityRecordMap.get(v.rowId)
         }
-        val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-          v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
-        }
-        val appActivityRecordEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-          appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAppActivityRecord)
-        }
-        definitions.EventHistoryItem(
-          encodedUpdateV2,
-          verdictEncoded,
-          trafficSummaryEncoded,
-          appActivityRecordEncoded,
+        buildEventHistoryItem(
+          verdictWithViewsO,
+          updateO,
+          appAndAssetActivityRecordForEvent,
+          encoding,
         )
       }.toVector
     }
@@ -2867,8 +2869,17 @@ class HttpScanHandler(
                     status = "Ok",
                     roundNumber = activityTotal.roundNumber,
                     totalAppActivityWeight = activityTotal.totalRoundAppActivityWeight,
+                    totalAssetActivityWeight = activityTotal.totalRoundAssetActivityWeight,
                     activePartiesCount = activityTotal.activeAppProviderPartiesCount,
                     activityRecordsCount = activityTotal.activityRecordsCount,
+                    totalAppRewardFromAppActivity =
+                      rewardTotal.totalAppRewardFromAppActivity.toString,
+                    totalAppRewardFromAssetActivity =
+                      rewardTotal.totalAppRewardFromAssetActivity.toString,
+                    issuancePerFeaturedAppActivity =
+                      rewardTotal.issuancePerFeaturedAppActivity.toString,
+                    issuancePerFeaturedAssetActivity =
+                      rewardTotal.issuancePerFeaturedAssetActivity.toString,
                     totalAppRewardMintingAllowance =
                       rewardTotal.totalAppRewardMintingAllowance.toString,
                     totalAppRewardThresholded = rewardTotal.totalAppRewardThresholded.toString,
