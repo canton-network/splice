@@ -229,6 +229,22 @@ testSubstitution_updateFails_tsv1 = do
     submitWithTransferContext registry (actAs instrId.admin) \context ->
       exerciseCmd substitutionCid V1.TransferInstruction_Update with extraActors = []; extraArgs = emptyExtraArgs with context
 
+-- | Negative: a proposal can't be accepted after it expires, so it's safe to retry creating it.
+testSubstitution_acceptAfterExpiryFails_tsv1 : Script ()
+testSubstitution_acceptAfterExpiryFails_tsv1 = do
+  let ops = tsv1Operations
+  (env@TestEnv{..}, targetCid, _, substitutionCid) <- setupSubstitution ops
+  [(_, proposal)] <- query @GovernanceLockSubstitution bob
+
+  setTime proposal.expiresAt
+  expectFailureContaining "Ledger time is at or past deadline 'expiresAt'" =<<
+    ops.acceptInstruction env substitutionCid alice
+
+  -- the proposal is still active, and the target lock is untouched
+  [_] <- query @GovernanceLockSubstitution bob
+  Some target <- queryContractId alice targetCid
+  target.amount === 50000.0
+
 testSubstitution_vestingTarget_tsv1 : Script ()
 testSubstitution_vestingTarget_tsv1 = testSubstitution_vestingTarget tsv1Operations
 

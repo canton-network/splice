@@ -119,6 +119,7 @@ data GovernanceLockSubstitution_DsoExpireResult = GovernanceLockSubstitution_Dso
 governanceLockSubstitution_acceptImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> ExtraArgs -> Update GovernanceLockSubstitution_AcceptResult
 governanceLockSubstitution_acceptImpl self GovernanceLockSubstitution{..} actors extraArgs = do
   checkActors actors [[target.owner]]
+  assertWithinDeadline "expiresAt" expiresAt
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext target.dso extraArgs.context
   -- The legs report the memo of the accepted proposal
   let reason = reasonFromMeta $ substitutionGovernanceLockMetadata target.specification

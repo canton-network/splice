@@ -337,6 +337,24 @@ testLockTransfer_acceptPartialGovernanceLock ops = do
   archivedTransfer <- queryContractId alice transferCid
   archivedTransfer === None
 
+-- | Negative: a proposal can't be accepted after it expires, so it's safe to retry creating it.
+testLockTransfer_acceptAfterExpiryFails_tsv1 : Script ()
+testLockTransfer_acceptAfterExpiryFails_tsv1 = do
+  let ops = tsv1Operations
+  (env@TestEnv{..}, lockCid, _, transferCid) <- setupGovernanceLockTransfer ops 40000.0
+  Some proposal <- queryContractId bob transferCid
+
+  setTime proposal.expiresAt
+  expectFailureContaining "Ledger time is at or past deadline 'expiresAt'" =<<
+    ops.acceptInstruction env (coerceContractId transferCid) bob
+
+  -- the proposal is still active, and alice still owns the source lock
+  Some _ <- queryContractId alice transferCid
+  Some lock <- queryContractId alice lockCid
+  lock.amount === 100000.0
+  bobLocks <- governanceLocksOf bob
+  bobLocks === []
+
 testLockTransfer_acceptFullGovernanceLock_tsv1 : Script ()
 testLockTransfer_acceptFullGovernanceLock_tsv1 = testLockTransfer_acceptFullGovernanceLock tsv1Operations
 
