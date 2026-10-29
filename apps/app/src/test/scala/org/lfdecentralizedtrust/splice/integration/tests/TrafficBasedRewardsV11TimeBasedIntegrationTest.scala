@@ -142,6 +142,13 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     bobWalletClient.createTransferPreapproval()
     aliceWalletClient.tap(1000.0)
 
+    // Non-FA submitter for the negative-case clue below: splitwell's wallet user
+    // never gets a FA grant, so a transfer it submits should miss both
+    // findFASubmitter paths and fall through to computeForUserSubmitted (which
+    // produces app records but no asset records).
+    val nonFaSubmitterParty = onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
+    splitwellWalletClient.tap(1000.0)
+
     assertOldestOpenRound(0)
 
     clue(
@@ -175,8 +182,24 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
     }
 
-    // Advance past sendRound so its totals are computed and exposed by scan.
-    for (round <- 6 to 7) {
+    // Advance to round 6 so the negative-case send below lands in a distinct round
+    // from the FA-submitted send above.
+    advanceRoundsToNextRoundOpening
+    assertOldestOpenRound(6L)
+
+    val sendRoundNoFa = 6L
+    clue(
+      s"CIP-104 negative: non-FA submitter ($nonFaSubmitterParty) produces app-only, no asset activity in round $sendRoundNoFa"
+    ) {
+      splitwellWalletClient.transferPreapprovalSend(
+        assetParty,
+        BigDecimal(5),
+        UUID.randomUUID().toString,
+      )
+    }
+
+    // Advance past both send rounds so their totals are computed and exposed by scan.
+    for (round <- 7 to 8) {
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
@@ -228,6 +251,23 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       })
       eventsNamingAssetParty should not be empty withClue
         s"At least one event should list $assetParty as an asset activity record party with weight > 0"
+    }
+
+    clue(
+      s"Round $sendRoundNoFa negative case: non-FA submitter produces app records (bob as FA confirmer) but zero asset activity"
+    ) {
+      eventually(timeUntilSuccess = 30.seconds) {
+        inside(sv1ScanBackend.getRewardAccountingActivityTotals(sendRoundNoFa)) {
+          case GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(t) =>
+            t.activityRecordsCount should be >= 1L withClue
+              s"Round $sendRoundNoFa should have at least one activity record (bob is a FA confirmer on the splitwell→bob transfer)"
+            t.totalAppActivityWeight should be > 0L withClue
+              s"Round $sendRoundNoFa should have non-zero app activity weight (attributed to bob via computeForUserSubmitted)"
+            t.totalAssetActivityWeight shouldBe 0L withClue
+              s"Round $sendRoundNoFa must have zero asset activity: non-FA submitter means findFASubmitter returns None → computeForFASubmitted never runs → no asset-side split"
+        }
+      }
     }
   }
 
