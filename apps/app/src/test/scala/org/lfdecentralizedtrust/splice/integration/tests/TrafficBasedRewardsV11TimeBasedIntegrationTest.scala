@@ -4,15 +4,24 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
 import java.util.{Optional, UUID}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight_Update,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   RewardConfig,
   USD,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_GrantFeaturedAppRight,
+  DsoRules_UpdateFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_GrantFeaturedAppRight,
+  SRARC_UpdateFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
@@ -112,9 +121,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     // every OpenMiningRound created after bootstrap snapshots the updated
     // AmuletConfig and so that lookupFeaturedAppPartiesAsOf(roundOpensAt) returns
     // the FAK_ASSETMOVING / FAK_ASSET grants for the round that observes the send.
-    // Reusing the alice/bob wallet clients avoids the UNKNOWN_SUBMITTERS race
-    // that onboardUser hits when it tries to submit from a freshly-allocated
-    // party before topology propagation.
     val assetMoverParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     val assetParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
 
@@ -354,6 +360,60 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
           s"Cap-lowered round ratio ($capCrossRatioPct%) should be well under 2/3 of baseline ($baselineRatioPct%) — expect ~half"
       }
     }
+
+    // Snapshot the cap-crossed round's totals so the weight-change round below
+    // can compare against them (same cap of 0.05, but assetParty weight 1→3).
+    val capCrossRoundTotals =
+      inside(sv1ScanBackend.getRewardAccountingActivityTotals(capCrossRound)) {
+        case GetRewardAccountingActivityTotalsResponse.members
+              .RewardAccountingActivityTotalsOk(t) =>
+          t
+      }
+
+    clue(s"Triple assetParty's FA activity weight so step-8 attribution scales up") {
+      updateFeaturedAppRightWeight(assetParty, BigDecimal(3))
+    }
+
+    // Advance to let the new weight propagate into lookupFeaturedAppPartiesAsOf.
+    for (round <- 14 to 16) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
+    }
+
+    val weightChangeRound = 16L
+    clue(
+      s"Send in round $weightChangeRound to measure step-8 weight application (weight=3, cap=0.05 unchanged)"
+    ) {
+      aliceWalletClient.transferPreapprovalSend(
+        assetParty,
+        BigDecimal(10),
+        UUID.randomUUID().toString,
+      )
+    }
+    for (round <- 17 to 18) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
+    }
+
+    clue(
+      s"Round $weightChangeRound asset ratio should scale ~3× over round $capCrossRound's (weight 3 vs 1, cap unchanged)"
+    ) {
+      assertRoundTotalsOk(weightChangeRound) { t =>
+        t.totalAppActivityWeight should be > 0L
+        t.totalAssetActivityWeight should be > 0L
+        // Step 8 of computeAssetActivity applies the FA weight AFTER cap clamp.
+        // Weight 1→3 triples assetParty's capped share; DSO's share (weight 0.1,
+        // re-attributed to the submitter) is unaffected. Net ratio climbs
+        // from ~5.5% toward ~15.5%. Bounds pin "much larger than 2×, less than 4×".
+        val capCrossRatioPct = capCrossRoundTotals.totalAssetActivityWeight * 100L /
+          capCrossRoundTotals.totalAppActivityWeight
+        val weightChangeRatioPct = t.totalAssetActivityWeight * 100L / t.totalAppActivityWeight
+        weightChangeRatioPct should be > capCrossRatioPct * 2L withClue
+          s"Weight-tripled round ratio ($weightChangeRatioPct%) should be at least 2× capCross ratio ($capCrossRatioPct%)"
+        weightChangeRatioPct should be < capCrossRatioPct * 4L withClue
+          s"Weight-tripled round ratio ($weightChangeRatioPct%) should be less than 4× capCross ratio ($capCrossRatioPct%) — DSO's share is weight-independent"
+      }
+    }
   }
 
   // Votes an AmuletConfig update that sets the three TBAR v1.1 RewardConfig
@@ -438,6 +498,40 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         right.payload.activityWeight.toScala
           .map(BigDecimal(_))
           .getOrElse(BigDecimal(1)) shouldBe weight
+      }
+    }
+  }
+
+  // Votes an UpdateFeaturedAppRight choice that re-grants the FA right with a new
+  // activityWeight (appKind and opsParties are preserved by Daml's `this with ...`).
+  // Blocks until scan observes the new weight.
+  private def updateFeaturedAppRightWeight(
+      party: PartyId,
+      newWeight: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val rightCid = clue(s"Look up featured app right for $party") {
+      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
+    }
+    val action = new ARC_DsoRules(
+      new SRARC_UpdateFeaturedAppRight(
+        new DsoRules_UpdateFeaturedAppRight(
+          rightCid,
+          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
+        )
+      )
+    )
+    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
+    clue(s"Wait for $party featured app right weight to be $newWeight") {
+      eventually() {
+        val weight = sv1ScanBackend
+          .lookupFeaturedAppRight(party)
+          .value
+          .payload
+          .activityWeight
+          .toScala
+          .map(BigDecimal(_))
+        weight.getOrElse(BigDecimal(1)).compare(newWeight) shouldBe 0 withClue
+          s"activity weight for $party should be $newWeight"
       }
     }
   }
