@@ -811,7 +811,7 @@ class Monitor:
                 if stop_at is None
                 else list(itertools.takewhile(lambda e: parse_time(event_position(e)[1]) <= stop_at, events))
             )
-            matches = [m for m in map(self.process_event, in_range) if m is not None]
+            matches = [m for m in map(self.process_event_history_item, in_range) if m is not None]
             for m in matches:
                 print(json.dumps(m), flush=True)
             if matches and not unposted:
@@ -871,7 +871,7 @@ class Monitor:
             f"{self.stats['transactions']} transactions, {self.stats['matches']} matching"
         )
 
-    def process_event(self, item: Json) -> Optional[Json]:
+    def process_event_history_item(self, item: Json) -> Optional[Json]:
         """Updates the holdings from an event of Scan's event stream; returns its match, if any."""
         update: Optional[Json] = item.get("update")
         verdict: Optional[Json] = item.get("verdict")
