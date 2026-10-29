@@ -128,7 +128,7 @@ export type ProposalActionMap = {
   SRARC_CreateUnallocatedUnclaimedActivityRecord: UnclaimedActivityRecordProposal;
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
-  // TODO(#8059): remove with the legacy SRARC_UpdateFeaturedAppRight form in Splice 0.11.0
+  // TODO(#8058): remove with the legacy SRARC_UpdateFeaturedAppRight form in Splice 0.11.0
   SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
   SRARC_CreateFeaturedAppConfigUpdateInstruction: FeatureAppConfigUpdateProposal;
   // If no proposal type is defined, can use unknown or a specific type:
@@ -256,7 +256,7 @@ export type NonConfigProposalFormData =
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData
-  // TODO(#8059): remove with the legacy SRARC_UpdateFeaturedAppRight form in Splice 0.11.0
+  // TODO(#8058): remove with the legacy SRARC_UpdateFeaturedAppRight form in Splice 0.11.0
   | UpdateFeatureAppFormData
   | CreateFeaturedAppConfigUpdateFormData;
 
