@@ -32,10 +32,6 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
     with SvTaskBasedTrigger[Task] {
   private val store = svTaskContext.dsoStore
 
-  /** Override with how to retrieve the list of tasks that should be processed in parallel right now.
-    *
-    * The DB queries underlying it SHOULD be efficient enough to run in a loop.
-    */
   override protected def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = {
     store
       .listFeaturedAppConfigUpdateInstructionSample(PageLimit.tryCreate(context.config.parallelism))
