@@ -161,7 +161,7 @@ jobs:
       test_name: logical-sync-upgrade
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
-      protocol_version: ${{ inputs.protocol_version }}
+      protocol_version: 36
     secrets: inherit
 
   scala_test_roll_forward_lsu:
