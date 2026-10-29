@@ -17,7 +17,8 @@ module Splice.GovernanceLock.Request (
   Parser(..),
   runParser,
   assertParsed,
-  missingMetadataMessage,
+  missingMemoKeyMessage,
+  invalidMemoValueMessage,
   governanceLockMetadataParser,
   governanceLockTagParser,
   governanceLockKindParser,
@@ -28,6 +29,7 @@ module Splice.GovernanceLock.Request (
 import Prelude hiding (forA)
 import DA.Action (unless)
 import DA.Assert
+import DA.Date (Month(..), date)
 import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
 import DA.Text qualified as Text
@@ -46,7 +48,6 @@ import Splice.GovernanceLock
 import Splice.GovernanceLock.Substitution
 import Splice.GovernanceLock.Transfer
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
-import Splice.TokenStandard.Utils.Internal.Conversions (relTimeFromMeta, timeFromMeta)
 import Splice.Util
 
 data GovernanceLockRequest
@@ -92,13 +93,22 @@ governanceLockRequestTagFromText : Text -> Optional GovernanceLockRequestTag =
 getOptionalMetadata : Text -> Metadata -> Optional Text
 getOptionalMetadata key meta = TextMap.lookup key meta.values
 
-missingMetadataMessage : Text -> Text
-missingMetadataMessage key = "Missing metadata field '" <> key <> "'"
+-- | Refers to a key as the user wrote it in the memo, i.e., without the `cipMetaPrefix`
+-- that `governanceLockMetadataParser` adds.
+memoKeyText : Text -> Text
+memoKeyText key = "memo key '" <> removeMetaKeyPrefix key <> "'"
+
+missingMemoKeyMessage : Text -> Text
+missingMemoKeyMessage key = "Missing " <> memoKeyText key
+
+-- | Arguments: what the value should be (e.g. "decimal"), the key, and the value.
+invalidMemoValueMessage : Text -> Text -> Text -> Text
+invalidMemoValueMessage kind key value = "Invalid " <> kind <> " in " <> memoKeyText key <> ": '" <> value <> "'"
 
 getRequiredMetadata' : CanAssert m => (Text -> m a) -> Text -> Metadata -> m a
 getRequiredMetadata' parse key meta = case getOptionalMetadata key meta of
   Some v -> parse v
-  None -> assertFail $ missingMetadataMessage key
+  None -> assertFail $ missingMemoKeyMessage key
 
 getRequiredMetadata : CanAssert m => Text -> Metadata -> m Text
 getRequiredMetadata = getRequiredMetadata' pure
@@ -354,19 +364,24 @@ requiredMetadataParser key = inputParser >>= getRequiredMetadata key
 optionalMetadataParser : Text -> Parser Metadata (Optional Text)
 optionalMetadataParser key = getOptionalMetadata key <$> inputParser
 
+-- | Parse a number of microseconds, as written by `encodeTime` and `encodeRelTime`.
+microsMetadataParser : Text -> Parser Metadata RelTime
+microsMetadataParser key = requiredMetadataParser key >>= \t ->
+  validationParser $ (convertMicrosecondsToRelTime <$> Text.parseInt t) <?> invalidMemoValueMessage "integer" key t
+
 timeMetadataParser : Text -> Parser Metadata Time
-timeMetadataParser key = Parser \meta -> (timeFromMeta key meta) <?> (missingMetadataMessage key)
+timeMetadataParser key = addRelTime (time (date 1970 Jan 1) 0 0 0) <$> microsMetadataParser key
 
 iso8601TimeFromTextParser : Text -> Text -> Parser i Time
 iso8601TimeFromTextParser key input = validationParser $ validate $ case parseIso8601UtcTime input of
-  Left e -> Left $ "Error in metadata field '" <> key <> "': " <> e
+  Left e -> Left $ "Error in " <> memoKeyText key <> ": " <> e
   Right t -> Right t
 
 iso8601TimeMetadataParser : Text -> Parser Metadata Time
 iso8601TimeMetadataParser key = requiredMetadataParser key >>= iso8601TimeFromTextParser key
 
 relTimeMetadataParser : Text -> Parser Metadata RelTime
-relTimeMetadataParser key = Parser \meta -> (relTimeFromMeta key meta) <?> (missingMetadataMessage key)
+relTimeMetadataParser = microsMetadataParser
 
 -- | Parse a URL-style key value string 'key1=value1&...&key2=value2' into a key-value map.
 keyValueParser : Text -> Parser i (TextMap.TextMap Text)
@@ -374,13 +389,10 @@ keyValueParser keyValues =
   TextMap.fromList <$> forA (Text.splitOn "&" keyValues) \keyValue ->
     case Text.splitOn "=" keyValue of
       [k, v] -> pure (k, v)
-      l -> assertFail $ "Unable to map a key value pair, from list: " <> show l
-
-invalidPartyMessage : Text -> Text -> Text
-invalidPartyMessage key party = "Invalid party in metadata field '" <> key <> "': " <> party
+      _ -> assertFail $ "Invalid memo entry '" <> keyValue <> "': expected 'key=value'"
 
 partyFromTextParser : Text -> Text -> Parser i Party
-partyFromTextParser key party = validationParser $ (partyFromText party) <?> (invalidPartyMessage key party)
+partyFromTextParser key party = validationParser $ (partyFromText party) <?> invalidMemoValueMessage "party" key party
 
 partyFromMetadataParser : Text -> Parser Metadata Party
 partyFromMetadataParser key = requiredMetadataParser key >>= partyFromTextParser key
@@ -446,7 +458,7 @@ lockStateParser : Parser Metadata LockState
 lockStateParser = optionalMetadataParser lockStatusMetaKey >>= \case
   None -> pure LS_Locked
   Some t | Some state <- lockStateFromText t -> pure state
-  Some t -> assertFail $ "Invalid value in " <> lockStatusMetaKey <> " metadata field: '" <> t <> "'"
+  Some t -> assertFail $ invalidMemoValueMessage "value" lockStatusMetaKey t
 
 glr_transferLock_parser : Parser Metadata GovernanceLockRequest
 glr_transferLock_parser = do
@@ -495,7 +507,7 @@ parseGovernanceLockRequestTSv1 dso receiver config rawMeta = do
 
 amountParser : Text -> Parser Metadata Decimal
 amountParser key = requiredMetadataParser key >>= \t ->
-  validationParser $ (Text.parseDecimal t) <?> ("Invalid decimal in " <> key <> " metadata field: '" <> t <> "'")
+  validationParser $ (Text.parseDecimal t) <?> invalidMemoValueMessage "decimal" key t
 
 unlockAmountParser : Parser Metadata Decimal
 unlockAmountParser = amountParser unlockAmountMetaKey

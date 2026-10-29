@@ -230,7 +230,7 @@ testLockTransfer_failures ops expectedAuthFailure = do
   -- The TSv1 request must not have expired, and must name the new owner.
   expectFailureContaining "transfer.executeBefore" =<<
     ops.proposeTransfer' (testEnvRegistries env) alice transfer \r -> r with executeBefore = now `addRelTime` hours (-1)
-  expectFailureContaining (missingMetadataMessage newLockOwnerMetaKey) =<<
+  expectFailureContaining (missingMemoKeyMessage newLockOwnerMetaKey) =<<
     ops.proposeTransfer' (testEnvRegistries env) alice transfer \r -> r with
       meta = reasonToMeta
         (tsv1RequestMemo' GLRT_TransferLock (governanceLockKind lock.specification) [(transferAmountMetaKey, "40000.0")])

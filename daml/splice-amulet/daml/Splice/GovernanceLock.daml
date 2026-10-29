@@ -51,6 +51,7 @@ module Splice.GovernanceLock (
   encodeLockCompatMemo,
   encodeGovernanceLockMetadataWithRequest,
   cipMetaPrefix,
+  removeMetaKeyPrefix,
   cipMemoPrefix,
   requestMetaKey,
   unlockAmountMetaKey,
@@ -827,10 +828,10 @@ governanceLockKindFromTagAndSubject tag subject =
     tagText = governanceLockTagToText tag
     parseProvider = case partyFromText subject of
       Some p -> pure p
-      None -> assertFail $ "Invalid provider for " <> tagText <> ": " <> subject
+      None -> assertFail $ "Invalid provider for " <> tagText <> ": '" <> subject <> "'"
     parseSvName
       | Text.isPred (\c -> c == "-" || Text.isAlphaNum c) subject = pure subject
-      | otherwise = assertFail $ "Invalid SV name for " <> tagText <> ": " <> subject
+      | otherwise = assertFail $ "Invalid SV name for " <> tagText <> ": '" <> subject <> "'"
 
 data LockState = LS_Locked | LS_Vesting
   deriving (Eq, Enum, Bounded)
