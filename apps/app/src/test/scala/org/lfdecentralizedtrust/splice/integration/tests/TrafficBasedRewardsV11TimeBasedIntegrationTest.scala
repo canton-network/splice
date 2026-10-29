@@ -172,6 +172,10 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     charlieWalletClient.createTransferPreapproval()
     sv1WalletClient.createTransferPreapproval()
     aliceWalletClient.tap(1000.0)
+    // bob also needs amulet so he can submit a transfer himself (FAK_ASSET-as-submitter
+    // scenario in the post-vote round — exercises the compute path that skips
+    // computeAssetActivity for non-ASSETMOVING FA submitters).
+    bobWalletClient.tap(1000.0)
 
     // Non-FA submitter for the baseline round's negative-case leg: splitwell's
     // wallet user never gets a FA grant, so a transfer it submits should miss
@@ -331,17 +335,21 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       assertOldestOpenRound(round.toLong)
     }
 
-    // Round 10 scenario: three cap=0.05 cases in parallel.
+    // Round 10 scenario: four cap=0.05 cases in parallel.
     // - alice→assetParty (weight=1): exercises cap clamp (~5% per-record asset ratio).
     // - alice→highWeightAssetParty (weight=3): exercises step-8 weight application
     //   atop the same cap (~15% per-record asset ratio).
     // - alice→doomedAssetParty (revoked): exercises post-revocation attribution —
     //   doomedAssetParty is no longer a FAK_ASSET confirmer so its asset activity
     //   record is absent; only DSO's share remains, re-attributed to the submitter.
+    // - bob→highWeightAssetParty (FAK_ASSET submitter): exercises the compute path
+    //   that recognises bob as the FA submitter but skips computeAssetActivity
+    //   (only FAK_ASSETMOVING submitters trigger the asset split). Bob gets full
+    //   burn as app activity; no asset-side records are produced for this verdict.
     val postVoteRound = 10L
     val cursorBeforePostVote = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
     clue(
-      s"Round $postVoteRound: cap-crossed (w=1) + weight-tripled (w=3) + post-revocation (doomed) in parallel"
+      s"Round $postVoteRound: cap-crossed + weight-tripled + post-revocation + FAK_ASSET-submitter in parallel"
     ) {
       aliceWalletClient.transferPreapprovalSend(
         assetParty,
@@ -356,6 +364,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       aliceWalletClient.transferPreapprovalSend(
         doomedAssetParty,
         BigDecimal(10),
+        UUID.randomUUID().toString,
+      )
+      bobWalletClient.transferPreapprovalSend(
+        highWeightAssetParty,
+        BigDecimal(5),
         UUID.randomUUID().toString,
       )
     }
@@ -426,6 +439,32 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         BigDecimal(t.totalAppRewardThresholded) should be > BigDecimal(0) withClue
           s"Round $postVoteRound: at least one party should fall below the lowered 5 USD threshold"
       }
+    }
+
+    clue(
+      s"Round $postVoteRound FAK_ASSET-submitter event (bob→charlie): bob gets full burn as app activity; no asset-side"
+    ) {
+      // When a FAK_ASSET party submits (vs. only confirms), computeForFASubmitted
+      // recognises them via findFASubmitter but the match guard skips
+      // computeAssetActivity — only FAK_ASSETMOVING submitters trigger the
+      // asset-side split. Submitter gets the full burn as a single app record;
+      // assetActivityRecords stays absent for this verdict, even for FAK_ASSET
+      // confirmers like highWeightAssetParty.
+      val submitterProto = assetParty.toProtoPrimitive
+      val event = postVoteEvents
+        .find(_.submittingAppProvider.exists(_.value == submitterProto))
+        .getOrElse(
+          fail(
+            s"Expected an event with submittingAppProvider = $assetParty in round $postVoteRound"
+          )
+        )
+      val appRecords = event.appActivityRecords
+        .getOrElse(fail("FAK_ASSET-submitted event should carry appActivityRecords"))
+        .records
+      appRecords.map(_.party).toSet shouldBe Set(submitterProto) withClue
+        s"Submitter $assetParty should be the only app provider for the FAK_ASSET-submitted event"
+      event.assetActivityRecords shouldBe None withClue
+        "computeAssetActivity does not fire for FAK_ASSET submitters, so no asset-side records are produced"
     }
 
     clue(
