@@ -42,12 +42,18 @@ export default defineConfig([
   },
   tseslint.configs.recommended,
   pluginReact.configs.flat["jsx-runtime"],
-  reactHooks.configs["recommended-latest"],
+  reactHooks.configs.flat.recommended,
   tanstackQuery.configs["flat/recommended"],
   eslintConfigPrettier,
   {
     files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
     rules: {
+      // TODO(#8138): fix the sites and re-enable, one rule at a time.
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/set-state-in-render": "off",
+      "react-hooks/static-components": "off",
+      "react-hooks/immutability": "off",
       "@typescript-eslint/no-non-null-asserted-optional-chain": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
