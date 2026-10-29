@@ -84,6 +84,18 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def mintingTrafficBased: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 
+  private val packagesNewerThanPinned =
+    Seq(
+      DarResources.amulet -> DarResources.amulet_0_1_24,
+      DarResources.amuletNameService -> DarResources.amuletNameService_0_1_25,
+      DarResources.dsoGovernance -> DarResources.dsoGovernance_0_1_30,
+      DarResources.wallet -> DarResources.wallet_0_1_25,
+      DarResources.walletPayments -> DarResources.walletPayments_0_1_24,
+    ).flatMap { case (pkg, pinned) =>
+      pkg.all.filter(_.metadata.version > pinned.metadata.version)
+    }.groupBy(_.metadata.name)
+      .map { case (name, resources) => name -> resources.map(_.metadata.version).toSet }
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
@@ -98,7 +110,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         }
       })
       // Test with older amulet version (before the 104 amendement is
-      // effective), to confirm we have no regression
+      // effective), to confirm we have no regression.
+      // Once the amulet_0_1_25 is effective on mainnet this test can be safely removed.
       .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(c =>
           c.copy(initialPackageConfig =
@@ -114,6 +127,19 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             )
           )
         )(config)
+      )
+      .withNoVettedPackages(implicit env =>
+        env.validators.local.map(_.participantClient) ++ env.svs.local.map(_.participantClient)
+      )
+      .addConfigTransform((_, config) =>
+        config.copy(
+          validatorApps = config.validatorApps.map { case (name, validator) =>
+            name -> validator.copy(additionalPackagesToUnvet = packagesNewerThanPinned)
+          },
+          svApps = config.svApps.map { case (name, sv) =>
+            name -> sv.copy(additionalPackagesToUnvet = packagesNewerThanPinned)
+          },
+        )
       )
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
