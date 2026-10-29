@@ -3733,8 +3733,6 @@ components:
         For networks where the SVs enable activity record computation,
         a traffic summary and app activity record are present when
         a verdict is present.
-      required:
-        - asset_activity_records
       properties:
         update:
           $ref: "#/components/schemas/UpdateHistoryItemV2"
@@ -3749,7 +3747,13 @@ components:
           $ref: "#/components/schemas/EventHistoryAppActivityRecords"
           nullable: true
         asset_activity_records:
-          $ref: "#/components/schemas/EventHistoryActivityRecords"
+          description: |
+            Asset-side activity records (CIP-104), one per provider.
+            Omitted from JSON when there is no asset activity for the event.
+          type: array
+          x-scala-array-type: org.lfdecentralizedtrust.splice.http.OmitNullArray
+          items:
+            $ref: "#/components/schemas/ActivityRecord"
         submitting_app_provider:
           description: |
             The submitting app provider party identifier, present only when the submitter is a featured-app.
@@ -3931,9 +3935,6 @@ components:
       description: |
         App activity records computed from verdicts and traffic summaries
         as per [CIP-104](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md).
-
-        Conceptually equal to `EventHistoryActivityRecords`, but kept
-        for backwards compatibility.
       required:
         - round_number
         - records
@@ -3949,21 +3950,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AppActivityRecord"
-    EventHistoryActivityRecords:
-      type: object
-      description: |
-        Activity records computed from a single verdict and traffic summary
-        as per CIP-104.
-        The round the records belong to is carried by the enclosing envelope.
-      required:
-        - records
-      properties:
-        records:
-          description: |
-            Activity records, one per provider.
-          type: array
-          items:
-            $ref: "#/components/schemas/ActivityRecord"
     ActivityRecord:
       type: object
       description: |

@@ -14,7 +14,7 @@ import com.google.protobuf.ByteString
 import io.circe.Json
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.ledger.api as ledgerApi
-import org.lfdecentralizedtrust.splice.http.OmitNullString
+import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItem,
@@ -636,24 +636,22 @@ object ScanHttpEncodings {
     )
   }
 
+  /** Returns `None` when there is no record or no asset activity, so the JSON
+    * key is omitted (via `OmitNullArray`) rather than emitted as `null` — matches
+    * pre-upgrade SV behaviour so BFT reads converge during the upgrade window.
+    */
   def encodeAssetActivityRecord(
-      record: AppAndAssetActivityRecordT
-  ): definitions.EventHistoryActivityRecords = {
-    val records = record.assetActivityProviderParties
-      .zip(record.assetActivityWeights)
-      .map { case (party, weight) =>
-        definitions.ActivityRecord(party = party, weight = weight)
-      }
-      .toVector
-    definitions.EventHistoryActivityRecords(records = records)
-  }
-
-  def encodeAssetActivityRecordOrEmpty(
       recordO: Option[AppAndAssetActivityRecordT]
-  ): definitions.EventHistoryActivityRecords =
-    recordO
-      .map(encodeAssetActivityRecord)
-      .getOrElse(definitions.EventHistoryActivityRecords(records = Vector.empty))
+  ): Option[OmitNullArray[definitions.ActivityRecord]] =
+    recordO.flatMap { r =>
+      val records = r.assetActivityProviderParties
+        .zip(r.assetActivityWeights)
+        .map { case (party, weight) =>
+          definitions.ActivityRecord(party = party, weight = weight)
+        }
+        .toVector
+      if (records.isEmpty) None else Some(OmitNullArray(records))
+    }
 
   def encodeSubmittingAppProvider(
       recordO: Option[AppAndAssetActivityRecordT]
