@@ -108,6 +108,10 @@ spec:
         - name: ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD
           value: canton.parameters.enable-key-download = yes
         {{- end }}
+        {{- if .Values.enableRepairCommands }}
+        - name: ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS
+          value: canton.features.enable-repair-commands = yes
+        {{- end }}
         {{- if .Values.httpHealthProbes }}
         - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
           value: canton.participants.participant.monitoring.http-health-server.port = 5071

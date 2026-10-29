@@ -192,6 +192,12 @@ async function installValidator(
     validatorVersion
   );
   checkValidatorKeyDownloadForPeriodicBackups(validatorName, validatorConfig, backupConfig);
+  if (validatorConfig.migrateParty && !validatorConfig.participant.enableRepairCommands) {
+    throw new Error(
+      `${validatorName}: migrating the validator party requires importing its ACS through the participant's repair service. ` +
+        'Set `participant.enableRepairCommands: true` for this node in config.yaml.'
+    );
+  }
 
   const nodeIdentifier = validatorConfig.nodeIdentifier || validatorConfig.partyHint;
 

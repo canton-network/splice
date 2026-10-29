@@ -54,7 +54,7 @@ export type ParticipantArgs = {
 
 export type ParticipantOutput = {
   db: Postgres;
-  chart?: InstalledHelmChart;
+  chart: InstalledHelmChart;
 };
 
 async function installParticipantPostgres({

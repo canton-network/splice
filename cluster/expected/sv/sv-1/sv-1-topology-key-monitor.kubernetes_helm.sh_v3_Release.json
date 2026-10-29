@@ -1,0 +1,68 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-topology-key-monitor",
+    "compat": "true",
+    "maxHistory": 10,
+    "name": "topology-key-monitor",
+    "namespace": "sv-1",
+    "timeout": 600,
+    "values": {
+      "affinity": {
+        "nodeAffinity": {
+          "requiredDuringSchedulingIgnoredDuringExecution": {
+            "nodeSelectorTerms": [
+              {
+                "matchExpressions": [
+                  {
+                    "key": "cn_apps",
+                    "operator": "Exists"
+                  },
+                  {
+                    "key": "cn_apps",
+                    "operator": "In",
+                    "values": [
+                      "hyperdisk"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "cluster": {
+        "dnsName": "mock.global.canton.network.digitalasset.com",
+        "fixedTokens": false,
+        "hostname": "mock.global.canton.network.digitalasset.com",
+        "name": "cn-mocknet"
+      },
+      "expectedSynchronizerAliases": [
+        "global"
+      ],
+      "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
+      "keys": [
+        "12205e1643ef9bcc12dd3450d02f7c538de011dc92290672cb66dd47053ab4a67cae",
+        "122057b07227114d122f5954a770c1ba30586cc51efd1dd644f6c85bfb9916eac967"
+      ],
+      "participant": {
+        "address": "participant"
+      },
+      "pollIntervalSeconds": 1,
+      "serviceAccountName": "sv",
+      "slowQueryThresholdSeconds": 5,
+      "tolerations": [
+        {
+          "effect": "NoSchedule",
+          "key": "cn_apps",
+          "operator": "Exists"
+        }
+      ]
+    },
+    "version": "0.3.20"
+  },
+  "name": "sv-1-topology-key-monitor",
+  "provider": "",
+  "type": "kubernetes:helm.sh/v3:Release"
+}

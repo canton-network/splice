@@ -61,6 +61,7 @@
       "enableHealthProbes": true,
       "enableKeyDownload": false,
       "enablePostgresMetrics": true,
+      "enableRepairCommands": false,
       "extraVolumeMounts": [
         {
           "mountPath": "/app/gcp-credentials.json",

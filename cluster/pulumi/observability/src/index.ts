@@ -16,6 +16,7 @@ import {
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
   installSequencerParticipantRegistrationAlert,
+  installTopologyKeyMonitorAlerts,
 } from './gcpAlerts';
 import { istioMonitoring } from './istio';
 import { configureObservability } from './observability';
@@ -51,6 +52,7 @@ if (enableAlerts && !clusterIsResetPeriodically) {
   const notificationChannel = getNotificationChannel();
   if (notificationChannel) {
     installGcpLoggingAlerts(notificationChannel);
+    installTopologyKeyMonitorAlerts(notificationChannel);
     installClusterMaintenanceUpdateAlerts(notificationChannel);
     if (monitoringConfig.alerting.alerts.cloudSql.maintenance) {
       installCloudSQLMaintenanceUpdateAlerts(notificationChannel);

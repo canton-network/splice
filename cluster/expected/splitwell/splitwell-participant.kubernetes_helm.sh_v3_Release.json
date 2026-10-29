@@ -53,6 +53,7 @@
       "enableHealthProbes": true,
       "enableKeyDownload": true,
       "enablePostgresMetrics": true,
+      "enableRepairCommands": false,
       "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
       "metrics": {
         "enable": true

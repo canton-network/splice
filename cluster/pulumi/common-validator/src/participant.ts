@@ -76,6 +76,7 @@ export async function installParticipant(
       enable: true,
     },
     enableKeyDownload: validatorConfig.participant.enableKeyDownload,
+    enableRepairCommands: validatorConfig.participant.enableRepairCommands,
   };
 
   const participantValuesWithSpecifiedAud: ChartValues = {
