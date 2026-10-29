@@ -131,7 +131,7 @@ class ScanEventStore(
       currentMigrationId,
     ).map(ts => if (ts == CantonTimestamp.MinValue) None else Some(ts))
 
-  def getAppActivityRecords(verdictRowIds: Seq[Long])(implicit
+  def getAppAndAssetActivityRecords(verdictRowIds: Seq[Long])(implicit
       tc: TraceContext
   ): Future[Map[Long, AppActivityRecordT]] =
     verdictStore.appActivityRecordStore.getRecordsByVerdictRowIds(verdictRowIds)

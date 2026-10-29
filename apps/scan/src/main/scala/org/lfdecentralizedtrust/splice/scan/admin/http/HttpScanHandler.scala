@@ -824,9 +824,9 @@ class HttpScanHandler(
         case Some((verdictWithViewsO, updateO)) =>
           val verdictRowIdO = verdictWithViewsO.map { case (v, _) => v.rowId }
           for {
-            appActivityRecordO <- verdictRowIdO match {
+            appAndAssetActivityRecordO <- verdictRowIdO match {
               case Some(rowId) =>
-                eventStore.getAppActivityRecords(Seq(rowId)).map(_.get(rowId))
+                eventStore.getAppAndAssetActivityRecords(Seq(rowId)).map(_.get(rowId))
               case None => Future.successful(None)
             }
           } yield {
@@ -847,7 +847,7 @@ class HttpScanHandler(
               v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
             }
             val appActivityRecordEncoded =
-              appActivityRecordO.map(ScanHttpEncodings.encodeAppActivityRecord)
+              appAndAssetActivityRecordO.map(ScanHttpEncodings.encodeAppActivityRecord)
             // TODO(#7837): cover these fields in the integration test.
             Right(
               definitions.EventHistoryItem(
@@ -856,9 +856,9 @@ class HttpScanHandler(
                 trafficSummary = trafficSummaryEncoded,
                 appActivityRecords = appActivityRecordEncoded,
                 assetActivityRecords =
-                  ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appActivityRecordO),
+                  ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appAndAssetActivityRecordO),
                 submittingAppProvider =
-                  ScanHttpEncodings.encodeSubmittingAppProvider(appActivityRecordO),
+                  ScanHttpEncodings.encodeSubmittingAppProvider(appAndAssetActivityRecordO),
               )
             )
           }
@@ -906,7 +906,7 @@ class HttpScanHandler(
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
           verdictWithViewsO.map { case (v, _) => v.rowId }
         }
-        appActivityRecordMap <- eventStore.getAppActivityRecords(verdictRowIds)
+        appAndAssetActivityRecordMap <- eventStore.getAppAndAssetActivityRecords(verdictRowIds)
       } yield events.map { case (verdictWithViewsO, updateO) =>
         val encodedUpdateV2 = updateO
           .map(
@@ -924,11 +924,11 @@ class HttpScanHandler(
         val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
           v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
         }
-        val appActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
-          appActivityRecordMap.get(v.rowId)
+        val appAndAssetActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
+          appAndAssetActivityRecordMap.get(v.rowId)
         }
         val appActivityRecordEncoded =
-          appActivityRecordForEvent.map(ScanHttpEncodings.encodeAppActivityRecord)
+          appAndAssetActivityRecordForEvent.map(ScanHttpEncodings.encodeAppActivityRecord)
         // TODO(#7837): cover these fields in the integration test.
         definitions.EventHistoryItem(
           update = encodedUpdateV2,
@@ -936,9 +936,9 @@ class HttpScanHandler(
           trafficSummary = trafficSummaryEncoded,
           appActivityRecords = appActivityRecordEncoded,
           assetActivityRecords =
-            ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appActivityRecordForEvent),
+            ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appAndAssetActivityRecordForEvent),
           submittingAppProvider =
-            ScanHttpEncodings.encodeSubmittingAppProvider(appActivityRecordForEvent),
+            ScanHttpEncodings.encodeSubmittingAppProvider(appAndAssetActivityRecordForEvent),
         )
       }.toVector
     }
