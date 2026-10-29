@@ -83,3 +83,16 @@ to 36 by the outbox) and the synchronizer rejects it with SerialMismatch(expecte
 with INITIAL_ONBOARDING_ERROR. Expected: for an initialized node, return its existing identity converted to the
 requested protocol version (same mappings and keys, re-signed), as StoreBasedSynchronizerOutbox's convertTransactions
 does, or fail instead of generating keys.
+
+## Canton admin API check (2026-10-29)
+
+`TopologyManagerWriteService` (canton/community/base/.../topology_manager_write_service.proto) has
+`CreateTemporaryTopologyStore(name, protocol_version)`, `Authorize(proposal, signed_by, store, ...)` and
+`SignTransactions(transactions, signed_by, store)`; splice uses none of them today. Candidate splice-side fix
+(untested): per node, create a temporary store at the initial PV, Authorize the node's existing NamespaceDelegation and
+OwnerToKeyMapping (same mappings, serial 1, the node's own keys) into it, read them back and use exactly those in the
+genesis state. The transaction hash depends on mapping, serial, operation and PV only, so it equals what the node
+publishes later. Canton's own GenerateOnboardingTransactions does the same in a temp store, but with name-based keys.
+
+Unverified risk: joining SVs use generateOnboardingTopologyTransactions(synchronizer PV) for sequencer and mediator
+(LocalSynchronizerNode.scala:236, :405), so a new SV joining a PV 36 network with Canton 3.7 nodes may hit the same.
