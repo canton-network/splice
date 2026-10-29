@@ -1102,12 +1102,16 @@ abstract class TopologyAdminConnection(
     }
   }
 
-  /** Re-proposes the mappings of the given transactions in `store`.
+  /** Copies the given transactions to `store` which uses `protocolVersion`.
+    * Transactions that already use `protocolVersion` are added as-is, others are re-proposed which
+    * requires the node to have the keys to sign them. Copying as-is is required if the
+    * root namespace key is offline.
     * This is useful for copying transactions from the authorized store to a temp topology store
-    * of a different PV.
+    * of a potentially different PV.
     */
   def reauthorizeTransactions(
       store: TopologyStoreId,
+      protocolVersion: ProtocolVersion,
       transactions: Seq[GenericSignedTopologyTransaction],
   )(implicit
       traceContext: TraceContext
@@ -1119,13 +1123,26 @@ abstract class TopologyAdminConnection(
         else if (tx.mapping.code == TopologyMapping.Code.NamespaceDelegation) 1
         else 2
       )
+    def hasProtocolVersion(tx: GenericSignedTopologyTransaction): Boolean =
+      tx.representativeProtocolVersion == SignedTopologyTransaction
+        .protocolVersionRepresentativeFor(protocolVersion) &&
+        tx.transaction.representativeProtocolVersion == TopologyTransaction
+          .protocolVersionRepresentativeFor(protocolVersion)
     MonadUtil.sequentialTraverse(ordered) { tx =>
-      proposeMapping(
-        store,
-        tx.mapping,
-        PositiveInt.one,
-        isProposal = false,
-      ): Future[GenericSignedTopologyTransaction]
+      if (hasProtocolVersion(tx)) {
+        val signed = tx.copy(isProposal = false)
+        addTopologyTransactions(store, Seq(signed)).map(_ => signed)
+      } else {
+        logger.info(
+          s"Re-signing ${tx.mapping.code} as it does not use protocol version $protocolVersion"
+        )
+        proposeMapping(
+          store,
+          tx.mapping,
+          PositiveInt.one,
+          isProposal = false,
+        ): Future[GenericSignedTopologyTransaction]
+      }
     }
   }
 

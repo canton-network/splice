@@ -490,6 +490,7 @@ class SV1Initializer(
                   .getIdentityTransactions(participantId.uid, TopologyStoreId.Authorized)
                 participantIdentity <- participantAdminConnection.reauthorizeTransactions(
                   tempStore,
+                  sv1Config.initialProtocolVersion,
                   participantIdentityTransactions,
                 )
                 (mediatorIdentity, sequencerIdentity) <- (
