@@ -378,3 +378,14 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10725 | Mainnet backup_status_cluster (GHA run 40661475825, 10-28 09:06) | 10643 | `2026-10-28b/10725-backup-10643.md`. Ran before cni #7727 (backup step timeout removed, merged 09:47); 10643's final diagnosis is the 90 min timeout, not OOM. Close as dup. |
 | 10733 | deploy_cimain (CircleCI 87435, job 525868), cni 1451bfce38, splice d0a311567d | - | `2026-10-28b/10733-deploy-cimain.md`. No deploy_basic issue for cimain, so likely wait_for_previous_pipeline or dependencies_scan; not 10693 (#7718 included). Needs the job log. |
 | 10736 | ciperiodic deploy_upgrade (CircleCI 87425, job 525815), base splice 3514d7e8ad (0.9.x) | 10677 | `2026-10-28b/10736-deploy-upgrade.md`. Not family N (base is the 0.9.x release); first 10:00 runs after cni #7703 (synchronizerMigration.active). Close as dup of 10677, needs the log. |
+
+## 2026-10-29 inbox
+
+| Ref | Failure | Family / dup of | Packet / action |
+|---|---|---|---|
+| 10743-10890 (144) | every job of 3 post-merge runs + 10-29 nightlies + store perf: test compile `not found: value truncateInstant` | main break, fixed by #8109 | `2026-10-29/main-break-8109.md`, `host-commands-main-break.sh` |
+| 10740 | TokenStandardV2TransferIntegrationTest, forced ACS snapshot HTTP 500 `Failed to acquire session-scoped advisory lock 1936747523` (acsSnapshotIndex) | R (new) | `2026-10-29/singles.md`; Oriol |
+| 10742 | RollForwardLsuDRIntegrationTest passes, afterAll: aliceValidator close > 10 s (in-flight SubmitAndWait) | S (new, teardown) | `2026-10-29/singles.md` |
+| 10745 | Devnet Backup backup_cluster (cni GHA 40721834944) | - | needs log |
+| 10741, 10892 | ciperiodic deploy_sv_reonboard (526074, 526417) | - | needs log; cni #7748 |
+| 10843, 10844, 10846 | ciperiodic monitor_sv_catchup_test / deploy_lsu_operator / non_devnet (526215, 526299, 526332) | lead: main compile break | needs log; 10844 = first LSU after cni #7746 |

@@ -289,3 +289,21 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10679: one runner several times slower in every app init phase (Wait for user 17-35 s, Initialize app ~4 min),
   `Condition never became true within 5 minutes` in waitForInitialization; cache hit, no 40001 storm. One-off.
 
+
+## R. Forced ACS snapshot returns 500 when the snapshot index trigger holds its advisory lock
+- Signature: `Request to .../api/scan/v0/state/acs/force resulted in an unexpected exception: Failed to acquire
+  session-scoped advisory lock 1936747523` (= AdvisoryLockIds.acsSnapshotIndex, 0x73706c00 + 3), then the test's
+  `forceAcsSnapshotNow` fails with `HTTP 500`.
+- Mechanism: per-table ACS snapshots (`NextV2`) index with `pg_try_advisory_lock`; the triggers skip on
+  `FailedToAcquireLockException`, `HttpScanHandler.forceAcsSnapshotNow` does not. 10740 (2026-10-28, TokenStandardV2Transfer).
+- Owner: OriolMunoz-da (per-table snapshots #6515, #7788).
+
+## S. Environment close times out on an in-flight ledger submission (teardown only)
+- Signature: test passes, suite aborted in `afterAll`: `ShutdownFailedException: Unable to close SpliceEnvironment`,
+  `Task closing node-<validator> did not complete within 10 seconds`, `Timeout 10 seconds expired, but readers are still active`.
+- Cause: a trigger's SubmitAndWait in flight when the env closes; RetryProvider waits 10 s. 10742 (RollForwardLsuDR).
+
+## Note 2026-10-29: merge race on main
+- Whole runs red (every job incl. docs/static_tests) with one compile error = main broken by two individually green
+  PRs (10-28: #8097 removed `truncateInstant`, #8056 used it; fixed by #8109). Close all per-job issues as fixed by the
+  unbreak PR; check whether nightlies ran before the fix.
