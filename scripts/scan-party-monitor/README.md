@@ -170,8 +170,9 @@ slows down Scan for everyone else, including other users of this script.
 
 ## Tests
 
-`test_scan_party_monitor.py` has unit tests against an in-process fake of Scan. They only need
-Python 3 and take a few seconds. Run them from anywhere in the repository with
+`test_scan_party_monitor.py` has unit tests against an in-process fake of Scan, which they check
+against Scan's OpenAPI spec. They need Python 3 with PyYAML and openapi-schema-validator, as in
+the nix dev shell, and take a few seconds. Run them from anywhere in the repository with
 
 ```bash
 scripts/run-python-tests.sh scripts/scan-party-monitor

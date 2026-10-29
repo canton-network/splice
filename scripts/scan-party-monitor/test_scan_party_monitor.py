@@ -10,8 +10,8 @@ Run from the repository root with
 
     python3 -m unittest discover -s scripts/scan-party-monitor -v
 
-Unlike the script, the tests also need PyYAML (as in the nix dev shell), to check the fake
-Scan's JSON against Scan's OpenAPI spec.
+Unlike the script, the tests also need PyYAML and openapi-schema-validator (as in the nix dev
+shell), to check the fake Scan's JSON against Scan's OpenAPI spec.
 """
 
 from __future__ import annotations
@@ -34,6 +34,8 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tupl
 from unittest import mock
 
 import yaml
+from jsonschema.exceptions import ValidationError
+from openapi_schema_validator import OAS30Validator
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -519,86 +521,98 @@ MAY_BE_ABSENT = {
     ("UpdateHistoryTransactionV2", "external_transaction_hash"),  # for transactions not signed externally
 }
 
-JSON_TYPES: Dict[str, Tuple[Type[Any], ...]] = {
-    "object": (dict,),
-    "array": (list,),
-    "string": (str,),
-    "integer": (int,),
-    "number": (int, float),
-    "boolean": (bool,),
-}
 
+class StrictScanSpec:
+    """scan.yaml's schemas, made strict: an object must have every key of its schema, except
+    those in MAY_BE_ABSENT, and no others."""
 
-class OpenApiSpec:
     def __init__(self, path: str) -> None:
         with open(path) as f:
-            self.spec: Json = yaml.safe_load(f)
+            spec: Json = yaml.safe_load(f)
+        self.paths: Json = spec["paths"]
+        self.schemas: Json = spec["components"]["schemas"]
+        self.strict = {name: self._strict(schema, name) for name, schema in self.schemas.items()}
+
+    def _strict(self, schema: Any, name: str = "") -> Any:
+        if isinstance(schema, list):
+            return [self._strict(s) for s in schema]
+        if not isinstance(schema, dict):
+            return schema
+        if "$ref" in schema and len(schema) > 1:
+            # OAS 3.0 ignores the siblings of a $ref, e.g. `nullable: true`.
+            ref = {"$ref": schema["$ref"]}
+            return {"anyOf": [ref, {"enum": [None]}]} if schema.get("nullable") else ref
+        if "allOf" in schema:
+            # additionalProperties applies to each part on its own, so merge the parts first.
+            parts = [self._resolve(p) for p in schema["allOf"]]
+            properties = {k: v for part in parts for k, v in part.get("properties", {}).items()}
+            return self._strict({"type": "object", "properties": properties}, name)
+        strict = {k: self._strict(v) for k, v in schema.items() if k not in ("properties", "discriminator")}
+        if "properties" in schema:
+            strict["properties"] = {k: self._strict(v) for k, v in schema["properties"].items()}
+            strict["required"] = [k for k in schema["properties"] if (name, k) not in MAY_BE_ABSENT]
+            strict["additionalProperties"] = False
+        return strict
+
+    def _resolve(self, schema: Json) -> Json:
+        while "$ref" in schema:
+            schema = self.schemas[schema["$ref"].rsplit("/", 1)[-1]]
+        return schema
 
     def response_schema(self, method: str, path: str) -> Json:
-        response: Json = self.spec["paths"][path][method.lower()]["responses"]["200"]
+        response: Json = self.paths[path][method.lower()]["responses"]["200"]
         return {**response["content"]["application/json"]["schema"]}
 
-    def problems(self, value: Any, schema: Json, where: str = "$", name: str = "") -> List[str]:
-        """How `value` differs from `schema`: missing or unknown keys, and wrong types."""
-        nullable = schema.get("nullable", False)
-        while "$ref" in schema:
-            name = schema["$ref"].rsplit("/", 1)[-1]
-            schema = self.spec["components"]["schemas"][name]
-            nullable = nullable or schema.get("nullable", False)
-        if value is None:
-            return [] if nullable else [f"{where}: null"]
-        if "allOf" in schema:
-            parts = [self.resolved(s) for s in schema["allOf"]]
-            merged = {k: v for part in parts for k, v in part.get("properties", {}).items()}
-            return self.problems(value, {"type": "object", "properties": merged}, where, name)
-        if "oneOf" in schema:
-            # The closest alternative, e.g. a created rather than an exercised event.
-            return min((self.problems(value, s, where, name) for s in schema["oneOf"]), key=len)
-        expected = schema.get("type")
-        if expected is not None and (
-            not isinstance(value, JSON_TYPES[expected]) or (isinstance(value, bool) and expected != "boolean")
-        ):
-            return [f"{where}: {value!r} is not of type {expected}"]
-        if "enum" in schema and value not in schema["enum"]:
-            return [f"{where}: {value!r} is not one of {schema['enum']}"]
-        if isinstance(value, list):
-            return [p for i, v in enumerate(value) for p in self.problems(v, schema.get("items", {}), f"{where}[{i}]")]
-        if not isinstance(value, dict):
-            return []
-        if isinstance(schema.get("additionalProperties"), dict):
-            return [p for k, v in value.items() for p in self.problems(v, schema["additionalProperties"], f"{where}.{k}")]
-        properties: Json = schema.get("properties", {})
-        if not properties:
-            return []  # e.g. Daml values
-        missing = [f"{where}: missing {name}.{k}" for k in properties if k not in value and (name, k) not in MAY_BE_ABSENT]
-        unknown = [f"{where}: {k} is not in {name}" for k in value if k not in properties]
-        nested = [p for k, v in value.items() if k in properties for p in self.problems(v, properties[k], f"{where}.{k}")]
-        return missing + unknown + nested
+    def problems(self, value: Any, schema: Json) -> List[str]:
+        """How `value` differs from `schema`, one line per difference."""
+        validator = OAS30Validator({**self._strict(schema), "components": {"schemas": self.strict}})
+        return sorted(
+            f"${''.join(f'[{p}]' if isinstance(p, int) else f'.{p}' for p in leaf.absolute_path)}: {leaf.message}"
+            for error in validator.iter_errors(value)
+            for leaf in _closest_errors(error)
+        )
 
-    def resolved(self, schema: Json) -> Json:
-        while "$ref" in schema:
-            schema = self.spec["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
-        return schema
+
+def _closest_errors(error: ValidationError) -> List[ValidationError]:
+    """The errors of the alternative of a oneOf or anyOf that `value` comes closest to, e.g. a
+    created rather than an exercised event; other errors as they are."""
+    alternatives: Dict[Any, List[ValidationError]] = {}
+    for e in error.context or []:
+        if not (e.validator == "enum" and e.validator_value == [None]):  # the null of a nullable $ref
+            alternatives.setdefault(e.relative_schema_path[0], []).append(e)
+    if not alternatives:
+        return [error]
+    return [leaf for e in min(alternatives.values(), key=len) for leaf in _closest_errors(e)]
 
 
 class ScanSpecTest(unittest.TestCase):
     """The fake Scan's JSON has every key of Scan's OpenAPI spec, and no others."""
 
-    spec: OpenApiSpec
+    spec: StrictScanSpec
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.spec = OpenApiSpec(SCAN_YAML)
+        cls.spec = StrictScanSpec(SCAN_YAML)
 
     def assertMatchesSpec(self, value: Any, schema: Json) -> None:
         self.assertEqual(self.spec.problems(value, schema), [])
 
-    def test_checker_finds_differences(self) -> None:
-        schema = {"$ref": "#/components/schemas/Quorum"}
-        self.assertEqual(self.spec.problems({"parties": ["p"], "threshold": 1}, schema), [])
+    def test_strict_spec_finds_differences(self) -> None:
+        quorum = {"$ref": "#/components/schemas/Quorum"}
+        self.assertEqual(self.spec.problems({"parties": ["p"], "threshold": 1}, quorum), [])
         self.assertEqual(
-            self.spec.problems({"parties": "p", "weight": 1}, schema),
-            ["$: missing Quorum.threshold", "$: weight is not in Quorum", "$.parties: 'p' is not of type array"],
+            self.spec.problems({"parties": "p", "weight": 1}, quorum),
+            [
+                "$.parties: 'p' is not of type 'array'",
+                "$: 'threshold' is a required property",
+                "$: Additional properties are not allowed ('weight' was unexpected)",
+            ],
+        )
+        item = {"$ref": "#/components/schemas/EventHistoryItem"}
+        self.assertEqual(self.spec.problems(event(), item), [])
+        self.assertEqual(
+            self.spec.problems({"update": None, "verdict": None}, item),
+            ["$: 'app_activity_records' is a required property", "$: 'traffic_summary' is a required property"],
         )
 
     def test_acs_contracts(self) -> None:
