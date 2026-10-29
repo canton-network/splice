@@ -130,11 +130,12 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
     baseConfigRef.current = currentConfigQuery.data ?? null;
   }, [currentConfigQuery.data]);
 
-  // Auto-select the only right, or clear the selection when the provider changes.
+  // The right is resolved automatically and its picker is intentionally hidden: a provider has
+  // at most one featured-app right in practice, so take the first right if any (else clear).
   useEffect(() => {
     const hasSelectedOption = picker.rightOptions.some(o => o.value === rightCid);
     if (hasSelectedOption) return;
-    const nextRightCid = picker.rightOptions.length === 1 ? picker.rightOptions[0].value : '';
+    const nextRightCid = picker.rightOptions.length >= 1 ? picker.rightOptions[0].value : '';
     form.setFieldValue('rightCid', nextRightCid);
   }, [form, picker.rightOptions, rightCid]);
 
@@ -160,7 +161,9 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
       })
     : undefined;
 
-  const configNotReady = !!rightCid && (currentConfigQuery.isError || !currentConfigQuery.data);
+  // Submission needs a resolved right with its config loaded. With the picker hidden this also
+  // guards the no-right case (empty rightCid) previously covered by the rightCid field validator.
+  const configNotReady = !rightCid || currentConfigQuery.isError || !currentConfigQuery.data;
 
   return (
     <>
@@ -215,28 +218,11 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
               )}
             </form.AppField>
 
-            <form.AppField
-              name="rightCid"
-              validators={{
-                onBlur: ({ value }) => picker.validateRightSelection(value),
-                onChange: ({ value }) => picker.validateRightSelection(value),
-              }}
-            >
-              {field => (
-                <field.SelectField
-                  title="Featured Application Contract ID"
-                  id={`${idPrefix}-rightCid`}
-                  options={picker.rightOptions}
-                  scrollableIdentifier
-                  disabled={picker.rightOptions.length === 0}
-                  placeholder={
-                    providerHasNoRights
-                      ? 'No featured application rights found for this provider'
-                      : undefined
-                  }
-                />
-              )}
-            </form.AppField>
+            {providerHasNoRights && (
+              <Alert severity="warning" data-testid={`${idPrefix}-no-rights`}>
+                No featured application rights found for this provider.
+              </Alert>
+            )}
 
             {currentConfigQuery.isError && (
               <Alert severity="error" data-testid={`${idPrefix}-config-load-error`}>

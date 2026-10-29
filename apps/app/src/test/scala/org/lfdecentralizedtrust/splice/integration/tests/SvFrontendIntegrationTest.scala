@@ -657,8 +657,9 @@ class SvFrontendIntegrationTest
         "SRARC_CreateFeaturedAppConfigUpdateInstruction",
         "amend-featured-app",
       ) { implicit webDriver =>
+        // Entering the provider auto-resolves its single right and prepopulates the form
+        // (the rightCid picker is hidden); wait for that prepopulation before editing.
         fillOutTextField("amend-featured-app-partyId", providerPartyId)
-        selectFirstMuiOption("amend-featured-app-rightCid-dropdown")
         eventually() {
           inside(find(id("amend-featured-app-activityWeight"))) { case Some(element) =>
             element.underlying.getAttribute("value") should not be empty
