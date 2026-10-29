@@ -8,8 +8,8 @@ Monitors a Scan instance for activity of a configured set of tracked parties, an
   - transfers of Amulet from a tracked party to a party that is not one of its expected
     recipients, and
   - for tracked parties with `alert_confirmations` set, every transaction that the party
-    confirms or submits, according to the mediator verdict. This includes transactions that
-    are entirely private to other parties than the DSO party, and rejected ones.
+    confirms, according to the mediator verdict. This includes transactions that are
+    entirely private to other parties than the DSO party, and rejected ones.
 
 Matching transactions are printed to stdout as JSON lines and, optionally, posted to a Slack
 incoming webhook.

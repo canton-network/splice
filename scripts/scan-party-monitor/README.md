@@ -55,7 +55,7 @@ where much more verbosity is desired.
   added to `expected_recipients`, not a replacement for them. Transfers from a party to
   itself (e.g. merging its holdings) never alert.
 - `alert_confirmations` (optional, default `false`) additionally reports every transaction
-  the party confirms or submits, whatever it does.
+  the party confirms, whatever it does.
 
 To change the configuration, edit the file and restart the script with the same `--db`.
 Changes to recipients and `alert_confirmations` apply from the next update on. Adding a
