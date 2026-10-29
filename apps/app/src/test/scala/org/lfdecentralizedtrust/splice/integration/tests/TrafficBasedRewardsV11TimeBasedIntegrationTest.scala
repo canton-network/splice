@@ -3,11 +3,16 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
+import java.util.{Optional, UUID}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
+  AmuletConfig,
+  RewardConfig,
+  USD,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
-import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
@@ -19,6 +24,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.ReceiveSvRewardCouponTrigger
 import org.lfdecentralizedtrust.splice.util.{
+  AmuletConfigSchedule,
   AmuletConfigUtil,
   TimeTestUtil,
   TriggerTestUtil,
@@ -27,6 +33,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
 // Sibling to TrafficBasedRewardsTimeBasedIntegrationTest covering TBAR v1.1
@@ -97,6 +104,41 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
 
   "TBAR v1.1 asset-side activity pipeline works" in { implicit env =>
+    // All asset-side setup (party onboarding, FA grants with kinds, RewardConfig
+    // enable, TransferPreapproval, tap) happens at bootstrap simtime so that
+    // every OpenMiningRound created after bootstrap snapshots the updated
+    // AmuletConfig and so that lookupFeaturedAppPartiesAsOf(roundOpensAt) returns
+    // the FAK_ASSETMOVING / FAK_ASSET grants for the round that observes the send.
+    // Reusing the alice/bob wallet clients avoids the UNKNOWN_SUBMITTERS race
+    // that onboardUser hits when it tries to submit from a freshly-allocated
+    // party before topology propagation.
+    val assetMoverParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+    val assetParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+
+    val assetMoverValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+    val assetValidatorParty = bobValidatorBackend.getValidatorPartyId()
+    clue(s"Grant FAK_AssetMoving right to $assetMoverParty") {
+      grantFeaturedAppRightWithKind(
+        assetMoverParty,
+        FeaturedAppKind.FAK_ASSETMOVING,
+        opsParties = Seq(assetMoverValidatorParty),
+      )
+    }
+    clue(s"Grant FAK_Asset right to $assetParty") {
+      grantFeaturedAppRightWithKind(
+        assetParty,
+        FeaturedAppKind.FAK_ASSET,
+        opsParties = Seq(assetValidatorParty),
+      )
+    }
+    enableTbarV11AssetSide()
+
+    // Receiver's TransferPreapproval is required so the sender submits the
+    // amulet transfer directly — makes assetMoverParty the Daml submitter so
+    // findFASubmitter attributes the transaction to the FAK_ASSETMOVING grant.
+    bobWalletClient.createTransferPreapproval()
+    aliceWalletClient.tap(1000.0)
+
     assertOldestOpenRound(0)
 
     clue(
@@ -110,47 +152,110 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       ]
     }
 
-    for (round <- 1 to 3) {
+    // Advance several rounds so the new TBAR v1.1 RewardConfig lands in the
+    // OpenMiningRound snapshots of upcoming rounds.
+    for (round <- 1 to 5) {
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
 
-    clue(
-      "Bootstrap rounds 0..2 have zero activity (no featured apps yet); TBAR v1.1 asset-side totals are also zero under defaults"
-    ) {
-      assertZeroTotals(sv1ScanBackend, 0L to 2L)
+    val sendRound = 5L
+    clue("CIP-104 Example 2.1: assetMoverParty sends to assetParty (sole FAK_ASSET confirmer)") {
+      aliceWalletClient.transferPreapprovalSend(
+        assetParty,
+        BigDecimal(10),
+        UUID.randomUUID().toString,
+      )
     }
 
-    // Onboard two wallet-ready parties to exercise asset-side attribution. Reusing the
-    // alice/bob wallet clients avoids the UNKNOWN_SUBMITTERS race that onboardUser hits
-    // when it tries to submit WalletAppInstall from a freshly-allocated party before
-    // topology propagation; the clients' ledgerApiUser already has a propagated party.
-    val assetMoverParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
-    val assetParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
-
-    clue(s"Grant FAK_AssetMoving right to $assetMoverParty") {
-      grantFeaturedAppRightWithKind(assetMoverParty, FeaturedAppKind.FAK_ASSETMOVING)
+    // Advance past sendRound so its totals are computed and exposed by scan.
+    for (round <- 6 to 7) {
+      advanceRoundsToNextRoundOpening
+      assertOldestOpenRound(round.toLong)
     }
-    clue(s"Grant FAK_Asset right to $assetParty") {
-      grantFeaturedAppRightWithKind(assetParty, FeaturedAppKind.FAK_ASSET)
+
+    clue(s"Round $sendRound shows asset-side TBAR v1.1 activity from the asset-moving send") {
+      eventually(timeUntilSuccess = 30.seconds) {
+        inside(sv1ScanBackend.getRewardAccountingActivityTotals(sendRound)) {
+          case GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(t) =>
+            t.activityRecordsCount should be >= 1L withClue
+              s"Round $sendRound should have at least one activity record from the send"
+            t.totalAppActivityWeight should be > 0L withClue
+              s"Round $sendRound should have non-zero app activity weight (total burn attributed to submitter)"
+            t.totalAssetActivityWeight should be > 0L withClue
+              s"Round $sendRound should have non-zero asset activity weight (extra burn to FAK_ASSET confirmer)"
+        }
+      }
+    }
+  }
+
+  // Flips on asset-side computation by voting a RewardConfig update that
+  // populates the three TBAR v1.1 Optional fields. The InitialRewardConfig
+  // bootstrap leaves them None, so until this runs computeForFASubmitted
+  // short-circuits and no asset activity records are produced.
+  private def enableTbarV11AssetSide()(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val amuletRules = sv1Backend.getDsoInfo().amuletRules
+    val existing = AmuletConfigSchedule(amuletRules).getConfigAsOf(env.environment.clock.now)
+    val rc = existing.rewardConfig.get()
+    val newRc = new RewardConfig(
+      rc.mintingVersion,
+      rc.dryRunVersion,
+      rc.batchSize,
+      rc.rewardCouponTimeToLive,
+      rc.appRewardCouponThreshold,
+      Optional.of(BigDecimal("0.2").bigDecimal),
+      Optional.of(BigDecimal("0.1").bigDecimal),
+      Optional.of(BigDecimal("0.1").bigDecimal),
+    )
+    val newConfig = new AmuletConfig[USD](
+      existing.transferConfig,
+      existing.issuanceCurve,
+      existing.decentralizedSynchronizer,
+      existing.tickDuration,
+      existing.packageConfig,
+      existing.transferPreapprovalFee,
+      existing.featuredAppActivityMarkerAmount,
+      existing.optDevelopmentFundManager,
+      existing.externalPartyConfigStateTickDuration,
+      Optional.of(newRc),
+      existing.transferPreapprovalBaseDuration,
+      existing.developmentFundManagerBlacklist,
+      existing.minDevelopmentFundMintingDelay,
+      existing.amuletSwitchOverTimes,
+    )
+    setAmuletConfig(Seq((None, newConfig, existing)))
+    eventually() {
+      sv1Backend.listVoteRequests() shouldBe empty
     }
   }
 
   // Grants a featured-app right directly with the specified kind via
-  // DsoRules_GrantFeaturedAppRight (controller: dso). Blocks until scan
-  // observes the right with the expected kind and weight.
+  // DsoRules_GrantFeaturedAppRight (controller: dso). The opsParties argument
+  // registers additional parties (typically the user's validator operator) that
+  // submit on behalf of the provider — findFASubmitter resolves each submitter
+  // against the FA providers' opsParty mapping, so the validator party must be
+  // listed here for wallet-submitted transactions to be attributed to the user's
+  // FA grant. Blocks until scan observes the right with the expected kind and weight.
   private def grantFeaturedAppRightWithKind(
       party: PartyId,
       kind: FeaturedAppKind,
+      opsParties: Seq[PartyId],
       weight: BigDecimal = BigDecimal(1),
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val opsPartiesArg =
+      if (opsParties.isEmpty) java.util.Optional.empty[java.util.List[String]]()
+      else
+        java.util.Optional.of(
+          java.util.List.copyOf(opsParties.map(_.toProtoPrimitive).asJava)
+        )
     val action = new ARC_DsoRules(
       new SRARC_GrantFeaturedAppRight(
         new DsoRules_GrantFeaturedAppRight(
           party.toProtoPrimitive,
           java.util.Optional.of(weight.bigDecimal),
           java.util.Optional.of(kind),
-          java.util.Optional.empty(),
+          opsPartiesArg,
         )
       )
     )
@@ -165,39 +270,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       }
     }
   }
-
-  // Asserts both the pre-amendment totals (app-side + minting allowance) and the
-  // TBAR v1.1 asset-side totals (asset activity weight + per-source rewards +
-  // featured-app/asset issuance rates) are all zero for the given rounds.
-  private def assertZeroTotals(
-      scan: ScanAppBackendReference,
-      rounds: Seq[Long],
-      timeout: FiniteDuration = 20.seconds,
-  ): Unit =
-    rounds.foreach { round =>
-      eventually(timeout) {
-        inside(scan.getRewardAccountingActivityTotals(round)) {
-          case GetRewardAccountingActivityTotalsResponse.members
-                .RewardAccountingActivityTotalsOk(t) =>
-            t.activityRecordsCount shouldBe 0L withClue
-              s"Round $round should have no activity records on ${scan.name}"
-            t.totalAppActivityWeight shouldBe 0L withClue
-              s"Round $round should have no activity weight on ${scan.name}"
-            t.totalAssetActivityWeight shouldBe 0L withClue
-              s"Round $round should have no asset activity weight on ${scan.name}"
-            BigDecimal(t.totalAppRewardMintingAllowance) shouldBe BigDecimal(0) withClue
-              s"Round $round should have no minting allowance on ${scan.name}"
-            BigDecimal(t.totalAppRewardFromAppActivity) shouldBe BigDecimal(0) withClue
-              s"Round $round should have no app-side reward on ${scan.name}"
-            BigDecimal(t.totalAppRewardFromAssetActivity) shouldBe BigDecimal(0) withClue
-              s"Round $round should have no asset-side reward on ${scan.name}"
-            BigDecimal(t.issuancePerFeaturedAppActivity) shouldBe BigDecimal(0) withClue
-              s"Round $round should have no featured-app issuance on ${scan.name}"
-            BigDecimal(t.issuancePerFeaturedAssetActivity) shouldBe BigDecimal(0) withClue
-              s"Round $round should have no featured-asset issuance on ${scan.name}"
-        }
-      }
-    }
 
   private def assertOldestOpenRound(
       expectedOldestRound: Long
