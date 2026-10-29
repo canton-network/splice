@@ -325,7 +325,7 @@ describe('Grant Featured App Form', () => {
     });
   });
 
-  test('sends opsParties to backend when provided', async () => {
+  test('includes opsParties in the GrantFeaturedAppRight vote action', async () => {
     let requestBody = '';
     server.use(
       http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
