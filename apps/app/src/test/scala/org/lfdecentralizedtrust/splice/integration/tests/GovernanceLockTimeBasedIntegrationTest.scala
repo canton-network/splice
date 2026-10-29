@@ -209,7 +209,7 @@ class GovernanceLockTimeBasedIntegrationTest
       }
 
       // Withdraw the governance lock; it's relocked as a vesting GovernanceLock and funds remain locked
-      val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+      val vestingStartTime = getLedgerTime.plusSeconds(1).toInstant
       val (vestingLockCid, vestingLockView) = ops
         .unlockGovernanceLock(
           aliceValidatorBackend.participantClientWithAdminToken,
@@ -342,7 +342,7 @@ class GovernanceLockTimeBasedIntegrationTest
     val owner = RichPartyId.local(sv1Party)
     val participant = sv1Backend.participantClientWithAdminToken
 
-    val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+    val vestingStartTime = getLedgerTime.plusSeconds(1).toInstant
     val endTime = vestingStartTime.plus(vestingDuration)
 
     // `tsv1Operations.createGovernanceLock` feeds all of the owner's unlocked
@@ -712,7 +712,7 @@ class GovernanceLockTimeBasedIntegrationTest
         },
       )
 
-      val vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+      val vestingStartTime = getLedgerTime.plusSeconds(1).toInstant
       tsv1Operations
         .unlockGovernanceLock(
           aliceParticipant,
@@ -812,7 +812,7 @@ class GovernanceLockTimeBasedIntegrationTest
           lockKind,
           lockSubject,
           unlockAmount = initialLockAmount,
-          vestingStartTime = truncateInstant(getLedgerTime.plusSeconds(1).toInstant),
+          vestingStartTime = getLedgerTime.plusSeconds(1).toInstant,
           isValid = _.originalInstructionCid.toScala.exists(
             _.contractId == lockCid.contractId
           ),
@@ -862,8 +862,7 @@ class GovernanceLockTimeBasedIntegrationTest
     val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
     val alice = RichPartyId.local(aliceParty)
     val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
-    val vestingStartTime =
-      truncateInstant(getLedgerTime.plusSeconds(1).toInstant)
+    val vestingStartTime = getLedgerTime.plusSeconds(1).toInstant
 
     aliceWalletClient.tap(walletAmuletToUsd(BigDecimal(100000)))
     val lockCid = tsv1Operations.createGovernanceLock(
