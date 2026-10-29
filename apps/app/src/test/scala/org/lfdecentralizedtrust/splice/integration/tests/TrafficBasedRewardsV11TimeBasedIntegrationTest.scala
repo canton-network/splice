@@ -34,7 +34,7 @@ import scala.jdk.OptionConverters.*
 // test is kept as a regression reference per the author's and reviewer's
 // 2026-10-28 agreement on #7837.
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
