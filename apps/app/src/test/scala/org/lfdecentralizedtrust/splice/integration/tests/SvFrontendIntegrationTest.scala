@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
   ARC_AmuletRules,
   ARC_DsoRules,
@@ -585,14 +586,30 @@ class SvFrontendIntegrationTest
       val providerParty = sv3Backend.getDsoInfo().svParty
       val providerPartyId = providerParty.toProtoPrimitive
       val activityWeight = BigDecimal("2.5")
+      // opsParties must not include the provider; use sv2's party (valid and distinct).
+      val opsPartyId = sv2Backend.getDsoInfo().svParty.toProtoPrimitive
 
-      // First, create a Grant proposal for the provider.
+      // First, create a Grant proposal for the provider, exercising the new appKind and
+      // opsParties fields (CIP-104 1.1).
       val grantProposalContractId = assertCreateProposal(
         "SRARC_GrantFeaturedAppRight",
         "grant-featured-app",
       ) { implicit webDriver =>
         fillOutTextField("grant-featured-app-idValue", providerPartyId)
         fillOutTextField("grant-featured-app-activityWeight", activityWeight.toString)
+        selectMuiOptionByValue("grant-featured-app-appKind-dropdown", "FAK_AssetMoving")
+        // MUI's Select popup lingers/animates after choosing; wait for it to close so it
+        // does not obscure the opsParties controls below it.
+        eventually() {
+          webDriver.findElements(By.cssSelector("ul.MuiMenu-list")).size() shouldBe 0
+        }
+        // opsParties is an add-a-row widget: add one row, then fill it.
+        click on testId("grant-featured-app-opsParties-add")
+        eventually() {
+          inside(find(testId("grant-featured-app-opsParties-row-0"))) { case Some(row) =>
+            row.underlying.sendKeys(opsPartyId)
+          }
+        }
       }
 
       clue("vote the grant request to execution before creating revoke request") {
@@ -618,6 +635,11 @@ class SvFrontendIntegrationTest
           featuredAppRight.value.payload.activityWeight.toScala.map(
             BigDecimal(_)
           ) shouldBe Some(activityWeight)
+          featuredAppRight.value.payload.appKind.toScala shouldBe Some(
+            FeaturedAppKind.FAK_ASSETMOVING
+          )
+          featuredAppRight.value.payload.opsParties.toScala
+            .map(_.asScala.toList) shouldBe Some(List(opsPartyId))
         }
       }
 
