@@ -405,7 +405,7 @@ function buildRewardConfigChanges(
       currentValue: before?.extraFeaturedAssetActivityWeight || '',
       newValue: after?.extraFeaturedAssetActivityWeight || '',
       description:
-        'Weight applied to extra featured asset activity (default: 0.2). Leave blank to use the protocol default.',
+        'Weight applied to extra featured asset activity across the whole transaction (default: 0.2). Leave blank to use the protocol default.',
     },
     {
       fieldName: 'rewardConfigMaxExtraFeaturedAssetActivityWeightPerAsset',
