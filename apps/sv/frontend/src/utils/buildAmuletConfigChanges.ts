@@ -401,7 +401,7 @@ function buildRewardConfigChanges(
     },
     {
       fieldName: 'rewardConfigExtraFeaturedAssetActivityWeight',
-      label: 'Reward config: Extra featured asset activity weight',
+      label: 'Reward config: Extra featured asset activity weight per transaction',
       currentValue: before?.extraFeaturedAssetActivityWeight || '',
       newValue: after?.extraFeaturedAssetActivityWeight || '',
       description:

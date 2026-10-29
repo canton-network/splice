@@ -268,7 +268,7 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       },
       {
         fieldName: 'rewardConfigExtraFeaturedAssetActivityWeight',
-        label: 'Reward config: Extra featured asset activity weight',
+        label: 'Reward config: Extra featured asset activity weight per transaction',
         currentValue: '0.2',
         newValue: '0.3',
       },
@@ -383,7 +383,7 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       },
       {
         fieldName: 'rewardConfigExtraFeaturedAssetActivityWeight',
-        label: 'Reward config: Extra featured asset activity weight',
+        label: 'Reward config: Extra featured asset activity weight per transaction',
         currentValue: '0.2',
         newValue: '',
       },
