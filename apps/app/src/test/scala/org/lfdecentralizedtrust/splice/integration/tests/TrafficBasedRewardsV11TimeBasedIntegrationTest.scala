@@ -4,24 +4,15 @@ import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
 import java.util.{Optional, UUID}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  FeaturedAppKind,
-  FeaturedAppRight_Update,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   RewardConfig,
   USD,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  DsoRules_GrantFeaturedAppRight,
-  DsoRules_UpdateFeaturedAppRight,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
-  SRARC_GrantFeaturedAppRight,
-  SRARC_UpdateFeaturedAppRight,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
@@ -43,7 +34,6 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 
-import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -138,19 +128,32 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         opsParties = Seq(bobValidatorBackend.getValidatorPartyId()),
       )
     }
+    // Second FAK_ASSET party at weight=3 so one send can exercise the weight-1 (default)
+    // and the weight=3 (step-8-scaling) paths in parallel, within a single cap round.
+    // charlie runs on alice's validator per the simple-topology-1sv config.
+    val highWeightAssetParty = onboardWalletUser(charlieWalletClient, aliceValidatorBackend)
+    clue(s"Grant FAK_Asset right (weight=3) to $highWeightAssetParty") {
+      grantFeaturedAppRightWithKind(
+        highWeightAssetParty,
+        FeaturedAppKind.FAK_ASSET,
+        opsParties = Seq(aliceValidatorBackend.getValidatorPartyId()),
+        weight = BigDecimal(3),
+      )
+    }
     updateTbarV11RewardConfig()
 
-    // Receiver's TransferPreapproval is required so the sender submits the
-    // amulet transfer directly — makes assetMoverParty the Daml submitter so
-    // findFASubmitter attributes the transaction to the FAK_ASSETMOVING grant.
+    // Receivers' TransferPreapprovals so the sender submits the amulet transfer
+    // directly — assetMoverParty becomes the Daml submitter, and findFASubmitter
+    // attributes the transaction to the FAK_ASSETMOVING grant.
     bobWalletClient.createTransferPreapproval()
+    charlieWalletClient.createTransferPreapproval()
     aliceWalletClient.tap(1000.0)
 
-    // Non-FA submitter for the negative-case clue below: splitwell's wallet user
-    // never gets a FA grant, so a transfer it submits should miss both
-    // findFASubmitter paths and fall through to computeForUserSubmitted (which
-    // produces app records but no asset records).
-    val nonFaSubmitterParty = onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
+    // Non-FA submitter for the baseline round's negative-case leg: splitwell's
+    // wallet user never gets a FA grant, so a transfer it submits should miss
+    // both findFASubmitter paths and fall through to computeForUserSubmitted
+    // (which produces app records but no asset records).
+    onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
     splitwellWalletClient.tap(1000.0)
 
     assertOldestOpenRound(0)
@@ -173,127 +176,60 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       assertOldestOpenRound(round.toLong)
     }
 
-    val sendRound = 5L
-    // Scan returns events in ascending time; cursor-before-send bounds later queries
-    // to the post-send window instead of paging through the full history.
-    val cursorBeforeSend = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
-    clue("CIP-104 Example 2.1: assetMoverParty sends to assetParty (sole FAK_ASSET confirmer)") {
+    // Round 5 scenario: all cap=0.1 cases in parallel.
+    // - alice→bob (FA submitter + FAK_ASSET confirmer, weight=1): baseline positive.
+    // - splitwell→bob (non-FA submitter, FAK_ASSET confirmer): negative; app records
+    //   only, no asset-side (findFASubmitter returns None → computeForFASubmitted
+    //   never runs).
+    val baselineRound = 5L
+    val cursorBeforeBaseline = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
+    clue(s"Round $baselineRound: FA alice→$assetParty + non-FA splitwell→$assetParty in parallel") {
       aliceWalletClient.transferPreapprovalSend(
         assetParty,
         BigDecimal(10),
         UUID.randomUUID().toString,
       )
-    }
-
-    // Advance to round 6 so the negative-case send below lands in a distinct round
-    // from the FA-submitted send above.
-    advanceRoundsToNextRoundOpening
-    assertOldestOpenRound(6L)
-
-    val sendRoundNoFa = 6L
-    val cursorBeforeNoFaSend = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
-    clue(
-      s"CIP-104 negative: non-FA submitter ($nonFaSubmitterParty) produces app-only, no asset activity in round $sendRoundNoFa"
-    ) {
       splitwellWalletClient.transferPreapprovalSend(
         assetParty,
         BigDecimal(5),
         UUID.randomUUID().toString,
       )
     }
-
-    // Advance past both send rounds so their totals are computed and exposed by scan.
-    for (round <- 7 to 8) {
+    for (round <- 6 to 7) {
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
 
-    // Events generated by the FA-submitted send and the round-5-closing automation.
-    // Fetched once and reused by the two downstream clues below.
-    val postSendEvents = sv1ScanBackend.getEventHistory(
+    val baselineEvents = sv1ScanBackend.getEventHistory(
       count = 1000,
-      after = Some(cursorBeforeSend),
+      after = Some(cursorBeforeBaseline),
       encoding = CompactJson,
     )
 
-    clue(s"Round $sendRound shows asset-side TBAR v1.1 activity from the asset-moving send") {
-      assertRoundTotalsOk(sendRound) { t =>
-        t.activityRecordsCount should be >= 1L withClue
-          s"Round $sendRound should have at least one activity record from the send"
-        t.totalAppActivityWeight should be > 0L withClue
-          s"Round $sendRound should have non-zero app activity weight (total burn attributed to submitter)"
-        // CIP-104 asset split: extraFeaturedAssetActivityWeight=0.2 is the headline,
-        // but per-envelope split, the per-asset cap (0.1), and dso-weight attenuation
-        // land the aggregate near ~0.11×. The [5%, 25%] window catches both the
-        // "zero asset activity" regression and >1× inflation.
-        val assetLower = (BigDecimal(t.totalAppActivityWeight) * 0.05).toLong
-        val assetUpper = (BigDecimal(t.totalAppActivityWeight) * 0.25).toLong
-        t.totalAssetActivityWeight should be >= assetLower withClue
-          s"Round $sendRound asset activity weight (${t.totalAssetActivityWeight}) should be at least 5% of app activity weight (${t.totalAppActivityWeight})"
-        t.totalAssetActivityWeight should be <= assetUpper withClue
-          s"Round $sendRound asset activity weight (${t.totalAssetActivityWeight}) should be at most 25% of app activity weight (${t.totalAppActivityWeight})"
-      }
-    }
-
-    clue(s"At least one event exposes assetParty $assetParty via per-event assetActivityRecords") {
-      // Shape-1 field end-to-end: the OmitNullArray-wrapped array from the event-api PR.
-      val eventsWithAssetRecords =
-        postSendEvents.flatMap(_.assetActivityRecords.filter(_.value.nonEmpty))
-      eventsWithAssetRecords should not be empty withClue
-        s"At least one event after cursor $cursorBeforeSend should carry non-empty assetActivityRecords"
-      val assetPartyProto = assetParty.toProtoPrimitive
-      val eventsNamingAssetParty = eventsWithAssetRecords.filter(_.value.exists { r =>
-        r.party == assetPartyProto && r.weight > 0L
-      })
-      eventsNamingAssetParty should not be empty withClue
-        s"At least one event should list $assetParty as an asset activity record party with weight > 0"
+    clue(
+      s"Round $baselineRound FA event: per-record asset weight for $assetParty is ~10% of burn (cap=0.1, weight=1)"
+    ) {
+      val faEvent = findFaSubmittedEvent(baselineEvents, assetParty)
+      assertAssetRatioInEvent(
+        event = faEvent,
+        submitter = assetMoverParty,
+        assetParty = assetParty,
+        expectedPct = 10,
+        tolerancePct = 3,
+        label = s"baseline alice→$assetParty",
+      )
     }
 
     clue(
-      s"Round $sendRoundNoFa negative case: non-FA submitter produces app records (bob as FA confirmer) but zero asset activity"
+      s"Round $baselineRound non-FA event (splitwell→$assetParty): app records only, no asset activity"
     ) {
-      assertRoundTotalsOk(sendRoundNoFa) { t =>
-        t.activityRecordsCount should be >= 1L withClue
-          s"Round $sendRoundNoFa should have at least one activity record (bob is a FA confirmer on the splitwell→bob transfer)"
-        t.totalAppActivityWeight should be > 0L withClue
-          s"Round $sendRoundNoFa should have non-zero app activity weight (attributed to bob via computeForUserSubmitted)"
-        t.totalAssetActivityWeight shouldBe 0L withClue
-          s"Round $sendRoundNoFa must have zero asset activity: non-FA submitter means findFASubmitter returns None → computeForFASubmitted never runs → no asset-side split"
-      }
-    }
-
-    clue("scan.getEventById surfaces submitting_app_provider per compute path") {
-      // FA-submitted path (round 5): submitting_app_provider = Some(assetMoverParty).
-      val faSubmittedEvent = postSendEvents
-        .find(_.assetActivityRecords.exists(_.value.nonEmpty))
-        .getOrElse(
-          fail(s"Expected an FA-submitted event with asset records after $cursorBeforeSend")
-        )
-      val faUpdateId = faSubmittedEvent.verdict
-        .map(_.updateId)
-        .getOrElse(fail("FA-submitted event should carry a verdict with an updateId"))
-      val faEvent = sv1ScanBackend
-        .getEventById(faUpdateId, None)
-        .getOrElse(fail(s"scan.getEventById($faUpdateId) returned None"))
-      faEvent.submittingAppProvider.map(_.value) shouldBe Some(
-        assetMoverParty.toProtoPrimitive
-      ) withClue
-        s"FA-submitted event $faUpdateId should report $assetMoverParty as submitting_app_provider"
-
-      // User-submitted path (round 6): submitting_app_provider absent — the field
-      // is only populated by computeForFASubmitted, not computeForUserSubmitted.
-      val postNoFaEvents = sv1ScanBackend.getEventHistory(
-        count = 1000,
-        after = Some(cursorBeforeNoFaSend),
-        encoding = CompactJson,
-      )
-      val userSubmittedEvent = postNoFaEvents
+      val userSubmittedEvent = baselineEvents
         .find(e =>
           e.appActivityRecords.exists(_.records.nonEmpty) && e.assetActivityRecords.isEmpty
         )
         .getOrElse(
           fail(
-            s"Expected a user-submitted event with app records (and no asset records) after $cursorBeforeNoFaSend"
+            s"Expected a user-submitted event with app records (and no asset records) in round $baselineRound events"
           )
         )
       val noFaUpdateId = userSubmittedEvent.verdict
@@ -303,116 +239,94 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         .getEventById(noFaUpdateId, None)
         .getOrElse(fail(s"scan.getEventById($noFaUpdateId) returned None"))
       noFaEvent.submittingAppProvider shouldBe None withClue
-        s"User-submitted event $noFaUpdateId should have no submitting_app_provider"
-    }
-
-    // Capture the earlier round's asset:app ratio for the cap-crossing comparison below.
-    val sendRoundTotals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(sendRound)) {
-      case GetRewardAccountingActivityTotalsResponse.members
-            .RewardAccountingActivityTotalsOk(t) =>
-        t
+        s"Non-FA-submitted event $noFaUpdateId should have no submitting_app_provider"
     }
 
     clue(
-      "Lower maxExtraFeaturedAssetActivityWeightPerAsset mid-flow so the next asset-moving send crosses the per-asset cap"
+      s"Round $baselineRound FA event (alice→$assetParty): getEventById reports submitting_app_provider = $assetMoverParty"
+    ) {
+      val faEvent = findFaSubmittedEvent(baselineEvents, assetParty)
+      val faUpdateId = faEvent.verdict
+        .map(_.updateId)
+        .getOrElse(fail("FA-submitted event should carry a verdict with an updateId"))
+      val reloaded = sv1ScanBackend
+        .getEventById(faUpdateId, None)
+        .getOrElse(fail(s"scan.getEventById($faUpdateId) returned None"))
+      reloaded.submittingAppProvider.map(_.value) shouldBe Some(
+        assetMoverParty.toProtoPrimitive
+      ) withClue
+        s"FA-submitted event $faUpdateId should report $assetMoverParty as submitting_app_provider"
+    }
+
+    // Mid-flow: halve the per-asset cap so the next scenario round exercises both
+    // cap clamping and step-8 weight scaling via two parallel sends.
+    clue(
+      "Lower maxExtraFeaturedAssetActivityWeightPerAsset mid-flow for the cap+weight scenario round"
     ) {
       updateTbarV11RewardConfig(maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"))
     }
-
-    // The cap-lower vote took effect at the current simtime; new rounds opening
-    // after this point see the lowered cap in lookupAmuletConfigAsOf.
-    for (round <- 9 to 11) {
+    for (round <- 8 to 10) {
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
 
-    val capCrossRound = 11L
+    // Round 10 scenario: both cap=0.05 cases in parallel.
+    // - alice→assetParty (weight=1): exercises cap clamp (~5% per-record asset ratio).
+    // - alice→highWeightAssetParty (weight=3): exercises step-8 weight application
+    //   atop the same cap (~15% per-record asset ratio).
+    val capWeightRound = 10L
+    val cursorBeforeCapWeight = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
     clue(
-      s"CIP-104 cap enforcement: send in round $capCrossRound against the lowered per-asset cap (0.05)"
+      s"Round $capWeightRound: cap-crossed alice→$assetParty (w=1) + weight-tripled alice→$highWeightAssetParty (w=3)"
     ) {
       aliceWalletClient.transferPreapprovalSend(
         assetParty,
         BigDecimal(10),
         UUID.randomUUID().toString,
       )
-    }
-    for (round <- 12 to 13) {
-      advanceRoundsToNextRoundOpening
-      assertOldestOpenRound(round.toLong)
-    }
-
-    clue(
-      s"Round $capCrossRound asset ratio should be ~half of round $sendRound's (cap 0.05 vs 0.1)"
-    ) {
-      assertRoundTotalsOk(capCrossRound) { t =>
-        t.totalAppActivityWeight should be > 0L
-        t.totalAssetActivityWeight should be > 0L withClue
-          s"Round $capCrossRound should still have asset activity (cap is lower, not zero)"
-        // Baseline round saw asset ~0.11 × app. With cap halved from 0.1 to 0.05,
-        // the per-asset share halves, so asset should land near ~0.055 × app.
-        // Pin the halving relationship directly rather than tracking absolute values.
-        val baselineRatioPct = sendRoundTotals.totalAssetActivityWeight * 100L /
-          sendRoundTotals.totalAppActivityWeight
-        val capCrossRatioPct = t.totalAssetActivityWeight * 100L / t.totalAppActivityWeight
-        capCrossRatioPct should be < baselineRatioPct withClue
-          s"Cap-lowered round ratio ($capCrossRatioPct%) should be smaller than baseline round $sendRound's ratio ($baselineRatioPct%)"
-        capCrossRatioPct * 3L should be < baselineRatioPct * 2L withClue
-          s"Cap-lowered round ratio ($capCrossRatioPct%) should be well under 2/3 of baseline ($baselineRatioPct%) — expect ~half"
-      }
-    }
-
-    // Snapshot the cap-crossed round's totals so the weight-change round below
-    // can compare against them (same cap of 0.05, but assetParty weight 1→3).
-    val capCrossRoundTotals =
-      inside(sv1ScanBackend.getRewardAccountingActivityTotals(capCrossRound)) {
-        case GetRewardAccountingActivityTotalsResponse.members
-              .RewardAccountingActivityTotalsOk(t) =>
-          t
-      }
-
-    clue(s"Triple assetParty's FA activity weight so step-8 attribution scales up") {
-      updateFeaturedAppRightWeight(assetParty, BigDecimal(3))
-    }
-
-    // Advance to let the new weight propagate into lookupFeaturedAppPartiesAsOf.
-    for (round <- 14 to 16) {
-      advanceRoundsToNextRoundOpening
-      assertOldestOpenRound(round.toLong)
-    }
-
-    val weightChangeRound = 16L
-    clue(
-      s"Send in round $weightChangeRound to measure step-8 weight application (weight=3, cap=0.05 unchanged)"
-    ) {
       aliceWalletClient.transferPreapprovalSend(
-        assetParty,
+        highWeightAssetParty,
         BigDecimal(10),
         UUID.randomUUID().toString,
       )
     }
-    for (round <- 17 to 18) {
+    for (round <- 11 to 12) {
       advanceRoundsToNextRoundOpening
       assertOldestOpenRound(round.toLong)
     }
 
+    val capWeightEvents = sv1ScanBackend.getEventHistory(
+      count = 1000,
+      after = Some(cursorBeforeCapWeight),
+      encoding = CompactJson,
+    )
+
     clue(
-      s"Round $weightChangeRound asset ratio should scale ~3× over round $capCrossRound's (weight 3 vs 1, cap unchanged)"
+      s"Round $capWeightRound cap-crossed event (alice→$assetParty, w=1, cap=0.05): per-record asset ratio ~5%"
     ) {
-      assertRoundTotalsOk(weightChangeRound) { t =>
-        t.totalAppActivityWeight should be > 0L
-        t.totalAssetActivityWeight should be > 0L
-        // Step 8 of computeAssetActivity applies the FA weight AFTER cap clamp.
-        // Weight 1→3 triples assetParty's capped share; DSO's share (weight 0.1,
-        // re-attributed to the submitter) is unaffected. Net ratio climbs
-        // from ~5.5% toward ~15.5%. Bounds pin "much larger than 2×, less than 4×".
-        val capCrossRatioPct = capCrossRoundTotals.totalAssetActivityWeight * 100L /
-          capCrossRoundTotals.totalAppActivityWeight
-        val weightChangeRatioPct = t.totalAssetActivityWeight * 100L / t.totalAppActivityWeight
-        weightChangeRatioPct should be > capCrossRatioPct * 2L withClue
-          s"Weight-tripled round ratio ($weightChangeRatioPct%) should be at least 2× capCross ratio ($capCrossRatioPct%)"
-        weightChangeRatioPct should be < capCrossRatioPct * 4L withClue
-          s"Weight-tripled round ratio ($weightChangeRatioPct%) should be less than 4× capCross ratio ($capCrossRatioPct%) — DSO's share is weight-independent"
-      }
+      val event = findFaSubmittedEvent(capWeightEvents, assetParty)
+      assertAssetRatioInEvent(
+        event = event,
+        submitter = assetMoverParty,
+        assetParty = assetParty,
+        expectedPct = 5,
+        tolerancePct = 3,
+        label = s"cap-crossed alice→$assetParty",
+      )
+    }
+
+    clue(
+      s"Round $capWeightRound weight-tripled event (alice→$highWeightAssetParty, w=3, cap=0.05): per-record asset ratio ~15%"
+    ) {
+      val event = findFaSubmittedEvent(capWeightEvents, highWeightAssetParty)
+      assertAssetRatioInEvent(
+        event = event,
+        submitter = assetMoverParty,
+        assetParty = highWeightAssetParty,
+        expectedPct = 15,
+        tolerancePct = 4,
+        label = s"weight-tripled alice→$highWeightAssetParty",
+      )
     }
   }
 
@@ -502,40 +416,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
   }
 
-  // Votes an UpdateFeaturedAppRight choice that re-grants the FA right with a new
-  // activityWeight (appKind and opsParties are preserved by Daml's `this with ...`).
-  // Blocks until scan observes the new weight.
-  private def updateFeaturedAppRightWeight(
-      party: PartyId,
-      newWeight: BigDecimal,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val rightCid = clue(s"Look up featured app right for $party") {
-      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
-    }
-    val action = new ARC_DsoRules(
-      new SRARC_UpdateFeaturedAppRight(
-        new DsoRules_UpdateFeaturedAppRight(
-          rightCid,
-          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
-        )
-      )
-    )
-    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
-    clue(s"Wait for $party featured app right weight to be $newWeight") {
-      eventually() {
-        val weight = sv1ScanBackend
-          .lookupFeaturedAppRight(party)
-          .value
-          .payload
-          .activityWeight
-          .toScala
-          .map(BigDecimal(_))
-        weight.getOrElse(BigDecimal(1)).compare(newWeight) shouldBe 0 withClue
-          s"activity weight for $party should be $newWeight"
-      }
-    }
-  }
-
   private def assertOldestOpenRound(
       expectedOldestRound: Long
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
@@ -550,19 +430,59 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
   }
 
-  // Waits (eventually) for scan to return RewardAccountingActivityTotalsOk for the
-  // given round and then runs `check` against the totals. Fails loudly if scan
-  // ever responds with Undetermined/CannotProvide once the timeout elapses.
-  private def assertRoundTotalsOk(round: Long, timeout: FiniteDuration = 30.seconds)(
-      check: definitions.RewardAccountingActivityTotalsOk => Unit
-  )(implicit env: SpliceTestConsoleEnvironment): Unit =
-    eventually(timeUntilSuccess = timeout) {
-      inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
-        case GetRewardAccountingActivityTotalsResponse.members
-              .RewardAccountingActivityTotalsOk(t) =>
-          check(t)
-      }
-    }
+  // Picks the first event whose assetActivityRecords includes `assetParty` as a
+  // record party. Used to disambiguate parallel per-round sends by their target
+  // asset provider rather than by updateId (which transferPreapprovalSend does
+  // not return).
+  private def findFaSubmittedEvent(
+      events: Seq[definitions.EventHistoryItem],
+      assetParty: PartyId,
+  ): definitions.EventHistoryItem = {
+    val partyProto = assetParty.toProtoPrimitive
+    events
+      .find(_.assetActivityRecords.exists(_.value.exists(_.party == partyProto)))
+      .getOrElse(
+        fail(s"No event found with $assetParty as an asset activity record party")
+      )
+  }
+
+  // Asserts that `event`'s per-record asset weight for `assetParty` matches
+  // `expectedPct` of the submitter's app weight (= total burn attributed to the
+  // submitter in computeForFASubmitted), within ± tolerancePct. The ratio check
+  // is per-event, so parallel sends in the same round can each be verified
+  // against their own CIP-formula expectation independently.
+  private def assertAssetRatioInEvent(
+      event: definitions.EventHistoryItem,
+      submitter: PartyId,
+      assetParty: PartyId,
+      expectedPct: Int,
+      tolerancePct: Int,
+      label: String,
+  ): Unit = {
+    val appRecords = event.appActivityRecords
+      .getOrElse(fail(s"$label: event has no appActivityRecords"))
+      .records
+    val submitterProto = submitter.toProtoPrimitive
+    val submitterBurn = appRecords
+      .find(_.party == submitterProto)
+      .getOrElse(fail(s"$label: no app record for submitter $submitter"))
+      .weight
+    val assetRecords = event.assetActivityRecords
+      .getOrElse(fail(s"$label: event has no assetActivityRecords"))
+      .value
+    val assetPartyProto = assetParty.toProtoPrimitive
+    val assetWeight = assetRecords
+      .find(_.party == assetPartyProto)
+      .getOrElse(fail(s"$label: no asset record for $assetParty"))
+      .weight
+    val actualPct = assetWeight * 100L / submitterBurn
+    val lower = (expectedPct - tolerancePct).toLong
+    val upper = (expectedPct + tolerancePct).toLong
+    actualPct should be >= lower withClue
+      s"$label: asset/app ratio $actualPct% should be >= $lower% (expected ~$expectedPct%)"
+    actualPct should be <= upper withClue
+      s"$label: asset/app ratio $actualPct% should be <= $upper% (expected ~$expectedPct%)"
+  }
 }
 
 object TrafficBasedRewardsV11TimeBasedIntegrationTestBase {
