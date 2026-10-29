@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.auth
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import com.daml.jwt.{AuthServiceJWTCodec, JwtSigner, StandardJWTPayload, StandardJWTTokenFormat}
 import com.digitalasset.canton.user.store.UserManagementStore
 
 // See also: com.daml.ledger.api.auth.Main from the Daml SDK contains utils for generating ledger API access tokens
@@ -16,9 +15,7 @@ object AuthUtil {
       "OIDC_AUTHORITY_LEDGER_API_AUDIENCE",
       sys.env("SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_AUDIENCE"),
     )
-  val testParticipantAdminApiAudience: String = "participant"
   val testSecret: String = "test"
-  val adminApiTestSecret: String = "admin-test"
   val testSignatureAlgorithm: Algorithm = Algorithm.HMAC256(testSecret)
 
   /** We expect the audience field to have format `https://<domain>/<version>/<app-name>` */
@@ -72,33 +69,16 @@ object AuthUtil {
 
   object CantonAdminApi {
 
+    val adminApiTestSecret: String = "admin-test"
+    val testParticipantAdminApiAudience: String = "participant"
+    val defaultParticipantAdminApiUser: String = UserManagementStore.DefaultParticipantAdminUserId
+
     def participantAdminApiTestToken: String =
       testToken(
-        AuthUtil.adminApiTestSecret,
-        AuthUtil.testParticipantAdminApiAudience,
+        audience = testParticipantAdminApiAudience,
+        user = defaultParticipantAdminApiUser,
+        secret = adminApiTestSecret,
       )
-
-    // borrowed from com.digitalasset.canton.participant.ledger.api.JwtTokenUtilities
-    def testToken(
-        secret: String,
-        audience: String,
-    ): String = {
-      val payload = StandardJWTPayload(
-        issuer = None,
-        userId = UserManagementStore.DefaultParticipantAdminUserId,
-        participantId = None,
-        exp = None,
-        format = StandardJWTTokenFormat.Audience,
-        audiences = List(audience),
-        scope = None,
-      )
-      val jwtPayload = AuthServiceJWTCodec.compactPrint(payload)
-      val signed = JwtSigner
-        .HMAC256(secret)
-        .signPayload(jwtPayload)
-        .fold(err => throw new RuntimeException(err.message), identity)
-      signed.value
-    }
   }
 
   @SuppressWarnings(Array("org.lfdecentralizedtrust.splice.wart.Println"))

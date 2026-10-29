@@ -70,10 +70,9 @@ class ParticipantPlaintextIdentitiesIntegrationTest
         (_, config) => ConfigTransforms.withPausedSvDomainComponentsOffboardingTriggers()(config),
         (_, config) => useSelfSignedTokensForLongRunningLedgerApiAuth(AuthUtil.testSecret, config),
         (_, config) =>
-          useSelfSignedTokensForParticipantAdminApiAuth(
-            AuthUtil.adminApiTestSecret,
-            AuthUtil.testParticipantAdminApiAudience,
-          )(config),
+          useSelfSignedTokensForParticipantAdminApiAuth(AuthUtil.CantonAdminApi.adminApiTestSecret)(
+            config
+          ),
         (_, config) =>
           updateAllValidatorConfigs { case (name, c) =>
             if (name == "aliceValidatorLocal") {

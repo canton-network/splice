@@ -766,10 +766,7 @@ object ConfigTransforms {
   def useSelfSignedTokensForAuth: ConfigTransform =
     combineAllTransforms(
       useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret),
-      useSelfSignedTokensForParticipantAdminApiAuth(
-        AuthUtil.adminApiTestSecret,
-        AuthUtil.testParticipantAdminApiAudience,
-      ),
+      useSelfSignedTokensForParticipantAdminApiAuth(AuthUtil.CantonAdminApi.adminApiTestSecret),
     )
 
   /** Auth-enabled Splice apps use self-signed tokens with the given secret for their ledger API connections.
@@ -820,15 +817,19 @@ object ConfigTransforms {
   }
 
   def useSelfSignedTokensForParticipantAdminApiAuth(
-      secret: String,
-      audience: String,
+      secret: String
   ): ConfigTransform =
     updateAllParticipantAdminApiConfigs { adminApi =>
+      val token = AuthUtil.testToken(
+        AuthUtil.CantonAdminApi.testParticipantAdminApiAudience,
+        AuthUtil.CantonAdminApi.defaultParticipantAdminApiUser,
+        secret,
+      )
       adminApi.copy(
         authConfig = AuthTokenSourceConfig.Static(
-          token = AuthUtil.CantonAdminApi.testToken(secret, audience),
+          token,
           // We use a JWT instead of a Canton Admin token as port mapping for the token file seems broken in most tests.
-          adminToken = Some(AuthUtil.CantonAdminApi.testToken(secret, audience)),
+          adminToken = Some(token),
         )
       )
     }
