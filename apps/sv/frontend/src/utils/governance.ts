@@ -59,7 +59,8 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
-  SRARC_CreateFeaturedAppConfigUpdateInstruction: 'Amend Featured Application Configuration',
+  SRARC_CreateFeaturedAppConfigUpdateInstruction:
+    'Update Featured Application Metadata (since Splice 0.10.0)',
 });
 
 export const createProposalActions: {
@@ -458,12 +459,11 @@ export function appKindLabel(kind: string): string {
   return kind === '' ? APP_KIND_DEFAULT_LABEL : (APP_KIND_LABELS[kind] ?? kind);
 }
 
-// Select options for the appKind field. Blank maps to the DAML default (None).
+// Select options for the appKind field. No explicit "unset" option: an empty
+// field value (None) renders as the field placeholder (see SelectField), so the
+// dropdown lists only the concrete kinds.
 export function appKindSelectOptions(): { key: string; value: string }[] {
-  return [
-    { key: APP_KIND_DEFAULT_LABEL, value: '' },
-    ...FeaturedAppKind.keys.map(k => ({ key: appKindLabel(k), value: k })),
-  ];
+  return FeaturedAppKind.keys.map(k => ({ key: appKindLabel(k), value: k }));
 }
 
 // Build the UI-facing view of a single provider's config amendment: scalar

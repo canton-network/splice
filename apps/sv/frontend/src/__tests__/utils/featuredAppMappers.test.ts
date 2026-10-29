@@ -58,9 +58,9 @@ describe('diffOpsParties', () => {
 });
 
 describe('appKindSelectOptions', () => {
-  it('leads with a blank default option then the kinds', () => {
+  it('lists the concrete kinds with no explicit unset option', () => {
     const opts = appKindSelectOptions();
-    expect(opts[0]).toEqual({ key: 'Default (unset)', value: '' });
+    expect(opts.find(o => o.value === '')).toBeUndefined();
     expect(opts.map(o => o.value)).toContain('FAK_Basic');
     expect(opts.map(o => o.value)).toContain('FAK_AssetMoving');
     // values stay the raw DAML constructors; keys are friendly labels
