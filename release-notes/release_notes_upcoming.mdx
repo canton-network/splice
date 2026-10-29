@@ -109,6 +109,13 @@
 
      - Upgrade base image to 1.0.18
 
+  - Token standard
+
+    - **Behavior change** `requestedAt` must now be within 24 hours of submission, where
+      previously it only had to be in the past. This applies to the Amulet transfer and
+      allocation factories and to governance lock requests, and matches the 24 hour signing
+      delay introduced in CIP-107.
+
   - Deployment
 
     - Added the `splice-topology-key-monitor` Helm chart, which logs a warning for every topology transaction that is signed by any key configured in the chart.
