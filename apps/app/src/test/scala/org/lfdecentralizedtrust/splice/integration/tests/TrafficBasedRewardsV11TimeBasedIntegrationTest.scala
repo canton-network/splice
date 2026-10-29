@@ -148,7 +148,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
     }
     // Third FAK_ASSET party whose grant will be revoked between the baseline and
-    // cap+weight scenario rounds. Lets both the pre-revocation (baseline-equivalent)
+    // post-vote scenario rounds. Lets both the pre-revocation (baseline-equivalent)
     // and post-revocation (asset-side absence) assertions land in the same two
     // scenario rounds as the other sends.
     // sv1's SV party, validator party, and wallet-user party are all the same
@@ -193,6 +193,17 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined
       ]
     }
+
+    // Sequence of actions
+    //   Round  | Scenario / mid-flow votes
+    //   -------+--------------------------------------------------------
+    //   1-4    | propagation (bootstrap config lands in OpenMiningRounds)
+    //   5      | 3 parallel sends: baseline + non-FA + pre-revoke-baseline
+    //   6-7    | close round 5
+    //   7-ish  | mid-flow votes: cap→0.05, threshold→5 USD, revoke doomed
+    //   8-10   | propagation
+    //   10     | 3 parallel sends: cap-crossed + weight-tripled + post-revoke
+    //   11-12  | close round 10
 
     // Advance several rounds so the new TBAR v1.1 RewardConfig lands in the
     // OpenMiningRound snapshots of upcoming rounds.
@@ -334,10 +345,10 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     // - alice→doomedAssetParty (revoked): exercises post-revocation attribution —
     //   doomedAssetParty is no longer a FAK_ASSET confirmer so its asset activity
     //   record is absent; only DSO's share remains, re-attributed to the submitter.
-    val capWeightRound = 10L
-    val cursorBeforeCapWeight = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
+    val postVoteRound = 10L
+    val cursorBeforePostVote = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
     clue(
-      s"Round $capWeightRound: cap-crossed (w=1) + weight-tripled (w=3) + post-revocation (doomed) in parallel"
+      s"Round $postVoteRound: cap-crossed (w=1) + weight-tripled (w=3) + post-revocation (doomed) in parallel"
     ) {
       aliceWalletClient.transferPreapprovalSend(
         assetParty,
@@ -360,16 +371,16 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       assertOldestOpenRound(round.toLong)
     }
 
-    val capWeightEvents = sv1ScanBackend.getEventHistory(
+    val postVoteEvents = sv1ScanBackend.getEventHistory(
       count = 1000,
-      after = Some(cursorBeforeCapWeight),
+      after = Some(cursorBeforePostVote),
       encoding = CompactJson,
     )
 
     clue(
-      s"Round $capWeightRound cap-crossed event (alice→$assetParty, w=1, cap=0.05): per-record asset ratio ~5%"
+      s"Round $postVoteRound cap-crossed event (alice→$assetParty, w=1, cap=0.05): per-record asset ratio ~5%"
     ) {
-      val event = findFaSubmittedEvent(capWeightEvents, assetParty)
+      val event = findFaSubmittedEvent(postVoteEvents, assetParty)
       assertAssetRatioInEvent(
         event = event,
         submitter = assetMoverParty,
@@ -381,9 +392,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
 
     clue(
-      s"Round $capWeightRound weight-tripled event (alice→$highWeightAssetParty, w=3, cap=0.05): per-record asset ratio ~15%"
+      s"Round $postVoteRound weight-tripled event (alice→$highWeightAssetParty, w=3, cap=0.05): per-record asset ratio ~15%"
     ) {
-      val event = findFaSubmittedEvent(capWeightEvents, highWeightAssetParty)
+      val event = findFaSubmittedEvent(postVoteEvents, highWeightAssetParty)
       assertAssetRatioInEvent(
         event = event,
         submitter = assetMoverParty,
@@ -395,7 +406,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
 
     clue(
-      s"Round $capWeightRound post-revocation event (alice→$doomedAssetParty): no asset record for the revoked party; only DSO-share re-attributed to $assetMoverParty"
+      s"Round $postVoteRound post-revocation event (alice→$doomedAssetParty): no asset record for the revoked party; only DSO-share re-attributed to $assetMoverParty"
     ) {
       // The revoked-receiver send is identified by its asset-records shape: the
       // only FA-submitted event in the window whose assetActivityRecords has
@@ -403,7 +414,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       // active FAK_ASSET confirmers in this same round have two entries (the
       // confirmer + the submitter).
       val submitterProto = assetMoverParty.toProtoPrimitive
-      val assetPartyProtos: Set[String] = capWeightEvents.iterator
+      val assetPartyProtos: Set[String] = postVoteEvents.iterator
         .flatMap { e =>
           for {
             app <- e.appActivityRecords.filter(_.records.exists(_.party == submitterProto))
@@ -426,7 +437,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
 
     clue(
-      s"Round $capWeightRound combined-threshold mix of above/below (threshold lowered to 5 USD mid-flow)"
+      s"Round $postVoteRound combined-threshold mix of above/below (threshold lowered to 5 USD mid-flow)"
     ) {
       // With the mid-flow vote lowering appRewardCouponThreshold to 5 USD:
       // - assetMoverParty's combined (app + DSO-share asset) reward across 3
@@ -436,11 +447,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       // Pinning both non-zero exercises the mixed above/below branch — any
       // regression that pushed all parties into one bucket (all above or all
       // below) would flip one of these to zero.
-      assertRoundTotalsOk(capWeightRound) { t =>
+      assertRoundTotalsOk(postVoteRound) { t =>
         BigDecimal(t.totalAppRewardMintingAllowance) should be > BigDecimal(0) withClue
-          s"Round $capWeightRound: at least one party should clear the lowered 5 USD threshold"
+          s"Round $postVoteRound: at least one party should clear the lowered 5 USD threshold"
         BigDecimal(t.totalAppRewardThresholded) should be > BigDecimal(0) withClue
-          s"Round $capWeightRound: at least one party should fall below the lowered 5 USD threshold"
+          s"Round $postVoteRound: at least one party should fall below the lowered 5 USD threshold"
       }
     }
   }
