@@ -7,7 +7,7 @@
     ".": "./lib/index.js"
   },
   "devDependencies": {
-    "@daml/types": "^3.5.2",
+    "@daml/types": "^3.6.2",
     "@trivago/prettier-plugin-sort-imports": "5.2.2",
     "@types/node": "22.14.0",
     "eslint": "^9.39.4",
@@ -30,9 +30,9 @@
   },
   "dependencies": {
     "dompurify": "^3.4.16",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "jsondiffpatch": "^0.7.6",
-    "uuid": "^14.0.0",
+    "uuid": "^14.0.3",
     "zod": "^4.6.7"
   }
 }
