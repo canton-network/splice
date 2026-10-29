@@ -60,6 +60,13 @@ Do not do the same work in the main thread while forks run. Report each fork's v
 
 ## 4. Hand over
 
+Before handing over (and always before re-handing), read each target's live state and drop what Raymond already did
+(closed, commented, retitled); say "already done: ..." for those. Batches go out as a script whose steps are
+state-guarded, so running it twice is harmless, e.g.
+`[ "$(gh issue view N --repo DACH-NY/cn-test-failures --json state -q .state)" = OPEN ] && gh issue close N ...`;
+comments only if no own comment with the same first line exists; retitles only if the title still starts with
+"GHA Run" or "Pipeline".
+
 One message with: the per-issue verdict table (dup of X / new family + cause / needs log), what needs an owner,
 and one zsh block with every command from the new `host-commands-*.md` files plus the unrun ones from step 2.
 Close dups as `--reason "not planned" --comment "Duplicate of #N"`; fixed ones `--reason completed` with the
