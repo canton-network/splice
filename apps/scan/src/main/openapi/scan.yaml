@@ -3953,7 +3953,7 @@ components:
       type: object
       description: |
         Activity records computed from a single verdict and traffic summary
-        as per the TBAR v1.1 amendment to CIP-104.
+        as per CIP-104.
         The round the records belong to is carried by the enclosing envelope.
       required:
         - records
@@ -3992,7 +3992,7 @@ components:
       properties:
         party:
           description: |
-            The provider party identifier.
+            The app provider party identifier.
           type: string
         weight:
           description: |
@@ -4221,7 +4221,7 @@ components:
           description: The total of all rewards from asset activity for this round, including thresholded.
         issuance_per_featured_app_activity:
           type: string
-          description: CC rewarded per CC of featured app-activity coupon issued this round.
+          description: The ratio of Amulet minted per Amulet burned for app activity.
         issuance_per_featured_asset_activity:
           type: string
           description: The ratio of Amulet minted per Amulet burned for asset activity.
