@@ -884,7 +884,7 @@ class HttpScanHandler(
                 trafficSummary = trafficSummaryEncoded,
                 appActivityRecords = appActivityRecordEncoded,
                 assetActivityRecords =
-                  ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appAndAssetActivityRecordO),
+                  ScanHttpEncodings.encodeAssetActivityRecord(appAndAssetActivityRecordO),
                 submittingAppProvider =
                   ScanHttpEncodings.encodeSubmittingAppProvider(appAndAssetActivityRecordO),
               )
@@ -964,7 +964,7 @@ class HttpScanHandler(
           trafficSummary = trafficSummaryEncoded,
           appActivityRecords = appActivityRecordEncoded,
           assetActivityRecords =
-            ScanHttpEncodings.encodeAssetActivityRecordOrEmpty(appAndAssetActivityRecordForEvent),
+            ScanHttpEncodings.encodeAssetActivityRecord(appAndAssetActivityRecordForEvent),
           submittingAppProvider =
             ScanHttpEncodings.encodeSubmittingAppProvider(appAndAssetActivityRecordForEvent),
         )

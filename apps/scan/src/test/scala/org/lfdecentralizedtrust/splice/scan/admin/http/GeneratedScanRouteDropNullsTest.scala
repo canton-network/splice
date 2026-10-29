@@ -11,7 +11,6 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   DamlValueEncoding,
-  EventHistoryActivityRecords,
   EventHistoryItem,
   FeatureSupportResponse,
   UpdateHistoryRequestV2,
@@ -84,7 +83,6 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
         verdict = None, // should be preserved as null
         trafficSummary = None, // should be preserved as null
         appActivityRecords = None, // should be preserved as null
-        assetActivityRecords = EventHistoryActivityRecords(records = Vector.empty),
       )
       // ignoring the result since it's obviously a Future.successful stub.
       val _ = doReturn(
@@ -113,6 +111,9 @@ class GeneratedScanRouteDropNullsTest extends AnyWordSpec with BaseTest with Sca
 
         // submitting_app_provider was None, so must be absent from the JSON
         json.hcursor.downField("submitting_app_provider").focus shouldBe None
+
+        // asset_activity_records defaults to None, so must be absent (OmitNullArray)
+        json.hcursor.downField("asset_activity_records").focus shouldBe None
 
         // But external_transaction_hash inside the nested transaction should be absent
         val txJson = json.hcursor.downField("update")
