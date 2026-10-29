@@ -12,13 +12,10 @@ module Splice.GovernanceLock.Substitution (
   createSubstitution,
 ) where
 
-import Prelude hiding (forA)
 import DA.Assert
-import DA.Foldable (forA_)
 import DA.Map qualified as Map
 import DA.Optional
 import DA.Time
-import DA.Traversable (forA)
 
 import Splice.Amulet
 import Splice.Amulet.TokenApiUtils
@@ -54,7 +51,7 @@ template GovernanceLockSubstitution with
       controller target.dso
       do
         assertDeadlineExceeded "GovernanceLockSubstitution.expiresAt" expiresAt
-        forA_ lockedAmulet $ unlockAmulet (ForOwner with dso = target.dso; owner)
+        substitution_returnFunds target.dso owner target.specification lockedAmulet
         pure GovernanceLockSubstitution_DsoExpireResult
 
     interface instance V1.TransferInstruction for GovernanceLockSubstitution where
@@ -109,12 +106,12 @@ data GovernanceLockSubstitution_AcceptResult
 data GovernanceLockSubstitution_WithdrawResult
   = GovernanceLockSubstitution_WithdrawResult with
     unlockedAmulet : Optional (ContractId Amulet)
-      -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
+      -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds, or if their lock expired.
 
 data GovernanceLockSubstitution_RejectResult
   = GovernanceLockSubstitution_RejectResult with
     unlockedAmulet : Optional (ContractId Amulet)
-      -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds.
+      -- ^ The funds returned to the proposer. `None` if the proposal did not lock any funds, or if their lock expired.
 
 data GovernanceLockSubstitution_DsoExpireResult = GovernanceLockSubstitution_DsoExpireResult {}
   deriving (Serializable)
@@ -149,21 +146,25 @@ governanceLockSubstitution_acceptImpl self GovernanceLockSubstitution{..} actors
     unlockedAmulet
 
 -- | Unlocks the funds of a substitution proposal, which returns them to the proposer.
--- Returns `None` if the proposal did not lock any funds.
-substitution_returnFunds : Party -> Party -> Optional (ContractId LockedAmulet) -> Update (Optional (ContractId Amulet))
-substitution_returnFunds dso proposer lockedAmulet =
-  forA lockedAmulet (fmap fst . unlockAmulet (ForOwner with dso; owner = proposer))
+-- Returns `None` if the proposal did not lock any funds, or if the lock of the funds has expired.
+substitution_returnFunds : Party -> Party -> GovernanceLockSpecification -> Optional (ContractId LockedAmulet) -> Update (Optional (ContractId Amulet))
+substitution_returnFunds _ _ _ None = pure None
+substitution_returnFunds dso proposer specification (Some lockedAmuletCid) = do
+  lockExpired <- isLedgerTimeGE (governanceLockExpiresAt specification)
+  if lockExpired
+    then pure None
+    else Some . fst <$> unlockAmulet (ForOwner with dso; owner = proposer) lockedAmuletCid
 
 governanceLockSubstitution_withdrawImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> Update GovernanceLockSubstitution_WithdrawResult
 governanceLockSubstitution_withdrawImpl _self this actors = do
   checkActors actors [[this.owner]]
-  unlockedAmulet <- substitution_returnFunds this.target.dso this.owner this.lockedAmulet
+  unlockedAmulet <- substitution_returnFunds this.target.dso this.owner this.target.specification this.lockedAmulet
   pure GovernanceLockSubstitution_WithdrawResult with unlockedAmulet
 
 governanceLockSubstitution_rejectImpl : ContractId GovernanceLockSubstitution -> GovernanceLockSubstitution -> [Party] -> Update GovernanceLockSubstitution_RejectResult
 governanceLockSubstitution_rejectImpl _self this actors = do
   checkActors actors [[this.target.owner]]
-  unlockedAmulet <- substitution_returnFunds this.target.dso this.owner this.lockedAmulet
+  unlockedAmulet <- substitution_returnFunds this.target.dso this.owner this.target.specification this.lockedAmulet
   pure GovernanceLockSubstitution_RejectResult with unlockedAmulet
 
 data SubstitutionTransferInstructionViewArgs = SubstitutionTransferInstructionViewArgs with
