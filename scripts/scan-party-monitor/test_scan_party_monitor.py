@@ -10,7 +10,8 @@ Run from the repository root with
 
     python3 -m unittest discover -s scripts/scan-party-monitor -v
 
-Uses only the Python standard library.
+Unlike the script, the tests also need PyYAML (as in the nix dev shell), to check the fake
+Scan's JSON against Scan's OpenAPI spec.
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Type
 from unittest import mock
+
+import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -54,6 +57,9 @@ LOCKED_AMULET = f"{PACKAGE}:Splice.Amulet:LockedAmulet"
 PREAPPROVAL = f"{PACKAGE}:Splice.AmuletRules:TransferPreapproval"
 AMULET_RULES = f"{PACKAGE}:Splice.AmuletRules:AmuletRules"
 OTHER = f"{PACKAGE}:Splice.Other:Other"
+
+PACKAGE_NAME = "splice-amulet"
+SYNCHRONIZER = "global-domain::1220"
 
 SNAPSHOT = "2026-01-02T00:00:00Z"
 
@@ -79,12 +85,15 @@ def created(
     event: Json = {
         "contract_id": cid,
         "template_id": template_id,
+        "package_name": PACKAGE_NAME,
         "signatories": list(signatories),
         "observers": list(observers),
         "create_arguments": arguments or {},
         "created_at": "2026-01-01T00:00:00Z",
     }
-    if event_id is not None:
+    if event_id is None:
+        event["created_in_update_id"] = f"{cid}-creation"
+    else:
         event.update(event_type="created_event", event_id=event_id)
     return event
 
@@ -129,8 +138,10 @@ def exercised(
         "event_id": event_id,
         "contract_id": cid,
         "template_id": template_id,
+        "package_name": PACKAGE_NAME,
         "choice": choice,
         "choice_argument": {},
+        "exercise_result": {},
         "acting_parties": acting,
         "consuming": consuming,
         "child_event_ids": list(children),
@@ -142,7 +153,10 @@ def transaction(update_id: str, record_time: str, *events: Json) -> Json:
     return {
         "update_id": update_id,
         "migration_id": 0,
+        "workflow_id": "",
         "record_time": record_time,
+        "synchronizer_id": SYNCHRONIZER,
+        "effective_at": record_time,
         "root_event_ids": [events[0]["event_id"]],
         "events_by_id": {e["event_id"]: e for e in events},
     }
@@ -151,8 +165,17 @@ def transaction(update_id: str, record_time: str, *events: Json) -> Json:
 def assignment(update_id: str, record_time: str, created_event: Json) -> Json:
     return {
         "update_id": update_id,
+        "offset": "1",
         "record_time": record_time,
-        "event": {"migration_id": 0, "created_event": created_event},
+        "event": {
+            "submitter": DSO,
+            "source_synchronizer": "other-domain::1220",
+            "target_synchronizer": SYNCHRONIZER,
+            "migration_id": 0,
+            "unassign_id": f"{update_id}-unassign",
+            "created_event": created_event,
+            "reassignment_counter": 1,
+        },
     }
 
 
@@ -191,7 +214,7 @@ def verdict(
 
 def event(update: Optional[Json] = None, verdict: Optional[Json] = None) -> Json:
     """An item of Scan's event stream."""
-    return {"update": update, "verdict": verdict}
+    return {"update": update, "verdict": verdict, "traffic_summary": None, "app_activity_records": None}
 
 
 def with_verdict(update: Json, confirming: Iterable[Iterable[str]] = (), submitting: Iterable[str] = ()) -> Json:
@@ -472,6 +495,136 @@ class HelpersTest(unittest.TestCase):
         self.assertIn("--updates-requests-per-second is deprecated; use --events-requests-per-second", stderr.getvalue())
         defaults = spm.parse_cli_args(["--scan-url", "http://scan", "--config", "c.json", "--db", "d.db"])
         self.assertEqual((defaults.events_page_size, defaults.events_requests_per_second), (spm.MAX_PAGE_SIZE, 2.0))
+
+
+### the fake Scan against Scan's OpenAPI spec
+
+SCAN_YAML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../apps/scan/src/main/openapi/scan.yaml")
+
+# Optional keys that Scan leaves out of some responses, and that the fake leaves out too.
+MAY_BE_ABSENT = {
+    ("AcsResponseV2", "next_page_token"),  # on the last page
+    ("ExercisedEvent", "interface_id"),  # for choices that are not inherited from an interface
+    ("UpdateHistoryTransactionV2", "external_transaction_hash"),  # for transactions not signed externally
+}
+
+JSON_TYPES: Dict[str, Tuple[Type[Any], ...]] = {
+    "object": (dict,),
+    "array": (list,),
+    "string": (str,),
+    "integer": (int,),
+    "number": (int, float),
+    "boolean": (bool,),
+}
+
+
+class OpenApiSpec:
+    def __init__(self, path: str) -> None:
+        with open(path) as f:
+            self.spec: Json = yaml.safe_load(f)
+
+    def response_schema(self, method: str, path: str) -> Json:
+        response: Json = self.spec["paths"][path][method.lower()]["responses"]["200"]
+        return {**response["content"]["application/json"]["schema"]}
+
+    def problems(self, value: Any, schema: Json, where: str = "$", name: str = "") -> List[str]:
+        """How `value` differs from `schema`: missing or unknown keys, and wrong types."""
+        nullable = schema.get("nullable", False)
+        while "$ref" in schema:
+            name = schema["$ref"].rsplit("/", 1)[-1]
+            schema = self.spec["components"]["schemas"][name]
+            nullable = nullable or schema.get("nullable", False)
+        if value is None:
+            return [] if nullable else [f"{where}: null"]
+        if "allOf" in schema:
+            parts = [self.resolved(s) for s in schema["allOf"]]
+            merged = {k: v for part in parts for k, v in part.get("properties", {}).items()}
+            return self.problems(value, {"type": "object", "properties": merged}, where, name)
+        if "oneOf" in schema:
+            # The closest alternative, e.g. a created rather than an exercised event.
+            return min((self.problems(value, s, where, name) for s in schema["oneOf"]), key=len)
+        expected = schema.get("type")
+        if expected is not None and (
+            not isinstance(value, JSON_TYPES[expected]) or (isinstance(value, bool) and expected != "boolean")
+        ):
+            return [f"{where}: {value!r} is not of type {expected}"]
+        if "enum" in schema and value not in schema["enum"]:
+            return [f"{where}: {value!r} is not one of {schema['enum']}"]
+        if isinstance(value, list):
+            return [p for i, v in enumerate(value) for p in self.problems(v, schema.get("items", {}), f"{where}[{i}]")]
+        if not isinstance(value, dict):
+            return []
+        if isinstance(schema.get("additionalProperties"), dict):
+            return [p for k, v in value.items() for p in self.problems(v, schema["additionalProperties"], f"{where}.{k}")]
+        properties: Json = schema.get("properties", {})
+        if not properties:
+            return []  # e.g. Daml values
+        missing = [f"{where}: missing {name}.{k}" for k in properties if k not in value and (name, k) not in MAY_BE_ABSENT]
+        unknown = [f"{where}: {k} is not in {name}" for k in value if k not in properties]
+        nested = [p for k, v in value.items() if k in properties for p in self.problems(v, properties[k], f"{where}.{k}")]
+        return missing + unknown + nested
+
+    def resolved(self, schema: Json) -> Json:
+        while "$ref" in schema:
+            schema = self.spec["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
+        return schema
+
+
+class ScanSpecTest(unittest.TestCase):
+    """The fake Scan's JSON has every key of Scan's OpenAPI spec, and no others."""
+
+    spec: OpenApiSpec
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.spec = OpenApiSpec(SCAN_YAML)
+
+    def assertMatchesSpec(self, value: Any, schema: Json) -> None:
+        self.assertEqual(self.spec.problems(value, schema), [])
+
+    def test_checker_finds_differences(self) -> None:
+        schema = {"$ref": "#/components/schemas/Quorum"}
+        self.assertEqual(self.spec.problems({"parties": ["p"], "threshold": 1}, schema), [])
+        self.assertEqual(
+            self.spec.problems({"parties": "p", "weight": 1}, schema),
+            ["$: missing Quorum.threshold", "$: weight is not in Quorum", "$.parties: 'p' is not of type array"],
+        )
+
+    def test_acs_contracts(self) -> None:
+        for contract in ACS:
+            with self.subTest(contract_id=contract["contract_id"]):
+                self.assertMatchesSpec(contract, {"$ref": "#/components/schemas/ActiveContract"})
+
+    def test_fake_scan_responses(self) -> None:
+        events = [
+            transfer("u1", at(1), ALICE, "alice-1", BOB, "10.0", "alice-change", "bob-preapproval"),
+            with_verdict(
+                transaction(
+                    "u2",
+                    at(2),
+                    exercised("u2:0", "alice-locked", LOCKED_AMULET, "LockedAmulet_Unlock", [CHARLIE], True, ["u2:1"]),
+                    amulet("bob-2", BOB, "20.0", "u2:1"),
+                ),
+                [[DSO, ALICE, CHARLIE]],
+            ),
+            event(verdict=verdict("u3", at(3), [[ALICE, BOB]], [BOB])),
+            event(verdict=verdict("u4", at(4), [[ALICE]], [ALICE], "VERDICT_RESULT_REJECTED")),
+            event(assignment("r5", at(5), amulet("moved", ALICE, "7.0", "r5:0"))),
+        ]
+        scan = FakeScan(ACS, events)
+        holdings = {"migration_id": 0, "record_time": SNAPSHOT, "owner_party_ids": [ALICE, CHARLIE], "page_size": 2}
+        requests: List[Tuple[str, str, Optional[Json], Optional[Dict[str, Any]]]] = [
+            ("GET", "/v0/migrations/last", None, None),
+            ("GET", "/v0/state/acs/snapshot-timestamp", None, {"before": at(1), "migration_id": 0}),
+            ("POST", "/v2/holdings/state", holdings, None),  # a page with a next page
+            ("POST", "/v2/holdings/state", {**holdings, "after": "2"}, None),  # the last page
+            ("POST", "/v0/events", {"after": {"after_migration_id": 0, "after_record_time": SNAPSHOT}, "page_size": 10}, None),
+        ]
+        for method, path, body, query in requests:
+            with self.subTest(method=method, path=path, body=body):
+                response = scan.handle(method, path, body, query)
+                self.assertMatchesSpec(response, self.spec.response_schema(method, path))
+        self.assertEqual(len(scan.handle(*requests[-1][:2], requests[-1][2], None)["events"]), len(events))
 
 
 class ConfigTest(unittest.TestCase):
@@ -869,7 +1022,7 @@ class MatchingTest(MonitorTestCase):
 
     def test_assigned_holdings_are_tracked(self) -> None:
         monitor = self.seeded(ONLY_ALICE)
-        self.assertIsNone(monitor.process_event(event(assignment("r1", at(1), amulet("moved", ALICE, "7.0")))))
+        self.assertIsNone(monitor.process_event(event(assignment("r1", at(1), amulet("moved", ALICE, "7.0", "r1:0")))))
         item = transfer("u2", at(2), ALICE, "moved", CHARLIE, "7.0")
         self.assertEqual(summary(monitor.process_event(item)), {ALICE: [("transfer", CHARLIE)]})
 
