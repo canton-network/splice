@@ -150,18 +150,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     // post-vote scenario rounds. Lets both the pre-revocation (baseline-equivalent)
     // and post-revocation (asset-side absence) assertions land in the same two
     // scenario rounds as the other sends.
-    // sv1's SV party, validator party, and wallet-user party are all the same
-    // party in simple-topology-1sv, so opsParties MUST be empty: Amulet.daml's
-    // validFeaturedAppRight requires `provider notElem opsParties`. The party is
-    // only ever a receiver here, never a submitter, so no ops-party resolution
-    // in findFASubmitter is needed.
     val doomedAssetParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
     clue(s"Grant FAK_Asset right (weight=1) to $doomedAssetParty (will be revoked mid-flow)") {
-      grantFeaturedAppRightWithKind(
-        doomedAssetParty,
-        FeaturedAppKind.FAK_ASSET,
-        opsParties = Seq.empty,
-      )
+      grantReceiverOnlyFeaturedAppRight(doomedAssetParty, FeaturedAppKind.FAK_ASSET)
     }
     updateTbarV11RewardConfig()
 
@@ -579,6 +570,19 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       }
     }
   }
+
+  // Grants an FA right for a party that will only ever appear as a receiver /
+  // confirmer, never as a submitter. In that case no opsParties entry is needed
+  // (findFASubmitter is never consulted for this party). Also enforces the
+  // Amulet.daml `validFeaturedAppRight` constraint which requires
+  // `provider notElem opsParties` — useful when the provider party coincides
+  // with its own validator-operator party (e.g. an SV wallet in a 1-SV topology).
+  private def grantReceiverOnlyFeaturedAppRight(
+      party: PartyId,
+      kind: FeaturedAppKind,
+      weight: BigDecimal = BigDecimal(1),
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    grantFeaturedAppRightWithKind(party, kind, opsParties = Seq.empty, weight = weight)
 
   // Votes a DsoRules_RevokeFeaturedAppRight choice, which withdraws the FA right.
   // Blocks until scan no longer observes the right for `party`. From this point
