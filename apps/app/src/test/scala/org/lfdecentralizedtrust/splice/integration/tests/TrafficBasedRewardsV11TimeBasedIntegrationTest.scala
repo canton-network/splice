@@ -44,10 +44,9 @@ import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
-// Sibling to TrafficBasedRewardsTimeBasedIntegrationTest covering TBAR v1.1
-// (asset-side activity introduced by the CIP-104 amendment). The pre-amendment
-// test is kept as a regression reference per the author's and reviewer's
-// 2026-10-28 agreement on #7837.
+// Covers TBAR v1.1 asset-side activity (CIP-104 amendment).
+// Pre-amendment behaviour continues to be covered by
+// TrafficBasedRewardsTimeBasedIntegrationTest.
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
@@ -427,6 +426,27 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         BigDecimal(t.totalAppRewardThresholded) should be > BigDecimal(0) withClue
           s"Round $postVoteRound: at least one party should fall below the lowered 5 USD threshold"
       }
+    }
+
+    clue(
+      s"Round $postVoteRound IssuingMiningRound.optIssuancePerFeaturedAssetRewardCoupon is unpopulated"
+    ) {
+      // The round-closing path does not yet produce a value for
+      // optIssuancePerFeaturedAssetRewardCoupon from the asset-activity totals,
+      // so the field stays None on IssuingMiningRound. Pin that invariant: when
+      // the round-close summary starts populating the field, this assertion will
+      // fire and should be tightened to the CIP-104 formula value.
+      val issuingRound = eventually() {
+        sv1ScanBackend
+          .getOpenAndIssuingMiningRounds()
+          ._2
+          .find(_.contract.payload.round.number == postVoteRound)
+          .getOrElse(
+            fail(s"IssuingMiningRound for round $postVoteRound not found in scan")
+          )
+      }
+      issuingRound.contract.payload.optIssuancePerFeaturedAssetRewardCoupon.toScala shouldBe None withClue
+        s"optIssuancePerFeaturedAssetRewardCoupon has a value — tighten this test to the CIP-104 formula"
     }
   }
 
