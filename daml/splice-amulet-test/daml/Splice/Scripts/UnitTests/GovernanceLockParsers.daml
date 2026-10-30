@@ -91,7 +91,7 @@ test_memoErrorMessages = do
   -- Keys are named as written in the memo, without the `cipMetaPrefix`, and values are quoted
   missingMemoKeyMessage lockKindMetaKey === "Missing memo key 'lock-kind'"
   invalidMemoValueMessage "party" targetLockOwnerMetaKey "bad$party"
-    === "Invalid party in memo key 'target-lock-owner': 'bad$party'"
+    === "Invalid party for memo key 'target-lock-owner': 'bad$party'"
 
 -- Lock kind parser
 -------------------
