@@ -64,7 +64,7 @@ services:
       - multi-sync
 
   nginx:
-    image: "nginx:${NGINX_VERSION}"
+    image: "nginx/nginx-unprivileged:${NGINX_VERSION}"
     container_name: nginx
     env_file:
       - ${LOCALNET_ENV_DIR}/common.env

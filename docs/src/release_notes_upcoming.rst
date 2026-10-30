@@ -48,6 +48,11 @@
 
     - Upgrade base image to 1.0.18
 
+    - The nginx containers of the Docker Compose deployments (validator, sv and localnet) now use the ``nginx/nginx-unprivileged`` image.
+      The nginx process runs as a non-root user and listens on container port 8080 instead of 80.
+      The published host ports are unchanged. If you use a custom ``nginx.conf``, update its ``listen`` ports to 8080
+      and set ``pid /tmp/nginx.pid;`` so the unprivileged user can write the pid file.
+
   - Deployment
 
     - Added the `splice-topology-key-monitor` Helm chart, which logs a warning for every topology transaction that is signed by any key configured in the chart.
