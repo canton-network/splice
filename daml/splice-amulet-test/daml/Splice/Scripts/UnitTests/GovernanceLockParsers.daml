@@ -95,6 +95,7 @@ test_errorMessages = do
     === "Error in memo key 'lock-vesting-duration-micros': Invalid microseconds: '60d'"
   invalidLockSubjectMessage "SV name" GLT_SuperValidator "bad$sv"
     === "Invalid SV name for sv-lock: 'bad$sv'"
+  invalidMemoEntryMessage "a=b=c" === "Invalid memo entry 'a=b=c': expected 'key=value'"
 
 -- Lock kind parser
 -------------------
@@ -151,7 +152,6 @@ test_governanceLockMetadataParser = do
   let run entries = runParser governanceLockMetadataParser (mkMeta entries)
       reason r = (reasonMetaKey, cipMemoPrefix <> r)
       otherEntry = ("other-key", "other-value")
-      entryError e = "Invalid memo entry '" <> e <> "': expected 'key=value'"
       dropMetaPrefix = Text.dropPrefix cipMetaPrefix
       lockSubjectMetaKeyNoPrefix = dropMetaPrefix lockSubjectMetaKey
 
@@ -180,18 +180,18 @@ test_governanceLockMetadataParser = do
     run [reason $ lockSubjectMetaKeyNoPrefix <> "="]
 
   -- A pair without `=`
-  expectErrors [entryError lockSubjectMetaKeyNoPrefix] $ run [reason lockSubjectMetaKeyNoPrefix]
+  expectErrors [invalidMemoEntryMessage lockSubjectMetaKeyNoPrefix] $ run [reason lockSubjectMetaKeyNoPrefix]
 
   -- A pair with more than one `=`
-  expectErrors [entryError $ lockSubjectMetaKeyNoPrefix <> "=provider=x"] $
+  expectErrors [invalidMemoEntryMessage $ lockSubjectMetaKeyNoPrefix <> "=provider=x"] $
     run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider=x"]
 
   -- An empty reason, and an empty pair after a trailing `&`
-  expectErrors [entryError ""] $ run [reason ""]
-  expectErrors [entryError ""] $ run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider&"]
+  expectErrors [invalidMemoEntryMessage ""] $ run [reason ""]
+  expectErrors [invalidMemoEntryMessage ""] $ run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider&"]
 
   -- All invalid pairs are reported
-  expectErrors [entryError "a", entryError "b=c=d"] $
+  expectErrors [invalidMemoEntryMessage "a", invalidMemoEntryMessage "b=c=d"] $
     run [reason $ "a&" <> lockSubjectMetaKeyNoPrefix <> "=provider&b=c=d"]
 
 -- Lock specification parser

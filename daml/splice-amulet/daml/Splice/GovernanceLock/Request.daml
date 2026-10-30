@@ -20,6 +20,7 @@ module Splice.GovernanceLock.Request (
   missingMemoKeyMessage,
   invalidMemoValueMessage,
   memoKeyErrorMessage,
+  invalidMemoEntryMessage,
   governanceLockMetadataParser,
   governanceLockTagParser,
   governanceLockKindParser,
@@ -109,6 +110,10 @@ invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKe
 -- | Names the key in an error reported by a decoder that only sees the value.
 memoKeyErrorMessage : Text -> Text -> Text
 memoKeyErrorMessage key error = "Error in " <> memoKeyText key <> ": " <> error
+
+-- | For an entry of the `key1=value1&key2=value2` memo that is not a single `key=value` pair.
+invalidMemoEntryMessage : Text -> Text
+invalidMemoEntryMessage entry = "Invalid memo entry '" <> entry <> "': expected 'key=value'"
 
 getRequiredMetadata' : CanAssert m => (Text -> m a) -> Text -> Metadata -> m a
 getRequiredMetadata' parse key meta = case getOptionalMetadata key meta of
@@ -396,7 +401,7 @@ keyValueParser keyValues =
   TextMap.fromList <$> forA (Text.splitOn "&" keyValues) \keyValue ->
     case Text.splitOn "=" keyValue of
       [k, v] -> pure (k, v)
-      _ -> assertFail $ "Invalid memo entry '" <> keyValue <> "': expected 'key=value'"
+      _ -> assertFail $ invalidMemoEntryMessage keyValue
 
 partyFromTextParser : Text -> Text -> Parser i Party
 partyFromTextParser key party = validationParser $ (partyFromText party) <?> invalidMemoValueMessage "party" key party
