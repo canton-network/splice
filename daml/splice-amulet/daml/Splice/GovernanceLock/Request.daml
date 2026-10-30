@@ -19,6 +19,7 @@ module Splice.GovernanceLock.Request (
   assertParsed,
   missingMemoKeyMessage,
   invalidMemoValueMessage,
+  memoKeyErrorMessage,
   governanceLockMetadataParser,
   governanceLockTagParser,
   governanceLockKindParser,
@@ -29,7 +30,6 @@ module Splice.GovernanceLock.Request (
 import Prelude hiding (forA)
 import DA.Action (unless)
 import DA.Assert
-import DA.Date (Month(..), date)
 import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
 import DA.Text qualified as Text
@@ -48,6 +48,7 @@ import Splice.GovernanceLock
 import Splice.GovernanceLock.Substitution
 import Splice.GovernanceLock.Transfer
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
+import Splice.TokenStandard.Utils.Internal.Conversions (relTimeFromMeta, timeFromMeta)
 import Splice.Util
 
 data GovernanceLockRequest
@@ -104,6 +105,10 @@ missingMemoKeyMessage key = "Missing " <> memoKeyText key
 -- | Arguments: what the value should be (e.g. "decimal"), the key, and the value.
 invalidMemoValueMessage : Text -> Text -> Text -> Text
 invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKeyText key <> ": '" <> value <> "'"
+
+-- | Names the key in an error reported by a decoder that only sees the value.
+memoKeyErrorMessage : Text -> Text -> Text
+memoKeyErrorMessage key error = "Error in " <> memoKeyText key <> ": " <> error
 
 getRequiredMetadata' : CanAssert m => (Text -> m a) -> Text -> Metadata -> m a
 getRequiredMetadata' parse key meta = case getOptionalMetadata key meta of
@@ -364,24 +369,26 @@ requiredMetadataParser key = inputParser >>= getRequiredMetadata key
 optionalMetadataParser : Text -> Parser Metadata (Optional Text)
 optionalMetadataParser key = getOptionalMetadata key <$> inputParser
 
--- | Parse a number of microseconds, as written by `encodeTime` and `encodeRelTime`.
-microsMetadataParser : Text -> Parser Metadata RelTime
-microsMetadataParser key = requiredMetadataParser key >>= \t ->
-  validationParser $ (convertMicrosecondsToRelTime <$> Text.parseInt t) <?> invalidMemoValueMessage "integer" key t
+-- | Parses a required key with a decoder such as `timeFromMeta`, which returns `None` for a missing key.
+metadataDecoderParser : (Text -> Metadata -> Either Text (Optional o)) -> Text -> Parser Metadata o
+metadataDecoderParser decode key = inputParser >>= \meta -> validationParser $ validate $ case decode key meta of
+  Left e -> Left (memoKeyErrorMessage key e)
+  Right None -> Left (missingMemoKeyMessage key)
+  Right (Some v) -> Right v
 
 timeMetadataParser : Text -> Parser Metadata Time
-timeMetadataParser key = addRelTime (time (date 1970 Jan 1) 0 0 0) <$> microsMetadataParser key
+timeMetadataParser = metadataDecoderParser timeFromMeta
 
 iso8601TimeFromTextParser : Text -> Text -> Parser i Time
 iso8601TimeFromTextParser key input = validationParser $ validate $ case parseIso8601UtcTime input of
-  Left e -> Left $ "Error in " <> memoKeyText key <> ": " <> e
+  Left e -> Left (memoKeyErrorMessage key e)
   Right t -> Right t
 
 iso8601TimeMetadataParser : Text -> Parser Metadata Time
 iso8601TimeMetadataParser key = requiredMetadataParser key >>= iso8601TimeFromTextParser key
 
 relTimeMetadataParser : Text -> Parser Metadata RelTime
-relTimeMetadataParser = microsMetadataParser
+relTimeMetadataParser = metadataDecoderParser relTimeFromMeta
 
 -- | Parse a URL-style key value string 'key1=value1&...&key2=value2' into a key-value map.
 keyValueParser : Text -> Parser i (TextMap.TextMap Text)

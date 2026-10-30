@@ -76,6 +76,7 @@ import DA.Optional
 import DA.Text qualified as T
 import DA.Time
 import DA.TextMap qualified as TextMap
+import DA.Traversable qualified as Traversable
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV1 qualified as HoldingV1
@@ -98,13 +99,13 @@ encodeRelTime t  = show (convertRelTimeToMicroseconds t)
 encodeTime : Time -> Text
 encodeTime t = show (convertRelTimeToMicroseconds(t `subTime` epoch))
 
-decodeRelTimeMicros : Text -> RelTime
+decodeRelTimeMicros : CanAssert m => Text -> m RelTime
 decodeRelTimeMicros t = case T.parseInt t of
-  Some i -> convertMicrosecondsToRelTime i
-  None -> error ("Cannot parse reltime " <> t)
+  Some i -> pure (convertMicrosecondsToRelTime i)
+  None -> assertFail ("Invalid microseconds: '" <> t <> "'")
 
-decodeTime : Text -> Time
-decodeTime t = epoch `addRelTime` (decodeRelTimeMicros t)
+decodeTime : CanAssert m => Text -> m Time
+decodeTime t = addRelTime epoch <$> decodeRelTimeMicros t
 
 -- AnyContractId conversion
 ------------------------------
@@ -132,11 +133,11 @@ timeToMeta : Text -> Time -> Metadata -> Metadata
 timeToMeta field t meta =
   Metadata $ TextMap.insert field (encodeTime t) meta.values
 
-timeFromMeta : Text -> Metadata -> Optional Time
-timeFromMeta field meta = decodeTime <$> TextMap.lookup field meta.values
+timeFromMeta : CanAssert m => Text -> Metadata -> m (Optional Time)
+timeFromMeta field meta = Traversable.mapA decodeTime (TextMap.lookup field meta.values)
 
-relTimeFromMeta : Text -> Metadata -> Optional RelTime
-relTimeFromMeta field meta = decodeRelTimeMicros <$> TextMap.lookup field meta.values
+relTimeFromMeta : CanAssert m => Text -> Metadata -> m (Optional RelTime)
+relTimeFromMeta field meta = Traversable.mapA decodeRelTimeMicros (TextMap.lookup field meta.values)
 
 -- Account utils
 ----------------
