@@ -147,7 +147,7 @@ testGovernanceLockUnlockFailuresScenario ops = do
     unlockWithEntries [(unlockAmountMetaKey, "10000.0"), (vestingStartTimeMetaKey, "not-a-time")]
 
   -- The unlock amount must be a valid decimal, positive and at most the locked amount
-  actionMustFail (expectMessageContains "Invalid decimal in memo key 'unlock-amount': 'not-a-decimal'") $
+  actionMustFail (expectMessageContains "Invalid decimal for memo key 'unlock-amount': 'not-a-decimal'") $
     unlockWithEntries [(unlockAmountMetaKey, "not-a-decimal"), (vestingStartTimeMetaKey, show vestingStartTime)]
   actionMustFail (expectMessageContains "'unlockAmount' is not greater than 'zero'") $
     unlock (unlockMeta (-10000.0) vestingStartTime)

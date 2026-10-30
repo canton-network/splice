@@ -103,7 +103,7 @@ missingMemoKeyMessage key = "Missing " <> memoKeyText key
 
 -- | Arguments: what the value should be (e.g. "decimal"), the key, and the value.
 invalidMemoValueMessage : Text -> Text -> Text -> Text
-invalidMemoValueMessage kind key value = "Invalid " <> kind <> " in " <> memoKeyText key <> ": '" <> value <> "'"
+invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKeyText key <> ": '" <> value <> "'"
 
 getRequiredMetadata' : CanAssert m => (Text -> m a) -> Text -> Metadata -> m a
 getRequiredMetadata' parse key meta = case getOptionalMetadata key meta of
