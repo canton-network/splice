@@ -7,6 +7,13 @@
 
 .. release-notes:: Upcoming
 
+  - LocalNet
+
+    - **Behavior change** All host ports published by LocalNet (Postgres, the participant Ledger, Admin and JSON APIs,
+      the validator admin APIs and the Swagger UI) are now bound to `127.0.0.1` instead of all interfaces.
+      These services use default credentials or no authentication, so they must not be reachable from the network.
+      To expose them on another interface, set `HOST_BIND_IP` (as already supported for the web UIs), for example `HOST_BIND_IP=0.0.0.0`.
+
   - Health checks of Canton nodes
 
     - **Behavior change** The health checks of all Canton nodes (participant, sequencer and mediator) now use Canton's HTTP health endpoints
@@ -41,6 +48,11 @@
 
     - Upgrade base image to 1.0.18
 
+    - The nginx containers of the Docker Compose deployments (validator, sv and localnet) now use the ``nginx/nginx-unprivileged`` image.
+      The nginx process runs as a non-root user and listens on container port 8080 instead of 80.
+      The published host ports are unchanged. If you use a custom ``nginx.conf``, update its ``listen`` ports to 8080
+      and set ``pid /tmp/nginx.pid;`` so the unprivileged user can write the pid file.
+
   - Participant
 
     - The `splice-participant` Helm chart has two new values to harden the participant: `enableKeyDownload` and `enableRepairCommands`.
@@ -57,3 +69,8 @@
   - Deployment
 
     - Added the `splice-topology-key-monitor` Helm chart, which logs a warning for every topology transaction that is signed by any key configured in the chart.
+
+  - Validator
+
+    - **Behavior change** When auth is disabled, setting `allowedOrigins` in the `splice-validator` Helm chart is mandatory.
+      The Docker Compose validator deployment sets it automatically.
