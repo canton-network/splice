@@ -51,8 +51,9 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
         loggerFactory.append("participant", "sv1"),
         grpcClientMetrics,
         retryProvider,
-        tokenProvider =
-          AuthTokenSourceStatic(AuthUtil.CantonAdminApi.participantAdminApiTestToken),
+        tokenProvider = AuthTokenSourceStatic(
+          AuthUtil.CantonAdminApi.participantAdminApiTestToken
+        ),
       ),
       new SequencerAdminConnection(
         FullClientConfig(port = synchronizerNodes.sequencer.adminApi.port),
