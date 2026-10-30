@@ -420,6 +420,9 @@ class SvReonboardingIntegrationTest
           "EXTRA_PARTICIPANT_ADMIN_USER" -> validatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> s"participant_reonboard_new",
         ),
+        // the test asserts sv4's participant is still waiting for an id, so
+        // that it can be re-onboarded from the dump below
+        autoInitParticipants = Set.empty,
       )() {
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {
