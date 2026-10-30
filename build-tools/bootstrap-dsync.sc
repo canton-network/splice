@@ -1,6 +1,7 @@
 val sequencers = Seq(sequencer1, sequencer2, sequencer3, sequencer4)
 val mediators = Seq(mediator1, mediator2, mediator3, mediator4)
-val owners = sequencers.take(3)
+// We have a threshold of three, so signing the bootstrapping transactions only with the first three sequencers.
+val signingSequencers = sequencers.take(3)
 
 println("Bootstrapping synchronizer...")
 val synchronizerId = bootstrap
@@ -21,7 +22,7 @@ val synchronizerId = bootstrap
   .logical
 
 println("Setting sequencer threshold to 2...")
-owners.foreach(owner =>
+signingSequencers.foreach(owner =>
   owner.topology.sequencers.propose(
     synchronizerId,
     threshold = PositiveInt.tryCreate(2),
@@ -38,7 +39,7 @@ utils.retry_until_true {
 }
 
 println("Restricting onboarding...")
-owners.foreach(owner =>
+signingSequencers.foreach(owner =>
   owner.topology.synchronizer_parameters.propose_update(
     synchronizerId,
     _.update(onboardingRestriction = OnboardingRestriction.RestrictedOpen),
@@ -53,19 +54,19 @@ utils.retry_until_true {
 }
 
 println("Turning on traffic management...")
-owners.foreach(owner =>
+signingSequencers.foreach(owner =>
   owner.topology.synchronizer_parameters.propose_update(
     synchronizerId,
     _.update(trafficControl =
       Some(
         TrafficControlParameters(
           maxBaseTrafficAmount = NonNegativeLong.zero,
+          maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(10), // Doesn't really matter, since the base rate is zero.
           readVsWriteScalingFactor = PositiveInt.tryCreate(200),
-          maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(10),
           setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(5),
           enforceRateLimiting = true,
           baseEventCost = NonNegativeLong.zero,
-          freeConfirmationResponses = false,
+          freeConfirmationResponses = true,
         )
       )
     ),
