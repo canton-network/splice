@@ -418,10 +418,12 @@ template AmuletRules
       with
         provider : Party
         activityWeight : Optional Decimal
+        appKind : Optional FeaturedAppKind
+        opsParties : Optional [Party]
       controller provider
       do
         require "isDevNet flag is true" isDevNet
-        featuredAppRightCid <- create FeaturedAppRight with dso; provider; activityWeight
+        featuredAppRightCid <- create FeaturedAppRight with dso; provider; activityWeight; appKind; opsParties
         return AmuletRules_DevNet_FeatureAppResult with ..
 
     -- Bootstrap the open mining rounds by creating
@@ -596,7 +598,8 @@ template AmuletRules
               miningRound.tickDuration miningRound.amuletPrice miningRound.issuanceConfig summary
 
         -- record unclaimed reward contract
-        let totalUnclaimedRewards = params.unclaimedValidatorRewards + params.unclaimedAppRewards + params.unclaimedSvRewards
+        let unclaimedAppRewards = fromOptional params.unclaimedAppRewards summary.optUnclaimedAppRewards
+        let totalUnclaimedRewards = params.unclaimedValidatorRewards + unclaimedAppRewards + params.unclaimedSvRewards
         when (totalUnclaimedRewards > 0.0) $
           void $ create UnclaimedReward with
             dso
@@ -620,10 +623,13 @@ template AmuletRules
           opensAt = opensAt
           targetClosesAt = targetClosesAt
           issuancePerValidatorRewardCoupon = params.issuancePerValidatorRewardCoupon
-          issuancePerFeaturedAppRewardCoupon = params.issuancePerFeaturedAppRewardCoupon
+          issuancePerFeaturedAppRewardCoupon = fromOptional
+            params.issuancePerFeaturedAppRewardCoupon
+            summary.optIssuancePerFeaturedAppRewardCoupon
           issuancePerUnfeaturedAppRewardCoupon = params.issuancePerUnfeaturedAppRewardCoupon
           issuancePerSvRewardCoupon = params.issuancePerSvRewardCoupon
           optIssuancePerValidatorFaucetCoupon = Some params.issuancePerValidatorFaucetCoupon
+          optIssuancePerFeaturedAssetRewardCoupon = summary.optIssuancePerFeaturedAssetRewardCoupon
 
         return AmuletRules_MiningRound_StartIssuingResult with ..
 
@@ -2080,7 +2086,7 @@ instance Additive BalanceChange where
 
 
 instance HasCheckedFetch AmuletRules ForDso where
-  contractGroupId AmuletRules with .. = ForDso with ..
+  contractGroupId AmuletRules{..} = ForDso with dso
 
 -- External Party Setup
 -- ----------------------
@@ -2293,6 +2299,9 @@ instance HasCheckedFetch TransferPreapproval ForOwner where
     ForOwner with
       owner = receiver
       dso
+
+instance HasCheckedFetch TransferPreapproval ForDso where
+  contractGroupId TransferPreapproval{..} = ForDso with dso
 
 data TransferPreapproval_SendResult = TransferPreapproval_SendResult
   with

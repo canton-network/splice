@@ -897,8 +897,7 @@ const UpdateFeatureAppSection = ({
       const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
       const contract = response.featured_app_right;
       const payload = contract?.payload as
-        | { provider?: string; activityWeight?: string | null }
-        | undefined;
+        { provider?: string; activityWeight?: string | null } | undefined;
       return {
         provider: payload?.provider ?? null,
         currentWeight: contract ? (payload?.activityWeight ?? DEFAULT_APP_ACTIVITY_WEIGHT) : '',

@@ -4,9 +4,11 @@
 package org.lfdecentralizedtrust.splice.automation
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.PackageConfig
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, ParticipantAdminConnection}
 import org.lfdecentralizedtrust.splice.util.{AmuletConfigSchedule, PackageVetting}
 
@@ -26,6 +28,8 @@ abstract class PackageVettingTrigger(
 
   private val previouslyRunInputRefForVetting = new AtomicReference[Set[String]](Set.empty)
   private val previouslyRunInputRefForUnvetting = new AtomicReference[Set[String]](Set.empty)
+  private val retainedPendingPackageConfigs =
+    new PackageVettingTrigger.RetainedPendingPackageConfigs()
 
   def getSynchronizerId()(implicit tc: TraceContext): Future[SynchronizerId]
 
@@ -69,7 +73,10 @@ abstract class PackageVettingTrigger(
         )
       )
       currentPackageConfig = amuletRules.payload.configSchedule.initialValue.packageConfig
-      pendingPackageConfigs = newAmuletConfigVoteRequests.map(_._2.packageConfig)
+      pendingPackageConfigs = retainedPendingPackageConfigs.update(
+        context.clock.now,
+        newAmuletConfigVoteRequests.map(_._2.packageConfig),
+      )
       // ensure that unsupported versions are not vetted
       _ <- runIfInputChanged(
         Seq(
@@ -110,4 +117,30 @@ abstract class PackageVettingTrigger(
     }
   }
 
+}
+
+object PackageVettingTrigger {
+
+  // Must exceed the client AmuletRules cache TTL (10 min default) plus scan's server-side cache (30s).
+  private val PendingConfigGracePeriod = NonNegativeFiniteDuration.ofMinutes(15)
+
+  // Keep configs of executed votes pending until the AmuletRules reflects them.
+  private[automation] final class RetainedPendingPackageConfigs(
+      gracePeriod: NonNegativeFiniteDuration = PendingConfigGracePeriod
+  ) {
+    private val lastSeen = new AtomicReference[Map[PackageConfig, CantonTimestamp]](Map.empty)
+
+    def update(
+        now: CantonTimestamp,
+        pendingPackageConfigs: Seq[PackageConfig],
+    ): Seq[PackageConfig] =
+      lastSeen
+        .updateAndGet { seen =>
+          (seen ++ pendingPackageConfigs.map(_ -> now)).filter { case (_, at) =>
+            at.plus(gracePeriod.asJava) >= now
+          }
+        }
+        .keys
+        .toSeq
+  }
 }

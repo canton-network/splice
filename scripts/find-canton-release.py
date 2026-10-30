@@ -41,7 +41,7 @@ import sys
 
 import git
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -84,13 +84,13 @@ def open_repo(path: str, option: str) -> git.Repo:
     return repo
 
 
-def print_table(rows: list[tuple[str, ...]]):
+def print_table(rows: list[tuple[str, ...]]) -> None:
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
     for row in rows:
         print("  ".join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip())
 
 
-def main():
+def main() -> None:
     args = parse_args()
     closed = open_repo(args.closed_canton, "--closed-canton")
     oss = open_repo(args.oss_canton, "--oss-canton")
@@ -146,7 +146,9 @@ def main():
     except git.BadName:
         sys.exit(f"error: no branch {branch} in --oss-canton {args.oss_canton!r}")
     for snapshot in oss.iter_commits(branch):
-        match = re.search(r"^Reference commit: ([0-9a-f]+)", snapshot.message, re.MULTILINE)
+        message = snapshot.message if isinstance(snapshot.message, str) else snapshot.message.decode()
+        summary = snapshot.summary if isinstance(snapshot.summary, str) else snapshot.summary.decode()
+        match = re.search(r"^Reference commit: ([0-9a-f]+)", message, re.MULTILINE)
         older = resolve_closed(match.group(1)) if match else None
         if older is None or older == ref:
             continue
@@ -154,7 +156,7 @@ def main():
         if rows:
             print(
                 f"\nMost recent older snapshot with a release:\n"
-                f"  OSS commit (digital-asset/canton): {snapshot.hexsha[:10]} {snapshot.summary}\n"
+                f"  OSS commit (digital-asset/canton): {snapshot.hexsha[:10]} {summary}\n"
                 f"  Reference commit (DACH-NY/canton): {older.hexsha[:10]}\n"
             )
             print_table([header, *rows])

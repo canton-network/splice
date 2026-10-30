@@ -206,6 +206,10 @@ export function buildAmuletRulesConfigFromChanges(
               microseconds: getValue('rewardConfigRewardCouponTimeToLive', false),
             },
             appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold', false),
+            // TODO(#7901) make these CIP-104 fieldseditable
+            extraFeaturedAssetActivityWeight: null,
+            maxExtraFeaturedAssetActivityWeightPerAsset: null,
+            dsoAppActivityWeight: null,
           },
 
     governanceLockConfig: nullIfAllNull({

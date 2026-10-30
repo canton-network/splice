@@ -32,7 +32,7 @@ export function useLookupAnsEntryByNameFromResponse(
 ): UseQueryResult<AnsEntry | null> {
   return useQuery({
     refetchInterval: PollingStrategy.NONE,
-    queryKey: ['scan-api', 'lookupAnsEntryByName', AnsEntry, name],
+    queryKey: ['scan-api', 'lookupAnsEntryByName', AnsEntry, name, retryWhenNotFound],
     queryFn: async () => {
       try {
         const response = await getResponse(name);

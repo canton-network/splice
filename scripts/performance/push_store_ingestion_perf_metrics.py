@@ -14,6 +14,7 @@ Usage:
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 
@@ -22,7 +23,7 @@ PUSHGATEWAY_URL = "http://prometheus-pushgateway.observability.svc.cluster.local
 JOB_NAME = "splice_store_ingest_perf"
 
 
-def _build_registry(data: dict) -> CollectorRegistry:
+def _build_registry(data: dict[str, Any]) -> CollectorRegistry:
     registry = CollectorRegistry()
     for entry in data["metrics"]:
         gauge = Gauge(entry["name"], entry["description"], registry=registry)
@@ -30,12 +31,13 @@ def _build_registry(data: dict) -> CollectorRegistry:
     return registry
 
 
-def _read_metrics_file(metrics_file: Path) -> dict:
+def _read_metrics_file(metrics_file: Path) -> dict[str, Any]:
     with open(metrics_file) as f:
-        return json.load(f)
+        data: dict[str, Any] = json.load(f)
+        return data
 
 
-def _push_metrics_for_test(test_name: str, data: dict) -> None:
+def _push_metrics_for_test(test_name: str, data: dict[str, Any]) -> None:
     registry = _build_registry(data)
     grouping_key = {"test": test_name}
     push_to_gateway(

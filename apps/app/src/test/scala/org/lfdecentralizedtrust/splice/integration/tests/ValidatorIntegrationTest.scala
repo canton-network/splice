@@ -23,8 +23,22 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
-import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.apache.pekko.http.scaladsl.model.{
+  HttpHeader,
+  HttpMethods,
+  HttpRequest,
+  HttpResponse,
+  StatusCodes,
+}
+import org.apache.pekko.http.scaladsl.model.headers.{
+  `Access-Control-Allow-Origin`,
+  `Access-Control-Request-Headers`,
+  `Access-Control-Request-Method`,
+  Authorization,
+  HttpOrigin,
+  OAuth2BearerToken,
+  Origin,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetChoiceContextRequest
 import org.lfdecentralizedtrust.tokenstandard.{
@@ -44,6 +58,7 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
 
   private val invalidValidator = "aliceValidatorInvalid"
   private val validatorPartyHint = s"imnotvalid_${(new scala.util.Random).nextInt(10000)}"
+  private val allowedOrigin = "http://wallet.localhost"
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -62,9 +77,10 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
                   ledgerApiUser = s"${aliceValidatorConfig.ledgerApiUser}2",
                 )
           ) + (aliceValidatorName -> aliceValidatorConfig.copy(
+            allowedOrigins = Some(Seq(allowedOrigin)),
             validatorWalletUsers =
               // Add a second wallet user to test that both get onboarded
-              aliceValidatorConfig.validatorWalletUsers :+ s"${aliceValidatorConfig.validatorWalletUsers.loneElement}-duplicate"
+              aliceValidatorConfig.validatorWalletUsers :+ s"${aliceValidatorConfig.validatorWalletUsers.loneElement}-duplicate",
           ))
         )
       })
@@ -309,6 +325,52 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
       .singleRequest(registerPost.withHeaders(headers))
       .futureValue
     validResponse.status should be(StatusCodes.OK)
+  }
+
+  "only accept requests from allowed origins" in { implicit env =>
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+
+    implicit val sys = env.actorSystem
+    registerHttpConnectionPoolsCleanup(env)
+
+    val listUsersUri = s"${aliceValidatorBackend.httpClientConfig.url}/api/validator/v0/admin/users"
+
+    def preflight(origin: String) =
+      Http()
+        .singleRequest(
+          HttpRequest(
+            HttpMethods.OPTIONS,
+            listUsersUri,
+            Seq[HttpHeader](
+              Origin(HttpOrigin(origin)),
+              `Access-Control-Request-Method`(HttpMethods.GET),
+              `Access-Control-Request-Headers`("authorization"),
+            ),
+          )
+        )
+        .futureValue
+
+    def listUsers(origin: Option[String]) =
+      Http()
+        .singleRequest(
+          Get(listUsersUri).withHeaders(
+            aliceValidatorBackend.headers ++ origin.map(o => Origin(HttpOrigin(o))).toList
+          )
+        )
+        .futureValue
+        .status
+
+    val allowedPreflight = preflight(allowedOrigin)
+    allowedPreflight.status should be(StatusCodes.OK)
+    allowedPreflight.header[`Access-Control-Allow-Origin`].map(_.value) should be(
+      Some(allowedOrigin)
+    )
+    preflight("http://example.com").status shouldBe a[StatusCodes.ClientError]
+
+    listUsers(None) should be(StatusCodes.OK)
+    listUsers(Some(allowedOrigin)) should be(StatusCodes.OK)
+    listUsers(Some("http://example.com")) shouldBe a[StatusCodes.ClientError]
   }
 
   "fail admin endpoint when not authenticated as validator operator" in { implicit env =>
