@@ -85,7 +85,6 @@ test_assertParsed = do
 -- Error message helpers
 ------------------------
 
--- | The other tests build their expected errors with these helpers, so their exact text is checked here.
 test_memoErrorMessages : Script ()
 test_memoErrorMessages = do
   -- Keys are named as written in the memo, without the `cipMetaPrefix`, and values are quoted
