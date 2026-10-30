@@ -427,3 +427,12 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10919 | ExpiryWithIgnoredAmuletVersion startup timeout, DB lock held after previous suite, open | same |
 | 10917 | compose portfolio `Failed to list contracts ... TransferInstruction` ERROR, open | same |
 | 10918 10920 | compose / LocalNet wallet tap row missing (same run), open 10918, dup 10920 | same |
+
+### 2026-10-30 mainnet-Daml nightly, run 41006358697 (fork A)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 10934 + 10924 10926 10928 10929 10931 10932 10936 | REAL, family X1: external party topology generated at PV 37, PV 36 participant rejects (`found 37`); open 10934 | `2026-10-30/nightly-a.md`, `host-commands-a.md` |
+| 10927 + 10925 10935 | family X2: joining SV mediators / LSU successor sequencers outbox flush fails (log check only); open 10927 | same |
+| 10937 | REAL, family X3: offline root key validator `TOPOLOGY_CONVERSION_ERROR`, shard hangs; open | same |
+| 10930 10933 | family Y: tests need newer packages than tagged (RewardCouponV2 #7627, traffic purchase #8012); open | same |

@@ -351,3 +351,22 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Compose / LocalNet wallet frontends: tap row missing (10918 parent, 10920) and portfolio
   `Failed to list contracts of interface ...TransferInstruction` ERROR (10917); intermittent, later runs green.
 - TokenStandard* `/state/acs/force` 500 on the advisory lock: parent 10740, dup 10916.
+
+## X. Canton 3.7 nodes produce PV 37 topology where a PV 36 synchronizer expects PV 36 (REAL, 2026-10-30)
+- Seen in the mainnet-Daml nightly (PV 36) from 10-30, once SV1 bootstrap works (#8065/#8125). Post-merge (PV 37)
+  is unaffected. Three variants:
+  - X1 external party onboarding: `POST .../admin/external-party/topology/submit` HTTP 400
+    `PROTO_DESERIALIZATION_FAILURE`; canton.clog `expected representative protocol version 36 but found 37`.
+    ValidatorUtil.createTopologyMappings -> generateTransactions(Authorized, no PV). Parent 10934.
+  - X2 joining SV mediators / LSU successor sequencers: tests pass, log check fails on `synchronizer outbox flusher
+    failed ... OwnerToKeyMapping(member = MED::svN ...) serial = 1`. Same mechanism as N. Parent 10927.
+  - X3 offline root key validator: `TOPOLOGY_CONVERSION_ERROR ... Signing key ... for topology transaction
+    NamespaceDelegation` on ReconnectSynchronizer, validator exits, shard hangs to SIGINT. Parent 10937.
+- Each nightly files ~12 per-job issues; one grep per job for `found 37`, `outbox flusher failed` or
+  `TOPOLOGY_CONVERSION_ERROR`, close as dups of the parent.
+
+## Y. Test needs newer Daml packages than its scalatest tag (mainnet-Daml nightly)
+- The nightly excludes tags for package versions not in MainNet's release line (scripts/initial-package-config.py,
+  `Using scalatest tags:` in the job log); a test tagged too low runs against the old packages and fails on
+  behaviour it needs. 10930 UnhideAndExpireRewardCouponV2 (tag 0_1_19, needs 0.1.25 / #7627); 10933 traffic purchase via
+  token standard (`UNKNOWN_INFORMEES splice_traffic-manager`, #8012, untagged). Fix: tag the test.
