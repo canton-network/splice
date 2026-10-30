@@ -44,3 +44,8 @@
   - Deployment
 
     - Added the `splice-topology-key-monitor` Helm chart, which logs a warning for every topology transaction that is signed by any key configured in the chart.
+
+  - Validator
+
+    - **Behavior change** When auth is disabled, setting `allowedOrigins` in the `splice-validator` Helm chart is mandatory.
+      The Docker Compose validator deployment sets it automatically.
