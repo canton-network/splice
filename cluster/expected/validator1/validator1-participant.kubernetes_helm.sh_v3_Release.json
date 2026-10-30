@@ -59,7 +59,9 @@
       },
       "disableAuth": false,
       "enableHealthProbes": true,
+      "enableKeyDownload": true,
       "enablePostgresMetrics": true,
+      "enableRepairCommands": true,
       "extraVolumeMounts": [
         {
           "mountPath": "/app/gcp-credentials.json",

@@ -32,6 +32,12 @@ export async function installParticipant(
   return { db, chart };
 }
 
+export function svParticipantKeyDownloadEnabled(
+  participant: SingleSvConfiguration['participant']
+): boolean {
+  return participant?.enableKeyDownload ?? true;
+}
+
 export type ParticipantArgs = {
   xns: ExactNamespace;
   participant: SingleSvConfiguration['participant'];
@@ -120,6 +126,7 @@ function installParticipantChart(
     },
     additionalJvmOptions: getAdditionalJvmOptions(participant?.additionalJvmOptions),
     enablePostgresMetrics: true,
+    enableKeyDownload: svParticipantKeyDownloadEnabled(participant),
     serviceAccountName: imagePullServiceAccountName,
     resources: participant?.resources,
     pvc: persistentHeapDumpsPvc(),
