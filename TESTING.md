@@ -5,8 +5,8 @@
   - [CI](#ci)
     - [Opting-in to CI](#opting-in-to-ci)
     - [Opting-out of CI](#opting-out-of-ci)
-    - [Git history in CI](#git-history-in-ci)
     - [Requesting Cluster Tests](#requesting-cluster-tests)
+    - [Git history in CI](#git-history-in-ci)
   - [Running Tests Locally](#running-tests-locally)
     - [Managing Canton for Tests](#managing-canton-for-tests)
       - [Issues on macOS](#issues-on-macos)
@@ -75,6 +75,18 @@ In certain cases, it may be valid to allow a PR to be merged without going throu
 While `[skip ci]` is supported, it does not allow the PR to be merged. To skip testing but
 still allow the PR to be merged, please include the text `[force]` in your last commit message.
 
+### Requesting Cluster Tests
+
+There are two types of cluster tests that can be requested on a PR:
+- A basic cluster test, which deploys a scratch cluster, and runs the test suite against it.
+- A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
+
+To request a cluster test to be run on your PR, comment `/cluster_test` on the PR. The job will paste a comment with instructions for
+maintainers.
+To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
+comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
+contact an existing maintainer to approve it.
+
 ### Git history in CI
 
 To keep the data transferred per CI job small, jobs check out only the tested commit (depth 1)
@@ -89,18 +101,6 @@ and fetch no other branches by default.
 `scripts/check-git-fetch-depth.py`, run in the static tests, rejects `fetch-depth: 0` and `git fetch`/`git clone`
 without `--depth`, `--deepen`, `--shallow-*` or `--filter`.
 If full history is really needed, add `# full-history-ok: <reason>` on that line or the line above.
-
-### Requesting Cluster Tests
-
-There are two types of cluster tests that can be requested on a PR:
-- A basic cluster test, which deploys a scratch cluster, and runs the test suite against it.
-- A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
-
-To request a cluster test to be run on your PR, comment `/cluster_test` on the PR. The job will paste a comment with instructions for
-maintainers.
-To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
-comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
-contact an existing maintainer to approve it.
 
 ## Running Tests Locally
 
