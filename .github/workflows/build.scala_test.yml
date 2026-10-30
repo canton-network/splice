@@ -86,7 +86,7 @@ jobs:
           # Checkout the PR head commit to get the commit message
           ref: ${{ github.event.pull_request.head.sha }}
           # Default depth 1: only the head commit's message and tree are needed;
-          # pre_scala_test fetches the release-line tip it diffs against.
+          # pre_scala_test's "Check if skip files changed" step fetches the release-line tip it diffs against.
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Split tests

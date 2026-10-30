@@ -211,6 +211,12 @@ const MonitoringConfigSchema = z
           // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
           droppedSentPacketsThreshold: 30,
         }),
+        // Notifies on every new participant
+        sequencerParticipantRegistration: z
+          .object({
+            enabled: z.boolean(),
+          })
+          .default({ enabled: false }),
         globalSynchronizerHealth: z.object({
           // Fraction (0-1) of sequenced confirmation requests that were discarded
           // (i.e., never processed by the mediator, e.g. due to CometBFT replays)

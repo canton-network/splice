@@ -138,6 +138,28 @@ testSubstitution_futureRequestedAt ops = do
     (GovernanceLockKey with dso = instrId.admin; owner = alice; specification = targetSpec)
     20000.0 requestedAt
 
+testSubstitution_staleRequestedAt_tsv1 : Script ()
+testSubstitution_staleRequestedAt_tsv1 = testSubstitution_staleRequestedAt tsv1Operations
+
+testSubstitution_staleRequestedAt_tsv2 : Script ()
+testSubstitution_staleRequestedAt_tsv2 = testSubstitution_staleRequestedAt tsv2Operations
+
+testSubstitution_staleRequestedAt : HasToInterface GovernanceLockSubstitution i => GovernanceLockOperations i r t -> Script ()
+testSubstitution_staleRequestedAt ops = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+      kind = GLK_SuperValidatorRightsOwner "TestSV"
+  AmuletRegistryV2.tapFaucet registry alice 49000.0
+  AmuletRegistryV2.tapFaucet registry bob 20000.0
+
+  let targetSpec = fullLockSpecification kind
+  ops.governanceLock (testEnvRegistries env) alice 50000.0 kind
+
+  requestedAt <- (`addRelTime` days (-2)) <$> getTime
+  expectFailureContaining "requestedAt + 1 day" =<< ops.proposeSubstitutionAt (testEnvRegistries env) bob
+    (GovernanceLockKey with dso = instrId.admin; owner = alice; specification = targetSpec)
+    20000.0 requestedAt
+
 -- | alice holds a 50000.0 SV lock; bob has 20000.0 liquid and proposes to substitute 20000.0 of it.
 setupSubstitution : GovernanceLockOperations i r t -> Script (TestEnv, ContractId GovernanceLock, GovernanceLockSpecification, ContractId i)
 setupSubstitution ops = do
@@ -228,6 +250,22 @@ testSubstitution_updateFails_tsv1 = do
   expectFailureContaining "substitutions cannot be updated" =<<
     submitWithTransferContext registry (actAs instrId.admin) \context ->
       exerciseCmd substitutionCid V1.TransferInstruction_Update with extraActors = []; extraArgs = emptyExtraArgs with context
+
+-- | Negative: a proposal can't be accepted after it expires, so it's safe to retry creating it.
+testSubstitution_acceptAfterExpiryFails_tsv1 : Script ()
+testSubstitution_acceptAfterExpiryFails_tsv1 = do
+  let ops = tsv1Operations
+  (env@TestEnv{..}, targetCid, _, substitutionCid) <- setupSubstitution ops
+  [(_, proposal)] <- query @GovernanceLockSubstitution bob
+
+  setTime proposal.expiresAt
+  expectFailureContaining "Ledger time is at or past deadline 'expiresAt'" =<<
+    ops.acceptInstruction env substitutionCid alice
+
+  -- the proposal is still active, and the target lock is untouched
+  [_] <- query @GovernanceLockSubstitution bob
+  Some target <- queryContractId alice targetCid
+  target.amount === 50000.0
 
 testSubstitution_vestingTarget_tsv1 : Script ()
 testSubstitution_vestingTarget_tsv1 = testSubstitution_vestingTarget tsv1Operations

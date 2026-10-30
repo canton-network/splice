@@ -117,7 +117,7 @@ governanceLock_transferFactoryV1_transferImpl dso actors arg@V1.TransferFactory_
   -- validate call to factory and retrieve context
   requireMatchExpected ("admin", expectedAdmin) dso
   requireMatchExpected ("instrumentId", transfer.instrumentId) (amuletInstrumentId dso)
-  assertDeadlineExceeded "transfer.requestedAt" transfer.requestedAt
+  assertInPast24Hours "transfer.requestedAt" transfer.requestedAt
   assertWithinDeadline "transfer.executeBefore" transfer.executeBefore
 
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context

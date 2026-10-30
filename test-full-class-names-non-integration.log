@@ -42,6 +42,7 @@ org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.BftBulkObjectListing
 org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.KvBackfillingProgressTest
 org.lfdecentralizedtrust.splice.scan.store.db.CheckMetaVersionsTest
 org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStoreTest
+org.lfdecentralizedtrust.splice.scan.store.db.FreezeGovernanceLockJsonTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryReadinessTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStartTest
 org.lfdecentralizedtrust.splice.store.DbUnavailablePartiesStoreTest
@@ -72,6 +73,7 @@ org.lfdecentralizedtrust.splice.sv.util.WeightDistributionForSvTest
 org.lfdecentralizedtrust.splice.unit.http.HttpClientProxyTest
 org.lfdecentralizedtrust.splice.unit.store.db.AcsJdbcTypesTest
 org.lfdecentralizedtrust.splice.util.AmuletConfigScheduleTest
+org.lfdecentralizedtrust.splice.util.ExerciseNodeTest
 org.lfdecentralizedtrust.splice.util.GovernanceLockUtilTest
 org.lfdecentralizedtrust.splice.util.IpCidrRateLimitsTest
 org.lfdecentralizedtrust.splice.util.PolicyTest

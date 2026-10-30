@@ -233,6 +233,7 @@ private[validator] object ValidatorUtil {
       partyHint: String,
       publicKey: SigningPublicKey,
       participantAdminConnection: ParticipantAdminConnection,
+      synchronizerId: SynchronizerId,
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
@@ -283,7 +284,7 @@ private[validator] object ValidatorUtil {
           .map(mapping =>
             Proposal(
               mapping = mapping,
-              store = TopologyStoreId.Authorized,
+              store = TopologyStoreId.Synchronizer(synchronizerId),
               serial = Some(PositiveInt.one),
             )
           )

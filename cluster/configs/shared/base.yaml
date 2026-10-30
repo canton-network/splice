@@ -202,13 +202,13 @@ monitoring:
         # on the first violating window).
         # Requests denied by Cloud Armor.
         deniedRequests:
-          threshold: 100
+          threshold: 300
           alignmentPeriodSeconds: 300
           durationSeconds: 0
         # Requests matching a WAF (OWASP CRS) rule. Only used if cloudArmor.wafRules.enabled
         # and cloudArmor.logging.enabled are true.
         wafRejections:
-          threshold: 10
+          threshold: 50
           alignmentPeriodSeconds: 300
           durationSeconds: 0
         throttleRejections:
