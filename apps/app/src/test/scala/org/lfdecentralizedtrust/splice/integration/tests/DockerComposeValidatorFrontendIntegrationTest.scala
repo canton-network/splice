@@ -3,8 +3,14 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.Get
-import org.apache.pekko.http.scaladsl.model.StatusCodes
-import org.apache.pekko.http.scaladsl.model.headers.Host
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpMethods, HttpRequest, StatusCodes, Uri}
+import org.apache.pekko.http.scaladsl.model.headers.{
+  `Access-Control-Request-Headers`,
+  `Access-Control-Request-Method`,
+  Host,
+  HttpOrigin,
+  Origin,
+}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{
   AnsFrontendTestUtil,
@@ -203,6 +209,62 @@ class DockerComposeValidatorFrontendIntegrationTest
         response.entity.toStrict(10.seconds).futureValue.data.utf8String should include(
           "\"version\":\"3." // check that it reports a version. We don't care about the exact version
         )
+      }
+
+      clue("Without auth, Nginx only serves its configured virtual hosts") {
+        Http()
+          .singleRequest(
+            Get("http://localhost/api/validator/readyz").withHeaders(Host("other.localhost"))
+          )
+          .failed
+          .futureValue shouldBe a[Exception]
+      }
+
+      def preflightStatus(host: String, path: String, origin: String) =
+        Http()
+          .singleRequest(
+            HttpRequest(
+              HttpMethods.OPTIONS,
+              Uri(s"http://localhost$path"),
+              Seq[HttpHeader](
+                Host(host),
+                Origin(HttpOrigin(origin)),
+                `Access-Control-Request-Method`(HttpMethods.POST),
+                `Access-Control-Request-Headers`("authorization", "content-type"),
+              ),
+            )
+          )
+          .futureValue
+          .status
+
+      clue("Without auth, the validator API only accepts requests from the wallet and ANS UIs") {
+        preflightStatus(
+          "wallet.localhost",
+          "/api/validator/v0/register",
+          "http://wallet.localhost",
+        ) should be(StatusCodes.OK)
+        preflightStatus(
+          "wallet.localhost",
+          "/api/validator/v0/register",
+          "http://example.com",
+        ) shouldBe a[StatusCodes.ClientError]
+      }
+
+      clue("Without auth, the JSON ledger API only accepts requests from the wallet and ANS UIs") {
+        preflightStatus(
+          "json-ledger-api.localhost",
+          "/v2/commands/submit-and-wait",
+          "http://example.com",
+        ) shouldBe a[StatusCodes.ClientError]
+        Http()
+          .singleRequest(
+            Get("http://localhost/v2/version").withHeaders(
+              Host("json-ledger-api.localhost"),
+              Origin(HttpOrigin("http://wallet.localhost")),
+            )
+          )
+          .futureValue
+          .status should be(StatusCodes.OK)
       }
 
       clue("GRPC ledger API is exposed") {
