@@ -44,17 +44,15 @@
   - Participant
 
     - The `splice-participant` Helm chart has two new values to harden the participant: `enableKeyDownload` and `enableRepairCommands`.
-      Both default to `true`, so the behavior is unchanged. A future release will change both defaults to `false`.
+      Both default to `true`, so the behavior is unchanged. Splice 0.10.0 will change both defaults to `false`.
 
       - `enableKeyDownload: false` disallows downloading the participant's private keys via its admin API.
         For participants that do not use KMS, this breaks participant identities dumps, including periodic backups
         (`participantIdentitiesDumpPeriodicBackup`), the validator's `/v0/admin/participant/identities` endpoint, and SV identities dumps.
         Participants that use KMS are not affected, as their identities dumps do not include private keys.
       - `enableRepairCommands: false` disables the participant's repair service (`canton.features.enable-repair-commands`).
-        **SVs must keep it enabled**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump,
-        exports the ACS through it.
-        Validators only need it while restoring from an identities dump (`migrateValidatorParty`) or while running
-        repair commands such as `participant.repair.import_acs`.
+        **SVs must keep it enabled**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump, exports the ACS through it.
+        Validators only need it while restoring from an identities dump (`migrateValidatorParty`) or while running repair commands such as `participant.repair.import_acs`.
 
   - Deployment
 
