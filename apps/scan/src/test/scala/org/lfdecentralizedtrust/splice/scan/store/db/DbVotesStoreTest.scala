@@ -71,7 +71,10 @@ import org.lfdecentralizedtrust.splice.store.{
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import org.slf4j.event.Level
+import slick.dbio.DBIO
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -91,6 +94,8 @@ class DbVotesStoreTest
     with HasExecutionContext
     with HasActorSystem
     with SplicePostgresTest {
+
+  private val participantName = "DbVotesStoreTest"
 
   "DbVotesStore" should {
     "behave the same as the txlog-based votes store in ScanStore" should {
@@ -190,6 +195,56 @@ class DbVotesStoreTest
           _ <- ingestAll(stores, voteFixtures.reverse)
           pages <- listAllPages(stores.votesStore, VoteResultsFilters(), pageSize = 2)
         } yield pages.flatten shouldBe expected
+      }
+    }
+
+    "contract_id" should {
+      "be the DsoRules on which the choice was exercised" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          contractIds <- listContractIds()
+        } yield {
+          contractIds should have size voteFixtures.flatMap(_.votes).size.toLong
+          all(contractIds.map(_._2)) shouldBe Some(dsoRulesCid)
+        }
+      }
+    }
+
+    "the migration of contract_id" should {
+      "fill the contract id from the update history, and leave rows without a match null" in {
+        for {
+          stores <- mkStores()
+          _ <- ingestAll(stores, voteFixtures)
+          updateIds <- listContractIds().map(_.map(_._1).distinct.sorted)
+          (withHistory, withoutHistory) = updateIds.splitAt(updateIds.size / 2)
+          _ <- clearContractIds()
+          historyId <- insertHistory(participantName, dsoParty.toProtoPrimitive)
+          otherHistoryId <- insertHistory("OtherParticipant", dsoParty.toProtoPrimitive)
+          _ <- MonadUtil.sequentialTraverse(withHistory.zipWithIndex) { case (updateId, i) =>
+            for {
+              _ <- insertExercise(historyId, updateId, 0, "DsoRules_CloseVoteRequest", s"cid-$i")
+              // Another choice in the same update, and the same update in the history of another participant
+              _ <- insertExercise(historyId, updateId, 1, "DsoRules_SomeOtherChoice", s"other-$i")
+              _ <- insertExercise(
+                otherHistoryId,
+                updateId,
+                0,
+                "DsoRules_CloseVoteRequest",
+                s"other-participant-$i",
+              )
+            } yield ()
+          }
+          _ <- runMigration()
+          contractIds <- listContractIds()
+        } yield {
+          withHistory should not be empty
+          withoutHistory should not be empty
+          forAll(contractIds) { case (updateId, contractId) =>
+            val i = withHistory.indexOf(updateId)
+            contractId shouldBe (if (i >= 0) Some(s"cid-$i") else None)
+          }
+        }
       }
     }
 
@@ -674,6 +729,88 @@ class DbVotesStoreTest
       )
     }
 
+  private def listContractIds(): Future[Seq[(String, Option[String])]] =
+    futureUnlessShutdownToFuture(
+      storage.query(
+        sql"select update_id, contract_id from votes_store_results".as[(String, Option[String])],
+        "test.listContractIds",
+      )
+    )
+
+  private def clearContractIds(): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update(
+        sqlu"update votes_store_results set contract_id = null",
+        "test.clearContractIds",
+      )
+    ).map(_ => ())
+
+  private def insertHistory(participantName: String, party: String): Future[Int] =
+    futureUnlessShutdownToFuture(
+      storage
+        .querySingle(
+          sql"""insert into update_history_descriptors (party, participant_id, store_name)
+              values ($party, ${mkParticipantId(participantName).toProtoPrimitive}, 'DbScanStore')
+              returning id""".as[Int].headOption,
+          "test.insertHistory",
+        )
+        .value
+    ).map(_.getOrElse(fail("No history inserted")))
+
+  /** Inserts an update with a single exercise on a DsoRules contract into the update history.
+    * The row of the update is shared by all exercises of the same history.
+    * Flyway-style single execution is needed here, as [[DbStorageIdempotency]] runs all writes twice.
+    */
+  private def insertExercise(
+      historyId: Int,
+      updateId: String,
+      nodeId: Int,
+      choice: String,
+      contractId: String,
+  ): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        DBIO
+          .seq(
+            sqlu"""insert into update_history_transactions
+                   (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
+                    effective_at, root_event_ids)
+                 select $historyId, v.update_id, v.record_time, '0', v.synchronizer_id, $domainMigrationId,
+                        v.record_time, array['#0']
+                 from votes_store_results v
+                 where v.update_id = $updateId
+                   and not exists (select 1 from update_history_transactions t
+                                   where t.history_id = $historyId and t.update_id = $updateId)
+                 limit 1""",
+            sqlu"""insert into update_history_exercises
+                   (history_id, event_id, update_row_id, child_event_ids, choice, package_name, template_id_package_id,
+                    template_id_module_name, template_id_entity_name, contract_id, consuming, argument, result, acting_parties,
+                    record_time, update_id, domain_id, migration_id)
+                 select $historyId, '#' || $updateId || ':' || $nodeId, t.row_id, array[]::text[], $choice, 'splice-dso-governance', 'pkg',
+                        'Splice.DsoRules', 'DsoRules', $contractId, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
+                        t.record_time, t.update_id, t.domain_id, t.migration_id
+                 from update_history_transactions t
+                 where t.history_id = $historyId and t.update_id = $updateId""",
+          )
+          .map(_ => ()),
+        "test.insertExercise",
+      )
+    ).map(_ => ())
+
+  /** Runs the migration script as is, to check it against the data written by the ingestion.
+    * Flyway runs a script once, so this bypasses [[DbStorageIdempotency]], which runs all writes twice.
+    * The column that the script adds is already there, so only its update statement is run.
+    */
+  private def runMigration(): Future[Unit] = {
+    val script = scala.io.Source
+      .fromResource("db/migration/canton-network/postgres/stable/V081__votes_store_contract_id.sql")
+      .mkString
+    val update = script.substring(script.indexOf("update votes_store_results"))
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(sqlu"#$update".map(_ => ()), "test.runMigration")
+    )
+  }
+
   private case class Stores(
       scanStore: ScanStore,
       votesStore: DbVotesStore,
@@ -720,7 +857,7 @@ class DbVotesStoreTest
 
   private def mkStoresWith(
       kvStore: DbKeyValueStore,
-      participantName: String = "DbVotesStoreTest",
+      participantName: String = participantName,
       acsStoreDescriptorUserVersion: Option[Long] = None,
   ): Future[Stores] = {
     val packageSignatures =

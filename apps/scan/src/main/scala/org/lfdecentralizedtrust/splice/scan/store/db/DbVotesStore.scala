@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import cats.data.NonEmptyList
-import com.daml.ledger.javaapi.data.Transaction
+import com.daml.ledger.javaapi.data.{ExercisedEvent, Transaction}
 import com.digitalasset.canton.config.CantonRequireTypes.{String2066, String256M}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
@@ -250,6 +250,7 @@ object DbVotesStore {
       synchronizerId: String2066,
       updateId: String2066,
       eventNumber: Int,
+      contractId: String2066,
       voteActionName: String2066,
       voteRequesterName: String2066,
       voteAccepted: Boolean,
@@ -267,6 +268,7 @@ object DbVotesStore {
           synchronizer_id,
           update_id,
           event_number,
+          contract_id,
           vote_action_name,
           vote_requester_name,
           vote_accepted,
@@ -281,6 +283,7 @@ object DbVotesStore {
           ${synchronizerId},
           ${updateId},
           ${eventNumber},
+          ${contractId},
           ${voteActionName},
           ${voteRequesterName},
           ${voteAccepted},
@@ -311,25 +314,44 @@ object DbVotesStore {
     tx.getEventsById.asScala.iterator
       .flatMap { case (nodeId, event) =>
         lazy val eventNumber = mapping(nodeId).intValue
-        // Only the nodes that are a CloseVoteRequest exercise can fail here, all other nodes are ignored.
-        Try(event match {
-          case DsoRulesCloseVoteRequest(node) =>
-            Some(toInsert(node.result.value, storeId, recordTime, tx, eventNumber))
+        event match {
+          case exercised: ExercisedEvent =>
+            // Only the nodes that are a CloseVoteRequest exercise can fail here, all other nodes are ignored.
+            Try(exercised match {
+              case DsoRulesCloseVoteRequest(node) =>
+                Some(
+                  toInsert(
+                    node.result.value,
+                    exercised.getContractId,
+                    storeId,
+                    recordTime,
+                    tx,
+                    eventNumber,
+                  )
+                )
+              case _ => None
+            }) match {
+              case Success(insert) => insert
+              case Failure(e) =>
+                // Throwing would stop the ingestion of the whole ACS store, which can't continue past this update.
+                // Instead, write a row that only identifies the vote, so that it can be fixed later.
+                elc.error(
+                  s"Failed to decode the vote result in update ${tx.getUpdateId} at record time $recordTime. " +
+                    "Ingesting a placeholder instead.",
+                  e,
+                )
+                Some(
+                  toInsert(
+                    placeholderResult(recordTime),
+                    exercised.getContractId,
+                    storeId,
+                    recordTime,
+                    tx,
+                    eventNumber,
+                  ).copy(error = Some(e.getMessage.take(MaxErrorLength)))
+                )
+            }
           case _ => None
-        }) match {
-          case Success(insert) => insert
-          case Failure(e) =>
-            // Throwing would stop the ingestion of the whole ACS store, which can't continue past this update.
-            // Instead, write a row that only identifies the vote, so that it can be fixed later.
-            elc.error(
-              s"Failed to decode the vote result in update ${tx.getUpdateId} at record time $recordTime. " +
-                "Ingesting a placeholder instead.",
-              e,
-            )
-            Some(
-              toInsert(placeholderResult(recordTime), storeId, recordTime, tx, eventNumber)
-                .copy(error = Some(e.getMessage.take(MaxErrorLength)))
-            )
         }
       }
       .toSeq
@@ -338,6 +360,7 @@ object DbVotesStore {
 
   private def toInsert(
       result: DsoRules_CloseVoteRequestResult,
+      contractId: String,
       storeId: Int,
       recordTime: Long,
       tx: Transaction,
@@ -350,6 +373,7 @@ object DbVotesStore {
       synchronizerId = String2066.tryCreate(tx.getSynchronizerId),
       updateId = String2066.tryCreate(tx.getUpdateId),
       eventNumber = eventNumber,
+      contractId = String2066.tryCreate(contractId),
       voteActionName = String2066.tryCreate(actionName(result.request.action)),
       voteRequesterName = String2066.tryCreate(result.request.requester),
       voteAccepted = outcome match { case _: Accepted => true; case _ => false },
