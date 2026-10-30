@@ -1782,7 +1782,10 @@ function subcmd_participant_console() {
                 cncluster participant_console sv-1 7
 
               Example: opening multi-participant-24 console
-                cncluster participant_console multi-validator 7 multi-participant-24 7"
+                cncluster participant_console multi-validator 7 multi-participant-24 7
+
+              Set PARTICIPANT_CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead
+              of opening a console. See also build-tools/participant-console-all.sh."
     fi
 
     app_container="$app"
@@ -1849,11 +1852,19 @@ function subcmd_participant_console() {
     kubectl port-forward -n "$namespace" "$participant_pod" 11001:5"${participant_number}"01 11002:5"${participant_number}"02 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-participant.conf"
+    if [ "${PARTICIPANT_CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$PARTICIPANT_CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$PARTICIPANT_CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-participant.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-participant.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 subcommand_whitelist[sequencer_console]='Open a Canton console against a single sequencer running in the target namespace'
