@@ -88,14 +88,14 @@ test_assertParsed = do
 test_errorMessages : Script ()
 test_errorMessages = do
   -- Keys are named as written in the memo, without the `cipMetaPrefix`, and values are quoted
-  missingMemoKeyMessage lockKindMetaKey === "Missing memo key 'lock-kind'"
-  invalidMemoValueMessage "party" targetLockOwnerMetaKey "bad$party"
-    === "Invalid party for memo key 'target-lock-owner': 'bad$party'"
-  memoKeyErrorMessage lockVestingDurationMetaKey "Invalid microseconds: '60d'"
+  errorInMemoKeyMessage lockVestingDurationMetaKey "Invalid microseconds: '60d'"
     === "Error in memo key 'lock-vesting-duration-micros': Invalid microseconds: '60d'"
   invalidLockSubjectMessage "SV name" GLT_SuperValidator "bad$sv"
     === "Invalid SV name for sv-lock: 'bad$sv'"
   invalidMemoEntryMessage "a=b=c" === "Invalid memo entry 'a=b=c': expected 'key=value'"
+  invalidMemoValueMessage "party" targetLockOwnerMetaKey "bad$party"
+    === "Invalid party for memo key 'target-lock-owner': 'bad$party'"
+  missingMemoKeyMessage lockKindMetaKey === "Missing memo key 'lock-kind'"
 
 -- Lock kind parser
 -------------------
@@ -493,8 +493,8 @@ test_substitutionTSv1Parser_failures = do
 
   -- The vesting period and end time must be integers; both invalid values are reported
   expectErrors
-    [ memoKeyErrorMessage lockVestingDurationMetaKey "Invalid microseconds: '60d'"
-    , memoKeyErrorMessage lockVestingEndTimeMetaKey "Invalid microseconds: '2026-01-01T00:00:00Z'"
+    [ errorInMemoKeyMessage lockVestingDurationMetaKey "Invalid microseconds: '60d'"
+    , errorInMemoKeyMessage lockVestingEndTimeMetaKey "Invalid microseconds: '2026-01-01T00:00:00Z'"
     ]
     $ run
         [ subject
