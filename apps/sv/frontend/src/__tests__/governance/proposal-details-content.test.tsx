@@ -9,6 +9,7 @@ import {
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
 import {
+  FeatureAppConfigUpdateProposal,
   ProposalDetails,
   ProposalVote,
   ProposalVotingInformation,
@@ -460,6 +461,65 @@ describe('Proposal Details Content', () => {
     });
     // ...but there's no current-value box (contract archived → currentWeight '')
     expect(screen.queryByTestId('config-change-current-value')).toBeNull();
+  });
+
+  test('should render amend featured app config proposal details', () => {
+    const amendDetails = {
+      actionName: 'Update Featured Application Metadata (since Splice 0.10.0)',
+      action: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
+      proposal: {
+        updates: [
+          {
+            provider: 'provider::1220aaaa',
+            scalarChanges: [
+              {
+                fieldName: 'appKind',
+                label: 'App Kind',
+                currentValue: 'Default (unset)',
+                newValue: 'Asset Moving',
+              },
+            ],
+            opsAdded: ['ops-carol::1220dddd'],
+            opsRemoved: ['ops-bob::1220cccc'],
+          },
+        ],
+      } as FeatureAppConfigUpdateProposal,
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={amendDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    const action = screen.getByTestId('proposal-details-action-value');
+    expect(action.textContent).toMatch(
+      'Update Featured Application Metadata (since Splice 0.10.0)'
+    );
+
+    const amendSection = screen.getByTestId('proposal-details-amend-feature-app-section');
+    expect(amendSection).toBeInTheDocument();
+
+    const provider = screen.getByTestId('proposal-details-amend-provider-0');
+    expect(provider.textContent).toMatch('provider::1220aaaa');
+
+    // scalar change (appKind) renders via ConfigValuesChanges
+    expect(screen.getByTestId('config-change-field-label').textContent).toBe('App Kind');
+    expect(screen.getByTestId('config-change-new-value').textContent).toMatch('Asset Moving');
+
+    // opsParties diff: one added, one removed
+    expect(screen.getByTestId('proposal-details-amend-ops-0-added-0').textContent).toMatch(
+      'ops-carol::1220dddd'
+    );
+    expect(screen.getByTestId('proposal-details-amend-ops-0-removed-0').textContent).toMatch(
+      'ops-bob::1220cccc'
+    );
   });
 
   test('should render update sv reward weight proposal details', () => {

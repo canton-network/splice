@@ -6,6 +6,7 @@ import type {
   AmuletRules_ActionRequiringConfirmation,
   DsoRules_ActionRequiringConfirmation,
   DsoRules_CloseVoteRequestResult,
+  DsoRules_CreateFeaturedAppConfigUpdateInstruction,
   DsoRules_SetConfig,
   DsoRulesConfig,
   SvInfo,
@@ -21,6 +22,8 @@ import type {
   ConfigChange,
   ConfigFormData,
   DsoRulesConfigProposal,
+  FeatureAppConfigUpdateEntry,
+  FeatureAppConfigUpdateProposal,
   FeatureAppProposal,
   OffBoardMemberProposal,
   PendingConfigFieldInfo,
@@ -42,6 +45,8 @@ import {
 } from '../components/forms/formValidators';
 import { AmuletRules_SetConfig } from '@daml.js/splice-amulet/lib/Splice/AmuletRules';
 import { AmuletConfig } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
+import { FeaturedAppConfig, FeaturedAppKind } from '@daml.js/splice-amulet/lib/Splice/Amulet';
+import { DEFAULT_APP_ACTIVITY_WEIGHT } from './constants';
 import { Optional } from '@daml/types';
 
 export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag, string> => ({
@@ -54,6 +59,8 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
+  SRARC_CreateFeaturedAppConfigUpdateInstruction:
+    'Update Featured Application Metadata (since Splice 0.10.0)',
 });
 
 export const createProposalActions: {
@@ -63,7 +70,15 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
-  { name: 'Update Featured Application', value: 'SRARC_UpdateFeaturedAppRight' },
+  // TODO(#8058): remove this legacy option in Splice 0.11.0
+  {
+    name: 'Update Featured Application Metadata (before Splice 0.10.0)',
+    value: 'SRARC_UpdateFeaturedAppRight',
+  },
+  {
+    name: 'Update Featured Application Metadata (since Splice 0.10.0)',
+    value: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
+  },
   {
     name: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
     value: 'SRARC_SetConfig',
@@ -218,6 +233,8 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
         );
       case 'SRARC_SetConfig':
         return createDsoRulesConfigProposal(dsoAction.value.baseConfig, dsoAction.value.newConfig);
+      case 'SRARC_CreateFeaturedAppConfigUpdateInstruction':
+        return createFeatureAppConfigUpdateProposal(dsoAction.value.updates);
     }
   } else if (action.tag === 'ARC_AmuletRules') {
     const amuletAction = action.value.amuletRulesAction;
@@ -250,6 +267,18 @@ function createUpdateFeatureAppProposal(
   newActivityWeight: string
 ): UpdateFeatureAppProposal {
   return { rightContractId, newActivityWeight };
+}
+
+// Map the choice `updates` (Tuple2 _1=provider, _2=FeaturedAppRight_UpdateConfig) into the
+// UI proposal: one entry per provider with scalar changes + opsParties added/removed.
+function createFeatureAppConfigUpdateProposal(
+  updates: DsoRules_CreateFeaturedAppConfigUpdateInstruction['updates']
+): FeatureAppConfigUpdateProposal {
+  return {
+    updates: updates.map(({ _1: provider, _2: update }) =>
+      buildFeaturedAppConfigUpdateEntry(provider, update.baseConfig, update.newConfig)
+    ),
+  };
 }
 
 function createRevokeFeatureAppProposal(rightContractId: string): UnfeatureAppProposal {
@@ -384,6 +413,97 @@ export function getSvRewardWeight(svs: [string, SvInfo][], svPartyId: string): s
 
 export function activityWeightToOptional(weight: string): string | null {
   return weight.trim() === '' ? null : weight;
+}
+
+// appKind: '' (blank select) encodes the DAML default (None → FAK_Basic).
+export function appKindToOptional(kind: string): FeaturedAppKind | null {
+  return kind === '' ? null : (kind as FeaturedAppKind);
+}
+
+// opsParties mapper. Empty (after trimming blank rows) → None: canonicalize empty to None
+// everywhere so a None-vs-[] mismatch never reaches DAML patchScalar (raw Optional equality).
+// Dedup is the validator's job (validateOpsParties), not the mapper's.
+export function opsPartiesToOptional(parties: string[]): string[] | null {
+  const cleaned = parties.map(p => p.trim()).filter(p => p !== '');
+  return cleaned.length === 0 ? null : cleaned;
+}
+
+// Presentational list diff: on-ledger the opsParties change is a whole-list replacement
+// (patchScalar); added/removed is only how we display base→next. Caller passes cleaned lists.
+export function diffOpsParties(
+  base: string[],
+  next: string[]
+): { added: string[]; removed: string[] } {
+  const baseSet = new Set(base);
+  const nextSet = new Set(next);
+  return {
+    added: next.filter(p => !baseSet.has(p)),
+    removed: base.filter(p => !nextSet.has(p)),
+  };
+}
+
+// Friendly display labels for the FeaturedAppKind constructors; the raw DAML
+// names (FAK_Basic, …) leak internals, so mirror how proposal actions are labeled.
+const APP_KIND_LABELS: Record<string, string> = {
+  FAK_Basic: 'Basic',
+  FAK_AssetMoving: 'Asset Moving',
+  FAK_Asset: 'Asset',
+};
+
+// Label shown for an unset (None) appKind in change/diff displays.
+// DAML default is FAK_Basic (Amulet.daml `defaultAppKind`).
+const APP_KIND_DEFAULT_LABEL = 'Default (unset)';
+
+// Display label for an appKind value; '' (None) → the DAML default.
+export function appKindLabel(kind: string): string {
+  return kind === '' ? APP_KIND_DEFAULT_LABEL : (APP_KIND_LABELS[kind] ?? kind);
+}
+
+// Select options for the appKind field. No explicit "unset" option: an empty
+// field value (None) renders as the field placeholder (see SelectField), so the
+// dropdown lists only the concrete kinds.
+export function appKindSelectOptions(): { key: string; value: string }[] {
+  return FeaturedAppKind.keys.map(k => ({ key: appKindLabel(k), value: k }));
+}
+
+// Build the UI-facing view of a single provider's config amendment: scalar
+// changes (appKind / activityWeight) as ConfigChange rows (only changed fields), and the
+// opsParties change as added/removed party lists. Shared by the review summary and the
+// vote-request details section so both render identically.
+export function buildFeaturedAppConfigUpdateEntry(
+  provider: string,
+  baseConfig: FeaturedAppConfig,
+  newConfig: FeaturedAppConfig
+): FeatureAppConfigUpdateEntry {
+  const scalarChanges: ConfigChange[] = [];
+
+  const baseKind = baseConfig.appKind ?? '';
+  const newKind = newConfig.appKind ?? '';
+  if (baseKind !== newKind) {
+    scalarChanges.push({
+      fieldName: 'appKind',
+      label: 'App Kind',
+      currentValue: appKindLabel(baseKind),
+      newValue: appKindLabel(newKind),
+    });
+  }
+
+  const baseWeight = baseConfig.activityWeight ?? '';
+  const newWeight = newConfig.activityWeight ?? '';
+  if (baseWeight !== newWeight) {
+    scalarChanges.push({
+      fieldName: 'activityWeight',
+      label: 'Activity Weight',
+      currentValue: baseWeight || DEFAULT_APP_ACTIVITY_WEIGHT,
+      newValue: newWeight || DEFAULT_APP_ACTIVITY_WEIGHT,
+    });
+  }
+
+  const { added, removed } = diffOpsParties(
+    baseConfig.opsParties ?? [],
+    newConfig.opsParties ?? []
+  );
+  return { provider, scalarChanges, opsAdded: added, opsRemoved: removed };
 }
 
 export function buildPendingConfigFields(
