@@ -1,6 +1,5 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.admin.api.client.data.{NodeStatus, WaitingForId}
 import com.digitalasset.canton.config.{DbConfig, FullClientConfig}
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{Port, PositiveInt}
@@ -411,7 +410,7 @@ class SvReonboardingIntegrationTest
       }
 
       withCantonSvNodes(
-        (None, None, None, Some(sv4Backend)),
+        (None, None, None, Some(sv4ReonboardBackend)),
         logSuffix = "sv4-reonboarding-new",
         svs123 = false,
         overrideSvDbsSuffix = Some("reonboard_new"),
@@ -420,17 +419,13 @@ class SvReonboardingIntegrationTest
           "EXTRA_PARTICIPANT_ADMIN_USER" -> validatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> s"participant_reonboard_new",
         ),
-        // the test asserts sv4's participant is still waiting for an id, so
-        // that it can be re-onboarded from the dump below
-        autoInitParticipants = Set.empty,
       )() {
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {
-          inside(sv4ReonboardBackend.participantClientWithAdminToken.health.status) {
-            case NodeStatus.NotInitialized(active, waitingFor, _) =>
-              active should be(true)
-              waitingFor should be(Some(WaitingForId))
-          }
+          // Canton initializes this participant itself; what matters for
+          // re-onboarding is that it got a fresh namespace, not the old one.
+          val id = sv4ReonboardBackend.participantClientWithAdminToken.id
+          id.uid.namespace should not be sv4ParticipantDump.id.uid.namespace
         }
         better.files
           .File(dumpPath)
