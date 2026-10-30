@@ -22,7 +22,7 @@
     "@tanstack/react-query": "5.104.5",
     "bignumber.js": "9.1.1",
     "dompurify": "^3.4.16",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "jsondiffpatch": "^0.7.6",
     "react": "18.3.1",
     "react-dom": "18.3.1",
