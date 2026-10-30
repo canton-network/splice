@@ -128,8 +128,7 @@ let
     curl
     dpm-sdk
     git
-    # Required for git add/status with the runner-container-hooks submodule
-    git-lfs
+    git-lfs # Required for git add/status with the runner-container-hooks submodule
     hub # Github CLI for todo checker
     jq
     nodejs
