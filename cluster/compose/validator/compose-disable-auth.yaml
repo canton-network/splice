@@ -35,6 +35,11 @@ services:
           canton.validator-apps.validator_backend.participant-client.ledger-api.auth-config {
             type="none"
           }
+          canton.validator-apps.validator_backend.allowed-origins = [
+            "http://wallet.localhost",
+            "http://ans.localhost",
+            "http://portfolio.localhost"
+          ]
 
   wallet-web-ui:
     environment:
@@ -45,3 +50,8 @@ services:
     environment:
       - SPLICE_APP_UI_UNSAFE=true
       - SPLICE_APP_UI_UNSAFE_SECRET=unsafe
+
+  nginx:
+    volumes:
+      - ./nginx-disable-auth:/etc/nginx/nginx-disable-auth
+      - ./nginx-vhosts/disable-auth.conf:/etc/nginx/vhosts/disable-auth.conf
