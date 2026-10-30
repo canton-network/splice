@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "dompurify": "^3.4.16",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "jsondiffpatch": "^0.7.6",
     "uuid": "^14.0.3",
     "zod": "^4.6.7"
