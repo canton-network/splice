@@ -115,6 +115,8 @@ validatorWebUi:
 
 # set to true to disable auth (this is highly insecure)
 disableAuth: false
+# Required to be non-empty if disableAuth is true. If empty, all origins are allowed.
+allowedOrigins: []
 
 #auth:
 #  # Optional: override the K8s secret name the validator app reads ledger API credentials from.

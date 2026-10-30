@@ -9,7 +9,7 @@ import DA.Foldable (forA_)
 import DA.List (dedupSort)
 import qualified DA.Map as Map
 import DA.TextMap qualified as TextMap
-import DA.Optional (fromSomeNote)
+import DA.Optional (fromSomeNote, isSome)
 import Daml.Script
 import DA.Time
 
@@ -29,7 +29,9 @@ import Splice.AmuletRules
 import Splice.Ans
 import Splice.ExternalPartyAmuletRules
 import Splice.ExternalPartyConfigState
+import Splice.Expiry
 import Splice.Fees
+import Splice.Round
 import Splice.AmuletTransferInstruction
 import Splice.AmuletAllocation
 import Splice.AmuletAllocationV2
@@ -1024,3 +1026,278 @@ testExpireAmuletAllocationV2 = do
   WalletClientV2.checkUnlockedBalance sender registryV2.instrumentId 100.0
 
   pure ()
+
+testDsoRulesLockedAmuletExpireAmuletRejectsForeignDso : Script ()
+testDsoRulesLockedAmuletExpireAmuletRejectsForeignDso = do
+  (app, dso, (sv1, _, _, _)) <- initDevNet
+  alice <- setupUser app "alice" app.dso
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  amuletCid <- tap app alice 1.5
+  Some amulet <- queryContractId alice.primaryParty amuletCid
+  now <- getTime
+  foreignLockedAmuletCid <- submit sv1 $ createCmd LockedAmulet with
+    amulet = amulet with dso = sv1; owner = sv1
+    lock = TimeLock with holders = [sv1]; expiresAt = now; optContext = None
+  (roundCid, _) <- getLatestActiveOpenRound app
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_LockedAmulet_ExpireAmulet with
+        cid = foreignLockedAmuletCid
+        choiceArg = LockedAmulet_ExpireAmulet with roundCid
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignLockedAmuletO <- queryContractId sv1 foreignLockedAmuletCid
+  assertMsg "the foreign LockedAmulet is still live" (isSome foreignLockedAmuletO)
+
+testDsoRulesExpireSubscriptionRejectsForeignDso : Script ()
+testDsoRulesExpireSubscriptionRejectsForeignDso = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initDevNet
+  alice <- setupUser app "alice" app.dso
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(ansRulesCid, _)] <- query @AnsRules dso
+
+  ansSummary <- submit (actAs alice.primaryParty <> readAs app.dso) $ exerciseCmd ansRulesCid AnsRules_RequestEntry with
+    name = "ans.darth.vader"
+    url = "https://darth-vader-ans.com"
+    description = "Darth Vader's ANS Description"
+    user = alice.primaryParty
+
+  amulet <- tap app alice 1.5
+  paymentContext <- getPaymentTransferContext app alice
+  result <- submit (actAs alice.primaryParty <> actAs app.dso) $ exerciseCmd ansSummary.requestCid SubscriptionRequest_AcceptAndMakePayment with
+    inputs = [InputAmulet amulet]
+    context = paymentContext
+    walletProvider = app.dso
+  let initialPaymentCid = result.subscriptionPayment
+
+  appContext <- getAppTransferContext app app.dsoUser
+  let collectInitialPaymentAction = ARC_AnsEntryContext with
+        ansEntryContextCid = ansSummary.entryCid
+        ansEntryContextAction = ANSRARC_CollectInitialEntryPayment $ AnsEntryContext_CollectInitialEntryPayment with
+          paymentCid = initialPaymentCid
+          transferContext = appContext
+          ansRulesCid
+
+  confirmationCids <- forA [sv1, sv2, sv3, sv4] $ \svParty -> do
+    confirmed <- submit (actAs svParty <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = svParty
+      action = collectInitialPaymentAction
+    return confirmed.confirmation
+
+  submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid
+    DsoRules_ExecuteConfirmedAction with
+      action = collectInitialPaymentAction
+      amuletRulesCid = None
+      confirmationCids
+      sv = Some sv1
+
+  [(_, subscriptionState)] <- queryFilter @SubscriptionIdleState app.dso (\state -> state.subscriptionData.sender == alice.primaryParty)
+  foreignSubscriptionStateCid <- submit sv1 $ createCmd subscriptionState with
+    subscriptionData = subscriptionState.subscriptionData with
+      sender = sv1
+      receiver = sv1
+      provider = sv1
+      dso = sv1
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_ExpireSubscription with
+        ansEntryContextCid = ansSummary.entryCid
+        subscriptionIdleStateCid = foreignSubscriptionStateCid
+        choiceArg = SubscriptionIdleState_ExpireSubscription with actor = sv1
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignSubscriptionStateO <- queryContractId sv1 foreignSubscriptionStateCid
+  assertMsg "the foreign SubscriptionIdleState is still live" (isSome foreignSubscriptionStateO)
+
+testDsoRulesExpireAnsEntryRejectsForeignDso : Script ()
+testDsoRulesExpireAnsEntryRejectsForeignDso = do
+  (_, dso, (sv1, _, _, _)) <- initDevNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  now <- getTime
+  foreignAnsEntryCid <- submit sv1 $ createCmd AnsEntry with
+    user = sv1
+    dso = sv1
+    name = "ans.foreign"
+    url = ""
+    description = ""
+    expiresAt = now
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_ExpireAnsEntry with
+        ansEntryCid = foreignAnsEntryCid
+        choiceArg = AnsEntry_Expire with actor = sv1
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignAnsEntryO <- queryContractId sv1 foreignAnsEntryCid
+  assertMsg "the foreign AnsEntry is still live" (isSome foreignAnsEntryO)
+
+testDsoRulesExpireUnclaimedActivityRecordRejectsForeignDso : Script ()
+testDsoRulesExpireUnclaimedActivityRecordRejectsForeignDso = do
+  (_, dso, (sv1, _, _, _)) <- initDevNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  now <- getTime
+  foreignRecordCid <- submit sv1 $ createCmd UnclaimedActivityRecord with
+    dso = sv1
+    beneficiary = sv1
+    amount = 1.0
+    reason = "foreign"
+    expiresAt = now
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_ExpireUnclaimedActivityRecord with
+        unclaimedActivityRecordCid = foreignRecordCid
+        sv = sv1
+    pure (() <$ r)
+
+  foreignRecordO <- queryContractId sv1 foreignRecordCid
+  assertMsg "the foreign UnclaimedActivityRecord is still live" (isSome foreignRecordO)
+
+testDsoRulesExpireTransferPreapprovalRejectsForeignDso : Script ()
+testDsoRulesExpireTransferPreapprovalRejectsForeignDso = do
+  (_, dso, (sv1, _, _, _)) <- initDevNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  now <- getTime
+  foreignPreapprovalCid <- submit sv1 $ createCmd TransferPreapproval with
+    dso = sv1
+    receiver = sv1
+    provider = sv1
+    validFrom = now
+    lastRenewedAt = now
+    expiresAt = now `addRelTime` days 1
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_ExpireTransferPreapproval with
+        transferPreapprovalCid = foreignPreapprovalCid
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignPreapprovalO <- queryContractId sv1 foreignPreapprovalCid
+  assertMsg "the foreign TransferPreapproval is still live" (isSome foreignPreapprovalO)
+
+testDsoRulesAmuletExpireV2RejectsForeignDso : Script ()
+testDsoRulesAmuletExpireV2RejectsForeignDso = do
+  (app, dso, (sv1, _, _, _)) <- initDevNet
+  alice <- setupUser app "alice" app.dso
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  amuletCid <- tap app alice 1.5
+  Some amulet <- queryContractId alice.primaryParty amuletCid
+  foreignAmuletCid <- submit sv1 $ createCmd amulet with dso = sv1; owner = sv1
+  (configState0Cid, configState1Cid) <- getExternalPartyConfigStates app
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_Amulet_ExpireV2 with
+        cid = foreignAmuletCid
+        choiceArg = Amulet_ExpireV2 with
+          externalPartyConfigState0Cid = configState0Cid
+          externalPartyConfigState1Cid = configState1Cid
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignAmuletO <- queryContractId sv1 foreignAmuletCid
+  assertMsg "the foreign Amulet is still live" (isSome foreignAmuletO)
+
+testDsoRulesLockedAmuletExpireAmuletV2RejectsForeignDso : Script ()
+testDsoRulesLockedAmuletExpireAmuletV2RejectsForeignDso = do
+  (app, dso, (sv1, _, _, _)) <- initDevNet
+  alice <- setupUser app "alice" app.dso
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+
+  amuletCid <- tap app alice 1.5
+  Some amulet <- queryContractId alice.primaryParty amuletCid
+  now <- getTime
+  foreignLockedAmuletCid <- submit sv1 $ createCmd LockedAmulet with
+    amulet = amulet with dso = sv1; owner = sv1
+    lock = TimeLock with holders = [sv1]; expiresAt = now; optContext = None
+  (configState0Cid, configState1Cid) <- getExternalPartyConfigStates app
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_LockedAmulet_ExpireAmuletV2 with
+        cid = foreignLockedAmuletCid
+        choiceArg = LockedAmulet_ExpireAmuletV2 with
+          externalPartyConfigState0Cid = configState0Cid
+          externalPartyConfigState1Cid = configState1Cid
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignLockedAmuletO <- queryContractId sv1 foreignLockedAmuletCid
+  assertMsg "the foreign LockedAmulet is still live" (isSome foreignLockedAmuletO)
+
+testDsoRulesMergeMemberTrafficContractsRejectsForeignDso : Script ()
+testDsoRulesMergeMemberTrafficContractsRejectsForeignDso = do
+  (_, dso, (sv1, _, _, _)) <- initDevNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, amuletRules)] <- query @AmuletRules dso
+  foreignAmuletRulesCid <- submit sv1 $ createCmd amuletRules with dso = sv1
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_MergeMemberTrafficContracts with
+        amuletRulesCid = foreignAmuletRulesCid
+        trafficCids = []
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignAmuletRulesO <- queryContractId sv1 foreignAmuletRulesCid
+  assertMsg "the foreign AmuletRules is still live" (isSome foreignAmuletRulesO)
+
+testDsoRulesMiningRoundCloseRejectsForeignDso : Script ()
+testDsoRulesMiningRoundCloseRejectsForeignDso = do
+  (app, dso, (sv1, _, _, _)) <- initDevNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, amuletRules)] <- query @AmuletRules dso
+  foreignAmuletRulesCid <- submit sv1 $ createCmd amuletRules with dso = sv1
+
+  runNextIssuance app
+  ((issuingRoundCid, _) :: _) <- query @IssuingMiningRound dso
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_MiningRound_Close with
+        amuletRulesCid = foreignAmuletRulesCid
+        issuingRoundCid
+        sv = Some sv1
+    pure (() <$ r)
+
+  foreignAmuletRulesO <- queryContractId sv1 foreignAmuletRulesCid
+  assertMsg "the foreign AmuletRules is still live" (isSome foreignAmuletRulesO)
+
+testDsoRulesUpdateExternalPartyConfigStatesRejectsForeignDso : Script ()
+testDsoRulesUpdateExternalPartyConfigStatesRejectsForeignDso = do
+  (app, dso, (sv1, _, _, _)) <- initDevNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(_, amuletRules)] <- query @AmuletRules dso
+  foreignAmuletRulesCid <- submit sv1 $ createCmd amuletRules with dso = sv1
+
+  (externalPartyConfigStateCid0, externalPartyConfigStateCid1) <- getExternalPartyConfigStates app
+  [(round0Cid, _), (round1Cid, _), (round2Cid, _)] <- AmuletRegistry.getActiveOpenRoundsSorted dso
+
+  actionMustFail (expectMessageContains "Contract group identifier mismatch") do
+    r <- trySubmit (actAs sv1 <> readAs dso) $
+      exerciseCmd dsoRulesCid DsoRules_UpdateExternalPartyConfigStates with
+        amuletRulesCid = foreignAmuletRulesCid
+        externalPartyConfigStateCid0
+        externalPartyConfigStateCid1
+        openMiningRoundTriple = OpenMiningRoundTriple with
+          round0Cid
+          round1Cid
+          round2Cid
+        sv = sv1
+    pure (() <$ r)
+
+  foreignAmuletRulesO <- queryContractId sv1 foreignAmuletRulesCid
+  assertMsg "the foreign AmuletRules is still live" (isSome foreignAmuletRulesO)

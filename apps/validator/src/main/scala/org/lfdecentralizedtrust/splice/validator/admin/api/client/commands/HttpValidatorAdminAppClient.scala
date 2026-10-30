@@ -419,8 +419,11 @@ object HttpValidatorAdminAppClient {
 
     override protected def handleOk()(implicit
         decoder: TemplateJsonDecoder
-    ) = { case http.GetExternalPartyBalanceResponse.OK(response) =>
-      Right(response)
+    ) = {
+      case http.GetExternalPartyBalanceResponse.OK(response) =>
+        Right(response)
+      case http.GetExternalPartyBalanceResponse.NotFound(response) =>
+        Left(response.error)
     }
   }
 }

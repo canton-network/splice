@@ -76,6 +76,10 @@ object RewardComputationInputsTest {
     100L,
     new RelTime(36L * 3600L * 1000000L),
     SpliceUtil.damlDecimal(0.5),
+    // TODO(#7762): test these new parameters
+    Optional.empty(),
+    Optional.empty(),
+    Optional.empty(),
   )
 
   private def mkOpenMiningRound(
