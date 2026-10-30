@@ -2499,12 +2499,13 @@ class DbSvDsoStore private (
 
   override def findConflictingParties(
       proposed: Seq[PartyId],
-      excludeRightCid: Option[String],
-  )(implicit tc: TraceContext): Future[Seq[PartyId]] = {
+      excludeRightCid: Option[FeaturedAppRight.ContractId],
+  )(implicit tc: TraceContext): Future[Seq[SvDsoStore.ConflictingParty]] = {
     if (proposed.isEmpty) Future.successful(Seq.empty)
     else {
       val arr = proposed.map(_.toProtoPrimitive).toArray
-      val exclude = excludeRightCid.fold(sql"")(cid => sql" and acs.contract_id <> $cid ")
+      val exclude =
+        excludeRightCid.fold(sql"")(cid => sql" and acs.contract_id <> ${cid.contractId} ")
       val q = (sql"""
         with rights as materialized (
           select acs.contract_id, acs.create_arguments
@@ -2517,18 +2518,26 @@ class DbSvDsoStore private (
         )}
         """ ++ exclude ++ sql"""
         )
-        select distinct party from (
-          select r.create_arguments->>'provider' as party from rights r
+        select distinct party, contract_id from (
+          select r.contract_id, r.create_arguments->>'provider' as party from rights r
           union all
-          select e from rights r,
+          select r.contract_id, e from rights r,
             jsonb_array_elements_text(
               case when jsonb_typeof(r.create_arguments->'opsParties') = 'array'
                    then r.create_arguments->'opsParties' else '[]'::jsonb end) e
         ) all_parties
         where party = any($arr)
-        """).toActionBuilder.as[String]
+        limit 1000
+        """).toActionBuilder.as[(String, String)]
       waitUntilAcsIngested {
-        storage.query(q, "findConflictingParties").map(_.map(PartyId.tryFromProtoPrimitive))
+        storage
+          .query(q, "findConflictingParties")
+          .map(_.map { case (party, cid) =>
+            SvDsoStore.ConflictingParty(
+              PartyId.tryFromProtoPrimitive(party),
+              new FeaturedAppRight.ContractId(cid),
+            )
+          })
       }
     }
   }

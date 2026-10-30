@@ -5,7 +5,10 @@ package org.lfdecentralizedtrust.splice.sv.util
 
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight_UpdateConfig
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppRight,
+  FeaturedAppRight_UpdateConfig,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
@@ -17,10 +20,13 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
+// Validates FeaturedAppRight grant/amend actions before they become vote-requests: it is the
+// authoritative gate for the opsParties rules (no duplicates, provider is not its own opsParty,
+// valid party ids) and additionally checks cross-right overlap against the ACS.
+// The UI pre-checks the first three for fast feedback, but only the backend can do the ACS overlap check.
+// Conflicts against other in-flight vote-requests are checked by neither at the moment.
 object FeaturedAppRightValidator {
-  // Scope of the overlap check: a party may be the provider or an opsParty of at most one
-  // FeaturedAppRight. Both same-role (opsParty-vs-opsParty, provider-vs-provider) and cross-role
-  // (opsParty-vs-provider and the reverse) collisions across different rights are rejected.
+
   def validateFeaturedAppRightAction(
       action: ActionRequiringConfirmation,
       store: SvDsoStore,
@@ -37,16 +43,16 @@ object FeaturedAppRightValidator {
               case Some(_) =>
                 Future
                   .successful(Left(s"provider ${value.provider} already has a FeaturedAppRight"))
-              case None => checkOps(store, providerPartyId, proposed, None)
+              case None => checkOpsParties(store, providerPartyId, proposed, None)
             }
 
           case u: SRARC_CreateFeaturedAppConfigUpdateInstruction =>
             val value = u.dsoRules_CreateFeaturedAppConfigUpdateInstructionValue
-            // One instruction can amend multiple providers' configs via `updates`, each entry
-            // carrying its own opsParties. Validate them all, short-circuiting on the first failure,
-            // so conflicting opsParties cannot be smuggled in via a later entry.
-            // Residual: two entries in the same instruction claiming the same opsParty both pass,
-            // since neither is in the ACS yet — same cross-contract race as the TOCTOU note below.
+            // `updates` is a list — one entry per provider this instruction amends, each with its own opsParties.
+            // We check every entry and stop at the first conflict, so a bad opsParty can't slip through by being
+            // placed in a later entry instead of the first.
+            // Still open: two entries in the same instruction both adding the same party both pass here (neither is
+            // on-ledger yet), the same kind of race as the TOCTOU note on checkOpsParties below.
             val allUpdates: Seq[(String, FeaturedAppRight_UpdateConfig)] =
               value.updates.asScala.toSeq.map(t => (t._1, t._2))
             allUpdates.foldLeft(Future.successful(Right(()): Either[String, Unit])) {
@@ -82,34 +88,43 @@ object FeaturedAppRightValidator {
           .optionalJavaListToSeq(current.payload.opsParties)
           .map(PartyId.tryFromProtoPrimitive)
         val effective = resolveOps(baseParties, currentParties, proposedParties)
-        checkOps(store, providerPartyId, effective, Some(current.contractId.contractId))
+        checkOpsParties(store, providerPartyId, effective, Some(current.contractId))
     }
   }
 
-  // TOCTOU: this runs at propose time and each SV validates independently against its own
-  // ACS snapshot, so two concurrent proposals with overlapping opsParties can both pass here
-  // and both execute. DAML `ensure` is single-contract and cannot catch a cross-contract
-  // conflict, so this residual race is not fully closed by backend validation.
-  def checkOps(
+  // If multiple vote-requests are created by different SVs, due to ACS snapshot race conditions
+  // we could in principle still end up in a situation where a single party is specified in multiple rights.
+  // Time of Check, Time of Use (TOCTOU) problem
+  def checkOpsParties(
       store: SvDsoStore,
       provider: PartyId,
-      proposed: Seq[PartyId],
-      excludeCid: Option[String],
+      proposedOpsParties: Seq[PartyId],
+      // the currentContractCid is excluded in the db check
+      currentContractCid: Option[FeaturedAppRight.ContractId],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Either[String, Unit]] =
-    if (proposed.distinct.sizeIs != proposed.size)
+    if (proposedOpsParties.distinct.sizeIs != proposedOpsParties.size)
       Future.successful(Left("duplicate opsParties in request"))
-    else if (proposed.contains(provider))
+    else if (proposedOpsParties.contains(provider))
       Future.successful(Left("provider cannot be its own opsParty"))
     else
-      store.findConflictingParties((provider +: proposed).distinct, excludeCid).map {
-        case Nil => Right(())
-        case c => Left(s"parties already in use: ${c.mkString(", ")}")
-      }
+      store
+        .findConflictingParties((provider +: proposedOpsParties).distinct, currentContractCid)
+        .map {
+          case Nil => Right(())
+          case conflicts =>
+            val rendered = conflicts
+              .map(c => s"${c.party} (on right ${c.rightCid.contractId})")
+              .mkString(", ")
+            Left(s"parties already in use: $rendered")
+        }
 
-  // Decision: None and empty [] opsParties are treated as equivalent — SvUtil.optionalJavaListToSeq
-  // maps both to Nil. This diverges from DAML patchScalar's raw-Optional equality only at the
-  // None-vs-[] boundary, and only ever widens the validated set (conservative): at worst a
-  // false-reject of a clear-to-empty amend, never a missed conflict.
+  // Decides the opsParties an amend ends up with: if the proposed list matches the base the amend was built from,
+  // the amend didn't touch opsParties, so keep the ones currently on the right; otherwise take the proposed list.
+  // (This mirrors DAML's patch behavior.)
+  //
+  // Known limitation: we treat "no opsParties" (None) and "empty list" ([]) as the same, but DAML treats them as different.
+  // This only matters for an amend that clears opsParties to empty, where we may reject a vote-request we didn't strictly need to.
+  // We never miss a real conflict, the error only ever goes the safe way, so we accept this rare case rather than add code to tell None and [] apart.
   def resolveOps(
       baseParties: Seq[PartyId],
       currentParties: Seq[PartyId],

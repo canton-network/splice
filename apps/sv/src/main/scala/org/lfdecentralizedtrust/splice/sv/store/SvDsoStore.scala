@@ -4,11 +4,11 @@
 package org.lfdecentralizedtrust.splice.sv.store
 
 import com.digitalasset.canton.tracing.TraceContext
-
 import cats.implicits.toTraverseOps
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
   UnclaimedReward,
 }
@@ -1251,8 +1251,8 @@ trait SvDsoStore
 
   def findConflictingParties(
       proposed: Seq[PartyId],
-      excludeRightCid: Option[String],
-  )(implicit tc: TraceContext): Future[Seq[PartyId]]
+      excludeRightCid: Option[FeaturedAppRight.ContractId],
+  )(implicit tc: TraceContext): Future[Seq[SvDsoStore.ConflictingParty]]
 }
 
 object SvDsoStore {
@@ -1794,6 +1794,11 @@ object SvDsoStore {
   case class RoundBatch[+T](
       roundNumber: Long,
       batch: Seq[T],
+  )
+
+  case class ConflictingParty(
+      party: PartyId,
+      rightCid: FeaturedAppRight.ContractId,
   )
 }
 

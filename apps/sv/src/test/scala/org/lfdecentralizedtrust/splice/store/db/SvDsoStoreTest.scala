@@ -535,7 +535,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1), userParty(2)))
           )(store.multiDomainAcsStore)
           result <- store.findConflictingParties(Seq(userParty(2), userParty(3)), None)
-        } yield result.toSet shouldBe Set(userParty(2))
+        } yield result.map(_.party).toSet shouldBe Set(userParty(2))
       }
 
       "return empty when there is no overlap" in {
@@ -555,21 +555,29 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq(userParty(1)), Some(cid))
+          result <- store.findConflictingParties(
+            Seq(userParty(1)),
+            Some(new splice.amulet.FeaturedAppRight.ContractId(cid)),
+          )
         } yield result shouldBe empty
       }
 
-      "deduplicate a party shared across multiple rights" in {
+      "report a party once per right it appears on" in {
+        val cid1 = nextCid()
+        val cid2 = nextCid()
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+            featuredAppRight(providerParty(1), contractId = cid1, opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(2), opsParties = ops(userParty(1)))
+            featuredAppRight(providerParty(2), contractId = cid2, opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           result <- store.findConflictingParties(Seq(userParty(1)), None)
-        } yield result shouldBe Seq(userParty(1))
+        } yield {
+          result.map(_.party) shouldBe Seq(userParty(1), userParty(1))
+          result.map(_.rightCid.contractId).toSet shouldBe Set(cid1, cid2)
+        }
       }
 
       "ignore rights with None or empty opsParties" in {
@@ -592,7 +600,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           result <- store.findConflictingParties(Seq(providerParty(1)), None)
-        } yield result.toSet shouldBe Set(providerParty(1))
+        } yield result.map(_.party).toSet shouldBe Set(providerParty(1))
       }
     }
 
