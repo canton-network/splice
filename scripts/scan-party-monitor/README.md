@@ -157,10 +157,6 @@ slows down Scan for everyone else, including other users of this script.
 
 ## Limitations
 
-- Transfers are detected from the parts of transactions visible to the DSO party, which
-  include all Amulet holdings. Of a transaction that the DSO party does not see at all, Scan
-  only has the mediator verdict, so it is only reported for parties with
-  `alert_confirmations`.
 - A transfer funded only from reward coupons, without consuming any of the sender's
   holdings, is not detected as a transfer; it is reported for parties with
   `alert_confirmations`.
@@ -200,6 +196,9 @@ instance like other Scala integration tests.
   Slack messages mark private and rejected transactions.
 - `--updates-page-size` and `--updates-requests-per-second` are now `--events-page-size` and
   `--events-requests-per-second`; the old names still work, with a warning.
+- The default page size of the event stream is 100, down from 1000 for `/v2/updates`.
+- Holdings are only recognized in the `splice-amulet` package, not by module and entity name
+  alone.
 - Databases from 0.2.0 are not supported; start with a new `--db`.
 
 ### 0.2.0 ([#7982](https://github.com/canton-network/splice/pull/7982))
