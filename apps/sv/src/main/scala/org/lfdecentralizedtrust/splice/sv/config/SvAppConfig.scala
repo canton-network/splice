@@ -40,7 +40,7 @@ import org.lfdecentralizedtrust.splice.config.{
   BackupDumpConfig,
   BaseParticipantClientConfig,
   GcpBucketConfig,
-  LedgerApiClientConfig,
+  ClientConfigWithAuth,
   ParticipantBootstrapDumpConfig,
   PeriodicBackupDumpConfig,
   PruningConfig,
@@ -369,14 +369,14 @@ final case class BeneficiaryConfig(
 )
 
 final case class SvParticipantClientConfig(
-    override val adminApi: FullClientConfig,
-    override val ledgerApi: LedgerApiClientConfig,
+    override val adminApi: ClientConfigWithAuth,
+    override val ledgerApi: ClientConfigWithAuth,
     sequencerRequestAmplification: SubmissionRequestAmplification =
       SvAppBackendConfig.DefaultParticipantSequencerRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
     subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
-) extends BaseParticipantClientConfig(adminApi, ledgerApi)
+) extends BaseParticipantClientConfig
 
 final case class BftSequencingParameters(
     pbftViewChangeTimeout: PositiveFiniteDuration =

@@ -525,14 +525,10 @@ class ValidatorApp(
     )
   }
 
-  private def withParticipantAdminConnection[T](f: ParticipantAdminConnection => Future[T]) = {
-    val participantAdminConnection = new ParticipantAdminConnection(
-      config.participantClient.adminApi,
-      amuletAppParameters.loggingConfig.api,
-      loggerFactory,
-      metrics.grpcClientMetrics,
-      retryProvider,
-    )
+  private def withParticipantAdminConnection[T](
+      f: ParticipantAdminConnection => Future[T]
+  ) = {
+    val participantAdminConnection = createParticipantAdminConnection()
     f(participantAdminConnection).andThen { _ => participantAdminConnection.close() }
   }
 
@@ -600,13 +596,7 @@ class ValidatorApp(
         if (config.automation.topologyMetricsPollingInterval.isDefined)
           readOnlyLedgerConnection.grantReadAsAnyParty(config.ledgerApiUser)
         else Future.unit
-      participantAdminConnection = new ParticipantAdminConnection(
-        config.participantClient.adminApi,
-        amuletAppParameters.loggingConfig.api,
-        loggerFactory,
-        metrics.grpcClientMetrics,
-        retryProvider,
-      )
+      participantAdminConnection = createParticipantAdminConnection()
       participantIdentitiesStore = new NodeIdentitiesStore(
         participantAdminConnection,
         config.participantIdentitiesBackup.map(_ -> clock),
