@@ -279,6 +279,10 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   runner OOM first suspected): backup_status_cluster `Stale backups found: ...` on Mainnet and Devnet (10692 10694
   10698 10700 10724 10725). Fixed by cni #7727 (1451bfce38, 10-28 09:47: timeout removed, one backup run per net).
   Runs before that are dups; status stays red until stale nodes have a fresh backup. Reopen 10643 if it persists.
+  After #7727, a Devnet status failure at 18:xx is the 18:00 check racing the 16:00 backup (backups 0,4,16,20; status
+  0,3,6,18,21; 8 h threshold; 12 h gap 04->16): 10915, open with Krzysztof. Earlier 18:xx hits 10514 10638 10692.
+- ciperiodic workflows share `cluster/deployment/ciperiodic/config.yaml`: a config change for one (cni #7746, PV 36
+  founding for lsu_operator) hits sv_reonboard and non_devnet too. 10741 10892 10914 = 10844, fixed by splice#8125.
 - ciperiodic deploy_upgrade (10677, 10736; 10:00 runs since 10-27): base = latest release (0.9.x submodule), then
   upgrade to main. Not family N. First runs after cni #7703 (synchronizerMigration.active added on the branch). Needs
   the CircleCI step output.
