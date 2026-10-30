@@ -9,14 +9,14 @@
   "devDependencies": {
     "@daml/types": "^3.6.2",
     "@trivago/prettier-plugin-sort-imports": "5.2.2",
-    "@types/node": "26.6.3",
+    "@types/node": "26.6.5",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "10.1.8",
     "msw": "^2.15.0",
     "nodemon": "^3.1.14",
     "prettier": "3.9.10",
     "typescript": "5.8.3",
-    "typescript-eslint": "8.72.0"
+    "typescript-eslint": "8.72.1"
   },
   "scripts": {
     "build": "tsc",

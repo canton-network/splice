@@ -37,7 +37,7 @@
     "@tanstack/eslint-plugin-query": "5.104.5",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
-    "@types/node": "26.6.3",
+    "@types/node": "26.6.5",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.6",
     "@vitejs/plugin-react": "^6.0.1",
@@ -47,7 +47,7 @@
     "globals": "^16.0.0",
     "msw": "^2.15.0",
     "typescript": "5.8.3",
-    "typescript-eslint": "8.72.0",
+    "typescript-eslint": "8.72.1",
     "vite": "^8.3.5"
   },
   "eslintConfig": {
