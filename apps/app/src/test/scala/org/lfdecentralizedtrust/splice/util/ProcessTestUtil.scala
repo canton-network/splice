@@ -146,5 +146,8 @@ trait ProcessTestUtil { this: BaseTest =>
       "json",
       "--log-file-name",
       s"log/canton-standalone-$logSuffix.clog",
+      // Keep the pre-Canton-3.6.5 default on 0.9.x (DACH-NY/canton-network-internal#7687)
+      "-C",
+      "canton.parameters.enable-key-download=yes",
     )
 }
