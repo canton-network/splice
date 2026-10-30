@@ -87,6 +87,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  DbVotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
 import org.lfdecentralizedtrust.splice.store.{
@@ -193,13 +194,7 @@ class ScanApp(
         appInitConnection.getInitialRoundFromUserMetadata(config.svUser)
       }
       _ = logger.debug(s"Started with initial round $initialRound")
-      participantAdminConnection = new ParticipantAdminConnection(
-        config.participantClient.adminApi,
-        amuletAppParameters.loggingConfig.api,
-        loggerFactory,
-        scanAppMetrics.grpcClientMetrics,
-        retryProvider,
-      )
+      participantAdminConnection = createParticipantAdminConnection()
       participantId <- appInitStep("Get participant id") {
         participantAdminConnection.getParticipantId()
       }
@@ -209,6 +204,7 @@ class ScanApp(
       domainMigrationId <- appInitStep("Resolving domain migration id") {
         resolveDomainMigrationId()
       }
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       store <- ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
         storage,
@@ -222,6 +218,7 @@ class ScanApp(
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,
+        additionalIngestionSinks = Seq(new DbVotesStore.IngestionSink(kvStore, loggerFactory)),
       )
       internedStringStore <- InternedStringStore.createAndWarmupCache(
         storage,
@@ -230,6 +227,7 @@ class ScanApp(
         loggerFactory,
         retryProvider.metricsFactory,
       )
+      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage,
         domainMigrationId,
@@ -268,8 +266,6 @@ class ScanApp(
         retryProvider,
         loggerFactory,
       )
-      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
-      kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
       historyStart = new ScanHistoryStart(
         new KvHistoryStartStore(kvProvider),
         new ParticipantHistoryStartSources(
@@ -436,6 +432,7 @@ class ScanApp(
         appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
+        store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
         bulkStorage.map(_.reader),
         scanAppMetrics.httpApi,
         dsoAnsResolver,

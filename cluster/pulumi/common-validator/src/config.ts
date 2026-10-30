@@ -75,6 +75,8 @@ export const ValidatorAppConfigSchema = z.object({
 });
 
 export const ParticipantConfigSchema = z.object({
+  enableKeyDownload: z.boolean().default(false),
+  enableRepairCommands: z.boolean().default(false),
   additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
   additionalJvmOptions: z.string().optional(),
   resources: K8sResourceSchema.default({

@@ -3,6 +3,8 @@
 
 from docutils.parsers.rst import Directive
 from docutils import nodes
+from sphinx.application import Sphinx
+from typing import Any
 
 # Automatically creates a release notes section with a download link to the release bundle
 
@@ -13,7 +15,7 @@ class ReleaseNotesDirective(Directive):
     final_argument_whitespace = True
     has_content = True
 
-    def run(self):
+    def run(self) -> list[nodes.Node]:
         version = self.arguments[0].strip()
 
         section = nodes.section(
@@ -40,7 +42,7 @@ class ReleaseNotesDirective(Directive):
 
         return [section]
 
-def setup(app):
+def setup(app: Sphinx) -> dict[str, Any]:
     app.add_directive('release-notes', ReleaseNotesDirective)
 
     return {

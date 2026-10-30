@@ -19,14 +19,14 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 DEFAULT_THRESHOLDS = Path(".github/store-perf-thresholds.json")
 NEWLINE = "\n"
 GITHUB_OUTPUT_HEREDOC_DELIM = "EOF_PERF_THRESHOLDS"
 
 
-def load_thresholds(path: Path) -> dict:
+def load_thresholds(path: Path) -> dict[str, dict[str, Any]]:
     with open(path) as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -46,7 +46,7 @@ def iter_metric_files(dirs: Iterable[Path]) -> Iterable[Path]:
         yield from sorted(d.glob("*.json"))
 
 
-def get_metric_value(data: dict, name: str) -> float | None:
+def get_metric_value(data: dict[str, Any], name: str) -> float | None:
     for m in data.get("metrics", []):
         if m.get("name") == name:
             try:
@@ -56,13 +56,16 @@ def get_metric_value(data: dict, name: str) -> float | None:
     return None
 
 
-def extract_threshold(rule) -> float | None:
+def extract_threshold(rule: object) -> float | None:
     """Extract the `max` threshold from a rule of the form {"max": <number>}.
     """
     if not isinstance(rule, dict):
         return None
+    max_value = rule.get("max")
+    if max_value is None:
+        return None
     try:
-        return float(rule.get("max"))
+        return float(max_value)
     except (TypeError, ValueError):
         return None
 
@@ -107,7 +110,7 @@ def append_step_summary(lines: list[str]) -> None:
         print( f"warning: could not write GITHUB_STEP_SUMMARY ({summary_path}): {e}", file=sys.stderr )
 
 
-def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict ) -> tuple[list[str], int]:
+def evaluate_perf_threshold_breaches( metric_dirs: list[Path], thresholds: dict[str, dict[str, Any]] ) -> tuple[list[str], int]:
     """Compare every metrics.json under `metric_dirs` to `thresholds`.
     Returns (breach_lines, files_seen).
     """
@@ -181,6 +184,7 @@ def main() -> int:
         append_step_summary(
             ["## Performance threshold breaches", "", "```", *breaches, "```"]
         )
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -32,7 +32,7 @@ import com.daml.ledger.javaapi.data.{
 }
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.ledger.javaapi.data.User.Right
-import org.lfdecentralizedtrust.splice.auth.AuthToken
+import org.lfdecentralizedtrust.splice.auth.{AuthToken, AuthTokenProvider}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.LedgerClient.GetTreeUpdatesResponse
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionFilter
 import org.lfdecentralizedtrust.splice.util.DisclosedContracts
@@ -103,7 +103,7 @@ final case class DedupDuration(duration: Duration) extends DedupConfig {
 private[environment] class LedgerClient(
     channel: Channel,
     expectedTokenUser: String,
-    getToken: () => Future[Option[AuthToken]],
+    tokenProvider: AuthTokenProvider,
     override protected val loggerFactory: NamedLoggerFactory,
     timeouts: ProcessingTimeout,
 )(implicit
@@ -129,7 +129,7 @@ private[environment] class LedgerClient(
       stub: T,
       timeout: Option[NonNegativeDuration] = Some(timeouts.default),
   )(implicit tc: TraceContext): Future[T] = {
-    getToken().map { token =>
+    tokenProvider.getToken.map { token =>
       val authedStub = token.fold(stub) { token =>
         checkTokenUser(token)
         TraceContextGrpc.addTraceContextToCallOptions(

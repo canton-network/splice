@@ -30,6 +30,9 @@ validator1:
     enabled: true
 validators:
   validator-runbook:
+    participant:
+      # so we can test taking identity dumps from it
+      enableKeyDownload: true
     walletGateway:
       enabled: true
 svs:

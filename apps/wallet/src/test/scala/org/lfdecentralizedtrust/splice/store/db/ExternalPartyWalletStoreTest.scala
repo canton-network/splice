@@ -154,6 +154,13 @@ abstract class ExternalPartyWalletStoreTest
         }
       }
     }
+
+    testGovernanceLockIngestion(
+      externalParty1,
+      dsoParty,
+      externalParty2,
+      () => mkStore(externalParty1),
+    )
   }
 
   private lazy val externalParty1 = userParty(1)

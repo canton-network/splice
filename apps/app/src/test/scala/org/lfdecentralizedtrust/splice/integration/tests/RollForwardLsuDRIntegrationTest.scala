@@ -203,6 +203,8 @@ class RollForwardLsuDRIntegrationTest
       participants = false,
       enableBftSequencer = false,
       logSuffix = "roll-forward-lsu-before-dr",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
       extraSequencerConfig =
         Seq(s"parameters.lsu-repair.global-max-sequencing-time-exclusive=${maxSequencingTime}"),
       overrideSvDbsSuffix = Some("lsu_drbeforedr"),
@@ -261,6 +263,8 @@ class RollForwardLsuDRIntegrationTest
         participants = false,
         enableBftSequencer = true,
         logSuffix = "roll-forward-lsu-dr",
+        // LSU exports the sequencer and mediator keys
+        enableKeyDownload = true,
         extraSequencerConfig = Seq(
           s"parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=${lowerBoundSequencingTimeExclusive}",
           s"parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=${upgradeTime}",

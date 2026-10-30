@@ -956,6 +956,8 @@ abstract class UserWalletStoreTest extends TransferInputStoreTest with HasExecut
       }
 
     }
+
+    testGovernanceLockIngestion(user1, dsoParty, user2, () => mkStore(user1))
   }
 
   "getOutstandingTransferOffers" in {

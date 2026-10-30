@@ -21,6 +21,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
+  GovernanceLock,
+  GovernanceLockKey,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -31,6 +35,7 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{CacheConfig, ScanCacheConfig}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
+import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
 import org.lfdecentralizedtrust.splice.store.{
   Limit,
   MiningRoundsStore,
@@ -183,6 +188,11 @@ class CachingScanStore(
       store.lookupTransferPreapprovalByParty,
     ).get(partyId)
 
+  override def listGovernanceLocksByKey(key: GovernanceLockKey, limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
+    store.listGovernanceLocksByKey(key, limit)
+
   override def lookupTransferCommandCounterByParty(partyId: PartyId)(implicit
       tc: TraceContext
   ): Future[Option[ContractWithState[TransferCommandCounter.ContractId, TransferCommandCounter]]] =
@@ -264,6 +274,8 @@ class CachingScanStore(
   override def domains: SynchronizerStore = store.domains
 
   override def multiDomainAcsStore: MultiDomainAcsStore = store.multiDomainAcsStore
+
+  override private[splice] def txLogStoreId: TxLogStoreId = store.txLogStoreId
 
   @SuppressWarnings(
     Array("org.wartremover.warts.AsInstanceOf", "com.digitalasset.canton.RequireBlocking")
