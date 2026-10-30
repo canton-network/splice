@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 
 import scala.concurrent.{ExecutionContext, Future}
 
+// Ideally this trigger should never execute
 class ExpireFeaturedAppConfigUpdateInstructionTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
