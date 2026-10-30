@@ -23,7 +23,9 @@ import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletA
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
+import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
@@ -82,6 +84,18 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def mintingTrafficBased: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 
+  private val packagesNewerThanPinned =
+    Seq(
+      DarResources.amulet -> DarResources.amulet_0_1_24,
+      DarResources.amuletNameService -> DarResources.amuletNameService_0_1_25,
+      DarResources.dsoGovernance -> DarResources.dsoGovernance_0_1_30,
+      DarResources.wallet -> DarResources.wallet_0_1_25,
+      DarResources.walletPayments -> DarResources.walletPayments_0_1_24,
+    ).flatMap { case (pkg, pinned) =>
+      pkg.all.filter(_.metadata.version > pinned.metadata.version)
+    }.groupBy(_.metadata.name)
+      .map { case (name, resources) => name -> resources.map(_.metadata.version).toSet }
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
@@ -95,6 +109,38 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           backend.participantClient.upload_dar_unless_exists(tokenStandardTestDarPath)
         }
       })
+      // Test with older amulet version (before the 104 amendement is
+      // effective), to confirm we have no regression.
+      // Once the amulet_0_1_25 is effective on mainnet this test can be safely removed.
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(c =>
+          c.copy(initialPackageConfig =
+            InitialPackageConfig(
+              amuletVersion = DarResources.amulet_0_1_24.metadata.version.toString,
+              amuletNameServiceVersion =
+                DarResources.amuletNameService_0_1_25.metadata.version.toString,
+              dsoGovernanceVersion = DarResources.dsoGovernance_0_1_30.metadata.version.toString,
+              validatorLifecycleVersion =
+                DarResources.validatorLifecycle_0_1_9.metadata.version.toString,
+              walletVersion = DarResources.wallet_0_1_25.metadata.version.toString,
+              walletPaymentsVersion = DarResources.walletPayments_0_1_24.metadata.version.toString,
+            )
+          )
+        )(config)
+      )
+      .withNoVettedPackages(implicit env =>
+        env.validators.local.map(_.participantClient) ++ env.svs.local.map(_.participantClient)
+      )
+      .addConfigTransform((_, config) =>
+        config.copy(
+          validatorApps = config.validatorApps.map { case (name, validator) =>
+            name -> validator.copy(additionalPackagesToUnvet = packagesNewerThanPinned)
+          },
+          svApps = config.svApps.map { case (name, sv) =>
+            name -> sv.copy(additionalPackagesToUnvet = packagesNewerThanPinned)
+          },
+        )
+      )
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
@@ -377,7 +423,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId4",
         Set(aliceParty, venueParty),
         expectedRound = 7,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -390,7 +435,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "aliceCreateId",
         Set(aliceParty),
         expectedRound = 7,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -411,7 +455,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId5",
         Set(aliceParty, venueParty),
         expectedRound = 9,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -423,7 +466,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId6",
         Set(aliceParty, venueParty),
         expectedRound = 10,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -437,7 +479,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "updateId7",
         Set(aliceParty),
         expectedRound = 11,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
     }
 
@@ -675,7 +716,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       cluePrefix: String,
       expectedProviders: Set[PartyId],
       expectedRound: Long,
-      scaledProvider: Option[(PartyId, BigDecimal)] = None,
   ): Unit = {
     withClue(s"$cluePrefix should have app activity") {
       event.appActivityRecords shouldBe defined
@@ -693,21 +733,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           r.weight should be > 0L
         }
       }
+      val weightSum = activity.records.map(_.weight).sum
       val numFeaturedAppParties = expectedProviders.size.toLong
-
-      // Convert the assigned activity back to burn amount using app weight
-      val reconstructedBurnSum = activity.records.map { r =>
-        val activityWeight = scaledProvider match {
-          case Some((party, w)) if r.party == party.toProtoPrimitive => w
-          case _ => BigDecimal(1)
-        }
-        BigDecimal(r.weight) / activityWeight
-      }.sum
       withClue(
-        s"$cluePrefix reconstructed burn should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
+        s"$cluePrefix sum of weights should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
       ) {
-        reconstructedBurnSum should be >= BigDecimal(totalTrafficCost - numFeaturedAppParties)
-        reconstructedBurnSum should be <= BigDecimal(totalTrafficCost)
+        weightSum should be >= (totalTrafficCost - numFeaturedAppParties)
+        weightSum should be <= totalTrafficCost
       }
     }
   }
