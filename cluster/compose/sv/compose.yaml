@@ -83,6 +83,7 @@ services:
       - ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER=canton.participants.participant.monitoring.http-health-server.port=5071
       # Scan serves ACS snapshots for validator recovery through the participant's repair service
       - ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS=canton.features.enable-repair-commands = yes
+      - CANTON_PARTICIPANT_IDENTIFIER=sv
     depends_on:
       postgres-splice-sv:
         condition: service_healthy

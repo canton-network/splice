@@ -22,8 +22,10 @@ function write_participant_config() {
     cat <<EOF >> /app/app.conf
 canton.participants.participant_$index = {
     init = {
-        generate-topology-transactions-and-keys = false
-        identity.type = manual
+        generate-topology-transactions-and-keys = true
+        identity.type = auto
+        identity.identifier.type = explicit
+        identity.identifier.name = "participant_$index"
     }
 
     sequencer-client {

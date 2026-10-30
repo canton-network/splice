@@ -4,6 +4,15 @@ services:
     environment:
       # Importing the ACS of the migrated parties requires the participant's repair service
       - ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS=canton.features.enable-repair-commands = yes
+      # The identity comes from the dump, so Canton must not create one first.
+      # `identity = null` is required: HOCON merges objects on duplicate keys,
+      # so without it the auto-init `identity.identifier` would survive and
+      # Canton rejects it, since `manual` takes no identifier.
+      - |
+        ADDITIONAL_CONFIG_MANUAL_INIT=
+          canton.participants.participant.init.identity = null
+          canton.participants.participant.init.identity = { type = manual }
+          canton.participants.participant.init.generate-topology-transactions-and-keys = false
 
   chown-participant-bootstrapping-dump:
     image: busybox:1.37.0

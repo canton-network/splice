@@ -9,6 +9,7 @@
     "imageName"
   ],
   "properties": {
+    "nodeIdentifier": { "type": "string" },
     "securityContexts": {
       "type": ["object"],
       "properties": {
