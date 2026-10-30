@@ -925,9 +925,11 @@ class AcsSnapshotStore(
     // This doesn't have to be transactional:
     // - if the `set indexes_created = true` executes, we know everything succeeded.
     // - otherwise, on retry the `create index IF NOT EXISTS` will just move on.
+    // In production the AcsSnapshotIndexTrigger is the only caller, so there will never be lock contention there.
     for {
       _ <- storage.queryAndUpdate(
-        AdvisoryLocks.withSessionLock(
+        AdvisoryLocks.withBlockingTransactionalLock(
+          profile,
           AdvisoryLockIds.acsSnapshotIndex,
           AcsSnapshotDDL.stakeholderIndexAction(
             snapshot.stakeholdersTableName,
@@ -938,7 +940,8 @@ class AcsSnapshotStore(
         "index_stakeholders",
       )
       _ <- storage.queryAndUpdate(
-        AdvisoryLocks.withSessionLock(
+        AdvisoryLocks.withBlockingTransactionalLock(
+          profile,
           AdvisoryLockIds.acsSnapshotIndex,
           AcsSnapshotDDL.stakeholderTemplateIdIndexAction(
             snapshot.stakeholdersTableName,

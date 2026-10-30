@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.admin.api.client.{
   GrpcClientMetrics,
   GrpcMetricsClientInterceptor,
 }
-import org.lfdecentralizedtrust.splice.auth.AuthToken
+import org.lfdecentralizedtrust.splice.auth.AuthTokenProvider
 import org.lfdecentralizedtrust.splice.environment.ledger.api.LedgerClient
 import org.lfdecentralizedtrust.splice.util.SpliceCircuitBreaker
 
@@ -26,7 +26,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 class SpliceLedgerClient(
     config: ClientConfig,
     applicationId: String,
-    getToken: () => Future[Option[AuthToken]],
+    tokenProvider: AuthTokenProvider,
     apiLoggingConfig: ApiLoggingConfig,
     override protected val loggerFactory: NamedLoggerFactory,
     // Note: traceProvider is not used right now, but we keep it for future use. See the comments on the tracing
@@ -64,7 +64,7 @@ class SpliceLedgerClient(
       )
 
     val channel = builder.build
-    new LedgerClient(channel, applicationId, getToken, loggerFactory, timeouts)
+    new LedgerClient(channel, applicationId, tokenProvider, loggerFactory, timeouts)
   }
 
   private val inactiveContractsCallbacks = new AtomicReference[Seq[String => Unit]](Seq())

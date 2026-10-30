@@ -130,6 +130,8 @@ setupGovernanceLock kind = do
     dso = app.dso
     provider = alice.primaryParty
     activityWeight = None
+    appKind = None
+    opsParties = None
 
   pure GovernanceLockEnv with ..
 
@@ -325,6 +327,8 @@ testDsoRulesConvertProvisionalFeaturedAppLockWrongFeaturedAppRight = do
     dso = env.app.dso
     provider = env.sv1
     activityWeight = None
+    appKind = None
+    opsParties = None
 
   submitMustFail (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock with
@@ -348,6 +352,8 @@ testDsoRulesConvertProvisionalFeaturedAppLockRejectsForeignDso = do
     dso = env.sv1
     provider = env.alice.primaryParty
     activityWeight = None
+    appKind = None
+    opsParties = None
 
   actionMustFail (expectMessageContains "Contract group identifier mismatch") do
     r <- trySubmit (actAs env.sv1 <> readAs env.app.dso) $
@@ -495,6 +501,63 @@ testDsoRulesWithdrawExpiredVestingSubstitutionNotYetExpired = do
 
   optSubstitution <- queryContractId env.app.dso substitutionCid
   assertMsg "the substitution proposal is still live" (isSome optSubstitution)
+
+-- | Move the ledger clock past the `endTime` of the vesting target of a substitution proposal,
+-- which is also when the lock of the funds of the proposal expires.
+passSubstitutionLockExpiry : SubstitutionEnv -> ContractId GovernanceLockSubstitution -> Script (ContractId LockedAmulet)
+passSubstitutionLockExpiry env substitutionCid = do
+  Some substitution <- queryContractId env.bob.primaryParty substitutionCid
+  GLS_VestingLock VestingLockSpecification{endTime} <- pure substitution.target.specification
+  Some lockedAmuletCid <- pure substitution.lockedAmulet
+  Some lockedAmulet <- queryContractId env.bob.primaryParty lockedAmuletCid
+  lockedAmulet.lock.expiresAt === endTime
+  setTime (endTime `addRelTime` hours 1)
+  pure lockedAmuletCid
+
+-- | The proposer can archive the `LockedAmulet` of a proposal once its lock expires,
+-- so the withdrawal must still work against an archived `lockedAmulet` id.
+testDsoRulesWithdrawExpiredVestingSubstitutionWithDanglingLockedAmulet : Script ()
+testDsoRulesWithdrawExpiredVestingSubstitutionWithDanglingLockedAmulet = do
+  (env, substitutionCid) <- setupVestingSubstitution
+  lockedAmuletCid <- passSubstitutionLockExpiry env substitutionCid
+
+  submit env.bob.primaryParty $
+    exerciseCmd lockedAmuletCid LockedAmulet_OwnerExpireLockV2
+  lockedAmuletO <- queryContractId env.bob.primaryParty lockedAmuletCid
+  assertMsg "the underlying LockedAmulet is gone" (isNone lockedAmuletO)
+
+  submit (actAs env.sv1 <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockSubstitution_DsoExpire with
+      substitutionCid
+      sv = env.sv1
+
+  optSubstitution <- queryContractId env.app.dso substitutionCid
+  assertMsg "the substitution proposal has been withdrawn" (isNone optSubstitution)
+
+-- | Once the lock of the funds of a proposal expires, the withdrawal leaves the `LockedAmulet` to the proposer,
+-- who can still release it on their own authority.
+testDsoRulesWithdrawExpiredVestingSubstitutionAfterLockExpiry : Script ()
+testDsoRulesWithdrawExpiredVestingSubstitutionAfterLockExpiry = do
+  (env, substitutionCid) <- setupVestingSubstitution
+  lockedAmuletCid <- passSubstitutionLockExpiry env substitutionCid
+
+  submit (actAs env.sv1 <> readAs env.app.dso) $
+    exerciseCmd env.dsoRulesCid DsoRules_GovernanceLockSubstitution_DsoExpire with
+      substitutionCid
+      sv = env.sv1
+
+  optSubstitution <- queryContractId env.app.dso substitutionCid
+  assertMsg "the substitution proposal has been withdrawn" (isNone optSubstitution)
+
+  -- The withdrawal does not unlock the funds.
+  Some lockedAmulet <- queryContractId env.bob.primaryParty lockedAmuletCid
+  lockedAmulet.amulet.amount.initialAmount === testVestingAmount
+
+  result <- submit env.bob.primaryParty $
+    exerciseCmd lockedAmuletCid LockedAmulet_OwnerExpireLockV2
+  Some amulet <- queryContractId @Amulet env.bob.primaryParty result.amuletCid
+  amulet.owner === env.bob.primaryParty
+  amulet.amount.initialAmount === testVestingAmount
 
 -- | A DsoRules test environment holding a single lock transfer proposal from
 -- alice to bob.

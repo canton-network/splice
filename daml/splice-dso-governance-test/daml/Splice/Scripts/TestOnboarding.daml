@@ -376,6 +376,28 @@ testSvOnboardingConfirmedExpiry = do
   Map.keys (dsoRules.offboardedSvs) === [svX]
 
 
+testConfirmSvOnboardingRejectsExistingParticipant : Script ()
+testConfirmSvOnboardingRejectsExistingParticipant = do
+  (_, dso, (_, sv2, _, _)) <- initMainNet
+
+  [(dsoRulesCid, dsoRules)] <- query @DsoRules dso
+  let sv2ParticipantId = (fromSome (Map.lookup sv2 dsoRules.svs)).participantId
+  svX <- allocateParty "svX"
+  let confirm participantId = exerciseCmd dsoRulesCid DsoRules_ConfirmSvOnboarding with
+        newSvParty = svX
+        newSvName = "svX"
+        newParticipantId = participantId
+        newSvRewardWeight = 19
+        reason = "because"
+
+  -- the participant of sv2 cannot be used for another SV
+  submitMustFail dso $ confirm sv2ParticipantId
+
+  -- a fresh participant can be used
+  _ <- submit dso $ confirm "svX-participant-id"
+  pure ()
+
+
 testSvNameUniquenessNotInDevNet : Script ()
 testSvNameUniquenessNotInDevNet = do
   -- When it is not in devnet, a new SV party cannot dynamically replace an existing SV party for the same SV name.

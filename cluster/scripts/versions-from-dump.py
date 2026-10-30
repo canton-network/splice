@@ -8,7 +8,7 @@ import sys
 
 j = json.load(sys.stdin)
 
-result = {}
+result: dict[str, dict[str, str]] = {}
 resources = j["deployment"]["resources"]
 releases = [r for r in resources if r["type"] == "kubernetes:helm.sh/v3:Release"]
 for release in releases:

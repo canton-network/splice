@@ -16,10 +16,11 @@ import os
 import re
 import sys
 import urllib.parse
-from typing import List, Optional, Set, Dict
+from collections.abc import Mapping
+from typing import Any, List, Optional, Set, Dict
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Delete packages from GHCR.io where tags match a pattern"
@@ -55,7 +56,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def get_next_page_url(headers):
+def get_next_page_url(headers: Mapping[str, str]) -> Optional[str]:
     """Extract the next page URL from the Link header."""
     link_header = headers.get('Link') or headers.get('link')
     if not link_header:
@@ -70,7 +71,7 @@ def get_next_page_url(headers):
     return None
 
 
-def get_version_ids(api_url: str, image_name: str, version_to_delete: str, gh_token: str, verbose: bool = False) -> List[dict]:
+def get_version_ids(api_url: str, image_name: str, version_to_delete: str, gh_token: str, verbose: bool = False) -> List[dict[str, Any]]:
     """
     Get all version IDs for a package that match the specified version tag.
 
@@ -88,7 +89,7 @@ def get_version_ids(api_url: str, image_name: str, version_to_delete: str, gh_to
 
     # URL encode the image name
     encoded_image = urllib.parse.quote(image_name)
-    url = f"{api_url}%2F{encoded_image}/versions?per_page=100"
+    url: Optional[str] = f"{api_url}%2F{encoded_image}/versions?per_page=100"
     matching_versions = []
 
     while url:
@@ -154,7 +155,7 @@ def get_version_ids(api_url: str, image_name: str, version_to_delete: str, gh_to
 
 
 def delete_version(version_id: str, api_url: str, image_name: str, gh_token: str,
-                  dry_run: bool = False, verbose: bool = False):
+                  dry_run: bool = False, verbose: bool = False) -> bool:
     """
     Delete a specific version of a package.
 
@@ -197,7 +198,7 @@ def delete_version(version_id: str, api_url: str, image_name: str, gh_token: str
         return False
 
 
-def prompt_for_confirmation(version_info, image_name, version_to_delete):
+def prompt_for_confirmation(version_info: dict[str, Any], image_name: str, version_to_delete: str) -> tuple[bool, bool]:
     """
     Ask the user to confirm deletion of a specific version.
 
@@ -233,7 +234,7 @@ def prompt_for_confirmation(version_info, image_name, version_to_delete):
 
 
 def process_package(package_name: str, packages_repo: str, version_to_delete: str, gh_token: str,
-                   deleted_packages_log: List[Dict[str, str]], verbose: bool = False, dry_run: bool = False, interactive: bool = False):
+                   deleted_packages_log: List[Dict[str, str]], verbose: bool = False, dry_run: bool = False, interactive: bool = False) -> None:
     """Process a single package to find and delete matching versions."""
     print(f"Checking {package_name}")
 
@@ -273,7 +274,7 @@ def process_package(package_name: str, packages_repo: str, version_to_delete: st
         print(f"No versions found matching version '{version_to_delete}' for {package_name}")
 
 
-def main():
+def main() -> None:
     """Main function."""
     args = parse_arguments()
 
@@ -284,7 +285,7 @@ def main():
         sys.exit(1)
 
     # List to store details of deleted packages
-    deleted_packages_log = []
+    deleted_packages_log: List[Dict[str, str]] = []
 
     splice_root = os.environ.get("SPLICE_ROOT")
     if not splice_root:
