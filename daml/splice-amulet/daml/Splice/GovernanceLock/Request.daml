@@ -17,10 +17,10 @@ module Splice.GovernanceLock.Request (
   Parser(..),
   runParser,
   assertParsed,
-  missingMemoKeyMessage,
-  invalidMemoValueMessage,
-  memoKeyErrorMessage,
+  errorInMemoKeyMessage,
   invalidMemoEntryMessage,
+  invalidMemoValueMessage,
+  missingMemoKeyMessage,
   governanceLockMetadataParser,
   governanceLockTagParser,
   governanceLockKindParser,
@@ -89,11 +89,20 @@ governanceLockRequestTagToText GLRT_SubstituteLock = "substitute-lock"
 governanceLockRequestTagFromText : Text -> Optional GovernanceLockRequestTag =
   dataFromText governanceLockRequestTagToText [minBound .. maxBound]
 
--- Metadata
------------
+-- Error messages
+-----------------
 
-getOptionalMetadata : Text -> Metadata -> Optional Text
-getOptionalMetadata key meta = TextMap.lookup key meta.values
+-- | Names the key in an error reported by a decoder that only sees the value.
+errorInMemoKeyMessage : Text -> Text -> Text
+errorInMemoKeyMessage key error = "Error in " <> memoKeyText key <> ": " <> error
+
+-- | For an entry of the `key1=value1&key2=value2` memo that is not a single `key=value` pair.
+invalidMemoEntryMessage : Text -> Text
+invalidMemoEntryMessage entry = "Invalid memo entry '" <> entry <> "': expected 'key=value'"
+
+-- | Arguments: what the value should be (e.g. "decimal"), the key, and the value.
+invalidMemoValueMessage : Text -> Text -> Text -> Text
+invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKeyText key <> ": '" <> value <> "'"
 
 -- | Refers to a key as the user wrote it in the memo, i.e., without the `cipMetaPrefix`
 -- that `governanceLockMetadataParser` adds.
@@ -103,17 +112,11 @@ memoKeyText key = "memo key '" <> removeMetaKeyPrefix key <> "'"
 missingMemoKeyMessage : Text -> Text
 missingMemoKeyMessage key = "Missing " <> memoKeyText key
 
--- | Arguments: what the value should be (e.g. "decimal"), the key, and the value.
-invalidMemoValueMessage : Text -> Text -> Text -> Text
-invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKeyText key <> ": '" <> value <> "'"
+-- Metadata
+-----------
 
--- | Names the key in an error reported by a decoder that only sees the value.
-memoKeyErrorMessage : Text -> Text -> Text
-memoKeyErrorMessage key error = "Error in " <> memoKeyText key <> ": " <> error
-
--- | For an entry of the `key1=value1&key2=value2` memo that is not a single `key=value` pair.
-invalidMemoEntryMessage : Text -> Text
-invalidMemoEntryMessage entry = "Invalid memo entry '" <> entry <> "': expected 'key=value'"
+getOptionalMetadata : Text -> Metadata -> Optional Text
+getOptionalMetadata key meta = TextMap.lookup key meta.values
 
 getRequiredMetadata' : CanAssert m => (Text -> m a) -> Text -> Metadata -> m a
 getRequiredMetadata' parse key meta = case getOptionalMetadata key meta of
@@ -377,7 +380,7 @@ optionalMetadataParser key = getOptionalMetadata key <$> inputParser
 -- | Parses a required key with a decoder such as `timeFromMeta`, which returns `None` for a missing key.
 metadataDecoderParser : (Text -> Metadata -> Either Text (Optional o)) -> Text -> Parser Metadata o
 metadataDecoderParser decode key = inputParser >>= \meta -> validationParser $ validate $ case decode key meta of
-  Left e -> Left (memoKeyErrorMessage key e)
+  Left e -> Left (errorInMemoKeyMessage key e)
   Right None -> Left (missingMemoKeyMessage key)
   Right (Some v) -> Right v
 
@@ -386,7 +389,7 @@ timeMetadataParser = metadataDecoderParser timeFromMeta
 
 iso8601TimeFromTextParser : Text -> Text -> Parser i Time
 iso8601TimeFromTextParser key input = validationParser $ validate $ case parseIso8601UtcTime input of
-  Left e -> Left (memoKeyErrorMessage key e)
+  Left e -> Left (errorInMemoKeyMessage key e)
   Right t -> Right t
 
 iso8601TimeMetadataParser : Text -> Parser Metadata Time
