@@ -214,19 +214,18 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     initDsoWithSv1Only()
     aliceValidatorBackend.startSync()
     val participantId = aliceValidatorBackend.participantClient.id
-    val metricName = s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
+    val partiesPerParticipantMetricName = s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
     val numPartiesMetricName = s"$MetricsPrefix.synchronizer-topology.num-parties"
-    // Unlike metrics.get, metrics.list does not fail while a metric is not registered yet, e.g. after a restart.
     def numPartiesOnAliceParticipant() =
       aliceValidatorBackend.metrics
-        .list(metricName, Map("participant_id" -> participantId.toString))
-        .get(metricName)
+        .list(partiesPerParticipantMetricName, Map("participant_id" -> participantId.toString))
+        .get(partiesPerParticipantMetricName)
         .value
         .loneElement
         .select[MetricValue.DoublePoint]
         .value
         .value
-    def numPartiesFromTopology() =
+    def numPartiesOnAliceParticipantFromTopology() =
       aliceValidatorBackend.participantClient.topology.party_to_participant_mappings
         .list(
           synchronizerId = decentralizedSynchronizerId,
@@ -249,20 +248,20 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         .list(synchronizerStore, filterParty = party.filterString)
         .loneElement
 
-    val initialCount = clue("Metrics match the topology state") {
+    clue("Metrics match the topology state") {
       eventually() {
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
         numParties() should be >= numPartiesOnAliceParticipant()
       }
-      numPartiesOnAliceParticipant()
     }
+    val initialPartiesOnAliceParticipant = numPartiesOnAliceParticipant()
     val initialNumParties = numParties()
 
-    clue("Metrics are updated when a new party is allocated") {
+    clue("Metrics are updated when a new party is onboarded") {
       aliceValidatorBackend.onboardUser(s"topology-metrics-user-${Random.nextInt(10000)}")
       eventually() {
-        numPartiesOnAliceParticipant() shouldBe initialCount + 1
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
         numParties() shouldBe initialNumParties + 1
       }
     }
@@ -281,14 +280,14 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         partyToParticipant(party).item.participants.map(_.participantId) shouldBe Seq(
           participantId
         )
-        numPartiesOnAliceParticipant() shouldBe initialCount + 2
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 2
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
         numParties() shouldBe initialNumParties + 2
       },
     )
 
     actAndCheck(
-      "Replace the party's mapping with one without participants", {
+      "Offboard the party from the participant via a topology transaction", {
         val current = partyToParticipant(party)
         aliceValidatorBackend.participantClient.topology.party_to_participant_mappings.propose(
           party,
@@ -302,8 +301,8 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
       "Metrics are updated",
       _ => {
         partyToParticipant(party).item.participants shouldBe empty
-        numPartiesOnAliceParticipant() shouldBe initialCount + 1
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
         numParties() shouldBe initialNumParties + 1
       },
     )
@@ -316,8 +315,8 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     )(
       "Metrics do not count the party without hosting participants",
       _ => {
-        numPartiesOnAliceParticipant() shouldBe initialCount + 1
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
         numParties() shouldBe initialNumParties + 1
       },
     )
