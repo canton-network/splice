@@ -82,12 +82,13 @@ def created(
     arguments: Optional[Json] = None,
     observers: Iterable[str] = (),
     event_id: Optional[str] = None,
+    package_name: str = PACKAGE_NAME,
 ) -> Json:
     """A created event; without `event_id` in the form of the ACS."""
     event: Json = {
         "contract_id": cid,
         "template_id": template_id,
-        "package_name": PACKAGE_NAME,
+        "package_name": package_name,
         "signatories": list(signatories),
         "observers": list(observers),
         "create_arguments": arguments or {},
@@ -490,6 +491,8 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(holding(locked_amulet("l", ALICE, [CHARLIE], "2.5")), spm.Holding(ALICE, "2.5"))
         self.assertIsNone(holding(preapproval("p", BOB)))
         self.assertIsNone(holding(created("c", AMULET, [DSO, ALICE])))
+        other_package = created("o", AMULET, [DSO, ALICE], amulet("o", ALICE, "1.5")["create_arguments"], package_name="other")
+        self.assertIsNone(holding(other_package))
 
     def test_timestamp_argument(self) -> None:
         self.assertEqual(spm.timestamp("2026-10-26T12:00:00Z"), "2026-10-26T12:00:00Z")

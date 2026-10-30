@@ -64,6 +64,7 @@ SLACK_MAX_REASONS_PER_UPDATE = 3
 # Slack truncates messages at 40000 characters.
 SLACK_MAX_CHARS = 35000
 VERDICT_REJECTED = "VERDICT_RESULT_REJECTED"
+AMULET_PACKAGE = "splice-amulet"
 AMULET = "Splice.Amulet:Amulet"
 LOCKED_AMULET = "Splice.Amulet:LockedAmulet"
 
@@ -218,9 +219,9 @@ class Holding:
     amount: Optional[str]
 
     @staticmethod
-    def of(template_id: str, create_arguments: object) -> Optional[Holding]:
+    def of(package_name: str, template_id: str, create_arguments: object) -> Optional[Holding]:
         """The holding of a contract, None for other templates. Daml values are read leniently."""
-        name = qualified_name(template_id)
+        name = qualified_name(template_id) if package_name == AMULET_PACKAGE else None
         amulet: object = None
         if name == AMULET:
             amulet = create_arguments
@@ -249,7 +250,7 @@ class Contract:
             contract_id=o.string("contract_id"),
             template_id=template_id,
             created_at=o.string("created_at"),
-            holding=Holding.of(template_id, o.value.get("create_arguments")),
+            holding=Holding.of(o.string("package_name"), template_id, o.value.get("create_arguments")),
         )
 
 
