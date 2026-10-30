@@ -2497,6 +2497,51 @@ class DbSvDsoStore private (
     } yield result.map(contractFromRow(FeaturedAppActivityMarker.COMPANION)(_))
   }
 
+  override def findConflictingParties(
+      proposed: Seq[PartyId],
+      excludeRightCid: Option[FeaturedAppRight.ContractId],
+  )(implicit tc: TraceContext): Future[Seq[SvDsoStore.ConflictingParty]] = {
+    if (proposed.isEmpty) Future.successful(Seq.empty)
+    else {
+      val arr = proposed.map(_.toProtoPrimitive).toArray
+      val exclude =
+        excludeRightCid.fold(sql"")(cid => sql" and acs.contract_id <> ${cid.contractId} ")
+      val q = (sql"""
+        with rights as materialized (
+          select acs.contract_id, acs.create_arguments
+          from #${DsoTables.acsTableName} acs
+          where acs.store_id = $acsStoreId
+            and acs.migration_id = $domainMigrationId
+            and acs.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+            and acs.template_id_qualified_name = ${QualifiedName(
+          FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
+        )}
+        """ ++ exclude ++ sql"""
+        )
+        select distinct party, contract_id from (
+          select r.contract_id, r.create_arguments->>'provider' as party from rights r
+          union all
+          select r.contract_id, e from rights r,
+            jsonb_array_elements_text(
+              case when jsonb_typeof(r.create_arguments->'opsParties') = 'array'
+                   then r.create_arguments->'opsParties' else '[]'::jsonb end) e
+        ) all_parties
+        where party = any($arr)
+        limit 1000
+        """).toActionBuilder.as[(String, String)]
+      waitUntilAcsIngested {
+        storage
+          .query(q, "findConflictingParties")
+          .map(_.map { case (party, cid) =>
+            SvDsoStore.ConflictingParty(
+              PartyId.tryFromProtoPrimitive(party),
+              new FeaturedAppRight.ContractId(cid),
+            )
+          })
+      }
+    }
+  }
+
   override def close(): Unit = {
     dsoStoreMetrics.close()
     super.close()
