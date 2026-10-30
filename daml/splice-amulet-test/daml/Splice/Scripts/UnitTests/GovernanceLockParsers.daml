@@ -111,8 +111,8 @@ test_governanceLockTagParser = do
   expectTag GLT_SuperValidator $ run "sv-lock"
 
   -- The tag must be known, and the TSv1 receiver party format is not accepted
-  expectErrors ["Invalid lock kind: 'unknown-lock'"] $ governanceLockTagToText <$> run "unknown-lock"
-  expectErrors ["Invalid lock kind: 'cip-127_sv-lock'"] $ governanceLockTagToText <$> run "cip-127_sv-lock"
+  expectErrors [invalidMemoValueMessage "value" lockKindMetaKey "unknown-lock"] $ governanceLockTagToText <$> run "unknown-lock"
+  expectErrors [invalidMemoValueMessage "value" lockKindMetaKey "cip-127_sv-lock"] $ governanceLockTagToText <$> run "cip-127_sv-lock"
 
 test_governanceLockKindParser : Script ()
 test_governanceLockKindParser = do
@@ -132,7 +132,7 @@ test_governanceLockKindParser = do
   expectErrors [missingMemoKeyMessage lockKindMetaKey] $ run []
 
   -- The lock kind must be known
-  expectErrors ["Invalid lock kind: 'unknown-lock'"] $ run [kind' "unknown-lock", subject "provider"]
+  expectErrors [invalidMemoValueMessage "value" lockKindMetaKey "unknown-lock"] $ run [kind' "unknown-lock", subject "provider"]
 
   -- The subject of a featured app lock must be a party
   expectErrors [invalidLockSubjectMessage "provider" GLT_FeaturedApp invalidParty] $
@@ -472,7 +472,7 @@ test_substitutionTSv1Parser_failures = do
     run [subject, (targetLockOwnerMetaKey, invalidParty)]
 
   -- The kind must name a known lock kind
-  expectErrors ["Invalid lock kind: 'unknown'"] $
+  expectErrors [invalidMemoValueMessage "value" lockKindMetaKey "unknown"] $
     run' [(lockKindMetaKey, "unknown"), subject, targetOwner]
 
   -- The target state must be `locked` or `vesting`; an invalid state and an invalid owner are both reported
