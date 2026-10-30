@@ -36,6 +36,7 @@ IGNORED_FILE_PATTERNS = [
 
 VERSION_VAR_IMAGES = {
     "POSTGRES_VERSION": "postgres",
+    "NGINX_VERSION": "nginx/nginx-unprivileged",
 }
 
 
