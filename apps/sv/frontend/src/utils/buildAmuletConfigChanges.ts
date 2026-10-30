@@ -399,6 +399,30 @@ function buildRewardConfigChanges(
       description:
         'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
     },
+    {
+      fieldName: 'rewardConfigExtraFeaturedAssetActivityWeight',
+      label: 'Reward config: Extra featured asset activity weight per transaction',
+      currentValue: before?.extraFeaturedAssetActivityWeight || '',
+      newValue: after?.extraFeaturedAssetActivityWeight || '',
+      description:
+        'Weight applied to extra featured asset activity across the whole transaction (default: 0.2). Leave blank to use the protocol default.',
+    },
+    {
+      fieldName: 'rewardConfigMaxExtraFeaturedAssetActivityWeightPerAsset',
+      label: 'Reward config: Max extra featured asset activity weight per asset',
+      currentValue: before?.maxExtraFeaturedAssetActivityWeightPerAsset || '',
+      newValue: after?.maxExtraFeaturedAssetActivityWeightPerAsset || '',
+      description:
+        'Maximum extra featured asset activity weight counted per asset (default: 0.1). Leave blank to use the protocol default.',
+    },
+    {
+      fieldName: 'rewardConfigDsoAppActivityWeight',
+      label: 'Reward config: DSO app activity weight',
+      currentValue: before?.dsoAppActivityWeight || '',
+      newValue: after?.dsoAppActivityWeight || '',
+      description:
+        'Weight applied to DSO app activity (default: 0.1). Leave blank to use the protocol default.',
+    },
   ] as ConfigChange[];
 }
 
