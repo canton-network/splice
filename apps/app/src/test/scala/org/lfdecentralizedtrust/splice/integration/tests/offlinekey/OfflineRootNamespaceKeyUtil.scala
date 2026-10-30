@@ -14,6 +14,7 @@ import com.digitalasset.canton.topology.transaction.{
   TopologyChangeOp,
 }
 import com.digitalasset.canton.topology.{Namespace, ParticipantId}
+import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.environment.SpliceConsoleEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -72,6 +73,9 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
           RemoteParticipantConfig(
             adminApiConfig,
             FullClientConfig(port = Port.tryCreate(27701)),
+            adminApiToken = Some(
+              AuthUtil.CantonAdminApi.participantAdminApiTestToken
+            ),
           ),
         )
       offlineParticipantClient.health.wait_for_ready_for_id()

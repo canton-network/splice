@@ -9,6 +9,11 @@
       These services use default credentials or no authentication, so they must not be reachable from the network.
       To expose them on another interface, set `HOST_BIND_IP` (as already supported for the web UIs), for example `HOST_BIND_IP=0.0.0.0`.
 
+  - Validator
+
+    - **Behavior change** When auth is disabled, setting `allowedOrigins` in the `splice-validator` Helm chart is mandatory.
+      The Docker Compose validator deployment sets it automatically.
+
   - Health checks of Canton nodes
 
     - **Behavior change** The health checks of all Canton nodes (participant, sequencer and mediator) now use Canton's HTTP health endpoints
@@ -45,6 +50,11 @@
       You should [upgrade](https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration),
       as the previous default (14) is reaching end-of-life on November 12, 2026 and won't be supported by Splice nor receive updates from upstream Postgres.
       If you cannot yet upgrade, you must restore the previous volume in `compose.yaml` AND change the Postgres version in the `.env` file back to `14.24-trixie@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446`.
+
+    - The nginx containers of the Docker Compose deployments (validator, sv and localnet) now use the `nginx/nginx-unprivileged` image.
+      The nginx process runs as a non-root user and listens on container port 8080 instead of 80.
+      The published host ports are unchanged. If you use a custom `nginx.conf`, update its `listen` ports to 8080
+      and set `pid /tmp/nginx.pid;` so the unprivileged user can write the pid file.
 
   - Participant
 
@@ -108,6 +118,13 @@
    - Docker images
 
      - Upgrade base image to 1.0.18
+
+  - Token standard
+
+    - **Behavior change** `requestedAt` must now be within 24 hours of submission, where
+      previously it only had to be in the past. This applies to the Amulet transfer and
+      allocation factories and to governance lock requests, and matches the 24 hour signing
+      delay introduced in CIP-107.
 
   - Deployment
 
