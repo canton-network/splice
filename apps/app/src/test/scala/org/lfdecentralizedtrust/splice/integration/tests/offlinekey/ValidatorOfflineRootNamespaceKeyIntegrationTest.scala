@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests.offlinekey
 import com.digitalasset.canton.crypto.SigningKeyUsage
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.DelegationRestriction
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
@@ -67,6 +68,8 @@ class ValidatorOfflineRootNamespaceKeyIntegrationTest
         initializeInstanceWithOfflineRootNamespaceKey(
           "aliceValidator",
           aliceValidatorParticipantClient,
+          // Based on default in Canton's offline-root-key/prepare-cert.sh
+          ProtocolVersion.v36,
         )
       }
       aliceValidatorBackend.startSync()

@@ -23,7 +23,7 @@
     "date-fns": "2.29.3",
     "decimal.js-light": "2.5.1",
     "dompurify": "^3.4.16",
-    "html-react-parser": "5.1.15",
+    "html-react-parser": "6.1.8",
     "jose": "^6.2.12",
     "jsondiffpatch": "^0.7.6",
     "msw": "^2.15.0",
@@ -43,7 +43,7 @@
     "@tanstack/react-query-devtools": "5.104.5",
     "@trivago/prettier-plugin-sort-imports": "5.2.2",
     "@types/dompurify": "3.2.0",
-    "@types/node": "22.14.0",
+    "@types/node": "26.6.3",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.6",
     "@types/semver": "^7.8.0",
@@ -67,6 +67,7 @@
   "peerDependencies": {
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
+    "@mui/x-data-grid": "9.16.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
