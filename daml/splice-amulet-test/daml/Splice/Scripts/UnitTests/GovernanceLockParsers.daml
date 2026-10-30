@@ -85,14 +85,16 @@ test_assertParsed = do
 -- Error message helpers
 ------------------------
 
-test_memoErrorMessages : Script ()
-test_memoErrorMessages = do
+test_errorMessages : Script ()
+test_errorMessages = do
   -- Keys are named as written in the memo, without the `cipMetaPrefix`, and values are quoted
   missingMemoKeyMessage lockKindMetaKey === "Missing memo key 'lock-kind'"
   invalidMemoValueMessage "party" targetLockOwnerMetaKey "bad$party"
     === "Invalid party for memo key 'target-lock-owner': 'bad$party'"
   memoKeyErrorMessage lockVestingDurationMetaKey "Invalid microseconds: '60d'"
     === "Error in memo key 'lock-vesting-duration-micros': Invalid microseconds: '60d'"
+  invalidLockSubjectMessage "SV name" GLT_SuperValidator "bad$sv"
+    === "Invalid SV name for sv-lock: 'bad$sv'"
 
 -- Lock kind parser
 -------------------
@@ -132,13 +134,13 @@ test_governanceLockKindParser = do
   expectErrors ["Invalid lock kind: 'unknown-lock'"] $ run [kind' "unknown-lock", subject "provider"]
 
   -- The subject of a featured app lock must be a party
-  expectErrors ["Invalid provider for fa-lock: '" <> invalidParty <> "'"] $
+  expectErrors [invalidLockSubjectMessage "provider" GLT_FeaturedApp invalidParty] $
     run [kind GLT_FeaturedApp, subject invalidParty]
-  expectErrors ["Invalid provider for provisional-fa-lock: '" <> invalidParty <> "'"] $
+  expectErrors [invalidLockSubjectMessage "provider" GLT_ProvisionalFeaturedApp invalidParty] $
     run [kind GLT_ProvisionalFeaturedApp, subject invalidParty]
 
   -- The subject of an SV lock must only contain alphanumeric characters or hyphens
-  expectErrors ["Invalid SV name for sv-lock: '" <> invalidSVName <> "'"] $
+  expectErrors [invalidLockSubjectMessage "SV name" GLT_SuperValidator invalidSVName] $
     run [kind GLT_SuperValidator, subject invalidSVName]
 
 -- Metadata parser
@@ -208,7 +210,7 @@ test_fullLockSpecificationParser' run = do
     run (governanceLockTagToText GLT_SuperValidator) [(lockSubjectMetaKey, "someSv")]
 
   -- Invalid field
-  expectErrors ["Invalid provider for fa-lock: '" <> invalidParty <> "'"] $
+  expectErrors [invalidLockSubjectMessage "provider" GLT_FeaturedApp invalidParty] $
     run (governanceLockTagToText GLT_FeaturedApp) [(lockSubjectMetaKey, invalidParty)]
 
 -- | The lock kind is read from the `lockKindMetaKey` field.
@@ -361,7 +363,7 @@ test_governanceLockRequestTSv1Parser = do
   -- All invalid fields are reported
   expectRequestErrors
     [ invalidReceiverError alice
-    , "Invalid provider for fa-lock: '" <> invalidParty <> "'"
+    , invalidLockSubjectMessage "provider" GLT_FeaturedApp invalidParty
     , invalidMemoValueMessage "decimal" unlockAmountMetaKey "not-a-decimal"
     ]
     $ run alice
