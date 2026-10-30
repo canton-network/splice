@@ -214,7 +214,8 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     initDsoWithSv1Only()
     aliceValidatorBackend.startSync()
     val participantId = aliceValidatorBackend.participantClient.id
-    val partiesPerParticipantMetricName = s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
+    val partiesPerParticipantMetricName =
+      s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
     val numPartiesMetricName = s"$MetricsPrefix.synchronizer-topology.num-parties"
     def numPartiesOnAliceParticipant() =
       aliceValidatorBackend.metrics
