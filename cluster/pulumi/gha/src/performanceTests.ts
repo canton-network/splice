@@ -33,9 +33,9 @@ export function createCloudSQLInstanceForPerformanceTests(
     flags: {
       random_page_cost: '1.1',
       temp_file_limit: '2147483647',
-      max_wal_size: '20480', // 20GB, but GCP requires a plain number in MB
-      maintenance_work_mem: '2000000', // 2Gi, but GCP requires a plain number in KB
-      work_mem: '32768', // 32MB, matching the prod (high-memory) instance
+      max_wal_size: '20480', // 20GB
+      maintenance_work_mem: '2000000', // 2GB
+      work_mem: '32768', // 32MB
     },
   });
   const zone = GCP_ZONE || config.requireEnv('DB_CLOUDSDK_COMPUTE_ZONE');
