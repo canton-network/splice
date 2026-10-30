@@ -58,7 +58,7 @@ export function createCloudSQLInstanceForPerformanceTests(
         queryInsightsEnabled: true,
         enhancedQueryInsightsEnabled: mainnetLikeConfig.enterprisePlus,
       },
-      tier: mainnetLikeConfig.tier, // tier used on Mainnet as of 2026
+      tier: mainnetLikeConfig.tier,
       edition: mainnetLikeConfig.enterprisePlus ? 'ENTERPRISE_PLUS' : 'ENTERPRISE',
       ...(mainnetLikeConfig.enterprisePlus
         ? {
