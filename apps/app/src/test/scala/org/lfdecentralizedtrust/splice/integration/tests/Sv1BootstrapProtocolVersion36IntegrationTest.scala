@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.FullClientConfig
 import com.digitalasset.canton.version.ProtocolVersion
+import org.lfdecentralizedtrust.splice.auth.{AuthTokenSourceStatic, AuthUtil}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.IsTheCantonSequencerBFTEnabled
 import org.lfdecentralizedtrust.splice.environment.{
@@ -45,11 +46,13 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
     val synchronizerNodes = svConfig.localSynchronizerNodes.current
     val topologyConnections: Seq[TopologyAdminConnection] = Seq(
       new ParticipantAdminConnection(
-        FullClientConfig(port = svConfig.participantClient.adminApi.port),
+        FullClientConfig(port = svConfig.participantClient.adminApi.clientConfig.port),
         env.environment.config.monitoring.logging.api,
         loggerFactory.append("participant", "sv1"),
         grpcClientMetrics,
         retryProvider,
+        tokenProvider =
+          AuthTokenSourceStatic(AuthUtil.CantonAdminApi.participantAdminApiTestToken),
       ),
       new SequencerAdminConnection(
         FullClientConfig(port = synchronizerNodes.sequencer.adminApi.port),
