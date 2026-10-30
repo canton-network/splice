@@ -152,8 +152,7 @@ test_governanceLockMetadataParser = do
   let run entries = runParser governanceLockMetadataParser (mkMeta entries)
       reason r = (reasonMetaKey, cipMemoPrefix <> r)
       otherEntry = ("other-key", "other-value")
-      dropMetaPrefix = Text.dropPrefix cipMetaPrefix
-      lockSubjectMetaKeyNoPrefix = dropMetaPrefix lockSubjectMetaKey
+      lockSubjectMetaKeyNoPrefix = removeMetaKeyPrefix lockSubjectMetaKey
 
   -- Without a reason field, empty metadata is returned
   expectSuccess (mkMeta []) $ run []
