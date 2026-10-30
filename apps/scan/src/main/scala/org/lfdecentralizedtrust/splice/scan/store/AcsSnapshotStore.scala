@@ -927,7 +927,8 @@ class AcsSnapshotStore(
     // - otherwise, on retry the `create index IF NOT EXISTS` will just move on.
     for {
       _ <- storage.queryAndUpdate(
-        AdvisoryLocks.withSessionLock(
+        AdvisoryLocks.withBlockingTransactionalLock(
+          profile,
           AdvisoryLockIds.acsSnapshotIndex,
           AcsSnapshotDDL.stakeholderIndexAction(
             snapshot.stakeholdersTableName,
@@ -938,7 +939,8 @@ class AcsSnapshotStore(
         "index_stakeholders",
       )
       _ <- storage.queryAndUpdate(
-        AdvisoryLocks.withSessionLock(
+        AdvisoryLocks.withBlockingTransactionalLock(
+          profile,
           AdvisoryLockIds.acsSnapshotIndex,
           AcsSnapshotDDL.stakeholderTemplateIdIndexAction(
             snapshot.stakeholdersTableName,
