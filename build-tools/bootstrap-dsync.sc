@@ -61,7 +61,9 @@ signingSequencers.foreach(owner =>
       Some(
         TrafficControlParameters(
           maxBaseTrafficAmount = NonNegativeLong.zero,
-          maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(10), // Doesn't really matter, since the base rate is zero.
+          maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(
+            10
+          ), // Doesn't really matter, since the base rate is zero.
           readVsWriteScalingFactor = PositiveInt.tryCreate(200),
           setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(5),
           enforceRateLimiting = true,
