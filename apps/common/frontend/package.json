@@ -23,7 +23,7 @@
     "date-fns": "2.29.3",
     "decimal.js-light": "2.5.1",
     "dompurify": "^3.4.16",
-    "html-react-parser": "5.1.15",
+    "html-react-parser": "6.1.8",
     "jose": "^6.2.12",
     "jsondiffpatch": "^0.7.6",
     "msw": "^2.15.0",
