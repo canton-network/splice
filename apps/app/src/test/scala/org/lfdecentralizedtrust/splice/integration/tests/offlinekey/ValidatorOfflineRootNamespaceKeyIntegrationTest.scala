@@ -68,6 +68,7 @@ class ValidatorOfflineRootNamespaceKeyIntegrationTest
         initializeInstanceWithOfflineRootNamespaceKey(
           "aliceValidator",
           aliceValidatorParticipantClient,
+          // Based on default in Canton's offline-root-key/prepare-cert.sh
           ProtocolVersion.v36,
         )
       }
