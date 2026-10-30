@@ -330,3 +330,24 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   reconnect to the synchronizer to move the ledger end` -> SV app exits the JVM (evidence loss for the shard).
 - Check introduced with the Canton 3.7 fork (canton/.../participant/admin/repair/RepairServiceHelpers.scala:223,
   #7944, 10-23). First hit 10907 (SvTimeBasedOnboardingIntegrationTest, simtime, main 3568cba969, 10-29).
+
+## V. PeriodicTopologySnapshot: missing 'scopes' since pekko-connectors-google 1.3.0 (REAL, 2026-10-30)
+- Signature: PeriodicTopologySnapshotIntegrationTest `did not include substring "Took a new topology snapshot on <date>"`;
+  canton_network_test.clog WARN `Stream onboarding state to GCP bucket failed ... ConfigException$Missing: hardcoded
+  value: No configuration setting found for key 'scopes'` at SequencerAdminConnection.streamOnboardingState.
+- Cause: #8017 (backport #8073 on 0.9.x) bumped pekko-connectors-google-cloud-storage 1.0.2 -> 1.3.0; 1.3.0
+  `Credentials.parseServiceAccount` reads `scopes` at the top level, we pass it inside `service-account`. Fails only
+  on the first runs of a day (later runs find today's snapshot and skip streaming). Parent 10921, dup 10923.
+  Not to be confused with family T (invalid_grant, 10-29).
+
+## W. ScanEventHistoryIntegrationTest pre-tap cursor not quiet (test race)
+- Signature: `should provide new events with verdicts *** FAILED ***` at ScanEventHistoryIntegrationTest.scala:65,
+  a Vector of EventHistoryItem with licenseCid / couponCid / openRoundCid (background reward/licence automation).
+- Parent 10912. Test-side fix: drop the emptiness check or pause that automation.
+
+## Note 2026-10-30
+- 10919 ExpiryWithIgnoredAmuletVersion: startup-of-all-nodes 2 min timeout, splitwellValidator `DbLockNotAcquired`
+  ~944x right after AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest (leftover nodes); lock holder open.
+- Compose / LocalNet wallet frontends: tap row missing (10918 parent, 10920) and portfolio
+  `Failed to list contracts of interface ...TransferInstruction` ERROR (10917); intermittent, later runs green.
+- TokenStandard* `/state/acs/force` 500 on the advisory lock: parent 10740, dup 10916.

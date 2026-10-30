@@ -415,3 +415,15 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10914 10892 10741 | ciperiodic deploy_sv_reonboard: PV 36 founding (shared ciperiodic config since cni #7746), dup 10844, fixed by splice#8125; 10-30 08:00 run clean | `2026-10-30/infra-c.md`, `host-commands-c.md` |
 | 10915 | Devnet backup_status 18:00 check vs 16:00 backup (12 h gap, 8 h threshold), not 10643; open, Krzysztof; needs log | same |
 | 10922 | Cluster Lock Reaper (scratchnet) 10-30 04:00; needs log (step + scratchnet) | same |
+
+### 2026-10-30 splice main singles (fork B)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 10921 10923 | REAL: PeriodicTopologySnapshot `missing 'scopes'`, pekko-connectors-google 1.3.0 (#8017/#8073), family V; open 10921, Raymond | `2026-10-30/splice-b.md`, `host-commands-b.md` |
+| 10913 | cache miss after #8102, Killed SBT 40m, dup 10358 | same |
+| 10916 | `/state/acs/force` 500 advisory lock, dup 10740 | same |
+| 10912 | ScanEventHistory pre-tap cursor race, family W, open, Robert | same |
+| 10919 | ExpiryWithIgnoredAmuletVersion startup timeout, DB lock held after previous suite, open | same |
+| 10917 | compose portfolio `Failed to list contracts ... TransferInstruction` ERROR, open | same |
+| 10918 10920 | compose / LocalNet wallet tap row missing (same run), open 10918, dup 10920 | same |
