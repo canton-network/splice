@@ -24,7 +24,9 @@ import scala.jdk.CollectionConverters.*
 // authoritative gate for the opsParties rules (no duplicates, provider is not its own opsParty,
 // valid party ids) and additionally checks cross-right overlap against the ACS.
 // The UI pre-checks the first three for fast feedback, but only the backend can do the ACS overlap check.
-// Conflicts against other in-flight vote-requests are checked by neither at the moment.
+// The UI also surfaces an advisory warning when opsParties overlap an in-flight vote-request; this validator
+// deliberately does not re-check in-flight requests (that query would run on every proposal), so the
+// authoritative check here is ACS-only and the cross-request race is left as the TOCTOU limitation noted below.
 object FeaturedAppRightValidator {
 
   def validateFeaturedAppRightAction(
