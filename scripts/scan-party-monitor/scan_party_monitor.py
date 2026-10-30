@@ -52,7 +52,7 @@ VERSION = "0.3.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
 SCHEMA_VERSION = "2"
 MAX_PAGE_SIZE = 1000
-# Events are large, and fetching many at once burdens Scan.
+# reduces load on scan with plenty of headroom for MainNet catchup
 DEFAULT_EVENTS_PAGE_SIZE = 100
 MAX_TRACKED_PARTIES = 1000
 # Hex characters of a namespace fingerprint: a multihash prefix (1220) and a SHA-256 digest
