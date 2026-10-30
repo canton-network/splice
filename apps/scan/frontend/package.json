@@ -37,7 +37,7 @@
     "@tanstack/eslint-plugin-query": "5.104.5",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
-    "@types/node": "22.14.0",
+    "@types/node": "26.6.3",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.6",
     "@vitejs/plugin-react": "^6.0.1",
