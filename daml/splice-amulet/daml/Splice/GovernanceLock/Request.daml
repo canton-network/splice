@@ -411,7 +411,7 @@ partyFromMetadataParser key = requiredMetadataParser key >>= partyFromTextParser
 
 governanceLockTagParser : Parser Metadata GovernanceLockTag
 governanceLockTagParser = requiredMetadataParser lockKindMetaKey >>= \tag ->
-  validationParser $ (governanceLockTagFromText tag) <?> ("Invalid lock kind: '" <> tag <> "'")
+  validationParser $ (governanceLockTagFromText tag) <?> invalidMemoValueMessage "value" lockKindMetaKey tag
 
 governanceLockSubjectParser : Parser Metadata Text
 governanceLockSubjectParser = requiredMetadataParser lockSubjectMetaKey
