@@ -72,7 +72,7 @@ testGovernanceLockHappyPathScenario ops = do
   -- Check that we can't withdraw before the withdraw time has arrived on-ledger
   actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'vestedUntilTime' at") $
     ops.vestingWithdraw env aliceVesting alice (withdrawMeta unlockTime)
-  actionMustFail (expectMessageContains $ "Error in metadata field '" <> vestedUntilTimeMetaKey <> "': Invalid Time: 'not-a-time'") $
+  actionMustFail (expectMessageContains (errorInMemoKeyMessage vestedUntilTimeMetaKey "Invalid Time: 'not-a-time'")) $
     ops.vestingWithdraw env aliceVesting alice (Metadata $ TM.fromList [(vestedUntilTimeMetaKey, "not-a-time")])
 
   passTime (hours 12)
@@ -143,11 +143,11 @@ testGovernanceLockUnlockFailuresScenario ops = do
     unlock (unlockMeta 10000.0 now)
   actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'vestingStartTime - 1 day' at") $
     unlock (unlockMeta 10000.0 (now `addRelTime` (days 1 + seconds 1)))
-  actionMustFail (expectMessageContains $ "Error in metadata field '" <> vestingStartTimeMetaKey <> "': Invalid Time: 'not-a-time'") $
+  actionMustFail (expectMessageContains (errorInMemoKeyMessage vestingStartTimeMetaKey "Invalid Time: 'not-a-time'")) $
     unlockWithEntries [(unlockAmountMetaKey, "10000.0"), (vestingStartTimeMetaKey, "not-a-time")]
 
   -- The unlock amount must be a valid decimal, positive and at most the locked amount
-  actionMustFail (expectMessageContains $ "Invalid decimal in " <> unlockAmountMetaKey <> " metadata field: 'not-a-decimal'") $
+  actionMustFail (expectMessageContains (invalidMemoValueMessage "decimal" unlockAmountMetaKey "not-a-decimal")) $
     unlockWithEntries [(unlockAmountMetaKey, "not-a-decimal"), (vestingStartTimeMetaKey, show vestingStartTime)]
   actionMustFail (expectMessageContains "'unlockAmount' is not greater than 'zero'") $
     unlock (unlockMeta (-10000.0) vestingStartTime)
