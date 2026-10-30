@@ -12,7 +12,8 @@
 Matches are printed to stdout as one JSON object per transaction, and optionally posted to
 a Slack channel through an incoming webhook.
 
-The script only needs Python 3 and its standard library.
+The script only needs Python 3 and its standard library. It is tested with Python 3.9 and
+later, and maintained with the Python of the repository's nix dev shell (3.14).
 
 ## Usage
 
@@ -184,3 +185,27 @@ locally with `scripts/check-python-types.sh scripts/scan-party-monitor`.
 
 `ScanPartyMonitorScriptIntegrationTest` runs the script against a more realistic local Scan
 instance like other Scala integration tests.
+
+## Changelog
+
+### 0.3.0 ([#8107](https://github.com/canton-network/splice/pull/8107))
+
+- The script follows Scan's event stream (`/v0/events`) instead of `/v2/updates`, and seeds
+  only the tracked parties' Amulet and LockedAmulet holdings (`/v2/holdings/state`) instead
+  of all contracts they sign.
+- With `alert_confirmations`, a party is reported with one `confirming` reason per
+  transaction, listing the `views` it confirms according to the mediator verdict. This
+  replaces the `acting`, `created_signatory` and `exercised_contract_signatory` reasons.
+- Confirmations now include transactions that are private to other parties than the DSO
+  party (`"private": true`), and rejected transactions. Matches carry `verdict_result`, and
+  Slack messages mark private and rejected transactions.
+- `--updates-page-size` and `--updates-requests-per-second` are now `--events-page-size` and
+  `--events-requests-per-second`; the old names still work, with a warning.
+- Party ids in the configuration must have lowercase fingerprints
+  ([#8098](https://github.com/canton-network/splice/pull/8098)).
+- An unexpected response from Scan stops the script with an error naming the field.
+- Databases of 0.2.0 are not supported; start with a new `--db`.
+
+### 0.2.0 ([#7982](https://github.com/canton-network/splice/pull/7982))
+
+Initial release.
