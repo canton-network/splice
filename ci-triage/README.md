@@ -407,3 +407,11 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10904 10906 10910 | ParticipantKmsIdentitiesIntegrationTest hangs to job timeout on GCP KMS UNAUTHENTICATED (rotation), dup 10896 | same |
 | 10907 | NEW family U: sv4 join IMPORT_ACS_ERROR 'last event is a topology offset' (Canton 3.7 check), open | same |
 | 10911 | family B ack DEADLINE_EXCEEDED (0.9.x, after rotation), dup 10165 | same |
+
+### 2026-10-30 infra (fork C)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 10914 10892 10741 | ciperiodic deploy_sv_reonboard: PV 36 founding (shared ciperiodic config since cni #7746), dup 10844, fixed by splice#8125; 10-30 08:00 run clean | `2026-10-30/infra-c.md`, `host-commands-c.md` |
+| 10915 | Devnet backup_status 18:00 check vs 16:00 backup (12 h gap, 8 h threshold), not 10643; open, Krzysztof; needs log | same |
+| 10922 | Cluster Lock Reaper (scratchnet) 10-30 04:00; needs log (step + scratchnet) | same |
