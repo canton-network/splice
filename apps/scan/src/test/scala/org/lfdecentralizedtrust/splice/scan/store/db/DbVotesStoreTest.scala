@@ -754,7 +754,9 @@ class DbVotesStoreTest
         kvStore,
         loggerFactory,
       )
-      initializeResult <- scanStore.multiDomainAcsStore.testIngestionSink.initialize()
+      initializeResult <- scanStore.multiDomainAcsStore.testIngestionSink.initialize(
+        mockLedgerConnection()
+      )
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
         case InitializeAcsAtLatestOffset | InitializeAcsAtOffset(_) =>

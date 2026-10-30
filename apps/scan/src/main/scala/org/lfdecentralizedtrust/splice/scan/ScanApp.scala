@@ -240,6 +240,8 @@ class ScanApp(
         loggerFactory,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+        clock,
+        partitionRunwayDays = config.updateHistoryPartitionRunwayDays,
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,

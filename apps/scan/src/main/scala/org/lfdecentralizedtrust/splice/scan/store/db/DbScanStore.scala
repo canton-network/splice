@@ -70,14 +70,12 @@ import org.lfdecentralizedtrust.splice.store.{
   Limit,
   ResultsPage,
   TxLogStore,
-  UpdateHistory,
   VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   GovernanceLockUtil,
-  PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
 }
@@ -865,34 +863,4 @@ class DbScanStore private (
         .toMap
     }
 
-  // TODO (#934): this method probably belongs in UpdateHistory instead
-  override def lookupContractByRecordTime[C, TCId <: ContractId[?], T](
-      companion: C,
-      updateHistory: UpdateHistory,
-      recordTime: CantonTimestamp,
-  )(implicit
-      companionClass: ContractCompanion[C, TCId, T],
-      tc: TraceContext,
-  ): Future[Option[Contract[TCId, T]]] = {
-    val pqn @ PackageQualifiedName(packageName, QualifiedName(moduleName, entityName)) =
-      companionClass.packageQualifiedName(companion)
-    for {
-      row <- storage
-        .querySingle(
-          selectFromUpdateCreatesTableResult(
-            updateHistory.historyId,
-            where = sql"""template_id_module_name = ${lengthLimited(moduleName)}
-              and template_id_entity_name = ${lengthLimited(entityName)}
-              and package_name = ${lengthLimited(packageName)}
-              and record_time > $recordTime""",
-            // TODO(#934): Order by row_id is suspicious
-            orderLimit = sql"""order by row_id asc limit 1""",
-          ).headOption,
-          s"lookup[$pqn]",
-        )
-        .value
-    } yield {
-      row.map(contractFromEvent(companion)(_))
-    }
-  }
 }
