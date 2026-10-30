@@ -131,29 +131,6 @@ abstract class InStackDecentralizedSynchronizerNode
 
     const rateLimitConfig = getSequencerRateLimitConfig();
 
-    const autoInitSeqEnvVars = autoInit
-      ? [
-          {
-            name: 'ADDITIONAL_CONFIG_AUTO_INIT',
-            value: `
-        canton.sequencers.sequencer.init.identity.type = auto
-        canton.sequencers.sequencer.init.generate-topology-transactions-and-keys = true
-      `,
-          },
-        ]
-      : [];
-    const autoInitMedEnvVars = autoInit
-      ? [
-          {
-            name: 'ADDITIONAL_CONFIG_AUTO_INIT',
-            value: `
-        canton.mediators.mediator.init.identity.type = auto
-        canton.mediators.mediator.init.generate-topology-transactions-and-keys = true
-      `,
-          },
-        ]
-      : [];
-
     installSpliceHelmChart(
       this.xns,
       this.name,
@@ -180,8 +157,7 @@ abstract class InStackDecentralizedSynchronizerNode
               ? [{ name: 'ADDITIONAL_CONFIG_SEQUENCER_RATE_LIMITS', value: rateLimitConfig }]
               : []
             )
-              .concat(physicalSynchronizerConfig.sequencer.additionalEnvVars)
-              .concat(autoInitSeqEnvVars),
+              .concat(physicalSynchronizerConfig.sequencer.additionalEnvVars),
             resources: physicalSynchronizerConfig.sequencer.resources,
             additionalJvmOptions: getAdditionalJvmOptions(
               physicalSynchronizerConfig.sequencer.additionalJvmOptions
@@ -197,7 +173,7 @@ abstract class InStackDecentralizedSynchronizerNode
               ...(dbs.setCoreDbNames ? { databaseName: mediatorDbName } : {}),
             },
             additionalEnvVars:
-              physicalSynchronizerConfig.mediator.additionalEnvVars.concat(autoInitMedEnvVars),
+              physicalSynchronizerConfig.mediator.additionalEnvVars,
             resources: physicalSynchronizerConfig.mediator.resources,
             additionalJvmOptions: getAdditionalJvmOptions(
               physicalSynchronizerConfig.mediator.additionalJvmOptions

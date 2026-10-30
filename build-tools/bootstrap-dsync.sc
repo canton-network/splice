@@ -1,7 +1,50 @@
+import com.digitalasset.canton.console.InstanceReference
+
 val sequencers = Seq(sequencer1, sequencer2, sequencer3, sequencer4)
 val mediators = Seq(mediator1, mediator2, mediator3, mediator4)
+val nodes = sequencers ++ mediators
 // We have a threshold of three, so signing the bootstrapping transactions only with the first three sequencers.
 val signingSequencers = sequencers.take(3)
+
+def initManually(node: InstanceReference): Unit = {
+  println("Generating keys for node " + node.name + "...")
+
+  val namespaceKey = node.keys.secret.generate_signing_key(
+    name = node.name + s"-${SigningKeyUsage.Namespace.identifier}",
+    SigningKeyUsage.NamespaceOnly,
+  )
+  val sequencerAuthKey = node.keys.secret.generate_signing_key(
+    name = node.name + s"-${SigningKeyUsage.SequencerAuthentication.identifier}",
+    SigningKeyUsage.SequencerAuthenticationOnly,
+  )
+  val signingKey = node.keys.secret.generate_signing_key(
+    name = node.name + s"-${SigningKeyUsage.Protocol.identifier}",
+    SigningKeyUsage.ProtocolOnly,
+  )
+
+  println("Bootstrapping node " + node.name + "...")
+  val namespace = Namespace(namespaceKey.id)
+  node.topology.init_id_from_uid(
+    UniqueIdentifier.tryCreate("manual-" + node.name, namespace)
+  )
+
+  node.health.wait_for_ready_for_initialization()
+
+  println("Initializing topology for node " + node.name + "...")
+  node.topology.namespace_delegations.propose_delegation(
+    namespace,
+    namespaceKey,
+    CanSignAllMappings,
+  )
+
+  node.topology.owner_to_key_mappings.propose(
+    member = node.id.member,
+    keys = NonEmpty(Seq, sequencerAuthKey, signingKey),
+    signedBy = Seq(namespaceKey.fingerprint, sequencerAuthKey.fingerprint, signingKey.fingerprint),
+  )
+}
+
+nodes.foreach(initManually)
 
 println("Bootstrapping synchronizer...")
 val synchronizerId = bootstrap
