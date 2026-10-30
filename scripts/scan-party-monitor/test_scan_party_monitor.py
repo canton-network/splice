@@ -510,7 +510,7 @@ class HelpersTest(unittest.TestCase):
         self.assertIn("--updates-page-size is deprecated; use --events-page-size", stderr.getvalue())
         self.assertIn("--updates-requests-per-second is deprecated; use --events-requests-per-second", stderr.getvalue())
         defaults = spm.parse_cli_args(["--scan-url", "http://scan", "--config", "c.json", "--db", "d.db"])
-        self.assertEqual((defaults.events_page_size, defaults.events_requests_per_second), (spm.MAX_PAGE_SIZE, 2.0))
+        self.assertEqual((defaults.events_page_size, defaults.events_requests_per_second), (spm.DEFAULT_EVENTS_PAGE_SIZE, 2.0))
 
 
 ### the fake Scan against Scan's OpenAPI spec

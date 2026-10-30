@@ -52,6 +52,8 @@ VERSION = "0.3.0"
 USER_AGENT = f"splice-scan-party-monitor/{VERSION}"
 SCHEMA_VERSION = "2"
 MAX_PAGE_SIZE = 1000
+# Events are large, and fetching many at once burdens Scan.
+DEFAULT_EVENTS_PAGE_SIZE = 100
 MAX_TRACKED_PARTIES = 1000
 # Hex characters of a namespace fingerprint: a multihash prefix (1220) and a SHA-256 digest
 MIN_FINGERPRINT_LENGTH = 68
@@ -1363,7 +1365,7 @@ def parse_cli_args(argv: Optional[List[str]]) -> argparse.Namespace:
         help="Pace of ACS requests while seeding. Scan's ACS rate limit is shared by all of its clients; "
         "please don't raise this (default: %(default)s)",
     )
-    parser.add_argument("--events-page-size", type=page_size, default=MAX_PAGE_SIZE, help="Events per request (default: %(default)s)")
+    parser.add_argument("--events-page-size", type=page_size, default=DEFAULT_EVENTS_PAGE_SIZE, help="Events per request (default: %(default)s)")
     parser.add_argument(
         "--events-requests-per-second",
         type=float,
