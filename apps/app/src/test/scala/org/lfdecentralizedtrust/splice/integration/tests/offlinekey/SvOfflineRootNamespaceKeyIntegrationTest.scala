@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests.offlinekey
 
+import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, SvAppBackendReference}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -7,6 +8,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.{ProcessTestUtil, StandaloneCanton, WalletTestUtil}
 
 class SvOfflineRootNamespaceKeyIntegrationTest
@@ -61,17 +63,21 @@ class SvOfflineRootNamespaceKeyIntegrationTest
     val participantClient = backend.participantClientWithAdminToken
     val sequencerClient = backend.sequencerClient
     val mediatorClient = backend.mediatorClient
+    val protocolVersion = synchronizerProtocolVersion
     initializeInstanceWithOfflineRootNamespaceKey(
       s"${backend.name}$cantonNameSuffix",
       participantClient,
+      protocolVersion,
     )
     initializeInstanceWithOfflineRootNamespaceKey(
       s"${backend.name}$cantonNameSuffix",
       sequencerClient,
+      protocolVersion,
     )
     initializeInstanceWithOfflineRootNamespaceKey(
       s"${backend.name}$cantonNameSuffix",
       mediatorClient,
+      protocolVersion,
     )
     scan.start()
     backend.startSync()
@@ -80,4 +86,14 @@ class SvOfflineRootNamespaceKeyIntegrationTest
     instanceHasNoRootNamespaceKey(sequencerClient)
     instanceHasNoRootNamespaceKey(mediatorClient)
   }
+
+  private def synchronizerProtocolVersion(implicit
+      env: SpliceTestConsoleEnvironment
+  ): ProtocolVersion =
+    sv1Backend.config.onboarding match {
+      case Some(foundDso: SvOnboardingConfig.FoundDso) => foundDso.initialProtocolVersion
+      case Some(_: SvOnboardingConfig.JoinWithKey) | Some(_: SvOnboardingConfig.RollForwardLsu) |
+          None =>
+        fail("Failed to retrieve initialProtocolVersion from sv1.")
+    }
 }

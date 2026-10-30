@@ -46,6 +46,7 @@
         "12205e1643ef9bcc12dd3450d02f7c538de011dc92290672cb66dd47053ab4a67cae",
         "122057b07227114d122f5954a770c1ba30586cc51efd1dd644f6c85bfb9916eac967"
       ],
+      "missingSynchronizerGracePeriodSeconds": 600,
       "participant": {
         "address": "participant"
       },

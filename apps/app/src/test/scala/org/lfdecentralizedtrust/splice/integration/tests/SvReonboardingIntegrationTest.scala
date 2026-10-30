@@ -1,6 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.config.{DbConfig, FullClientConfig}
+import com.digitalasset.canton.config.DbConfig
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{Port, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -142,7 +142,12 @@ class SvReonboardingIntegrationTest
                     adminApi = referenceValidatorConfig.adminApi
                       .copy(internalPort = Some(Port.tryCreate(27503))),
                     participantClient = ParticipantClientConfig(
-                      FullClientConfig(port = Port.tryCreate(27502)),
+                      referenceValidatorConfig.participantClient.adminApi.copy(
+                        clientConfig =
+                          referenceValidatorConfig.participantClient.adminApi.clientConfig.copy(
+                            port = Port.tryCreate(27502)
+                          )
+                      ),
                       referenceValidatorConfig.participantClient.ledgerApi.copy(
                         clientConfig =
                           referenceValidatorConfig.participantClient.ledgerApi.clientConfig.copy(

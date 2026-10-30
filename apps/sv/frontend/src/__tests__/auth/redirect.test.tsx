@@ -5,6 +5,7 @@ import { Algorithm, AuthConfig, UserProvider } from '@canton-network/splice-comm
 import { render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React, { useEffect } from 'react';
+import { AuthContext, AuthContextProps } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { SvAdminClientProvider, useSvAdminClient } from '../../contexts/SvAdminServiceContext';
@@ -12,19 +13,16 @@ import { server, svUrl } from '../setup/setup';
 
 const removeUser = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('react-oidc-context', () => ({
-  useAuth: () => ({
-    isAuthenticated: true,
-    user: { access_token: makeFakeJwt('test-user') },
-    settings: {
-      authority: 'https://example.auth0.com',
-      client_id: 'test-client',
-    },
-    removeUser,
-    error: null,
-  }),
-  AuthProvider: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+const fakeAuth = {
+  isAuthenticated: true,
+  user: { access_token: makeFakeJwt('test-user') },
+  settings: {
+    authority: 'https://example.auth0.com',
+    client_id: 'test-client',
+  },
+  removeUser,
+  error: null,
+} as unknown as AuthContextProps;
 
 let locationHrefSet: string | undefined;
 beforeEach(() => {
@@ -76,11 +74,13 @@ afterEach(() => {
 
 const renderWithProviders = () =>
   render(
-    <UserProvider authConf={rs256Config}>
-      <SvAdminClientProvider url={svUrl}>
-        <Caller />
-      </SvAdminClientProvider>
-    </UserProvider>
+    <AuthContext.Provider value={fakeAuth}>
+      <UserProvider authConf={rs256Config}>
+        <SvAdminClientProvider url={svUrl}>
+          <Caller />
+        </SvAdminClientProvider>
+      </UserProvider>
+    </AuthContext.Provider>
   );
 
 describe('401 from SV API logs the user out', () => {

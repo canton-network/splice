@@ -42,6 +42,7 @@ export function installTopologyKeyMonitor(
       expectedSynchronizerAliases: config.expectedSynchronizerAliases,
       pollIntervalSeconds: config.pollIntervalSeconds,
       slowQueryThresholdSeconds: config.slowQueryThresholdSeconds,
+      missingSynchronizerGracePeriodSeconds: config.missingSynchronizerGracePeriodSeconds,
       ...(config.resources ? { resources: config.resources } : {}),
       ...(serviceAccountName ? { serviceAccountName } : {}),
     },

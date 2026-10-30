@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 
-def parse_dar_lock(content):
+def parse_dar_lock(content: str) -> dict[str, list[str]]:
     return {
         k: [v[1] for v in vs]
         for k, vs in itertools.groupby(
@@ -24,7 +24,7 @@ def parse_dar_lock(content):
     }
 
 
-def filter_versions(k, vs, base):
+def filter_versions(k: str, vs: list[str], base: dict[str, list[str]]) -> list[str]:
     base_versions = base.get(k, [])
     return [v for v in vs if v not in base_versions]
 
@@ -32,7 +32,7 @@ def filter_versions(k, vs, base):
 # Given a splice version, output the latest Daml package versions from base-version to package-config-file
 # and output a list of scalatest tag exclusions to tags-file that exclude all tests for package versions
 # that are in HEAD but not in base-version.
-def main():
+def main() -> None:
     if len(sys.argv) != 4:
         print(
             "Usage: initial-package-config.py base-version package-config-file tags-file"
@@ -48,9 +48,13 @@ def main():
         text=True,
     )
     if process.returncode != 0:
-        print("Failed to read dars.lock file")
-        print(process.stdout)
-        print(process.stderr)
+        print(
+            f"Failed to read daml/dars.lock from refs/remotes/origin/release-line-{version}",
+            file=sys.stderr,
+        )
+        print(process.stdout, file=sys.stderr)
+        print(process.stderr, file=sys.stderr)
+        sys.exit(1)
     base_dar_lock = parse_dar_lock(process.stdout)
     base_versions = {
         k: max(vs, key=semver.Version.parse) for k, vs in base_dar_lock.items()
@@ -71,7 +75,7 @@ def main():
             f.write(f"-l {tag} ")
 
 
-def to_tag_name(k, v):
+def to_tag_name(k: str, v: str) -> str:
     pkg = "".join([part.capitalize() for part in k.split("-")])
     return f"org.lfdecentralizedtrust.splice.util.scalatesttags.{pkg}_{v.replace(".", "_")}"
 

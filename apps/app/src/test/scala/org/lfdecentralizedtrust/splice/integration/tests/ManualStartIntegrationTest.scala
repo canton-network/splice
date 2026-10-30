@@ -16,6 +16,7 @@ import com.digitalasset.canton.topology.{
   SequencerId,
   UniqueIdentifier,
 }
+import org.lfdecentralizedtrust.splice.auth.{AuthTokenSourceStatic, AuthUtil}
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, PruningConfig, SpliceBackendConfig}
 import org.lfdecentralizedtrust.splice.console.AppBackendReference
 import org.lfdecentralizedtrust.splice.environment.*
@@ -444,11 +445,12 @@ class ManualStartIntegrationTest
     import env.executionContext
     val loggerFactoryWithKey = loggerFactory.append("participant", name)
     new ParticipantAdminConnection(
-      FullClientConfig(port = config.participantClient.adminApi.port),
+      FullClientConfig(port = config.participantClient.adminApi.clientConfig.port),
       env.environment.config.monitoring.logging.api,
       loggerFactoryWithKey,
       grpcClientMetrics,
       retryProvider,
+      tokenProvider = AuthTokenSourceStatic(AuthUtil.CantonAdminApi.participantAdminApiTestToken),
     )
   }
 }
