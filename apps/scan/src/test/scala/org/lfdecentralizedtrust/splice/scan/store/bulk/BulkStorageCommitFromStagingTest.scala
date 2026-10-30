@@ -332,6 +332,11 @@ class BulkStorageCommitFromStagingTest
             clue(
               "Enough scans do agree - the copy flow should complete successfully, but still warn about those that did not agree"
             ) {
+              // Make scans 0 and 1 report "no data" so that BFT "execute call"
+              // reaches to exactly `requestsToDo=5` connections
+              // (`scan_2` through `scan_6`). This way failing `scan_5` and `scan_6`
+              // are guaranteed to be among the 5 being queried to build a quorum.
+              Seq(0, 1).foreach(mockScanConnections.setHasNoDataResponse(_))
               Seq.range(2, 5).foreach(i => mockScanConnections.scanAgrees(i))
               sub.expectNext(5.seconds, "go")
               assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
