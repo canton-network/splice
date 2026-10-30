@@ -24,13 +24,9 @@ import org.lfdecentralizedtrust.splice.util.{
 
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
-import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppActivityMarker}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletallocationCodegen
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
-import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
-import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_29
@@ -67,35 +63,6 @@ class TokenStandardAllocationIntegrationTest
   val bobTransferAmount = walletUsdToAmulet(20.0)
   val feesReserveMultiplier = 1.1 // fee reserves are 4 x the fees required for the transfer
   val feesUpperBound = walletUsdToAmulet(1.15)
-
-  def createAllocation(
-      walletClient: WalletAppClientReference,
-      request: allocationrequestv1.AllocationRequestView,
-      legId: String,
-  ): allocationv1.Allocation.ContractId = {
-    val transferLeg = request.transferLegs.get(legId)
-    val senderParty = PartyId.tryFromProtoPrimitive(transferLeg.sender)
-    val (_, allocation) = actAndCheck(
-      show"Create allocation for leg $legId with sender $senderParty", {
-        walletClient.allocateAmulet(
-          new allocationv1.AllocationSpecification(
-            request.settlement,
-            legId,
-            transferLeg,
-          )
-        )
-      },
-    )(
-      show"There exists an allocation from $senderParty",
-      _ => {
-        inside(walletClient.listAmuletAllocations()) {
-          case (allocationRequest: HttpWalletAppClient.TokenStandard.V1AmuletAllocation) +: Nil =>
-            allocationRequest
-        }
-      },
-    )
-    new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
-  }
 
   "Settle a DvP using allocations" in { implicit env =>
     val allocatedOtcTrade = setupAllocatedOtcTrade()
