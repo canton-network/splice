@@ -266,6 +266,7 @@ class SequencerAdminConnection(
                 ConfigFactory.parseMap(
                   Map[String, AnyRef](
                     "provider" -> "service-account",
+                    "scopes" -> scopes,
                     "service-account" ->
                       Map[String, AnyRef](
                         "private-key" -> Base64.getEncoder.encodeToString(
@@ -273,7 +274,6 @@ class SequencerAdminConnection(
                         ),
                         "client-email" -> x.getClientEmail,
                         "project-id" -> bucketConfig.projectId,
-                        "scopes" -> scopes,
                       ).asJava,
                   ).asJava
                 )
