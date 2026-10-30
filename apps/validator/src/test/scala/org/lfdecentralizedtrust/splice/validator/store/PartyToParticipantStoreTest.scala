@@ -52,6 +52,14 @@ abstract class PartyToParticipantStoreTest
       }
     }
 
+    "drop parties without hosting participants from the initial state" in {
+      for {
+        store <- mkStore()
+        _ <- store.initialize(10, Map(alice -> Seq(p1), bob -> Seq.empty))
+        hosting <- store.hostingParticipants()
+      } yield hosting shouldBe Map(alice -> Seq(p1))
+    }
+
     "reject a second initialization" in {
       for {
         store <- mkStore()

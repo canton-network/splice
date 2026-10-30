@@ -20,6 +20,7 @@ import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.sequencing.SubmissionRequestAmplification
 import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
@@ -213,14 +214,19 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     initDsoWithSv1Only()
     aliceValidatorBackend.startSync()
     val participantId = aliceValidatorBackend.participantClient.id
-    val metricName = s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
+    val partiesPerParticipantMetricName =
+      s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
+    val numPartiesMetricName = s"$MetricsPrefix.synchronizer-topology.num-parties"
     def numPartiesOnAliceParticipant() =
       aliceValidatorBackend.metrics
-        .get(metricName, Map("participant_id" -> participantId.toString))
+        .list(partiesPerParticipantMetricName, Map("participant_id" -> participantId.toString))
+        .get(partiesPerParticipantMetricName)
+        .value
+        .loneElement
         .select[MetricValue.DoublePoint]
         .value
         .value
-    def numPartiesFromTopology() =
+    def numPartiesOnAliceParticipantFromTopology() =
       aliceValidatorBackend.participantClient.topology.party_to_participant_mappings
         .list(
           synchronizerId = decentralizedSynchronizerId,
@@ -228,21 +234,93 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         )
         .size
         .toDouble
+    def numParties() =
+      aliceValidatorBackend.metrics
+        .list(numPartiesMetricName)
+        .get(numPartiesMetricName)
+        .value
+        .loneElement
+        .select[MetricValue.DoublePoint]
+        .value
+        .value
+    val synchronizerStore = TopologyStoreId.Synchronizer(decentralizedSynchronizerId)
+    def partyToParticipant(party: PartyId) =
+      aliceValidatorBackend.participantClient.topology.party_to_participant_mappings
+        .list(synchronizerStore, filterParty = party.filterString)
+        .loneElement
 
-    val initialCount = clue("Metrics match the topology state") {
+    clue("Metrics match the topology state") {
       eventually() {
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() should be >= numPartiesOnAliceParticipant()
       }
-      numPartiesOnAliceParticipant()
     }
+    val initialPartiesOnAliceParticipant = numPartiesOnAliceParticipant()
+    val initialNumParties = numParties()
 
-    clue("Metrics are updated when a new party is allocated") {
+    clue("Metrics are updated when a new party is onboarded") {
       aliceValidatorBackend.onboardUser(s"topology-metrics-user-${Random.nextInt(10000)}")
       eventually() {
-        numPartiesOnAliceParticipant() shouldBe initialCount + 1
-        numPartiesOnAliceParticipant() shouldBe numPartiesFromTopology()
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 1
       }
     }
+
+    val (party, _) = actAndCheck(
+      "Allocate a new party",
+      aliceValidatorBackend.participantClientWithAdminToken.ledger_api.parties
+        .allocate(
+          s"topology-metrics-party-${Random.nextInt(10000)}",
+          synchronizerId = Some(decentralizedSynchronizerId),
+        )
+        .party,
+    )(
+      "Metrics are updated",
+      party => {
+        partyToParticipant(party).item.participants.map(_.participantId) shouldBe Seq(
+          participantId
+        )
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 2
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 2
+      },
+    )
+
+    actAndCheck(
+      "Offboard the party from the participant via a topology transaction", {
+        val current = partyToParticipant(party)
+        aliceValidatorBackend.participantClient.topology.party_to_participant_mappings.propose(
+          party,
+          newParticipants = Seq.empty,
+          serial = Some(current.context.serial + PositiveInt.one),
+          store = synchronizerStore,
+          mustFullyAuthorize = true,
+        )
+      },
+    )(
+      "Metrics are updated",
+      _ => {
+        partyToParticipant(party).item.participants shouldBe empty
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 1
+      },
+    )
+
+    actAndCheck(
+      "Restart the validator", {
+        aliceValidatorBackend.stop()
+        aliceValidatorBackend.startSync()
+      },
+    )(
+      "Metrics do not count the party without hosting participants",
+      _ => {
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 1
+      },
+    )
   }
 
   "onboard users with party hint sanitizer" in { implicit env =>
