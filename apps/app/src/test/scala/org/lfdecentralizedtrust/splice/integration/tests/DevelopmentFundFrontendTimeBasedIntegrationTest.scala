@@ -308,7 +308,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
 
             clue("Check: user_2 sees non-DFM warning alert") {
               eventually() {
-                find(className("MuiAlert-standardWarning")).isDefined shouldBe true
+                find(className("MuiAlert-colorWarning")).isDefined shouldBe true
               }
             }
 
@@ -396,8 +396,8 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
             clue("Check: user_2 sees DFM info alert (user_2 is the DFM)") {
               eventually() {
                 waitForQuery(id("development-fund-allocation-beneficiary"))
-                find(className("MuiAlert-standardWarning")) shouldBe empty
-                find(className("MuiAlert-standardInfo")).isDefined shouldBe true
+                find(className("MuiAlert-colorWarning")) shouldBe empty
+                find(className("MuiAlert-colorInfo")).isDefined shouldBe true
               }
             }
 
