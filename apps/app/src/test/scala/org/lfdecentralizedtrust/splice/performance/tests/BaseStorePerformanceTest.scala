@@ -5,11 +5,7 @@ import com.daml.metrics.api.MetricHandle.Timer
 import com.daml.metrics.api.testing.InMemoryMetricsFactory
 import com.daml.metrics.api.{HistogramInventory, MetricInfo, MetricName, MetricsContext}
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.config.{
-  ProcessingTimeout,
-  QueryCostMonitoringConfig,
-  StorageConfig,
-}
+import com.digitalasset.canton.config.{ProcessingTimeout, QueryCostMonitoringConfig, StorageConfig}
 import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.metrics.{DbStorageHistograms, DbStorageMetrics}
@@ -136,17 +132,7 @@ abstract class BaseStorePerformanceTest(
   protected def instanceLockEnabled: Boolean = true
 
   /** Optional Canton query-cost monitoring config.
-    *
     * When set (`Some`), Canton tags every query's metrics context with the real caller stack frame
-    * (the first non-framework frame, e.g. `UpdateHistory.getUpdate(...)`), which is what populates
-    * the `callsite` of each [[DbQuerySample]]. When `None` the callsite is the constant
-    * `"query-tracking-disabled"`.
-    *
-    * Defaults to `None`: enabling it makes Canton capture a stack trace per query, which is cheap
-    * for read tests that issue a handful of queries but would skew ingestion tests that run millions
-    * of inserts. Override to `Some(...)` only in low-query-count tests that want per-method
-    * attribution. `every` only controls Canton's periodic cost-report logging, so set it far out to
-    * avoid log spam during the test.
     */
   protected def logQueryCost: Option[QueryCostMonitoringConfig] = None
 
@@ -423,4 +409,3 @@ class NanoTimerMetricsFactory extends InMemoryMetricsFactory {
     }
   }
 }
-

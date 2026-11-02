@@ -62,12 +62,9 @@ class UpdateHistoryReadPerformanceTest(
 
   override type Store = UpdateHistory
 
-  // This test issues only a handful of queries per operation, so enabling Canton's query-cost
-  // tracking (a stack-trace capture per query) is cheap and lets us attribute each DB sample to the
-  // calling method (e.g. `UpdateHistory.getUpdate`) via its `callsite`. `every` is far out so the
-  // periodic cost-report logging never fires during the test.
+  // Enabling Canton's query-cost tracking tags each DB sample with a `callsite` label
   override protected def logQueryCost: Option[QueryCostMonitoringConfig] =
-    Some(QueryCostMonitoringConfig(every = NonNegativeFiniteDuration.ofMinutes(60)))
+    Some(QueryCostMonitoringConfig(every = NonNegativeFiniteDuration.ofSeconds(5)))
 
   override protected def mkStore(storage: DbStorage): Future[UpdateHistory] = {
     implicit val initTc: TraceContext = TraceContext.empty
