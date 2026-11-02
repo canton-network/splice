@@ -96,7 +96,7 @@ Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install pre
 
 ## 9. Export recent issues on the host
 
-Manual-export source (SKILL.md, Sources for private data). Ask the user to run this from the host repo root
+Manual-export source (`ci-triage/CLAUDE.md`, Access). Ask the user to run this from the host repo root
 (fish shell; set `SINCE` to about two weeks back). Read it from the sandbox as
 `/run/sandbox/source/ci-triage/export/issues-since-$SINCE.jsonl`; one JSON object per line.
 ```
@@ -160,7 +160,7 @@ jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " 
 
 ## 11. Private data through ghx
 
-`ghx` source (SKILL.md, Sources for private data). `ghx <path> [curl options]`; JSON out, curl exits non-zero on
+`ghx` source (`ci-triage/CLAUDE.md`, Access). `ghx <path> [curl options]`; JSON out, curl exits non-zero on
 HTTP errors (`--fail-with-body`, the router's reason is in the body). Page by hand with `page=N`.
 ```
 T=/repos/DACH-NY/cn-test-failures
@@ -178,14 +178,6 @@ contents only with the raw media type: the JSON form carries a `download_url` wi
 must not end up in logs or packets. After the router's sandbox setup, `git clone https://github.com/DACH-NY/canton-network-internal.git`
 goes through the router too (into `log/`, never into the triage branch). canton-network-internal Actions logs are
 refused: ask the user to save them to `ci-triage/export/<ref>/` on the host.
-
-Inbox without the user (heuristic, see SKILL.md): lists open issues whose board Status was only ever changed by
-the automation bot, flagged `T` when the number already appears in `ci-triage/**.md`. Only the first 100 timeline
-events per issue are read. Old bulk-filed items match too; drop them with `--min-number` (the oldest open item of
-the last round).
-```
-python3 -I ci-triage/skills/ci-triage/scripts/inbox_fetch.py --min-number <N> --triage-dir ci-triage --json log/inbox-heuristic.json
-```
 
 ## 12. Change an issue's Status on the host
 
