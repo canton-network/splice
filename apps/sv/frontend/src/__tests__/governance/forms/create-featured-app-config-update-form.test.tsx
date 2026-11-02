@@ -39,40 +39,84 @@ describe('SV user can', () => {
 describe('Create Featured App Config Update Form (amend)', () => {
   const idPrefix = 'amend-featured-app';
 
-  // Builds an in-flight GrantFeaturedAppRight vote carrying `opsParties`, reusing a valid
-  // vote-request envelope from the mocks and swapping only its action (decodeOpenAPI reads
-  // `payload`, not `created_event_blob`).
-  const inFlightGrantWithOpsParties = (opsParties: string[]): ListDsoRulesVoteRequestsResponse => {
+  // Wraps an action in an in-flight vote response, reusing a valid vote-request envelope from the
+  // mocks and swapping only its action (decodeOpenAPI reads `payload`, not `created_event_blob`).
+  const inFlightVoteWith = (
+    action: ActionRequiringConfirmation
+  ): ListDsoRulesVoteRequestsResponse => {
     const base = voteRequests.dso_rules_vote_requests[0];
-    const action: ActionRequiringConfirmation = {
-      tag: 'ARC_DsoRules',
-      value: {
-        dsoAction: {
-          tag: 'SRARC_GrantFeaturedAppRight',
-          value: {
-            provider: 'in-flight-provider::1014912490',
-            activityWeight: null,
-            appKind: null,
-            opsParties,
-          },
-        },
-      },
-    };
     return {
       dso_rules_vote_requests: [{ ...base, payload: { ...base.payload, action } }],
     };
   };
+
+  const grantAction = (opsParties: string[]): ActionRequiringConfirmation => ({
+    tag: 'ARC_DsoRules',
+    value: {
+      dsoAction: {
+        tag: 'SRARC_GrantFeaturedAppRight',
+        value: {
+          provider: 'in-flight-provider::1014912490',
+          activityWeight: null,
+          appKind: null,
+          opsParties,
+        },
+      },
+    },
+  });
+
+  const amendAction = (opsParties: string[]): ActionRequiringConfirmation => ({
+    tag: 'ARC_DsoRules',
+    value: {
+      dsoAction: {
+        tag: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
+        value: {
+          updates: [
+            {
+              _1: 'in-flight-provider::1014912490',
+              _2: {
+                baseConfig: { appKind: null, activityWeight: null, opsParties: null },
+                newConfig: { appKind: null, activityWeight: null, opsParties },
+              },
+            },
+          ],
+        },
+      },
+    },
+  });
 
   const addOpsPartyRow = async (user: ReturnType<typeof userEvent.setup>, value: string) => {
     await user.click(screen.getByTestId(`${idPrefix}-opsParties-add`));
     await user.type(screen.getByTestId(`${idPrefix}-opsParties-row-0`), value);
   };
 
-  test('warns when an opsParty overlaps an in-flight vote request', async () => {
+  test('warns when an opsParty overlaps an in-flight grant vote request', async () => {
     const overlapParty = 'overlap-ops::1014912493';
     server.use(
       http.get(`${svUrl}/v0/admin/sv/voterequests`, () =>
-        HttpResponse.json(inFlightGrantWithOpsParties([overlapParty]))
+        HttpResponse.json(inFlightVoteWith(grantAction([overlapParty])))
+      )
+    );
+
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <CreateFeaturedAppConfigUpdateForm />
+      </Wrapper>
+    );
+
+    await addOpsPartyRow(user, overlapParty);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`${idPrefix}-ops-overlap`)).toHaveTextContent(overlapParty);
+    });
+  });
+
+  test('warns when an opsParty overlaps an in-flight amend vote request', async () => {
+    const overlapParty = 'overlap-ops::1014912493';
+    server.use(
+      http.get(`${svUrl}/v0/admin/sv/voterequests`, () =>
+        HttpResponse.json(inFlightVoteWith(amendAction([overlapParty])))
       )
     );
 
@@ -93,7 +137,7 @@ describe('Create Featured App Config Update Form (amend)', () => {
   test('does not warn when opsParties do not overlap an in-flight vote request', async () => {
     server.use(
       http.get(`${svUrl}/v0/admin/sv/voterequests`, () =>
-        HttpResponse.json(inFlightGrantWithOpsParties(['other-ops::1014912491']))
+        HttpResponse.json(inFlightVoteWith(grantAction(['other-ops::1014912491'])))
       )
     );
 
