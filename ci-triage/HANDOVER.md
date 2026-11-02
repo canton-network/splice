@@ -33,14 +33,24 @@ Then: `python3 -I ci-triage/skill/ci-triage-inbox/scripts/inbox_fetch.py --min-n
 | Issues | Group | State |
 |---|---|---|
 | 11108-11116, 11119-11127, 11129-11135 | mainnet-Daml nightlies 41171022068, 41275427340, 41391921766 (same sha 3525c637db) | all 25 dups: 16 of 10927 (X2), 6 of 10933 (traffic), 3 of 10930 (coupon); none fixed on main, so about 8 new issues per night until they are. X1 (10934) and X3 (10937) confirmed fixed at PV 36. `nightly-a.md` |
-| 11104, 11105, 11107, 11128, 11136 | single scala_test jobs (LSU, wall-clock-time, simtime) | fork B running |
+| 11128 (+ dup 11136) | ScanPartyMonitorScriptIntegrationTest (#8107) | new family Z, test flake: /v0/events caps at the last DSO-visible update; fix: tap after createTransferOffer; owner stephencompall-DA |
+| 11104 | LsuIntegrationTest, log check only | new family AA: sv4Validator faucet trigger ERROR after 35 SEQUENCER_BACKPRESSURE retries while late sv4 sequencer is blacklisted; fix: pause that trigger until sv4 upgrades; owner Martin Florian |
+| 11105 | wall-clock-time, log check only | Canton 3.7.0: Internal ACS Updates Stream terminated abruptly, commitment matcher stays Failed; first hit, to Canton team if it repeats |
+| 11107 | simtime | dup of 10907 (julientinguely-da) |
 | 11117 | Devnet backup_status_cluster 10-31 | stays open: first night after the Devnet LSU switch to serial 7 (cni #7836/#7837), cause open, needs log; owner suggestion Krzysztof |
 | 11118 | Devnet backup_cluster 10-31 | dup of 11117 |
 | 11106, 11137 | CircleCI deploy_sv_reonboard 87744, 87814 | not 10844 (#8125 deployed); intermittent (2 of 7 runs), needs log |
 
 Not run yet: every command in `ci-triage/2026-11-02/host-commands-*.md`. The log fetches for the four infra items
 are at the top of `host-commands-c.md` (CircleCI needs `CIRCLECI_TOKEN`; cni Actions logs need `gh` on the host).
-If fork A or B rows are missing from the README, those groups are still to be triaged: rerun `/ci-triage-inbox`.
+All issue commands of the round are in one script, `ci-triage/2026-11-02/run-issues.zsh` (41 state-guarded steps).
+
+Fix branches pushed to canton-network/splice without a PR (all apply cleanly on main 2026-11-02, none compiled
+against current main): `ray/fix-10197-bft-read-confirmation-wait` (10197 open, one-line wait), 
+`ray/fix-reset-topology-plugin-no-exit` (10139 open), `ray/fix-topology-init-limit` (10140 closed, likely obsolete),
+`ray/fix-fail-fast-init` (uncompiled, no proving test). Not pushed: `ray/fix-localnet-protocol-version` (moves
+`CANTON_PROTOCOL_VERSION` to the SV's `initial-protocol-version` in LocalNet; untested). Superseded, drop:
+`ray/fix-gha-runner-version-operator` (#7672 merged).
 
 ### Open items with an owner question (live state 2026-11-02)
 
