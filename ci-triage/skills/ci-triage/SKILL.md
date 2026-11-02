@@ -26,17 +26,37 @@ Each GitHub issue is assigned a `Status` field in the project:
 
 # Access
 
-- `canton-network/splice`: everything is public, including output of GHA jobs
-- `DACH-NY/cn-test-failures`: private repository, the sandbox proxy should have a read/write token for issues
-- `DACH-NY/canton-network-internal`: private repository, the sandbox proxy should have a read-only token for repository content
-- CircleCI: you don't have direct access; ask the user to download the job logs and artifacts manually
+- `canton-network/splice`: everything is public, including output of GHA jobs; use `gh api` directly.
+- `DACH-NY/cn-test-failures` and `DACH-NY/canton-network-internal`: private, read through one of the two sources
+  below. Never write to them; issue changes are commands for the user (step 8).
+- CircleCI: no access; ask the user to download the job logs and artifacts manually.
 
 Neither you nor the user's host CLI has project-level access to the `DACH-NY/projects/48` project.
 If a user needs to manually update an issue `Status`, ask them to do it through the GitHub web interface.
 
+## Sources for private data
+
+Pick the source once per session and say which one you use:
+```
+command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
+```
+- `ghx` works (prints `DACH-NY/cn-test-failures`): `ghx <api path>` is a host-side proxy that adds the token
+  for the repository in the path and prints the JSON response. Pass only the path (with query string) and
+  pipe to `jq`; do not rely on `gh api` flags such as `--jq` or `--paginate`. It reads cn-test-failures issues
+  and comments and canton-network-internal contents and commits. It refuses canton-network-internal Actions
+  (`not allowed by route`) and cannot read Projects v2. `dial tcp ... refused` means the router is off: ask the
+  user to start it, or use the manual export. Recipes: `references/recipes.md` section 11.
+- No `ghx`: manual export. The sandbox runs in clone mode, so files the user writes on the host are only visible
+  through the read-only host mount: the user writes to `ci-triage/export/` in the host repo (excluded from git),
+  you read `/run/sandbox/source/ci-triage/export/`. Recipes 9 (recent issues) and 10 (inbox) produce the exports;
+  ask the user to rerun them when an issue you need is missing or the export is older than the issue.
+- Either source: the inbox (Status = Inbox) needs the board, so it always comes from recipe 10. Logs the
+  sandbox cannot fetch (CircleCI, canton-network-internal Actions) go to `ci-triage/export/<ref>/` on the host.
+
 # CI failure triage for splice
 
-Input: one `cn-test-failures` issue number. If you can't read the issue content, stop immediately and ask the user to fix access.
+Input: one `cn-test-failures` issue number. Read its body and comments from the source chosen above. If neither
+source has it, stop immediately and ask the user to fix access or rerun the export.
 
 Output: one evidence packet per issue in `ci-triage/`, a row in `ci-triage/README.md`, a duplicate verdict,
 and optionally a fix branch. Everything you write must be reproducible by someone else: every claim is a command
@@ -65,12 +85,14 @@ is not checked out, ask the user which triage branch is current before writing a
    - `*** FAILED ***` = assertion or command failure: take the failing clue and stack head.
    - no report, job cancelled or exit without summary = evidence loss (JVM exit, timeout); say so.
 3. Duplicate check BEFORE deep analysis: compare the flagged line and the shard's suite list against
-   `ci-triage/known-families.md` on the triage branch. A match still needs the confirming grep listed there.
-   Say "duplicate of X" only after that grep.
+   `ci-triage/known-families.md` on the triage branch, then search recent issues (title, body, comments) for the
+   test name and the flagged text (recipe 11 with `ghx`, else the recipe 9 export). A match still needs the
+   confirming grep listed there. Say "duplicate of X" only after that grep.
 4. Establish what runs: canton pin from `nix/canton-sources.json` at the run's sha, never from `canton/`.
    For Canton behaviour cite the jar (`references/recipes.md` section 6), and state the version next to every
    source citation.
-5. Download the artifact gzipped to `log/<ref>/<artifact>/` (gitignored), stream with `zcat`.
+5. Download the artifact gzipped to `log/<ref>/<artifact>/` (gitignored), stream with `zcat`. Logs the user
+   downloaded manually are read in place from `/run/sandbox/source/ci-triage/export/<ref>/`.
    Build the suite timeline from `canton_network_test.clog.gz`, then correlate flagged timestamps to it and
    to the canton log. Chase "what is it waiting on, and why" until the cause is a concrete event with a
    timestamp; do not stop at the timeout symptom.

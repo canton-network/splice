@@ -11,7 +11,8 @@ Shared triage branch, never merged. Procedure: the `ci-triage` skill in `skills/
   (`history/README-2026-09-08_2026-11-02.md`) maps every ref triaged before 2026-11-02 to its run, job and verdict;
   grep it by ref.
 
-Issue exports from the private tracker are not committed; they live in the host's `log/ci-triage-export/`.
+Issue exports and manually downloaded logs go to `ci-triage/export/` (gitignored); in a clone-mode sandbox they
+are read from `/run/sandbox/source/ci-triage/export/`. See the skill's Sources for private data.
 
 ## Ref -> run -> job mapping
 

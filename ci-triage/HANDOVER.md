@@ -13,8 +13,8 @@ Taken over from Raymond:
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 
 Access from the sandbox: canton-network/splice runs, logs and artifacts work. cn-test-failures, canton-network-internal
-and project 48 are not readable yet (404). Issue data comes from host exports in `log/ci-triage-export/`
-(read through `/run/sandbox/source/log/ci-triage-export/`); CircleCI logs only as manual downloads.
+and project 48 are not readable yet (404) and there is no `ghx`. Issue data comes from host exports in
+`ci-triage/export/` (read through `/run/sandbox/source/ci-triage/export/`); CircleCI logs only as manual downloads.
 
 ## Inbox 2026-11-02 14:44 (19 items, board export)
 

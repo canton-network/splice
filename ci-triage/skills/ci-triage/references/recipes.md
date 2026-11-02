@@ -96,25 +96,26 @@ Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install pre
 
 ## 9. Export recent issues on the host
 
-Without direct access to the tracker, ask the user to run this on the host (fish shell; set `SINCE` to about two
-weeks back). The host repo is mounted read-only at `/run/sandbox/source`, so the export is readable from the sandbox
-as `/run/sandbox/source/log/ci-triage-export/issues-since-$SINCE.jsonl`.
+Manual-export source (SKILL.md, Sources for private data). Ask the user to run this from the host repo root
+(fish shell; set `SINCE` to about two weeks back). Read it from the sandbox as
+`/run/sandbox/source/ci-triage/export/issues-since-$SINCE.jsonl`; one JSON object per line.
 ```
 set SINCE <YYYY-MM-DD>
-mkdir -p log/ci-triage-export
+mkdir -p ci-triage/export
 gh issue list -R DACH-NY/cn-test-failures --state all --search "created:>=$SINCE" --limit 2000 \
         --json number,title,state,stateReason,createdAt,closedAt,assignees,labels,body,comments \
         --jq '.[] | {number, title, state, stateReason, createdAt, closedAt,
                 assignees: [.assignees[].login], labels: [.labels[].name], body,
                 comments: [.comments[] | {author: .author.login, createdAt, body}]}' \
-        >log/ci-triage-export/issues-since-$SINCE.jsonl
-and wc -l log/ci-triage-export/issues-since-$SINCE.jsonl
+        >ci-triage/export/issues-since-$SINCE.jsonl
+and wc -l ci-triage/export/issues-since-$SINCE.jsonl
 ```
 
 ## 10. Export inbox on the host
 
-Ask the user to run this on the host (fish shell) to get the Status = Inbox items of project 48, with bodies and
-comments. Readable from the sandbox as `/run/sandbox/source/log/ci-triage-export/inbox.jsonl`.
+Needed with either source (`ghx` cannot read Projects v2). Ask the user to run this from the host repo root
+(fish shell) to get the Status = Inbox items of project 48, with bodies and comments. Read it from the sandbox as
+`/run/sandbox/source/ci-triage/export/inbox.jsonl`.
 ```
 gh api graphql --paginate -f query='
 query($endCursor: String) {
@@ -145,6 +146,30 @@ query($endCursor: String) {
   | {number, title, url, state, createdAt, author: .author.login,
       assignees: [.assignees.nodes[].login], labels: [.labels.nodes[].name], body,
       commentCount: .comments.totalCount,
-      comments: [.comments.nodes[] | {author: .author.login, createdAt, body}]}' >log/ci-triage-export/inbox.jsonl
-and echo (wc -l <log/ci-triage-export/inbox.jsonl | string trim) "Inbox issues -> log/ci-triage-export/inbox.jsonl"
+      comments: [.comments.nodes[] | {author: .author.login, createdAt, body}]}' >ci-triage/export/inbox.jsonl
+and echo (wc -l <ci-triage/export/inbox.jsonl | string trim) "Inbox issues -> ci-triage/export/inbox.jsonl"
 ```
+
+Reading the exports in the sandbox (one issue, or a text search for the duplicate check):
+```
+X=/run/sandbox/source/ci-triage/export
+ls -la $X
+jq -r --argjson n $REF 'select(.number == $n) | "#\(.number) [\(.state)] \(.title)\n\(.body)", (.comments[] | "-- \(.author) \(.createdAt)\n\(.body)")' $X/issues-since-*.jsonl
+jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " + ([.comments[].body] | join(" "))) | test($p)) | "#\(.number) \(.state)/\(.stateReason // "-") \(.createdAt[0:10]) \(.title[0:110])"' $X/issues-since-*.jsonl
+```
+
+## 11. Private data through ghx
+
+`ghx` source (SKILL.md, Sources for private data). Path only, JSON out; paginate by hand with `page=N`.
+```
+T=/repos/DACH-NY/cn-test-failures
+ghx $T/issues/$REF | jq -r '"#\(.number) [\(.state)] \(.title)\n\(.body)"'
+ghx "$T/issues/$REF/comments?per_page=100" | jq -r '.[] | "-- \(.user.login) \(.created_at)\n\(.body)"'
+for p in 1 2 3 4 5 6 7 8 9 10; do ghx "$T/issues?state=all&per_page=100&page=$p&since=<YYYY-MM-DD>T00:00:00Z"; done \
+  | jq -c '.[] | select(.pull_request | not) | {number, title, state, state_reason, created_at, body}' > log/issues-recent.jsonl
+jq -r --arg p '<test name or flagged text>' 'select((.title + " " + (.body // "")) | test($p)) | "#\(.number) \(.state)/\(.state_reason // "-") \(.created_at[0:10]) \(.title[0:110])"' log/issues-recent.jsonl
+ghx "/repos/DACH-NY/canton-network-internal/commits/<sha>" | jq -r '.commit.message, (.files[].filename)'
+ghx "/repos/DACH-NY/canton-network-internal/contents/<path>?ref=<sha>" | jq -r .content | base64 -d
+```
+`since` filters on last update, not creation. The issue list holds no comments; fetch them per candidate.
+canton-network-internal Actions logs are refused: ask the user to save them to `ci-triage/export/<ref>/` on the host.
