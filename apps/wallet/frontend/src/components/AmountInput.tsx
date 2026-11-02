@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useMemo } from 'react';
 import useAmuletPrice from '../hooks/scan-proxy/useAmuletPrice';
-import BigNumber from 'bignumber.js';
+import { parseBigNumber } from '@canton-network/splice-common-frontend';
 import { Box, FormControl, InputAdornment, OutlinedInput, Stack, Typography } from '@mui/material';
 import { useWalletConfig } from '../utils/config';
 
@@ -19,7 +19,7 @@ export const AmountInput: React.FC<AmountInputProps> = ({
   const config = useWalletConfig();
   const amuletPriceQuery = useAmuletPrice();
   const usd = useMemo(
-    () => amuletPriceQuery.data?.times(ccAmountText),
+    () => amuletPriceQuery.data?.times(parseBigNumber(ccAmountText)),
     [ccAmountText, amuletPriceQuery.data]
   );
 
@@ -39,7 +39,7 @@ export const AmountInput: React.FC<AmountInputProps> = ({
               </InputAdornment>
             }
             aria-describedby="outlined-amount-amulet-helper-text"
-            error={BigNumber(ccAmountText).lte(0.0)}
+            error={parseBigNumber(ccAmountText).lte(0.0)}
             inputProps={{
               'aria-label': 'amount',
             }}
