@@ -5,7 +5,7 @@
 -- i.e., the DsoRules at the time the vote was closed.
 -- Always set for rows ingested after this migration. Rows that were already there are filled below.
 -- The column is deliberately nullable, so that the migration cannot fail.
--- TODO (#8157): Make this column non-null once confirming that there are no null values
+-- We can make it non-null once confirming that there are no null values.
 alter table votes_store_results
     add column contract_id text;
 
