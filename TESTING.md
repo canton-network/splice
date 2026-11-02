@@ -6,6 +6,7 @@
     - [Opting-in to CI](#opting-in-to-ci)
     - [Opting-out of CI](#opting-out-of-ci)
     - [Requesting Cluster Tests](#requesting-cluster-tests)
+    - [Git history in CI](#git-history-in-ci)
   - [Running Tests Locally](#running-tests-locally)
     - [Managing Canton for Tests](#managing-canton-for-tests)
       - [Issues on macOS](#issues-on-macos)
@@ -85,6 +86,21 @@ maintainers.
 To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
 comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
 contact an existing maintainer to approve it.
+
+### Git history in CI
+
+To keep the data transferred per CI job small, jobs check out only the tested commit (depth 1)
+and fetch no other branches by default.
+- Don't rely on `git log`, `git rev-list --count`, `git merge-base` or `git describe` reaching beyond `HEAD`.
+- If a job needs `main` or the latest release line, set the `fetch_git_refs` input of
+  `.github/actions/tests/common_test_setup` to `shallow` (tips only) or `history`
+  (commit history without file contents). See `.github/actions/scripts/common_setup.sh`.
+- To diff against another branch, fetch just its tip with `git fetch --depth=1`; `git diff` compares trees,
+  so no shared history is needed.
+
+`scripts/check-git-fetch-depth.py`, run in the static tests, rejects `fetch-depth: 0` and `git fetch`/`git clone`
+without `--depth`, `--deepen`, `--shallow-*` or `--filter`.
+If full history is really needed, add `# full-history-ok: <reason>` on that line or the line above.
 
 ## Running Tests Locally
 
