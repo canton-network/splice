@@ -34,11 +34,7 @@ class InMemoryPartyToParticipantStore extends PartyToParticipantStore {
       offset: Long,
       hostingParticipants: Map[PartyId, Seq[ParticipantId]],
   ): Future[Unit] = {
-    // A PartyToParticipant mapping can be replaced with one without participants instead of being
-    // removed. Ingestion drops a party once its last participant is revoked, so drop such parties
-    // here as well to keep a re-initialized store consistent with one that ingested the change.
-    val nonEmptyHostingParticipants = hostingParticipants.filter(_._2.nonEmpty)
-    if (state.compareAndSet(None, Some(State(offset, nonEmptyHostingParticipants)))) Future.unit
+    if (state.compareAndSet(None, Some(State(offset, hostingParticipants)))) Future.unit
     else Future.failed(new IllegalStateException("PartyToParticipantStore is already initialized"))
   }
 
@@ -75,7 +71,9 @@ object InMemoryPartyToParticipantStore {
             case _: ParticipantAuthorizationRevoked =>
               current.filterNot(_ == event.participantId)
           }
-          if (updated.isEmpty) acc - event.partyId else acc.updated(event.partyId, updated)
+          // Note that we do not remove the party from the map even if it has no participants,
+          // as it's still in the topology state, even if not hosted anywhere.
+          acc.updated(event.partyId, updated)
         },
       )
   }

@@ -52,12 +52,12 @@ abstract class PartyToParticipantStoreTest
       }
     }
 
-    "drop parties without hosting participants from the initial state" in {
+    "do not drop parties without hosting participants from the initial state" in {
       for {
         store <- mkStore()
         _ <- store.initialize(10, Map(alice -> Seq(p1), bob -> Seq.empty))
         hosting <- store.hostingParticipants()
-      } yield hosting shouldBe Map(alice -> Seq(p1))
+      } yield hosting shouldBe Map(alice -> Seq(p1), bob -> Seq.empty)
     }
 
     "reject a second initialization" in {
@@ -100,7 +100,7 @@ abstract class PartyToParticipantStoreTest
         offset <- store.lastIngestedOffset()
       } yield {
         afterAdd shouldBe Map(alice -> Seq(p1, p2), bob -> Seq(p2))
-        afterRevoke shouldBe Map(alice -> Seq(p2))
+        afterRevoke shouldBe Map(alice -> Seq(p2), bob -> Seq.empty)
         offset shouldBe Some(14)
       }
     }
@@ -116,7 +116,7 @@ abstract class PartyToParticipantStoreTest
           )
         )
         hosting <- store.hostingParticipants()
-      } yield hosting shouldBe Map(alice -> Seq(p1))
+      } yield hosting shouldBe Map(alice -> Seq(p1), bob -> Seq.empty)
     }
   }
 }

@@ -304,7 +304,7 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         partyToParticipant(party).item.participants shouldBe empty
         numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
         numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
-        numParties() shouldBe initialNumParties + 1
+        numParties() shouldBe initialNumParties + 2
       },
     )
 
@@ -314,11 +314,11 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         aliceValidatorBackend.startSync()
       },
     )(
-      "Metrics do not count the party without hosting participants",
+      "Metrics remain correct after restart",
       _ => {
         numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
         numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
-        numParties() shouldBe initialNumParties + 1
+        numParties() shouldBe initialNumParties + 2
       },
     )
   }
