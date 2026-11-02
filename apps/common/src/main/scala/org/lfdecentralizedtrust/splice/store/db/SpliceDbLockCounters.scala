@@ -23,4 +23,6 @@ object SpliceDbLockCounters {
   val SCAN_WRITERS: DbLockCounter = DbLockCounter(105)
   val SPLITWELL_WRITE: DbLockCounter = DbLockCounter(106)
   val SPLITWELL_WRITERS: DbLockCounter = DbLockCounter(107)
+  val SYNC_OPERATOR_WRITE: DbLockCounter = DbLockCounter(108)
+  val SYNC_OPERATOR_WRITERS: DbLockCounter = DbLockCounter(109)
 }

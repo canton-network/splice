@@ -87,11 +87,13 @@ class SpliceConsoleEnvironment(
         fullDsoApps.local,
         appsHostedByValidator.local,
         appsHostedByThirdParty.local,
+        syncOperators.local,
       ),
       mergeRemoteSpliceInstances(
         fullDsoApps.remote,
         appsHostedByValidator.remote,
         appsHostedByThirdParty.remote,
+        syncOperators.remote,
       ),
     )
   }
@@ -181,6 +183,18 @@ class SpliceConsoleEnvironment(
       environment.config.splitwellClientsByString.keys.map(createRemoteSplitwellReference).toSeq,
     )
 
+  lazy val syncOperators: NodeReferences[
+    SyncOperatorAppReference,
+    SyncOperatorAppClientReference,
+    SyncOperatorAppBackendReference,
+  ] =
+    NodeReferences(
+      environment.config.syncOperatorsByString.keys.map(createSyncOperatorReference).toSeq,
+      environment.config.syncOperatorClientsByString.keys
+        .map(createRemoteSyncOperatorReference)
+        .toSeq,
+    )
+
   private def createValidatorReference(name: String): ValidatorAppBackendReference =
     new ValidatorAppBackendReference(this, name)
 
@@ -223,6 +237,16 @@ class SpliceConsoleEnvironment(
 
   private def createRemoteSplitwellReference(name: String): SplitwellAppClientReference =
     new SplitwellAppClientReference(this, name, environment.config.splitwellClientsByString(name))
+
+  private def createSyncOperatorReference(name: String): SyncOperatorAppBackendReference =
+    new SyncOperatorAppBackendReference(this, name)
+
+  private def createRemoteSyncOperatorReference(name: String): SyncOperatorAppClientReference =
+    new SyncOperatorAppClientReference(
+      this,
+      name,
+      environment.config.syncOperatorClientsByString(name),
+    )
 
   override protected def topLevelValues: Seq[TopLevelValue[?]] = {
 
@@ -309,6 +333,36 @@ class SpliceConsoleEnvironment(
           "Splitwells",
         ),
         splitwells.remote,
+        Seq("App References"),
+      ) :++ syncOperators.local.map(v =>
+        TopLevelValue(
+          v.name,
+          helpText("local sync operator app", v.name),
+          v,
+          Seq("App References"),
+        )
+      ) :++ syncOperators.remote.map(v =>
+        TopLevelValue(
+          v.name,
+          helpText("sync operator app client", v.name),
+          v,
+          Seq("App References"),
+        )
+      ) :+ TopLevelValue(
+        "syncOperators",
+        helpText(
+          "All local sync operator instances" + genericNodeReferencesDoc,
+          "SyncOperators",
+        ),
+        syncOperators.local,
+        Seq("App References"),
+      ) :+ TopLevelValue(
+        "syncOperatorClients",
+        helpText(
+          "All sync operator client instances" + genericNodeReferencesDoc,
+          "SyncOperators",
+        ),
+        syncOperators.remote,
         Seq("App References"),
       ) :++ scans.local.map(scan =>
         TopLevelValue(scan.name, helpText("Scan app", scan.name), scan, Seq("Scan"))

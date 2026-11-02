@@ -434,4 +434,20 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
   }
+
+  "Sync operator config" should {
+    "load from the sync operator topology" in {
+      val syncOperatorTopology = ConfigFactory.parseFile(
+        new java.io.File("apps/app/src/test/resources/sync-operator-topology.conf")
+      )
+      val loaded =
+        SpliceConfig
+          .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(syncOperatorTopology)))
+          .value
+      val syncOperator = loaded.syncOperatorsByString("syncOperator")
+      syncOperator.synchronizerNodes.current.sequencer.adminApi.port.unwrap shouldBe 5709
+      syncOperator.adminApi.port.unwrap shouldBe 5116
+      syncOperator.operatorUser shouldBe "sync_operator_user"
+    }
+  }
 }

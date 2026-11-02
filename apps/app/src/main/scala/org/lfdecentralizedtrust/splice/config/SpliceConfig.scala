@@ -35,6 +35,13 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
 import org.lfdecentralizedtrust.splice.sv.config.*
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
+import org.lfdecentralizedtrust.splice.syncoperator.config.{
+  SyncOperatorAppBackendConfig,
+  SyncOperatorAppClientConfig,
+  SyncOperatorSequencerConfig,
+  SyncOperatorSynchronizerNodeConfig,
+  SyncOperatorSynchronizerNodesConfig,
+}
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
   IpCidrRateLimits,
@@ -123,6 +130,8 @@ case class SpliceConfig(
     ansAppExternalClients: Map[InstanceName, AnsAppExternalClientConfig] = Map.empty,
     splitwellApps: Map[InstanceName, SplitwellAppBackendConfig] = Map.empty,
     splitwellAppClients: Map[InstanceName, SplitwellAppClientConfig] = Map.empty,
+    syncOperatorApps: Map[InstanceName, SyncOperatorAppBackendConfig] = Map.empty,
+    syncOperatorAppClients: Map[InstanceName, SyncOperatorAppClientConfig] = Map.empty,
     override val remoteParticipants: Map[InstanceName, RemoteParticipantConfig] = Map.empty,
     monitoring: MonitoringConfig = MonitoringConfig(),
     parameters: CantonParameters = CantonParameters(
@@ -318,6 +327,50 @@ case class SpliceConfig(
 
   def splitwellClientsByString: Map[String, SplitwellAppClientConfig] =
     splitwellAppClients.map { case (n, c) =>
+      n.unwrap -> c
+    }
+
+  private lazy val syncOperatorAppParameters_ : Map[InstanceName, SharedSpliceAppParameters] =
+    syncOperatorApps.fmap { syncOperatorConfig =>
+      SharedSpliceAppParameters(
+        monitoring,
+        parameters.timeouts.processing,
+        parameters.timeouts.requestTimeout,
+        UpgradesConfig(),
+        syncOperatorConfig.parameters.circuitBreakers,
+        syncOperatorConfig.parameters.enabledFeatures,
+        syncOperatorConfig.parameters.caching,
+        parameters.enableAdditionalConsistencyChecks,
+        features.enablePreviewCommands,
+        parameters.nonStandardConfig,
+        syncOperatorConfig.sequencerClient,
+        dontWarnOnDeprecatedPV = false,
+        dbMigrateAndStart = true,
+        batchingConfig = new BatchingConfig(),
+      )
+    }
+
+  private[splice] def syncOperatorAppParameters(
+      appName: InstanceName
+  ): SharedSpliceAppParameters =
+    nodeParametersFor(syncOperatorAppParameters_, "sync-operator-app", appName)
+
+  /** Use `syncOperatorAppParameters` instead!
+    */
+  def trySyncOperatorAppParametersByString(name: String): SharedSpliceAppParameters =
+    syncOperatorAppParameters(
+      InstanceName.tryCreate(name)
+    )
+
+  /** Use `syncOperators` instead!
+    */
+  def syncOperatorsByString: Map[String, SyncOperatorAppBackendConfig] =
+    syncOperatorApps.map { case (n, c) =>
+      n.unwrap -> c
+    }
+
+  def syncOperatorClientsByString: Map[String, SyncOperatorAppClientConfig] =
+    syncOperatorAppClients.map { case (n, c) =>
       n.unwrap -> c
     }
 
@@ -974,6 +1027,18 @@ object SpliceConfig {
       deriveReader[SplitwellAppBackendConfig]
     implicit val splitwellClientConfigReader: ConfigReader[SplitwellAppClientConfig] =
       deriveReader[SplitwellAppClientConfig]
+    implicit val syncOperatorSequencerConfigReader: ConfigReader[SyncOperatorSequencerConfig] =
+      deriveReader[SyncOperatorSequencerConfig]
+    implicit val syncOperatorSynchronizerNodeConfigReader
+        : ConfigReader[SyncOperatorSynchronizerNodeConfig] =
+      deriveReader[SyncOperatorSynchronizerNodeConfig]
+    implicit val syncOperatorSynchronizerNodesConfigReader
+        : ConfigReader[SyncOperatorSynchronizerNodesConfig] =
+      deriveReader[SyncOperatorSynchronizerNodesConfig]
+    implicit val syncOperatorConfigReader: ConfigReader[SyncOperatorAppBackendConfig] =
+      deriveReader[SyncOperatorAppBackendConfig]
+    implicit val syncOperatorClientConfigReader: ConfigReader[SyncOperatorAppClientConfig] =
+      deriveReader[SyncOperatorAppClientConfig]
 
     implicit val spliceConfigReader: ConfigReader[SpliceConfig] = deriveReader[SpliceConfig]
   }
@@ -1315,6 +1380,18 @@ object SpliceConfig {
       deriveWriter[SplitwellAppBackendConfig]
     implicit val splitwellClientConfigWriter: ConfigWriter[SplitwellAppClientConfig] =
       deriveWriter[SplitwellAppClientConfig]
+    implicit val syncOperatorSequencerConfigWriter: ConfigWriter[SyncOperatorSequencerConfig] =
+      deriveWriter[SyncOperatorSequencerConfig]
+    implicit val syncOperatorSynchronizerNodeConfigWriter
+        : ConfigWriter[SyncOperatorSynchronizerNodeConfig] =
+      deriveWriter[SyncOperatorSynchronizerNodeConfig]
+    implicit val syncOperatorSynchronizerNodesConfigWriter
+        : ConfigWriter[SyncOperatorSynchronizerNodesConfig] =
+      deriveWriter[SyncOperatorSynchronizerNodesConfig]
+    implicit val syncOperatorConfigWriter: ConfigWriter[SyncOperatorAppBackendConfig] =
+      deriveWriter[SyncOperatorAppBackendConfig]
+    implicit val syncOperatorClientConfigWriter: ConfigWriter[SyncOperatorAppClientConfig] =
+      deriveWriter[SyncOperatorAppClientConfig]
 
     implicit val spliceConfigWriter: ConfigWriter[SpliceConfig] =
       deriveWriter[SpliceConfig]

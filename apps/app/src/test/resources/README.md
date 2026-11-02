@@ -85,6 +85,7 @@ all network indices must be odd numbers.
 - `13`: Splitwell, Admin API
 - `14`: SV, Public API + Admin API
 - `15`: SV, Admin API (reserved)
+- `16`: Sync Operator, Admin API
 
 ### Examples
 

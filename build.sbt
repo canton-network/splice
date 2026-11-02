@@ -72,6 +72,7 @@ lazy val root: Project = (project in file("."))
     `apps-validator`,
     `apps-scan`,
     `apps-splitwell`,
+    `apps-syncoperator`,
     `apps-sv`,
     `apps-app`,
     `apps-metrics-docs`,
@@ -1935,6 +1936,16 @@ lazy val `apps-splitwell` =
         ),
     )
 
+lazy val `apps-syncoperator` =
+  project
+    .in(file("apps/syncoperator"))
+    .dependsOn(
+      `apps-common` % "compile->compile;test->test"
+    )
+    .settings(
+      BuildCommon.sharedAppSettings
+    )
+
 lazy val pulumi =
   project
     .in(file("cluster/pulumi"))
@@ -2424,6 +2435,7 @@ lazy val `apps-app`: Project =
     .dependsOn(
       `apps-common`,
       `apps-splitwell`,
+      `apps-syncoperator`,
       `apps-validator`,
       `apps-sv` % "compile->compile;test->test",
       `apps-scan`,

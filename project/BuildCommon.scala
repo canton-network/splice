@@ -244,6 +244,7 @@ object BuildCommon {
             "apps-validator/clean",
             "apps-scan/clean",
             "apps-splitwell/clean",
+            "apps-syncoperator/clean",
             "apps-sv/clean",
             "apps-wallet/clean",
             "apps-app/clean",

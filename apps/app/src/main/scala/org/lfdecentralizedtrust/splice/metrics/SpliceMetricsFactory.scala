@@ -10,6 +10,7 @@ import com.digitalasset.canton.metrics.{DbStorageHistograms, MetricsFactoryProvi
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanAppMetrics
 import org.lfdecentralizedtrust.splice.splitwell.metrics.SplitwellAppMetrics
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics
+import org.lfdecentralizedtrust.splice.syncoperator.metrics.SyncOperatorAppMetrics
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
 
 import scala.collection.concurrent.TrieMap
@@ -25,6 +26,7 @@ case class SpliceMetricsFactory(
   private val svs = TrieMap[String, SvAppMetrics]()
   private val scans = TrieMap[String, ScanAppMetrics]()
   private val splitwells = TrieMap[String, SplitwellAppMetrics]()
+  private val syncOperators = TrieMap[String, SyncOperatorAppMetrics]()
 
   def forValidator(name: String): ValidatorAppMetrics = {
     validators.getOrElseUpdate(
@@ -71,6 +73,19 @@ case class SpliceMetricsFactory(
       name, {
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "splitwell")
         new SplitwellAppMetrics(
+          metricsFactoryProvider.generateMetricsFactory(metricsContext),
+          storageHistograms,
+          loggerFactory,
+        )
+      },
+    )
+  }
+
+  def forSyncOperator(name: String): SyncOperatorAppMetrics = {
+    syncOperators.getOrElseUpdate(
+      name, {
+        val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "syncoperator")
+        new SyncOperatorAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
           storageHistograms,
           loggerFactory,

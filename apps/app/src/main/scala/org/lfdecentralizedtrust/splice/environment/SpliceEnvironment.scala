@@ -19,6 +19,8 @@ import org.lfdecentralizedtrust.splice.splitwell.SplitwellAppBootstrap
 import org.lfdecentralizedtrust.splice.splitwell.config.SplitwellAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.SvAppBootstrap
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorAppBootstrap
+import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorAppBackendConfig
 import org.lfdecentralizedtrust.splice.validator.ValidatorAppBootstrap
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorAppBackendConfig
 
@@ -169,9 +171,40 @@ class SpliceEnvironment(
     loggerFactory,
   )
 
+  protected def createSyncOperator(
+      name: String,
+      syncOperatorConfig: SyncOperatorAppBackendConfig,
+  ): SyncOperatorAppBootstrap = {
+    val appLoggerFactory = loggerFactory.append(SyncOperatorAppBootstrap.LoggerFactoryKeyName, name)
+    SyncOperatorAppBootstrap(
+      name,
+      syncOperatorConfig,
+      config.trySyncOperatorAppParametersByString(name),
+      createClock(Some(SyncOperatorAppBootstrap.LoggerFactoryKeyName -> name)),
+      metrics.forSyncOperator(name),
+      testingConfig,
+      futureSupervisor,
+      appLoggerFactory,
+      configuredOpenTelemetry,
+    )
+      .valueOr(err =>
+        throw new RuntimeException(
+          s"Failed to create sync operator bootstrap: $err"
+        )
+      )
+  }
+
+  lazy val syncOperators = new SyncOperatorApps(
+    createSyncOperator,
+    timeouts,
+    config.syncOperatorsByString,
+    config.trySyncOperatorAppParametersByString,
+    loggerFactory,
+  )
+
   // Ordering here matches SpliceConsoleEnvironment.startupOrderPrecedence
   def allSplices: List[Nodes[CantonNode, CantonNodeBootstrap[CantonNode]]] =
-    List(svs, scans, validators, splitwells)
+    List(svs, scans, validators, splitwells, syncOperators)
 
   override def allNodes: List[Nodes[CantonNode, CantonNodeBootstrap[CantonNode]]] =
     super.allNodes ::: allSplices

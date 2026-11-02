@@ -23,6 +23,10 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.{
   SvOffboardingSequencerTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
+import org.lfdecentralizedtrust.splice.syncoperator.config.{
+  SyncOperatorAppBackendConfig,
+  SyncOperatorSynchronizerNodeConfig,
+}
 import org.lfdecentralizedtrust.splice.validator.config.{
   AnsAppExternalClientConfig,
   ValidatorAppBackendConfig,
@@ -51,7 +55,8 @@ object ConfigTransforms {
     case object Scan extends ConfigurableApp
     case object Validator extends ConfigurableApp
     case object Splitwell extends ConfigurableApp
-    val All = Seq(Sv, Scan, Validator, Splitwell)
+    case object SyncOperator extends ConfigurableApp
+    val All = Seq(Sv, Scan, Validator, Splitwell, SyncOperator)
   }
 
   def makeAllTimeoutsBounded: ConfigTransform = {
@@ -127,6 +132,7 @@ object ConfigTransforms {
       updateAllRemoteSplitwellAppConfigs_(c =>
         c.copy(ledgerApiUser = s"${c.ledgerApiUser}-$suffix")
       ),
+      updateAllSyncOperatorAppConfigs_(c => c.copy(operatorUser = s"${c.operatorUser}-$suffix")),
       updateAllAnsAppExternalClientConfigs_(c =>
         c.copy(ledgerApiUser = s"${c.ledgerApiUser}-$suffix")
       ),
@@ -154,6 +160,8 @@ object ConfigTransforms {
       case Scan => updateAllScanAppConfigs_(c => c.focus(_.automation).modify(transform))
       case Validator => updateAllValidatorConfigs_(c => c.focus(_.automation).modify(transform))
       case Splitwell => updateAllSplitwellAppConfigs_(c => c.focus(_.automation).modify(transform))
+      case SyncOperator =>
+        updateAllSyncOperatorAppConfigs_(c => c.focus(_.automation).modify(transform))
     }
   }
 
@@ -164,6 +172,7 @@ object ConfigTransforms {
         updateAllScanAppConfigs_(c => c.focus(_.automation).modify(transform)),
         updateAllValidatorConfigs_(c => c.focus(_.automation).modify(transform)),
         updateAllSplitwellAppConfigs_(c => c.focus(_.automation).modify(transform)),
+        updateAllSyncOperatorAppConfigs_(c => c.focus(_.automation).modify(transform)),
       )
       transforms.foldLeft(config)((c, tf) => tf(c))
   }
@@ -217,6 +226,7 @@ object ConfigTransforms {
   type WalletAppClientTransform = Endo[WalletAppClientConfig]
   type SplitwellAppTransform = Endo[SplitwellAppBackendConfig]
   type RemoteSplitwellAppTransform = Endo[SplitwellAppClientConfig]
+  type SyncOperatorAppTransform = Endo[SyncOperatorAppBackendConfig]
   type AutomationConfigTransform = Endo[AutomationConfig]
 
   def withPausedSvDomainComponentsOffboardingTriggers(): ConfigTransform =
@@ -414,6 +424,18 @@ object ConfigTransforms {
   ): ConfigTransform =
     updateAllRemoteSplitwellAppConfigs((_, config) => update(config))
 
+  def updateAllSyncOperatorAppConfigs(
+      update: (String, SyncOperatorAppBackendConfig) => SyncOperatorAppBackendConfig
+  ): ConfigTransform =
+    _.focus(_.syncOperatorApps).modify(_.map { case (name, config) =>
+      (name, update(name.unwrap, config))
+    })
+
+  def updateAllSyncOperatorAppConfigs_(
+      update: SyncOperatorAppTransform
+  ): ConfigTransform =
+    updateAllSyncOperatorAppConfigs((_, config) => update(config))
+
   def bumpOptionalUrl(o: Option[String], bump: Int): Option[String] = {
     o.map(bumpUrl(bump, _))
   }
@@ -530,6 +552,15 @@ object ConfigTransforms {
       updateAllRemoteSplitwellAppConfigs((name, conf) =>
         if (predicate(name))
           conf.focus(_.participantClient).modify(portTransform(bump, _))
+        else conf
+      ),
+      updateAllSyncOperatorAppConfigs((name, conf) =>
+        if (predicate(name))
+          conf
+            .focus(_.participantClient)
+            .modify(portTransform(bump, _))
+            .focus(_.synchronizerNodes.current)
+            .modify(portTransform(bump, _))
         else conf
       ),
     )
@@ -756,6 +787,12 @@ object ConfigTransforms {
 
   private def portTransform(
       bump: Int,
+      c: SyncOperatorSynchronizerNodeConfig,
+  ): SyncOperatorSynchronizerNodeConfig =
+    c.focus(_.sequencer.adminApi).modify(portTransform(bump, _))
+
+  private def portTransform(
+      bump: Int,
       c: SvSynchronizerNodeConfig,
   ): SvSynchronizerNodeConfig =
     c.focus(_.sequencer)
@@ -790,6 +827,9 @@ object ConfigTransforms {
       }),
       updateAllRemoteSplitwellAppConfigs_(c => {
         c.focus(_.participantClient.ledgerApi).modify(enableAuth(c.ledgerApiUser, _))
+      }),
+      updateAllSyncOperatorAppConfigs_(c => {
+        c.focus(_.participantClient.ledgerApi).modify(enableAuth(c.operatorUser, _))
       }),
     )
   }
