@@ -214,6 +214,55 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     val calculateRewardsDryRunTriggers =
       activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
 
+    def advanceRoundsOpening(range: Range): Unit =
+      range.foreach { round =>
+        advanceTimeAndWaitForRoundOpening
+        assertOldestOpenRound(round.toLong)
+      }
+
+    // Replayed in rounds 10, 15, 20. Per-party weights (and thus per-party
+    // rewards) are stable across replays, which phase 2a relies on for its
+    // calibration to transfer to phase 2b.
+    def runFourPartyScenario(): (String, String, String, String) = {
+      val aliceBob = settleTrade(
+        aliceWalletClient,
+        assetMoverParty,
+        bobWalletClient,
+        assetParty,
+        venueParty,
+        walletUsdToAmulet(100.0),
+        walletUsdToAmulet(20.0),
+      )
+      val aliceCharlie = settleTrade(
+        aliceWalletClient,
+        assetMoverParty,
+        charlieWalletClient,
+        highWeightAssetParty,
+        venueParty,
+        walletUsdToAmulet(100.0),
+        walletUsdToAmulet(20.0),
+        aliceValidatorBackend,
+      )
+      val aliceSv1 = settleTrade(
+        aliceWalletClient,
+        assetMoverParty,
+        sv1WalletClient,
+        doomedAssetParty,
+        venueParty,
+        walletUsdToAmulet(100.0),
+        walletUsdToAmulet(20.0),
+        sv1ValidatorBackend,
+      )
+      val bobCharlie = transferPreapprovalSendCapturingUpdateId(
+        senderWallet = bobWalletClient,
+        senderParty = assetParty,
+        senderParticipant = bobValidatorBackend.participantClientWithAdminToken,
+        receiver = highWeightAssetParty,
+        amount = BigDecimal(5),
+      )
+      (aliceBob, aliceCharlie, aliceSv1, bobCharlie)
+    }
+
     val (uid5Dvp1, uid5Direct, uid5Dvp2, uid10Dvp1, uid10Dvp2, uid10Dvp3, uid10Direct) =
       setTriggersWithin(triggersToPauseAtStart =
         calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
@@ -251,10 +300,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
             walletUsdToAmulet(20.0),
             sv1ValidatorBackend,
           )
-          for (round <- 6 to 7) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
+          advanceRoundsOpening(6 to 7)
 
           clue("Lower per-asset cap, lower threshold, and revoke doomedAssetParty in one window") {
             updateTbarV11RewardConfig(
@@ -263,52 +309,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
             )
             revokeFeaturedAppRight(doomedAssetParty)
           }
-          for (round <- 8 to 10) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
+          advanceRoundsOpening(8 to 10)
 
           // Round 10 scenario: cap=0.05. Cap clamp + weight scaling + post-revocation + FAK_ASSET-submitter cases.
-          val id10Dvp1 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            bobWalletClient,
-            assetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-          )
-          val id10Dvp2 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            charlieWalletClient,
-            highWeightAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            aliceValidatorBackend,
-          )
-          val id10Dvp3 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            sv1WalletClient,
-            doomedAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            sv1ValidatorBackend,
-          )
-          val id10Direct = transferPreapprovalSendCapturingUpdateId(
-            senderWallet = bobWalletClient,
-            senderParty = assetParty,
-            senderParticipant = bobValidatorBackend.participantClientWithAdminToken,
-            receiver = highWeightAssetParty,
-            amount = BigDecimal(5),
-          )
-          for (round <- 11 to 12) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
+          val (id10Dvp1, id10Dvp2, id10Dvp3, id10Direct) = runFourPartyScenario()
+          advanceRoundsOpening(11 to 12)
 
           clue("CalculateRewardsV2 contracts should exist for each scenario round") {
             eventually() {
@@ -473,52 +478,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
               appRewardCouponThreshold = BigDecimal("0.001"),
             )
           }
-          for (round <- 13 to 15) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
+          advanceRoundsOpening(13 to 15)
 
-          val id15Dvp1 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            bobWalletClient,
-            assetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-          )
-          val id15Dvp2 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            charlieWalletClient,
-            highWeightAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            aliceValidatorBackend,
-          )
-          val id15Dvp3 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            sv1WalletClient,
-            doomedAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            sv1ValidatorBackend,
-          )
-          val id15Direct = transferPreapprovalSendCapturingUpdateId(
-            senderWallet = bobWalletClient,
-            senderParty = assetParty,
-            senderParticipant = bobValidatorBackend.participantClientWithAdminToken,
-            receiver = highWeightAssetParty,
-            amount = BigDecimal(5),
-          )
-          for (round <- 16 to 17) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
-          (id15Dvp1, id15Dvp2, id15Dvp3, id15Direct)
+          val scenario15 = runFourPartyScenario()
+          advanceRoundsOpening(16 to 17)
+          scenario15
         }
       }
     val _ = (uid15Dvp1, uid15Dvp2, uid15Dvp3, uid15Direct)
@@ -569,52 +533,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
               appRewardCouponThreshold = calibratedThresholdUsd,
             )
           }
-          for (round <- 18 to 20) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
+          advanceRoundsOpening(18 to 20)
 
-          val id20Dvp1 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            bobWalletClient,
-            assetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-          )
-          val id20Dvp2 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            charlieWalletClient,
-            highWeightAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            aliceValidatorBackend,
-          )
-          val id20Dvp3 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            sv1WalletClient,
-            doomedAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            sv1ValidatorBackend,
-          )
-          val id20Direct = transferPreapprovalSendCapturingUpdateId(
-            senderWallet = bobWalletClient,
-            senderParty = assetParty,
-            senderParticipant = bobValidatorBackend.participantClientWithAdminToken,
-            receiver = highWeightAssetParty,
-            amount = BigDecimal(5),
-          )
-          for (round <- 21 to 22) {
-            advanceTimeAndWaitForRoundOpening
-            assertOldestOpenRound(round.toLong)
-          }
-          (id20Dvp1, id20Dvp2, id20Dvp3, id20Direct)
+          val scenario20 = runFourPartyScenario()
+          advanceRoundsOpening(21 to 22)
+          scenario20
         }
       }
     val _ = (uid20Dvp1, uid20Dvp2, uid20Dvp3, uid20Direct)
