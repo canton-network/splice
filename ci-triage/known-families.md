@@ -34,12 +34,13 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | S | environment close timeout on in-flight submission | 10742 | open |
 | T | CI test credentials rotated 2026-10-29 | 10896, 10901 | resolved by the rotation |
 | U | joining SV ACS import refused, topology offset (Canton 3.7) | 10907 (dup 11107) | open |
-| V | PeriodicTopologySnapshot missing 'scopes' (pekko-connectors 1.3.0) | 10921 (dup 10923) | real, fix state unknown |
+| V | PeriodicTopologySnapshot missing 'scopes' (pekko-connectors 1.3.0) | 10921 (dups 10923, 10891) | fixed on main, #8148 |
 | W | ScanEventHistoryIntegrationTest pre-tap cursor race | 10912 | open, rautenrieth-da |
 | X | PV 37 topology on a PV 36 synchronizer | 10934 (X1), 10927 (X2), 10937 (X3) | X1, X3 fixed; X2 open |
 | Y | test tagged below the Daml packages it needs | 10930, 10933 | open, test tags |
-| Z | ScanPartyMonitorScript verdict held back by /v0/events cap | 11128 (dup 11136) | open, stephencompall-DA |
+| Z | ScanPartyMonitorScript verdict held back by /v0/events cap | 11128 (dups 11136, 11138, 11139) | open, stephencompall-DA; 4 hits on 2026-11-02 |
 | AA | LsuIntegrationTest sv4 faucet trigger ERROR during catch-up | 11104 | open, test |
+| AB | BftScanConnection refresh WARN about stopped sv2Scan after suppression ended | 11140 | open, test fix proposed |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -386,6 +387,9 @@ State as recorded in the family section, not rechecked against the tracker on 20
   `Credentials.parseServiceAccount` reads `scopes` at the top level, we pass it inside `service-account`. Fails only
   on the first runs of a day (later runs find today's snapshot and skip streaming). Parent 10921, dup 10923.
   Not to be confused with family T (invalid_grant, 10-29).
+- Fixed on main by #8148 (2d373163c3, 2026-10-30); 10921 closed. Branches that have #8017 but not #8148 still hit it.
+- 2026-11-02: 10891 (PR 8083 branch 9ff2637f41, run 40713988598 wall-clock-time (9), 10-29 01:30 UTC) is V: has #8017,
+  lacks #8148; 9x `'scopes'`, 0x invalid_grant. Dup of 10921.
 
 ## W. ScanEventHistoryIntegrationTest pre-tap cursor not quiet (test race)
 - Signature: `should provide new events with verdicts *** FAILED ***` at ScanEventHistoryIntegrationTest.scala:65,
@@ -432,6 +436,9 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - Mechanism: ScanEventStore.getEvents caps at min(last verdict, last update) record time; a verdict the DSO party
   does not see is served only after the next DSO-visible update. Test fix: a tap after createTransferOffer.
 - Parent 11128 (dup 11136). Owner stephencompall-DA.
+- 2026-11-02: dups 11138 (41428422164 wall-clock-time (0)) and 11139 (41438225454 wall-clock-time (8)); 4 failures that day
+  (05:00, 07:43, 10:23, 11:36). Variant: the hidden verdict is 1 microsecond after the last DSO-visible update (same act),
+  not ~250 ms. Packet `11138-11139-scan-party-monitor-events-cap-dup-11128.md`.
 
 ## AA. LsuIntegrationTest: sv4 faucet trigger ERROR during the late sv4 successor sequencer's catch-up
 - Signature (log check only): ERROR `ReceiveFaucetCouponTrigger ... validator=sv4Validator` `Skipping processing of
@@ -440,6 +447,19 @@ State as recorded in the family section, not rechecked against the tracker on 20
   `SEQUENCER_BACKPRESSURE`; on the successor sequencers `New epoch ... blacklisted nodes = List(sv4)` for ~2 min.
 - Fix in the test: pause that trigger on sv4Validator until "sv4 upgrades", like the sv4 circuit breakers (#5587).
   Parent 11104. Owner suggestion Martin Florian.
+
+## AB. BftScanConnectionIntegrationTest: periodic scan refresh WARN about a deliberately stopped scan after the suppression ended
+- Signature (log check only): WARN `Failed to connect to scan of Digital-Asset-Eng-2 (http://localhost:5112).` from
+  `BftScanConnection$AllDsoScansBft:BftScanConnectionIntegrationTest/.../validator=aliceValidator`, about 1 s before
+  `Test succeeded: 'BftScanConnectionIntegrationTest/init fast enough even if there are unavailable scans'`.
+- Confirm: `grep -a 'validator=aliceValidator' | grep -a -E 'Failed to connect to scan of|Started refreshing scan list'`
+  shows two `Suppressed WARN` refreshes, then an unsuppressed one 60 s after the first; `Stopping node aliceValidator`
+  follows within ms, after the TokenStandardCliSanityCheckPlugin teardown.
+- Mechanism: the test stops sv2Scan and suppresses the WARN only around `startSync` + `onboardUser`; aliceValidator's
+  `scansRefreshInterval = 60s` refresh retries the stopped scan until the environment is torn down. Fails when startup +
+  onboarding + listAnsEntries + teardown plugins exceed 60 s.
+- Parent 11140 (2026-11-02, main 1938e4170b). Fix in the test: keep the suppression until aliceValidator stops, or
+  restart sv2Scan inside it. No suite-wide ignore.
 
 ## Note 2026-11-02
 - U: second hit 11107 (simtime, main 3525c637db), dup of 10907.

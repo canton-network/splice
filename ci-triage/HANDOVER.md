@@ -50,14 +50,13 @@ Need logs that the sandbox cannot fetch:
 | 11117 | cni GHA 41175569098, Devnet Backup Status | job log (stale list); dup 11118 already closed |
 | 10479 | cni GHA 38997942871 job 117294527070, Purge Unused Databases (backfilled for cni#7615) | job log |
 
-Not triaged yet:
+Triaged 2026-11-02 on this branch; issue commands handed to the user, not yet confirmed as run:
 
-| Issue | Source |
-|---|---|
-| 11138 | splice GHA 41428422164, wall-clock-time (0), main 288c61b |
-| 11139 | splice GHA 41438225454, wall-clock-time (8) |
-| 11140 | splice GHA 41441330497, wall-clock-time (9) |
-| 10891 | PR run 40713988598 job 123197207725 (pr 8083), "flaky PeriodicTopologySnapshotIntegrationTest"; check against family V |
+| Issue | Verdict | Action |
+|---|---|---|
+| 10891 | dup of 10921 (V), PR branch without #8148 | close as dup |
+| 11138, 11139 | dups of 11128 (Z) | close as dup, recurrence comment on 11128 |
+| 11140 | new family AB, test-side timing race | comment, retitle, move to Triaged (web UI); test fix proposed, no branch |
 
 ## Open fix branches (from Raymond's handover, 2026-11-02)
 
