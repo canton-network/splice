@@ -32,9 +32,7 @@ Then: `python3 -I ci-triage/skill/ci-triage-inbox/scripts/inbox_fetch.py --min-n
 
 | Issues | Group | State |
 |---|---|---|
-| 11108-11116 | nightly run 41171022068 (10-31), 9 jobs | fork A running; question: do the three broken nightlies share one cause |
-| 11119-11127 | nightly run 41275427340 (11-01), 9 jobs | fork A running |
-| 11129-11135 | nightly run 41391921766 (11-02), 7 jobs | fork A running |
+| 11108-11116, 11119-11127, 11129-11135 | mainnet-Daml nightlies 41171022068, 41275427340, 41391921766 (same sha 3525c637db) | all 25 dups: 16 of 10927 (X2), 6 of 10933 (traffic), 3 of 10930 (coupon); none fixed on main, so about 8 new issues per night until they are. X1 (10934) and X3 (10937) confirmed fixed at PV 36. `nightly-a.md` |
 | 11104, 11105, 11107, 11128, 11136 | single scala_test jobs (LSU, wall-clock-time, simtime) | fork B running |
 | 11117 | Devnet backup_status_cluster 10-31 | stays open: first night after the Devnet LSU switch to serial 7 (cni #7836/#7837), cause open, needs log; owner suggestion Krzysztof |
 | 11118 | Devnet backup_cluster 10-31 | dup of 11117 |
