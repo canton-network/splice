@@ -12,6 +12,7 @@ import React, { useMemo } from 'react';
 import { RadioSelector } from './RadioSelector';
 import { datePickerFieldSx } from '../../themes/fieldStyles';
 import { DATE_TIME_PLACEHOLDER } from '../../utils/constants';
+import { dataTestId } from '../../utils/dataAttributes';
 
 const effectiveAtDisplayFormat = 'YYYY-MM-DD HH:mm';
 
@@ -84,7 +85,6 @@ export const EffectiveDateField: React.FC<EffectiveDateFieldProps> = props => {
                       effectiveDate: newDate?.format(dateTimeFormatISO) || undefined,
                     });
                   }}
-                  enableAccessibleFieldDOMStructure={false}
                   slots={{
                     openPickerIcon: KeyboardArrowDown,
                   }}
@@ -109,9 +109,11 @@ export const EffectiveDateField: React.FC<EffectiveDateFieldProps> = props => {
                       helperText: field.state.meta.errors?.[0],
                       onBlur: field.handleBlur,
                       sx: datePickerFieldSx,
-                      inputProps: {
-                        'data-testid': `${id}-field`,
-                        placeholder: DATE_TIME_PLACEHOLDER,
+                      slotProps: {
+                        htmlInput: {
+                          ...dataTestId(`${id}-field`),
+                          placeholder: DATE_TIME_PLACEHOLDER,
+                        },
                       },
                     },
                   }}
