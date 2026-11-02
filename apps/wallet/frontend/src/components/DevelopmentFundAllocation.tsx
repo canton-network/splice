@@ -118,7 +118,6 @@ const DevelopmentFundAllocation: React.FC = () => {
                   onChange={newValue => setExpiresAt(newValue)}
                   minDateTime={dayjs()}
                   disabled={disabled}
-                  enableAccessibleFieldDOMStructure={false}
                   slotProps={{
                     textField: {
                       id: 'development-fund-allocation-expires-at',
@@ -138,7 +137,6 @@ const DevelopmentFundAllocation: React.FC = () => {
                   onChange={newValue => setMintAfter(newValue)}
                   minDateTime={minMintAfter ?? undefined}
                   disabled={disabled}
-                  enableAccessibleFieldDOMStructure={false}
                   slotProps={{
                     textField: {
                       id: 'development-fund-allocation-mint-after',

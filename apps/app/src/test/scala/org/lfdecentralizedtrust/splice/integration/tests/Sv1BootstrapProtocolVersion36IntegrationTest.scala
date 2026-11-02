@@ -1,10 +1,12 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.FullClientConfig
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
+import com.digitalasset.canton.topology.transaction.TopologyMapping
 import com.digitalasset.canton.version.ProtocolVersion
 import org.lfdecentralizedtrust.splice.auth.{AuthTokenSourceStatic, AuthUtil}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.IsTheCantonSequencerBFTEnabled
+import org.lfdecentralizedtrust.splice.console.SvAppBackendReference
 import org.lfdecentralizedtrust.splice.environment.{
   MediatorAdminConnection,
   ParticipantAdminConnection,
@@ -16,6 +18,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.Integration
 import org.lfdecentralizedtrust.splice.util.{ProcessTestUtil, StandaloneCanton}
 
 import scala.concurrent.duration.DurationInt
+import scala.jdk.CollectionConverters.*
 
 class Sv1BootstrapProtocolVersion36IntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -31,62 +34,63 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      // Do not use `simpleTopology1Sv` as its setup depends on the shared Canton nodes.
-      .fromResources(Seq("simple-topology-1sv.conf"), this.getClass.getSimpleName)
-      .addConfigTransforms((_, conf) => ConfigTransforms.bumpCantonPortsBy(22_000)(conf))
+      .simpleTopology4Svs(this.getClass.getSimpleName)
+      // The standard pre-setup depends on the shared Canton nodes.
+      .withPreSetup(_ => ())
+      .addConfigTransformsToFront((_, conf) => ConfigTransforms.bumpCantonPortsBy(22_000)(conf))
+      .withSequencerConnectionsFromScanDisabled(22_000)
       // Add a suffix to the canton identifiers to avoid metric conflicts with the shared canton nodes
       .withCantonNodeNameSuffix("StandaloneSv1BootstrapPv36")
       .withProtocolVersion(protocolVersion)
       .withTrafficTopupsDisabled
       .withManualStart
 
-  "sv1 bootstraps a fresh synchronizer with protocol version 36" in { implicit env =>
+  "sv1 bootstraps a fresh synchronizer with protocol version 36 and sv2 joins" in { implicit env =>
     import env.executionContext
-    val svConfig = sv1Backend.config
-    val synchronizerNodes = svConfig.localSynchronizerNodes.current
-    val topologyConnections: Seq[TopologyAdminConnection] = Seq(
+    def participantConnection(sv: SvAppBackendReference) =
       new ParticipantAdminConnection(
-        FullClientConfig(port = svConfig.participantClient.adminApi.clientConfig.port),
+        FullClientConfig(port = sv.config.participantClient.adminApi.clientConfig.port),
         env.environment.config.monitoring.logging.api,
-        loggerFactory.append("participant", "sv1"),
+        loggerFactory.append("participant", sv.name),
         grpcClientMetrics,
         retryProvider,
         tokenProvider = AuthTokenSourceStatic(
           AuthUtil.CantonAdminApi.participantAdminApiTestToken
         ),
-      ),
+      )
+    def sequencerConnection(sv: SvAppBackendReference) =
       new SequencerAdminConnection(
-        FullClientConfig(port = synchronizerNodes.sequencer.adminApi.port),
+        FullClientConfig(port = sv.config.localSynchronizerNodes.current.sequencer.adminApi.port),
         env.environment.config.monitoring.logging.api,
-        loggerFactory.append("sequencer", "sv1"),
+        loggerFactory.append("sequencer", sv.name),
         grpcClientMetrics,
         retryProvider,
-      ),
+      )
+    def mediatorConnection(sv: SvAppBackendReference) =
       new MediatorAdminConnection(
-        FullClientConfig(port = synchronizerNodes.mediator.adminApi.port),
+        FullClientConfig(port = sv.config.localSynchronizerNodes.current.mediator.adminApi.port),
         env.environment.config.monitoring.logging.api,
-        loggerFactory.append("mediator", "sv1"),
+        loggerFactory.append("mediator", sv.name),
         grpcClientMetrics,
         retryProvider,
-      ),
-    )
+      )
+    val svs = Seq(sv1Backend, sv2Backend)
+    val synchronizerNodeConnections: Seq[TopologyAdminConnection] =
+      svs.flatMap(sv => Seq(sequencerConnection(sv), mediatorConnection(sv)))
+    val topologyConnections: Seq[TopologyAdminConnection] =
+      svs.map(participantConnection) ++ synchronizerNodeConnections
 
-    withCanton(
-      Seq(testResourcesPath / "standalone-sv1-nodes.conf") ++
-        Option
-          .when(IsTheCantonSequencerBFTEnabled)(
-            testResourcesPath / "standalone-sequencer-sv1-extra-enable-bft.conf"
-          )
-          .toList,
-      Seq(ProcessTestUtil.enableRepairCommandsConfig),
-      "sv1-bootstrap-pv36",
-      "SV1_ADMIN_USER" -> svConfig.ledgerApiUser,
-      "SV1_PARTICIPANT_DB" -> s"participant_sv1_$dbsSuffix",
-      "SV1_SEQUENCER_DB" -> s"sequencer_sv1_$dbsSuffix",
-      "SV1_SEQUENCER_DB_BFT" -> s"sequencer_sv1_${dbsSuffix}_bft",
-      "SV1_MEDIATOR_DB" -> s"mediator_sv1_$dbsSuffix",
-      "SEQUENCER_DRIVER_DB" -> s"sequencer_driver_$dbsSuffix",
-    ) {
+    withCantonSvNodes(
+      (
+        Some(sv1Backend),
+        Some(sv2Backend),
+        // sv3 is not used but its participant config requires an admin user.
+        Some(sv3Backend),
+        None,
+      ),
+      logSuffix = "sv1-bootstrap-pv36",
+      sv4 = false,
+    )() {
       clue("Canton nodes are running but have no identity") {
         topologyConnections.foreach { connection =>
           // Long timeout because Canton is slow to start up
@@ -99,7 +103,7 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
       }
 
       clue("Start sv1 and its scan and validator") {
-        startAllSync(sv1Backend, sv1ScanBackend, sv1ValidatorBackend)
+        startAllSync(sv1Nodes*)
       }
 
       clue(s"The synchronizer runs protocol version $protocolVersion") {
@@ -108,6 +112,30 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
           .loneElement
         connected.physicalSynchronizerId.protocolVersion shouldBe protocolVersion
         sv1ScanBackend.getDsoPartyId() shouldBe sv1Backend.getDsoInfo().dsoParty
+      }
+
+      clue("sv2 joins after sv1") {
+        startAllSync(sv2Nodes*)
+        sv2Backend.participantClientWithAdminToken.synchronizers
+          .list_connected()
+          .loneElement
+          .physicalSynchronizerId
+          .protocolVersion shouldBe protocolVersion
+        sv1Backend.getDsoInfo().dsoRules.payload.svs.keySet.asScala shouldBe Set(
+          sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+          sv2Backend.getDsoInfo().svParty.toProtoPrimitive,
+        )
+      }
+
+      clue("Sequencers and mediators have no OwnerToKeyMapping in their authorized store") {
+        synchronizerNodeConnections.foreach { connection =>
+          connection
+            .listAllTransactions(
+              TopologyStoreId.Authorized,
+              includeMappings = Set(TopologyMapping.Code.OwnerToKeyMapping),
+            )
+            .futureValue shouldBe empty
+        }
       }
     }
   }

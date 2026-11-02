@@ -79,6 +79,7 @@ let
     python3Packages.pydantic
     python3Packages.pygithub
     python3Packages.pyjwt
+    python3Packages.openapi-schema-validator
     python3Packages.pyyaml
     python3Packages.regex
     python3Packages.requests
@@ -92,6 +93,7 @@ let
     python3Packages.sphinxcontrib-openapi
     python3Packages.sphinx-autobuild
     python3Packages.types-docutils
+    python3Packages.types-jsonschema
     python3Packages.types-pyyaml
     python3Packages.types-requests
     python3Packages.waitress
