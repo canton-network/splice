@@ -44,6 +44,7 @@ import {
 } from '../../utils/constants';
 import { useFeaturedAppRightConfig } from '../../hooks/useFeaturedAppRightConfig';
 import { Alert } from '@mui/material';
+import { useInFlightOpsPartiesOverlap } from '../../hooks/useFeaturedAppGrantWarnings';
 
 export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
   const svAdminClient = useSvAdminClient();
@@ -121,6 +122,8 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
 
   const partyId = useStore(form.store, state => state.values.partyId);
   const rightCid = useStore(form.store, state => state.values.rightCid);
+  const opsParties = useStore(form.store, state => state.values.opsParties);
+  const opsOverlapWarning = useInFlightOpsPartiesOverlap(opsParties);
 
   // Fetch the selected right's full current config (appKind / activityWeight / opsParties)
   // to prepopulate the editor and serve as the amend baseConfig.
@@ -217,6 +220,12 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
                 />
               )}
             </form.AppField>
+
+            {opsOverlapWarning && (
+              <Alert severity="warning" data-testid={`${idPrefix}-ops-overlap`}>
+                {opsOverlapWarning}
+              </Alert>
+            )}
 
             {providerHasNoRights && (
               <Alert severity="warning" data-testid={`${idPrefix}-no-rights`}>

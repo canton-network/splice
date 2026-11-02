@@ -506,6 +506,35 @@ export function buildFeaturedAppConfigUpdateEntry(
   return { provider, scalarChanges, opsAdded: added, opsRemoved: removed };
 }
 
+// Collect all opsParties referenced by in-flight (pending) vote requests — both
+// SRARC_GrantFeaturedAppRight (opsParties) and SRARC_CreateFeaturedAppConfigUpdateInstruction
+// (updates[].newConfig.opsParties). Used by the grant/amend forms to warn (non-blocking) when
+// the author picks an opsParty already pending in another vote.
+export function extractInFlightOpsParties(
+  proposals: Contract<VoteRequest>[] | undefined
+): string[] {
+  if (!proposals?.length) {
+    return [];
+  }
+
+  const result: string[] = [];
+  for (const proposal of proposals) {
+    const action = proposal.payload.action;
+    if (action.tag !== 'ARC_DsoRules') {
+      continue;
+    }
+    const dsoAction = action.value.dsoAction;
+    if (dsoAction.tag === 'SRARC_GrantFeaturedAppRight') {
+      result.push(...(dsoAction.value.opsParties ?? []));
+    } else if (dsoAction.tag === 'SRARC_CreateFeaturedAppConfigUpdateInstruction') {
+      for (const update of dsoAction.value.updates) {
+        result.push(...(update._2.newConfig.opsParties ?? []));
+      }
+    }
+  }
+  return result;
+}
+
 export function buildPendingConfigFields(
   proposals: Contract<VoteRequest>[] | undefined
 ): PendingConfigFieldInfo[] {
