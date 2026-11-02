@@ -234,38 +234,33 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         assertOldestOpenRound(round.toLong)
       }
 
+    // Alice-side 100 USD → counterparty-side 20 USD DvP settled by the venue,
+    // pre-filling the hoisted trait's 8-arg form with this test's fixed values.
+    def aliceSettleTrade(
+        counterpartyWallet: org.lfdecentralizedtrust.splice.console.WalletAppClientReference,
+        counterpartyParty: PartyId,
+        counterpartyValidator: org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference =
+          bobValidatorBackend,
+    ): String =
+      settleTrade(
+        aliceWalletClient,
+        assetMoverParty,
+        counterpartyWallet,
+        counterpartyParty,
+        venueParty,
+        walletUsdToAmulet(100.0),
+        walletUsdToAmulet(20.0),
+        counterpartyValidator,
+      )
+
     // Per-party weights (and thus rewards) are stable across replays, so
     // round-10 amounts calibrate the threshold used in the round-15 replay.
     def runFourPartyScenario(): (String, String, String, String) = {
-      val aliceBob = settleTrade(
-        aliceWalletClient,
-        assetMoverParty,
-        bobWalletClient,
-        assetParty,
-        venueParty,
-        walletUsdToAmulet(100.0),
-        walletUsdToAmulet(20.0),
-      )
-      val aliceCharlie = settleTrade(
-        aliceWalletClient,
-        assetMoverParty,
-        charlieWalletClient,
-        highWeightAssetParty,
-        venueParty,
-        walletUsdToAmulet(100.0),
-        walletUsdToAmulet(20.0),
-        aliceValidatorBackend,
-      )
-      val aliceSv1 = settleTrade(
-        aliceWalletClient,
-        assetMoverParty,
-        sv1WalletClient,
-        doomedAssetParty,
-        venueParty,
-        walletUsdToAmulet(100.0),
-        walletUsdToAmulet(20.0),
-        sv1ValidatorBackend,
-      )
+      val aliceBob = aliceSettleTrade(bobWalletClient, assetParty)
+      val aliceCharlie =
+        aliceSettleTrade(charlieWalletClient, highWeightAssetParty, aliceValidatorBackend)
+      val aliceSv1 =
+        aliceSettleTrade(sv1WalletClient, doomedAssetParty, sv1ValidatorBackend)
       val bobCharlie = transferPreapprovalSendCapturingUpdateId(
         senderWallet = bobWalletClient,
         senderParty = assetParty,
@@ -287,15 +282,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         pauseScanVerdictIngestionWithin(sv1ScanBackend) {
 
           // Round 5 scenario: cap=0.1. Baseline FA ratios + non-FA negative case.
-          val id5Dvp1 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            bobWalletClient,
-            assetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-          )
+          val id5Dvp1 = aliceSettleTrade(bobWalletClient, assetParty)
           val id5Direct = transferPreapprovalSendCapturingUpdateId(
             senderWallet = splitwellWalletClient,
             senderParty = nonFaSenderParty,
@@ -303,16 +290,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
             receiver = assetParty,
             amount = BigDecimal(5),
           )
-          val id5Dvp2 = settleTrade(
-            aliceWalletClient,
-            assetMoverParty,
-            sv1WalletClient,
-            doomedAssetParty,
-            venueParty,
-            walletUsdToAmulet(100.0),
-            walletUsdToAmulet(20.0),
-            sv1ValidatorBackend,
-          )
+          val id5Dvp2 = aliceSettleTrade(sv1WalletClient, doomedAssetParty, sv1ValidatorBackend)
           advanceRoundsOpening(6 to 7)
 
           clue("Lower per-asset cap, lower threshold, and revoke doomedAssetParty in one window") {
@@ -347,52 +325,42 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         }
       }
 
-    clue(
-      s"Round $baselineRound DvP event (alice↔$assetParty): per-record asset weight is ~10% of burn (cap=0.1, weight=1)"
-    ) {
-      assertAssetRatioInEvent(
-        event = fetchEvent(uid5Dvp1, s"baseline DvP $uid5Dvp1"),
-        submitter = venueParty,
-        assetParty = assetParty,
-        expectedPct = 10,
-        tolerancePct = 5,
-        label = s"baseline DvP alice↔$assetParty (venue submits)",
-      )
-    }
-
-    clue(
-      s"Round $baselineRound DvP event (alice↔$doomedAssetParty): same baseline — doomed party still active"
-    ) {
-      assertAssetRatioInEvent(
-        event = fetchEvent(uid5Dvp2, s"baseline DvP $uid5Dvp2"),
-        submitter = venueParty,
-        assetParty = doomedAssetParty,
-        expectedPct = 10,
-        tolerancePct = 5,
-        label = s"baseline DvP alice↔$doomedAssetParty (pre-revocation)",
-      )
+    // Both round-5 DvPs land under cap=0.1 with weight-1 asset confirmers,
+    // so the per-record asset ratio should be ~10% of burn in each.
+    Seq(
+      uid5Dvp1 -> assetParty,
+      uid5Dvp2 -> doomedAssetParty,
+    ).foreach { case (uid, confirmer) =>
+      clue(
+        s"Round $baselineRound DvP event (alice↔$confirmer): per-record asset weight is ~10% of burn (cap=0.1, weight=1)"
+      ) {
+        assertAssetRatioInEvent(
+          event = fetchEvent(uid, s"baseline DvP $uid"),
+          submitter = venueParty,
+          assetParty = confirmer,
+          expectedPct = 10,
+          tolerancePct = 5,
+          label = s"baseline DvP alice↔$confirmer",
+        )
+      }
     }
 
     clue(
       s"Round $baselineRound non-FA event (splitwell→$assetParty): app records only, no asset activity, no submitting_app_provider"
     ) {
       val noFaEvent = fetchEvent(uid5Direct, s"non-FA direct $uid5Direct")
-      noFaEvent.submittingAppProvider shouldBe None withClue
-        s"Non-FA-submitted event $uid5Direct should have no submitting_app_provider"
+      val label = s"non-FA $uid5Direct"
+      assertSubmittingAppProvider(noFaEvent, None, label)
       noFaEvent.appActivityRecords.exists(_.records.nonEmpty) shouldBe true withClue
-        s"Non-FA-submitted event $uid5Direct should have app records"
-      noFaEvent.assetActivityRecords shouldBe None withClue
-        s"Non-FA-submitted event $uid5Direct should have no asset activity records"
+        s"$label: should have app records"
+      assertNoAssetActivity(noFaEvent, label)
     }
 
     clue(
       s"Round $baselineRound DvP event (alice↔$assetParty): getEventById reports submitting_app_provider = $venueParty"
     ) {
       val reloaded = fetchEvent(uid5Dvp1, s"baseline DvP $uid5Dvp1 submitting_app_provider")
-      reloaded.submittingAppProvider.map(_.value) shouldBe Some(
-        venueParty.toProtoPrimitive
-      ) withClue
-        s"DvP settlement $uid5Dvp1 should report $venueParty as submitting_app_provider"
+      assertSubmittingAppProvider(reloaded, Some(venueParty), s"baseline DvP $uid5Dvp1")
     }
 
     clue(
@@ -425,31 +393,17 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       s"Round $postVoteRound post-revocation DvP (alice↔$doomedAssetParty): no asset record for the revoked party; only DSO-share re-attributed to $venueParty"
     ) {
       val event = fetchEvent(uid10Dvp3, s"post-revocation DvP $uid10Dvp3")
-      val assetPartyProtos = event.assetActivityRecords
-        .getOrElse(fail(s"post-revocation DvP $uid10Dvp3 should carry assetActivityRecords"))
-        .value
-        .map(_.party)
-        .toSet
-      assetPartyProtos should not contain doomedAssetParty.toProtoPrimitive withClue
-        s"$doomedAssetParty was revoked; its FA grant should no longer attribute asset activity"
-      assetPartyProtos shouldBe Set(venueParty.toProtoPrimitive) withClue
-        s"Only DSO's share should remain, re-attributed to the submitting app $venueParty"
+      assertAssetPartyProtos(event, Set(venueParty), s"post-revocation DvP $uid10Dvp3")
     }
 
     clue(
       s"Round $postVoteRound FAK_ASSET-submitter event (bob→$highWeightAssetParty): bob gets full burn as app activity; no asset-side"
     ) {
       val event = fetchEvent(uid10Direct, s"FAK_ASSET submitter direct $uid10Direct")
-      val submitterProto = assetParty.toProtoPrimitive
-      event.submittingAppProvider.map(_.value) shouldBe Some(submitterProto) withClue
-        s"FAK_ASSET-submitted event $uid10Direct should report $assetParty as submitting_app_provider"
-      val appRecords = event.appActivityRecords
-        .getOrElse(fail("FAK_ASSET-submitted event should carry appActivityRecords"))
-        .records
-      appRecords.map(_.party).toSet shouldBe Set(submitterProto) withClue
-        s"Submitter $assetParty should be the only app provider for the FAK_ASSET-submitted event"
-      event.assetActivityRecords shouldBe None withClue
-        "computeAssetActivity does not fire for FAK_ASSET submitters, so no asset-side records are produced"
+      val label = s"FAK_ASSET submitter direct $uid10Direct"
+      assertSubmittingAppProvider(event, Some(assetParty), label)
+      assertAppRecordParties(event, Set(assetParty), label)
+      assertNoAssetActivity(event, label)
     }
 
     clue(
@@ -539,6 +493,28 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
           s"Round $verificationRound: at least one party should clear calibrated threshold $calibratedThresholdUsd USD"
         BigDecimal(t.totalAppRewardThresholded) should be > BigDecimal(0) withClue
           s"Round $verificationRound: at least one party should fall below calibrated threshold $calibratedThresholdUsd USD"
+      }
+    }
+
+    // Cross-round sweep: every closed round from bootstrap through the
+    // verification round should have Ok totals and a well-formed root hash.
+    // Catches regressions that per-event pins would miss (e.g. a round whose
+    // CalculateRewardsV2 contracts don't land).
+    clue(s"Rounds 0..$verificationRound: Ok totals and 64-char root hash") {
+      (0L to verificationRound).foreach { round =>
+        eventually() {
+          inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+            case GetRewardAccountingActivityTotalsResponse.members
+                  .RewardAccountingActivityTotalsOk(_) =>
+              succeed
+          }
+        }
+        val hash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+          case GetRewardAccountingRootHashResponse.members
+                .RewardAccountingRootHashOk(h) =>
+            h.rootHash
+        }
+        hash should have length 64 withClue s"Round $round root hash"
       }
     }
   }
@@ -784,6 +760,49 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       s"$label: asset/app ratio $actualPct% should be >= $lower% (expected ~$expectedPct%)"
     actualPct should be <= upper withClue
       s"$label: asset/app ratio $actualPct% should be <= $upper% (expected ~$expectedPct%)"
+  }
+
+  private def assertSubmittingAppProvider(
+      event: definitions.EventHistoryItem,
+      expected: Option[PartyId],
+      label: String,
+  ): Unit =
+    event.submittingAppProvider.map(_.value) shouldBe expected.map(_.toProtoPrimitive) withClue
+      s"$label: submittingAppProvider should be $expected"
+
+  private def assertAssetPartyProtos(
+      event: definitions.EventHistoryItem,
+      expected: Set[PartyId],
+      label: String,
+  ): Unit = {
+    val actual = event.assetActivityRecords
+      .getOrElse(fail(s"$label: event has no assetActivityRecords"))
+      .value
+      .map(_.party)
+      .toSet
+    actual shouldBe expected.map(_.toProtoPrimitive) withClue
+      s"$label: assetActivityRecords party set"
+  }
+
+  private def assertNoAssetActivity(
+      event: definitions.EventHistoryItem,
+      label: String,
+  ): Unit =
+    event.assetActivityRecords shouldBe None withClue
+      s"$label: assetActivityRecords should be None"
+
+  private def assertAppRecordParties(
+      event: definitions.EventHistoryItem,
+      expected: Set[PartyId],
+      label: String,
+  ): Unit = {
+    val actual = event.appActivityRecords
+      .getOrElse(fail(s"$label: event has no appActivityRecords"))
+      .records
+      .map(_.party)
+      .toSet
+    actual shouldBe expected.map(_.toProtoPrimitive) withClue
+      s"$label: appActivityRecords party set"
   }
 
   // Walks the CIP-0104 reward batch Merkle tree and returns every
