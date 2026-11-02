@@ -20,8 +20,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import BigNumber from 'bignumber.js';
-import { DisableConditionally } from '@canton-network/splice-common-frontend';
+import { DisableConditionally, parseBigNumber } from '@canton-network/splice-common-frontend';
 import BftAnsField from './BftAnsField';
 import AmountInput from './AmountInput';
 import { Add, Remove } from '@mui/icons-material';
@@ -396,7 +395,7 @@ function isValidNextIterationFundingAmount(amount: string): boolean {
   if (!value) {
     return false;
   }
-  const amountNumber = new BigNumber(value);
+  const amountNumber = parseBigNumber(value);
   return amountNumber.isFinite() && amountNumber.gte(0);
 }
 

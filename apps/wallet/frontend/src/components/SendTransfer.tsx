@@ -4,9 +4,9 @@ import {
   DisableConditionally,
   ErrorDisplay,
   Loading,
+  parseBigNumber,
 } from '@canton-network/splice-common-frontend';
 import { useMutation } from '@tanstack/react-query';
-import BigNumber from 'bignumber.js';
 import addHours from 'date-fns/addHours';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -54,7 +54,7 @@ const SendTransfer: React.FC = () => {
     { name: '90 days', value: 90 },
   ];
 
-  const ccAmount = useMemo(() => new BigNumber(ccAmountText), [ccAmountText]);
+  const ccAmount = useMemo(() => parseBigNumber(ccAmountText), [ccAmountText]);
 
   // Only set deduplication id once. In the success case, it doesn't matter because of `isSending` & the `navigate`.
   // But: if the transfer is accepted by the BE, but the response fails to reach the FE (e.g., timeout),
