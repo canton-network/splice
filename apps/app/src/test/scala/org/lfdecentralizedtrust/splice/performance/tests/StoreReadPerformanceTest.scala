@@ -21,8 +21,7 @@ final case class StoreReadPerfMetrics(
     numUpdates: Long,
 ) {
 
-  /** Time spent neither waiting for a DB connection nor executing DB queries, i.e. the
-    * decode/translation + application overhead left after subtracting the two DB phases.
+  /** Time spent neither waiting for a DB connection nor executing DB queries,
     */
   def nonDbTimeNs: BigDecimal = (totalTimeNs - dbWaitTimeNs - dbExecTimeNs).max(BigDecimal(0))
 }

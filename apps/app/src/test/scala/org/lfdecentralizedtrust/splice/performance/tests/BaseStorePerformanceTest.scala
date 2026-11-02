@@ -83,24 +83,34 @@ abstract class BaseStorePerformanceTest(
     */
   protected val dbMetricsFactory: NanoTimerMetricsFactory = new NanoTimerMetricsFactory
 
-  /** Monotonic sequence number of DB query samples recorded so far. Snapshot before an operation
-    * and pass to [[dbExecWindow]] afterwards to get stats for exactly that operation's window.
+  /** Monotonic sequence number of DB query samples recorded so far.
+    *
+    * Windows are defined by time only. The per-callsite breakdown can separate it only if it is unique,
+    * so run measured operations sequentially.
     */
   protected def dbExecSeq: Long = dbMetricsFactory.currentSeq
 
-  /** Stats for all DB `exectime` samples recorded since `afterSeq` (i.e. during one operation):
-    * the time spent actually running SQL on a connection.
+  /** Stats for all DB `exectime` samples recorded since `afterSeq`
     */
   protected def dbExecWindow(afterSeq: Long): DbExecWindow = windowFor(afterSeq, "exectime")
 
-  /** Stats for all DB `waittime` samples recorded since `afterSeq`: the time a query spent queued
-    * on the executor + acquiring a connection, before it started running (see the "wait" phase in
-    * scripts/performance/ledger_api_metrics.md).
+  /** Stats for all DB `waittime` samples recorded since `afterSeq`
     */
   protected def dbWaitWindow(afterSeq: Long): DbExecWindow = windowFor(afterSeq, "waittime")
 
-  /** Stats for all DB samples whose timer name ends with `suffix`, recorded since `afterSeq`:
-    * total/count/max in ns, plus a per-callsite breakdown.
+  /** Stats for all DB samples whose timer name ends with `suffix`, recorded since `afterSeq`
+    *
+    * E.g. with afterSeq = 1042
+    * {{{
+    *   seq   timer                       callsite
+    *   1043  general.executor.waittime   UpdateHistory.queryCreateEvents
+    *   1044  general.executor.exectime   UpdateHistory.queryCreateEvents
+    *   1045  general.executor.waittime   UpdateHistory.queryExerciseEvents
+    *   1046  general.executor.exectime   UpdateHistory.queryExerciseEvents
+    * }}}
+    *
+    * `windowFor(1042, "exectime")` keeps 1044 and 1046
+    * `windowFor(1042, "waittime")` keeps 1043 and 1045
     */
   private def windowFor(afterSeq: Long, suffix: String): DbExecWindow = {
     val window = dbMetricsFactory.windowSamples(afterSeq, _.endsWith(suffix))
@@ -108,10 +118,6 @@ abstract class BaseStorePerformanceTest(
       count = window.size.toLong,
       totalNanos = window.map(_.nanos).sum,
       maxNanos = window.map(_.nanos).maxOption.getOrElse(0L),
-      // Key the breakdown by connection pool (read "general" vs write) plus the query callsite. The
-      // pool separates the method's own SELECTs (read pool) from background advisory-lock traffic
-      // (write pool). The callsite is the real caller stack frame (e.g. `UpdateHistory.getUpdate`)
-      // when `logQueryCost` is enabled, or the constant `"query-tracking-disabled"` otherwise.
       breakdown = window
         .groupBy(s => s"${BaseStorePerformanceTest.poolOf(s.timerName)} ${s.callsite}")
         .view
@@ -340,7 +346,6 @@ abstract class BaseStorePerformanceTest(
   }
 }
 
-/** Stats for the DB `exectime` samples recorded during a single operation window. */
 final case class DbExecWindow(
     count: Long,
     totalNanos: Long,
@@ -348,13 +353,11 @@ final case class DbExecWindow(
     breakdown: Map[String, (Long, Long)],
 )
 
-/** One recorded query execution. `callsite` is the `query` label set by the query cost tracker. */
+/** A recorded query execution. `callsite` is the `query` label set by the query cost tracker. */
 final case class DbQuerySample(timerName: String, callsite: String, nanos: Long, seq: Long)
 
 /** A metrics factory that preserves nanosecond precision for timers and keeps a monotonic log of
-  * individual query samples, so per-operation windows (count / total / max / per-callsite) can be
-  * computed by sequence number. `InMemoryMetricsFactory` truncates timer samples to whole
-  * milliseconds, which would floor all sub-millisecond DB queries to 0.
+  * individual query samples
   */
 class NanoTimerMetricsFactory extends InMemoryMetricsFactory {
   import java.util.concurrent.atomic.AtomicLong
@@ -366,7 +369,7 @@ class NanoTimerMetricsFactory extends InMemoryMetricsFactory {
   override def timer(info: MetricInfo)(implicit context: MetricsContext): Timer =
     timers.getOrElseUpdate(info.name, new NanoTimer(info))
 
-  /** Current highest sample sequence number. */
+  /** current highest sample sequence number. */
   def currentSeq: Long = seqGen.get()
 
   /** All samples recorded after `afterSeq` whose timer name matches `nameFilter`, in order. */
@@ -379,8 +382,7 @@ class NanoTimerMetricsFactory extends InMemoryMetricsFactory {
     val _ = samples.add(DbQuerySample(timerName, callsite, nanos, seqGen.incrementAndGet()))
   }
 
-  /** A [[Timer]] that appends each recorded sample (with its `query` callsite label) to the
-    * factory's shared sample log.
+  /** A [[Timer]] that appends each recorded sample (with its `query` callsite label) at the nanosecond precision.
     */
   private final class NanoTimer(override val info: MetricInfo) extends Timer {
     private val name = info.name.toString
