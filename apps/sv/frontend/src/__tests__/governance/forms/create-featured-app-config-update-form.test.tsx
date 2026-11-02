@@ -45,8 +45,9 @@ describe('Create Featured App Config Update Form (amend)', () => {
     action: ActionRequiringConfirmation
   ): ListDsoRulesVoteRequestsResponse => {
     const base = voteRequests.dso_rules_vote_requests[0];
+    const payload = { ...(base.payload as Record<string, unknown>), action };
     return {
-      dso_rules_vote_requests: [{ ...base, payload: { ...base.payload, action } }],
+      dso_rules_vote_requests: [{ ...base, payload }],
     };
   };
 
