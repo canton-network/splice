@@ -384,3 +384,26 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 2026-11-02: both fail every mainnet-Daml nightly (3 nights, 9 dups). Traffic test fails in TokenStandardTransfer and
   TokenStandardV2Transfer shards; confirm with the transfer POST to `splice_traffic-manager` 30-40 ms before
   `UNKNOWN_INFORMEES`. Coupon: count `ProcessRewardsTrigger batchType=`; only BatchOfMintingAllowances = 10930.
+
+## Z. ScanPartyMonitorScriptIntegrationTest: private verdict held back by the /v0/events cap (test flake, #8107)
+- Signature: `The script reports alice confirming the private transaction ... List() did not contain element
+  "confirming" (ScanPartyMonitorScriptIntegrationTest.scala:273)`.
+- Confirm: script stderr (`exited with 0:` debug line) stays at one `At record time` for 20 s; sv1Scan logs the
+  private verdict (`Last ingested verdict record_time is now`) but only `History N ... ingesting a => b @ None` after.
+- Mechanism: ScanEventStore.getEvents caps at min(last verdict, last update) record time; a verdict the DSO party
+  does not see is served only after the next DSO-visible update. Test fix: a tap after createTransferOffer.
+- Parent 11128 (dup 11136). Owner stephencompall-DA.
+
+## AA. LsuIntegrationTest: sv4 faucet trigger ERROR during the late sv4 successor sequencer's catch-up
+- Signature (log check only): ERROR `ReceiveFaucetCouponTrigger ... validator=sv4Validator` `Skipping processing of
+  Task(license = ...) due to unexpected failure` with `LOCAL_VERDICT_INACTIVE_CONTRACTS`.
+- Confirm: `Total maximum number of retries 35 exceeded`, the preceding sv4Validator SubmitAndWait failures are all
+  `SEQUENCER_BACKPRESSURE`; on the successor sequencers `New epoch ... blacklisted nodes = List(sv4)` for ~2 min.
+- Fix in the test: pause that trigger on sv4Validator until "sv4 upgrades", like the sv4 circuit breakers (#5587).
+  Parent 11104. Owner suggestion Martin Florian.
+
+## Note 2026-11-02
+- U: second hit 11107 (simtime, main 3525c637db), dup of 10907.
+- 11105 Canton 3.7.0: sv1Participant WARN `Internal stream [Internal ACS Updates Stream] completed with a failure`
+  (AbruptTerminationException, fanoutPublisherSink) 250 ms after the commitment matcher turns Ok on first connect;
+  matcher stays Failed. First hit, no ignore.

@@ -444,3 +444,12 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 11108 11109 11110 11111 11113 11115 11120 11121 11122 11123 11126 11127 11129 11132 11133 11135 | dup of 10927 (family X2) | `2026-11-02/nightly-a.md`, `host-commands-a.md` |
 | 11114 11116 11124 11125 11130 11131 | dup of 10933 (family Y traffic) | same |
 | 11112 11119 11134 | dup of 10930 (family Y coupon) | same |
+
+### 2026-11-02 splice main singles (fork B)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 11128 + 11136 | new family Z: ScanPartyMonitorScriptIntegrationTest (#8107) flake, private verdict held back by the /v0/events cap until the next DSO-visible update; open 11128, owner stephencompall-DA | `2026-11-02/singles-b.md`, `host-commands-b.md` |
+| 11107 | dup of 10907 (family U, sv4 IMPORT_ACS_ERROR topology offset) | same |
+| 11104 | new family AA: LsuIntegrationTest log check, sv4Validator faucet trigger ERROR after 35 backpressure retries while the late sv4 successor sequencer is blacklisted; open, owner Martin Florian | same |
+| 11105 | new, Canton 3.7.0: sv1Participant `Internal ACS Updates Stream` AbruptTermination, commitment matcher stays Failed (log check only); open, first hit | same |
