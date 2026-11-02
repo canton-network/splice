@@ -21,7 +21,7 @@
     "jsondiffpatch": "^0.7.6",
     "msw": "^2.15.0",
     "uuid": "^14.0.3",
-    "web-vitals": "4.2.4",
+    "web-vitals": "6.2.3",
     "zod": "^4.6.7"
   },
   "devDependencies": {
