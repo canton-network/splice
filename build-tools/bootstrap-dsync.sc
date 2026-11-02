@@ -25,7 +25,7 @@ def initManually(node: InstanceReference): Unit = {
   println("Bootstrapping node " + node.name + "...")
   val namespace = Namespace(namespaceKey.id)
   node.topology.init_id_from_uid(
-    UniqueIdentifier.tryCreate("manual-" + node.name, namespace)
+    UniqueIdentifier.tryCreate(node.name, namespace)
   )
 
   node.health.wait_for_ready_for_initialization()
