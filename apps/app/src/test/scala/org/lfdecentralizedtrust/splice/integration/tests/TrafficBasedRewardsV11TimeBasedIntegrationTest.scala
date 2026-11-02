@@ -203,6 +203,20 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       ]
     }
 
+    // Sequence of actions
+    //   Round  | Action
+    //   -------+--------------------------------------------------------
+    //   1-5    | propagation (bootstrap config lands in OpenMiningRounds)
+    //   5      | 2 DvP settlements + 1 non-FA direct send  [baselineRound]
+    //   6-7    | close round 5
+    //   7-ish  | mid-flow votes: cap→0.05, threshold→5 USD, revoke doomedAssetParty
+    //   8-10   | propagation
+    //   10     | 3 DvP settlements + 1 FAK_ASSET-submitter direct send  [postVoteRound]
+    //   11-12  | close round 10; measure per-party amounts, calibrate threshold
+    //   12-ish | vote: appRewardCouponThreshold → calibrated USD
+    //   13-15  | propagation
+    //   15     | replay the round-10 scenario  [verificationRound]
+    //   16-17  | close round 15; assert mix of above/below threshold
     val baselineRound = 5L
     val postVoteRound = 10L
 
@@ -220,9 +234,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         assertOldestOpenRound(round.toLong)
       }
 
-    // Replayed in rounds 10, 15, 20. Per-party weights (and thus per-party
-    // rewards) are stable across replays, which phase 2a relies on for its
-    // calibration to transfer to phase 2b.
+    // Per-party weights (and thus rewards) are stable across replays, so
+    // round-10 amounts calibrate the threshold used in the round-15 replay.
     def runFourPartyScenario(): (String, String, String, String) = {
       val aliceBob = settleTrade(
         aliceWalletClient,
@@ -444,8 +457,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     ) {
       // Pin: field stays None until round-close summary populates it from
       // asset-activity totals; this assertion will then fire and should be
-      // tightened to the CIP-104 formula. Must run before phase 2a — phase 2a's
-      // extra rounds advance past ExpireIssuingMiningRoundTrigger for round 10.
+      // tightened to the CIP-104 formula. Must run before the verification
+      // scenario's round advances — they cross round 10's
+      // ExpireIssuingMiningRoundTrigger window.
       val issuingRound = eventually() {
         sv1ScanBackend
           .getOpenAndIssuingMiningRounds()
@@ -459,44 +473,18 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         s"optIssuancePerFeaturedAssetRewardCoupon has a value — tighten this test to the CIP-104 formula"
     }
 
-    // Phase 2a: near-zero threshold replay of the round-10 scenario, so the
-    // batch tree surfaces every party's amount. Per-party amounts only depend
-    // on per-party activity weights (not the threshold), so these amounts
-    // predict phase 2b under the calibrated threshold.
-    val measurementRound = 15L
-
-    val (uid15Dvp1, uid15Dvp2, uid15Dvp3, uid15Direct) =
-      setTriggersWithin(triggersToPauseAtStart =
-        calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
-      ) {
-        pauseScanVerdictIngestionWithin(sv1ScanBackend) {
-          clue(
-            s"Phase 2a: near-zero threshold so round $measurementRound measurement sees every party"
-          ) {
-            updateTbarV11RewardConfig(
-              maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"),
-              appRewardCouponThreshold = BigDecimal("0.001"),
-            )
-          }
-          advanceRoundsOpening(13 to 15)
-
-          val scenario15 = runFourPartyScenario()
-          advanceRoundsOpening(16 to 17)
-          scenario15
-        }
-      }
-    val _ = (uid15Dvp1, uid15Dvp2, uid15Dvp3, uid15Direct)
-
-    val round15Amounts = eventually() {
-      getMintingAllowancesForRound(measurementRound)
+    // Measure round-10 per-party amounts and calibrate the verification
+    // threshold from the midpoint of the two smallest.
+    val round10Amounts = eventually() {
+      getMintingAllowancesForRound(postVoteRound)
         .map(a => BigDecimal(a.amount))
         .sorted
     }
-    val calibratedThreshold = round15Amounts match {
+    val calibratedThreshold = round10Amounts match {
       case smallest +: second +: _ => (smallest + second) / 2
       case _ =>
         fail(
-          s"Round $measurementRound minting allowances need at least 2 parties, got $round15Amounts"
+          s"Round $postVoteRound minting allowances need at least 2 parties, got $round10Amounts"
         )
     }
     // appRewardCouponThreshold is in USD; scan converts via
@@ -510,37 +498,38 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         .amuletPrice
     val calibratedThresholdUsd = calibratedThreshold * BigDecimal(amuletPriceUsdPerCc)
     logger.info(
-      s"Phase 2a measurement: round $measurementRound per-party amounts (ascending CC) = " +
-        round15Amounts.map(_.toString).mkString(", ") +
+      s"Round $postVoteRound per-party amounts (ascending CC) = " +
+        round10Amounts.map(_.toString).mkString(", ") +
         s"; calibrated threshold = $calibratedThreshold CC = $calibratedThresholdUsd USD" +
         s" (amuletPrice = $amuletPriceUsdPerCc USD/CC)"
     )
 
-    // Phase 2b: replay under the calibrated threshold — smallest party falls
-    // below, others clear, exercising the mixed above/below branch.
-    val verificationRound = 20L
+    // Verification: replay the round-10 scenario under the calibrated
+    // threshold — smallest party falls below, others clear, exercising the
+    // mixed above/below branch.
+    val verificationRound = 15L
 
-    val (uid20Dvp1, uid20Dvp2, uid20Dvp3, uid20Direct) =
+    val (uid15Dvp1, uid15Dvp2, uid15Dvp3, uid15Direct) =
       setTriggersWithin(triggersToPauseAtStart =
         calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
       ) {
         pauseScanVerdictIngestionWithin(sv1ScanBackend) {
           clue(
-            s"Phase 2b: vote calibrated threshold $calibratedThresholdUsd USD (= $calibratedThreshold CC) for round $verificationRound"
+            s"Vote calibrated threshold $calibratedThresholdUsd USD (= $calibratedThreshold CC) for round $verificationRound"
           ) {
             updateTbarV11RewardConfig(
               maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"),
               appRewardCouponThreshold = calibratedThresholdUsd,
             )
           }
-          advanceRoundsOpening(18 to 20)
+          advanceRoundsOpening(13 to 15)
 
-          val scenario20 = runFourPartyScenario()
-          advanceRoundsOpening(21 to 22)
-          scenario20
+          val scenario15 = runFourPartyScenario()
+          advanceRoundsOpening(16 to 17)
+          scenario15
         }
       }
-    val _ = (uid20Dvp1, uid20Dvp2, uid20Dvp3, uid20Direct)
+    val _ = (uid15Dvp1, uid15Dvp2, uid15Dvp3, uid15Direct)
 
     clue(
       s"Round $verificationRound: calibrated threshold $calibratedThresholdUsd USD (= $calibratedThreshold CC) splits parties above/below"
