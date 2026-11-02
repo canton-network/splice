@@ -4,4 +4,6 @@
 import type { HTMLAttributes } from 'react';
 
 export const dataTestId = (testId: string): HTMLAttributes<HTMLElement> =>
-  ({ 'data-testid': testId }) as HTMLAttributes<HTMLElement>;
+  ({
+    'data-testid': testId,
+  }) as HTMLAttributes<HTMLElement>;

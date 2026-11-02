@@ -28,9 +28,9 @@ export const AmountInput: React.FC<AmountInputProps> = ({
   }, [ccAmountText, amuletPriceQuery.data]);
 
   return (
-    <Stack direction="column" mb={4} spacing={1}>
+    <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
       <Typography variant="h6">Amount</Typography>
-      <Box display="flex">
+      <Box sx={{ display: 'flex' }}>
         <FormControl sx={{ marginRight: '32px', flexGrow: '1' }}>
           <OutlinedInput
             id={`${idPrefix}-amulet-amount`}

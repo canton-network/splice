@@ -105,8 +105,8 @@ const CreateAllocation: React.FC = () => {
   };
 
   return (
-    <Stack mt={4} spacing={4} direction="column" justifyContent="center">
-      <Typography mt={6} variant="h4">
+    <Stack spacing={4} direction="column" sx={{ mt: 4, justifyContent: 'center' }}>
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Create Allocation
       </Typography>
       <Card variant="outlined">
@@ -118,7 +118,7 @@ const CreateAllocation: React.FC = () => {
 
             <Typography variant="h5">Settlement</Typography>
             <Typography variant="h6">Settlement Ref</Typography>
-            <Stack direction="row" alignItems="center" spacing={2}>
+            <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
               <Typography variant="h6">ID</Typography>
               <TextField
                 id="create-allocation-settlement-ref-id"
@@ -157,7 +157,7 @@ const CreateAllocation: React.FC = () => {
             </Stack>
             <Typography variant="h6">Executors</Typography>
             {allocation.settlement.executors.map((_executor, idx) => (
-              <Stack key={idx} direction="row" alignItems="center" spacing={1}>
+              <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <BftAnsField
                   name={`Executor ${idx}`}
                   label={`Executor ${idx + 1}`}
@@ -207,7 +207,10 @@ const CreateAllocation: React.FC = () => {
             {allocation.transfer_legs.map((leg, idx) => (
               <Card key={idx} variant="outlined" sx={{ p: 2 }}>
                 <Stack spacing={1}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Stack
+                    direction="row"
+                    sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+                  >
                     <Typography variant="h6">Amulet Transfer Leg {idx + 1}</Typography>
                     {allocation.transfer_legs.length > 1 && (
                       <Button

@@ -61,7 +61,7 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
           renderValue={selected => {
             if (!selected) {
               return showPlaceholder ? (
-                <Typography component="span" color="text.secondary">
+                <Typography component="span" sx={{ color: 'text.secondary' }}>
                   {resolvedPlaceholder}
                 </Typography>
               ) : (

@@ -10,9 +10,9 @@ import TotalAmuletBalance from '../components/TotalAmuletBalance';
 const Root: React.FC = () => {
   return (
     <Layout>
-      <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
+      <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
         <Container maxWidth="lg" sx={{ marginTop: 2 }}>
-          <Stack mt={4} spacing={2} direction="column" justifyContent="center">
+          <Stack spacing={2} direction="column" sx={{ mt: 4, justifyContent: 'center' }}>
             <Typography variant="h5">
               Explore, search and find answers to current network configuration details.
             </Typography>

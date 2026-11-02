@@ -107,7 +107,7 @@ const Balances: React.FC<BalancesProps> = ({ group, party, provider, domainId, r
           </TableBody>
         </Table>
       </Stack>
-      <Stack justifyContent="stretch">
+      <Stack sx={{ justifyContent: 'stretch' }}>
         <TransferButton
           className="settle-my-debts-link"
           text="Settle My Debts"
@@ -233,7 +233,7 @@ const Entry: React.FC<EntryProps> = ({ group, party, provider, domainId, rules }
             Enter payment
           </Button>
         </Stack>
-        <Stack direction="row" justifyContent="stretch">
+        <Stack direction="row" sx={{ justifyContent: 'stretch' }}>
           <TextField
             label="Amount"
             className="transfer-amount-field"
@@ -329,10 +329,8 @@ const Group: React.FC<GroupProps> = ({ group, party, provider, domainId, rules }
         {group.contractId}
       </div>
       <Stack
-        sx={{ px: 2, py: 1 }}
         direction="row"
-        justifyContent="space-between"
-        alignItems="center"
+        sx={{ justifyContent: 'space-between', alignItems: 'center', px: 2, py: 1 }}
       >
         <Typography variant="button" className="group-name">
           {group.payload.id.unpack}
