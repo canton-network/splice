@@ -72,7 +72,10 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
     )
 
     withCanton(
-      Seq(testResourcesPath / "standalone-sv1-nodes.conf") ++
+      Seq(
+        testResourcesPath / "standalone-sv1-nodes.conf",
+        testResourcesPath / "standalone-participant-sv1-auto-init.conf",
+      ) ++
         Option
           .when(IsTheCantonSequencerBFTEnabled)(
             testResourcesPath / "standalone-sequencer-sv1-extra-enable-bft.conf"
@@ -81,20 +84,27 @@ class Sv1BootstrapProtocolVersion36IntegrationTest
       Seq(ProcessTestUtil.enableRepairCommandsConfig),
       "sv1-bootstrap-pv36",
       "SV1_ADMIN_USER" -> svConfig.ledgerApiUser,
+      "SV1_PARTICIPANT_IDENTIFIER" -> svConfig.cantonIdentifierConfig.value.participant,
       "SV1_PARTICIPANT_DB" -> s"participant_sv1_$dbsSuffix",
       "SV1_SEQUENCER_DB" -> s"sequencer_sv1_$dbsSuffix",
       "SV1_SEQUENCER_DB_BFT" -> s"sequencer_sv1_${dbsSuffix}_bft",
       "SV1_MEDIATOR_DB" -> s"mediator_sv1_$dbsSuffix",
       "SEQUENCER_DRIVER_DB" -> s"sequencer_driver_$dbsSuffix",
     ) {
-      clue("Canton nodes are running but have no identity") {
-        topologyConnections.foreach { connection =>
+      clue("The synchronizer nodes are running but have no identity") {
+        topologyConnections.drop(1).foreach { connection =>
           // Long timeout because Canton is slow to start up
           eventually(timeUntilSuccess = 60.seconds) {
             val idResult = connection.getIdOption().futureValue
             idResult.initialized shouldBe false
             idResult.uniqueIdentifier shouldBe None
           }
+        }
+      }
+
+      clue("The participant has initialized itself") {
+        eventually(timeUntilSuccess = 60.seconds) {
+          topologyConnections.head.getIdOption().futureValue.uniqueIdentifier shouldBe defined
         }
       }
 
