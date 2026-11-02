@@ -6,10 +6,11 @@ Everything reproducible is on one git branch; this page is the short path into i
 ## 1. Get the work
 
 ```
-git fetch <remote> ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
-cp -r ci-triage/skill/ci-triage ~/.claude/skills/
+git fetch origin ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
+cp -r ci-triage/skill/ci-triage ci-triage/skill/ci-triage-inbox ~/.claude/skills/
 ```
-Then read, in this order: `ci-triage/HANDOVER.md` (status of every fix branch, open items, environment notes),
+Then read, in this order: `ci-triage/HANDOVER.md` (section 0: the current inbox round, unrun host commands, open
+owner questions, and the `ghx` shim the inbox fetch needs; then fix branches, environment notes),
 `ci-triage/README.md` (ref -> run -> job mapping and one line per ref), and
 `ci-triage/skill/ci-triage/references/known-families.md` (flake families A to L with the grep that confirms each).
 

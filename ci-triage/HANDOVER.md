@@ -1,9 +1,63 @@
-# CI triage handover (state as of 2026-09-22)
+# CI triage handover (state as of 2026-11-02)
 
-Everything reproducible about the splice CI failure triage of 2026-09-08 to 2026-09-21 lives on this branch,
-`ray/ci-triage-2026-09-15`. A new person needs: this branch, the skill directory it carries, a sandbox with `gh`
-access to canton-network/splice, and the run URLs for new refs. Downloaded artifacts and Canton jars are not part
-of the handover; every packet contains the commands that fetched them.
+Everything reproducible about the splice CI failure triage since 2026-09-08 lives on this branch,
+`ray/ci-triage-2026-09-15`. A new person needs: this branch, the skill directories it carries, a sandbox with `gh`
+access to canton-network/splice and DACH-NY, and the cn-test-failures inbox. Downloaded artifacts and Canton jars
+are not part of the handover; every packet contains the commands that fetched them.
+
+Section 0 is the current state. Sections 3 and 4 are the snapshot of 2026-09-22 and were not rechecked since.
+
+## 0. Current state (2026-11-02)
+
+### How the work runs now
+
+Since October the unit of work is the inbox: items of board https://github.com/orgs/DACH-NY/projects/48/views/1
+with Status = Inbox. `/ci-triage-inbox` (skill in `ci-triage/skill/ci-triage-inbox/`) fetches it, splits it into
+already-triaged items and new groups, triages each group in a background fork with `/ci-triage`, and writes one
+dated packet dir per round (`ci-triage/2026-10-30/`, `ci-triage/2026-10-30b/`, `ci-triage/2026-11-02/`). Each
+dir has a `README.md` with the verdict per issue and `host-commands-*.md` with state-guarded `gh` commands
+(close dup, retitle "<Suite/job>: <cause>", root-cause comment) that a person with DACH-NY rights runs on the host.
+The assistant never closes, comments or pushes itself.
+
+`scripts/inbox_fetch.py` calls `ghx <api path>`, a token router on Raymond's host. Without it, create a shim that
+forwards to `gh api` with a token that covers DACH-NY:
+```
+printf '#!/bin/sh\nexec gh api "$@"\n' | sudo tee /usr/local/bin/ghx && sudo chmod +x /usr/local/bin/ghx
+```
+Then: `python3 -I ci-triage/skill/ci-triage-inbox/scripts/inbox_fetch.py --min-number 10900 --triage-dir ci-triage`.
+
+### Round 2026-11-02 (in progress): `ci-triage/2026-11-02/`
+
+37 inbox items from 10900 on: 3 triaged earlier, 34 new.
+
+| Issues | Group | State |
+|---|---|---|
+| 11108-11116 | nightly run 41171022068 (10-31), 9 jobs | fork A running; question: do the three broken nightlies share one cause |
+| 11119-11127 | nightly run 41275427340 (11-01), 9 jobs | fork A running |
+| 11129-11135 | nightly run 41391921766 (11-02), 7 jobs | fork A running |
+| 11104, 11105, 11107, 11128, 11136 | single scala_test jobs (LSU, wall-clock-time, simtime) | fork B running |
+| 11117 | Devnet backup_status_cluster 10-31 | stays open: first night after the Devnet LSU switch to serial 7 (cni #7836/#7837), cause open, needs log; owner suggestion Krzysztof |
+| 11118 | Devnet backup_cluster 10-31 | dup of 11117 |
+| 11106, 11137 | CircleCI deploy_sv_reonboard 87744, 87814 | not 10844 (#8125 deployed); intermittent (2 of 7 runs), needs log |
+
+Not run yet: every command in `ci-triage/2026-11-02/host-commands-*.md`. The log fetches for the four infra items
+are at the top of `host-commands-c.md` (CircleCI needs `CIRCLECI_TOKEN`; cni Actions logs need `gh` on the host).
+If fork A or B rows are missing from the README, those groups are still to be triaged: rerun `/ci-triage-inbox`.
+
+### Open items with an owner question (live state 2026-11-02)
+
+| Issue | Subject | Owner |
+|---|---|---|
+| 10912 | ScanEventHistoryIntegrationTest: background reward/licence tx lands after the pre-tap cursor | rautenrieth-da (assigned) |
+| 10915 | Devnet backup_status_cluster: 18:00 check finds stale backups when the 16:00 backup has not finished | none; suggestion Krzysztof |
+| 10917 | DockerComposeValidatorFrontendIntegrationTest: portfolio app 'Failed to list contracts' | none; recheck after #8130 |
+| 10918 | Compose/LocalNet wallet frontend: tap row not found in transaction history | none; root cause not found |
+| 10919 | ExpiryWithIgnoredAmuletVersionIntegrationTest: startup times out, splitwellValidator DB lock | none; lock holder unknown |
+| 10927 | PV 36 nightly: joining SV outbox cannot push identity (X2) | moritzkiefer-da (assigned) |
+| 10930, 10933 | MainNet-packages tests: no RewardCouponV2; traffic purchase UNKNOWN_INFORMEES | none; suggestion Simon Meier |
+
+Closed last week, for context: 10934 (X1, fixed by #8149, prove on the next mainnet-Daml nightly at PV 36),
+10937 (X3), 10922 (cluster lock reaper), the 10939-11070 compile-break batch (#8150).
 
 ## 1. What is where
 
@@ -24,18 +78,17 @@ artifacts and jars).
 From the sandbox that holds the branch, on the host (sandbox name is `$SANDBOX_VM_ID` inside it; here `cn`):
 ```
 git fetch sandbox-cn ray/ci-triage-2026-09-15
-git push <remote-the-colleague-can-read> ray/ci-triage-2026-09-15
-for b in $(git branch -r --list 'sandbox-cn/ray/fix-*' 'sandbox-cn/ray/backport-*' | sed 's|sandbox-cn/||'); do git fetch sandbox-cn $b:$b; done
+git push origin ray/ci-triage-2026-09-15
 ```
-The branch carries only `[skip ci]` commits and must never be merged; pushing it as a plain branch is fine.
-Colleague, in a fresh sandbox:
+The branch carries only `[skip ci]` commits and must never be merged; it lives as a plain branch on
+canton-network/splice. Colleague, in a fresh sandbox:
 ```
-git fetch <remote> ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
-cp -r ci-triage/skill/ci-triage ~/.claude/skills/
+git fetch origin ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
+cp -r ci-triage/skill/ci-triage ci-triage/skill/ci-triage-inbox ~/.claude/skills/
 ```
 Continue committing packets on the same branch with `git commit -s -m "[skip ci] ..."`, one subject line, ASCII only.
 
-## 3. Fix branch status
+## 3. Fix branch status (snapshot 2026-09-22)
 
 Checked 2026-09-22 with `git cherry <base> <branch>` (patch present upstream) and the PR list of canton-network/splice.
 
@@ -64,7 +117,7 @@ Checked 2026-09-22 with `git cherry <base> <branch>` (patch present upstream) an
 | ray/fix-fail-fast-init (2832e6da66, 2 commits) | 10088-A, 10180 (#7289) | not pushed | uncompiled, no proving test; `ray/fix-fail-fast-init-preRebase` is a superseded draft, drop it |
 | ray/fix-summarizing-round-log-noise (2fb77e0be2) | 10121, 10142 | not pushed | uncompiled; app-side log level change, needs owner review |
 
-## 4. Open items without a fix branch
+## 4. Open items without a fix branch (snapshot 2026-09-22)
 
 - 10165 (umbrella for 10094, 10153, 10161, 10137): BFT 1 -> N sequencer onboarding step loses strong quorum, sv1
   blacklisted for epochs, 120 s ack deadlines and a 38 s HTTP timeout. Canton-side; not fixed as of the canton
