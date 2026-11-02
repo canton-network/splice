@@ -7935,7 +7935,7 @@
                         "expr": "daml_sequencer_bftordering_p2p_endpoint_status{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
                         "format": "time_series",
                         "instant": false,
-                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{endpoint}}",
+                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{exported_endpoint}}",
                         "range": true
                       }
                     },
