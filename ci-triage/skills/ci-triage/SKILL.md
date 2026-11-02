@@ -40,12 +40,19 @@ Pick the source once per session and say which one you use:
 ```
 command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
 ```
-- `ghx` works (prints `DACH-NY/cn-test-failures`): `ghx <api path>` is a host-side proxy that adds the token
-  for the repository in the path and prints the JSON response. Pass only the path (with query string) and
-  pipe to `jq`; do not rely on `gh api` flags such as `--jq` or `--paginate`. It reads cn-test-failures issues
-  and comments and canton-network-internal contents and commits. It refuses canton-network-internal Actions
-  (`not allowed by route`) and cannot read Projects v2. `dial tcp ... refused` means the router is off: ask the
-  user to start it, or use the manual export. Recipes: `references/recipes.md` section 11.
+- `ghx` works (prints `DACH-NY/cn-test-failures`): `ghx /repos/OWNER/REPO/...` is a curl wrapper (Raymond's
+  `gh-cred-router`; its README has the host and sandbox setup) that sends the request to a credential router on
+  the user's host. The router picks a token per repository and checks the request against per-repository rules from the user's
+  config. Extra arguments are curl options, not `gh api` flags: no `--jq`, no `--paginate`; pipe to `jq` and page
+  with `page=N`. Only `/repos/{owner}/{repo}/...` is routed, so `/graphql`, `/search` and `/user` are rejected.
+  With the example config it reads cn-test-failures (everything) and canton-network-internal code (contents,
+  commits, git fetch), and refuses canton-network-internal Actions (`not allowed by route`). The config may also
+  allow issue writes; the skill still never writes (step 8). Recipes: `references/recipes.md` section 11.
+  If `ghx` is missing or fails, check the router with
+  `curl -s -o /dev/null -w '%{http_code}\n' http://host.docker.internal:18555/api/repos/DACH-NY/canton`:
+  `401` router up (then run the sandbox setup from the router README), `500`/`connection refused` router not
+  running, `403 Approval required for localhost:18555` the sandbox network policy is missing. Report the answer to
+  the user, who decides whether to fix the router or to use the manual export.
 - No `ghx`: manual export. The sandbox runs in clone mode, so files the user writes on the host are only visible
   through the read-only host mount: the user writes to `ci-triage/export/` in the host repo (excluded from git),
   you read `/run/sandbox/source/ci-triage/export/`. Recipes 9 (recent issues) and 10 (inbox) produce the exports;

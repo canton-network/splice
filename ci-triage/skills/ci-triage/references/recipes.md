@@ -160,7 +160,8 @@ jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " 
 
 ## 11. Private data through ghx
 
-`ghx` source (SKILL.md, Sources for private data). Path only, JSON out; paginate by hand with `page=N`.
+`ghx` source (SKILL.md, Sources for private data). `ghx <path> [curl options]`; JSON out, curl exits non-zero on
+HTTP errors (`--fail-with-body`, the router's reason is in the body). Page by hand with `page=N`.
 ```
 T=/repos/DACH-NY/cn-test-failures
 ghx $T/issues/$REF | jq -r '"#\(.number) [\(.state)] \(.title)\n\(.body)"'
@@ -168,8 +169,12 @@ ghx "$T/issues/$REF/comments?per_page=100" | jq -r '.[] | "-- \(.user.login) \(.
 for p in 1 2 3 4 5 6 7 8 9 10; do ghx "$T/issues?state=all&per_page=100&page=$p&since=<YYYY-MM-DD>T00:00:00Z"; done \
   | jq -c '.[] | select(.pull_request | not) | {number, title, state, state_reason, created_at, body}' > log/issues-recent.jsonl
 jq -r --arg p '<test name or flagged text>' 'select((.title + " " + (.body // "")) | test($p)) | "#\(.number) \(.state)/\(.state_reason // "-") \(.created_at[0:10]) \(.title[0:110])"' log/issues-recent.jsonl
-ghx "/repos/DACH-NY/canton-network-internal/commits/<sha>" | jq -r '.commit.message, (.files[].filename)'
-ghx "/repos/DACH-NY/canton-network-internal/contents/<path>?ref=<sha>" | jq -r .content | base64 -d
+C=/repos/DACH-NY/canton-network-internal
+ghx "$C/commits/<sha>" | jq -r '.commit.message, (.files[].filename)'
+ghx "$C/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"
 ```
-`since` filters on last update, not creation. The issue list holds no comments; fetch them per candidate.
-canton-network-internal Actions logs are refused: ask the user to save them to `ci-triage/export/<ref>/` on the host.
+`since` filters on last update, not creation. The issue list holds no comments; fetch them per candidate. Read file
+contents only with the raw media type: the JSON form carries a `download_url` with a short-lived access token, which
+must not end up in logs or packets. After the router's sandbox setup, `git clone https://github.com/DACH-NY/canton-network-internal.git`
+goes through the router too (into `log/`, never into the triage branch). canton-network-internal Actions logs are
+refused: ask the user to save them to `ci-triage/export/<ref>/` on the host.
