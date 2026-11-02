@@ -1,6 +1,6 @@
 # Packet template
 
-File: `ci-triage/<ref>-<short-slug>.md`. Title line first, then one paragraph of verdict, then numbered
+File: `ci-triage/issues/<ref>-<short-slug>.md`. Title line first, then one paragraph of verdict, then numbered
 sections. Every section is: one sentence of what the command shows, the command in a fence, the verbatim
 output in a fence (long hashes trimmed by the sed/cut in the command itself, e.g. `s/1220[0-9a-f]{60}/../g`).
 
@@ -20,7 +20,12 @@ output in a fence (long hashes trimmed by the sed/cut in the command itself, e.g
 Duplicate of / family; flake or real; fix location; fix branch if any; what was NOT verified.
 ```
 
-README rows:
-- Mapping table: `| ref | run | branch sha (PR) | job id and name | canton pin |`
-- Overview table: `| ref | failure (one line, with the key timestamps) | duplicate of | packet + resolution/status |`
-- Fix-branch table: `| branch | commit | fixes | verified here |`
+Index row in `ci-triage/issues/INDEX.tsv`: one line per ref, sorted by ref, tab-separated, no tabs or newlines in
+cells, empty cell for unknown (never guessed). Columns:
+`ref date run branch job canton summary dup_of category status file`
+- `date`: day of the last triage; `run`: GHA run id; `branch`: branch and sha (PR); `job`: job id and name;
+  `canton`: pin from `nix/canton-sources.json`; `summary`: one line, with the key timestamps; `dup_of`: parent ref
+  and family letter, or `new (<family>)`; `category`: free-form (Raymond's early rows only); `status`: resolution,
+  issue action, fix branch; `file`: packet path(s) relative to `ci-triage/`, space-separated.
+- Lookup: `awk -F'\t' '$1 == <ref>' ci-triage/issues/INDEX.tsv`; grep by test name or family across `summary`
+  and `dup_of`. Several refs in one packet get one row each with the same `file`.

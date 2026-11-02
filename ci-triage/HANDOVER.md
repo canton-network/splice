@@ -6,7 +6,9 @@ Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Cont
 `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02); his index, handover and onboarding are in `history/`.
 
 Taken over from Raymond:
-- all packets and round directories, at their original paths (issue comments cite them);
+- all packets, now in `issues/` (index: `issues/INDEX.tsv`, built from his README and the 2026-11-02 one); his
+  round READMEs and host-command files in `history/rounds/`; old-to-new paths for the citations in issue comments
+  in `history/moved-paths.tsv`;
 - `known-families.md` (moved from his skill copy, plus an index at the top);
 - not taken over: his skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
   which inferred the inbox from issue timelines through a host token router, replaced by the board export below;

@@ -6,9 +6,8 @@
 - No AI attribution anywhere (no Co-Authored-By, no "generated with"). `Signed-off-by` is the only trailer.
 - Commit messages: one subject line plus the DCO sign-off. CI tag mandatory: `[skip ci]` on the triage branch
   (never on a PR branch: it makes the PR unmergeable), `[ci]` on fix branches, `[static]` for lint-only.
-- Never commit CLAUDE.md or memory files. The triage branch carries only `ci-triage/` (packets, README,
-  HANDOVER, ONBOARDING, known-families.md). Nothing else: this skill lives on main, and changes to it go through a
-  normal PR.
+- Never commit CLAUDE.md or memory files. The triage branch carries only `ci-triage/` (`issues/`, `skills/`,
+  `history/`, HANDOVER.md, known-families.md). Nothing else.
 - Never modify existing issues. Instead, print a CLI command that would modify the issue and let the user run it.
 - Canton: `canton/` is vendored and stale. The binary is pinned in `nix/canton-sources.json`; runtime log lines
   stand on their own, source citations only against the jar of the version that ran.

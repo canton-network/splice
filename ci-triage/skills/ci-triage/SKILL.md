@@ -71,13 +71,15 @@ command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
 Input: one `cn-test-failures` issue number. Read its body and comments from the source chosen above. If neither
 source has it, stop immediately and ask the user to fix access or rerun the export.
 
-Output: one evidence packet per issue in `ci-triage/`, a row in `ci-triage/README.md`, a duplicate verdict,
-and optionally a fix branch. Everything you write must be reproducible by someone else: every claim is a command
+Output: one evidence packet per issue in `ci-triage/issues/`, a row in `ci-triage/issues/INDEX.tsv`, a duplicate
+verdict, and optionally a fix branch. Everything you write must be reproducible by someone else: every claim is a command
 plus its verbatim output. Read `references/conventions.md` once before starting; it overrides defaults.
 
-The skill lives on main; the triage data does not. Packets, `ci-triage/README.md`, `ci-triage/HANDOVER.md` and the
-flake family catalogue `ci-triage/known-families.md` live on the shared triage branch, which is never merged. If it
-is not checked out, ask the user which triage branch is current before writing anything.
+Everything lives on the shared triage branch, which is never merged: this skill (`ci-triage/skills/`), the
+packets and their index (`ci-triage/issues/`), `ci-triage/HANDOVER.md` and the flake family catalogue
+`ci-triage/known-families.md`. If it is not checked out, ask the user which triage branch is current before
+writing anything. `ci-triage/history/` is Raymond's earlier state, read-only; `history/moved-paths.tsv` maps the
+packet paths cited in older issue comments to their current location.
 
 ## Procedure
 
@@ -113,7 +115,8 @@ is not checked out, ask the user which triage branch is current before writing a
    fix that already exists on main, check `git merge-base --is-ancestor <sha> origin/<branch>`: a missing
    backport is the most common resolution for release-line failures.
 7. Write the packet from `references/packet-template.md`: command, then verbatim output, per finding.
-   Add the README row (mapping table, overview table, cross-cutting notes when a pattern spans refs).
+   Add or update the ref's row in `ci-triage/issues/INDEX.tsv` (format in the template). A pattern that spans refs
+   goes into the family in `known-families.md`, an open fix branch into `HANDOVER.md`.
    Add new families or occurrences to `ci-triage/known-families.md`.
 8. Suggest how to handle the GitHub issue. Do not modify the issue yourself, instead print CLI commands
    that can be used by the user.
@@ -132,7 +135,7 @@ is not checked out, ask the user which triage branch is current before writing a
    branch stays checked out (`references/recipes.md` section 8), named
    `<user>/fix-<ref>-<slug>` (backports: `<user>/backport-<ref>-<pr>-<release-line>`), where `<user>` is your own
    short git prefix, so the branch carries the cn-test-failures ref; when one branch fixes several refs, use the
-   parent ref and list the others in the README row. Single-subject commit with a CI tag and DCO sign-off, no
+   parent ref and list the others in the INDEX rows. Single-subject commit with a CI tag and DCO sign-off, no
    code comments, no AI attribution. State plainly what was and was not verified.
    Do not compile or start Canton unless asked; cheap checks only (`scalafmtCheck`, `prettier --check`,
    config greps).

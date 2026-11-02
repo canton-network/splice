@@ -58,7 +58,7 @@ onboarding.initial-protocol-version = 36, base deploys 10-28 23:22 and 10-29 10:
 fails with INITIAL_ONBOARDING_ERROR: the genesis OwnerToKeyMappings of participant, sequencer and mediator carry newly
 generated keys, because Canton's generateOnboardingTopologyTransactions rebuilds a node's identity with keys looked up by
 Canton's own names when the stored identity is at another PV, and splice's NodeInitializer names them differently.
-Tracked in #10844, details in ci-triage/2026-10-29/pv36-founding-deployments.md (ray/ci-triage-2026-09-15).
+Tracked in #10844, details in ci-triage/issues/2026-10-29-pv36-founding-deployments.md (ray/ci-triage-2026-09-15).
 
 ### Comment on canton-network/splice#8065
 

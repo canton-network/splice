@@ -1,6 +1,6 @@
 # 10736: ciperiodic deploy_upgrade (CircleCI pipeline 87425, job 525815), dup of 10677, NOT family N
 
-Verdict: same as 10677 (needs log). Correction to `2026-10-28/10699-10701-ciperiodic-pv36.md`, which listed 10677
+Verdict: same as 10677 (needs log). Correction to `issues/10699-10701-ciperiodic-pv36.md`, which listed 10677
 as "likely the same" as the PV 36 SV1 bootstrap (family N): deploy_upgrade is a different failure.
 
 - Trigger `.circleci/triggers/enabled/ciperiodic-upgrade.json`: "Tests an upgrade from the latest release to Splice
