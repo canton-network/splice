@@ -13,18 +13,11 @@ import scala.concurrent.{ExecutionContext, Future}
 
 final case class StoreReadPerfMetrics(
     totalTimeNs: BigDecimal,
-    dbWaitTimeNs: BigDecimal,
-    dbExecTimeNs: BigDecimal,
     peakHeapBytes: BigDecimal,
     cpuToWallClockRatio: BigDecimal,
     updateSizeBytes: Long,
     numUpdates: Long,
-) {
-
-  /** Time spent neither waiting for a DB connection nor executing DB queries,
-    */
-  def nonDbTimeNs: BigDecimal = (totalTimeNs - dbWaitTimeNs - dbExecTimeNs).max(BigDecimal(0))
-}
+)
 
 final case class ReadOperation(
     name: String,
@@ -118,24 +111,6 @@ abstract class StoreReadPerformanceTest(
         metrics.cpuToWallClockRatio,
       ),
       metric(
-        "db_exec_time_ns",
-        "DB executor execution time recorded by DbStorageMetrics (nanosecond precision), " +
-          "i.e. the DB-fetch cost for this operation.",
-        metrics.dbExecTimeNs,
-      ),
-      metric(
-        "db_wait_time_ns",
-        "DB executor wait time recorded by DbStorageMetrics (nanosecond precision), " +
-          "i.e. time queued on the executor + acquiring a connection before the query ran.",
-        metrics.dbWaitTimeNs,
-      ),
-      metric(
-        "non_db_time_ns",
-        "Time spent neither waiting for nor executing DB queries " +
-          "(total_time_ns - db_wait_time_ns - db_exec_time_ns), i.e. decode/translation + overhead.",
-        metrics.nonDbTimeNs,
-      ),
-      metric(
         "update_size_bytes",
         "Size of the update dump file in bytes",
         BigDecimal(metrics.updateSizeBytes),
@@ -194,8 +169,6 @@ abstract class StoreReadPerformanceTest(
 
           val m = StoreReadPerfMetrics(
             totalTimeNs = BigDecimal(duration),
-            dbWaitTimeNs = BigDecimal(dbWaitNs),
-            dbExecTimeNs = BigDecimal(dbExecNs),
             peakHeapBytes = heapUsed,
             cpuToWallClockRatio = cpuToWallClockRatio,
             updateSizeBytes = updateSizeBytes,

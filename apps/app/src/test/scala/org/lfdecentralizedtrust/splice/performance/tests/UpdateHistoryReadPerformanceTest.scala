@@ -62,7 +62,6 @@ class UpdateHistoryReadPerformanceTest(
 
   override type Store = UpdateHistory
 
-  // Enabling Canton's query-cost tracking tags each DB sample with a `callsite` label
   override protected def logQueryCost: Option[QueryCostMonitoringConfig] =
     Some(QueryCostMonitoringConfig(every = NonNegativeFiniteDuration.ofSeconds(5)))
 
