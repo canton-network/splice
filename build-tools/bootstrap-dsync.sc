@@ -1,6 +1,3 @@
-// This script is idempotent: every step first checks whether it has already been performed, so it
-// can safely be rerun, e.g. after a failure halfway through.
-
 import com.digitalasset.canton.console.{InstanceReference, SequencerReference}
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
 
@@ -94,9 +91,9 @@ def proposeBySigningSequencers(description: String)(
     println(s"$description: already done, skipping")
   } else {
     println(s"$description...")
-    signingSequencers.foreach { owner =>
-      if (hasProposed(owner)) println(s"${owner.name} has already proposed, skipping")
-      else propose(owner)
+    signingSequencers.foreach { sequencer =>
+      if (hasProposed(sequencer)) println(s"${sequencer.name} has already proposed, skipping")
+      else propose(sequencer)
     }
     utils.retry_until_true(isDone())
   }
@@ -115,12 +112,12 @@ def hasSequencerThreshold2(
 
 def hasProposedSynchronizerParameters(
     synchronizerId: SynchronizerId,
-    owner: InstanceReference,
+    node: InstanceReference,
     predicate: DynamicSynchronizerParameters => Boolean,
 ) =
-  owner.topology.synchronizer_parameters
+  node.topology.synchronizer_parameters
     .list(store = TopologyStoreId.Synchronizer(synchronizerId), proposals = true)
-    .exists(r => predicate(r.item) && r.context.signedBy.contains(fingerprint(owner)))
+    .exists(r => predicate(r.item) && r.context.signedBy.contains(fingerprint(node)))
 
 nodes.foreach(initManually)
 
@@ -152,12 +149,12 @@ val synchronizerId =
 proposeBySigningSequencers("Setting sequencer threshold to 2")(
   isDone = () => hasSequencerThreshold2(synchronizerId, sequencers.head, proposals = false),
   hasProposed = hasSequencerThreshold2(synchronizerId, _, proposals = true),
-  propose = owner =>
-    owner.topology.sequencers.propose(
+  propose = node =>
+    node.topology.sequencers.propose(
       synchronizerId,
       threshold = PositiveInt.tryCreate(2),
       active = sequencers.map(_.id),
-      signedBy = Some(fingerprint(owner)),
+      signedBy = Some(fingerprint(node)),
       synchronize = None,
     ),
 )
@@ -172,11 +169,11 @@ proposeBySigningSequencers("Restricting onboarding")(
     _,
     _.onboardingRestriction == OnboardingRestriction.RestrictedOpen,
   ),
-  propose = owner =>
-    owner.topology.synchronizer_parameters.propose_update(
+  propose = node =>
+    node.topology.synchronizer_parameters.propose_update(
       synchronizerId,
       _.update(onboardingRestriction = OnboardingRestriction.RestrictedOpen),
-      signedBy = Some(fingerprint(owner)),
+      signedBy = Some(fingerprint(node)),
     ),
 )
 
@@ -187,8 +184,8 @@ proposeBySigningSequencers("Turning on traffic management")(
       .trafficControl
       .isDefined,
   hasProposed = hasProposedSynchronizerParameters(synchronizerId, _, _.trafficControl.isDefined),
-  propose = owner =>
-    owner.topology.synchronizer_parameters.propose_update(
+  propose = node =>
+    node.topology.synchronizer_parameters.propose_update(
       synchronizerId,
       _.update(trafficControl =
         Some(
@@ -205,6 +202,6 @@ proposeBySigningSequencers("Turning on traffic management")(
           )
         )
       ),
-      signedBy = Some(fingerprint(owner)),
+      signedBy = Some(fingerprint(node)),
     ),
 )
