@@ -145,7 +145,7 @@ describe('flywayMigrationToWaitFor', () => {
     );
   });
 
-  test.each(['V077__verdict_add_round_number.sql', 'V078__partition_update_history'])(
+  test.each(['V077__verdict_add_round_number.sql', 'V081__partition_update_history'])(
     'rejects %s',
     async migration => {
       const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
@@ -163,7 +163,7 @@ describe('flywayMigrationToWaitFor', () => {
           'V068__app_activity_record_meta.sql',
           'V081__partition_update_history.sql',
         ])
-      ).toThrow(/: V078__partition_update_history\.sql$/);
+      ).toThrow(/: V081__partition_update_history\.sql$/);
     } finally {
       fs.rmSync(dir, { recursive: true });
     }
