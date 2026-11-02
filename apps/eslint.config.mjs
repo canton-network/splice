@@ -52,7 +52,6 @@ export default defineConfig([
       "react-hooks/refs": "off",
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/set-state-in-render": "off",
-      "react-hooks/static-components": "off",
       "react-hooks/immutability": "off",
       "@typescript-eslint/no-non-null-asserted-optional-chain": "off",
       "@typescript-eslint/no-unused-vars": [
