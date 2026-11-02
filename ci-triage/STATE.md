@@ -1,17 +1,16 @@
-# CI triage handover
+# CI triage state
 
 ## State 2026-11-02
 
 Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Continues Raymond's
-`ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02); his index, handover and onboarding are in `history/`.
+`ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02); his README, handover and onboarding are on that branch.
 
 Taken over from Raymond:
 - all packets, now in `issues/` (index: `issues/INDEX.tsv`, built from his README and the 2026-11-02 one); his
-  round READMEs and host-command files in `history/rounds/`; old-to-new paths for the citations in issue comments
-  in `history/moved-paths.tsv`;
+  round READMEs and host-command files in `history/rounds/`;
 - `known-families.md` (moved from his skill copy, plus an index at the top);
 - not taken over: his skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
-  which inferred the inbox from issue timelines through a host token router, replaced by the board export below;
+  superseded by `skills/ci-triage-inbox/`, its script is `scripts/inbox_from_timelines.py`;
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 
 Access from the sandbox: canton-network/splice runs, logs and artifacts work. cn-test-failures and canton-network-internal

@@ -55,7 +55,7 @@ packet and asks you to return the INDEX rows, catalogue notes and commands inste
    backport is the most common resolution for release-line failures.
 7. Write the packet from `references/packet-template.md`: command, then verbatim output, per finding.
    Add or update the ref's row in `ci-triage/issues/INDEX.tsv` (format in the template). New families or
-   occurrences go into `ci-triage/known-families.md` (and its index table), an open fix branch into `HANDOVER.md`.
+   occurrences go into `ci-triage/known-families.md` (and its index table), an open fix branch into `STATE.md`.
 8. Issue commands for the user (never run them yourself):
    - Not a duplicate: a comment with the findings and the suggested fix (one paragraph for a simple case such as a
      missing synchronization in a test, more for complex ones), optionally a retitle to

@@ -1,6 +1,6 @@
 # CI triage
 
-This folder exists only on the shared triage branch (the current one is named in `HANDOVER.md`), which is never
+This folder exists only on the shared triage branch (the current one is named in `STATE.md`), which is never
 merged.
 It holds the triage of failed CI jobs filed in `DACH-NY/cn-test-failures`.
 
@@ -18,11 +18,15 @@ ref = a cn-test-failures issue number.
 | `issues/<ref>-<slug>.md` | evidence packets, one per issue or per group of issues |
 | `issues/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
-| `HANDOVER.md` | current state: inbox, open questions, open fix branches |
-| `history/` | Raymond's state up to 2026-11-02, read-only; `moved-paths.tsv` maps paths cited in old issue comments |
+| `STATE.md` | current state: inbox, open questions, open fix branches |
+| `history/rounds/` | Raymond's per-round READMEs and the host commands he ran, read-only |
 | `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md` |
 | `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
+
+Paths cited in issue comments before 2026-11-03 (e.g. `ci-triage/2026-11-02/singles-b.md`) were moved; find the
+new path with `git show --name-status -M 7c4d314acd -- ci-triage | grep '<old path>'`. Raymond's README,
+handover and onboarding are on `ray/ci-triage-2026-09-15` (also at `2bf9628c11` on this branch).
 
 ## Background
 
@@ -72,7 +76,8 @@ command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
 - The triage branch carries only `ci-triage/`. Never commit memory files or CLAUDE.md files outside `ci-triage/`.
 - Do not run sbt compiles or start Canton unless asked; triage works from the run's logs and artifacts.
 - Artifacts the sandbox downloads go to `log/<ref>/` (gitignored), with `TMPDIR` under `log/` too; keep `.clog.gz`
-  compressed and stream with `zcat`. Never put tokens (e.g. a contents `download_url`) into files.
+  compressed and stream with `zcat`. Never pipe a large `zcat` into `sort` (it spills to `/tmp`); count with `awk`.
+  Never put tokens (e.g. a contents `download_url`) into files.
 - Fix branches: one per PR, stacked follow-ups on the same branch, named `<user>/fix-<ref>-<slug>` or
   `<user>/backport-<ref>-<pr>-<release-line>` (`<user>` = your git prefix), in their own worktree.
 

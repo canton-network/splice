@@ -10,7 +10,7 @@ the `ci-triage` skill; this skill is the batch wrapper around it. Recipes: `ci-t
 
 ## 1. Fetch
 
-- Read `ci-triage/HANDOVER.md` first: items left open on purpose, open owner questions, unrun commands from the
+- Read `ci-triage/STATE.md` first: items left open on purpose, open owner questions, unrun commands from the
   last round.
 - The inbox: ask the user for a fresh recipe 10 export and read `/run/sandbox/source/ci-triage/export/inbox.jsonl`.
   Without the user but with `ghx`, use the timeline heuristic, and say that the list is inferred:
@@ -30,7 +30,7 @@ One table, one row per item, exactly one class each:
 | Class | Test | Action |
 |---|---|---|
 | done | has a row in `issues/INDEX.tsv` or a root-cause comment, and no newer failure | check the comment against the packet or the family's confirming grep; propose the Status (`Triaged`, or close as duplicate); no new packet |
-| waiting | HANDOVER lists it as open on purpose (owner question, fix PR pending, umbrella) | leave it; mention it |
+| waiting | STATE.md lists it as open on purpose (owner question, fix PR pending, umbrella) | leave it; mention it |
 | needs-log | the evidence is only in CircleCI or canton-network-internal Actions | name the exact job id and step for the user to save to `export/<ref>/`; one request for all of them |
 | assigned | assigned to a person with an active discussion | skip unless asked; mention it |
 | new | everything else | group (step 3) |
@@ -53,7 +53,7 @@ first. Brief each with:
 - the refs with run id, job id and job name, the suspected family, and the packet file name to write
   (`ci-triage/issues/<ref>[-<ref>...]-<slug>.md`);
 - follow the ci-triage skill, steps 1 to 9, with these limits:
-  - write only your own packet file; do not edit `INDEX.tsv`, `known-families.md` or `HANDOVER.md`, do not commit,
+  - write only your own packet file; do not edit `INDEX.tsv`, `known-families.md` or `STATE.md`, do not commit,
     do not create or switch branches (other agents work in the same checkout);
   - a test-side fix is described precisely (file, line, change), not written;
   - return: the verdict per ref, the INDEX.tsv rows (exact TSV), text for `known-families.md` (an occurrence note,
@@ -67,7 +67,7 @@ reconciled in step 5.
 
 - Check each returned packet: ASCII only, commands with verbatim output, file name as briefed.
 - Add the rows to `issues/INDEX.tsv` (keep it sorted by ref, one row per ref, 11 tab-separated columns), the family
-  text and index rows to `known-families.md`, and refresh `HANDOVER.md`: the inbox table by class with the next
+  text and index rows to `known-families.md`, and refresh `STATE.md`: the inbox table by class with the next
   action per item, open fix branches, open owner questions.
 - One commit for the round: `[skip ci] <date>: <one line per verdict group>`.
 - Fix branches only when the user asks, one worktree per branch (ci-triage step 9).
