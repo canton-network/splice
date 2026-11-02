@@ -376,14 +376,14 @@ optionalMetadataParser : Text -> Parser Metadata (Optional Text)
 optionalMetadataParser key = getOptionalMetadata key <$> inputParser
 
 -- | Parses a required key with a decoder such as `timeFromMeta`, which returns `None` for a missing key.
-metadataDecoderParser : (Text -> Metadata -> Either Text (Optional o)) -> Text -> Parser Metadata o
-metadataDecoderParser decode key = inputParser >>= \meta -> validationParser $ validate $ case decode key meta of
+requiredMetadataParserWith : (Text -> Metadata -> Either Text (Optional o)) -> Text -> Parser Metadata o
+requiredMetadataParserWith decode key = inputParser >>= \meta -> validationParser $ validate $ case decode key meta of
   Left e -> Left (errorInMemoKeyMessage key e)
   Right None -> Left (missingMemoKeyMessage key)
   Right (Some v) -> Right v
 
 timeMetadataParser : Text -> Parser Metadata Time
-timeMetadataParser = metadataDecoderParser timeFromMeta
+timeMetadataParser = requiredMetadataParserWith timeFromMeta
 
 iso8601TimeFromTextParser : Text -> Text -> Parser i Time
 iso8601TimeFromTextParser key input = validationParser $ validate $ case parseIso8601UtcTime input of
@@ -394,7 +394,7 @@ iso8601TimeMetadataParser : Text -> Parser Metadata Time
 iso8601TimeMetadataParser key = requiredMetadataParser key >>= iso8601TimeFromTextParser key
 
 relTimeMetadataParser : Text -> Parser Metadata RelTime
-relTimeMetadataParser = metadataDecoderParser relTimeFromMeta
+relTimeMetadataParser = requiredMetadataParserWith relTimeFromMeta
 
 -- | Parse a URL-style key value string 'key1=value1&...&key2=value2' into a key-value map.
 keyValueParser : Text -> Parser i (TextMap.TextMap Text)
