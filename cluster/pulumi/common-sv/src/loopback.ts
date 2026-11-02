@@ -10,6 +10,7 @@ import {
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
 } from '@canton-network/splice-pulumi-common';
+import { allDSyncNodeNames } from '@canton-network/splice-pulumi-common-sv/src/dSyncNode';
 import { allValidatorIngressNames } from '@canton-network/splice-pulumi-common-validator';
 
 import { coreSvsToDeploy, svRunbookConfig } from './svConfigs';
@@ -76,7 +77,9 @@ export function installLoopback(
     `${ingress}.${clusterHostname}`,
     `*.${ingress}.${clusterHostname}`,
   ]);
-
+  const dsyncHosts = allDSyncNodeNames()
+    .map(dsync => [`${dsync}.${clusterHostname}`, `*.${dsync}.${clusterHostname}`])
+    .flat();
   const allHosts = [
     clusterHostname,
     ...validatorHosts,
@@ -84,7 +87,9 @@ export function installLoopback(
     `*.validator1.${clusterHostname}`,
     `splitwell.${clusterHostname}`,
     `*.splitwell.${clusterHostname}`,
-  ].concat(svHosts);
+  ]
+    .concat(svHosts)
+    .concat(dsyncHosts);
 
   const virtualService = new k8s.apiextensions.CustomResource(
     `loopback-virtual-service-${namespace.logicalName}`,

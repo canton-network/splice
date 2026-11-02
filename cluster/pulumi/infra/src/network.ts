@@ -17,6 +17,7 @@ import {
   useComputeClasses,
 } from '@canton-network/splice-pulumi-common';
 import { infraKubernetesScheduling } from '@canton-network/splice-pulumi-common';
+import { allDSyncNodeNames } from '@canton-network/splice-pulumi-common-sv';
 import { svConfigsBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { allValidatorIngressNames } from '@canton-network/splice-pulumi-common-validator';
 
@@ -202,7 +203,9 @@ function clusterCertificate(
         `*.validator1.${dnsName}`,
         `*.splitwell.${dnsName}`,
         `*.sv.${dnsName}`,
-      ].concat(svConfigsBasic.map(sv => `*.${sv.ingressName}.${dnsName}`))
+      ]
+        .concat(svConfigsBasic.map(sv => `*.${sv.ingressName}.${dnsName}`))
+        .concat(allDSyncNodeNames().map(dsyncNodeName => `*.${dsyncNodeName}.${dnsName}`))
     )
     .flat();
 
