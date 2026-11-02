@@ -1,0 +1,128 @@
+# 2026-11-02 fork A: mainnet-Daml nightly, runs 41171022068 (10-31), 41275427340 (11-01), 41391921766 (11-02)
+
+All three are the scheduled "Integration tests against mainnet Daml version" (PV 36) on main 3525c637db
+(10-30 22:39, after Canton 3.7.1 #8165, X1 fix #8149 and X3 fix #8154). 25 per-job issues, 3 failure shapes, all
+known families from 2026-10-30 (`2026-10-30/nightly-a.md`). No new cause.
+
+## Tuples (as filed)
+
+| Issue | Run | Job | Job id | Shape |
+|---|---|---|---|---|
+| 11108 | 41171022068 | roll-forward-lsu (0) | 124449218458 | X2 |
+| 11109 | 41171022068 | resource-intensive (0) | 124449345159 | X2 |
+| 11110 | 41171022068 | key-download (0) | 124449397443 | X2 |
+| 11111 | 41171022068 | wall-clock-time (8) | 124449354900 | X2 |
+| 11112 | 41171022068 | simtime (1) | 124449230057 | Y coupon |
+| 11113 | 41171022068 | wall-clock-time (6) | 124449354889 | X2 |
+| 11114 | 41171022068 | wall-clock-time (0) | 124449354910 | Y traffic |
+| 11115 | 41171022068 | wall-clock-time (5) | 124449354863 | X2 |
+| 11116 | 41171022068 | wall-clock-time (2) | 124449354998 | Y traffic |
+| 11119 | 41275427340 | simtime (3) | 124756877737 | Y coupon |
+| 11120 | 41275427340 | key-download (0) | 124756911822 | X2 |
+| 11121 | 41275427340 | roll-forward-lsu (0) | 124756997388 | X2 |
+| 11122 | 41275427340 | resource-intensive (0) | 124756953342 | X2 |
+| 11123 | 41275427340 | wall-clock-time (8) | 124756989573 | X2 |
+| 11124 | 41275427340 | wall-clock-time (1) | 124756989545 | Y traffic |
+| 11125 | 41275427340 | wall-clock-time (3) | 124756989553 | Y traffic |
+| 11126 | 41275427340 | wall-clock-time (6) | 124756989604 | X2 |
+| 11127 | 41275427340 | wall-clock-time (5) | 124756989549 | X2 |
+| 11129 | 41391921766 | wall-clock-time (5) | 125105364454 | X2 |
+| 11130 | 41391921766 | wall-clock-time (9) | 125105364243 | Y traffic |
+| 11131 | 41391921766 | wall-clock-time (3) | 125105364311 | Y traffic |
+| 11132 | 41391921766 | roll-forward-lsu (0) | 125105526801 | X2 (LSU successor `::37-2`) |
+| 11133 | 41391921766 | resource-intensive (0) | 125105474086 | X2 |
+| 11134 | 41391921766 | simtime (2) | 125105371375 | Y coupon |
+| 11135 | 41391921766 | key-download (0) | 125105927779 | X2 |
+
+## Runs
+
+```
+gh run view <run> --repo canton-network/splice --json headBranch,headSha,displayTitle,createdAt,event,jobs ...
+{"b":"main","c":"2026-10-31T05:03:17Z","e":"schedule","sha":"3525c637db","t":"Integration tests against mainnet Daml version"}
+{"b":"main","c":"2026-11-01T05:03:34Z","e":"schedule","sha":"3525c637db","t":"Integration tests against mainnet Daml version"}
+{"b":"main","c":"2026-11-02T05:04:46Z","e":"schedule","sha":"3525c637db","t":"Integration tests against mainnet Daml version"}
+```
+Every failed job of the three runs is in the table (9 + 9 + 7).
+
+## Classification (every job)
+
+```
+sed -E 's/\x1b\[[0-9;]*m//g' $J.log | grep -a -E 'FAILED \*\*\*|Tests: succeeded|contains problems' ...
+```
+- 16 jobs: `Tests: succeeded N, failed 0` + `(checkErrors) log/canton-standalone-<instance>_before_shutdown.clog
+  contains problems` (instances: roll-forward-lsu-before-dr, roll-forward-lsu-dr, mediator-offboarding,
+  sv123-non-sv1-svs, boostrap-package-config-dar-upload, sv4-reonboarding(-new)).
+- 6 jobs: `- buy traffic through a transfer to the traffic purchase receiver *** FAILED ***`
+  `CommandFailure: Command execution failed.` (TokenStandardTransferIntegrationTest / TokenStandardV2TransferIntegrationTest).
+- 3 jobs: `- Unhide and expire of RewardCouponV2 *** FAILED ***` `Vector() was empty (UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest.scala:206)`.
+
+## X2 (parent 10927): every flagged line is an outbox flush failure
+
+```
+for f in *.log; do flagged=$(... grep '@timestamp' | grep -v 'ignore this line' | sort -u | wc -l); outbox=$(... | grep -c 'outbox flusher failed'); done
+124449218458 flagged=3 outbox=3   124449345159 flagged=3 outbox=3   124449354863 flagged=2 outbox=2
+124449354889 flagged=1 outbox=1   124449354900 flagged=1 outbox=1   124449397443 flagged=1 outbox=1
+124756911822 flagged=1 outbox=1   124756953342 flagged=3 outbox=3   124756989549 flagged=2 outbox=2
+124756989573 flagged=1 outbox=1   124756989604 flagged=1 outbox=1   124756997388 flagged=3 outbox=3
+125105364454 flagged=2 outbox=2   125105474086 flagged=3 outbox=3   125105526801 flagged=8 outbox=8
+125105927779 flagged=1 outbox=1   (all other jobs flagged=0)
+```
+Sample (124449218458, 10-31):
+```
+"synchronizer outbox flusher failed The synchronizer Synchronizer 'global-domain::..5f41' failed the following topology
+transactions: List(SignedTopologyTransaction( TopologyTransaction( OwnerToKeyMapping(member = MED::sv4::1220c9348dfe...,
+...), serial = 1, operation = Replace ...","logger_name":"c.d.c.t.StoreBasedSynchronizerOutbox:mediator=sv4StandaloneMediator/psid=global-domain::1220541393ba::36-0","level":"WARN"
+```
+roll-forward-lsu per run (psid of the flagged lines):
+```
+124449218458 (10-31)  3x  psid ::36-0  (OTK MED::sv2/3/4)
+124756997388 (11-01)  3x  psid ::36-0
+125105526801 (11-02)  8x  psid ::37-2  (NamespaceDelegation + OTK of sv1-4 standalone sequencers on the LSU successor)
+```
+The 11-02 shape is the 10925 variant (DR after LSU to PV 37, 8x on `::37-2`), already a dup of 10927. Canton 3.7.1 (#8165)
+did not change X2.
+
+## Y traffic (parent 10933): UNKNOWN_INFORMEES on the transfer to splice_traffic-manager
+
+One artifact per run (`logs-wall-clock-time-0` 10-31, `-1` 11-01, `-3` 11-02):
+```
+zcat canton_network_test.clog.gz | grep -a -m1 UNKNOWN_INFORMEES
+2026-10-31T05:54:55.003Z UNKNOWN_INFORMEES(11,4c97c259): The participant is not connected to any synchronizer where the given informees are known.
+2026-11-01T05:56:33.815Z UNKNOWN_INFORMEES(11,0110b629): The participant is not connected to any synchronizer where the given informees are known.
+2026-11-02T05:38:47.517Z UNKNOWN_INFORMEES(11,54372692): The participant is not connected to any synchronizer where the given informees are known.
+```
+Preceding request (first `token-standard/transfers` POST with receiver splice_traffic-manager):
+```
+2026-10-31T05:54:54.967Z POST transfers receiver splice_traffic-manager
+2026-11-01T05:56:33.784Z POST transfers receiver splice_traffic-manager
+2026-11-02T05:38:47.477Z HTTP POST /api/validator/v0/wallet/token-standard/transfers ... {"receiver_party_id":"splice_traffic-manager::..abcd","amount":"6668.0000000000",...
+```
+Same as 10933: the test (added by #8012) is not tagged for a package version and runs against MainNet packages.
+
+## Y coupon (parent 10930): no coupon batches
+
+```
+zcat logs-simtime-N/canton_network_test.clog.gz | python3 count ProcessRewardsTrigger batchType=...
+10-31 simtime (1): {'BatchOfMintingAllowances': 59}
+11-01 simtime (3): {'BatchOfMintingAllowances': 18}
+11-02 simtime (2): {'BatchOfMintingAllowances': 36}
+```
+No RewardCouponV2 batches, same as 10930 (tag SpliceAmulet_0_1_19, needs 0.1.25 / #7627).
+
+## X1 and X3 fixes hold at PV 36
+
+10934 (X1) was closed by #8149 (7de6b406c4) and 10937 (X3) by #8154 (Martin Florian, 7e354bbf46); both are in 3525c637db.
+Neither shape appears in the 25 jobs (no `found 37`, `PROTO_DESERIALIZATION_FAILURE` or `TOPOLOGY_CONVERSION_ERROR` in a
+failing clue). Job 124756989553 (11-01 wall-clock-time (3)) ran ExternalPartySetupProposalIntegrationTest and
+offlinekey.ValidatorOfflineRootNamespaceKeyIntegrationTest; its only failure is the traffic test (`Tests: succeeded 25,
+failed 1`). First nightly proof that X1/X3 are fixed at PV 36.
+
+## Verdict
+
+- All 25 issues are duplicates: X2 -> 10927 (16), Y traffic -> 10933 (6), Y coupon -> 10930 (3).
+- Same cause on all three nights; main did not move between them (3525c637db). The nightly stays red until X2 and both
+  Y tests are fixed: ~8 per-job issues per night.
+- Owners: X2 Moritz Kiefer (assigned on 10927). Y: Simon Meier (#8012 traffic test; #7627 coupon test with Divam), no
+  assignee on 10930/10933 yet.
+- Fixed on main: no (main head 288c61b7e8, 11-02 10:23, has no change for X2 or Y; open draft #7889 touches
+  RewardCouponV2 serving, not the tag).

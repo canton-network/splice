@@ -1,0 +1,83 @@
+# 10154 - WalletMintingDelegationTimeBasedIntegrationTest fails on LOCAL_VERDICT_INACTIVE_CONTRACTS after advancing 25 h (run 35115826905)
+
+DUPLICATE of cn-test-failures 10060 (public splice issue #7223), FIXED on main by #7261 (0c43730f70,
+2026-09-16 08:10Z). The fix is NOT on release-line-0.8.x, where this run happened.
+
+- Run: https://github.com/canton-network/splice/actions/runs/35115826905, release-line-0.8.x ba405bcbf6
+  ("Backport PR #7341 to release-line-0.8.x (#7344)"), job 104861329019 `simtime (0)`.
+  The same run's `frontend-wall-clock-time (2)` failure is ref 10156 (separate packet).
+- Runtime canton: 3.5.17 (`nix/canton-sources.json` at ba405bcbf6).
+- 17 tests in 7 suites, 1 failed: `WalletMintingDelegationTimeBasedIntegrationTest / MintingDelegationCollectRewardsTrigger
+  should collect rewards for all coupons owned by the beneficiary` with `CommandFailure: Command execution failed.`
+
+## 1. The failing command
+
+```
+zcat log/10154/logs-simtime-0/canton_network_test.clog.gz | grep -a 'T15:52:0[2-4]' | grep -a -E 'clue|ERROR'
+```
+```
+15:52:02.555Z DEBUG Finished clue: attempting to advance time by PT25H
+15:52:02.555Z DEBUG Finished clue: (act) Advance past the delayed coupon's mintAfter
+15:52:04.070Z DEBUG Finished clue: (check) The delayed development fund coupon is collected
+15:52:04.071Z DEBUG Running clue: Test that amulets get merge at 2x limit
+15:52:04.476Z ERROR HttpCommandException: HTTP 404 Not Found POST at '/api/validator/v0/wallet/transfer-preapproval/send' on 127.0.0.1:5503.
+              Command failed, message: LOCAL_VERDICT_INACTIVE_CONTRACTS(11,52a7501b): Rejected transaction is referring to inactive contracts
+15:52:04.477Z ERROR Failed clue: Test that amulets get merge at 2x limit
+15:52:04.482Z ERROR Test failed: '...should collect rewards for all coupons owned by the beneficiary', message: Command execution failed.
+```
+
+Both sv1Participant and aliceParticipant emit the same `LOCAL_VERDICT_INACTIVE_CONTRACTS(11,224b85d6)` at
+15:52:03.632 in `canton-simtime.clog`.
+
+## 2. Same symptom as issue #7223
+
+Issue #7223 (public copy of cn-test-failures 10060): the test does `advanceTime(mintDelay.plus(1 hour))` with
+`mintDelay = 24 h`, which queues a backlog of round advances; the following `transferPreapprovalSend` then
+references an IssuingMiningRound that gets archived under it.
+
+## 3. The fix exists on main only
+
+```
+git log origin/main --oneline | grep 7261
+git log origin/release-line-0.8.x --oneline | grep -E '7261|WalletMintingDelegation'
+git show origin/release-line-0.8.x:apps/app/src/test/scala/.../WalletMintingDelegationTimeBasedIntegrationTest.scala | grep -n -E 'mintDelay|advanceTime'
+```
+```
+0c43730f70 Fix flake in WalletMintingDelegationTimeBasedIntegrationTest caused by time advancing too far (#7261)
+(nothing on release-line-0.8.x)
+475:      val mintDelay = Duration.ofHours(24)
+653:        advanceTime(mintDelay.plus(Duration.ofHours(1))),
+```
+
+#7261 changes `mintDelay` to 45 min and replaces the single 25 h jump by `advanceRoundsUntil(mintAfter)`
+(one round at a time, new helper in `TimeTestUtil.scala`).
+
+## 4. Verdict
+
+Not a new failure. Backport #7261 to release-line-0.8.x (and 0.8.0/0.8.1 if those lines are still built).
+
+## 5. 10166 (run 35226878907, 2026-09-17) - same failure again on release-line-0.8.x
+
+- Run: https://github.com/canton-network/splice/actions/runs/35226878907, release-line-0.8.x 57c06ffded (#7369),
+  job 105220970474 `simtime (2)`, canton 3.5.18-snapshot.20260916.19252.0.v9635aea8. 14 tests, 1 failed, same test.
+```
+zcat log/10166/logs-simtime-2/canton_network_test.clog.gz | grep -a WalletMintingDelegation | grep -a -E 'PT25H|transfer-preapproval/send.*(NOT_FOUND|404)'
+```
+```
+13:44:31.201Z Starting 'WalletMintingDelegationTimeBasedIntegrationTest/MintingDelegationCollectRewardsTrigger should collect rewards for all coupons owned by the beneficiary'
+13:45:13.483Z advancing time by PT25H to 1970-01-02T04:02:39.999Z
+13:45:15.982Z Request to http://127.0.0.1:5503/api/validator/v0/wallet/transfer-preapproval/send resulted in ... NOT_FOUND: LOCAL_VERDICT_INACTIVE_CONTRACTS(11,8308ec61)
+```
+`git merge-base --is-ancestor 0c43730f70 57c06ffded` -> not an ancestor: #7261 is still not on release-line-0.8.x
+(tip ef2dc6d559 on 2026-09-17 17:xx has no backport of it either). Second hit in two days; backport it.
+
+## 6. 10171 (run 35330711023, 2026-09-18) - third hit, now on the 0.8.3 release commit
+
+- Run: https://github.com/canton-network/splice/actions/runs/35330711023, release-line-0.8.3 8460154135
+  ("[release] Release 0.8.3 [ci] (#7389)"), job 105556336894 `simtime (3)`, canton 3.5.18. 18 tests, 1 failed, same test.
+```
+10:15:45.004Z advancing time by PT25H to 1970-01-05T10:07:40.999Z
+10:15:47.061Z Request to .../api/validator/v0/wallet/transfer-preapproval/send resulted in ... NOT_FOUND: LOCAL_VERDICT_INACTIVE_CONTRACTS(11,a5635d77)
+```
+`git merge-base --is-ancestor 0c43730f70 origin/release-line-0.8.3` -> not an ancestor. Backport branch
+`ray/backport-7261-release-line-0.8.3` (`cherry-pick -x -s 0c43730f70`, one context conflict resolved: main carries an extra `svRewardWeight` line above `mintDelay` that 0.8.3 lacks); release-line-0.8.x still lacks it too.
