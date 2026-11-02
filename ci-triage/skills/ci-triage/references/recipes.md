@@ -178,3 +178,39 @@ contents only with the raw media type: the JSON form carries a `download_url` wi
 must not end up in logs or packets. After the router's sandbox setup, `git clone https://github.com/DACH-NY/canton-network-internal.git`
 goes through the router too (into `log/`, never into the triage branch). canton-network-internal Actions logs are
 refused: ask the user to save them to `ci-triage/export/<ref>/` on the host.
+
+Inbox without the user (heuristic, see SKILL.md): lists open issues whose board Status was only ever changed by
+the automation bot, flagged `T` when the number already appears in `ci-triage/**.md`. Only the first 100 timeline
+events per issue are read. Old bulk-filed items match too; drop them with `--min-number` (the oldest open item of
+the last round).
+```
+python3 -I ci-triage/skills/ci-triage/scripts/inbox_fetch.py --min-number <N> --triage-dir ci-triage --json log/inbox-heuristic.json
+```
+
+## 12. Change an issue's Status on the host
+
+The user runs this; the sandbox has no board access. Define the fish function once per host shell (or save it as
+`~/.config/fish/functions/p48_status.fish`), then hand out one `p48_status <ref> <from> <to>` line per issue, e.g.
+`p48_status 11140 Inbox Triaged`. It changes nothing unless the current Status is `<from>`, so it is safe to run
+twice. Needs a host `gh` token with the `project` scope, SSO-authorized for DACH-NY.
+```
+function p48_status --argument-names ref from to
+    set -l q 'query($n: Int!) { repository(owner: "DACH-NY", name: "cn-test-failures") { issue(number: $n) {
+        projectItems(first: 20) { nodes { id
+          project { id number field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } }
+          status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } }'
+    set -l row (gh api graphql -F n=$ref -f query=$q --jq ".data.repository.issue.projectItems.nodes[] | select(.project.number == 48) | [.project.id, .id, (.status.name // \"<none>\"), .project.field.id, (first(.project.field.options[] | select(.name == \"$to\") | .id) // \"\")] | @tsv")
+    set -l f (string split \t -- $row)
+    if test (count $f) -ne 5; or test -z "$f[5]"
+        echo "#$ref: not on board 48, or Status has no option '$to'"
+        return 1
+    end
+    if test "$f[3]" != "$from"
+        echo "#$ref: Status is '$f[3]', not '$from'; left as is"
+        return 1
+    end
+    gh api graphql -f p=$f[1] -f i=$f[2] -f fid=$f[4] -f o=$f[5] -f query='mutation($p: ID!, $i: ID!, $fid: ID!, $o: String!) {
+        updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $fid, value: {singleSelectOptionId: $o}}) { projectV2Item { id } } }' >/dev/null
+    and echo "#$ref: $from -> $to"
+end
+```

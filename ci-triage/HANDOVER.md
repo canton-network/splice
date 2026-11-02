@@ -12,8 +12,9 @@ Taken over from Raymond:
   which inferred the inbox from issue timelines through a host token router, replaced by the board export below;
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 
-Access from the sandbox: canton-network/splice runs, logs and artifacts work. cn-test-failures, canton-network-internal
-and project 48 are not readable yet (404) and there is no `ghx`. Issue data comes from host exports in
+Access from the sandbox: canton-network/splice runs, logs and artifacts work. cn-test-failures and canton-network-internal
+are not readable yet (404) and there is no `ghx`; project 48 is readable from the host `gh` (after the SSO grant),
+never from the sandbox. Issue data comes from host exports in
 `ci-triage/export/` (read through `/run/sandbox/source/ci-triage/export/`); CircleCI logs only as manual downloads.
 
 ## Inbox 2026-11-02 14:44 (19 items, board export)

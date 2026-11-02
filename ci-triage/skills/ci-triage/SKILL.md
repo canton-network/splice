@@ -31,8 +31,10 @@ Each GitHub issue is assigned a `Status` field in the project:
   below. Never write to them; issue changes are commands for the user (step 8).
 - CircleCI: no access; ask the user to download the job logs and artifacts manually.
 
-Neither you nor the user's host CLI has project-level access to the `DACH-NY/projects/48` project.
-If a user needs to manually update an issue `Status`, ask them to do it through the GitHub web interface.
+Project 48 (the board with `Status`): the sandbox cannot read it directly (`ghx` routes no `/graphql`). The user's
+host `gh` can, with a token that has the `project` scope and is SSO-authorized for DACH-NY (a missing SSO grant
+shows as "Resource protected by organization SAML enforcement"). Status changes are commands for the user
+(recipe 12), like every other issue change.
 
 ## Sources for private data
 
@@ -57,8 +59,12 @@ command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
   through the read-only host mount: the user writes to `ci-triage/export/` in the host repo (excluded from git),
   you read `/run/sandbox/source/ci-triage/export/`. Recipes 9 (recent issues) and 10 (inbox) produce the exports;
   ask the user to rerun them when an issue you need is missing or the export is older than the issue.
-- Either source: the inbox (Status = Inbox) needs the board, so it always comes from recipe 10. Logs the
-  sandbox cannot fetch (CircleCI, canton-network-internal Actions) go to `ci-triage/export/<ref>/` on the host.
+- The inbox (Status = Inbox): the exact list is the board export (recipe 10, needs the user). With `ghx` and no
+  user at hand, `scripts/inbox_fetch.py` infers it from issue timelines (recipe 11): an open issue on the board
+  whose Status only the automation bot ever changed is still in Inbox. It is a heuristic; compare its count with
+  recipe 10 when the user can run it.
+- Either source: logs the sandbox cannot fetch (CircleCI, canton-network-internal Actions) go to
+  `ci-triage/export/<ref>/` on the host.
 
 # CI failure triage for splice
 
@@ -115,7 +121,7 @@ is not checked out, ask the user which triage branch is current before writing a
      - Add a comment that summarizes the findings and any suggested fixes.
        Keep it concise and focused on the key points. For a simple issue (such as a clearly missing synchronization in a test),
        one paragraph should be sufficient. For more complex edge cases, include more details.
-     - Move the issue to `Triaged`.
+     - Move the issue to `Triaged`: `p48_status <ref> Inbox Triaged` (recipe 12).
    - If the issue is a duplicate, the user should:
      - Add comment explaining why it is a duplicate.
      - Close the issue as a duplicate (this will automatically move the issue to `Closed`).
