@@ -319,6 +319,24 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
                   s"CalculateRewardsV2 should exist for round $round"
               }
             }
+            if (dryRunEnabled) {
+              clue("Archive dry-run CalculateRewardsV2 for rounds 0..2 via sv admin API") {
+                sv1Backend.archiveDryRunRewardAccountingContracts((0L to 2L).toSeq)
+              }
+              clue("CalculateRewardsV2 contracts for rounds 0..2 are gone") {
+                eventually() {
+                  val remaining = sv1Backend.appState.dsoStore
+                    .listCalculateRewardsV2()
+                    .futureValue
+                    .map(_.payload.round.number)
+                    .toSet
+                  (0L to 2L).foreach { round =>
+                    remaining should not contain round withClue
+                      s"CalculateRewardsV2 for round $round should be archived"
+                  }
+                }
+              }
+            }
           }
 
           (id5Dvp1, id5Direct, id5Dvp2, id10Dvp1, id10Dvp2, id10Dvp3, id10Direct)
@@ -848,4 +866,11 @@ class TrafficBasedRewardsV11TimeBasedIntegrationTest
   override protected val rewardConfigMode
       : TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode =
     TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
+}
+
+class TrafficBasedRewardsDryRunV11TimeBasedIntegrationTest
+    extends TrafficBasedRewardsV11TimeBasedIntegrationTestBase {
+  override protected val rewardConfigMode
+      : TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode =
+    TrafficBasedRewardsV11TimeBasedIntegrationTestBase.RewardConfigMode.DryRun
 }
