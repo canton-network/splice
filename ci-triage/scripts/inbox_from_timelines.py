@@ -5,7 +5,8 @@ The sandbox token cannot read Projects v2, but the REST issue timeline shows `ad
 `project_v2_item_status_changed` events with their actor. An open issue whose status was only ever changed by
 github-project-automation[bot] (or never) still has the default status, Inbox.
 
-Usage: inbox_fetch.py [--min-number N] [--triage-dir DIR] [--json OUT]
+Runs in the sandbox through ghx (see ci-triage/CLAUDE.md). Usage, from the repo root:
+  ci-triage/scripts/inbox_from_timelines.py [--min-number N] [--triage-dir DIR] [--json OUT]
   --min-number   ignore older issues (old bulk-filed items are archived but still match the heuristic)
   --triage-dir   ci-triage/ dir; issues mentioned in any file there are flagged as already triaged
 """

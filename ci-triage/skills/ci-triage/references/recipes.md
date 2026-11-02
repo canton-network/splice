@@ -96,59 +96,22 @@ Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install pre
 
 ## 9. Export recent issues on the host
 
-Manual-export source (`ci-triage/CLAUDE.md`, Access). Ask the user to run this from the host repo root
-(fish shell; set `SINCE` to about two weeks back). Read it from the sandbox as
-`/run/sandbox/source/ci-triage/export/issues-since-$SINCE.jsonl`; one JSON object per line.
+Manual-export source (`ci-triage/CLAUDE.md`, Access). Ask the user to run, from the host repo root (set the date to
+about two weeks back):
 ```
-set SINCE <YYYY-MM-DD>
-mkdir -p ci-triage/export
-gh issue list -R DACH-NY/cn-test-failures --state all --search "created:>=$SINCE" --limit 2000 \
-        --json number,title,state,stateReason,createdAt,closedAt,assignees,labels,body,comments \
-        --jq '.[] | {number, title, state, stateReason, createdAt, closedAt,
-                assignees: [.assignees[].login], labels: [.labels[].name], body,
-                comments: [.comments[] | {author: .author.login, createdAt, body}]}' \
-        >ci-triage/export/issues-since-$SINCE.jsonl
-and wc -l ci-triage/export/issues-since-$SINCE.jsonl
+direnv exec . ci-triage/scripts/export_issues.py --since <YYYY-MM-DD>
 ```
+Read it from the sandbox as `/run/sandbox/source/ci-triage/export/issues-since-<YYYY-MM-DD>.jsonl`; one JSON
+object per line (number, title, state, stateReason, createdAt, closedAt, assignees, labels, body, comments).
 
 ## 10. Export inbox on the host
 
-Needed with either source (`ghx` cannot read Projects v2). Ask the user to run this from the host repo root
-(fish shell) to get the Status = Inbox items of project 48, with bodies and comments. Read it from the sandbox as
-`/run/sandbox/source/ci-triage/export/inbox.jsonl`.
+Needed with either source (`ghx` cannot read Projects v2). Ask the user to run, from the host repo root:
 ```
-gh api graphql --paginate -f query='
-query($endCursor: String) {
-  organization(login: "DACH-NY") {
-    projectV2(number: 48) {
-      items(first: 50, after: $endCursor) {
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
-          content {
-            ... on Issue {
-              number title url state createdAt
-              repository { nameWithOwner }
-              author { login }
-              assignees(first: 10) { nodes { login } }
-              labels(first: 20) { nodes { name } }
-              body
-              comments(first: 100) { totalCount nodes { author { login } createdAt body } }
-            }
-          }
-        }
-      }
-    }
-  }
-}' --jq '.data.organization.projectV2.items.nodes[]
-  | select(.status.name == "Inbox" and .content.repository.nameWithOwner == "DACH-NY/cn-test-failures")
-  | .content
-  | {number, title, url, state, createdAt, author: .author.login,
-      assignees: [.assignees.nodes[].login], labels: [.labels.nodes[].name], body,
-      commentCount: .comments.totalCount,
-      comments: [.comments.nodes[] | {author: .author.login, createdAt, body}]}' >ci-triage/export/inbox.jsonl
-and echo (wc -l <ci-triage/export/inbox.jsonl | string trim) "Inbox issues -> ci-triage/export/inbox.jsonl"
+direnv exec . ci-triage/scripts/export_inbox.py
 ```
+Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl` (Status = Inbox items of project 48,
+with bodies and comments; `commentCount` shows when more than the 100 exported comments exist).
 
 Reading the exports in the sandbox (one issue, or a text search for the duplicate check):
 ```
@@ -181,28 +144,8 @@ refused: ask the user to save them to `ci-triage/export/<ref>/` on the host.
 
 ## 12. Change an issue's Status on the host
 
-The user runs this; the sandbox has no board access. Define the fish function once per host shell (or save it as
-`~/.config/fish/functions/p48_status.fish`), then hand out one `p48_status <ref> <from> <to>` line per issue, e.g.
-`p48_status 11140 Inbox Triaged`. It changes nothing unless the current Status is `<from>`, so it is safe to run
-twice. Needs a host `gh` token with the `project` scope, SSO-authorized for DACH-NY.
+The user runs this; the sandbox has no board access. One line per target Status, any number of refs; an issue is
+only changed when its current Status is FROM, so a second run is harmless. `--dry-run` shows what would change.
 ```
-function p48_status --argument-names ref from to
-    set -l q 'query($n: Int!) { repository(owner: "DACH-NY", name: "cn-test-failures") { issue(number: $n) {
-        projectItems(first: 20) { nodes { id
-          project { id number field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } }
-          status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } }'
-    set -l row (gh api graphql -F n=$ref -f query=$q --jq ".data.repository.issue.projectItems.nodes[] | select(.project.number == 48) | [.project.id, .id, (.status.name // \"<none>\"), .project.field.id, (first(.project.field.options[] | select(.name == \"$to\") | .id) // \"\")] | @tsv")
-    set -l f (string split \t -- $row)
-    if test (count $f) -ne 5; or test -z "$f[5]"
-        echo "#$ref: not on board 48, or Status has no option '$to'"
-        return 1
-    end
-    if test "$f[3]" != "$from"
-        echo "#$ref: Status is '$f[3]', not '$from'; left as is"
-        return 1
-    end
-    gh api graphql -f p=$f[1] -f i=$f[2] -f fid=$f[4] -f o=$f[5] -f query='mutation($p: ID!, $i: ID!, $fid: ID!, $o: String!) {
-        updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $fid, value: {singleSelectOptionId: $o}}) { projectV2Item { id } } }' >/dev/null
-    and echo "#$ref: $from -> $to"
-end
+direnv exec . ci-triage/scripts/set_status.py Inbox Triaged 11140 10495
 ```

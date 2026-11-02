@@ -21,6 +21,7 @@ ref = a cn-test-failures issue number.
 | `HANDOVER.md` | current state: inbox, open questions, open fix branches |
 | `history/` | Raymond's state up to 2026-11-02, read-only; `moved-paths.tsv` maps paths cited in old issue comments |
 | `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md` |
+| `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
 
 ## Background
@@ -61,8 +62,8 @@ command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
 
 ## Conventions (these override defaults)
 
-- Never modify issues or the board, even if a route would allow it. Print the commands (fish, for the host) and let
-  the user run them; Status changes use `p48_status` (recipe 12).
+- Never modify issues or the board, even if a route would allow it. Print the commands for the user (below);
+  Status changes use `scripts/set_status.py` (recipe 12).
 - Never infer tracking information by elimination (which issue belongs to which run or job). Ask.
 - Pure ASCII in every file, commit message, issue comment and PR text. No em dashes, smart quotes, arrows, emoji.
 - No AI attribution anywhere (no Co-Authored-By, no "generated with"). `Signed-off-by` is the only trailer.
@@ -74,3 +75,23 @@ command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
   compressed and stream with `zcat`. Never put tokens (e.g. a contents `download_url`) into files.
 - Fix branches: one per PR, stacked follow-ups on the same branch, named `<user>/fix-<ref>-<slug>` or
   `<user>/backport-<ref>-<pr>-<release-line>` (`<user>` = your git prefix), in their own worktree.
+
+## Scripts and commands for the user
+
+Users have different terminals but the same nix dev shell (`nix/shell.nix`: python3, gh, jq, bash). Anything more
+than a one-liner is a script in `ci-triage/scripts/`: Python 3 standard library plus `gh`, no shell-specific syntax,
+so it runs on every dev machine. The user runs them from the repo root with `direnv exec . ci-triage/scripts/<name>`,
+which works from any shell. Scripts that write a file write it under `ci-triage/export/` and print where.
+
+| Script | Where | What |
+|---|---|---|
+| `export_issues.py --since <date>` | host | recent issues with comments (recipe 9) |
+| `export_inbox.py` | host | Status = Inbox items of project 48 (recipe 10) |
+| `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |
+| `inbox_from_timelines.py` | sandbox, `ghx` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
+
+A new recipe that needs a loop, pagination or JSON handling becomes a script here, not a pasted block.
+
+One-liners handed to the user (issue comments, closes, retitles) must work in bash, zsh and fish alike: plain `gh`
+calls, every argument in single quotes, and no single quote, backslash or newline inside an argument (rephrase:
+"the log of sv1", not "sv1's log"). Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.

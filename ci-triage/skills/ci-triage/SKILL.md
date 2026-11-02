@@ -60,8 +60,8 @@ packet and asks you to return the INDEX rows, catalogue notes and commands inste
    - Not a duplicate: a comment with the findings and the suggested fix (one paragraph for a simple case such as a
      missing synchronization in a test, more for complex ones), optionally a retitle to
      `<Suite or job>: <cause>` while the title still starts with `GHA Run` or `Pipeline`, and
-     `p48_status <ref> Inbox Triaged`.
-   - Duplicate: `gh issue close <ref> -R DACH-NY/cn-test-failures --duplicate-of <parent> --comment "<why>"`
+     `direnv exec . ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
+   - Duplicate: `gh issue close <ref> -R DACH-NY/cn-test-failures --duplicate-of <parent> --comment '<why>'`
      (closing moves it to `Closed`). When the parent is open and recurs often, a short recurrence comment on it.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.

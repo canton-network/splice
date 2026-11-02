@@ -15,7 +15,7 @@ the `ci-triage` skill; this skill is the batch wrapper around it. Recipes: `ci-t
 - The inbox: ask the user for a fresh recipe 10 export and read `/run/sandbox/source/ci-triage/export/inbox.jsonl`.
   Without the user but with `ghx`, use the timeline heuristic, and say that the list is inferred:
   ```
-  python3 -I ci-triage/skills/ci-triage-inbox/scripts/inbox_fetch.py --min-number <oldest open item of the last round> --triage-dir ci-triage --json log/inbox-heuristic.json
+  ci-triage/scripts/inbox_from_timelines.py --min-number <oldest open item of the last round> --triage-dir ci-triage --json log/inbox-heuristic.json
   ```
   It lists open issues whose board Status only the automation bot ever changed (= still Inbox), flagged `T` when the
   number already appears in `ci-triage/**.md`; it reads only the first 100 timeline events per issue, and old
@@ -57,7 +57,7 @@ first. Brief each with:
     do not create or switch branches (other agents work in the same checkout);
   - a test-side fix is described precisely (file, line, change), not written;
   - return: the verdict per ref, the INDEX.tsv rows (exact TSV), text for `known-families.md` (an occurrence note,
-    or a new family section with the next free letter, plus its index row), and the issue commands (fish).
+    or a new family section with the next free letter, plus its index row), and the issue commands (CLAUDE.md, Commands for the user).
 
 While the agents run, do not do the same work in the main thread. Report each agent's verdict in one or two lines
 when it lands. Two agents proposing the same new family letter, or the same parent ref for different causes, are
@@ -76,8 +76,7 @@ reconciled in step 5.
 
 - Re-check the live state of every target first (`ghx`, or a fresh recipe 9 export) and drop what is already done;
   say "already done: ..." for those.
-- One message: the verdict table (ref, class or verdict, parent, action), what needs an owner, then one fenced fish
-  block with every command in this order: comments, closes as duplicate, retitles, `p48_status` lines, log requests.
-  One command per issue, no loops, no placeholders; the `p48_status` function definition (recipe 12) goes first
-  if the user has not saved it.
+- One message: the verdict table (ref, class or verdict, parent, action), what needs an owner, then one fenced
+  block with every command in this order: comments, closes as duplicate, retitles, `set_status.py` lines (one per
+  target Status, all refs on it), log requests. One command per issue otherwise, no loops, no placeholders.
 - End with the commit list and the fetch commands for the user (global CLAUDE.md template).
