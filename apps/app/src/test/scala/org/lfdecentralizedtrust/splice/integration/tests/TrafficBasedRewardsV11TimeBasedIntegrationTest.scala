@@ -123,11 +123,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       )
 
   "TBAR v1.1 asset-side activity pipeline works" in { implicit env =>
-    // All asset-side setup (party onboarding, FA grants with kinds, RewardConfig
-    // enable, TransferPreapproval, tap) happens at bootstrap simtime so that
-    // every OpenMiningRound created after bootstrap snapshots the updated
-    // AmuletConfig and so that lookupFeaturedAppPartiesAsOf(roundOpensAt) returns
-    // the FAK_ASSETMOVING / FAK_ASSET grants for the round that observes the send.
     val assetMoverParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
     val assetParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
 
@@ -145,9 +140,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         opsParties = Seq(bobValidatorBackend.getValidatorPartyId()),
       )
     }
-    // Second FAK_ASSET party at weight=3 so one send can exercise the weight-1 (default)
-    // and the weight=3 (step-8-scaling) paths in parallel, within a single cap round.
-    // charlie runs on alice's validator per the simple-topology-1sv config.
     val highWeightAssetParty = onboardWalletUser(charlieWalletClient, aliceValidatorBackend)
     clue(s"Grant FAK_Asset right (weight=3) to $highWeightAssetParty") {
       grantFeaturedAppRightWithKind(
@@ -157,28 +149,15 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         weight = BigDecimal(3),
       )
     }
-    // Third FAK_ASSET party whose grant will be revoked between the baseline and
-    // post-vote scenario rounds. Lets both the pre-revocation (baseline-equivalent)
-    // and post-revocation (asset-side absence) assertions land in the same two
-    // scenario rounds as the other sends.
     val doomedAssetParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
     clue(s"Grant FAK_Asset right (weight=1) to $doomedAssetParty (will be revoked mid-flow)") {
       grantReceiverOnlyFeaturedAppRight(doomedAssetParty, FeaturedAppKind.FAK_ASSET)
     }
-    // Venue party for DvP settlements. Hosted on splitwellValidator with a party
-    // hint distinct from splitwell's wallet-user (which is used as the non-FA
-    // submitter in round 5 and must not collide). Venue holds FAK_ASSETMOVING so
-    // its OTCTrade_Settle submissions resolve to the FA submitter in the compute,
-    // triggering computeAssetActivity.
-    //
-    // The venue is onboarded under a fresh ledger-api user, with
-    // createIfMissing = true so the hinted party is actually allocated on
-    // splitwellParticipant. Without that flag onboardUser only binds the user to
-    // the hinted PartyId without allocating it, and subsequent amulet
-    // submissions fail with UNKNOWN_SUBMITTERS. Reusing splitwellWalletClient's
-    // user would also go wrong a different way — onboardUser would silently
-    // return the existing primary party (splitwell__provider) and the hint
-    // would be ignored, making venueParty identical to the non-FA sender party.
+    // Fresh ledger-api user + createIfMissing=true: onboardUser without
+    // createIfMissing only binds a user to the hinted PartyId without allocating
+    // it, which breaks subsequent submissions with UNKNOWN_SUBMITTERS. Reusing
+    // splitwellWalletClient's user would also silently return the existing
+    // primary party (splitwell__provider), colliding with the non-FA sender.
     val venuePartyHint = s"venue-party-${Random.nextInt().abs}"
     val venueParty = splitwellValidatorBackend.onboardUser(
       s"venue-user-${Random.nextInt().abs}",
@@ -198,26 +177,16 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
     updateTbarV11RewardConfig()
 
-    // Receivers' TransferPreapprovals so the sender submits the amulet transfer
-    // directly — assetMoverParty becomes the Daml submitter, and findFASubmitter
-    // attributes the transaction to the FAK_ASSETMOVING grant.
     bobWalletClient.createTransferPreapproval()
     charlieWalletClient.createTransferPreapproval()
     sv1WalletClient.createTransferPreapproval()
     aliceWalletClient.tap(1000.0)
-    // bob also needs amulet so he can submit a transfer himself (FAK_ASSET-as-submitter
-    // scenario in the post-vote round — exercises the compute path that skips
-    // computeAssetActivity for non-ASSETMOVING FA submitters).
     bobWalletClient.tap(1000.0)
-    // charlie and sv1 are counterparties in DvP legs (they send their own amulet
-    // for leg1 of each OTCTrade). Fund both so the allocation can lock.
     charlieWalletClient.tap(1000.0)
     sv1WalletClient.tap(1000.0)
 
-    // Non-FA submitter for the baseline round's negative-case leg: splitwell's
-    // wallet user never gets a FA grant, so a transfer it submits should miss
-    // both findFASubmitter paths and fall through to computeForUserSubmitted
-    // (which produces app records but no asset records).
+    // splitwell's wallet user has no FA grant — the baseline round's non-FA
+    // negative-case needs a submitter that misses both findFASubmitter paths.
     val nonFaSenderParty = onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
     splitwellWalletClient.tap(1000.0)
 
@@ -234,23 +203,12 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       ]
     }
 
-    // Sequence of actions
-    //   Round  | Scenario / mid-flow votes
-    //   -------+--------------------------------------------------------
-    //   1-4    | propagation (bootstrap config lands in OpenMiningRounds)
-    //   5      | 2 DvP settlements + 1 non-FA direct send
-    //   6-7    | close round 5
-    //   7-ish  | mid-flow votes: cap→0.05, threshold→5 USD, revoke doomed
-    //   8-10   | propagation
-    //   10     | 3 DvP settlements + 1 FAK_ASSET-submitter direct send
-    //   11-12  | close round 10
-
     val baselineRound = 5L
     val postVoteRound = 10L
 
-    // CalculateRewardsTrigger and its dry-run twin are paused across the whole
-    // scenario body so the per-round CalculateRewardsV2 contracts are observable
-    // before being consumed, matching the pre-amendment sibling test.
+    // Pause CalculateRewardsTrigger and its dry-run twin so each round's
+    // CalculateRewardsV2 contracts are observable before consumption, matching
+    // the pre-amendment sibling test.
     val calculateRewardsTriggers =
       activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsTrigger])
     val calculateRewardsDryRunTriggers =
@@ -260,25 +218,13 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       setTriggersWithin(triggersToPauseAtStart =
         calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
       ) {
-        // Advance several rounds so the new TBAR v1.1 RewardConfig lands in the
-        // OpenMiningRound snapshots of upcoming rounds.
         for (round <- 1 to 5) {
           advanceRoundsToNextRoundOpening
           assertOldestOpenRound(round.toLong)
         }
         pauseScanVerdictIngestionWithin(sv1ScanBackend) {
 
-          // Round 5 scenario: all cap=0.1 cases.
-          // - DvP alice↔bob (venue submits, FAK_ASSETMOVING): baseline positive. Bob
-          //   (FAK_ASSET weight=1) is an asset confirmer across the leg envelopes.
-          // - splitwell→bob direct send (non-FA submitter): negative; app records only,
-          //   no asset-side (findFASubmitter returns None → computeForFASubmitted never
-          //   runs). Direct transfer because DvP always resolves to the venue submitter;
-          //   this scenario needs splitwell to be the Daml submitter.
-          // - DvP alice↔doomedAssetParty (venue submits): same baseline ratio as alice↔bob
-          //   while doomedAssetParty still has its grant. The revocation voted below
-          //   between rounds 5 and 10 makes the parallel round-10 send to doomedAssetParty
-          //   exercise the post-revocation path.
+          // Round 5 scenario: cap=0.1. Baseline FA ratios + non-FA negative case.
           val id5Dvp1 = settleTrade(
             aliceWalletClient,
             assetMoverParty,
@@ -310,15 +256,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
             assertOldestOpenRound(round.toLong)
           }
 
-          // Mid-flow: three governance changes share the same propagation window.
-          // - Halve the per-asset cap: round-10 scenario exercises cap clamping (w=1)
-          //   and step-8 weight scaling (w=3) via two parallel sends.
-          // - Revoke doomedAssetParty's FA grant: round-10 scenario also exercises
-          //   the post-revocation absence via a parallel alice→doomedAssetParty send.
-          // - Lower appRewardCouponThreshold: in round 10, alice's combined
-          //   (app+asset) reward clears the lowered threshold while bob/charlie
-          //   (asset-only, lower per-party totals) fall below — exercising the
-          //   thresholding/minting-allowance split in a single round.
           clue("Lower per-asset cap, lower threshold, and revoke doomedAssetParty in one window") {
             updateTbarV11RewardConfig(
               maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.05"),
@@ -331,18 +268,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
             assertOldestOpenRound(round.toLong)
           }
 
-          // Round 10 scenario: four cap=0.05 cases.
-          // - DvP alice↔assetParty (venue submits): exercises cap clamp.
-          // - DvP alice↔highWeightAssetParty (venue submits): exercises step-8 weight
-          //   application atop the same cap.
-          // - DvP alice↔doomedAssetParty (venue submits): post-revocation attribution —
-          //   doomedAssetParty is no longer a FAK_ASSET confirmer so its asset activity
-          //   record is absent; only DSO's share remains, re-attributed to the venue.
-          // - bob→highWeightAssetParty direct send (FAK_ASSET submitter): exercises the
-          //   compute path that recognises bob as the FA submitter but skips
-          //   computeAssetActivity (only FAK_ASSETMOVING submitters trigger the asset
-          //   split). Direct transfer because DvP always resolves to venue; this
-          //   scenario needs bob as the Daml submitter.
+          // Round 10 scenario: cap=0.05. Cap clamp + weight scaling + post-revocation + FAK_ASSET-submitter cases.
           val id10Dvp1 = settleTrade(
             aliceWalletClient,
             assetMoverParty,
@@ -495,12 +421,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $postVoteRound FAK_ASSET-submitter event (bob→$highWeightAssetParty): bob gets full burn as app activity; no asset-side"
     ) {
-      // When a FAK_ASSET party submits (vs. only confirms), computeForFASubmitted
-      // recognises them via findFASubmitter but the match guard skips
-      // computeAssetActivity — only FAK_ASSETMOVING submitters trigger the
-      // asset-side split. Submitter gets the full burn as a single app record;
-      // assetActivityRecords stays absent for this verdict, even for FAK_ASSET
-      // confirmers like highWeightAssetParty.
       val event = fetchEvent(uid10Direct, s"FAK_ASSET submitter direct $uid10Direct")
       val submitterProto = assetParty.toProtoPrimitive
       event.submittingAppProvider.map(_.value) shouldBe Some(submitterProto) withClue
@@ -517,15 +437,10 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     clue(
       s"Round $postVoteRound IssuingMiningRound.optIssuancePerFeaturedAssetRewardCoupon is unpopulated"
     ) {
-      // The round-closing path does not yet produce a value for
-      // optIssuancePerFeaturedAssetRewardCoupon from the asset-activity totals,
-      // so the field stays None on IssuingMiningRound. Pin that invariant: when
-      // the round-close summary starts populating the field, this assertion will
-      // fire and should be tightened to the CIP-104 formula value.
-      //
-      // Must run before phase 2a — the extra 7 rounds advanced during the
-      // diagnostic cause round 10's IssuingMiningRound to age past
-      // ExpireIssuingMiningRoundTrigger and get archived.
+      // Pin: field stays None until round-close summary populates it from
+      // asset-activity totals; this assertion will then fire and should be
+      // tightened to the CIP-104 formula. Must run before phase 2a — phase 2a's
+      // extra rounds advance past ExpireIssuingMiningRoundTrigger for round 10.
       val issuingRound = eventually() {
         sv1ScanBackend
           .getOpenAndIssuingMiningRounds()
@@ -539,13 +454,10 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         s"optIssuancePerFeaturedAssetRewardCoupon has a value — tighten this test to the CIP-104 formula"
     }
 
-    // Phase 2a: measure the scenario's per-party reward distribution under a
-    // near-zero threshold so every party clears and shows up in the batch tree.
-    // The measured amounts predict phase 2b's per-party amounts because the
-    // scenario replay is identical and per-party reward amounts only depend on
-    // per-party activity weights (not on the threshold, which only filters at
-    // the end). Diagnostic C-run5 confirmed the distribution is stable across
-    // identical scenario replays within ±~100 CC.
+    // Phase 2a: near-zero threshold replay of the round-10 scenario, so the
+    // batch tree surfaces every party's amount. Per-party amounts only depend
+    // on per-party activity weights (not the threshold), so these amounts
+    // predict phase 2b under the calibrated threshold.
     val measurementRound = 15L
 
     val (uid15Dvp1, uid15Dvp2, uid15Dvp3, uid15Direct) =
@@ -566,7 +478,6 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
             assertOldestOpenRound(round.toLong)
           }
 
-          // Replay the round-10 scenario identically.
           val id15Dvp1 = settleTrade(
             aliceWalletClient,
             assetMoverParty,
@@ -624,12 +535,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
           s"Round $measurementRound minting allowances need at least 2 parties, got $round15Amounts"
         )
     }
-    // appRewardCouponThreshold in RewardConfig is denominated in USD; scan
-    // converts to CC via `threshold_CC = threshold_USD / amuletPrice`
-    // (RewardComputationInputs.scala:96). getMintingAllowancesForRound returned
-    // CC amounts, so convert the calibrated CC midpoint back to USD before
-    // voting. Read amuletPrice from the latest OpenMiningRound so the test
-    // doesn't bake in the env default.
+    // appRewardCouponThreshold is in USD; scan converts via
+    // `threshold_CC = threshold_USD / amuletPrice`. Convert the measured CC
+    // midpoint back to USD before voting.
     val amuletPriceUsdPerCc =
       sv1ScanBackend
         .getLatestOpenMiningRound(env.environment.clock.now)
@@ -644,9 +552,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
         s" (amuletPrice = $amuletPriceUsdPerCc USD/CC)"
     )
 
-    // Phase 2b: vote the calibrated threshold, replay the scenario in round 20,
-    // and assert the mixed above/below branch — the smallest party falls below
-    // the midpoint-of-two-smallest threshold while all others clear.
+    // Phase 2b: replay under the calibrated threshold — smallest party falls
+    // below, others clear, exercising the mixed above/below branch.
     val verificationRound = 20L
 
     val (uid20Dvp1, uid20Dvp2, uid20Dvp3, uid20Direct) =
@@ -725,13 +632,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
   }
 
   // Votes an AmuletConfig update that sets the three TBAR v1.1 RewardConfig
-  // Optional fields and (optionally) overrides the base appRewardCouponThreshold.
-  // InitialRewardConfig leaves the TBAR v1.1 fields None at bootstrap, so until
-  // this runs computeForFASubmitted short-circuits (no asset activity records).
-  // Defaults match the CIP-104 recommended values plus the test's bootstrap
-  // threshold; override individual fields to exercise different configurations
-  // (e.g. a lower per-asset cap or a lowered threshold where some parties clear
-  // and others fall below).
+  // Optional fields (defaulted to CIP-104 values) plus the threshold.
+  // InitialRewardConfig leaves these None at bootstrap, so computeForFASubmitted
+  // short-circuits until this runs.
   private def updateTbarV11RewardConfig(
       extraFeaturedAssetActivityWeight: BigDecimal = BigDecimal("0.2"),
       maxExtraFeaturedAssetActivityWeightPerAsset: BigDecimal = BigDecimal("0.1"),
@@ -775,13 +678,10 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
   }
 
-  // Grants a featured-app right directly with the specified kind via
-  // DsoRules_GrantFeaturedAppRight (controller: dso). The opsParties argument
-  // registers additional parties (typically the user's validator operator) that
-  // submit on behalf of the provider — findFASubmitter resolves each submitter
-  // against the FA providers' opsParty mapping, so the validator party must be
-  // listed here for wallet-submitted transactions to be attributed to the user's
-  // FA grant. Blocks until scan observes the right with the expected kind and weight.
+  // Grants an FA right via DsoRules_GrantFeaturedAppRight and blocks until scan
+  // observes it. opsParties lists validator-operator parties that submit on
+  // behalf of the provider; findFASubmitter uses that mapping to attribute
+  // wallet-submitted transactions back to the user's FA grant.
   private def grantFeaturedAppRightWithKind(
       party: PartyId,
       kind: FeaturedAppKind,
@@ -816,12 +716,10 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
   }
 
-  // Grants an FA right for a party that will only ever appear as a receiver /
-  // confirmer, never as a submitter. In that case no opsParties entry is needed
-  // (findFASubmitter is never consulted for this party). Also enforces the
-  // Amulet.daml `validFeaturedAppRight` constraint which requires
-  // `provider notElem opsParties` — useful when the provider party coincides
-  // with its own validator-operator party (e.g. an SV wallet in a 1-SV topology).
+  // Grants an FA right for a receiver/confirmer-only party. Passes empty
+  // opsParties — needed because Amulet.daml's `validFeaturedAppRight` requires
+  // `provider notElem opsParties`, which fails when provider == its own
+  // validator-operator (e.g. an SV wallet in a 1-SV topology).
   private def grantReceiverOnlyFeaturedAppRight(
       party: PartyId,
       kind: FeaturedAppKind,
@@ -829,11 +727,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
   )(implicit env: SpliceTestConsoleEnvironment): Unit =
     grantFeaturedAppRightWithKind(party, kind, opsParties = Seq.empty, weight = weight)
 
-  // Votes a DsoRules_RevokeFeaturedAppRight choice, which withdraws the FA right.
-  // Blocks until scan no longer observes the right for `party`. From this point
-  // lookupFeaturedAppPartiesAsOf will not surface `party` as a provider for any
-  // subsequent round opening — the compute's findFASubmitter / asset-confirmer
-  // paths will treat `party` as non-featured.
+  // Votes DsoRules_RevokeFeaturedAppRight and blocks until scan no longer
+  // observes the right. From this point lookupFeaturedAppPartiesAsOf treats
+  // `party` as non-featured for subsequent rounds.
   private def revokeFeaturedAppRight(
       party: PartyId
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
@@ -867,9 +763,8 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
   }
 
-  // Waits (eventually) for scan to return RewardAccountingActivityTotalsOk for the
-  // given round and then runs `check` against the totals. Fails loudly if scan
-  // keeps responding with Undetermined/CannotProvide once the timeout elapses.
+  // Waits for Ok totals, then runs `check` against them. Fails if scan keeps
+  // responding Undetermined/CannotProvide past the timeout.
   private def assertRoundTotalsOk(round: Long, timeout: FiniteDuration = 30.seconds)(
       check: definitions.RewardAccountingActivityTotalsOk => Unit
   )(implicit env: SpliceTestConsoleEnvironment): Unit =
@@ -881,8 +776,7 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       }
     }
 
-  // Resolves a specific event by its updateId, wrapping the OrElse-fail boilerplate
-  // and labelling the lookup. Mirrors the pre-amendment sibling test's helper.
+  // Mirrors the pre-amendment sibling test's helper.
   private def fetchEvent(updateId: String, label: String)(implicit
       env: SpliceTestConsoleEnvironment
   ): definitions.EventHistoryItem =
@@ -894,19 +788,11 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       }
     }
 
-  // Runs a transferPreapprovalSend and returns the committed transaction's updateId.
-  // Captures the sender participant's ledger offset before the send, then reads back
-  // the single new transaction from the sender's participant filtered by sender party.
-  // Background wallet/validator automation is paused in this test's env, so the
-  // sender's party only shows the one submission we expect in this window.
-  //
-  // The submission is wrapped in retryCommandSubmission to tolerate races with
-  // RenewTransferPreapprovalTrigger: over the long simtime this test spans, scan
-  // can hand out a receiver-preapproval contract id that is archived by renewal
-  // before the sender's command reaches the participant. Each retry generates a
-  // fresh deduplicationId so Canton's command-dedup doesn't short-circuit the
-  // next attempt, and failed submissions don't commit so the offset-range search
-  // still finds the single successful transaction.
+  // Runs transferPreapprovalSend and returns the committed updateId by
+  // reading the single new transaction in the sender's offset range.
+  // retryCommandSubmission tolerates races with RenewTransferPreapprovalTrigger
+  // archiving the receiver's preapproval mid-flight; each retry uses a fresh
+  // deduplicationId so command-dedup doesn't short-circuit.
   private def transferPreapprovalSendCapturingUpdateId(
       senderWallet: org.lfdecentralizedtrust.splice.console.WalletAppClientReference,
       senderParty: PartyId,
@@ -952,11 +838,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
     }
   }
 
-  // Asserts that `event`'s per-record asset weight for `assetParty` matches
-  // `expectedPct` of the submitter's app weight (= total burn attributed to the
-  // submitter in computeForFASubmitted), within ± tolerancePct. The ratio check
-  // is per-event, so parallel sends in the same round can each be verified
-  // against their own CIP-formula expectation independently.
+  // Asserts `event`'s asset-record weight for `assetParty` is `expectedPct ± tolerancePct`
+  // of the submitter's app-record weight. Per-event, so parallel sends in the
+  // same round are independently verifiable.
   private def assertAssetRatioInEvent(
       event: definitions.EventHistoryItem,
       submitter: PartyId,
@@ -990,11 +874,9 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       s"$label: asset/app ratio $actualPct% should be <= $upper% (expected ~$expectedPct%)"
   }
 
-  // Walks the CIP-0104 reward batch Merkle tree from the root hash to the
-  // leaves and returns every per-party (provider, amount) pair. Only parties
-  // whose combined reward cleared the active appRewardCouponThreshold appear
-  // in the batch; below-threshold parties are filtered out upstream in scan's
-  // stage-2 SQL. Mirrors the pre-amendment sibling test's helper.
+  // Walks the CIP-0104 reward batch Merkle tree and returns every
+  // (provider, amount) pair above the active threshold. Mirrors the
+  // pre-amendment sibling test's helper.
   private def getMintingAllowancesForRound(
       round: Long
   )(implicit
@@ -1026,8 +908,7 @@ object TrafficBasedRewardsV11TimeBasedIntegrationTestBase {
   val trafficBasedAppRewards = "RewardVersion_TrafficBasedAppRewards"
   val featuredAppMarkers = "RewardVersion_FeaturedAppMarkers"
 
-  // Picked to match the pre-amendment test's threshold so the pre-/post-amendment
-  // numeric baselines line up when comparing scenarios.
+  // Matches the pre-amendment test's threshold so pre-/post-amendment baselines align.
   val appRewardCouponThreshold = BigDecimal("50")
 }
 

@@ -520,24 +520,12 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       )
   }
 
-  // Creates an OTCTradeProposal (alice-submitted), has the counterparty accept it,
-  // and has the venue initiate settlement. Returns the on-ledger OTCTrade plus
-  // alice's and bob's AllocationRequestViews.
-  //
-  // Hardcoded assumptions (not currently parameterized):
-  // - `aliceParty` must be hosted on `aliceValidatorBackend` (alice's proposal
-  //   submission goes through that participant).
-  // - `venueParty` must be hosted on `splitwellValidatorBackend` (the venue's
-  //   InitiateSettlement submission and the venue-side proposal visibility awaits
-  //   go through that participant).
-  // - Both `aliceRequest` and `bobRequest` are queried via `aliceWalletClient`
-  //   (both legs are in the same AllocationRequestView, so this works even for
-  //   the "bob side" caller).
-  //
-  // `bobValidator` is the only counterparty-dependent participant that's been
-  // parameterized — pass the validator that hosts `bobParty`.
-  // 5-arg overload: defaults to the standard alice↔bob trade where the
-  // counterparty is bob. Calls through to the 6-arg form.
+  // End-to-end OTCTradeProposal → Accept → InitiateSettlement, returning the
+  // OTCTrade and both legs' AllocationRequestViews. Hardcoded assumptions:
+  // `aliceParty` on aliceValidatorBackend, `venueParty` on
+  // splitwellValidatorBackend, both AllocationRequestViews fetched via
+  // aliceWalletClient. The counterparty's participant (`bobValidator`) is
+  // parameterized; everything else is fixed by this trait.
   def createAllocationRequestViaOTCTrade(
       aliceParty: PartyId,
       aliceTransferAmount: BigDecimal,
@@ -773,23 +761,11 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
     new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
   }
 
-  // Runs an end-to-end 2-leg OTC trade settlement: alice allocates her amulet,
-  // the counterparty (bob) allocates theirs, both allocations propagate to the
-  // venue's participant, then the venue submits OTCTrade_Settle. Returns the
-  // settlement's updateId. Amounts are passed explicitly so this trait doesn't
-  // need WalletTestUtil's walletUsdToAmulet; callers compute the amulet-side
-  // value from USD themselves.
-  //
-  // Hardcoded assumptions (inherited from createAllocationRequestViaOTCTrade):
-  // - `aliceParty` must be hosted on `aliceValidatorBackend`.
-  // - `venueParty` must be hosted on `splitwellValidatorBackend` (used also for
-  //   the final OTCTrade_Settle submission and the allocation-visibility await).
-  //
-  // `bobValidator` is the counterparty's participant host — pass
-  // bobValidatorBackend for alice↔bob trades, or the counterparty's actual
-  // validator for other pairs.
-  // 7-arg overload: defaults to the standard alice↔bob trade where the
-  // counterparty is bob. Calls through to the 8-arg form.
+  // End-to-end 2-leg OTC settlement: both parties allocate, allocations
+  // propagate to the venue's participant, venue submits OTCTrade_Settle.
+  // Returns the settlement's updateId. Inherits
+  // createAllocationRequestViaOTCTrade's hardcoded participant assumptions;
+  // `bobValidator` is the counterparty's participant host.
   def settleTrade(
       aliceWallet: WalletAppClientReference,
       aliceParty: PartyId,
