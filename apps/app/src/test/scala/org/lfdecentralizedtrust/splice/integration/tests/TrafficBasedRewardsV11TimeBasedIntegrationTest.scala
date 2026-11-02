@@ -424,25 +424,32 @@ abstract class TrafficBasedRewardsV11TimeBasedIntegrationTestBase
       assertNoAssetActivity(event, label)
     }
 
-    clue(
-      s"Round $postVoteRound IssuingMiningRound.optIssuancePerFeaturedAssetRewardCoupon is unpopulated"
-    ) {
-      // Pin: field stays None until round-close summary populates it from
-      // asset-activity totals; this assertion will then fire and should be
-      // tightened to the CIP-104 formula. Must run before the verification
-      // scenario's round advances — they cross round 10's
-      // ExpireIssuingMiningRoundTrigger window.
-      val issuingRound = eventually() {
-        sv1ScanBackend
-          .getOpenAndIssuingMiningRounds()
-          ._2
-          .find(_.contract.payload.round.number == postVoteRound)
-          .getOrElse(
-            fail(s"IssuingMiningRound for round $postVoteRound not found in scan")
-          )
+    if (mintingTrafficBased) {
+      clue(
+        s"Round $postVoteRound IssuingMiningRound asset-side fields match scan totals"
+      ) {
+        // Skipped in DryRun: populating these opt fields would override daml's
+        // FeaturedAppMarkers tranche math via fromOptional.
+        // Must run before the verification scenario advances past round 10's
+        // ExpireIssuingMiningRoundTrigger window.
+        val issuingRound = eventually() {
+          sv1ScanBackend
+            .getOpenAndIssuingMiningRounds()
+            ._2
+            .find(_.contract.payload.round.number == postVoteRound)
+            .getOrElse(
+              fail(s"IssuingMiningRound for round $postVoteRound not found in scan")
+            )
+        }
+        assertRoundTotalsOk(postVoteRound) { totals =>
+          val payload = issuingRound.contract.payload
+          payload.optIssuancePerFeaturedAssetRewardCoupon.toScala
+            .map(BigDecimal(_)) shouldBe
+            Some(BigDecimal(totals.issuancePerFeaturedAssetActivity))
+          BigDecimal(payload.issuancePerFeaturedAppRewardCoupon) shouldBe
+            BigDecimal(totals.issuancePerFeaturedAppActivity)
+        }
       }
-      issuingRound.contract.payload.optIssuancePerFeaturedAssetRewardCoupon.toScala shouldBe None withClue
-        s"optIssuancePerFeaturedAssetRewardCoupon has a value — tighten this test to the CIP-104 formula"
     }
 
     // Measure round-10 per-party amounts and calibrate the verification

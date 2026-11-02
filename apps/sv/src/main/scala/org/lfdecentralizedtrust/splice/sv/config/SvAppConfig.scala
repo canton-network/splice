@@ -271,6 +271,9 @@ final case class InitialRewardConfig(
     batchSize: Long = 100,
     rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
     appRewardCouponThreshold: BigDecimal = BigDecimal("0.5"),
+    extraFeaturedAssetActivityWeight: Option[BigDecimal] = None,
+    maxExtraFeaturedAssetActivityWeightPerAsset: Option[BigDecimal] = None,
+    dsoAppActivityWeight: Option[BigDecimal] = None,
 ) {
   def toRewardConfig: splice.amuletconfig.RewardConfig = {
     def parseVersion(s: String): splice.amuletconfig.RewardVersion = s match {
@@ -280,6 +283,8 @@ final case class InitialRewardConfig(
         splice.amuletconfig.RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
       case other => throw new IllegalArgumentException(s"Unknown RewardVersion: $other")
     }
+    def opt(v: Option[BigDecimal]): java.util.Optional[java.math.BigDecimal] =
+      v.map(_.bigDecimal).toJava
     new splice.amuletconfig.RewardConfig(
       parseVersion(mintingVersion),
       dryRunVersion
@@ -290,10 +295,9 @@ final case class InitialRewardConfig(
         rewardCouponTimeToLiveMicros
       ),
       appRewardCouponThreshold.bigDecimal,
-      // TODO(#7837): allow setting these fields
-      java.util.Optional.empty(),
-      java.util.Optional.empty(),
-      java.util.Optional.empty(),
+      opt(extraFeaturedAssetActivityWeight),
+      opt(maxExtraFeaturedAssetActivityWeightPerAsset),
+      opt(dsoAppActivityWeight),
     )
   }
 }
