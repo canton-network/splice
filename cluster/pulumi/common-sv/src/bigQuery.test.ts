@@ -118,7 +118,7 @@ describe('configureScanBigQuery', () => {
     });
   });
 
-  test.each(['V068__app_activity_record_meta.sql', 'V078__partition_update_history.sql'] as const)(
+  test.each(['V068__app_activity_record_meta.sql', 'V081__partition_update_history.sql'] as const)(
     'both publication and slot commands wait for %s',
     async migration => {
       const resources = await installBigQuery(true, true, migration);
@@ -140,8 +140,8 @@ describe('flywayMigrationToWaitFor', () => {
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
     );
-    expect(FlywayMigrationToWaitForSchema.parse('V078__partition_update_history.sql')).toBe(
-      'V078__partition_update_history.sql'
+    expect(FlywayMigrationToWaitForSchema.parse('V081__partition_update_history.sql')).toBe(
+      'V081__partition_update_history.sql'
     );
   });
 
@@ -161,7 +161,7 @@ describe('flywayMigrationToWaitFor', () => {
       expect(() =>
         checkFlywayMigrationsExist(dir, [
           'V068__app_activity_record_meta.sql',
-          'V078__partition_update_history.sql',
+          'V081__partition_update_history.sql',
         ])
       ).toThrow(/: V078__partition_update_history\.sql$/);
     } finally {
