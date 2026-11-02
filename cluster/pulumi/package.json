@@ -50,6 +50,7 @@
         "operator",
         "multi-validator",
         "sv-canton",
+        "dsync",
         "validator1",
         "splitwell",
         "circleci",
