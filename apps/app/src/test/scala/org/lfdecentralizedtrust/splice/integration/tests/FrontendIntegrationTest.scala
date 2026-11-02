@@ -912,8 +912,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       val hiddenInput = webDriver.findElement(By.id(pickerId))
       eventually() {
         webDriver.executeScript("arguments[0].scrollIntoView({block: 'center'});", hiddenInput)
-        firstDateTimeSection(hiddenInput).click()
-        typeDateTime(dateTime)
+        focusAndTypeDateTime(hiddenInput, dateTime)
         eventually(5.seconds)(
           hiddenInput.getAttribute("value").toLowerCase shouldBe dateTime.toLowerCase
         )
@@ -931,8 +930,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     clue(s"Selecting the date $dateTime (no-scroll path)") {
       val hiddenInput = webDriver.findElement(By.id(pickerId))
       eventually() {
-        webDriver.executeScript("arguments[0].focus();", firstDateTimeSection(hiddenInput))
-        typeDateTime(dateTime)
+        focusAndTypeDateTime(hiddenInput, dateTime)
         val actual = hiddenInput.getAttribute("value").toLowerCase
         val expected = dateTime.toLowerCase
         // MUI picker may display "a"/"p" instead of "am"/"pm"; normalize for comparison
@@ -943,14 +941,16 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     }
   }
 
-  private def firstDateTimeSection(hiddenInput: WebElement): WebElement =
-    hiddenInput.findElement(By.xpath("./..//*[@role='spinbutton']"))
-
-  private def typeDateTime(dateTime: String)(implicit webDriver: WebDriverType): Unit =
+  private def focusAndTypeDateTime(hiddenInput: WebElement, dateTime: String)(implicit
+      webDriver: WebDriverType
+  ): Unit = {
+    val firstSection = hiddenInput.findElement(By.xpath("./..//*[@role='spinbutton']"))
+    webDriver.executeScript("arguments[0].focus();", firstSection)
     new Actions(webDriver)
       .sendKeys(Keys.chord(Keys.CONTROL, "a"))
       .sendKeys(dateTime.replaceAll("[^0-9APMapm]", ""))
       .perform()
+  }
 }
 
 object FrontendIntegrationTest {
