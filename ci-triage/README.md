@@ -436,3 +436,11 @@ Inbox round (status Inbox inferred from the issue timelines). Packets in `2026-1
 | 10927 + 10925 10935 | family X2: joining SV mediators / LSU successor sequencers outbox flush fails (log check only); open 10927 | same |
 | 10937 | REAL, family X3: offline root key validator `TOPOLOGY_CONVERSION_ERROR`, shard hangs; open | same |
 | 10930 10933 | family Y: tests need newer packages than tagged (RewardCouponV2 #7627, traffic purchase #8012); open | same |
+
+### 2026-11-02 mainnet-Daml nightlies 41171022068 41275427340 41391921766 (fork A)
+
+| Ref | Verdict | Packet |
+|---|---|---|
+| 11108 11109 11110 11111 11113 11115 11120 11121 11122 11123 11126 11127 11129 11132 11133 11135 | dup of 10927 (family X2) | `2026-11-02/nightly-a.md`, `host-commands-a.md` |
+| 11114 11116 11124 11125 11130 11131 | dup of 10933 (family Y traffic) | same |
+| 11112 11119 11134 | dup of 10930 (family Y coupon) | same |
