@@ -45,9 +45,7 @@ object BaseStorePerformanceTest {
   private val PerfMainLockCounter: DbLockCounter = DbLockCounter(108)
   private val PerfPoolLockCounter: DbLockCounter = DbLockCounter(109)
 
-  /** Extracts the connection-pool name (e.g. "general" for reads, "write" for the locked write
-    * pool) from a DbStorageMetrics timer name like
-    * `store.perftest.db-storage.general.executor.exectime`.
+  /** Extracts the connection-pool name ("general" or "write")
     */
   def poolOf(timerName: String): String = {
     val parts = timerName.split('.')
