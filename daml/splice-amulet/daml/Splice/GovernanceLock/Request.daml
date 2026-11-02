@@ -100,7 +100,7 @@ errorInMemoKeyMessage key error = "Error in " <> memoKeyText key <> ": " <> erro
 invalidMemoEntryMessage : Text -> Text
 invalidMemoEntryMessage entry = "Invalid memo entry '" <> entry <> "': expected 'key=value'"
 
--- | Arguments: what the value should be (e.g. "decimal"), the key, and the value.
+-- | Takes what the value should be (e.g. "decimal"), the key, and the value.
 invalidMemoValueMessage : Text -> Text -> Text -> Text
 invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKeyText key <> ": '" <> value <> "'"
 

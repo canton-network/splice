@@ -831,7 +831,7 @@ governanceLockKindFromTagAndSubject tag subject =
       | Text.isPred (\c -> c == "-" || Text.isAlphaNum c) subject = pure subject
       | otherwise = assertFail $ invalidLockSubjectMessage "SV name" tag subject
 
--- | Arguments: what the subject should be (e.g. "provider"), the lock tag, and the subject.
+-- | Takes what the subject should be (e.g. "provider"), the lock tag, and the subject.
 invalidLockSubjectMessage : Text -> GovernanceLockTag -> Text -> Text
 invalidLockSubjectMessage kind tag subject =
   "Invalid " <> kind <> " for " <> governanceLockTagToText tag <> ": '" <> subject <> "'"
