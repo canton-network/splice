@@ -82,6 +82,8 @@ Users have different terminals but the same nix dev shell (`nix/shell.nix`: pyth
 than a one-liner is a script in `ci-triage/scripts/`: Python 3 standard library plus `gh`, no shell-specific syntax,
 so it runs on every dev machine. The user runs them from the repo root with `direnv exec . ci-triage/scripts/<name>`,
 which works from any shell. Scripts that write a file write it under `ci-triage/export/` and print where.
+Scripts are fully typed and pass the same check as the repo's scripts (`scripts/check-python-types.sh`):
+`direnv exec . bash -c 'cd ci-triage/scripts && mypy --config-file= --python-version 3.14 --strict --explicit-package-bases *.py'`.
 
 | Script | Where | What |
 |---|---|---|

@@ -13,7 +13,7 @@ import subprocess
 FIELDS = "number,title,state,stateReason,createdAt,closedAt,assignees,labels,body,comments"
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", required=True, help="creation date, YYYY-MM-DD")
     ap.add_argument("--repo", default="DACH-NY/cn-test-failures")

@@ -10,6 +10,8 @@ import argparse
 import json
 import pathlib
 import subprocess
+from collections.abc import Iterator
+from typing import Any
 
 QUERY = """
 query($org: String!, $number: Int!, $endCursor: String) {
@@ -38,7 +40,7 @@ query($org: String!, $number: Int!, $endCursor: String) {
 """
 
 
-def pages(org, number):
+def pages(org: str, number: int) -> Iterator[list[Any]]:
     cursor = None
     while True:
         cmd = ["gh", "api", "graphql", "-f", f"query={QUERY}", "-f", f"org={org}", "-F", f"number={number}"]
@@ -55,7 +57,7 @@ def pages(org, number):
         cursor = items["pageInfo"]["endCursor"]
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--org", default="DACH-NY")
     ap.add_argument("--project", type=int, default=48)
@@ -65,7 +67,8 @@ def main():
     args = ap.parse_args()
     out = pathlib.Path(args.out)
 
-    rows, seen = [], 0
+    rows: list[dict[str, Any]] = []
+    seen = 0
     for nodes in pages(args.org, args.project):
         for n in nodes:
             seen += 1

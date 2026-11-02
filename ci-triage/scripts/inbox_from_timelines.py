@@ -16,16 +16,17 @@ import pathlib
 import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 REPO = "/repos/DACH-NY/cn-test-failures"
 
 
-def get(path):
+def get(path: str) -> Any:
     out = subprocess.run(["ghx", path], capture_output=True, text=True, check=True).stdout
     return json.loads(out)
 
 
-def open_issues():
+def open_issues() -> list[Any]:
     issues, page = [], 1
     while True:
         batch = get(f"{REPO}/issues?state=open&per_page=100&page={page}")
@@ -35,7 +36,7 @@ def open_issues():
         page += 1
 
 
-def status_events(issue):
+def status_events(issue: Any) -> tuple[Any, bool, list[str]]:
     events = get(f"{REPO}/issues/{issue['number']}/timeline?per_page=100")
     added = any(e.get("event") == "added_to_project_v2" for e in events)
     changers = [
@@ -46,16 +47,16 @@ def status_events(issue):
     return issue, added, changers
 
 
-def triaged_numbers(triage_dir):
+def triaged_numbers(triage_dir: str | None) -> set[int]:
     if not triage_dir:
         return set()
-    seen = set()
+    seen: set[int] = set()
     for f in pathlib.Path(triage_dir).rglob("*.md"):
         seen.update(int(n) for n in re.findall(r"\b(1\d{4})\b", f.read_text(errors="ignore")))
     return seen
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-number", type=int, default=0)
     ap.add_argument("--triage-dir")

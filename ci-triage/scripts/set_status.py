@@ -10,6 +10,7 @@ import argparse
 import json
 import subprocess
 import sys
+from typing import Any
 
 LOOKUP = """
 query($owner: String!, $name: String!, $n: Int!) {
@@ -36,14 +37,14 @@ mutation($p: ID!, $i: ID!, $f: ID!, $o: String!) {
 """
 
 
-def gql(query, **variables):
+def gql(query: str, **variables: str | int) -> Any:
     cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
     for k, v in variables.items():
         cmd += ["-F" if isinstance(v, int) else "-f", f"{k}={v}"]
     return json.loads(subprocess.run(cmd, capture_output=True, text=True, check=True).stdout)
 
 
-def move(repo, project, ref, src, dst, dry_run):
+def move(repo: str, project: int, ref: int, src: str, dst: str, dry_run: bool) -> str:
     owner, name = repo.split("/")
     nodes = gql(LOOKUP, owner=owner, name=name, n=ref)["data"]["repository"]["issue"]["projectItems"]["nodes"]
     item = next((n for n in nodes if n["project"]["number"] == project), None)
@@ -62,7 +63,7 @@ def move(repo, project, ref, src, dst, dry_run):
     return f"#{ref}: {src} -> {dst}"
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("src", metavar="FROM")
     ap.add_argument("dst", metavar="TO")
