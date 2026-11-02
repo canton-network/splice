@@ -283,6 +283,14 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   0,3,6,18,21; 8 h threshold; 12 h gap 04->16): 10915, open with Krzysztof. Earlier 18:xx hits 10514 10638 10692.
 - ciperiodic workflows share `cluster/deployment/ciperiodic/config.yaml`: a config change for one (cni #7746, PV 36
   founding for lsu_operator) hits sv_reonboard and non_devnet too. 10741 10892 10914 = 10844, fixed by splice#8125.
+  After #8125, deploy_sv_reonboard still fails intermittently (11106 10-30 16:00, 11137 11-02 08:00; 5 runs between
+  passed): not 10844, check the deployed splice commit with `ghx .../commits/<parent of the build-branch commit>`
+  ("Set Splice commit to: ...") and `git merge-base --is-ancestor b4fc190853`. Cause needs the CircleCI step output.
+- Devnet LSU (cni #7836/#7837, 10-30 20:28: synchronizerMigration.active.id 6 -> 7): both backup workflows read
+  `.synchronizerMigration.active.id`, so the next run backs up and checks the new serial. First night after it:
+  06:00 status stale (11117) and 04:00 backup failed ~07:10 (11118, dup), recovered by 11-01. Not the 18:00 gap of
+  10915. Cause (slow first backup vs failing serial-7 component) needs the GHA logs; expect the same at each net's LSU.
+  Map cni GHA run ids to times via splice run ids (`gh api repos/canton-network/splice/actions/runs/N`, ~5.2 M ids/h).
 - ciperiodic deploy_upgrade (10677, 10736; 10:00 runs since 10-27): base = latest release (0.9.x submodule), then
   upgrade to main. Not family N. First runs after cni #7703 (synchronizerMigration.active added on the branch). Needs
   the CircleCI step output.
