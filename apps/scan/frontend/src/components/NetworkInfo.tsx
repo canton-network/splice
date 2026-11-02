@@ -254,7 +254,7 @@ const FeeTableRow: React.FC<{
   return (
     <TableRow className="fee-table-row">
       <TableCell>
-        <Typography variant="body1" fontWeight="bold" textTransform="uppercase">
+        <Typography variant="body1" sx={{ fontWeight: 'bold', textTransform: 'uppercase' }}>
           {name}
         </Typography>
         <Typography variant="caption">{description}</Typography>
@@ -262,8 +262,8 @@ const FeeTableRow: React.FC<{
       <TableCell align="right">
         <Typography
           variant="h6"
-          fontWeight="bold"
           id={name.toLocaleLowerCase().replaceAll(' ', '-')}
+          sx={{ fontWeight: 'bold' }}
         >
           {value.toString()} {unit}
         </Typography>
@@ -321,7 +321,7 @@ const TransferFees: React.FC<{ transferFees: SteppedRate }> = ({ transferFees })
   return (
     <TableRow>
       <TableCell>
-        <Typography variant="body1" fontWeight="bold" textTransform="uppercase">
+        <Typography variant="body1" sx={{ fontWeight: 'bold', textTransform: 'uppercase' }}>
           Transfer Fee
         </Typography>
         <Typography variant="caption">{`A proportional fee charged for the value created by locking and/or transferring a
@@ -353,7 +353,7 @@ const TransferFeeRow: React.FC<{ range: string; fee: BigNumber; last?: boolean }
         <Typography variant="body1">{range}</Typography>
       </TableCell>
       <TableCell align="right" sx={{ borderBottom: 'none' }}>
-        <Typography variant="h6" fontWeight="bold">
+        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
           {fee.toString()}%
         </Typography>
       </TableCell>

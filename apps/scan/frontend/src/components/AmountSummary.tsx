@@ -17,7 +17,7 @@ const NetworkTotal: React.FC<{
     <Card>
       <CardContent>
         <Stack direction="row" spacing={1}>
-          <Typography variant="h5" textTransform="uppercase" fontWeight="700" mb={2}>
+          <Typography variant="h5" sx={{ textTransform: 'uppercase', fontWeight: '700', mb: 2 }}>
             {title}
           </Typography>
           {asOf ? (
@@ -26,7 +26,7 @@ const NetworkTotal: React.FC<{
             </Typography>
           ) : null}
         </Stack>
-        <Typography variant="h1" mb={1} id={idCC} data-testid="amulet-circulating-supply">
+        <Typography variant="h1" id={idCC} data-testid="amulet-circulating-supply" sx={{ mb: 1 }}>
           <AmountDisplay amount={amount} currency="AmuletUnit" />
         </Typography>
         <Typography variant="h4" id={idUSD} data-testid="usd-circulating-supply">

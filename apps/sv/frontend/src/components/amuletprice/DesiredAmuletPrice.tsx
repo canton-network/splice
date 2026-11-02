@@ -104,7 +104,7 @@ const DesiredAmuletPrice: React.FC<DesiredAmuletPriceProps> = ({ canEditVote }) 
         />
       )}
 
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Desired {amuletName} Prices of Other Super Validators
       </Typography>
       <TableContainer>
@@ -175,7 +175,7 @@ const EditDesiredPriceSection: React.FC<EditDesiredPriceSectionProps> = ({
 
   return (
     <>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         {`Your Desired ${amuletName} Price`}
       </Typography>
       {isReadyToEdit ? (

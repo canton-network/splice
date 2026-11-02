@@ -114,8 +114,8 @@ export const TransferOffers: React.FC = () => {
     tokenStandardTransfersQuery.isError;
 
   return (
-    <Stack spacing={4} direction="column" justifyContent="center" id="transfer-offers">
-      <Typography mt={6} variant="h4">
+    <Stack spacing={4} direction="column" id="transfer-offers" sx={{ justifyContent: 'center' }}>
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Action Needed{' '}
         <Chip label={offers.length} color="success" className="transfer-offers-count" />
       </Typography>
@@ -124,7 +124,7 @@ export const TransferOffers: React.FC = () => {
       ) : isError ? (
         <ErrorDisplay message={'Error while fetching amulet price and transfer offers'} />
       ) : offers.length === 0 ? (
-        <Box display="flex" justifyContent="center">
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
           <Typography variant="h6">No transfer offers available</Typography>
         </Box>
       ) : (
@@ -192,7 +192,7 @@ export const TransferOfferDisplay: React.FC<TransferOfferProps> = props => {
         }}
       >
         <ArrowCircleLeftOutlined fontSize="large" />
-        <Stack direction="row" alignItems="center">
+        <Stack direction="row" sx={{ alignItems: 'center' }}>
           <Stack direction="column">
             <BftAnsEntry
               partyId={offer.senderId}
@@ -201,7 +201,7 @@ export const TransferOfferDisplay: React.FC<TransferOfferProps> = props => {
             />
           </Stack>
         </Stack>
-        <Stack direction="column" alignItems="flex-end">
+        <Stack direction="column" sx={{ alignItems: 'flex-end' }}>
           <Typography className="transfer-offer-amulet-amount">
             + <AmountDisplay amount={BigNumber(offer.ccAmount)} currency="AmuletUnit" />
           </Typography>
@@ -216,7 +216,7 @@ export const TransferOfferDisplay: React.FC<TransferOfferProps> = props => {
             </>
           </Typography>
         </Stack>
-        <Stack direction="row" alignItems="center" spacing={2}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <DisableConditionally
             conditions={[
               {

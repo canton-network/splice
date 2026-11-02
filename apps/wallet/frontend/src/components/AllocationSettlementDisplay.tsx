@@ -16,14 +16,14 @@ const AllocationSettlementDisplay: React.FC<{
     <Stack>
       <Stack>
         {id ? (
-          <Stack maxWidth="md">
+          <Stack sx={{ maxWidth: 'md' }}>
             <Typography className="settlement-id" variant="body2" noWrap>
               Settlement id: {id}
             </Typography>
           </Stack>
         ) : null}
         {cid ? (
-          <Stack maxWidth="md">
+          <Stack sx={{ maxWidth: 'md' }}>
             <Typography className="settlement-cid" variant="body2" noWrap>
               Settlement cid: {cid}
             </Typography>
@@ -31,7 +31,7 @@ const AllocationSettlementDisplay: React.FC<{
         ) : null}
       </Stack>
       <Stack direction="row" spacing={2}>
-        <Stack direction="row" alignItems="center" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2">Executors:</Typography>
           {executors.map((executor: string, idx: number) => (
             <BftAnsEntry key={idx} partyId={executor} className="settlement-executor" />

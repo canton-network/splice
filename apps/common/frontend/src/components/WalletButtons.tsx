@@ -29,7 +29,7 @@ const WalletButton = <T,>(props: Props<T>, walletPage: string) => {
 
   return (
     <Button {...buttonProps} onClick={onClick} disabled={clicked}>
-      <Typography variant="body1" textTransform="none">
+      <Typography variant="body1" sx={{ textTransform: 'none' }}>
         {text}
       </Typography>
     </Button>

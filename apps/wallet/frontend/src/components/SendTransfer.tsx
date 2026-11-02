@@ -127,14 +127,14 @@ const SendTransfer: React.FC = () => {
   }
 
   return (
-    <Stack mt={4} spacing={4} direction="column" justifyContent="center">
-      <Typography mt={6} variant="h4">
+    <Stack spacing={4} direction="column" sx={{ mt: 4, justifyContent: 'center' }}>
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Transfers
       </Typography>
       <Card variant="outlined">
         <CardContent sx={{ paddingX: '64px' }}>
           <Stack direction="column" spacing={1} sx={{ justifyContent: 'space-between' }}>
-            <Stack direction="column" mb={4} spacing={1}>
+            <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
               {featureSupport.data?.tokenStandard ? (
                 <FormControlLabel
                   control={
@@ -186,7 +186,7 @@ const SendTransfer: React.FC = () => {
             setCcAmountText={setCCAmountText}
           />
           {!(preapprovalResult.data && useTransferPreapproval) && (
-            <Stack direction="column" mb={4} spacing={1}>
+            <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
               <Typography variant="h6">Expiration</Typography>
               <FormControl fullWidth>
                 <NativeSelect
@@ -206,7 +206,7 @@ const SendTransfer: React.FC = () => {
           {featureSupport.data?.transferPreapprovalDescription ||
           !useTransferPreapproval ||
           !preapprovalResult.data ? (
-            <Stack direction="column" mb={4} spacing={1}>
+            <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
               <Typography variant="h6">
                 Description <Typography variant="caption">(optional)</Typography>{' '}
               </Typography>
@@ -214,7 +214,7 @@ const SendTransfer: React.FC = () => {
                 id="create-offer-description"
                 rows={4}
                 multiline
-                inputProps={{ 'aria-label': 'description' }}
+                slotProps={{ htmlInput: { 'aria-label': 'description' } }}
                 onChange={e => setDescription(e.target.value)}
               />
             </Stack>

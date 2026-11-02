@@ -92,7 +92,10 @@ export const BaseAnsField: React.FC<BaseAnsFieldProps> = propas => {
         <TextField
           {...params}
           fullWidth
-          inputProps={{ ...params.inputProps, 'data-resolved-party-id': resolvedPartyId }}
+          slotProps={{
+            ...params.slotProps,
+            htmlInput: { ...params.slotProps.htmlInput, 'data-resolved-party-id': resolvedPartyId },
+          }}
         />
       )}
       options={filteredAnsEntriesData || []}

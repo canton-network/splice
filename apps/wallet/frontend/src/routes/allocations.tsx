@@ -7,7 +7,7 @@ import ListAllocationRequests from '../components/ListAllocationRequests';
 import ListAllocations from '../components/ListAllocations';
 
 const Allocations: React.FC = () => (
-  <Box marginTop={4}>
+  <Box sx={{ marginTop: 4 }}>
     <ListAllocationRequests />
     <ListAllocations />
     <CreateAllocation />

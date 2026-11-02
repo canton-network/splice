@@ -43,7 +43,7 @@ export interface AccordionListProps {
 
 const AccordionList: React.FC<AccordionListProps> = ({ unfoldedAccordions, foldedAccordions }) => {
   return (
-    <Stack direction="column" mb={4} spacing={1}>
+    <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
       <Typography variant="h5">Config diffs</Typography>
       {unfoldedAccordions.map((accordion, index) => (
         <AccordionItem
