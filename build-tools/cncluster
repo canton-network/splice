@@ -1785,7 +1785,7 @@ function subcmd_participant_console() {
                 cncluster participant_console multi-validator 7 multi-participant-24 7
 
               Set PARTICIPANT_CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead
-              of opening a console. See also build-tools/participant-console-all.sh."
+              of opening a console."
     fi
 
     app_container="$app"
