@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   Auth0Client,
+  CLUSTER_HOSTNAME,
   DecentralizedSynchronizerUpgradeConfig,
   DomainMigrationIndex,
   exactNamespace,
@@ -12,6 +13,7 @@ import {
   configForDSyncNode,
   configForSv,
   dSyncMigrationConfigForNode,
+  dSyncNodeNamesInSameDSync,
   InstalledMigrationSpecificSv,
   StaticSvConfig,
   staticSvConfigFromDSyncNodeConfig,
@@ -67,6 +69,14 @@ export async function installNode(
       ? DecentralizedSynchronizerUpgradeConfig
       : dSyncMigrationConfigForNode(nodeName);
 
+  const clusterHostname = CLUSTER_HOSTNAME;
+  const configuredPeerAddresses =
+    nodeType === 'dsync'
+      ? dSyncNodeNamesInSameDSync(nodeName)
+          .filter(dsyncNodeName => dsyncNodeName !== nodeName)
+          .map(peerName => `sequencer-p2p-${migrationId}.${peerName}.${clusterHostname}`)
+      : [];
+
   return await installCantonComponents(
     xns,
     migrationId,
@@ -81,6 +91,8 @@ export async function installNode(
     },
     migrationConfig,
     nodeType,
+    configuredPeerAddresses,
+    nodeType === 'dsync', // autoInit is true for dsync nodes, false for sv nodes
     undefined,
     { dependsOn: imagePullDeps },
     supportsReset,

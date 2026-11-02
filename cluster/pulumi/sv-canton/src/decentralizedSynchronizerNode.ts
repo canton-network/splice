@@ -94,7 +94,12 @@ abstract class InStackDecentralizedSynchronizerNode
         port?: number;
         user?: string;
       };
+      peerEndpoints?: {
+        address: string;
+        port: number;
+      }[];
     },
+    autoInit: boolean,
     version: CnChartVersion,
     logLevel?: LogLevel,
     logLevelStdout?: LogLevel,
@@ -224,6 +229,8 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       mediatorPostgres: Postgres;
       bftSequencerPostgres?: Postgres;
     },
+    configuredPeerUrls: string[],
+    autoInit: boolean,
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     opts?: SpliceCustomResourceOptions
@@ -248,7 +255,14 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
         externalAddress: `sequencer-p2p-${migrationId}.${ingressName}.${CLUSTER_HOSTNAME}`,
         externalPort: 443,
         persistence,
+        peerEndpoints: configuredPeerUrls.map(address => {
+          return {
+            address,
+            port: 443,
+          };
+        }),
       },
+      autoInit,
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,
