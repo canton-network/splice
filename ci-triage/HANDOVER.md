@@ -8,7 +8,7 @@ Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Cont
 Taken over from Raymond:
 - all packets and round directories, at their original paths (issue comments cite them);
 - `known-families.md` (moved from his skill copy, plus an index at the top);
-- not taken over: his skill copies (`skill/ci-triage`, superseded by the skill on main; `skill/ci-triage-inbox`,
+- not taken over: his skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
   which inferred the inbox from issue timelines through a host token router, replaced by the board export below;
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 

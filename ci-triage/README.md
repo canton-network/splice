@@ -1,6 +1,7 @@
 # CI failure triage
 
-Shared triage branch, never merged. Procedure: the `ci-triage` skill on main (`.claude/skills/ci-triage/`).
+Shared triage branch, never merged. Procedure: the `ci-triage` skill in `skills/ci-triage/` on this branch
+(newer than the copy on main; install with `cp -r ci-triage/skills/ci-triage ~/.claude/skills/`).
 
 - `HANDOVER.md`: current state, open inbox items and what each one needs next.
 - `known-families.md`: flake family catalogue with confirming greps. Check it before any deep analysis.
