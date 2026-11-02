@@ -87,7 +87,7 @@ test_assertParsed = do
 
 test_errorMessages : Script ()
 test_errorMessages = do
-  -- Keys are named as written in the memo, without the `cipMetaPrefix`, and values are quoted
+  -- Keys are named as written in the memo, and values are quoted
   errorInMemoKeyMessage lockVestingDurationMetaKey "Invalid microseconds: '60d'"
     === "Error in memo key 'lock-vesting-duration-micros': Invalid microseconds: '60d'"
   invalidLockSubjectMessage "SV name" GLT_SuperValidator "bad$sv"
@@ -152,46 +152,45 @@ test_governanceLockMetadataParser = do
   let run entries = runParser governanceLockMetadataParser (mkMeta entries)
       reason r = (reasonMetaKey, cipMemoPrefix <> r)
       otherEntry = ("other-key", "other-value")
-      lockSubjectMetaKeyNoPrefix = removeMetaKeyPrefix lockSubjectMetaKey
 
   -- Without a reason field, empty metadata is returned
   expectSuccess (mkMeta []) $ run []
   expectSuccess (mkMeta []) $ run [otherEntry, (lockSubjectMetaKey, "provider")]
 
   -- A reason without the `cipMemoPrefix` prefix is not parsed, and empty metadata is returned
-  expectSuccess (mkMeta []) $ run [(reasonMetaKey, lockSubjectMetaKeyNoPrefix <> "=provider")]
+  expectSuccess (mkMeta []) $ run [(reasonMetaKey, lockSubjectMetaKey <> "=provider")]
 
-  -- A single pair is prefixed with `cipMetaPrefix` and added to the metadata, and the reason field is removed
+  -- A single pair is added to the metadata, and the reason field is removed
   expectSuccess (mkMeta [(lockSubjectMetaKey, "provider")]) $
-    run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider"]
-
-  -- Keys that already contain `cipMetaPrefix` are prefixed again
-  expectSuccess (mkMeta [(cipMetaPrefix <> lockSubjectMetaKey, "provider")]) $
     run [reason $ lockSubjectMetaKey <> "=provider"]
+
+  -- Keys are kept as written, even if they contain `cipMetaPrefix`
+  expectSuccess (mkMeta [(cipMetaPrefix <> lockSubjectMetaKey, "provider")]) $
+    run [reason $ cipMetaPrefix <> lockSubjectMetaKey <> "=provider"]
 
   -- `&` separates the pairs, and the other metadata fields are ignored
   expectSuccess
     (mkMeta [(lockSubjectMetaKey, "provider")])
-    $ run [otherEntry, reason $ lockSubjectMetaKeyNoPrefix <> "=provider"]
+    $ run [otherEntry, reason $ lockSubjectMetaKey <> "=provider"]
 
   -- An empty value is allowed
   expectSuccess (mkMeta [(lockSubjectMetaKey, "")]) $
-    run [reason $ lockSubjectMetaKeyNoPrefix <> "="]
+    run [reason $ lockSubjectMetaKey <> "="]
 
   -- A pair without `=`
-  expectErrors [invalidMemoEntryMessage lockSubjectMetaKeyNoPrefix] $ run [reason lockSubjectMetaKeyNoPrefix]
+  expectErrors [invalidMemoEntryMessage lockSubjectMetaKey] $ run [reason lockSubjectMetaKey]
 
   -- A pair with more than one `=`
-  expectErrors [invalidMemoEntryMessage $ lockSubjectMetaKeyNoPrefix <> "=provider=x"] $
-    run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider=x"]
+  expectErrors [invalidMemoEntryMessage $ lockSubjectMetaKey <> "=provider=x"] $
+    run [reason $ lockSubjectMetaKey <> "=provider=x"]
 
   -- An empty reason, and an empty pair after a trailing `&`
   expectErrors [invalidMemoEntryMessage ""] $ run [reason ""]
-  expectErrors [invalidMemoEntryMessage ""] $ run [reason $ lockSubjectMetaKeyNoPrefix <> "=provider&"]
+  expectErrors [invalidMemoEntryMessage ""] $ run [reason $ lockSubjectMetaKey <> "=provider&"]
 
   -- All invalid pairs are reported
   expectErrors [invalidMemoEntryMessage "a", invalidMemoEntryMessage "b=c=d"] $
-    run [reason $ "a&" <> lockSubjectMetaKeyNoPrefix <> "=provider&b=c=d"]
+    run [reason $ "a&" <> lockSubjectMetaKey <> "=provider&b=c=d"]
 
 -- Lock specification parser
 ----------------------------
@@ -410,16 +409,16 @@ test_substitutionTSv1Parser_examples = do
           owner = alice
           specification = GLS_FullLock FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
         $ run $
-            [ ("cip-127/request", "substitute-lock")
-            , ("cip-127/lock-kind", "sv-lock")
-            , ("cip-127/lock-subject", "someSv")
-            , ("cip-127/target-lock-owner", "alice")
+            [ (requestMetaKey, "substitute-lock")
+            , (lockKindMetaKey, "sv-lock")
+            , (lockSubjectMetaKey, "someSv")
+            , (targetLockOwnerMetaKey, "alice")
             ] <> moreEntries
 
   -- Leaving out `lock-status` defaults to a full lock
   testLockedSvLock []
   -- Including an explicit `lock-status=locked` parses a full lock
-  testLockedSvLock [("cip-127/lock-status", "locked")]
+  testLockedSvLock [(lockStatusMetaKey, "locked")]
 
   -- Staking app example: alice locks funds for the featured app "provider", and a staking app (charlie) can
   -- approve substitutions together with the provider. Bob substitutes funds of that lock with a lock whose
@@ -431,10 +430,10 @@ test_substitutionTSv1Parser_examples = do
       specification = GLS_FullLock FullLockSpecification with
         kind = GLK_FeaturedApp testProvider)
     $ run
-        [ ("cip-127/request", "substitute-lock")
-        , ("cip-127/lock-kind", "fa-lock")
-        , ("cip-127/lock-subject", "provider")
-        , ("cip-127/target-lock-owner", "alice")
+        [ (requestMetaKey, "substitute-lock")
+        , (lockKindMetaKey, "fa-lock")
+        , (lockSubjectMetaKey, "provider")
+        , (targetLockOwnerMetaKey, "alice")
         ]
 
   -- Vesting lock example: bob substitutes funds of a vesting lock of alice. A vesting target is selected with
@@ -449,13 +448,13 @@ test_substitutionTSv1Parser_examples = do
         vestingPeriod = days 60
         endTime = time (date 2026 Jan 1) 0 0 0)
     $ run
-        [ ("cip-127/request", "substitute-lock")
-        , ("cip-127/lock-kind", "sv-lock")
-        , ("cip-127/lock-subject", "someSv")
-        , ("cip-127/target-lock-owner", "alice")
-        , ("cip-127/lock-status", "vesting")
-        , ("cip-127/lock-vesting-duration-micros", "5184000000000")
-        , ("cip-127/lock-vesting-end-time-micros", "1767225600000000")
+        [ (requestMetaKey, "substitute-lock")
+        , (lockKindMetaKey, "sv-lock")
+        , (lockSubjectMetaKey, "someSv")
+        , (targetLockOwnerMetaKey, "alice")
+        , (lockStatusMetaKey, "vesting")
+        , (lockVestingDurationMetaKey, "5184000000000")
+        , (lockVestingEndTimeMetaKey, "1767225600000000")
         ]
 
 test_substitutionTSv1Parser_failures : Script ()

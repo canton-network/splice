@@ -104,10 +104,8 @@ invalidMemoEntryMessage entry = "Invalid memo entry '" <> entry <> "': expected 
 invalidMemoValueMessage : Text -> Text -> Text -> Text
 invalidMemoValueMessage kind key value = "Invalid " <> kind <> " for " <> memoKeyText key <> ": '" <> value <> "'"
 
--- | Refers to a key as the user wrote it in the memo, i.e., without the `cipMetaPrefix`
--- that `governanceLockMetadataParser` adds.
 memoKeyText : Text -> Text
-memoKeyText key = "memo key '" <> removeMetaKeyPrefix key <> "'"
+memoKeyText key = "memo key '" <> key <> "'"
 
 missingMemoKeyMessage : Text -> Text
 missingMemoKeyMessage key = "Missing " <> memoKeyText key
@@ -427,11 +425,7 @@ governanceLockMetadataParser : Parser Metadata Metadata
 governanceLockMetadataParser = do
   meta <- inputParser
   case Text.stripPrefix cipMemoPrefix $ reasonFromMeta meta of
-    Some reason ->
-      -- Prefix all parsed keys with the CIP prefix
-      let adjustKeys = TextMap.fromList . fmap (\(k, v) -> (cipMetaPrefix <> k, v)) . TextMap.toList
-      in Metadata <$> adjustKeys <$> keyValueParser reason
-
+    Some reason -> Metadata <$> keyValueParser reason
     None -> pure emptyMetadata
 
 parseGovernanceLockMetadata : CanAssert m => Metadata -> m Metadata
