@@ -190,6 +190,42 @@ export class PulumiAbortController {
   }
 }
 
+// Bounds how many pulumi operations run concurrently. Each operation spawns its own pulumi CLI
+// and program process, so running all stacks at once can exhaust the machine.
+export class OperationLimiter {
+  private running = 0;
+  private readonly waiting: (() => void)[] = [];
+
+  constructor(private readonly maxConcurrent: number) {
+    if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
+      throw new Error(`maxConcurrent must be a positive integer, got ${maxConcurrent}`);
+    }
+  }
+
+  public async run<T>(op: () => Promise<T>): Promise<T> {
+    if (this.running >= this.maxConcurrent) {
+      // the slot is handed over directly by the finishing operation, so `running` is not incremented here
+      await new Promise<void>(resolve => this.waiting.push(resolve));
+    } else {
+      this.running++;
+    }
+    try {
+      return await op();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) {
+        next();
+      } else {
+        this.running--;
+      }
+    }
+  }
+}
+
+export const maxParallelPulumiOperations = parseInt(
+  config.optionalEnv('PULUMI_MAX_PARALLEL_OPERATIONS') || '4'
+);
+
 export interface Operation {
   name: string;
   promise: Promise<void>;

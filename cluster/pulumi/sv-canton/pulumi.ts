@@ -13,7 +13,12 @@ import {
   DomainMigrationIndex,
   MigrationInfo,
 } from '../common/src/domainMigration';
-import { pulumiOptsWithPrefix, stack } from '../pulumi';
+import {
+  maxParallelPulumiOperations,
+  OperationLimiter,
+  pulumiOptsWithPrefix,
+  stack,
+} from '../pulumi';
 
 export function pulumiOptsForMigration(
   migration: DomainMigrationIndex,
@@ -46,6 +51,8 @@ export async function stackForMigration(
 }
 
 const migrations = DecentralizedSynchronizerUpgradeConfig.allMigrations;
+// Shared by all sv-canton operations (sv and dsync nodes) started from this process.
+const limiter = new OperationLimiter(maxParallelPulumiOperations);
 export const svsToDeploy = allSvNamesToDeploy;
 
 export function runSvCantonForAllMigrations<T>(
@@ -73,15 +80,20 @@ export function runSvCantonForAllMigrations<T>(
 export function runSvCantonForDsyncForAllMigrations<T>(
   operation: string,
   runForStack: (stack: automation.Stack, migration: MigrationInfo, dsyncNode: string) => Promise<T>,
-  requiresExistingStack: boolean,
+  requiresExistingStack: boolean
 ): { name: string; promise: Promise<T> }[] {
   return Object.values(clusterDSyncsConfiguration).flatMap(dsync => {
     return Object.keys(dsync.nodes).flatMap(dsyncNode => {
       return dsync.migrationConfig.allMigrations.map(migration => {
         return {
           name: `${operation}-canton-M${migration.id}-${dsyncNode}`,
-          // eslint-disable-next-line promise/prefer-await-to-then
-          promise: stackForMigration(dsyncNode, migration.id, requiresExistingStack, 'dsync').then(stack => {
+          promise: limiter.run(async () => {
+            const stack = await stackForMigration(
+              dsyncNode,
+              migration.id,
+              requiresExistingStack,
+              'dsync'
+            );
             return runForStack(stack, migration, dsyncNode);
           }),
         };
@@ -122,8 +134,8 @@ export function runSvCantonForSvs<T>(
       console.error(`Adding operation for migration ${migration.id} and sv ${sv}`);
       return {
         name: `${operation}-canton-M${migration.id}-${sv}`,
-        // eslint-disable-next-line promise/prefer-await-to-then
-        promise: stackForMigration(sv, migration.id, requiresExistingStack).then(stack => {
+        promise: limiter.run(async () => {
+          const stack = await stackForMigration(sv, migration.id, requiresExistingStack);
           return runForStack(stack, migration, sv);
         }),
       };
