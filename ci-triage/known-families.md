@@ -17,14 +17,14 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | D | sim-time jump with a command in flight | 9740, 10170, 10173, 10154 | fixed on main, backports per E |
 | E | missing backports to release lines | per backport | check first on release-line runs |
 | F | frontend test infrastructure | 10156, 10141, 10145, 10157, 10143 | fixed on main |
-| G | tests pass, one log line fails checkErrors | 10438, 10084, 10140, 10144, 10147, 10612, 10606, 10676, 10495, 10142 | mixed, see section |
+| G | tests pass, one log line fails checkErrors | 10438, 10084, 10140, 10144, 10147, 10612, 10606, 10676, 10495, 10142, 11155 | mixed, see section |
 | H | evidence loss (sys.exit, teardown cascade) | 10137, 10139, 10183, 10088, 10180, 10176 | fix branches open |
 | H2 | LSU: validator init against a non-active psid | 10088, 10174, 10180 | 10174 fixed, 10180 open |
 | H3 | trigger pause timeout (TriggerTestUtil.scala:93) | 10175, 10176 | 10175 fixed |
 | I | test races (venue, bulk storage, traffic, external party, sv4 sequencer) | 8784, 10149, 10179, 10690, 10691 | mixed |
 | J | infra, no code change | many | see section |
 | K | sim time: mediator pruning backoff after a 30 d jump | 10184 | PR 7440 open (2026-09-22) |
-| L | reference sequencer `insert block` 40001 retry storm | 10139, 10197 | open, Canton / test infra |
+| L | reference sequencer `insert block` 40001 retry storm | 10139, 10197, 11160 | open, Canton / test infra |
 | M | slow BFT confirmation vs 10 s client deadline | 10281 | fixed, #7909 |
 | N | SV1 bootstrap below participant default PV (PV 36 nightly) | 10520 | fixed, #8065 / #8125 |
 | O | AcsCommitmentSender close hang crashes participant (Canton 3.7) | 10729 | open, Canton |
@@ -33,14 +33,19 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | R | forced ACS snapshot 500 on advisory lock | 10740 (dup 10916) | open, OriolMunoz-da |
 | S | environment close timeout on in-flight submission | 10742 | open |
 | T | CI test credentials rotated 2026-10-29 | 10896, 10901 | resolved by the rotation |
-| U | joining SV ACS import refused, topology offset (Canton 3.7) | 10907 (dup 11107) | open |
+| U | joining SV ACS import refused, topology offset (Canton 3.7) | 10907 (dups 11107, 11163) | open, 3 hits, owner needed |
 | V | PeriodicTopologySnapshot missing 'scopes' (pekko-connectors 1.3.0) | 10921 (dups 10923, 10891) | fixed on main, #8148 |
 | W | ScanEventHistoryIntegrationTest pre-tap cursor race | 10912 | open, rautenrieth-da |
 | X | PV 37 topology on a PV 36 synchronizer | 10934 (X1), 10927 (X2), 10937 (X3) | X1, X3 fixed; X2 open |
 | Y | test tagged below the Daml packages it needs | 10930, 10933 | open, test tags |
-| Z | ScanPartyMonitorScript verdict held back by /v0/events cap | 11128 (dups 11136, 11138, 11139) | open, stephencompall-DA; 4 hits on 2026-11-02 |
+| Z | ScanPartyMonitorScript verdict held back by /v0/events cap | 11128 (dups 11136, 11138, 11139, 11158) | open, stephencompall-DA; 5 hits 2026-11-02..03 |
 | AA | LsuIntegrationTest sv4 faucet trigger ERROR during catch-up | 11104 | open, test |
 | AB | BftScanConnection refresh WARN about stopped sv2Scan after suppression ended | 11140 | open, test fix proposed |
+| AC | WalletMetricsTest trigger.completed lookup matches success + noop series | 10732 (dup 11143) | open, test fix proposed |
+| AD | TBAR test reads per-round totals while a parallel backlog computation is still committing | 11144 | open, test fix proposed |
+| AE | frontend login helper misses already-logged-in state on a slow page load | 11161 | open, test fix proposed |
+| AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (related 10475) | open, test fix proposed |
+| AG | first Postgres connection > 5 s at shard start, createDatabase retry WARN | 10739, 11141 | open, test config fix proposed |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -154,6 +159,9 @@ State as recorded in the family section, not rechecked against the tracker on 20
   synchronizer` INFO lines for 2 s then WARN pairs, then `Computing starting points` on the same participant. No config
   key reaches it; fix is a Canton one-liner (`retryLogLevel = Some(Level.INFO)` on that Pause). 1 hit in 59 failed main
   runs 09-10..09-21.
+- 2026-11-03: 10438 / 10302 third hit 11155 (main 8fd9921238, wall-clock-time (3), Canton 3.7.1): splitwellMediator
+  pool-2 at Canton startup 09:26:50.058, probes at 38.641, 44.040, 50.047 each 1-9 ms after a lock check, rebuilt
+  in 99 ms. Packet `11155-splitwell-mediator-locked-connection-lost.md`.
 
 
 ## H. Evidence loss
@@ -248,6 +256,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
   the contention itself is Canton / test infra (fewer writers per DB, non-serializable insert, capped backoff).
+- 2026-11-03: 11160 (release-line-0.10.0 simtime, Canton 3.7.1): globalSequencerSv1 store stall 18.2 s
+  (12:29:09.478 to 27.680, backoff up to 6.373 s) makes `onboardWalletUser` fail with HTTP 400
+  INVALID_PRESCRIBED_SYNCHRONIZER_ID: the new party is effective on splitwell 1.5 s after allocation but on global
+  only after 13.2 s, and `installWalletForUser` gives up after 12 ClientCalls retries. Onboarding waits only on
+  the Authorized store (`createPartyAndUser` -> `ensurePartyAllocated(TopologyStoreId.Authorized)`). Packet
+  `11160-onboarding-retry-budget-reference-sequencer-40001-stall.md`.
 
 ## M. Slow confirmation round trips on the BFT synchronizer vs 10 s client deadlines
 - Signature: `REQUEST_TIME_OUT(3,...)` / `CallOptions deadline exceeded after 9.99s` on a wallet/treasury call; the
@@ -340,6 +354,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   setup_sbt cache step (tools depends on apps-app compile->test). Close as dup of 10480.
 - 10679: one runner several times slower in every app init phase (Wait for user 17-35 s, Initialize app ~4 min),
   `Condition never became true within 5 minutes` in waitForInitialization; cache hit, no 40001 storm. One-off.
+- Cluster test trigger (splice workflow `cluster_tests.yml`, step "Trigger cluster test", used by Deploy CIMain and
+  pr_cluster_test): `curl: (22) The requested URL returned error: 500` four times, body "500 Internal Server Error:
+  The server encountered an internal error" (Werkzeug default, so the invoker app raised). 11152 11153 11154 = run
+  41610142697 attempts 1-3, 2026-11-03 09:20-09:40 UTC, attempt 4 at 09:44 passed. curl already retries 500 for 60 s;
+  cause is in the invoker (CLUSTER_TEST_INVOKER_URL, GCP da-cn-ci logs), not verified. One-off; each manual rerun
+  files a new issue, so expect one issue per failed attempt.
 
 
 ## R. Forced ACS snapshot returns 500 when the snapshot index trigger holds its advisory lock
@@ -378,6 +398,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   reconnect to the synchronizer to move the ledger end` -> SV app exits the JVM (evidence loss for the shard).
 - Check introduced with the Canton 3.7 fork (canton/.../participant/admin/repair/RepairServiceHelpers.scala:223,
   #7944, 10-23). First hit 10907 (SvTimeBasedOnboardingIntegrationTest, simtime, main 3568cba969, 10-29).
+- Third hit 11163 (2026-11-03, main 5c53b74294, simtime (1), run 41637827972): sv2 in
+  SvTimeBasedRewardCouponIntegrationTest env start, 13:11:32.295; offset 856 (TopologyTransactionEffective) was the
+  last indexed event before the disconnect; the same sv2 join passed at 13:06:41 in TimeBasedTestNetPreview (race).
+  Also 11107 (dup). Fix direction: in JoiningNodeDsoPartyHosting retry the import after reconnect and ledger end moving
+  past the topology offset (ImportPartyAcsRequest has no force_repair_when_topology_transaction_at_ledger_end).
+  Packet `11163-sv2-join-import-acs-topology-offset.md`.
 
 ## V. PeriodicTopologySnapshot: missing 'scopes' since pekko-connectors-google 1.3.0 (REAL, 2026-10-30)
 - Signature: PeriodicTopologySnapshotIntegrationTest `did not include substring "Took a new topology snapshot on <date>"`;
@@ -439,6 +465,8 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - 2026-11-02: dups 11138 (41428422164 wall-clock-time (0)) and 11139 (41438225454 wall-clock-time (8)); 4 failures that day
   (05:00, 07:43, 10:23, 11:36). Variant: the hidden verdict is 1 microsecond after the last DSO-visible update (same act),
   not ~250 ms. Packet `11138-11139-scan-party-monitor-events-cap-dup-11128.md`.
+- 2026-11-03: dup 11158 (41620786495 wall-clock-time (3), main 6949aa0f3b); hidden verdict 330 ms after the last
+  DSO-visible update. Fifth hit; no fix on main (5c53b74294). Packet `11158-scan-party-monitor-events-cap-dup-11128.md`.
 
 ## AA. LsuIntegrationTest: sv4 faucet trigger ERROR during the late sv4 successor sequencer's catch-up
 - Signature (log check only): ERROR `ReceiveFaucetCouponTrigger ... validator=sv4Validator` `Skipping processing of
@@ -460,6 +488,72 @@ State as recorded in the family section, not rechecked against the tracker on 20
   onboarding + listAnsEntries + teardown plugins exceed 60 s.
 - Parent 11140 (2026-11-02, main 1938e4170b). Fix in the test: keep the suppression until aliceValidator stops, or
   restart sv2Scan inside it. No suite-wide ignore.
+
+## AC. WalletMetricsTest: trigger.completed lookup matches 2 series (success + noop)
+- Signature (canton_network_test.clog, ERROR): `Found 2 matching metrics` followed by `Failed clue: DomainIngestionService
+  should report task completions correctly`, for 20 s; job log shows only `CommandFailure: Command execution failed.`
+  in "User wallet automation metrics should are labeled with the party ID of the wallet user".
+- Confirm: the tc1 DomainIngestionService `Completed processing` line and the first `Running clue:
+  DomainIngestionService should report task completions` are more than 24 s apart.
+- Mechanism: `trigger.completed` is labeled with `outcome` (TaskbasedTrigger.scala:188-241); the quiet per-party
+  DomainIngestionService marks `success` on the first poll and a silent `noop` 24-36 s later; `metrics.get` needs one
+  series. Test bug.
+- Parent 10732 (run 40672823965); dup 11143 (run 41481391794).
+- Fix (test, not written): add `"outcome" -> "success"` to the label map at WalletMetricsTest.scala:133-136.
+
+## AD. TrafficBasedRewards test reads round totals before the parallel backlog computation committed them
+- Signature (test failure): `RewardAccountingActivityTotalsUndetermined(...) Round <n> should have totals
+  (TrafficBasedRewardsTimeBasedIntegrationTest.scala:467)`, n below 10.
+- Confirm: `zcat canton_network_test.clog.gz | grep -a 'scan=sv1Scan' | grep -a -E 'RewardComputationTrigger|Computed and stored rewards for round'`
+  shows rounds 3..10 started in the same millisecond and round n's `Computed and stored rewards` after round 10's;
+  the test's GET `/rounds/<n>/activity-totals` lies in between.
+- Mechanism: the test pauses sv1Scan verdict ingestion for rounds 3..10, so on resume RewardComputationTrigger
+  (PollingParallelTaskExecutionTrigger) runs the whole backlog in parallel and finishes out of order; the test's
+  `eventually` waits for round 10 only, then reads 0..10 once. Undetermined is scan's documented "retry" answer.
+- Parent 11144 (run 41492215719, DryRun variant; applies to both variants via the shared base).
+- Fix: test-side, `assertRewardCalcs` waits for all rounds 0..10 (totals and root hash) inside the `eventually`.
+
+## AE. Frontend login helper misses the already-logged-in state on a slow page load
+- Signature: `Could not find IdQuery(user-id-field)` from `FrontendLoginUtil.loginOnceConfirmedToBeAtUrl`, on a page
+  where the user was already logged in (failure screenshot shows `Logout`), no `disallowed MIME type` in the browser log.
+- Confirm: in the browser log, the `#logout-button` FindElement of each attempt returns `no such element` before or
+  right after `browsingContext.domContentLoaded` of the target page (11161: 12:26:43.883 and 12:26:47.030, DCL
+  12:26:47.022); in canton_network_test.clog two `Failed clue: Waiting for login page to be ready` within 5 s.
+- Mechanism: the helper checks for the logout button once per attempt, then waits 3 s for the login form; the 5 s
+  budget allows two attempts, so a page that renders more than about 2 s after the helper starts is never logged out.
+  Seen on wallet `/confirm-payment/<cid>` after the splitwell redirect (Vite dev server, 3.8 s load). Precedent for the
+  same helper: #7810 (SvFrontendIntegrationTest auto-login race). Different from F (blocked vite modules).
+- Parent 11161 (SplitwellFrontendIntegrationTest settle debts with a single party, main be675a11dd).
+- Fix: wait for either `#logout-button` or `#user-id-field` before the retry loop (packet 11161). Not written.
+
+## AF. Sim-clock jump timeouts trip the SV medium-priority circuit breaker
+- Signature (log check only, canton_network_test.clog): WARN `Circuit breaker medium-priority-connection tripped after
+  20 failures. Attaching last failure` from `SpliceCircuitBreaker:<simtime suite>/.../SV=<sv>`, stack
+  `ABORTED: LOCAL_VERDICT_TIMEOUT(2,0)`.
+- Confirm: `grep -a -E 'advancing time by|(SubmitAndWait.*failed with|Resetting circuit|tripped).*SV=<sv>'`: a burst of
+  LOCAL_VERDICT_TIMEOUT failures within 3 s after one `advancing time by PT1H`, with no `Resetting circuit breaker`
+  in between, then the WARN; `moving to closed state` about 30 s later.
+- Mechanism: each sim-clock step drops the in-flight SV automation commands (accepted by design at a jump; same
+  jumps as 10475). LOCAL_VERDICT_TIMEOUT (category 2) is not ignored by SpliceCircuitBreaker, and the failure count
+  is only reset on a call made 15 min (sim time) after the last failure, i.e. after the next jump; test config
+  max-failures is 20 (`include/svs/_sv.conf`).
+- Parent 11147 (2026-11-02, main 136e2e3160, ScanNewNetworkBackfillingTimeBasedIntegrationTest, 47 sv2 failures in one
+  jump). Fix in the test: `circuitBreakers = CircuitBreakersConfig.never` for the SV apps, as LsuIntegrationTest does
+  for sv4. No ignore pattern.
+
+## AG. First Postgres connection slower than 5 s at shard start
+- Signature (log check only): WARN `Operation com.digitalasset.canton.resource.DbStorage.createDatabase failed, retrying
+  in 300ms: DatabaseCreationFailed(Failed to connect to database: ... PoolInitializationException: Failed to initialize
+  pool: Connection attempt timed out.` from DbStorage of an app (canton_network_test.clog) or a Canton node
+  (canton log), at the first environment / Canton startup of the shard.
+- Confirm: `HikariDataSource ... - Starting...` at most about 6.3 s before the WARN, `Added connection` for the same pool
+  within 300 ms after it; nothing else fails.
+- Mechanism: pools start with connectionTimeout 5000 and initializationFailTimeout 1; Postgres is slow for all its
+  clients for a few seconds (in 11141 also the Canton lock checks, 9 LockCheckRejected within 3 ms). The cause of the
+  Postgres stall is not in the artifacts (no Postgres log, no host metrics).
+- Hits: 10739 (2026-10-28, simtime (1), Canton globalSequencerSv2; closed not planned), 11141 (2026-11-02,
+  frontend-wall-clock-time (2), 7 app pools). Fix in test config: `connectionTimeout = 15000` in
+  `apps/app/src/test/resources/include/storage-postgres.conf` (and the Canton test storage config). No ignore pattern.
 
 ## Note 2026-11-02
 - U: second hit 11107 (simtime, main 3525c637db), dup of 10907.
