@@ -31,6 +31,7 @@ module Splice.GovernanceLock.Request (
 import Prelude hiding (forA)
 import DA.Action (unless)
 import DA.Assert
+import DA.Date (Month(Jan), date)
 import DA.NonEmpty qualified as NonEmpty
 import DA.Optional
 import DA.Text qualified as Text
@@ -49,7 +50,6 @@ import Splice.GovernanceLock
 import Splice.GovernanceLock.Substitution
 import Splice.GovernanceLock.Transfer
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
-import Splice.TokenStandard.Utils.Internal.Conversions (relTimeFromMeta, timeFromMeta)
 import Splice.Util
 
 data GovernanceLockRequest
@@ -375,15 +375,9 @@ requiredMetadataParser key = inputParser >>= getRequiredMetadata key
 optionalMetadataParser : Text -> Parser Metadata (Optional Text)
 optionalMetadataParser key = getOptionalMetadata key <$> inputParser
 
--- | Parses a required key with a decoder such as `timeFromMeta`, which returns `None` for a missing key.
-requiredMetadataParserWith : (Text -> Metadata -> Either Text (Optional o)) -> Text -> Parser Metadata o
-requiredMetadataParserWith decode key = inputParser >>= \meta -> validationParser $ validate $ case decode key meta of
-  Left e -> Left (errorInMemoKeyMessage key e)
-  Right None -> Left (missingMemoKeyMessage key)
-  Right (Some v) -> Right v
-
+-- | Parses a time written as microseconds since the epoch, as `timeToMeta` writes it.
 timeMetadataParser : Text -> Parser Metadata Time
-timeMetadataParser = requiredMetadataParserWith timeFromMeta
+timeMetadataParser key = addRelTime (time (date 1970 Jan 1) 0 0 0) <$> relTimeMetadataParser key
 
 iso8601TimeFromTextParser : Text -> Text -> Parser i Time
 iso8601TimeFromTextParser key input = validationParser $ validate $ case parseIso8601UtcTime input of
@@ -393,8 +387,14 @@ iso8601TimeFromTextParser key input = validationParser $ validate $ case parseIs
 iso8601TimeMetadataParser : Text -> Parser Metadata Time
 iso8601TimeMetadataParser key = requiredMetadataParser key >>= iso8601TimeFromTextParser key
 
+microsecondsFromTextParser : Text -> Text -> Parser i RelTime
+microsecondsFromTextParser key input = validationParser $ validate $ case Text.parseInt input of
+  None -> Left (errorInMemoKeyMessage key ("Invalid microseconds: '" <> input <> "'"))
+  Some micros -> Right (convertMicrosecondsToRelTime micros)
+
+-- | Parses a duration written as microseconds, as `encodeRelTime` writes it.
 relTimeMetadataParser : Text -> Parser Metadata RelTime
-relTimeMetadataParser = requiredMetadataParserWith relTimeFromMeta
+relTimeMetadataParser key = requiredMetadataParser key >>= microsecondsFromTextParser key
 
 -- | Parse a URL-style key value string 'key1=value1&...&key2=value2' into a key-value map.
 keyValueParser : Text -> Parser i (TextMap.TextMap Text)
