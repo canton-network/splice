@@ -6,17 +6,27 @@ import { Box, Typography } from '@mui/material';
 
 export const Faqs: React.FC = () => {
   return (
-    <Box display="flex" height="100%" flexDirection="column" justifyContent="center" marginTop={4}>
+    <Box
+      sx={{
+        display: 'flex',
+        height: '100%',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        marginTop: 4,
+      }}
+    >
       <Box
-        bgcolor="colors.neutral.15"
-        flex={1}
-        display="flex"
-        flexDirection="column"
-        justifyContent="space-between"
-        height="100%"
+        sx={{
+          bgcolor: 'colors.neutral.15',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          height: '100%',
+        }}
       >
         <Typography variant="h4">FAQs</Typography>
-        <Box marginTop={2}>
+        <Box sx={{ marginTop: 2 }}>
           <Typography variant="body1">More complete FAQs are coming soon.</Typography>
         </Box>
       </Box>

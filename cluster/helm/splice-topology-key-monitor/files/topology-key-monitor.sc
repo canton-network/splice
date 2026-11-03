@@ -24,6 +24,8 @@ val expectedSynchronizerAliases = requireNonEmptyListEnv(
 )
 val pollIntervalSeconds = requireEnv("TOPOLOGY_KEY_MONITOR_POLL_INTERVAL").toLong
 val slowQueryThresholdSeconds = requireEnv("TOPOLOGY_KEY_MONITOR_SLOW_QUERY_THRESHOLD").toLong
+val missingSynchronizerGracePeriodSeconds =
+  requireEnv("TOPOLOGY_KEY_MONITOR_MISSING_SYNCHRONIZER_GRACE_PERIOD").toLong
 
 logger.info(
   s"Starting topology key monitor for keys ${trackedKeys.toSeq.sorted.mkString(", ")} " +
@@ -33,6 +35,8 @@ logger.info(
 val startedAt = CantonTimestamp.now()
 // Per synchronizer and kind (proposals or not), the smallest valid-from not yet checked
 var cursors: Map[(SynchronizerId, Boolean), CantonTimestamp] = Map.empty
+// Per expected synchronizer alias that is currently missing, since when it has been missing
+var missingSince: Map[String, CantonTimestamp] = Map.empty
 
 while (true) {
   Thread.sleep(pollIntervalSeconds * 1000)
@@ -43,12 +47,20 @@ while (true) {
         psid.toOption.map(id => config.synchronizerAlias.unwrap -> id.logical)
       }
       .toMap
-    val missingAliases = expectedSynchronizerAliases.filterNot(registered.contains)
-    if (missingAliases.nonEmpty) {
-      logger.warn(
-        s"Synchronizer(s) ${missingAliases.toSeq.sorted.mkString(", ")} are not registered " +
+    val now = CantonTimestamp.now()
+    missingSince = expectedSynchronizerAliases
+      .filterNot(registered.contains)
+      .map(alias => alias -> missingSince.getOrElse(alias, now))
+      .toMap
+    if (missingSince.nonEmpty) {
+      val message =
+        s"Synchronizer(s) ${missingSince.keys.toSeq.sorted.mkString(", ")} are not registered " +
           s"on the participant with a known synchronizer id, so they are not monitored"
-      )
+      if (missingSince.values.exists(_.plusSeconds(missingSynchronizerGracePeriodSeconds) <= now)) {
+        logger.warn(message)
+      } else {
+        logger.info(message)
+      }
     }
     val synchronizerIds = expectedSynchronizerAliases.toSeq.sorted.flatMap(registered.get)
     val polled = for {

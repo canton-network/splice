@@ -11,8 +11,8 @@ APPS_DIR = "apps"
 REQUIRED_NAMESPACE = "@canton-network/"
 
 
-def main():
-    errors = []
+def main() -> None:
+    errors: list[str] = []
 
     for root, dirs, files in os.walk(APPS_DIR):
         # Skip node_modules

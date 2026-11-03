@@ -183,6 +183,7 @@ createGovernanceLockTransfer transfer@LockTransferArgs{..} = do
 governanceLockTransfer_acceptImpl : ContractId GovernanceLockTransfer -> GovernanceLockTransfer -> [Party] -> ExtraArgs -> Update GovernanceLockTransfer_AcceptResult
 governanceLockTransfer_acceptImpl self GovernanceLockTransfer{..} actors extraArgs = do
   checkActors actors [[receiver]]
+  assertWithinDeadline "expiresAt" expiresAt
   let dso = source.dso
   (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
   -- The legs report the memo of the accepted proposal

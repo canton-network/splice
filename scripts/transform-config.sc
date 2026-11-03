@@ -11,7 +11,7 @@ object TransformConfig extends App {
     case "useSelfSignedTokensForLedgerApiAuth" =>
       val inputConfig = SpliceConfig.parseAndLoadOrThrow(Seq(inputFileName.toFile))
       val outputConfig =
-        ConfigTransforms.useSelfSignedTokensForLedgerApiAuth("test")(inputConfig)
+        ConfigTransforms.useSelfSignedTokensForAuth(inputConfig)
       // Deliberately leaking secrets to file
       SpliceConfig.writeToFile(outputConfig, outputFileName, confidential = false)
     case "integrationTestDefaults" =>

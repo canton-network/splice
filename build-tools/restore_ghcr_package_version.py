@@ -49,7 +49,7 @@ def restore_package_version(org: str, package_name: str, version_id: str, token:
         # The calling function will report the final failure.
         return False
 
-def main(packages_to_restore: List[Dict[str, str]]):
+def main(packages_to_restore: List[Dict[str, str]]) -> None:
     token = os.getenv("GH_TOKEN")
     if not token:
         print("Error: GH_TOKEN environment variable not set.", file=sys.stderr)

@@ -49,7 +49,7 @@ cf_docs_repo = git.Repo(cf_docs_dir)
 branch_name = f"{getpass.getuser()}/release-notes-{new_version}"
 console = Console()
 
-def open_in_editor(filepath):
+def open_in_editor(filepath: str) -> None:
     sensible_editor = shutil.which("sensible-editor")
     if sensible_editor:
         editor_cmd = [sensible_editor, filepath]
@@ -65,7 +65,7 @@ def open_in_editor(filepath):
     except FileNotFoundError:
         print(f"Error: Could not find an editor to open {filepath}")
 
-def print_release_notes_and_git_log():
+def print_release_notes_and_git_log() -> None:
 
     release_notes_md = split_upcoming(release_notes)[1]
 
@@ -85,7 +85,7 @@ def print_release_notes_and_git_log():
                 f"Please reconcile them before proceeding."
             )
 
-    log_entries = [f" * {c.summary}" for c in repo.iter_commits(f"{origin_ref}..")]
+    log_entries = [f" * {c.summary if isinstance(c.summary, str) else c.summary.decode()}" for c in repo.iter_commits(f"{origin_ref}..")]
     log_text = "\n".join(log_entries)
 
     layout_grid = Table.grid(expand=True)
@@ -99,7 +99,7 @@ def print_release_notes_and_git_log():
 
     console.print(layout_grid)
 
-def split_upcoming(mdx):
+def split_upcoming(mdx: str) -> tuple[str, str, str]:
     """Splits the upcoming notes into (before, patch notes, after); the patch notes exclude the heading and mdx comments."""
     patch = patch_heading_re.search(mdx)
     minor = minor_heading_re.search(mdx, patch.end()) if patch else None
@@ -108,7 +108,7 @@ def split_upcoming(mdx):
     start, end = patch.end(), minor.start()
     return mdx[:start], mdx_comment_re.sub("", mdx[start:end]).strip("\n"), mdx[end:]
 
-def move_upcoming_notes():
+def move_upcoming_notes() -> None:
     before, patch_notes, after = split_upcoming(release_notes)
 
     with open(release_notes_filename, 'r') as f:
@@ -126,7 +126,7 @@ def move_upcoming_notes():
     with open(upcoming_notes_filename, 'w') as f:
         f.write(before + "\n\n{/* Add all release notes in this section */}\n\n" + after)
 
-def commit_branch_and_push(r, summary):
+def commit_branch_and_push(r: git.Repo, summary: str) -> None:
     branch = r.create_head(branch_name)
     r.head.reference = branch
     r.git.add(update=True)
@@ -140,16 +140,18 @@ Signed-off-by: {username} <{email}>
     r.index.commit(msg, skip_hooks=True)
     r.remote(name='origin').push(f"{branch_name}:{branch_name}")
 
-def create_pr(r, title):
+def create_pr(r: git.Repo, title: str) -> None:
     g = Github(os.environ['GITHUB_TOKEN'])
-    github_repo_name = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", r.remotes.origin.url).group(1)
-    github_repo = g.get_repo(github_repo_name)
+    remote_match = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", r.remotes.origin.url)
+    if remote_match is None:
+        sys.exit(f"cannot parse a GitHub repository from {r.remotes.origin.url}")
+    github_repo = g.get_repo(remote_match.group(1))
 
     pr = github_repo.create_pull(title=title, base="main", head=branch_name)
 
     print(f"Pull Request created successfully: {pr.html_url}")
 
-def main():
+def main() -> None:
 
     print_release_notes_and_git_log()
 

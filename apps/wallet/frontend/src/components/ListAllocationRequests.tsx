@@ -69,11 +69,11 @@ const ListAllocationRequests: React.FC = () => {
     <Stack
       spacing={4}
       direction="column"
-      justifyContent="center"
       id="allocation-requests"
       aria-labelledby="allocation-requests-label"
+      sx={{ justifyContent: 'center' }}
     >
-      <Typography mt={6} variant="h4" id="allocation-requests-label">
+      <Typography variant="h4" id="allocation-requests-label" sx={{ mt: 6 }}>
         Allocation Requests <Chip label={allocationRequests.length} color="success" />
       </Typography>
       {allocationRequests.map(ar => (
@@ -121,8 +121,8 @@ const AllocationRequestDisplay: React.FC<{
           alignItems: 'center',
         }}
       >
-        <Stack width="100%" spacing={2}>
-          <Stack direction="row" width="100%" spacing={2}>
+        <Stack spacing={2} sx={{ width: '100%' }}>
+          <Stack direction="row" spacing={2} sx={{ width: '100%' }}>
             <Chip label={isV2 ? 'V2' : 'V1'} color={isV2 ? 'primary' : 'default'} size="small" />
             <AllocationSettlementDisplay settlement={settlement} />
             <Button

@@ -73,7 +73,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const pageName = pathnameToPageName(location.pathname, config.spliceInstanceNames.amuletName);
 
   return (
-    <Box bgcolor={layoutTokens.page} display="flex" flexDirection="column" minHeight="100vh">
+    <Box
+      sx={{
+        bgcolor: layoutTokens.page,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+      }}
+    >
       <GlobalStyles styles={partyIdScrollGlobalStyles} />
       <PartyIdScrollTracks />
       <NetworkBanner />

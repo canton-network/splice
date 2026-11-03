@@ -314,7 +314,15 @@ spec:
         - name: ADDITIONAL_CONFIG_MAX_VETTING_DELAY
           value: canton.validator-apps.validator_backend.max-vetting-delay = "{{ . }}"
         {{- end }}
+        {{- if .Values.allowedOrigins }}
+        - name: ADDITIONAL_CONFIG_ALLOWED_ORIGINS
+          value: |
+            canton.validator-apps.validator_backend.allowed-origins = {{ .Values.allowedOrigins | toJson }}
+        {{- end }}
         {{- if .Values.disableAuth }}
+        {{- if not .Values.allowedOrigins }}
+        {{- fail "allowedOrigins must be set when disableAuth is true" }}
+        {{- end }}
         - name: ADDITIONAL_CONFIG_DISABLE_AUTH
           value: |
             canton.validator-apps.validator_backend {

@@ -24,17 +24,19 @@ import yaml
 from datetime import date
 import re
 
+from sphinx.application import Sphinx
+
 sys.path.insert(0, os.path.abspath('./_extensions'))
 
 # make_id from docutils removes leading digits from IDs, which makes it impossible to have permanent links to numbered
 # headings. We prefix IDs which start with a digit with "id-" before passing it to make_id to make permanent links work.
 #
 # See https://docutils.sourceforge.io/docs/ref/rst/directives.html#identifier-normalization
-def setup(app):
+def setup(app: Sphinx) -> None:
     import docutils.nodes
     make_id_orig = docutils.nodes.make_id
 
-    def make_id(string):
+    def make_id(string: str) -> str:
         prefixed_string = "id-" + string if string and string[0].isdigit() else string
         return make_id_orig(prefixed_string)
 
@@ -125,7 +127,7 @@ html_context = {
 html_css_files = ["deprecated-banner.css"]
 html_js_files = ["script.js"]
 
-SPLICE_ROOT = os.getenv("SPLICE_ROOT")
+SPLICE_ROOT = os.environ["SPLICE_ROOT"]
 with open(SPLICE_ROOT + "/nix/canton-sources.json") as f:
     obj = json.load(f)
     canton_version = obj["version"]
@@ -135,7 +137,7 @@ with open(SPLICE_ROOT + "/nix/dpm-sdk-sources.json") as f:
     daml_sdk_tooling_version = obj["version"]
     daml_sdk_version = obj["version"]
 
-with open(os.path.join(os.getenv("CANTON"), "SUBDIR")) as f:
+with open(os.path.join(os.environ["CANTON"], "SUBDIR")) as f:
     canton_subdir = f.readline()
 
 version = os.getenv("VERSION")

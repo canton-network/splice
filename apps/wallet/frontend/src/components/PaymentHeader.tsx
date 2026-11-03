@@ -21,12 +21,12 @@ const PaymentHeader: React.FC = () => {
   const isDataUndefined = amuletPriceQuery.data === undefined || balanceQuery.data === undefined;
 
   return (
-    <Box bgcolor="colors.neutral.20">
+    <Box sx={{ bgcolor: 'colors.neutral.20' }}>
       <Toolbar sx={{ padding: 2 }}>
-        <Typography variant="h5" autoCapitalize="characters" flex={'1'}>
+        <Typography variant="h5" autoCapitalize="characters" sx={{ flex: '1' }}>
           {config.spliceInstanceNames.amuletName} Wallet
         </Typography>
-        <Stack spacing={2} alignItems="center">
+        <Stack spacing={2} sx={{ alignItems: 'center' }}>
           <Stack spacing={2} direction="row">
             <span className="payment-current-user">
               <CurrentUser />

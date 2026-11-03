@@ -1,8 +1,11 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as React from 'react';
-import { DisableConditionally, ErrorDisplay } from '@canton-network/splice-common-frontend';
-import BigNumber from 'bignumber.js';
+import {
+  DisableConditionally,
+  ErrorDisplay,
+  parseBigNumber,
+} from '@canton-network/splice-common-frontend';
 import { useState } from 'react';
 
 import { Button, Stack, TextField } from '@mui/material';
@@ -14,9 +17,9 @@ const Tap: React.FC = () => {
 
   const mutation = useTap();
 
-  const isInvalidAmount = BigNumber(tapValueText).lte(0.0);
+  const isInvalidAmount = parseBigNumber(tapValueText).lte(0.0);
   return (
-    <Stack direction="row" spacing={2} alignItems="center">
+    <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
       <TextField
         error={isInvalidAmount}
         label="Amount"
@@ -33,7 +36,7 @@ const Tap: React.FC = () => {
       >
         <Button
           variant="contained"
-          onClick={() => mutation.mutate(BigNumber(tapValueText))}
+          onClick={() => mutation.mutate(parseBigNumber(tapValueText))}
           id="tap-button"
         >
           Tap
