@@ -176,3 +176,24 @@ User on lessons: W45 lesson 1 is the target style; lesson 2 of lower value, keep
 - Item 3: the user opened PR canton-network/splice#8215 from rautenrieth-da/fix-10732-wallet-metrics-outcome-label
   (b43adb1676); CI static_tests passed on it, so the local static check was stopped. PR 8211 static_tests also
   passed after the user's scalafmt fix. Still open: close 11143 as dup (asked the user whether it ran).
+
+## Fresh export 2026-11-03 18:08 (36 items)
+
+Exports `inbox.jsonl` (18:08) and `issues-since-2026-10-20.jsonl` (18:08, 732 issues, newest 11173).
+- Left the inbox: 11152, 11153, 11154 (closed, item 1); 11138, 11139, 11158 (closed, item 2); 11128 (open, Status
+  changed by the user, item 2).
+- 11143 still open: the close of item 3 has not run yet.
+- New, splice GHA on main, not yet classified (job logs not read): 11164 (run 41637827972, wall-clock-time (0),
+  5c53b74294), 11165 (41637223316, wall-clock-time (6), 6a32b00e92), 11168 + 11169 (41661993096, wall-clock-time
+  (4) and (2), d852f3c54c), 11172 + 11173 (41674340437, frontend-wall-clock-time (1) and wall-clock-time (3),
+  8dacec5c10). Queued as items 17-20 by run, regrouped by signature once read; presented after item 10, before the
+  done items 11-16.
+- New, needs-log: 11170 (cni GHA run 41669902127, cluster_lock_reaper), 11171 (CircleCI pipeline 88016 job
+  528537, deploy_sv_reonboard, like 11106, 11137, 11142, 11151).
+
+| # | Refs | Class | Signature | Family | State |
+|---|---|---|---|---|---|
+| 17 | 11164 | new | wall-clock-time (0), main 5c53b74294 | ? | open |
+| 18 | 11165 | new | wall-clock-time (6), main 6a32b00e92 | ? | open |
+| 19 | 11168, 11169 | new | run 41661993096, wall-clock-time (4) and (2) | ? | open |
+| 20 | 11172, 11173 | new | run 41674340437, frontend-wall-clock-time (1), wall-clock-time (3) | ? | open |
