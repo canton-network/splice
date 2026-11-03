@@ -161,17 +161,6 @@
                 },
                 "orgId": 1,
                 "type": "file"
-              },
-              {
-                "disableDeletion": false,
-                "editable": true,
-                "folder": "platform",
-                "name": "gid-pulumi-operator",
-                "options": {
-                  "path": "/var/lib/grafana/dashboards/pulumi-operator"
-                },
-                "orgId": 1,
-                "type": "file"
               }
             ]
           }
@@ -208,13 +197,6 @@
               "datasource": "Prometheus",
               "gnetId": 18030,
               "revision": 8
-            }
-          },
-          "pulumi-operator": {
-            "operator": {
-              "datasource": "Prometheus",
-              "gnetId": 25954,
-              "revision": 1
             }
           }
         },
