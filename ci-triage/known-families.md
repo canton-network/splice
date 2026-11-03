@@ -272,6 +272,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   aborted together in 26 of 58 collisions.
   Fix options: Canton passes node timeouts to the driver storage (cap applies) or drops `max(id) + 1` under
   SERIALIZABLE; test config raises `sequencer.config.empty-block-interval-millis` (side effects unchecked).
+  Other runs (`scripts/ref_seq_contention.py`, 2026-11-04): 11144 simtime (3): 13775 stored, 4641 failed, chains up
+  to 5 failures / 2.3 s, no delay over 1 s; 11141 frontend-wall-clock-time (2): 9885 stored, 2966 failed, chains up to
+  6 failures / 2.5 s, one delay 1.495 s (uncapped). Rate per minute 0 in the first minutes of a shard, then
+  0.15-0.6 per stored batch, not monotonic. Only shards started with the reference driver are exposed: simtime
+  (`-s`), frontend wall-clock, resource-intensive, key-download, lsu, signatures, app-upgrade, compose (`-w`);
+  wall-clock-time (`-we`, SPLICE_USE_CANTON_BFT_SEQUENCER=1) runs Canton BFT and has no `insert block`.
 - Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
   20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
