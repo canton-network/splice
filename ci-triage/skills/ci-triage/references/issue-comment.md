@@ -18,7 +18,8 @@ ran, what was grepped). Duplicate-close comments stay one or two sentences: pare
 the same failure.
 
 Quoting rules: `ci-triage/CLAUDE.md`, Commands for the user (single quotes around the body; no single quote or
-backslash inside; newlines are fine). When printing a command whose body contains ``` fences in chat, wrap the
+backslash inside; newlines are fine). A body that needs a single quote or backslash, e.g. a verbatim log line,
+goes into `<round dir>/comments/<ref>.md` and is posted with `--body-file`; never edit a log line to fit the quoting. When printing a command whose body contains ``` fences in chat, wrap the
 whole command in a `~~~` fence so the inner fences render as part of it.
 
 ## Example (11152, accepted by the user on 2026-11-03)

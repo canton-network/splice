@@ -7,6 +7,7 @@ is harmless; the parent itself is never closed. Usage, from the repo root:
   direnv exec . ci-triage/scripts/close_duplicates.py --dry-run 11128 11138 11139 --comment '...'
 """
 import argparse
+import pathlib
 import json
 import subprocess
 import sys
@@ -23,10 +24,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("parent", type=int)
     ap.add_argument("refs", nargs="+", type=int)
-    ap.add_argument("--comment", required=True, help="closing comment, the same for every issue")
+    body = ap.add_mutually_exclusive_group(required=True)
+    body.add_argument("--comment", help="closing comment, the same for every issue")
+    body.add_argument("--comment-file", help="file with the closing comment (any characters, Markdown)")
     ap.add_argument("--repo", default="DACH-NY/cn-test-failures")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+    comment = args.comment if args.comment is not None else pathlib.Path(args.comment_file).read_text()
 
     failed = False
     for ref in dict.fromkeys(args.refs):
@@ -42,7 +46,7 @@ def main() -> None:
                 print(f"#{ref}: would close as duplicate of #{args.parent}")
                 continue
             subprocess.run(["gh", "issue", "close", str(ref), "-R", args.repo, "--duplicate-of", str(args.parent),
-                            "--comment", args.comment], capture_output=True, text=True, check=True)
+                            "--comment", comment], capture_output=True, text=True, check=True)
             print(f"#{ref}: closed as duplicate of #{args.parent}")
         except subprocess.CalledProcessError as e:
             failed = True

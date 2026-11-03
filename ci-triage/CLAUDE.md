@@ -126,7 +126,7 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | `export_issues.py --since <date>` | host | recent issues with comments (recipe 9) |
 | `export_inbox.py` | host | open Status = Inbox issues of project 48 (recipe 10) |
 | `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |
-| `close_duplicates.py <parent> <ref>... --comment '<text>'` | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
+| `close_duplicates.py <parent> <ref>... --comment '<text>'` (or `--comment-file <path>`) | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
 | `probe_access.py` | sandbox | which method reads which private data (CLAUDE.md, Access) |
 | `inbox_from_timelines.py` | sandbox, `ghx` or `gh api` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
 | `gcp_logs.py --project <p> --start <t> --end <t> --filter <q>` | sandbox | Logs Explorer URL and `gcloud logging read` command for the user (recipe 13) |
@@ -137,4 +137,7 @@ Commands handed to the user (issue comments, closes, retitles) must work in bash
 calls, every argument in single quotes, and no single quote or backslash inside an argument (fish treats `\\` and
 `\'` as escapes inside single quotes, bash and zsh do not; rephrase: "the log of sv1", not "sv1's log"). Newlines
 inside a quoted argument are fine in all three shells: write comment bodies as readable Markdown, with paragraphs
-and fenced code blocks for log lines. Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.
+and fenced code blocks for log lines. A body that must contain a single quote or backslash (verbatim log lines)
+goes into a file instead, `<round dir>/comments/<ref>.md` (committed, so the user has it after fetching the branch),
+used with `gh issue comment <ref> -R DACH-NY/cn-test-failures --body-file <path>` or `close_duplicates.py
+--comment-file <path>`; show the body in chat as well. Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.
