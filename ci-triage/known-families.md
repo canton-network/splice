@@ -250,8 +250,16 @@ State as recorded in the family section, not rechecked against the tracker on 20
   `The operation 'insert block' has failed ... Retrying after` with growing backoff and `SQL state: 40001`.
 - Confirm: pair first `enqueued ... tag send` with the next `Created batch` on globalSequencerSv1 and list waits over
   5 s; grep the `insert block` retry chain in that window. Block production (`Processing block`) keeps running.
-- Cause: several reference sequencers (4 global + 2 splitwell) store serializable block inserts in one Postgres; the
-  test configs run the reference driver in both wall-clock and sim-time shards (`sequencers.conf:33`).
+- Cause: the 4 global reference sequencers share one driver database (`sequencer_driver[_simtime]`, per-synchronizer;
+  splitwell has its own) and its `blocks` table is the ordering ledger. `DbReferenceBlockOrderingStore.insertRequest`
+  (3.7.1 jar) inserts each batch as `insert into blocks (id, request, uuid) values ((select coalesce(max(id) + 1, 0)
+  from blocks), ...) on conflict (uuid) do nothing` under SERIALIZABLE (`insert block`), so any two concurrent
+  inserts conflict and Postgres aborts one with 40001; retried with exponential backoff. The test configs run the
+  reference driver in both wall-clock and sim-time shards (`sequencers.conf:33`).
+- 2026-11-03 (11160): not a stall of all writers. globalSequencerSv1 stored nothing from 12:29:13.462 to 27.541 (11
+  retries, backoff to 6.373 s) while Sv2-4 stored 31-32 batches each (heights 6741-6839, blocks without events, no
+  client requests enqueued by them); the only client request in the window, the one sent through Sv1, waited 13 s.
+  Why Sv2-4 store request-free batches (likely driver time-keeping) and why Sv1 lost every retry: not verified.
 - Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
   20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
