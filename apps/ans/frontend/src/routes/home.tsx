@@ -18,7 +18,7 @@ const Home: React.FC = () => {
 
   return (
     <>
-      <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" pb={4}>
+      <Box sx={{ bgcolor: 'colors.neutral.20', display: 'flex', flexDirection: 'column', pb: 4 }}>
         <Container maxWidth="md">
           <RequestAnsEntry />
         </Container>

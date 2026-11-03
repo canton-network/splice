@@ -16,7 +16,7 @@ const ValidatorLicensesWithQueries: React.FC = () => {
   const dsoInfosQuery = useDsoInfos();
 
   return (
-    <Box mt={4}>
+    <Box sx={{ mt: 4 }}>
       <ValidatorLicenses
         validatorLicensesQuery={validatorLicensesQuery}
         dsoInfosQuery={dsoInfosQuery}

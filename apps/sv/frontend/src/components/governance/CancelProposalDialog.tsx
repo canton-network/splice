@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
 import { Box, Button, Dialog, Typography } from '@mui/material';
 import React from 'react';
 import {
@@ -29,13 +29,15 @@ export const CancelProposalDialog: React.FC<CancelProposalDialogProps> = ({
     onClose={onClose}
     aria-labelledby="cancel-proposal-dialog-title"
     data-testid="cancel-proposal-dialog"
-    PaperProps={{
-      sx: {
-        bgcolor: CREATE_PROPOSAL_CARD_BG,
-        borderRadius: '4px',
-        maxWidth: 568,
-        width: '100%',
-        p: '40px',
+    slotProps={{
+      paper: {
+        sx: {
+          bgcolor: CREATE_PROPOSAL_CARD_BG,
+          borderRadius: '4px',
+          maxWidth: 568,
+          width: '100%',
+          p: '40px',
+        },
       },
     }}
   >

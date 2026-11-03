@@ -38,22 +38,22 @@ export const ConfirmSubscription: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      <Stack alignItems="center" paddingTop={4} spacing={4}>
+      <Stack spacing={4} sx={{ alignItems: 'center', paddingTop: 4 }}>
         {subscriptionRequestQuery.isError || isDataUndefined ? (
-          <Box display="flex" alignItems="center" justifyContent="center">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <ErrorDisplay message={'Error while fetching subscription request and amulet price'} />
           </Box>
         ) : (
           <>
-            <Stack alignItems="center" spacing={1}>
-              <Stack alignItems="center" direction="row" spacing={1}>
+            <Stack spacing={1} sx={{ alignItems: 'center' }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Typography variant="h6">Confirm Subscription to </Typography>
                 <BftAnsEntry
                   partyId={subscriptionRequestQuery.data.payload.subscriptionData.receiver}
                   variant="h5"
                 />
               </Stack>
-              <Stack alignItems="center" direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Typography variant="body2">via </Typography>
                 <BftAnsEntry
                   partyId={subscriptionRequestQuery.data.payload.subscriptionData.provider}
@@ -91,16 +91,16 @@ const SubscriptionContainer: React.FC<{ subscription: Contract<SubscriptionReque
 
   return (
     <Container maxWidth="xl">
-      <Box bgcolor="colors.neutral.10" border={1} borderColor="colors.neutral.15">
-        <Stack alignItems="center" spacing={4} marginY={4}>
-          <Stack alignItems="center">
+      <Box sx={{ bgcolor: 'colors.neutral.10', border: 1, borderColor: 'colors.neutral.15' }}>
+        <Stack spacing={4} sx={{ alignItems: 'center', marginY: 4 }}>
+          <Stack sx={{ alignItems: 'center' }}>
             <Typography variant="body1">Description</Typography>
             <Typography variant="h6" className="sub-request-description">
               {subscription.payload.subscriptionData.description}
             </Typography>
           </Stack>
           <Typography variant="body1">Subscription Details</Typography>
-          <Stack alignItems="center">
+          <Stack sx={{ alignItems: 'center' }}>
             <Typography variant="h6" className="sub-request-price">
               <AmountDisplay amount={amount} currency={unit} /> per{' '}
               <IntervalDisplay microseconds={payData.paymentInterval.microseconds} />
@@ -112,7 +112,7 @@ const SubscriptionContainer: React.FC<{ subscription: Contract<SubscriptionReque
             </Typography>
             <Typography variant="body2">Fees will be added.</Typography>
           </Stack>
-          <Stack alignItems="center">
+          <Stack sx={{ alignItems: 'center' }}>
             <Typography variant="body2">The first payment will be deducted immediately.</Typography>
           </Stack>
           <ConfirmSubscriptionButton cid={subscription.contractId} />

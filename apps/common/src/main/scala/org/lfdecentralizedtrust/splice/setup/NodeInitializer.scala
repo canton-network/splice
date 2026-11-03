@@ -111,13 +111,6 @@ class NodeInitializer(
     for {
       namespaceKey <- connection.generateKeyPair("namespace", SigningKeyUsage.NamespaceOnly)
 
-      // All nodes need a signing key
-      // TODO(DACH-NY/canton-network-internal#392) consider splitting keys instead of using `All`
-      signingKey <- connection.generateKeyPair("signing", SigningKeyUsage.All)
-
-      // Only participants need an encryption key, but for simplicity every node gets one
-      encryptionKey <- connection.generateEncryptionKeyPair("encryption")
-
       // Construct the fresh node identity from the namespace signing key fingerprint and the name hint.
       // This mirrors the implementation in the Canton auto-init stage, see [[CantonNodeBootstrapX.SetupNodeId.autoCompleteStage()]].
       namespace = Namespace(namespaceKey.id)
@@ -127,6 +120,28 @@ class NodeInitializer(
       // Setting node identity
       _ = logger.info(s"Triggering node initialization for node with ID $nodeId")
       _ <- connection.initId(nodeId)
+
+      // Sequencers and mediators do not use their authorized store: their identity transactions
+      // and keys are created by generateOnboardingTopologyTransactions when they get onboarded.
+      // Only participants need them in the authorized store.
+      _ <-
+        if (nodeId.code == ParticipantId.Code)
+          addIdentityTransactionsToAuthorizedStore(namespace, namespaceKey, nodeId)
+        else Future.unit
+    } yield {
+      logger.info(s"Finished node initialization for node with ID $nodeId")
+    }
+  }
+
+  private def addIdentityTransactionsToAuthorizedStore(
+      namespace: Namespace,
+      namespaceKey: SigningPublicKey,
+      nodeId: Member,
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] =
+    for {
+      // TODO(DACH-NY/canton-network-internal#392) consider splitting keys instead of using `All`
+      signingKey <- connection.generateKeyPair("signing", SigningKeyUsage.All)
+      encryptionKey <- connection.generateEncryptionKeyPair("encryption")
 
       // Adding root certificate
       _ <- connection.ensureNamespaceDelegation(
@@ -142,10 +157,7 @@ class NodeInitializer(
         keys = NonEmpty(Seq, signingKey, encryptionKey),
         retryFor = RetryFor.Automation,
       )
-    } yield {
-      logger.info(s"Finished node initialization for node with ID $nodeId")
-    }
-  }
+    } yield ()
 
   def initializeWithNewIdentityIfNeeded(
       identifierName: String,

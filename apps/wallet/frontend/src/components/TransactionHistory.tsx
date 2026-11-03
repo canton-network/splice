@@ -67,8 +67,8 @@ const TransactionHistory: React.FC = () => {
   const pagedTransactions = txQuery.data ? txQuery.data.pages : [];
 
   return (
-    <Stack mt={4} spacing={4} direction="column" justifyContent="center" id="tx-history">
-      <Typography mt={6} variant="h4">
+    <Stack spacing={4} direction="column" id="tx-history" sx={{ mt: 4, justifyContent: 'center' }}>
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Transaction History
       </Typography>
       {isLoading ? (
@@ -211,7 +211,7 @@ const TransactionIconAction: React.FC<TransactionIconInfoProps> = ({
   }
 
   return (
-    <Stack direction="row" alignItems="center">
+    <Stack direction="row" sx={{ alignItems: 'center' }}>
       <Icon sx={{ marginRight: '16px' }} fontSize="small">
         {icon}
       </Icon>

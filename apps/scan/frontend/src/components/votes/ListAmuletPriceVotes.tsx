@@ -50,8 +50,8 @@ const ListAmuletPriceVotes: React.FC = () => {
   const amuletPriceVotes = amuletPriceVotesQuery.data;
 
   return (
-    <Box mt={4} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-      <Typography mt={6} variant="h4">
+    <Box sx={{ mt: 4, borderBottom: 1, borderColor: 'divider' }}>
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Desired {amuletName} Prices of Super Validators
       </Typography>
       <TableContainer>
