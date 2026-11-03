@@ -111,7 +111,7 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 |---|---|---|---|---|---|
 | 1 | 11152, 11153, 11154 | new | Deploy CIMain trigger: cluster test invoker HTTP 500, 3 attempts | J | resolved |
 | 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | resolved |
-| 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | presented |
+| 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | resolved |
 | 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | open |
 | 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | open |
 | 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | open |
@@ -197,3 +197,5 @@ Exports `inbox.jsonl` (18:08) and `issues-since-2026-10-20.jsonl` (18:08, 732 is
 | 18 | 11165 | new | wall-clock-time (6), main 6a32b00e92 | ? | open |
 | 19 | 11168, 11169 | new | run 41661993096, wall-clock-time (4) and (2) | ? | open |
 | 20 | 11172, 11173 | new | run 41674340437, frontend-wall-clock-time (1), wall-clock-time (3) | ? | open |
+
+Item 3: 11143 closed as dup of 10732 (user, 2026-11-03), comment without packet reference, fix PR 8215. Resolved.
