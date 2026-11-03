@@ -20,6 +20,7 @@ ref = a cn-test-failures issue number.
 | `evidence/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
 | `STATE.md` | current state: inbox, open questions, open fix branches |
+| `lessons/<YYYY>-W<ww>.md` | weekly lessons for the splice engineers: test-code patterns behind the week's failures (ISO week) |
 | `rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` | one directory per inbox round: findings, commands handed out, open ends |
 | `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
 | `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
@@ -35,6 +36,12 @@ Rounds: every inbox round (skill `ci-triage-inbox`) persists its working state i
 without the chat. Background agents write only `<round dir>/<group>-*` for the group name in their brief; the main
 thread owns the rest of the round directory and the shared files. What the files contain is up to the writer.
 The rounds up to 2026-11-02 come from the previous triage branch (named by the time of its first commit for each).
+
+Lessons: triage is on a weekly rotation, and each week ends with `lessons/<ISO week>.md`, a Markdown read of at most
+10 minutes (about 6 lessons, 1500 words) for the engineers maintaining splice. A lesson is a test-code pattern
+others would plausibly repeat, backed by a resolved item: title (the pattern), Seen (refs, symptom), Why (the
+mechanism), Do (the right way, with a short snippet), Fix (PR or branch). Infra one-offs, Canton bugs and plain
+duplicates are not lessons. Over the cap, keep the lessons most likely to recur.
 
 ## Background
 

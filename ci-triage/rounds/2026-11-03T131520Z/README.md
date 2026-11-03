@@ -152,3 +152,5 @@ Item 3 (11143, parent 10732): cause rechecked on main 8dacec5c10 (DomainIngestio
 TaskNoop as outcome noop; metrics.get keeps series whose attributes contain the given ones). The comment of
 2026-10-28 on 10732 already names the mechanism and the outcome-label fix, so no new comment. Fix branch
 rautenrieth-da/fix-10732-wallet-metrics-outcome-label (b43adb1676). Command: close 11143 as dup.
+
+Lessons: started lessons/2026-W45.md on user request (weekly rotation, max 10 min read); lessons from items 2 (Z) and 3 (AC).

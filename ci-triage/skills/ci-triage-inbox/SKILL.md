@@ -112,7 +112,8 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
   2. Cause: the mechanism in a few sentences, with the two or three log lines that prove it (verbatim, with
      timestamps); say what is verified and what is not.
   3. Why this and not something else: the family and duplicate check, and the alternatives ruled out.
-  4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status. When
+  4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status, and
+     the proposed lesson in one line, or "Lesson: none" (`ci-triage/CLAUDE.md`, Lessons). When
      the fix qualifies (ci-triage step 9: established cause, test-only, one screen), create the fix branch before
      presenting and show its diff here; otherwise offer it.
   5. Its commands only (comment, close as duplicate, retitle, Status; no new comment on an issue whose existing
@@ -123,7 +124,8 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
 - Stop and wait. The user may ask, disagree, ask for a fix branch, edit the commands, skip, or report that the
   commands ran. Do not present the next item before the user says so.
 - Resolve: apply the user's corrections to the packet, merge this item (step 6, for its rows only), record its
-  outcome in the round README (verdict, commands handed out, ran or skipped, the user's corrections), and commit:
+  outcome in the round README (verdict, commands handed out, ran or skipped, the user's corrections), add the
+  accepted lesson to `ci-triage/lessons/<ISO week>.md`, and commit:
   `[skip ci] <round dir name>: <refs> <verdict>`. A correction that applies to later items (wording, a family
   judgement, a command convention) is noted in the README and applied to the rest of the queue.
 - A later item that is a duplicate of a parent already handled says so in one line and reuses its parent's
@@ -136,7 +138,8 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
 
 - Check each returned packet and round file: ASCII only, commands with verbatim output, file names as briefed.
 - Add the rows to `evidence/INDEX.tsv` (keep it sorted by ref, one row per ref, 11 tab-separated columns), the family
-  text and index rows to `known-families.md`, and refresh `STATE.md`: the inbox table by class with the next
+  text and index rows to `known-families.md`, lessons to `lessons/<ISO week>.md` (`ci-triage/CLAUDE.md`, Lessons;
+  in batch mode listed in the hand-over for the user to accept), and refresh `STATE.md`: the inbox table by class with the next
   action per item, open fix branches, open owner questions.
 - Write the round's own summary into the round directory (main-thread files), then commit: in batch mode one
   commit for the round, `[skip ci] <round dir name>: <one line per verdict group>`; in step mode one per item
