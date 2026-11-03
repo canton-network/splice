@@ -1,6 +1,6 @@
 # Known flake families. Check these before any deep analysis.
 
-Started by Raymond Roestenburg on 2026-09-08 (branch `ray/ci-triage-2026-09-15`), taken over unchanged on 2026-11-02.
+Started on 2026-09-08 on the previous triage branch `ray/ci-triage-2026-09-15`, taken over unchanged on 2026-11-02.
 Packet paths cited below and in issue comments resolve on this branch.
 
 Format: signature to grep | confirming check | mechanism | parent ref and duplicates | fix state.

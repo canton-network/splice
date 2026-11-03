@@ -2,17 +2,18 @@
 
 ## State 2026-11-02
 
-Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Continues Raymond's
-`ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02); his README, handover and onboarding are on that branch.
+Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Continues the previous
+triage branch `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02), which has the earlier README, handover and
+onboarding.
 
 Current round: `rounds/2026-11-02T153358Z-singles/` (10891, 11138, 11139, 11140); commands handed out, not
 confirmed as run.
 
-Taken over from Raymond:
-- all packets, now in `evidence/` (index: `evidence/INDEX.tsv`, built from his README and the 2026-11-02 one); his
+Taken over from the previous triage branch:
+- all packets, now in `evidence/` (index: `evidence/INDEX.tsv`, built from its README and the 2026-11-02 one); its
   round READMEs and host-command files in `rounds/` (one directory per round, named by its start time);
-- `known-families.md` (moved from his skill copy, plus an index at the top);
-- not taken over: his skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
+- `known-families.md` (moved from its skill copy, plus an index at the top);
+- not taken over: its skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
   superseded by `skills/ci-triage-inbox/`, its script is `scripts/inbox_from_timelines.py`;
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 
@@ -23,11 +24,11 @@ never from the sandbox. Issue data comes from host exports in
 
 ## Inbox 2026-11-02 14:44 (19 items, board export)
 
-Verdicts below are Raymond's, from his comments and packets, not rechecked.
+Verdicts below are from the previous triage (issue comments and packets), not rechecked.
 
-Root cause established, still in Inbox (Raymond's 2026-11-02 round did not move statuses):
+Root cause established, still in Inbox (the previous 2026-11-02 round did not move statuses):
 
-| Issue | Family | Raymond's verdict |
+| Issue | Family | Previous verdict |
 |---|---|---|
 | 10495 | G | offboarded mediator's in-flight send rejected; mediator-offboarding ignore file lacks the reonboarding pattern |
 | 10496 | J | docs job `npm ci` hangs, npm-install.sh has no per-attempt timeout |
@@ -35,7 +36,7 @@ Root cause established, still in Inbox (Raymond's 2026-11-02 round did not move 
 | 11105 | (note 2026-11-02) | Canton 3.7.0 ACS updates stream abrupt termination; first hit, Canton |
 | 11128 | Z | ScanPartyMonitorScript /v0/events cap; test fix, owner stephencompall-DA |
 
-Left in Inbox on purpose by Raymond, cause not established:
+Left in Inbox on purpose by the previous triage, cause not established:
 
 | Issue | Family | Open question |
 |---|---|---|
@@ -63,13 +64,13 @@ Triaged 2026-11-02 on this branch; issue commands handed to the user, not yet co
 | 11138, 11139 | dups of 11128 (Z) | close as dup, recurrence comment on 11128 |
 | 11140 | new family AB, test-side timing race | comment, retitle, move to Triaged; test fix proposed, no branch |
 
-## Open fix branches (from Raymond's handover, 2026-11-02)
+## Open fix branches (from the previous handover, 2026-11-02)
 
 Pushed to canton-network/splice without a PR, none compiled against current main:
 `ray/fix-10197-bft-read-confirmation-wait`, `ray/fix-reset-topology-plugin-no-exit` (10139),
 `ray/fix-topology-init-limit` (10140 closed, likely obsolete), `ray/fix-fail-fast-init` (no proving test).
 
-## Open owner questions (from Raymond's handover, 2026-11-02)
+## Open owner questions (from the previous handover, 2026-11-02)
 
 10912 (W, rautenrieth-da), 10915 (Devnet 18:00 backup status race, suggestion krzysztofczyz-da), 10927 (X2,
 moritzkiefer-da), 10930 and 10933 (Y, suggestion Simon Meier), plus 10917, 10918, 10919 above.

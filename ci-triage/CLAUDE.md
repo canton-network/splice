@@ -26,14 +26,14 @@ ref = a cn-test-failures issue number.
 
 Paths cited in older issue comments (e.g. `ci-triage/2026-11-02/singles-b.md`) may have moved, possibly more than
 once. List every rename of a file, newest first, with
-`git log -M --diff-filter=R --name-status --format= -- ci-triage | grep -F '<file name>'`. Raymond's README,
-handover and onboarding are on `ray/ci-triage-2026-09-15` (also at `2bf9628c11` on this branch).
+`git log -M --diff-filter=R --name-status --format= -- ci-triage | grep -F '<file name>'`. The previous triage
+branch `ray/ci-triage-2026-09-15` has the earlier README, handover and onboarding (also at `2bf9628c11` on this branch).
 
 Rounds: every inbox round (skill `ci-triage-inbox`) persists its working state in its own directory under
 `rounds/`, named by its UTC start time (seconds) and an optional free slug, so a round can be resumed or handed over
 without the chat. Background agents write only `<round dir>/<group>-*` for the group name in their brief; the main
 thread owns the rest of the round directory and the shared files. What the files contain is up to the writer.
-Raymond's rounds up to 2026-11-02 are the first entries (named by the time of his first commit for each).
+The rounds up to 2026-11-02 come from the previous triage branch (named by the time of its first commit for each).
 
 ## Background
 
@@ -61,8 +61,8 @@ Pick the source for private data once per session and say which one you use:
 ```
 command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
 ```
-- Prints `DACH-NY/cn-test-failures`: use `ghx` (recipe 11). It is a curl wrapper around Raymond's host-side
-  credential router `gh-cred-router` (README there has the setup): path only, curl options, pipe to `jq`, page with
+- Prints `DACH-NY/cn-test-failures`: use `ghx` (recipe 11). It is a curl wrapper around the host-side credential
+  router `gh-cred-router` (README there has the setup): path only, curl options, pipe to `jq`, page with
   `page=N`; no `--jq`, no `--paginate`; only `/repos/{owner}/{repo}/...` is routed. If it fails, check
   `curl -s -o /dev/null -w '%{http_code}\n' http://host.docker.internal:18555/api/repos/DACH-NY/canton`:
   `401` router up (run the router's sandbox setup), `500`/`connection refused` router not running,

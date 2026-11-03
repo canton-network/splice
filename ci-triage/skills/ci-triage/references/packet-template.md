@@ -25,7 +25,7 @@ cells, empty cell for unknown (never guessed). Columns:
 `ref date run branch job canton summary dup_of category status file`
 - `date`: day of the last triage; `run`: GHA run id; `branch`: branch and sha (PR); `job`: job id and name;
   `canton`: pin from `nix/canton-sources.json`; `summary`: one line, with the key timestamps; `dup_of`: parent ref
-  and family letter, or `new (<family>)`; `category`: free-form (Raymond's early rows only); `status`: resolution,
+  and family letter, or `new (<family>)`; `category`: free-form (early rows only); `status`: resolution,
   issue action, fix branch; `file`: packet path(s) relative to `ci-triage/`, space-separated.
 - Lookup: `awk -F'\t' '$1 == <ref>' ci-triage/evidence/INDEX.tsv`; grep by test name or family across `summary`
   and `dup_of`. Several refs in one packet get one row each with the same `file`.
