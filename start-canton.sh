@@ -18,6 +18,7 @@ function usage() {
   echo "  -F               same as -f, but does not start cometBFT, but rather assumes it is already running"
   echo "  -e               start canton using the canton provided BFT sequencer"
   echo "  -m               collect metrics and send them to our CI prometheus instance"
+  echo "  -t               zero base traffic rate on the splitwell synchronizer"
   echo "  -c <canton>      start a custom canton binary instead of the one on the PATH"
   echo "  -B <script>      path to a custom canton bootstrap script"
   echo "  -k               allow downloading private keys via the admin API (needed, e.g., for identities dumps)"
@@ -36,6 +37,8 @@ use_bft=0
 collect_metrics=0
 enable_key_download=0
 logFileHint=canton
+# Base traffic rate on the splitwell synchronizer in bytes; empty means mainnet's.
+splitwell_max_base_traffic_amount="${SPLITWELL_MAX_BASE_TRAFFIC_AMOUNT-}"
 
 args=$(getopt -o "hdDap:cB:wsbtfFegmk" -l "help" -- "$@")
 
@@ -98,6 +101,11 @@ do
         -k)
             enable_key_download=1
             echo "allowing downloads of private keys"
+            ;;
+        -t)
+            splitwell_max_base_traffic_amount=0
+            logFileHint=canton-standalone-sync-operator
+            echo "starting canton with a zero base traffic rate on the splitwell synchronizer"
             ;;
         -B)
             bootstrapScriptPath="$2"
@@ -228,6 +236,7 @@ tmux_cmd_canton() {
     "EXTRA_CLASSPATH=$COMETBFT_DRIVER/driver.jar \
      COMETBFT_DOCKER_IP=${COMETBFT_DOCKER_IP-} \
      LOG_LEVEL_API_REQUEST=DEBUG \
+     SPLITWELL_MAX_BASE_TRAFFIC_AMOUNT=${splitwell_max_base_traffic_amount-} \
      CANTON_PROTOCOL_VERSION=${CANTON_PROTOCOL_VERSION:-37} CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" $CANTON \
       -c $baseConfig $confOverrides \
       --log-level-canton=DEBUG \

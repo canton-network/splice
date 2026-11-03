@@ -10,6 +10,7 @@ import org.lfdecentralizedtrust.splice.console.{
   SplitwellAppClientReference,
   SvAppBackendReference,
   SvAppClientReference,
+  SyncOperatorAppBackendReference,
   ValidatorAppBackendReference,
   ValidatorAppClientReference,
   WalletAppClientReference,
@@ -297,6 +298,12 @@ trait CommonAppInstanceReferences {
     "providerSplitwellBackend"
   )
 
+  def syncOperatorBackend(implicit
+      env: SpliceTestConsoleEnvironment
+  ): SyncOperatorAppBackendReference = syncop(
+    "syncOperator"
+  )
+
   def svb(name: String)(implicit env: SpliceTestConsoleEnvironment): SvAppBackendReference =
     env.svs.local
       .find(_.name == name)
@@ -347,6 +354,13 @@ trait CommonAppInstanceReferences {
     env.splitwells.remote
       .find(_.name == name)
       .getOrElse(sys.error(s"remote splitwell [$name] not configured"))
+
+  def syncop(
+      name: String
+  )(implicit env: SpliceTestConsoleEnvironment): SyncOperatorAppBackendReference =
+    env.syncOperators.local
+      .find(_.name == name)
+      .getOrElse(sys.error(s"local sync operator [$name] not configured"))
 
   def scanb(
       name: String
