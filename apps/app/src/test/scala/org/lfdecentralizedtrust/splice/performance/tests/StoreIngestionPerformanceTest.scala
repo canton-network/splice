@@ -97,6 +97,7 @@ abstract class StoreIngestionPerformanceTest(
     var maxHeapBytes = BigDecimal(0)
 
     def eventsIn(update: TreeUpdateOrOffsetCheckpoint.Update): Long = update.update match {
+      // TODO(#8210): add reassignments event count
       case TransactionTreeUpdate(tree) =>
         val counts = IngestedEvents.eventCount(Seq(tree))
         counts.numCreatedEvents + counts.numExercisedEvents
