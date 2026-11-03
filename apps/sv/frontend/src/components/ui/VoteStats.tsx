@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { Stack, Typography, TypographyProps } from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import { YourVoteStatus } from '../../utils/types';
 
@@ -22,7 +22,7 @@ const VoteStats: React.FC<VoteStatsProps> = ({
 }) => {
   if (vote === 'accepted') {
     return (
-      <Stack direction="row" gap="4px" alignItems="center" data-testid={testId}>
+      <Stack direction="row" data-testid={testId} sx={{ gap: '4px', alignItems: 'center' }}>
         <CheckCircleOutlineIcon
           fontSize="small"
           color="success"
@@ -37,7 +37,7 @@ const VoteStats: React.FC<VoteStatsProps> = ({
 
   if (vote === 'rejected') {
     return (
-      <Stack direction="row" gap="4px" alignItems="center" data-testid={testId}>
+      <Stack direction="row" data-testid={testId} sx={{ gap: '4px', alignItems: 'center' }}>
         <CancelOutlinedIcon
           fontSize="small"
           color="error"

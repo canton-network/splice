@@ -27,6 +27,8 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
+from typing import Any, NoReturn
 
 SRC_PG = os.environ.get("SRC_PG", "14")
 TGT_PG = os.environ.get("TGT_PG", "17")
@@ -39,13 +41,13 @@ LOCALNET_DIR = os.environ.get("LOCALNET_DIR", f"{REPO_ROOT}/cluster/compose/loca
 DUMPS = tempfile.mkdtemp(prefix="pgmig-dumps-")
 
 
-def fail(msg: str) -> None:
+def fail(msg: str) -> NoReturn:
     print(f"FAIL: {msg}")
     sys.exit(1)
 
 
 def run(args: list[str], capture: bool = False, check: bool = True,
-        env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args, text=True, check=check,
         stdin=subprocess.DEVNULL,
@@ -72,7 +74,7 @@ def b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
 
-def wallet(port: int, user: str, method: str, path: str, body: dict | None = None):
+def wallet(port: int, user: str, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
     """Call a LocalNet wallet API through nginx with an unsafe-auth HS256 JWT."""
     header = b64url(b'{"alg":"HS256","typ":"JWT"}')
     payload = b64url(json.dumps(
@@ -90,7 +92,7 @@ def wallet(port: int, user: str, method: str, path: str, body: dict | None = Non
         return json.loads(response.read())
 
 
-def retry(what: str, attempts: int, delay: int, fn):
+def retry(what: str, attempts: int, delay: int, fn: Callable[[], Any]) -> Any:
     for _ in range(attempts):
         try:
             result = fn()
@@ -103,11 +105,12 @@ def retry(what: str, attempts: int, delay: int, fn):
 
 
 def balance(port: int, user: str) -> str:
-    return wallet(port, user, "GET", "/api/validator/v0/wallet/balance")["effective_unlocked_qty"]
+    quantity: str = wallet(port, user, "GET", "/api/validator/v0/wallet/balance")["effective_unlocked_qty"]
+    return quantity
 
 
 def wait_healthy() -> None:
-    def all_healthy():
+    def all_healthy() -> bool | None:
         out = run(["docker", "ps", "--format", "{{.Names}} {{.Status}}"], capture=True).stdout
         lines = [ln for ln in out.splitlines() if ln.strip()]
         unhealthy = [ln for ln in lines if "(healthy)" not in ln]
@@ -123,7 +126,7 @@ def wait_wallet(port: int, user: str) -> None:
 
 
 def wait_pg_healthy() -> None:
-    def healthy():
+    def healthy() -> bool | None:
         out = run(["docker", "inspect", "-f", "{{.State.Health.Status}}", "postgres"],
                   capture=True, check=False).stdout.strip()
         return True if out == "healthy" else None
@@ -148,7 +151,7 @@ def transfer(amount: str, tracking_id: str) -> None:
     if "offer_contract_id" not in offer:
         fail(f"transfer offer {tracking_id} not created: {offer}")
 
-    def find_offer():  # receiver sees the offer only after ingestion
+    def find_offer() -> Any:  # receiver sees the offer only after ingestion
         offers = wallet(3000, "app-provider", "GET",
                         "/api/validator/v0/wallet/transfer-offers")["offers"]
         return offers[0]["contract_id"] if offers else None

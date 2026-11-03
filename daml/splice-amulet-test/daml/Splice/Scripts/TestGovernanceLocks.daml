@@ -70,7 +70,7 @@ testGovernanceLockHappyPathScenario ops = do
   checkLockedHolding alice remainingLockCid 100000.0
 
   -- Check that we can't withdraw before the withdraw time has arrived on-ledger
-  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'requestedAt' at") $
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'vestedUntilTime' at") $
     ops.vestingWithdraw env aliceVesting alice (withdrawMeta unlockTime)
   actionMustFail (expectMessageContains $ "Error in metadata field '" <> vestedUntilTimeMetaKey <> "': Invalid Time: 'not-a-time'") $
     ops.vestingWithdraw env aliceVesting alice (Metadata $ TM.fromList [(vestedUntilTimeMetaKey, "not-a-time")])

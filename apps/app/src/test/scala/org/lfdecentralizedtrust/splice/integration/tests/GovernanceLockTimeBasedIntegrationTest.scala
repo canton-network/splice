@@ -464,8 +464,9 @@ class GovernanceLockTimeBasedIntegrationTest
 
       val sv1Party = sv1Backend.getDsoInfo().svParty
 
-      // Proposed by a party other than the lock owner, so each proposal escrows collateral
-      // that the DSO must return when the proposal expires.
+      // Proposed by a party other than the lock owner, so each proposal escrows collateral.
+      // The proposals expire at the vesting `endTime`, which is also when the lock of the
+      // collateral expires, so the expiry leaves the collateral to the proposer.
       val proposerParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val proposer = RichPartyId.local(proposerParty)
       val proposerParticipant = aliceValidatorBackend.participantClientWithAdminToken
@@ -540,21 +541,41 @@ class GovernanceLockTimeBasedIntegrationTest
         listLockSubstitutions shouldBe empty
       }
 
-      clue("Expiry returns the proposer's collateral") {
-        // The proposer held no unlocked amulets while the proposals were pending, so any
-        // unlocked holding here is returned collateral. The count is left open because
-        // wallet automation merges amulets.
-        eventually() {
-          listHoldings(proposerParticipant, proposerParty).filter(
-            _._2.lock.isEmpty
-          ) should not be empty
+      val expiredCollateral = clue("Expiry leaves the expired collateral locked") {
+        val now = getLedgerTime.toInstant
+        listHoldings(proposerParticipant, proposerParty).filter(
+          _._2.lock.isEmpty
+        ) shouldBe empty
+        val lockedAmulets = proposerParticipant.ledger_api_extensions.acs
+          .filterJava(amuletCodegen.LockedAmulet.COMPANION)(proposerParty, _ => true)
+        lockedAmulets should have length numSubstitutions.toLong
+        forAll(lockedAmulets) { lockedAmulet =>
+          lockedAmulet.data.lock.expiresAt.isAfter(now) shouldBe false
+          BigDecimal(lockedAmulet.data.amulet.amount.initialAmount) shouldBe lockAmount
         }
+        lockedAmulets.map(_.id)
       }
 
-      clue("The proposer's wallet history shows each returned collateral") {
+      actAndCheck(
+        "The proposer releases the expired collateral",
+        expiredCollateral.foreach(ownerExpireLock(proposerParty, _)),
+      )(
+        "the proposer holds the released collateral",
+        // The proposer held no unlocked amulets while the proposals were pending, so any
+        // unlocked holding here is released collateral. The count is left open because
+        // wallet automation merges amulets.
+        _ =>
+          listHoldings(proposerParticipant, proposerParty).filter(
+            _._2.lock.isEmpty
+          ) should not be empty,
+      )
+
+      clue("The proposer's wallet history shows each released collateral") {
         checkTxHistory(
           aliceWalletClient,
           Seq.fill[CheckTxHistoryFn](numSubstitutions)({ case e: BalanceChangeTxLogEntry =>
+            e.subtype.value shouldBe
+              TxLogEntry.BalanceChangeTransactionSubtype.LockedAmuletOwnerExpired.toProto
             e.amount shouldBe lockAmount
           }),
           previousEventId = beforeExpiry,

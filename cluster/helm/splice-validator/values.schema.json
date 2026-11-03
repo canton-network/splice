@@ -488,6 +488,12 @@
         "disableAuth": {
           "type": "boolean"
         },
+        "allowedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "if": {
           "properties": {
             "disableAuth": {

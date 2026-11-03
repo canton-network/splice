@@ -11,6 +11,7 @@ export const TopologyKeyMonitorConfigSchema = z
     expectedSynchronizerAliases: z.array(z.string()).min(1).default(['global']),
     pollIntervalSeconds: z.number().int().positive().default(60),
     slowQueryThresholdSeconds: z.number().int().positive().default(5),
+    missingSynchronizerGracePeriodSeconds: z.number().int().nonnegative().default(600),
     chartVersion: z.string().optional(),
     resources: K8sResourceSchema,
   })

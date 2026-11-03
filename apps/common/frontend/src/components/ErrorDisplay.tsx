@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect } from 'react';
 
-import { ErrorOutline } from '@mui/icons-material';
+import { ErrorOutlined } from '@mui/icons-material';
 import { Box, Button, Typography } from '@mui/material';
 
 import { theme } from '../theme';
@@ -34,7 +34,7 @@ const ErrorDisplay: React.FC<ErrorProps> = props => {
         alignItems: 'center',
       }}
     >
-      <ErrorOutline id="error-icon" color="error" sx={{ width: '40px', height: '40px' }} />
+      <ErrorOutlined id="error-icon" color="error" sx={{ width: '40px', height: '40px' }} />
       <Typography
         className="error-display-message"
         variant="subtitle1"

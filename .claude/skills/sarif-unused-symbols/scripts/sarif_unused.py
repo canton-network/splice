@@ -17,23 +17,25 @@ charOffset is a 0-based character offset into the file; snippet is the identifie
 itself (not the whole declaration).
 """
 import argparse, json, re, subprocess, sys
+from collections.abc import Iterator
+from typing import Any
 
 RULE = "ScalaUnusedSymbol"
 
 
-def git(*args, check=True):
+def git(*args: str, check: bool = True) -> str:
     r = subprocess.run(["git", *args], capture_output=True)
     if check and r.returncode != 0:
         sys.exit(f"git {' '.join(args)} failed: {r.stderr.decode()}")
     return r.stdout.decode("utf-8")
 
 
-def show(commit, path):
+def show(commit: str, path: str) -> list[str] | None:
     r = subprocess.run(["git", "show", f"{commit}:{path}"], capture_output=True)
     return r.stdout.decode("utf-8").split("\n") if r.returncode == 0 else None
 
 
-def results(sarif):
+def results(sarif: str) -> Iterator[tuple[str, str, dict[str, Any]]]:
     with open(sarif) as f:
         for r in json.load(f)["runs"][0]["results"]:
             if r["ruleId"] != RULE:
@@ -42,7 +44,7 @@ def results(sarif):
             yield r["message"]["text"], p["artifactLocation"]["uri"], p["region"]
 
 
-def classify(msg):
+def classify(msg: str) -> tuple[str, bool]:
     private = msg.startswith("Private ")
     head = msg.split(" ")[1 if private else 0].capitalize()
     kind = {
@@ -54,8 +56,8 @@ def classify(msg):
     return kind, private
 
 
-def renames(base, head):
-    out = {}
+def renames(base: str, head: str) -> dict[str, str | None]:
+    out: dict[str, str | None] = {}
     for line in git("diff", "--name-status", "-M", base, head).splitlines():
         parts = line.split("\t")
         if parts[0].startswith("R"):
@@ -65,8 +67,8 @@ def renames(base, head):
     return out
 
 
-def hunks(base, head, old, new):
-    hs = []
+def hunks(base: str, head: str, old: str, new: str) -> list[tuple[int, int, int, int]]:
+    hs: list[tuple[int, int, int, int]] = []
     for line in git("diff", "-U0", base, head, "--", old, *([new] if new != old else [])).splitlines():
         m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
         if m:
@@ -76,7 +78,7 @@ def hunks(base, head, old, new):
     return hs
 
 
-def map_line(hs, n):
+def map_line(hs: list[tuple[int, int, int, int]], n: int) -> tuple[int | None, bool]:
     """Return (new_line, exact). exact=False if n falls inside a changed hunk."""
     delta = 0
     for os_, oc, ns, nc in hs:
@@ -92,24 +94,28 @@ def map_line(hs, n):
     return n + delta, True
 
 
-def find_ident(line, ident, col_hint=None):
+def find_ident(line: str, ident: str, col_hint: int | None = None) -> int | None:
     hits = [m.start() for m in re.finditer(r"(?<![\w$])" + re.escape(ident) + r"(?![\w$])", line)]
     if col_hint is not None and col_hint in hits:
         return col_hint
     return hits[0] if len(hits) == 1 else None
 
 
-def cmd_candidates(a):
+def cmd_candidates(a: argparse.Namespace) -> None:
     base, head = a.base, a.head
     rn = renames(base, head)
     sc_files = git("ls-files", "*.sc").split()
     sc_text = {p: open(p, encoding="utf-8").read() for p in sc_files}
-    cache, hcache = {}, {}
+    cache: dict[str, list[str] | None] = {}
+    hcache: dict[tuple[str, str], list[tuple[int, int, int, int]]] = {}
     for i, (msg, uri, reg) in enumerate(results(a.sarif)):
         kind, private = classify(msg)
         name = reg["snippet"]["text"]
         new_uri = rn.get(uri, uri)
-        status, line_no, col = "ok", None, None
+        status = "ok"
+        line_no: int | None = None
+        col: int | None = None
+        lines: list[str] | None = None
         if new_uri is None:
             status = "deleted"
         else:
@@ -132,13 +138,14 @@ def cmd_candidates(a):
                     # moved or edited: search +-30 lines for a unique occurrence on a similar line
                     old_line = (show(base, uri) or [""] * (reg["startLine"]))[reg["startLine"] - 1].strip()
                     center = ln or reg["startLine"]
-                    cands = []
+                    cands: list[tuple[int, int]] = []
                     for k in range(max(1, center - 30), min(len(lines), center + 30) + 1):
-                        if lines[k - 1].strip() == old_line and find_ident(lines[k - 1], name) is not None:
-                            cands.append(k)
+                        ident_col = find_ident(lines[k - 1], name)
+                        if lines[k - 1].strip() == old_line and ident_col is not None:
+                            cands.append((k, ident_col))
                     if len(cands) == 1:
-                        status, line_no = "moved", cands[0]
-                        col = find_ident(lines[line_no - 1], name) + 1
+                        status, line_no = "moved", cands[0][0]
+                        col = cands[0][1] + 1
                     else:
                         status = "stale"
         sc_refs = [] if kind in ("param", "decl") else sorted(p for p, t in sc_text.items() if re.search(r"(?<![\w$])" + re.escape(name) + r"(?![\w$])", t))
@@ -146,13 +153,13 @@ def cmd_candidates(a):
             "id": i, "kind": kind, "private": private, "name": name, "message": msg,
             "file": new_uri, "line": line_no, "col": col, "status": status,
             "sc_refs": sc_refs,
-            "text": (cache[new_uri][line_no - 1].strip() if status in ("ok", "moved") else None),
+            "text": (lines[line_no - 1].strip() if lines is not None and line_no is not None and status in ("ok", "moved") else None),
         }))
 
 
-def cmd_verify(a):
+def cmd_verify(a: argparse.Namespace) -> None:
     bad = n = 0
-    files = {}
+    files: dict[str, str] = {}
     for msg, uri, reg in results(a.sarif):
         n += 1
         if uri not in files:
@@ -169,16 +176,16 @@ def cmd_verify(a):
     sys.exit(1 if bad else 0)
 
 
-def cmd_attribute(a):
+def cmd_attribute(a: argparse.Namespace) -> None:
     """sbt errors -> batch symbols. a.batch is a JSONL file of candidates (as printed above,
     plus optional 'new_line' recorded by the skill after editing)."""
     batch = [json.loads(l) for l in open(a.batch)]
-    errs = []
+    errs: list[tuple[str, int, str]] = []
     for l in sys.stdin:
         m = re.search(r"\[(?:error|warn)\]\s+(/\S+?\.scala):(\d+):(\d+)?:?\s*(.*)", l)
         if m:
             errs.append((m.group(1), int(m.group(2)), m.group(4)))
-    hit = {}
+    hit: dict[int, list[str]] = {}
     for path, ln, text in errs:
         for s in batch:
             same_file = path.endswith("/" + s["file"])
@@ -190,7 +197,7 @@ def cmd_attribute(a):
     print(f"{len(errs)} error lines, {len(hit)} batch symbols implicated", file=sys.stderr)
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, fn in (("candidates", cmd_candidates), ("verify", cmd_verify)):

@@ -9,7 +9,7 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
-import { Button, Grid, Typography } from '@mui/material';
+import { Button, Stack, Typography } from '@mui/material';
 
 import { useValidatorClient } from '../contexts/ValidatorServiceContext';
 import { useWalletConfig } from '../utils/config';
@@ -41,14 +41,7 @@ const Onboarding: React.FC = () => {
 
   return (
     <BasicLayout>
-      <Grid
-        height="100%"
-        container
-        spacing={0}
-        direction="column"
-        alignItems="center"
-        justifyContent="center"
-      >
+      <Stack sx={{ height: '100%', alignItems: 'center', justifyContent: 'center' }}>
         <Typography
           variant="h4"
           sx={{ marginBottom: '15px' }}
@@ -87,7 +80,7 @@ const Onboarding: React.FC = () => {
           You may also onboard yourself by calling <code>onboardUser()</code> on the validator app
           API.
         </Typography>
-      </Grid>
+      </Stack>
     </BasicLayout>
   );
 };

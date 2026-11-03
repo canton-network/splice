@@ -117,7 +117,9 @@ describe('Grant Featured App Form', () => {
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-    expect(submitButton).not.toBeDisabled();
+    await waitFor(() => {
+      expect(submitButton).not.toBeDisabled();
+    });
   });
 
   test('expiry date must be in the future', async () => {

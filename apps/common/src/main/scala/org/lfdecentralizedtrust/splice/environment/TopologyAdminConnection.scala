@@ -7,6 +7,7 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits.catsSyntaxOptionId
 import cats.syntax.applicative.*
 import cats.syntax.either.*
+import cats.syntax.functorFilter.*
 import com.daml.grpc.{GrpcException, GrpcStatus}
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.commands.{
@@ -56,12 +57,14 @@ import com.digitalasset.canton.topology.store.{StoredTopologyTransaction, TimeQu
 import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
+import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.version.{ProtocolVersion, ReleaseVersion}
 import com.google.protobuf.ByteString
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
+import org.lfdecentralizedtrust.splice.auth.{AuthTokenProvider, AuthTokenSourceNone}
 import org.lfdecentralizedtrust.splice.config.Thresholds
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
@@ -79,6 +82,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 /** Connection to nodes that expose topology information (sequencer, mediator, participant)
   */
@@ -88,12 +92,14 @@ abstract class TopologyAdminConnection(
     loggerFactory: NamedLoggerFactory,
     grpcClientMetrics: GrpcClientMetrics,
     override protected[this] val retryProvider: RetryProvider,
+    tokenProvider: AuthTokenProvider = AuthTokenSourceNone,
 )(implicit ec: ExecutionContextExecutor, tracer: Tracer)
     extends AppConnection(
       config,
       apiLoggingConfig,
       loggerFactory,
       grpcClientMetrics,
+      tokenProvider,
     )
     with RetryProvider.Has
     with LsuTopologyAdminConnection
@@ -737,12 +743,13 @@ abstract class TopologyAdminConnection(
     )
 
   protected def ensureInitialMapping[M <: TopologyMapping: ClassTag](
-      mappingE: Either[String, M]
+      mappingE: Either[String, M],
+      store: TopologyStoreId = TopologyStoreId.Authorized,
   )(implicit traceContext: TraceContext): Future[SignedTopologyTransaction[TopologyChangeOp, M]] = {
     val mapping =
       mappingE.valueOr(err => throw new IllegalArgumentException(s"Invalid topology mapping: $err"))
     listAllTransactions(
-      TopologyStoreId.Authorized,
+      store,
       includeMappings = Set(
         mapping.code
       ),
@@ -755,7 +762,7 @@ abstract class TopologyAdminConnection(
             s"Proposing initial mapping for ${mapping.code} with serial 1: $mapping"
           )
           proposeMapping(
-            TopologyStoreId.Authorized,
+            store,
             mapping,
             PositiveInt.one,
             isProposal = false,
@@ -1072,6 +1079,81 @@ abstract class TopologyAdminConnection(
     }
   }
 
+  def withTemporaryTopologyStore[A](name: String, protocolVersion: ProtocolVersion)(
+      f: TopologyStoreId.Temporary => Future[A]
+  )(implicit traceContext: TraceContext): Future[A] =
+    recreateTemporaryTopologyStore(name, protocolVersion).flatMap { store =>
+      f(store).transformWith { result =>
+        dropTemporaryTopologyStore(store)
+          .recover { case NonFatal(e) =>
+            logger.warn(s"Failed to drop temporary topology store $name", e)
+          }
+          .transform(_ => result)
+      }
+    }
+
+  private def recreateTemporaryTopologyStore(name: String, protocolVersion: ProtocolVersion)(
+      implicit traceContext: TraceContext
+  ): Future[TopologyStoreId.Temporary] = {
+    val create = runCmd(TopologyAdminCommands.Write.CreateTemporaryStore(name, protocolVersion))
+    create.recoverWith {
+      case ex: StatusRuntimeException if ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
+        logger.info(s"Temporary topology store $name already exists, dropping and recreating it")
+        dropTemporaryTopologyStore(TopologyStoreId.Temporary.tryCreate(name)).flatMap(_ =>
+          runCmd(TopologyAdminCommands.Write.CreateTemporaryStore(name, protocolVersion))
+        )
+    }
+  }
+
+  /** Copies the given transactions to `store` which uses `protocolVersion`.
+    * Transactions that already use `protocolVersion` are added as-is, others are re-proposed which
+    * requires the node to have the keys to sign them. Copying as-is is required if the
+    * root namespace key is offline.
+    * This is useful for copying transactions from the authorized store to a temp topology store
+    * of a potentially different PV.
+    */
+  def reauthorizeTransactions(
+      store: TopologyStoreId,
+      protocolVersion: ProtocolVersion,
+      transactions: Seq[GenericSignedTopologyTransaction],
+  )(implicit
+      traceContext: TraceContext
+  ): Future[Seq[GenericSignedTopologyTransaction]] = {
+    val ordered = transactions
+      .mapFilter(_.selectOp[TopologyChangeOp.Replace])
+      .sortBy(tx =>
+        if (NamespaceDelegation.isRootCertificate(tx)) 0
+        else if (tx.mapping.code == TopologyMapping.Code.NamespaceDelegation) 1
+        else 2
+      )
+    def hasProtocolVersion(tx: GenericSignedTopologyTransaction): Boolean =
+      tx.representativeProtocolVersion == SignedTopologyTransaction
+        .protocolVersionRepresentativeFor(protocolVersion) &&
+        tx.transaction.representativeProtocolVersion == TopologyTransaction
+          .protocolVersionRepresentativeFor(protocolVersion)
+    MonadUtil.sequentialTraverse(ordered) { tx =>
+      if (hasProtocolVersion(tx)) {
+        val signed = tx.copy(isProposal = false)
+        addTopologyTransactions(store, Seq(signed)).map(_ => signed)
+      } else {
+        logger.info(
+          s"Re-signing ${tx.mapping.code} as it does not use protocol version $protocolVersion"
+        )
+        proposeMapping(
+          store,
+          tx.mapping,
+          PositiveInt.one,
+          isProposal = false,
+        ): Future[GenericSignedTopologyTransaction]
+      }
+    }
+  }
+
+  def dropTemporaryTopologyStore(store: TopologyStoreId.Temporary)(implicit
+      traceContext: TraceContext
+  ): Future[Unit] =
+    runCmd(TopologyAdminCommands.Write.DropTemporaryStore(store))
+
   def addTopologyTransactions(
       store: TopologyStoreId,
       txs: Seq[GenericSignedTopologyTransaction],
@@ -1092,6 +1174,7 @@ abstract class TopologyAdminConnection(
     )
 
   def proposeInitialSequencerSynchronizerState(
+      store: TopologyStoreId,
       synchronizerId: SynchronizerId,
       active: Seq[SequencerId],
       observers: Seq[SequencerId],
@@ -1104,7 +1187,8 @@ abstract class TopologyAdminConnection(
         PositiveInt.one,
         active,
         observers,
-      )
+      ),
+      store,
     )
   }
 
@@ -1195,6 +1279,7 @@ abstract class TopologyAdminConnection(
   }
 
   def proposeInitialMediatorSynchronizerState(
+      store: TopologyStoreId,
       synchronizerId: SynchronizerId,
       group: NonNegativeInt,
       active: Seq[MediatorId],
@@ -1209,7 +1294,8 @@ abstract class TopologyAdminConnection(
         threshold = PositiveInt.one,
         active = active,
         observers = observers,
-      )
+      ),
+      store,
     )
 
   def ensureMediatorSynchronizerStateAdditionProposal(
@@ -1295,6 +1381,7 @@ abstract class TopologyAdminConnection(
     )
 
   def proposeInitialDecentralizedNamespaceDefinition(
+      store: TopologyStoreId,
       namespace: Namespace,
       owners: NonEmpty[Set[Namespace]],
       threshold: PositiveInt,
@@ -1306,7 +1393,8 @@ abstract class TopologyAdminConnection(
         namespace,
         threshold,
         owners,
-      )
+      ),
+      store,
     )
 
   def ensureDecentralizedNamespaceDefinitionProposalAccepted(
@@ -1408,13 +1496,14 @@ abstract class TopologyAdminConnection(
   }
 
   def proposeInitialDomainParameters(
+      store: TopologyStoreId,
       synchronizerId: SynchronizerId,
       parameters: DynamicSynchronizerParameters,
   )(implicit
       traceContext: TraceContext
   ): Future[SignedTopologyTransaction[TopologyChangeOp, SynchronizerParametersState]] =
     proposeMapping(
-      TopologyStoreId.Authorized,
+      store,
       SynchronizerParametersState(synchronizerId, parameters),
       serial = PositiveInt.one,
       isProposal = false,

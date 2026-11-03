@@ -73,10 +73,13 @@ let
     python3Packages.jsonpickle
     python3Packages.kubernetes
     python3Packages.marshmallow-dataclass
+    python3Packages.mypy
     python3Packages.polib
+    python3Packages.prometheus-client
     python3Packages.pydantic
     python3Packages.pygithub
     python3Packages.pyjwt
+    python3Packages.openapi-schema-validator
     python3Packages.pyyaml
     python3Packages.regex
     python3Packages.requests
@@ -89,6 +92,10 @@ let
     python3Packages.sphinx-copybutton
     python3Packages.sphinxcontrib-openapi
     python3Packages.sphinx-autobuild
+    python3Packages.types-docutils
+    python3Packages.types-jsonschema
+    python3Packages.types-pyyaml
+    python3Packages.types-requests
     python3Packages.waitress
     python3.pkgs.pip  # TODO(DACH-NY/canton-network-internal#565): Remove this once we switch to poetry
     python3.pkgs.sphinx-reredirects

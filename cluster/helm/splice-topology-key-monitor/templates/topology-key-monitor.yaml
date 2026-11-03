@@ -69,6 +69,8 @@ spec:
               value: {{ .Values.pollIntervalSeconds | quote }}
             - name: TOPOLOGY_KEY_MONITOR_SLOW_QUERY_THRESHOLD
               value: {{ .Values.slowQueryThresholdSeconds | quote }}
+            - name: TOPOLOGY_KEY_MONITOR_MISSING_SYNCHRONIZER_GRACE_PERIOD
+              value: {{ .Values.missingSynchronizerGracePeriodSeconds | quote }}
           volumeMounts:
             - name: topology-key-monitor-config
               mountPath: /app/topology-key-monitor
