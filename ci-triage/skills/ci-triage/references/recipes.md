@@ -143,6 +143,8 @@ jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " 
 ## 11. Private data through ghx or the sandbox token
 
 `R=ghx` or `R='gh api'`, whichever `probe_access.py` reports for the capability (`ci-triage/CLAUDE.md`, Access).
+Shell state does not persist between commands, so set `R` in every command that uses it (`R=ghx; $R ...`); this
+applies to the canton-network-internal variants of recipes 1 and 3 too.
 Both print JSON for a `/repos/...` path and exit non-zero on HTTP errors (the router's reason is in the body). Page
 by hand with `page=N`; filters go to `jq`, never `--jq`.
 ```
