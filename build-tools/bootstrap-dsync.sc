@@ -1,4 +1,4 @@
-import com.digitalasset.canton.console.{InstanceReference, SequencerReference}
+import com.digitalasset.canton.console.{InstanceReference, ParticipantReference, SequencerReference}
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
 
 val sequencers = Seq(sequencer1, sequencer2, sequencer3, sequencer4)
