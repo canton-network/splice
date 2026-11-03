@@ -226,3 +226,5 @@ Item 5: user asked for the issue tracking the 40001 contention. Export issues-si
 Item 5: full export (22:37, 2176 issues from 9001): 10139 open, unassigned, last comment ray-roestenburg-da 2026-10-06 (waiting for fix-fail-fast). 11160 body now references #10139 as tracking issue; recurrence comment drafted in comments/10139.md.
 
 Item 5: user asked why 40001. Jar 3.7.1: insert block = insert into blocks with id = max(id)+1 under SERIALIZABLE, one table shared by the 4 global sequencers. Correction: not all writers stalled; Sv1 lost every retry 12:29:13.5-27.5 while Sv2-4 stored 31-32 batches each (blocks 6741-6839 without events). comments/11160.md and comments/10139.md rewritten; family L cause updated.
+
+Live check 2026-11-03 (gh api): PR 8211 merged 21:56:57, closed 11128 (completed); PR 8215 merged 21:20:20, closed 10732 (completed). 11143 closed duplicate. 11144 open, retitled, 1 comment (PR 8221 open). 11160 open, no comment yet. Board Status not readable from the sandbox.
