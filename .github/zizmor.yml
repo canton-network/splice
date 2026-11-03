@@ -1,0 +1,60 @@
+# Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+rules:
+  dependabot-cooldown:
+    config:
+      days: 5
+  # GitHub's $/ syntax is new; the repo standard is ./
+  self-repository:
+    disable: true
+
+  # Internal reusable workflows within this repository inherit secrets
+  secrets-inherit:
+    ignore:
+      - build.yml
+      - build.wallclock_pg14.yml
+      - cimain.yml
+      - daml_compat_test.yml
+      - post_merge.yml
+      - pr_auto_upgrade_test.yml
+      - pr_cluster_test.yml
+      - pr_contributors.yml
+      - pr_non_contributors.yml
+
+  # PR workflows use pull_request_target and issue_comment with approval gates
+  dangerous-triggers:
+    ignore:
+      - assign_fork_prs.yml
+      - pr_cluster_test.yml
+      - pr_non_contributors.yml
+
+  # runner-container-hooks is an external submodule with its own workflows
+  artipacked:
+    ignore:
+      - build.yaml
+      - codeql-analysis.yml
+      - release.yaml
+
+  # Workflows that require workflow-level permissions (e.g. id-token for OIDC / failure notifications)
+  excessive-permissions:
+    ignore:
+      - backport.yml
+      - build.yml
+      - daml_compat_test.yml
+      - performance_tests.yml
+      - post_merge.yml
+      - pr_cluster_test.yml
+      - build.yaml # from runner-container-hooks submodule
+
+  # runner-container-hooks is an external submodule with its own release workflow
+  template-injection:
+    ignore:
+      - release.yaml # from runner-container-hooks submodule
+
+  # runner-container-hooks is an external submodule with its own workflows
+  unpinned-uses:
+    ignore:
+      - build.yaml
+      - codeql-analysis.yml
+      - release.yaml

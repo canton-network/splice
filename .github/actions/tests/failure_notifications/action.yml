@@ -41,7 +41,7 @@ runs:
         FAILURE_NOTIFICATIONS_URL: ${{ inputs.notifications_url }}
         NOTIFICATION_SLACK_CHANNEL: ${{ inputs.slack_channel }}
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         if [[ "${{ github.repository }}" == "DACH-NY/canton-network-internal" ]]; then
           # on the internal repository, source the Nix environment and envrc
           source "$NIX_ENV_SOURCE"

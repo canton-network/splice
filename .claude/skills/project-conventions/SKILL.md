@@ -32,7 +32,7 @@ These are enforced by `.pre-commit-config.yaml` and CI; matching them up front a
 
 ## Shell / CI / infra
 - Shellcheck applies to all `*.sh` except under `canton/` and `.envrc` (`-e SC1091` globally ignored).
-- Changes under `.github/**` are checked by `scripts/actionlint.sh`.
+- Changes under `.github/**` and `gha-scripts/actions/**` are checked by `scripts/actionlint.sh` and `scripts/zizmor.sh`.
 - Changes to `cluster/pulumi/**/*.ts` or any `cluster/**/*.{yaml,yml}` trigger `make cluster/pulumi/test` — verify Pulumi tests pass locally before proposing infra changes.
 - Grafana dashboard JSON under `cluster/pulumi/observability/grafana-dashboards/` is validated by `scripts/check-grafana-dashboards.sh`.
 

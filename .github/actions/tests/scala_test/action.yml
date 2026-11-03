@@ -156,7 +156,7 @@ runs:
     - name: Export Daml package versions output
       id: daml_package_versions
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         # We can't export from within run so we do it here.
         if [[ "${{ inputs.daml_base_version }}" != "" ]]; then
           echo "initial_package_versions='$(cat initial_package_config)'" >> "$GITHUB_OUTPUT"
@@ -176,7 +176,7 @@ runs:
     - name: Set RUN_SPLITTED_TESTS_CMD
       id: list_tests
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         tags=""
         if [ -f scala_test_tags ]
         then
@@ -233,7 +233,7 @@ runs:
 
     - name: Wait for Canton to be ready
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         if [[ "${{ inputs.with_canton }}" == "false" ]]; then
           echo "This job does not require Canton"
           exit 0

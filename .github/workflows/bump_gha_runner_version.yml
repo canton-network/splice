@@ -17,6 +17,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: true # needed to push branch later
           submodules: recursive
           token: '${{ secrets.GH_CREATE_PRS_TOKEN }}' # need to checkout with a stronger token to be able to push later
 

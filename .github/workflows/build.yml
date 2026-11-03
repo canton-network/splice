@@ -56,6 +56,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           # Checkout the PR head commit to get the commit message first
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: "recursive"
@@ -67,12 +68,18 @@ jobs:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Cancel if not opted in
         shell: bash
+        env:
+          STATIC_SKIP: ${{ steps.static_only.outputs.skip }}
+          API_URL: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           last_commit_msg=$(git log -1 --pretty=%B)
           echo "Last commit message: $last_commit_msg"
-          if [[ $last_commit_msg != *"[ci]"* ]] && [[ "${{ steps.static_only.outputs.skip }}" == "false" ]] ; then
+          if [[ $last_commit_msg != *"[ci]"* ]] && [[ "$STATIC_SKIP" == "false" ]] ; then
             echo "Cancelling the entire workflow because the current commit does not opt in for CI."
-            curl -fsSL -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+            curl -fsSL -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${API_URL}/repos/${REPO}/actions/runs/${RUN_ID}/cancel"
           else
             echo "Current commit opts in, letting it run."
           fi
@@ -370,6 +377,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: true # needed to fetch HEAD commit in later step
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check if static only
@@ -379,26 +387,30 @@ jobs:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Handle [force] and [static] labels
         shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATIC_SKIP: ${{ steps.static_only.outputs.skip }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          git fetch origin ${{ github.event.pull_request.head.sha }}
-          last_commit_msg=$(git log -1 --pretty=%B ${{ github.event.pull_request.head.sha }})
+          git fetch origin "$HEAD_SHA"
+          last_commit_msg=$(git log -1 --pretty=%B "$HEAD_SHA")
           echo "Last commit message: $last_commit_msg"
           if [[ $last_commit_msg == *"[force]"* ]]; then
             echo "Skipping the check for job success because the current commit opts in for a forced run."
             echo "FORCE=true" >> "$GITHUB_ENV"
-          elif [[ "${{ steps.static_only.outputs.skip }}" == "true" ]]; then
+          elif [[ "$STATIC_SKIP" == "true" ]]; then
             echo "Only static tests are required"
             # shellcheck disable=SC2129
             echo "FORCE=false" >> "$GITHUB_ENV"
             echo "JOBS<<EOF" >> "$GITHUB_ENV"
-            echo '${{ toJSON(needs) }}' | jq '{"docs", "static_tests", "deployment_test"}' >> "$GITHUB_ENV"
+            echo "$NEEDS_JSON" | jq '{"docs", "static_tests", "deployment_test"}' >> "$GITHUB_ENV"
             echo "EOF" >> "$GITHUB_ENV"
           else
             echo "Checking if all jobs succeeded."
             # shellcheck disable=SC2129
             echo "FORCE=false" >> "$GITHUB_ENV"
             echo "JOBS<<EOF" >> "$GITHUB_ENV"
-            echo '${{ toJSON(needs) }}' >> "$GITHUB_ENV"
+            echo "$NEEDS_JSON" >> "$GITHUB_ENV"
             echo "EOF" >> "$GITHUB_ENV"
           fi
           echo "env file: $(cat "$GITHUB_ENV")"

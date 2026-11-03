@@ -49,7 +49,7 @@ runs:
     - name: Check if include commit message tag matches and skip
       if: ${{ inputs.skip_if_commit_tag != '' }}
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         last_commit_msg=$(git log -1 --pretty=%B)
         if [[ $last_commit_msg =~ "[${{ inputs.skip_if_commit_tag }}]" ]]; then
           echo "Commit message ($last_commit_msg) includes tag (${{ inputs.skip_if_commit_tag }}), skipping"
@@ -60,7 +60,7 @@ runs:
     - name: Check if include commit message tag matches
       if: ${{ inputs.run_if_commit_tag != '' }}
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         last_commit_msg=$(git log -1 --pretty=%B)
         if [[ $last_commit_msg =~ "[${{ inputs.run_if_commit_tag }}]" ]]; then
           echo "Commit message ($last_commit_msg) includes tag (${{ inputs.run_if_commit_tag }}), running"
@@ -72,7 +72,7 @@ runs:
     - name: Check if skip files changed
       if: ${{ inputs.skip_if_files_changed != '' }}
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         latest_release=$(cat "LATEST_RELEASE")
         base=$(git rev-parse origin/release-line-"${latest_release}")
         changed=$(git diff --name-only $base -- ${{ inputs.skip_if_files_changed }})
@@ -88,7 +88,7 @@ runs:
     - name: Generate runner indices
       id: generate_index_list
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         last_commit_msg=$(git log -1 --pretty=%B)
         echo "Last commit message: $last_commit_msg"
         if [[ "${skip}" == "true" ]]; then

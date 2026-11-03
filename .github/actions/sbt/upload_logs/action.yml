@@ -19,7 +19,7 @@ runs:
   steps:
     - name: Pack logfiles
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         if [[ -d log ]]; then
           # pigz fails if there is no file to compress, which can be the case if Canton just rolled its logs
           pigz -r ${{ inputs.splice_root }}/log/* || true
@@ -27,7 +27,7 @@ runs:
 
     - name: Move potential additional debugging artifacts to log directory
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         mkdir -p log
         # When Java crashes, it sometimes saves an error report such as hs_err_pid*.log to the working directory.
         mv ${{ inputs.splice_root }}/*.log log/ || true

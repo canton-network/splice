@@ -23,7 +23,7 @@ runs:
   steps:
     - name: Prune nix cache directories
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         set -euxo pipefail
 
         max_age="${{ inputs.max_age_days }}"

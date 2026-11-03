@@ -63,6 +63,12 @@ repos:
         entry: "scripts/actionlint.sh"
         files: '^.github/.*$'
         pass_filenames: false
+      - id: gha_zizmor
+        name: static check github actions with zizmor
+        language: system
+        entry: "scripts/zizmor.sh"
+        files: '^(.github|gha-scripts/actions)/.*$'
+        pass_filenames: false
       - id: check-trailing-whitespace
         name: Check for trailing whitespace
         language: system

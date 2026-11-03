@@ -15,7 +15,7 @@ runs:
     - name: Check if static only
       id: check
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         set -eou pipefail
         last_commit_msg=$(git log -1 --pretty=%B)
           echo "Last commit message: $last_commit_msg"

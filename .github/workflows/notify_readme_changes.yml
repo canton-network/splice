@@ -6,12 +6,15 @@ on:
 
 jobs:
   notify_readme_changes:
+    permissions:
+      contents: read
     runs-on: ubuntu-24.04
     name: Notify on README changes
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           fetch-depth: 2
       - name: Detect README changes
         id: detect_changes
@@ -36,17 +39,23 @@ jobs:
         id: construct_message
         if: steps.detect_changes.outputs.FOUND_DOCUMENT_CHANGES == 'true'
         shell: bash
+        env:
+          GITHUB_COMMIT_URL: ${{ steps.detect_changes.outputs.GITHUB_COMMIT_URL }}
+          GIT_LOG: ${{ steps.detect_changes.outputs.GIT_LOG }}
+          CHANGED_DOC_FILES: ${{ steps.detect_changes.outputs.CHANGED_DOC_FILES }}
         run: |
           # shellcheck disable=SC2028,SC2016
-          echo 'MESSAGE=*Changes to `.md`, `.mdx` or `.rst` files have been detected and merged into the main branch.*\n<${{ steps.detect_changes.outputs.GITHUB_COMMIT_URL }}| View change at ${{ steps.detect_changes.outputs.GIT_LOG }}>\n\nChanged files:\n```\n${{ steps.detect_changes.outputs.CHANGED_DOC_FILES }}\n```' >> "$GITHUB_OUTPUT"
+          echo "MESSAGE=*Changes to \`.md\`, \`.mdx\` or \`.rst\` files have been detected and merged into the main branch.*\\n<${GITHUB_COMMIT_URL}| View change at ${GIT_LOG}>\\n\\nChanged files:\\n\`\`\`\\n${CHANGED_DOC_FILES}\\n\`\`\`" >> "$GITHUB_OUTPUT"
 
       - name: Dry run
         if: steps.detect_changes.outputs.FOUND_DOCUMENT_CHANGES == 'true'
         shell: bash
+        env:
+          MESSAGE: ${{ steps.construct_message.outputs.MESSAGE }}
         run: |
           echo "Dry run: The following message would be sent to Slack:"
           echo ""
-          echo '${{ steps.construct_message.outputs.MESSAGE }}'
+          echo "$MESSAGE"
 
       - name: Notify on document changes
         if: steps.detect_changes.outputs.FOUND_DOCUMENT_CHANGES == 'true'

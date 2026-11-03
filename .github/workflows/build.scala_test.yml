@@ -83,6 +83,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           # Checkout the PR head commit to get the commit message
           ref: ${{ github.event.pull_request.head.sha }}
           # Checkout with full history to get all commit messages on the branch
@@ -120,7 +121,7 @@ jobs:
 
     services:
       postgres:
-        image: ${{ inputs.postgres_image }}
+        image: ${{ inputs.postgres_image }} # zizmor: ignore[unpinned-images]
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_INITDB_ARGS: ${{ inputs.postgres_init_args }} --data-checksums
@@ -130,6 +131,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}

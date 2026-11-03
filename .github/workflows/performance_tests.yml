@@ -26,6 +26,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ''
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -81,7 +82,7 @@ jobs:
 
       - name: Upload ingestion metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: store-ingestion-perf-metrics-${{ github.run_id }}
           path: /tmp/store-ingestion-perf-metrics
@@ -129,6 +130,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ''
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -184,7 +186,7 @@ jobs:
 
       - name: Upload read metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: store-read-perf-metrics-${{ github.run_id }}
           path: /tmp/store-read-perf-metrics

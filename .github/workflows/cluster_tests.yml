@@ -27,6 +27,7 @@ jobs:
       - name: Check out trusted action code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -43,18 +44,23 @@ jobs:
 
       - name: Trigger cluster test
         id: trigger
+        env:
+          ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+          INVOKER_URL: ${{ secrets.CLUSTER_TEST_INVOKER_URL }}
+          WORKFLOW: ${{ inputs.workflow }}
+          SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           if ! result=$(curl -sSL -X POST --fail-with-body \
             --retry 3 --retry-delay 10 --retry-max-time 60 \
             --connect-timeout 10 --max-time 60 \
-            -H "Authorization: Bearer ${{ steps.auth.outputs.id_token }}" \
-            "${{ secrets.CLUSTER_TEST_INVOKER_URL }}?workflow=${{ inputs.workflow }}&splice-git-ref=${{ inputs.sha }}"); then
-            echo "::error::Failed to trigger cluster test workflow '${{ inputs.workflow }}' for sha '${{ inputs.sha }}'"
+            -H "Authorization: Bearer $ID_TOKEN" \
+            "${INVOKER_URL}?workflow=${WORKFLOW}&splice-git-ref=${SHA}"); then
+            echo "::error::Failed to trigger cluster test workflow '${WORKFLOW}' for sha '${SHA}'"
             echo "Response body: $result"
             exit 1
           fi
-          echo "Triggered ${{ inputs.workflow }}: $result"
+          echo "Triggered ${WORKFLOW}: $result"
           echo "result=$result" >> "$GITHUB_OUTPUT"
 
       - name: Report Failures on Slack & Github

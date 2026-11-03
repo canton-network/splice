@@ -52,7 +52,7 @@ runs:
     - name: Collect cache hits
       id: cache_hits
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         # Collect cache hits into a json struct.
         # Note that when there's a complete miss rather than a hit on an alternative key,
         # the output from the cache/restore action is empty and not false,

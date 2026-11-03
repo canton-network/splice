@@ -35,7 +35,7 @@ runs:
   steps:
     - name: Run bash command
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         set -euo pipefail
         target="$(cat /tmp/nix_target)"
         nix_path="$(cat /tmp/nix_path)"

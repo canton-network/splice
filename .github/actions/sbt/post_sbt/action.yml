@@ -56,7 +56,7 @@ runs:
     - name: Collect test reports
       if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
       shell: bash
-      run: |
+      run: | # zizmor: ignore[template-injection]
         sudo mkdir -p /cache/test-reports
         sudo chown $(whoami):$(whoami) "/cache/test-reports"
         for report in $(find ${{ inputs.splice_root }} -path "*/target/test-reports/TEST-*.xml")
