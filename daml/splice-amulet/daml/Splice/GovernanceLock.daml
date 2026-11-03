@@ -84,7 +84,6 @@ import DA.List.Total (head)
 import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as Text
-import DA.TextMap qualified as TextMap
 import DA.Time
 import DA.Traversable (forA)
 

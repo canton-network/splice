@@ -164,10 +164,6 @@ test_governanceLockMetadataParser = do
   expectSuccess (mkMeta [(lockSubjectMetaKey, "provider")]) $
     run [reason $ lockSubjectMetaKey <> "=provider"]
 
-  -- Keys are kept as written, even if they start with `cip-127/`
-  expectSuccess (mkMeta [("cip-127/" <> lockSubjectMetaKey, "provider")]) $
-    run [reason $ "cip-127/" <> lockSubjectMetaKey <> "=provider"]
-
   -- `&` separates the pairs, and the other metadata fields are ignored
   expectSuccess
     (mkMeta [(lockSubjectMetaKey, "provider")])
@@ -335,11 +331,9 @@ test_governanceLockRequestTSv1Parser = do
     ]
     $ run lockManagerParty (request "withdraw-vested-funds" :: faLock)
 
-  -- The request is required and must be known; the value has no `cip-127/` prefix
+  -- The request is required and must be known
   expectRequestErrors [missingMemoKeyMessage requestMetaKey] $ run lockManagerParty faLock
   expectRequestErrors ["Invalid request: 'unlock'"] $ run lockManagerParty (request "unlock" :: faLock)
-  expectRequestErrors ["Invalid request: 'cip-127/create-lock'"] $
-    run lockManagerParty (request "cip-127/create-lock" :: faLock)
 
   -- Creating, unlocking and transferring a lock needs the lock manager as the receiver
   expectRequestErrors [invalidReceiverError alice] $ run alice (request "create-lock" :: faLock)
@@ -389,11 +383,11 @@ substitutionTSv1Parser admin = governanceLockRequestTSv1Parser admin lockManager
 substitutionRequest : (Text, Text)
 substitutionRequest = (requestMetaKey, governanceLockRequestTagToText GLRT_SubstituteLock)
 
--- | Examples of the `allocation.meta` of an `AllocationFactory_Allocate` call that proposes a substitution.
+-- | Examples of the memo in the `allocation.meta` of an `AllocationFactory_Allocate` call that proposes a substitution.
 --
--- The metadata keys are written out on purpose, so that these tests also serve as examples of how to call the API.
--- The `cip-127/request` key selects the substitution.
--- `cip-127/target-lock-owner`, `cip-127/lock-kind`, and `cip-127/lock-status` specify the owner, kind, and state of the target lock.
+-- The memo keys are written out on purpose, so that these tests also serve as examples of how to call the API.
+-- The `request` key selects the substitution.
+-- `target-lock-owner`, `lock-kind`, and `lock-status` specify the owner, kind, and state of the target lock.
 test_substitutionTSv1Parser_examples : Script ()
 test_substitutionTSv1Parser_examples = do
   let run entries = runParser (substitutionTSv1Parser testAdmin) (mkMeta entries)
@@ -409,16 +403,16 @@ test_substitutionTSv1Parser_examples = do
           owner = alice
           specification = GLS_FullLock FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
         $ run $
-            [ (requestMetaKey, "substitute-lock")
-            , (lockKindMetaKey, "sv-lock")
-            , (lockSubjectMetaKey, "someSv")
-            , (targetLockOwnerMetaKey, "alice")
+            [ ("request", "substitute-lock")
+            , ("lock-kind", "sv-lock")
+            , ("lock-subject", "someSv")
+            , ("target-lock-owner", "alice")
             ] <> moreEntries
 
   -- Leaving out `lock-status` defaults to a full lock
   testLockedSvLock []
   -- Including an explicit `lock-status=locked` parses a full lock
-  testLockedSvLock [(lockStatusMetaKey, "locked")]
+  testLockedSvLock [("lock-status", "locked")]
 
   -- Staking app example: alice locks funds for the featured app "provider", and a staking app (charlie) can
   -- approve substitutions together with the provider. Bob substitutes funds of that lock with a lock whose
@@ -430,10 +424,10 @@ test_substitutionTSv1Parser_examples = do
       specification = GLS_FullLock FullLockSpecification with
         kind = GLK_FeaturedApp testProvider)
     $ run
-        [ (requestMetaKey, "substitute-lock")
-        , (lockKindMetaKey, "fa-lock")
-        , (lockSubjectMetaKey, "provider")
-        , (targetLockOwnerMetaKey, "alice")
+        [ ("request", "substitute-lock")
+        , ("lock-kind", "fa-lock")
+        , ("lock-subject", "provider")
+        , ("target-lock-owner", "alice")
         ]
 
   -- Vesting lock example: bob substitutes funds of a vesting lock of alice. A vesting target is selected with
@@ -448,13 +442,13 @@ test_substitutionTSv1Parser_examples = do
         vestingPeriod = days 60
         endTime = time (date 2026 Jan 1) 0 0 0)
     $ run
-        [ (requestMetaKey, "substitute-lock")
-        , (lockKindMetaKey, "sv-lock")
-        , (lockSubjectMetaKey, "someSv")
-        , (targetLockOwnerMetaKey, "alice")
-        , (lockStatusMetaKey, "vesting")
-        , (lockVestingDurationMetaKey, "5184000000000")
-        , (lockVestingEndTimeMetaKey, "1767225600000000")
+        [ ("request", "substitute-lock")
+        , ("lock-kind", "sv-lock")
+        , ("lock-subject", "someSv")
+        , ("target-lock-owner", "alice")
+        , ("lock-status", "vesting")
+        , ("lock-vesting-duration-micros", "5184000000000")
+        , ("lock-vesting-end-time-micros", "1767225600000000")
         ]
 
 test_substitutionTSv1Parser_failures : Script ()
