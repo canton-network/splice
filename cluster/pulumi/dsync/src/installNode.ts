@@ -65,6 +65,7 @@ export async function installNode(auth0Client: Auth0Client, namespace: string): 
       auth0: auth0Client.getCfg(),
       version: dsyncMigrationConfig.active.version,
       migrationId: dsyncMigrationConfig.activeMigrationId,
+      autoInit: true,
       participantAdminUserNameFrom: auth0UserNameEnvVarSource('dsync', true),
     },
     { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }

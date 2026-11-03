@@ -39,6 +39,7 @@ export type ParticipantArgs = {
   version: CnChartVersion;
   migrationId: DomainMigrationIndex;
   auth0: Auth0Config;
+  autoInit?: boolean;
   existingDb?: Postgres;
   disableProtection?: boolean;
   participantAdminUserNameFrom?: k8s.types.input.core.v1.EnvVarSource;
@@ -78,6 +79,7 @@ function installParticipantChart(
     version,
     migrationId,
     auth0,
+    autoInit,
     participantAdminUserNameFrom,
     imagePullServiceAccountName,
   }: ParticipantArgs,
@@ -109,6 +111,17 @@ function installParticipantChart(
     additionalEnvVars: [
       ...(kmsValues.additionalEnvVars ?? []),
       ...(participant?.additionalEnvVars ?? []),
+      ...(autoInit
+        ? [
+            {
+              name: 'ADDITIONAL_CONFIG_AUTO_INIT',
+              value: `canton.participants.participant.init {
+                generate-topology-transactions-and-keys = true
+                identity.type = auto
+              }`,
+            },
+          ]
+        : []),
     ],
     logLevel: logging?.cantonLogLevel,
     logLevelStdout: logging?.cantonStdoutLogLevel,

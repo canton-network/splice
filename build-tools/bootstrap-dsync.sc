@@ -1,4 +1,4 @@
-import com.digitalasset.canton.console.{InstanceReference, ParticipantReference, SequencerReference}
+import com.digitalasset.canton.console.{InstanceReference, SequencerReference}
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
 
 val sequencers = Seq(sequencer1, sequencer2, sequencer3, sequencer4)
@@ -8,48 +8,29 @@ val nodes = sequencers ++ mediators
 // We have a threshold of three, so signing the bootstrapping transactions only with the first three sequencers.
 val signingSequencers = sequencers.take(3)
 
-def getOrGenerateKey[K <: PublicKey](node: InstanceReference, name: String)(
-    select: PartialFunction[PublicKey, K],
-    generate: String => K,
-): K =
+def getOrGenerateSigningKey(node: InstanceReference, usage: SigningKeyUsage): SigningPublicKey = {
+  val name = node.name + s"-${usage.identifier}"
   node.keys.secret
     .list(filterName = name)
     .filter(_.publicKeyWithName.name.map(_.unwrap).contains(name))
     .map(_.publicKeyWithName.publicKey)
-    .collectFirst(select) match {
+    .collectFirst { case key: SigningPublicKey => key } match {
     case Some(key) =>
       println(s"Key $name already exists, skipping")
       key
     case None =>
       println(s"Generating key $name...")
-      generate(name)
+      node.keys.secret.generate_signing_key(name = name, usage = Set(usage))
   }
+}
 
-def getOrGenerateSigningKey(node: InstanceReference, usage: SigningKeyUsage): SigningPublicKey =
-  getOrGenerateKey(node, node.name + s"-${usage.identifier}")(
-    { case key: SigningPublicKey => key },
-    name => node.keys.secret.generate_signing_key(name = name, usage = Set(usage)),
-  )
-
-def getOrGenerateEncryptionKey(node: InstanceReference): EncryptionPublicKey =
-  getOrGenerateKey(node, node.name + "-encryption")(
-    { case key: EncryptionPublicKey => key },
-    name => node.keys.secret.generate_encryption_key(name = name),
-  )
-
-// Participants differ from sequencers and mediators in that they also need an encryption key,
-// and that they become initialized as soon as their owner to key mapping is in place
-// (sequencers and mediators only get initialized when the synchronizer is bootstrapped).
-// See https://docs.canton.network/global-synchronizer/deployment/identity-management#participant-node-manual-initialization
 def initManually(node: InstanceReference): Unit =
   if (node.health.initialized()) {
     println("Node " + node.name + " is already initialized, skipping")
   } else {
-    val isParticipant = node.isInstanceOf[ParticipantReference]
     val namespaceKey = getOrGenerateSigningKey(node, SigningKeyUsage.Namespace)
     val sequencerAuthKey = getOrGenerateSigningKey(node, SigningKeyUsage.SequencerAuthentication)
     val signingKey = getOrGenerateSigningKey(node, SigningKeyUsage.Protocol)
-    val encryptionKey = Option.when(isParticipant)(getOrGenerateEncryptionKey(node))
     val namespace = Namespace(namespaceKey.id)
 
     if (node.health.has_identity()) {
@@ -61,8 +42,7 @@ def initManually(node: InstanceReference): Unit =
       )
     }
 
-    if (isParticipant) node.health.wait_for_ready_for_node_topology()
-    else node.health.wait_for_ready_for_initialization()
+    node.health.wait_for_ready_for_initialization()
 
     if (
       node.topology.namespace_delegations
@@ -92,15 +72,10 @@ def initManually(node: InstanceReference): Unit =
       println("Proposing owner to key mapping for node " + node.name + "...")
       node.topology.owner_to_key_mappings.propose(
         member = node.id.member,
-        keys = NonEmpty.mk(Seq, sequencerAuthKey, signingKey +: encryptionKey.toList: _*),
+        keys = NonEmpty(Seq, sequencerAuthKey, signingKey),
         signedBy =
           Seq(namespaceKey.fingerprint, sequencerAuthKey.fingerprint, signingKey.fingerprint),
       )
-    }
-
-    if (isParticipant) {
-      println("Waiting for node " + node.name + " to be initialized...")
-      node.health.wait_for_initialized()
     }
   }
 
@@ -146,7 +121,11 @@ def hasProposedSynchronizerParameters(
     .exists(r => predicate(r.item) && r.context.signedBy.contains(fingerprint(node)))
 
 nodes.foreach(initManually)
-participants.foreach(initManually)
+
+participants.foreach { participant =>
+  println(s"Waiting for ${participant.name} to be initialized...")
+  participant.health.wait_for_initialized()
+}
 
 val synchronizerId =
   if (nodes.forall(_.health.initialized())) {
