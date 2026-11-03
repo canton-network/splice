@@ -128,3 +128,6 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 
 Listed once, not presented: waiting 10728, 10893, 10917, 10918, 10919; needs-log 10479, 10680, 11106, 11117,
 11137, 11142, 11145, 11151 (requests at the end of the queue); out of scope 11146.
+
+Correction 2026-11-03 (item 1, applies to all later items): issue comments do not cite evidence packets; they inline
+the decisive log lines or summarize them, for a senior engineer as reader. The batch commands above predate this.

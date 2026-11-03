@@ -67,7 +67,9 @@ edits to shared files.
      per parent with all its duplicates (closing moves them to `Closed`). When the parent is open and recurs often, a short recurrence comment on it.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
-   Cite the packet by its path on the triage branch.
+   Comments are self-contained for a senior engineer who never opens the triage branch: no packet paths or other
+   triage-branch references; inline the decisive log lines (job, timestamp, verbatim message in backticks) or
+   summarize them; cause, evidence, what was ruled out, resolution.
 9. Fix, only when it is test-side and small enough to review in one screen: one branch per PR off `origin/main`
    (or the release line for a backport, `cherry-pick -x -s`), in its own worktree so the triage branch stays checked
    out (`references/recipes.md` section 8). When one branch fixes several refs, name it after the parent ref and

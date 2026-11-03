@@ -98,6 +98,8 @@ is missing or newer than the export.
 - Never modify issues or the board, even if a route would allow it. Print the commands for the user (below);
   Status changes use `scripts/set_status.py` (recipe 12).
 - Never infer tracking information by elimination (which issue belongs to which run or job). Ask.
+- Issue comments stand on their own (reader: a senior engineer, no access to the triage branch): never cite packet
+  paths; inline the decisive log lines in backticks or summarize them.
 - Pure ASCII in every file, commit message, issue comment and PR text. No em dashes, smart quotes, arrows, emoji.
 - No AI attribution anywhere (no Co-Authored-By, no "generated with"). `Signed-off-by` is the only trailer.
 - Commits: one subject line plus `-s`. `[skip ci]` on the triage branch (never on a PR branch: it makes the PR
