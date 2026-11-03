@@ -208,3 +208,5 @@ Presented with comment, retitle, set_status Triaged.
 User 2026-11-03: every comment body goes into a body file (comments/<ref>.md); only single-line plain-text comments inline. CLAUDE.md, issue-comment.md and ci-triage step 8 updated. Item 4 comment moved to comments/11144.md.
 
 Item 4: user asked why the new eventually repeats the checks of the block below it; fix redone as the user chose: block 1 (wait for round 10) deleted, the per-round read block wrapped in eventually(). Amended to 9f4b991cbd (replaces bd47fecde5); scalafmtOnly and Test/compile pass. Body file updated.
+
+Item 4: user opened PR 8221. User: issue comments never reference the fix PR or branch (the PR links the issue with Fixes); describe the fix in one sentence. Body file and issue-comment.md updated; applies to all later items.

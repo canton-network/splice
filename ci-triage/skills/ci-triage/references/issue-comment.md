@@ -9,7 +9,8 @@ Shape (Markdown, short paragraphs; a few sentences each):
 3. Cause, with the decisive log lines verbatim in a fenced code block (two to four lines, timestamps kept,
    secrets and long JSON trimmed with `...`), then one or two sentences interpreting them.
 4. What rules out the alternatives (same sha passing, later runs, unrelated commit, family checked).
-5. Resolution: the fix (file and change) or why none is needed; owner if known.
+5. Resolution: the fix in one sentence (file and change) or why none is needed; owner if known. No reference to the
+   fix PR or branch: the PR links the issue with `Fixes ...`.
 6. Not checked: what was not verified and where the missing evidence lives; when it is worth chasing. If the
    evidence is in a system the user can read (GCP logs: recipe 13), hand them the link before writing this.
 
