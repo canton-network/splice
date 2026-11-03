@@ -6,8 +6,8 @@ Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Cont
 triage branch `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02), which has the earlier README, handover and
 onboarding.
 
-Current round: `rounds/2026-11-02T153358Z-singles/` (10891, 11138, 11139, 11140); commands handed out, not
-confirmed as run.
+Current round: `rounds/2026-11-03T131520Z/` (inbox export 2026-11-03 13:14, 35 items).
+Previous round `rounds/2026-11-02T153358Z-singles/`: its commands did not run (export 2026-11-03).
 
 Taken over from the previous triage branch:
 - all packets, now in `evidence/` (index: `evidence/INDEX.tsv`, built from its README and the 2026-11-02 one); its
