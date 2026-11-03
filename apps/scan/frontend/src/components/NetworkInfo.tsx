@@ -39,7 +39,7 @@ const NetworkInfo: React.FC = () => {
   const getAmuletRulesQuery = useGetAmuletRules();
   const openRoundsQuery = useOpenRounds();
 
-  let openRoundsDisplay: JSX.Element;
+  let openRoundsDisplay: React.JSX.Element;
   switch (openRoundsQuery.status) {
     case 'pending':
       openRoundsDisplay = <Loading />;

@@ -10,7 +10,7 @@ export class ConfigProvider<T extends z.ZodObject> extends Component<{
   configScheme: T;
   configContext: Context<z.infer<T> | undefined>;
 }> {
-  render(): JSX.Element {
+  render(): React.JSX.Element {
     const configReader = new ConfigReader(this.props.configScheme);
     const config = configReader.loadConfig();
     const ConfigContext = this.props.configContext;
