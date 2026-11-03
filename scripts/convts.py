@@ -10,9 +10,10 @@ to human readable / lnav compatible ISO 8601 date time format.
 
 import sys
 import re
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-def process_files(files):
+def process_files(files: Iterable[str]) -> None:
     for filepath in files:
         print("processing", filepath, file=sys.stderr)
         try:
@@ -21,13 +22,13 @@ def process_files(files):
             print("WARN could not process file:", filepath, file=sys.stderr)
             print(e, file=sys.stderr)
 
-def process_file(filepath):
+def process_file(filepath: str) -> None:
     with open(filepath, 'r+') as file:
         lines = file.readlines()
 
         formatted_dt = None
 
-        def convert_timestamp(m):
+        def convert_timestamp(m: re.Match[str]) -> str:
             nonlocal formatted_dt
             try:
                 timestamp = int(m[0])

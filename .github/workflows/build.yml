@@ -307,6 +307,12 @@ jobs:
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
+  python_tests:
+    uses: ./.github/workflows/build.python_tests.yml
+    secrets: inherit
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+
   docs:
     uses: ./.github/workflows/build.docs.yml
     secrets: inherit
@@ -356,6 +362,7 @@ jobs:
     - scala_test_without_canton
     - ui_tests
     - ts_cli_tests
+    - python_tests
     - docs
     - bundle_smoke_test
     runs-on: ubuntu-24.04

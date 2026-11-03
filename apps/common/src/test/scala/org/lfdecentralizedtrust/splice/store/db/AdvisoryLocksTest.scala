@@ -13,6 +13,7 @@ import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.*
 
 trait AdvisoryLocksTestHelper { _: DbTest with StoreTestBase with HasExecutionContext =>
 
@@ -107,6 +108,73 @@ class AdvisoryLocksTest
     AdvisoryLocks.withTransactionalLock(profile, _, _),
   )
 
+  "AdvisoryLocks.withBlockingTransactionalLock" should {
+    val lockId = AdvisoryLockIds.acsSnapshotIndex
+
+    "release the lock after running an action" in {
+      for {
+        _ <- storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withBlockingTransactionalLock(profile, lockId, DBIOAction.unit),
+            "test lock",
+          )
+          .failOnShutdown
+        lockIsFree <- lockIsFree(lockId)
+      } yield lockIsFree shouldBe true
+    }
+
+    "release the lock after an action fails" in {
+      for {
+        failure <- storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withBlockingTransactionalLock(
+              profile,
+              lockId,
+              DBIOAction.failed(new RuntimeException("error")),
+            ),
+            "test lock",
+          )
+          .failOnShutdown
+          .failed
+        _ = failure shouldBe a[RuntimeException]
+        lockIsFree <- lockIsFree(lockId)
+      } yield lockIsFree shouldBe true
+    }
+
+    "wait while another session holds the lock and then run the action" in {
+      val releaseLock = Promise[Unit]()
+      val (lockAcquired, lockReleased) =
+        holdLock(AdvisoryLocks.withSessionLock(lockId, _), DBIOAction.unit, releaseLock.future)
+      for {
+        _ <- lockAcquired
+        contended = storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withBlockingTransactionalLock(
+              profile,
+              lockId,
+              sqlu"create table #$testTable (id int)".map(_ => ()),
+            ),
+            "contended query",
+          )
+          .failOnShutdown
+        _ <- awaitLockWaiter(lockId, attemptsLeft = 200)
+        completedWhileLocked = contended.isCompleted
+        _ = releaseLock.success(())
+        _ <- lockReleased
+        _ <- contended
+        tableExists <- storage.underlying
+          .query(
+            sql"select to_regclass($testTable) is not null".as[Boolean].head,
+            "check table",
+          )
+          .failOnShutdown
+      } yield {
+        completedWhileLocked shouldBe false
+        tableExists shouldBe true
+      }
+    }
+  }
+
   /** Whether [[lockId]] can be acquired, i.e. nothing is holding it. Session-scoped and
     * transactional locks share one lock space, so a session-scoped check also detects a
     * detects a transactional holder.
@@ -116,6 +184,23 @@ class AdvisoryLocksTest
       .query(AdvisoryLocks.withSessionLock(lockId, DBIOAction.successful(true)), "check lock")
       .failOnShutdown
       .recover { case _: AdvisoryLocks.FailedToAcquireLockException => false }
+
+  private def awaitLockWaiter(lockId: Long, attemptsLeft: Int): Future[Unit] =
+    storage.underlying
+      .query(
+        sql"""select count(*) from pg_locks
+              where locktype = 'advisory' and objid::bigint = $lockId and not granted"""
+          .as[Int]
+          .head,
+        "count lock waiters",
+      )
+      .failOnShutdown
+      .flatMap {
+        case waiters if waiters > 0 => Future.unit
+        case _ if attemptsLeft > 0 =>
+          org.apache.pekko.pattern.after(50.millis)(awaitLockWaiter(lockId, attemptsLeft - 1))
+        case _ => Future.failed(new IllegalStateException(s"No session waited for lock $lockId"))
+      }
 
   override protected def cleanDb(
       storage: DbStorage

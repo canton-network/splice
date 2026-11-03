@@ -16,7 +16,7 @@ class FailureGithubIssue():
   def get_msg(self) -> tuple[str, str]:
     GITHUB_SERVER_URL=os.environ.get('GITHUB_SERVER_URL')
     GITHUB_REPOSITORY=os.environ.get('GITHUB_REPOSITORY')
-    GIT_SHA=os.environ.get('GITHUB_SHA')
+    GIT_SHA=os.environ['GITHUB_SHA']
     branch_url=f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/tree/{self.args.branch}"
     github_url=f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/commit/{GIT_SHA}"
     # Unfortunately, github does not provide a way to get the job number, s.a. https://github.com/orgs/community/discussions/129314
@@ -24,6 +24,8 @@ class FailureGithubIssue():
     job_url=f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/actions/runs/{self.args.gha_run_id}"
     repo = Repo(search_parent_directories=True)
     commit_msg = repo.head.commit.summary
+    if isinstance(commit_msg, bytes):
+      commit_msg = commit_msg.decode()
     commit_sha_short = GIT_SHA[:7]
     job_descriptor = (f"{self.args.job_subname} in " if self.args.job_subname else '') + self.args.job_name
 

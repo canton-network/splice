@@ -45,7 +45,7 @@ object Dependencies {
   lazy val better_files = CantonDependencies.better_files
 
   lazy val google_cloud_storage =
-    "com.google.cloud" % "google-cloud-storage" % "2.44.1"
+    "com.google.cloud" % "google-cloud-storage" % "2.70.0"
 
   lazy val jaxb_abi = "javax.xml.bind" % "jaxb-api" % "2.3.1"
 
@@ -87,6 +87,8 @@ object Dependencies {
     "com.fasterxml.jackson.core" % "jackson-core" % jackson_version,
     "com.fasterxml.jackson.core" % "jackson-databind" % jackson_version,
     "com.fasterxml.jackson.core" % "jackson-annotations" % "2.22",
+    "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % jackson_version,
+    "com.fasterxml.jackson.datatype" % "jackson-datatype-jsr310" % jackson_version,
     "org.jline" % "jline" % "3.30.17",
     "org.postgresql" % "postgresql" % "42.7.14",
     "org.typelevel" %% "jawn-parser" % "1.7.0",

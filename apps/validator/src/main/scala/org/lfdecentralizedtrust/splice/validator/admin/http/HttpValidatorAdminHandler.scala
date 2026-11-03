@@ -49,7 +49,6 @@ import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import com.digitalasset.canton.util.HexString
-import com.digitalasset.canton.version.ProtocolVersion
 import com.google.protobuf.ByteString
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
@@ -239,11 +238,15 @@ class HttpValidatorAdminHandler(
     withSpan(s"$workflowId.generateExternalPartyTopology") { _ => _ =>
       requireWalletEnabled { _ =>
         val publicKey = ValidatorUtil.signingPublicKeyFromHexEd25119(body.publicKey)
-        ValidatorUtil
-          .createTopologyMappings(
-            partyHint = body.partyHint,
-            publicKey = publicKey,
-            participantAdminConnection = participantAdminConnection,
+        getAmuletRulesDomain()(tracedContext)
+          .flatMap(synchronizerId =>
+            ValidatorUtil
+              .createTopologyMappings(
+                partyHint = body.partyHint,
+                publicKey = publicKey,
+                participantAdminConnection = participantAdminConnection,
+                synchronizerId = synchronizerId,
+              )
           )
           .map { case (partyId, topologyTxs) =>
             v0.ValidatorAdminResource.GenerateExternalPartyTopologyResponse.OK(
@@ -311,7 +314,7 @@ class HttpValidatorAdminHandler(
           ),
         ),
         isProposal = true,
-        protocolVersion = ProtocolVersion.dev,
+        protocolVersion = tx.representativeProtocolVersion.representative,
       )
       .valueOr(error =>
         throw Status.INVALID_ARGUMENT

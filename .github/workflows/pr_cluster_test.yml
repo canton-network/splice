@@ -20,7 +20,8 @@ jobs:
 
   get_head:
     runs-on: ubuntu-24.04
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    # Only react to issue comments from repository members/collaborators.
+    if: github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))
     outputs:
       sha: ${{ steps.get_head.outputs.sha }}
       repo: ${{ steps.get_head.outputs.repo }}
@@ -47,7 +48,8 @@ jobs:
 
   determine_test_type:
     runs-on: ubuntu-24.04
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    # Only react to issue comments from repository members/collaborators.
+    if: github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))
     outputs:
       workflow: ${{ steps.determine_test_type.outputs.workflow }}
     steps:
@@ -82,7 +84,8 @@ jobs:
     needs:
       - get_head
       - determine_test_type
-    if: needs.determine_test_type.outputs.workflow != '' && needs.determine_test_type.outputs.workflow != 'cluster_test'
+    # Only react to issue comments from repository members/collaborators.
+    if: (github.event_name != 'issue_comment' || (github.event.issue.pull_request && contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association))) && needs.determine_test_type.outputs.workflow != '' && needs.determine_test_type.outputs.workflow != 'cluster_test'
     uses: ./.github/workflows/cluster_tests.yml
     secrets: inherit
     with:

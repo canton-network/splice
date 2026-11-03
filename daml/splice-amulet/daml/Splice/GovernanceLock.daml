@@ -449,7 +449,7 @@ vestingLock_withdrawImpl self this@GovernanceLock{..} vestedUntilTime actors con
     = do
         vestingSpec <- requireVestingLock specification
         checkActors actors [[owner]]
-        assertDeadlineExceeded "requestedAt" vestedUntilTime
+        assertDeadlineExceeded "vestedUntilTime" vestedUntilTime
         let unvestedAmount = calculateUnvestedAmount vestedUntilTime amount vestingSpec
 
         case unvestedAmount of
