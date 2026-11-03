@@ -12,6 +12,7 @@ import argparse
 import json
 import pathlib
 import subprocess
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -53,9 +54,15 @@ ISSUES_BATCH = 20
 
 def graphql(query: str, variables: dict[str, Any]) -> Any:
     req = json.dumps({"query": query, "variables": variables})
-    out = subprocess.run(["gh", "api", "graphql", "--input", "-"], input=req, capture_output=True, text=True,
-                         check=True).stdout
-    return json.loads(out)["data"]
+    # Large board pages occasionally time out on the GitHub side (HTTP 502/504); retry those.
+    for attempt in range(4):
+        res = subprocess.run(["gh", "api", "graphql", "--input", "-"], input=req, capture_output=True, text=True)
+        if res.returncode == 0 or "HTTP 5" not in res.stderr:
+            break
+        time.sleep(5 * (attempt + 1))
+    if res.returncode != 0:
+        raise SystemExit(f"gh api graphql failed ({res.returncode}):\n{res.stderr.strip()}\n{res.stdout.strip()}")
+    return json.loads(res.stdout)["data"]
 
 
 def pages(org: str, number: int) -> Iterator[list[Any]]:
