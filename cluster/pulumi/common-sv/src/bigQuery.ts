@@ -60,17 +60,21 @@ const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
 // SINGLE SOURCE OF TRUTH: REPLICATED TABLE CONFIGURATION
 // ============================================================================
 // what tables from Scan to replicate to BigQuery
+// How the hourly scheduled query appends staging rows to production:
+// - 'watermark': rows up to an hour before the newest staging row,
+//   past a watermark (hourly_append.sql); for tables written
+//   continuously
+// - 'newKeys': every row whose single-column primaryKey isn't in
+//   production yet (append_new_keys.sql); for insert-only tables
+//   written in bursts, whose last hour the watermark would leave in
+//   staging until the next burst
+type AppendMode = 'watermark' | 'newKeys';
+
 interface ReplicatedTableConfig {
   primaryKey: string;
   datePartitionColumn: string;
   timeType: 'micros' | 'datastream_metadata';
-  // How the hourly scheduled query appends staging rows to production:
-  // - 'watermark' (default): rows up to an hour before the newest staging row, past a watermark
-  //   (hourly_append.sql). For tables written continuously, whose rows may change.
-  // - 'newKeys': every row whose single-column primaryKey isn't in production yet
-  //   (append_new_keys.sql). For insert-only tables written in bursts, which the watermark would
-  //   leave in staging until the next burst.
-  appendMode?: 'watermark' | 'newKeys';
+  appendMode: AppendMode;
 }
 
 type ReplicatedTables = Record<string, ReplicatedTableConfig>;
@@ -80,26 +84,31 @@ const alwaysReplicatedTables: ReplicatedTables = {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
+    appendMode: 'watermark',
   },
   update_history_exercises: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
+    appendMode: 'watermark',
   },
   scan_verdict_store: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
+    appendMode: 'watermark',
   },
   scan_verdict_transaction_view_store: {
     primaryKey: 'verdict_row_id, view_id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
+    appendMode: 'watermark',
   },
   app_activity_record_store: {
     primaryKey: 'verdict_row_id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
+    appendMode: 'watermark',
   },
 };
 
@@ -108,7 +117,8 @@ const internedStringsTable: ReplicatedTables = {
     primaryKey: 'id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
-    // new strings arrive in bursts, e.g. on package upgrades, and are never changed
+    // new strings arrive in bursts, e.g. on package upgrades, and
+    // are never changed
     appendMode: 'newKeys',
   },
 };
@@ -439,10 +449,41 @@ function installBqScheduledQueryContext(): ScheduledQueryContext {
 // HOURLY DEDUPLICATION & SCHEDULED QUERIES
 // ============================================================================
 
-const appendSqlTemplates = {
-  watermark: fs.readFileSync(path.join(__dirname, 'hourly_append.sql'), 'utf8'),
-  newKeys: fs.readFileSync(path.join(__dirname, 'append_new_keys.sql'), 'utf8'),
+function readSql(fileName: string): string {
+  return fs.readFileSync(path.join(__dirname, fileName), 'utf8');
+}
+
+const appendSqlTemplates: Record<AppendMode, string> = {
+  watermark: readSql('hourly_append.sql'),
+  newKeys: readSql('append_new_keys.sql'),
 };
+
+// expanded into both append templates as {{createProdTable}}
+const createProdTableSqlTemplate = readSql('create_prod_table.sql');
+
+// Replaces each `{{name}}` in `template` with `vars[name]`. A
+// multi-line value whose placeholder starts a line gets that line's
+// indentation on every line.
+function expandSql(template: string, vars: Record<string, string>): string {
+  const expanded = Object.entries(vars).reduce(
+    (sql, [name, value]) =>
+      sql
+        .replace(new RegExp(`^([ \\t]*)\\{\\{${name}\\}\\}`, 'gm'), (_, indent: string) =>
+          value
+            .trimEnd()
+            .split('\n')
+            .map(line => (line ? indent + line : line))
+            .join('\n')
+        )
+        .replaceAll(`{{${name}}}`, () => value),
+    template
+  );
+  const unexpanded = expanded.match(/\{\{\w+\}\}/);
+  if (unexpanded) {
+    throw new Error(`No value for ${unexpanded[0]} in SQL template`);
+  }
+  return expanded;
+}
 
 function installHourlyScheduledQueries(
   namespace: ExactNamespace,
@@ -456,7 +497,7 @@ function installHourlyScheduledQueries(
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
     const colName = tableConfig.datePartitionColumn;
-    const appendMode = tableConfig.appendMode ?? 'watermark';
+    const { appendMode } = tableConfig;
     if (appendMode === 'newKeys' && primaryKeyExpr.includes(',')) {
       throw new Error(`${tableName}: appendMode 'newKeys' needs a single-column primary key`);
     }
@@ -481,16 +522,21 @@ function installHourlyScheduledQueries(
         const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
         const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
 
-        return appendSqlTemplates[appendMode]
-          .replaceAll('{{tableName}}', tableName)
-          .replaceAll('{{schemaName}}', schemaName)
-          .replaceAll('{{primaryKeyExpr}}', primaryKeyExpr)
-          .replaceAll('{{recordTimestampExpr}}', recordTimestampExpr)
-          .replaceAll('{{recordDateExpr}}', recordDateExpr)
-          .replaceAll('{{prodTable}}', prodTable)
-          .replaceAll('{{stagingTable}}', stagingTable)
-          .replaceAll('{{watermarksTable}}', watermarksTable)
-          .replaceAll('{{prodInfoSchema}}', prodInfoSchema);
+        const vars = {
+          tableName,
+          schemaName,
+          primaryKeyExpr,
+          recordTimestampExpr,
+          recordDateExpr,
+          prodTable,
+          stagingTable,
+          watermarksTable,
+          prodInfoSchema,
+        };
+        return expandSql(appendSqlTemplates[appendMode], {
+          ...vars,
+          createProdTable: expandSql(createProdTableSqlTemplate, vars),
+        });
       });
 
     const routineId = `sp_append_${tableName}`;
