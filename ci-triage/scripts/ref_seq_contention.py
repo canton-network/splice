@@ -74,8 +74,8 @@ def main() -> None:
     buckets = [(0.0, 0.5), (0.5, 2.0), (2.0, 5.0), (5.0, float("inf"))]
     print("chain duration (s): " + ", ".join(
         f"{lo}-{hi}: {sum(1 for d, _, _ in durations if lo <= d < hi)}" for lo, hi in buckets))
-    for d, start, seq in sorted(durations)[-3:]:
-        print(f"  longest: {d:.1f} s from {start} {seq}")
+    for dur, start, seq in sorted(durations)[-3:]:
+        print(f"  longest: {dur:.1f} s from {start} {seq}")
     print(f"retry delays over 1 s: {len(long_delays)}")
     for t, seq, v in long_delays:
         print(f"  {t} {seq} {v}s")
