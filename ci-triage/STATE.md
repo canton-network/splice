@@ -5,9 +5,12 @@
 Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Continues Raymond's
 `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02); his README, handover and onboarding are on that branch.
 
+Current round: `rounds/2026-11-02T153358Z-singles/` (10891, 11138, 11139, 11140); commands handed out, not
+confirmed as run.
+
 Taken over from Raymond:
 - all packets, now in `evidence/` (index: `evidence/INDEX.tsv`, built from his README and the 2026-11-02 one); his
-  round READMEs and host-command files in `history/rounds/`;
+  round READMEs and host-command files in `rounds/` (one directory per round, named by its start time);
 - `known-families.md` (moved from his skill copy, plus an index at the top);
 - not taken over: his skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
   superseded by `skills/ci-triage-inbox/`, its script is `scripts/inbox_from_timelines.py`;
@@ -58,7 +61,7 @@ Triaged 2026-11-02 on this branch; issue commands handed to the user, not yet co
 |---|---|---|
 | 10891 | dup of 10921 (V), PR branch without #8148 | close as dup |
 | 11138, 11139 | dups of 11128 (Z) | close as dup, recurrence comment on 11128 |
-| 11140 | new family AB, test-side timing race | comment, retitle, move to Triaged (web UI); test fix proposed, no branch |
+| 11140 | new family AB, test-side timing race | comment, retitle, move to Triaged; test fix proposed, no branch |
 
 ## Open fix branches (from Raymond's handover, 2026-11-02)
 

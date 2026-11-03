@@ -16,7 +16,8 @@ issue commands for the user, and optionally a fix branch. Everything you write m
 every claim is a command plus its verbatim output.
 
 When run as one of several parallel agents (ci-triage-inbox), follow the brief: it usually limits you to your own
-packet and asks you to return the INDEX rows, catalogue notes and commands instead of writing shared files.
+packet and the round files of your group, and asks for the INDEX rows, catalogue notes and commands instead of
+edits to shared files.
 
 ## Procedure
 

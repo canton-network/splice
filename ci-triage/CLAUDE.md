@@ -19,7 +19,7 @@ ref = a cn-test-failures issue number.
 | `evidence/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
 | `STATE.md` | current state: inbox, open questions, open fix branches |
-| `history/rounds/` | Raymond's per-round READMEs and the host commands he ran, read-only |
+| `rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` | one directory per inbox round: findings, commands handed out, open ends |
 | `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md` |
 | `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
@@ -28,6 +28,12 @@ Paths cited in older issue comments (e.g. `ci-triage/2026-11-02/singles-b.md`) m
 once. List every rename of a file, newest first, with
 `git log -M --diff-filter=R --name-status --format= -- ci-triage | grep -F '<file name>'`. Raymond's README,
 handover and onboarding are on `ray/ci-triage-2026-09-15` (also at `2bf9628c11` on this branch).
+
+Rounds: every inbox round (skill `ci-triage-inbox`) persists its working state in its own directory under
+`rounds/`, named by its UTC start time (seconds) and an optional free slug, so a round can be resumed or handed over
+without the chat. Background agents write only `<round dir>/<group>-*` for the group name in their brief; the main
+thread owns the rest of the round directory and the shared files. What the files contain is up to the writer.
+Raymond's rounds up to 2026-11-02 are the first entries (named by the time of his first commit for each).
 
 ## Background
 
