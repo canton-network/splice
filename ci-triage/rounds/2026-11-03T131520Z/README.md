@@ -109,7 +109,7 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 
 | # | Refs | Class | Signature | Family | State |
 |---|---|---|---|---|---|
-| 1 | 11152, 11153, 11154 | new | Deploy CIMain trigger: cluster test invoker HTTP 500, 3 attempts | J | open |
+| 1 | 11152, 11153, 11154 | new | Deploy CIMain trigger: cluster test invoker HTTP 500, 3 attempts | J | presented |
 | 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | open |
 | 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | open |
 | 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | open |
@@ -131,3 +131,8 @@ Listed once, not presented: waiting 10728, 10893, 10917, 10918, 10919; needs-log
 
 Correction 2026-11-03 (item 1, applies to all later items): issue comments do not cite evidence packets; they inline
 the decisive log lines or summarize them, for a senior engineer as reader. The batch commands above predate this.
+
+Item 1 (11152, 11153, 11154): user looked at the invoker log via recipe 13 (new, gcp_logs.py): Cloud Function
+invoke-circleci-workflow got 403 secretmanager.versions.access denied on secret github_token; user: a permission
+problem that was fixed. Resolution changed from Infrequent / no repro to close as completed. Commands handed out
+2026-11-03, not yet confirmed as run.

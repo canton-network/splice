@@ -188,4 +188,4 @@ type, service name) and ask the user to correct them; record confirmed values he
 
 | Target | Project | Filter | Confirmed |
 |---|---|---|---|
-| cluster test invoker (`CLUSTER_TEST_INVOKER_URL`, Python/Werkzeug, ID-token auth) | da-cn-ci (guess) | `resource.type=("cloud_run_revision" OR "cloud_function")`, `(severity>=ERROR OR httpRequest.status>=500)` | no |
+| cluster test invoker (`CLUSTER_TEST_INVOKER_URL`): Cloud Function `invoke-circleci-workflow` (functions_framework, Python 3.12) | da-cn-ci | `resource.type=("cloud_run_revision" OR "cloud_function")`, `(severity>=ERROR OR httpRequest.status>=500)` | yes, 2026-11-03 (11152) |

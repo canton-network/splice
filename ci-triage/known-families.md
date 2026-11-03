@@ -358,7 +358,8 @@ State as recorded in the family section, not rechecked against the tracker on 20
   pr_cluster_test): `curl: (22) The requested URL returned error: 500` four times, body "500 Internal Server Error:
   The server encountered an internal error" (Werkzeug default, so the invoker app raised). 11152 11153 11154 = run
   41610142697 attempts 1-3, 2026-11-03 09:20-09:40 UTC, attempt 4 at 09:44 passed. curl already retries 500 for 60 s;
-  cause is in the invoker (CLUSTER_TEST_INVOKER_URL, GCP da-cn-ci logs), not verified. One-off; each manual rerun
+  cause (invoker log, recipe 13): Cloud Function invoke-circleci-workflow (da-cn-ci) got HTTP 403
+  `Permission 'secretmanager.versions.access' denied` reading secret github_token; fixed by 09:44. One-off; each manual rerun
   files a new issue, so expect one issue per failed attempt.
 
 

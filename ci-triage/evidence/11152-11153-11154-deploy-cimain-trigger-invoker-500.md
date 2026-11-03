@@ -160,3 +160,23 @@ canton-network-internal), which the sandbox cannot read; a likely cause is a fai
 pipeline API) that the invoker does not handle. If it recurs, check the invoker logs for 09:20-09:41 UTC on
 2026-11-03. Note the job log of deploy_cimain itself was never reached; the CircleCI deploy for 8fd9921238 ran
 from attempt 4.
+
+## Update 2026-11-03: invoker log (user, recipe 13)
+
+Command (run by the user on the host):
+```
+gcloud logging read 'timestamp>="2026-11-03T09:15:00Z" AND timestamp<="2026-11-03T09:45:00Z" AND (resource.type=("cloud_run_revision" OR "cloud_function")) AND ((severity>=ERROR OR httpRequest.status>=500))' --project da-cn-ci --order asc --limit 200 --format 'value(timestamp,severity,resource.labels.service_name,resource.labels.function_name,httpRequest.status,textPayload,jsonPayload.message)'
+```
+Output (excerpt as pasted by the user; frames inside flask and functions_framework omitted):
+```
+2026-11-03T09:25:28.024170Z    ERROR    invoke-circleci-workflow            Traceback (most recent call last):
+  ...
+  File "/workspace/main.py", line 21, in main
+    github_secret = gsm.projects().secrets().versions().access(name = "projects/656816146299/secrets/github_token/versions/latest").execute()
+  ...
+googleapiclient.errors.HttpError: <HttpError 403 when requesting https://secretmanager.googleapis.com/v1beta1/projects/656816146299/secrets/github_token/versions/latest:access?alt=json returned "Permission 'secretmanager.versions.access' denied on resource (or it may not exist).
+```
+Root cause: the Cloud Function `invoke-circleci-workflow` (project da-cn-ci) reads its GitHub token from Secret
+Manager on every request; that access was denied (403) during the window, so every trigger failed with 500. Access
+worked again by 09:44:12 (attempt 4). Not identified: which IAM change removed and restored the access (the user
+reports it as a permission problem that was fixed). The splice workflow and commit are not involved.
