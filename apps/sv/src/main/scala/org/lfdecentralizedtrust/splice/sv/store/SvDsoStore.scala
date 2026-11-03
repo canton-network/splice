@@ -854,10 +854,14 @@ trait SvDsoStore
     splice.amulet.RewardCouponV2,
   ]
 
+  /** Lists expired `FeaturedAppConfigUpdateInstruction` contracts whose provider no longer has a
+    * `FeaturedAppRight`. Instructions whose provider still has a right are excluded via an anti-join
+    * so the SVs' voted-on config update is not discarded; those get executed instead.
+    */
   def listExpiredFeaturedAppConfigUpdateInstruction: ListExpiredContracts[
     FeaturedAppConfigUpdateInstruction.ContractId,
     FeaturedAppConfigUpdateInstruction,
-  ] = multiDomainAcsStore.listExpiredFromPayloadExpiry(FeaturedAppConfigUpdateInstruction.COMPANION)
+  ]
 
   /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
     * Returns only the parties, not the coupons, to keep the query index-only.

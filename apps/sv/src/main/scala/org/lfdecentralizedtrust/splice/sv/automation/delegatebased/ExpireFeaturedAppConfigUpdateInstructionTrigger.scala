@@ -17,7 +17,11 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 
 import scala.concurrent.{ExecutionContext, Future}
 
-// Ideally this trigger should never execute
+// This trigger expires FeaturedAppConfigUpdateInstructions whose provider no longer has a
+// FeaturedAppRight. It can fire under normal circumstances when a config update races the revocation
+// of a provider's featured app right (more likely with automatic FA underlocking enforcement, see
+// CIP-0127). Instructions whose provider still has a right are excluded from expiry by
+// listExpiredFeaturedAppConfigUpdateInstruction so the SVs' voted-on config update is not discarded.
 class ExpireFeaturedAppConfigUpdateInstructionTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,

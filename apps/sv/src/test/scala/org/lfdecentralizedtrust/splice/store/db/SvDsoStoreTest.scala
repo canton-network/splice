@@ -2898,6 +2898,84 @@ class DbSvDsoStoreTest
 
   }
 
+  private def featuredAppConfigUpdateInstruction(
+      provider: PartyId,
+      expiresAt: Instant,
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    splice.dso.instruction.FeaturedAppConfigUpdateInstruction.ContractId,
+    splice.dso.instruction.FeaturedAppConfigUpdateInstruction,
+  ] = {
+    val emptyConfig = new splice.amulet.FeaturedAppConfig(
+      Optional.empty(),
+      Optional.empty(),
+      Optional.empty(),
+    )
+    contract(
+      identifier =
+        splice.dso.instruction.FeaturedAppConfigUpdateInstruction.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId =
+        new splice.dso.instruction.FeaturedAppConfigUpdateInstruction.ContractId(contractId),
+      payload = new splice.dso.instruction.FeaturedAppConfigUpdateInstruction(
+        dso.toProtoPrimitive,
+        provider.toProtoPrimitive,
+        new splice.amulet.FeaturedAppRight_UpdateConfig(emptyConfig, emptyConfig),
+        expiresAt,
+      ),
+    )
+  }
+
+  "listExpiredFeaturedAppConfigUpdateInstruction" should {
+
+    "return expired instructions whose provider has no FeaturedAppRight, and exclude those still featured or of another DSO" in {
+      val unfeaturedProvider = userParty(1)
+      val featuredProvider = userParty(2)
+      val otherUnfeaturedProvider = userParty(3)
+      val unfeaturedInstruction =
+        featuredAppConfigUpdateInstruction(unfeaturedProvider, time(2).toInstant)
+      val featuredInstruction =
+        featuredAppConfigUpdateInstruction(featuredProvider, time(2).toInstant)
+      // A different provider with no right of its own: featuredProvider's right must not shield it.
+      val otherUnfeaturedInstruction =
+        featuredAppConfigUpdateInstruction(otherUnfeaturedProvider, time(2).toInstant)
+      // The 'dso' party differs from mkStore()'s, so this is never ingested and must not show up.
+      val otherDsoInstruction =
+        featuredAppConfigUpdateInstruction(
+          unfeaturedProvider,
+          time(2).toInstant,
+          dso = userParty(4),
+        )
+      for {
+        store <- mkStore()
+        // A right exists only for featuredProvider, so only its instruction must be anti-joined out.
+        _ <- dummyDomain.create(featuredAppRight(featuredProvider))(store.multiDomainAcsStore)
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(
+            unfeaturedInstruction,
+            featuredInstruction,
+            otherUnfeaturedInstruction,
+            otherDsoInstruction,
+          )
+        )(dummyDomain.create(_)(store.multiDomainAcsStore))
+      } yield {
+        def cidsAt(t: CantonTimestamp) = store
+          .listExpiredFeaturedAppConfigUpdateInstruction(t, PageLimit.tryCreate(10))(
+            TraceContext.empty
+          )
+          .futureValue
+          .map(_.contract.contractId)
+
+        // 'contract_expires_at < now' is strict: an instruction is not expired at its own expiresAt.
+        cidsAt(time(2)) should be(empty)
+        cidsAt(time(3)) should contain theSameElementsAs Seq(
+          unfeaturedInstruction.contractId,
+          otherUnfeaturedInstruction.contractId,
+        )
+      }
+    }
+  }
+
   "listVoteRequestsReadyToBeClosed" should {
 
     val votesAccept =

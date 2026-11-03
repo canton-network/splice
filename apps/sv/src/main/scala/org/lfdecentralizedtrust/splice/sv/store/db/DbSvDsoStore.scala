@@ -1635,6 +1635,42 @@ class DbSvDsoStore private (
       }
   }
 
+  override def listExpiredFeaturedAppConfigUpdateInstruction: ListExpiredContracts[
+    FeaturedAppConfigUpdateInstruction.ContractId,
+    FeaturedAppConfigUpdateInstruction,
+  ] = { (now, limit) => implicit tc =>
+    waitUntilAcsIngested {
+      for {
+        result <- storage.query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            FeaturedAppConfigUpdateInstruction.COMPANION,
+            additionalWhere = sql"""and acs.contract_expires_at < $now
+              and not exists (
+                select 1
+                from #${DsoTables.acsTableName} fa_right
+                where fa_right.store_id = acs.store_id
+                  and fa_right.migration_id = acs.migration_id
+                  and fa_right.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+                  and fa_right.template_id_qualified_name = ${QualifiedName(
+                FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
+              )}
+                  and fa_right.assigned_domain is not null
+                  and fa_right.featured_app_right_provider = acs.create_arguments->>'provider'
+              )""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listExpiredFeaturedAppConfigUpdateInstruction",
+        )
+        limited = applyLimit("listExpiredFeaturedAppConfigUpdateInstruction", limit, result)
+      } yield limited.map(
+        assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(_)
+      )
+    }
+  }
+
   override def listMemberTrafficContracts(
       memberId: StoreMemberId,
       synchronizerId: SynchronizerId,
