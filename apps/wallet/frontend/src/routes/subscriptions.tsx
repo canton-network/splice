@@ -10,9 +10,9 @@ import {
   unitToCurrency,
 } from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
-import differenceInMilliseconds from 'date-fns/differenceInMilliseconds';
-import intlFormat from 'date-fns/intlFormat';
-import parseISO from 'date-fns/parseISO';
+import { differenceInMilliseconds } from 'date-fns';
+import { intlFormat } from 'date-fns';
+import { parseISO } from 'date-fns';
 
 import {
   Box,
