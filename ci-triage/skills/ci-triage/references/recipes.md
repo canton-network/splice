@@ -116,7 +116,7 @@ it in the background, and a worktree on a newer main than the sandbox image down
 ```
 cd ../fix-<ref> && direnv allow .
 direnv exec . sbt --batch formatFix
-direnv exec . sbt --batch "Test/compile lint updateTestConfigForParallelRuns updateDarResources"
+direnv exec . sbt --batch Test/compile lint updateTestConfigForParallelRuns updateDarResources   # separate args: one quoted string fails to parse (CI word-splits its cmd)
 git status --short          # must be empty apart from build logs; commit formatFix changes, test-*.log, DarResources
 ```
 
