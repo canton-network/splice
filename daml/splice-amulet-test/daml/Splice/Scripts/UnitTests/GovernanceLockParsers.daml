@@ -164,9 +164,9 @@ test_governanceLockMetadataParser = do
   expectSuccess (mkMeta [(lockSubjectMetaKey, "provider")]) $
     run [reason $ lockSubjectMetaKey <> "=provider"]
 
-  -- Keys are kept as written, even if they contain `cipMetaPrefix`
-  expectSuccess (mkMeta [(cipMetaPrefix <> lockSubjectMetaKey, "provider")]) $
-    run [reason $ cipMetaPrefix <> lockSubjectMetaKey <> "=provider"]
+  -- Keys are kept as written, even if they start with `cip-127/`
+  expectSuccess (mkMeta [("cip-127/" <> lockSubjectMetaKey, "provider")]) $
+    run [reason $ "cip-127/" <> lockSubjectMetaKey <> "=provider"]
 
   -- `&` separates the pairs, and the other metadata fields are ignored
   expectSuccess
@@ -335,11 +335,11 @@ test_governanceLockRequestTSv1Parser = do
     ]
     $ run lockManagerParty (request "withdraw-vested-funds" :: faLock)
 
-  -- The request is required and must be known; the value has no `cipMetaPrefix`
+  -- The request is required and must be known; the value has no `cip-127/` prefix
   expectRequestErrors [missingMemoKeyMessage requestMetaKey] $ run lockManagerParty faLock
   expectRequestErrors ["Invalid request: 'unlock'"] $ run lockManagerParty (request "unlock" :: faLock)
-  expectRequestErrors ["Invalid request: '" <> cipMetaPrefix <> "create-lock'"] $
-    run lockManagerParty (request (cipMetaPrefix <> "create-lock") :: faLock)
+  expectRequestErrors ["Invalid request: 'cip-127/create-lock'"] $
+    run lockManagerParty (request "cip-127/create-lock" :: faLock)
 
   -- Creating, unlocking and transferring a lock needs the lock manager as the receiver
   expectRequestErrors [invalidReceiverError alice] $ run alice (request "create-lock" :: faLock)

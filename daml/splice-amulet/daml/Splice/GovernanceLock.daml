@@ -51,7 +51,6 @@ module Splice.GovernanceLock (
   encodeCommonLockMetadataEntries,
   encodeLockCompatMemo,
   encodeGovernanceLockMetadataWithRequest,
-  cipMetaPrefix,
   cipMemoPrefix,
   requestMetaKey,
   unlockAmountMetaKey,
@@ -698,12 +697,8 @@ lockAmuletFor forOwner@ForOwner {..} receiver specs holdingInputs context reason
 
 cipPrefix = "cip-127"
 
--- | Prefix that `encodeLockMetadataEntries` adds to the metadata keys below.
--- The keys are defined without it, as they are written in memos.
-cipMetaPrefix = cipPrefix <> "/"
-
 -- | Prefix of the memo tag used to specify lock attributes.
-cipMemoPrefix = cipMetaPrefix <> "memo:"
+cipMemoPrefix = cipPrefix <> "/memo:"
 
 -- | Metadata key that specifies the requested lock operation.
 requestMetaKey = "request"
@@ -774,12 +769,9 @@ encodeGovernanceLockMetadataWithRequest : Text -> GovernanceLockSpecification ->
 encodeGovernanceLockMetadataWithRequest request spec =
   encodeLockMetadataEntries $ (requestMetaKey, request) :: encodeGovernanceLockSpecMetadataEntries spec
 
--- | Metadata with the given entries under keys prefixed with `cipMetaPrefix`,
--- and a memo that lists them in the given order.
+-- | Metadata whose only entry is the reason, a memo that lists the given entries in the given order.
 encodeLockMetadataEntries : [(Text, Text)] -> Metadata
-encodeLockMetadataEntries entries =
-  reasonToMeta (encodeLockCompatMemo entries) $
-    Metadata $ TextMap.fromList [(cipMetaPrefix <> k, v) | (k, v) <- entries]
+encodeLockMetadataEntries entries = reasonToMeta (encodeLockCompatMemo entries) emptyMetadata
 
 -- | The memo of the given metadata entries. It keeps the order of the entries,
 -- so that wallets show the memos as the CIP writes them.

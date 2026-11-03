@@ -25,16 +25,11 @@ test_tsv1Encoding = do
       === "cip-127/memo:lock-kind=sv-lock&lock-subject=someSv&lock-status=locked"
     encodeLockCompatMemo (encodeCommonLockMetadataEntries (GLK_ProvisionalFeaturedApp provider) LS_Vesting)
       === ("cip-127/memo:lock-kind=provisional-fa-lock&lock-subject=" <> partyToText provider <> "&lock-status=vesting")
-    -- The metadata keys carry the CIP prefix, unlike the keys in the memo
+    -- The lock information is only in the memo, not in separate metadata entries
     encodeGovernanceLockMetadataWithRequest "accept-to-transfer-lock"
         (GLS_FullLock FullLockSpecification with kind = GLK_SuperValidatorRightsOwner "someSv")
-      === Metadata (TextMap.fromList
-            [ ("cip-127/request", "accept-to-transfer-lock")
-            , ("cip-127/lock-kind", "sv-lock")
-            , ("cip-127/lock-subject", "someSv")
-            , ("cip-127/lock-status", "locked")
-            , (reasonMetaKey, "cip-127/memo:request=accept-to-transfer-lock&lock-kind=sv-lock&lock-subject=someSv&lock-status=locked")
-            ])
+      === Metadata (TextMap.singleton reasonMetaKey
+            "cip-127/memo:request=accept-to-transfer-lock&lock-kind=sv-lock&lock-subject=someSv&lock-status=locked")
   where
     provider = fromSome $ partyFromText "someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab"
 
