@@ -116,7 +116,6 @@ export async function installNode(
     },
     nodeType,
     configuredPeerAddresses,
-    nodeType === 'dsync', // autoInit is true for dsync nodes, false for sv nodes
     undefined,
     { dependsOn: imagePullDeps },
     supportsReset,

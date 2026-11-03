@@ -43,7 +43,6 @@ export async function installCantonComponents(
   },
   ledgerApiConsumerAppName: 'sv' | 'dsync',
   configuredCantonBftPeerUrls: string[],
-  autoInit: boolean,
   dbs?: {
     participant: Postgres;
     mediator: Postgres;
@@ -133,7 +132,6 @@ export async function installCantonComponents(
             setCoreDbNames: svConfig.isCoreSv,
           },
           configuredCantonBftPeerUrls,
-          autoInit,
           version,
           imagePullServiceAccountName,
           opts
