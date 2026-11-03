@@ -238,27 +238,29 @@ participants.foreach { participant =>
 
 val maxTraffic = NonNegativeLong.tryCreate(Long.MaxValue)
 
-// Base traffic is zero, so every participant needs purchased traffic to be able to submit anything.
+// Base traffic is zero, so every participant and mediator needs purchased traffic to be able to submit anything.
 // We always use serial 1: on reruns the sequencers ignore the update as outdated, which is fine
 // since the balance is already max.
 // The update is delivered as soon as a threshold of sequencers submitted it, and further submissions
 // of it are then refused, so only the 2 sequencers required by the threshold set above submit it.
 // Resubmitting within the same submission window would be refused for the same reason, so we skip
-// participants that already have a traffic balance. The sequencers only report the traffic state of
-// members that are known in the topology, so this only works once the participant has connected.
-participants.foreach { participant =>
+// members that already have a traffic balance. The sequencers only report the traffic state of
+// members that are known in the topology, so for participants this only works once they have connected.
+val trafficMembers: Seq[(String, Member)] =
+  participants.map(p => p.name -> p.id) ++ mediators.map(m => m.name -> m.id)
+trafficMembers.foreach { case (name, member) =>
   val hasTrafficBalance = sequencers.head.traffic_control
-    .traffic_state_of_members(Seq(participant.id))
+    .traffic_state_of_members(Seq(member))
     .trafficStates
-    .get(participant.id)
+    .get(member)
     .exists(_.serial.isDefined)
   if (hasTrafficBalance) {
-    println(s"${participant.name} already has a traffic balance, skipping")
+    println(s"$name already has a traffic balance, skipping")
   } else {
-    println(s"Setting traffic balance of ${participant.name} to max...")
+    println(s"Setting traffic balance of $name to max...")
     sequencers
       .take(2)
-      .foreach(_.traffic_control.set_traffic_balance(participant.id, PositiveInt.one, maxTraffic))
+      .foreach(_.traffic_control.set_traffic_balance(member, PositiveInt.one, maxTraffic))
   }
 }
 
