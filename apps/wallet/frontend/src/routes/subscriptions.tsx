@@ -78,6 +78,7 @@ const Subscriptions: React.FC = () => {
                   <SubscriptionRow
                     key={subscription.subscription.contractId}
                     subscription={subscription}
+                    fetchedAt={new Date(subscriptionQuery.dataUpdatedAt)}
                     cancelSubscription={onCancel}
                     amuletPrice={amuletPriceQuery.data}
                   />
@@ -93,11 +94,14 @@ const Subscriptions: React.FC = () => {
 
 interface SubscriptionRowProps {
   subscription: WalletSubscription;
+  /** When the subscription was fetched; the time left until the payment is due is relative to it. */
+  fetchedAt: Date;
   cancelSubscription: () => void;
   amuletPrice: BigNumber;
 }
 const SubscriptionRow: React.FC<SubscriptionRowProps> = ({
   subscription,
+  fetchedAt,
   cancelSubscription,
   amuletPrice,
 }) => {
@@ -119,7 +123,7 @@ const SubscriptionRow: React.FC<SubscriptionRowProps> = ({
         <Price payData={subscription.state.value.payload.payData} amuletPrice={amuletPrice} />
       </TableCell>
       <TableCell>
-        <PaymentDue state={subscription.state} />
+        <PaymentDue state={subscription.state} now={fetchedAt} />
       </TableCell>
       <TableCell>
         <DisableConditionally
@@ -188,7 +192,7 @@ const Price: React.FC<PriceProps> = ({ payData, amuletPrice }) => {
   );
 };
 
-const PaymentDue: React.FC<{ state: SubscriptionState }> = ({ state }) => {
+const PaymentDue: React.FC<{ state: SubscriptionState; now: Date }> = ({ state, now }) => {
   let paymentDueAtString: string;
   switch (state.type) {
     case 'idle':
@@ -199,7 +203,6 @@ const PaymentDue: React.FC<{ state: SubscriptionState }> = ({ state }) => {
       break;
   }
   const paymentDueAt = parseISO(paymentDueAtString);
-  const now = new Date();
   const millisecondsLeft = differenceInMilliseconds(paymentDueAt, now);
   return (
     <Stack>

@@ -92,7 +92,7 @@ export const UserProvider: React.FC<{
     }
   };
 
-  const signoutInFlight = useRef(false);
+  const signoutInFlightRef = useRef(false);
 
   const signoutFromIdp = useCallback(() => {
     if (auth === undefined || !auth.isAuthenticated) return;
@@ -102,8 +102,8 @@ export const UserProvider: React.FC<{
   }, [auth]);
 
   const signoutOnExpiry = useCallback(() => {
-    if (signoutInFlight.current) return;
-    signoutInFlight.current = true;
+    if (signoutInFlightRef.current) return;
+    signoutInFlightRef.current = true;
     signoutFromIdp();
   }, [signoutFromIdp]);
 

@@ -1,7 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
-import pluginReact from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import eslintConfigPrettier from "eslint-config-prettier/flat";
 import tanstackQuery from "@tanstack/eslint-plugin-query";
@@ -15,25 +14,6 @@ export default defineConfig([
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/explicit-module-boundary-types": "warn",
-      "react/jsx-key": [
-        "warn",
-        { warnOnDuplicates: true, checkFragmentShorthand: true },
-      ],
-      "react/jsx-boolean-value": "warn",
-      "react/function-component-definition": [
-        "warn",
-        {
-          namedComponents: "arrow-function",
-          unnamedComponents: "arrow-function",
-        },
-      ],
-      "react/react-in-jsx-scope": "off",
-      "react/jsx-uses-react": "off",
-    },
-    settings: {
-      react: {
-        version: "detect",
-      },
     },
   },
   {
@@ -41,7 +21,6 @@ export default defineConfig([
     languageOptions: { globals: globals.browser },
   },
   tseslint.configs.recommended,
-  pluginReact.configs.flat["jsx-runtime"],
   reactHooks.configs.flat.recommended,
   tanstackQuery.configs["flat/recommended"],
   eslintConfigPrettier,
