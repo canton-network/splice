@@ -132,6 +132,8 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 
 A new recipe that needs a loop, pagination or JSON handling becomes a script here, not a pasted block.
 
-One-liners handed to the user (issue comments, closes, retitles) must work in bash, zsh and fish alike: plain `gh`
-calls, every argument in single quotes, and no single quote, backslash or newline inside an argument (rephrase:
-"the log of sv1", not "sv1's log"). Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.
+Commands handed to the user (issue comments, closes, retitles) must work in bash, zsh and fish alike: plain `gh`
+calls, every argument in single quotes, and no single quote or backslash inside an argument (fish treats `\\` and
+`\'` as escapes inside single quotes, bash and zsh do not; rephrase: "the log of sv1", not "sv1's log"). Newlines
+inside a quoted argument are fine in all three shells: write comment bodies as readable Markdown, with paragraphs
+and fenced code blocks for log lines. Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.
