@@ -110,7 +110,7 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 | # | Refs | Class | Signature | Family | State |
 |---|---|---|---|---|---|
 | 1 | 11152, 11153, 11154 | new | Deploy CIMain trigger: cluster test invoker HTTP 500, 3 attempts | J | resolved |
-| 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | presented |
+| 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | presented, waiting for run |
 | 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | open |
 | 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | open |
 | 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | open |
@@ -143,3 +143,6 @@ Item 2 (family Z): user asked for automatic fix branches when the cause is estab
 (skills updated, 5828036a17). Branch rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx, commit
 0c380008f0: aliceValidatorWalletClient.tap(1.0) after createTransferOffer in the act step. Not compiled: nix in the
 worktree started downloading (newer pin on main), stopped; the user was told to rebuild the image.
+
+Item 2: user opened PR 8211 (auto-merge). No new comment on 11128 (the comment of 2026-11-02 already has the cause);
+only the duplicates are closed. 11128 keeps its Status; close it once 8211 is merged.

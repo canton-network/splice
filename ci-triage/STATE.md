@@ -40,7 +40,7 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 ## Open fix branches
 
 2026-11-03: `rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx` (0c380008f0, off main 8dacec5c10):
-family Z test fix, a tap after the private offer; not compiled locally (dev shell needs newer nix paths), CI via [ci].
+family Z test fix, a tap after the private offer; PR canton-network/splice#8211 (auto-merge), opened 2026-11-03.
 
 From the previous handover, 2026-11-02:
 

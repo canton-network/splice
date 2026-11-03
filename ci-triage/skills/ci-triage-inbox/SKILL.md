@@ -115,7 +115,8 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
   4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status. When
      the fix qualifies (ci-triage step 9: established cause, test-only, one screen), create the fix branch before
      presenting and show its diff here; otherwise offer it.
-  5. Its commands only (comment, close as duplicate, retitle, Status), in one `~~~` fenced block, after re-checking
+  5. Its commands only (comment, close as duplicate, retitle, Status; no new comment on an issue whose existing
+     root-cause comment still holds), in one `~~~` fenced block, after re-checking
      the live state of its refs (step 7, first bullet). Comments follow
      `ci-triage/skills/ci-triage/references/issue-comment.md`. Print the full body of every comment in chat for
      review, also when it is posted from a body file and also when it is unchanged from an earlier message.
