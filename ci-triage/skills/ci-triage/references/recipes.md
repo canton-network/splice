@@ -124,6 +124,10 @@ fails with `git fetch origin release-line-<x> failed (exit 128)`; fetch it over 
 https://github.com/canton-network/splice.git release-line-<x>:refs/remotes/origin/release-line-<x>`). The `.envrc`
 heap (`-Xmx16G`) gets formatFix OOM-killed (exit 137); run both sbt calls inside
 `direnv exec . bash -c 'export SBT_OPTS="${SBT_OPTS/-Xmx16G/-Xmx10G}"; sbt --batch ...'`.
+Even with -Xmx7G, lint was OOM-killed on 2026-11-03: the pulumi lint runs about 12 eslint/tsc node processes (0.6-1 GB
+each) next to the sbt JVM, and they survive the killed sbt (`pkill -f '<worktree>/.*node_modules'`). Fallback until the
+sandbox has more memory: `scalafmtOnly <files>` plus `<project>/Test/compile`, say that lint did not run locally,
+and rely on the PR's static_tests.
 
 ## 9. Export recent issues on the host
 
