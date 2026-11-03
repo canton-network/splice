@@ -61,8 +61,8 @@ packet and asks you to return the INDEX rows, catalogue notes and commands inste
      missing synchronization in a test, more for complex ones), optionally a retitle to
      `<Suite or job>: <cause>` while the title still starts with `GHA Run` or `Pipeline`, and
      `direnv exec . ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
-   - Duplicate: `gh issue close <ref> -R DACH-NY/cn-test-failures --duplicate-of <parent> --comment '<why>'`
-     (closing moves it to `Closed`). When the parent is open and recurs often, a short recurrence comment on it.
+   - Duplicate: `direnv exec . ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'`, one line
+     per parent with all its duplicates (closing moves them to `Closed`). When the parent is open and recurs often, a short recurrence comment on it.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
    Cite the packet by its path on the triage branch.

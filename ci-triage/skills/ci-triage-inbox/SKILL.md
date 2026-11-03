@@ -77,6 +77,7 @@ reconciled in step 5.
 - Re-check the live state of every target first (`ghx`, or a fresh recipe 9 export) and drop what is already done;
   say "already done: ..." for those.
 - One message: the verdict table (ref, class or verdict, parent, action), what needs an owner, then one fenced
-  block with every command in this order: comments, closes as duplicate, retitles, `set_status.py` lines (one per
-  target Status, all refs on it), log requests. One command per issue otherwise, no loops, no placeholders.
+  block with every command in this order: comments, `close_duplicates.py` lines (one per parent, all its
+  duplicates and one shared comment), retitles, `set_status.py` lines (one per target Status, all refs on it), log
+  requests. One command per issue otherwise, no loops, no placeholders.
 - End with the commit list and the fetch commands for the user (global CLAUDE.md template).

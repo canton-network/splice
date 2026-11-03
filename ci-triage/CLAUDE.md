@@ -95,6 +95,7 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | `export_issues.py --since <date>` | host | recent issues with comments (recipe 9) |
 | `export_inbox.py` | host | Status = Inbox items of project 48 (recipe 10) |
 | `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |
+| `close_duplicates.py <parent> <ref>... --comment '<text>'` | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
 | `inbox_from_timelines.py` | sandbox, `ghx` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
 
 A new recipe that needs a loop, pagination or JSON handling becomes a script here, not a pasted block.
