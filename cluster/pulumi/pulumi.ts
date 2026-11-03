@@ -223,7 +223,7 @@ export class OperationLimiter {
 }
 
 export const maxParallelPulumiOperations = parseInt(
-  config.optionalEnv('PULUMI_MAX_PARALLEL_OPERATIONS') || '4'
+  config.optionalEnv('PULUMI_MAX_PARALLEL_OPERATIONS') || '8'
 );
 
 export interface Operation {
