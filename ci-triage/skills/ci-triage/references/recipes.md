@@ -174,3 +174,18 @@ only changed when its current Status is FROM, so a second run is harmless. `--dr
 ```
 direnv exec . ci-triage/scripts/set_status.py Inbox Triaged 11140 10495
 ```
+
+## 13. GCP logs for an infra failure (user looks)
+
+The sandbox has no GCP access, but the user can read GCP logs. When the cause sits in a GCP service (cluster test
+invoker, failure notifications invoker, cluster apps), do not stop at "not checked": build the query in the
+sandbox and hand the user the link and the command; the pasted `gcloud` output becomes verbatim evidence.
+```
+ci-triage/scripts/gcp_logs.py --project <project> --start <UTC> --end <UTC> --filter '<query line>' [--filter ...]
+```
+Window: the failing period plus 5 min on each side. Say which parts of the query are guesses (project, resource
+type, service name) and ask the user to correct them; record confirmed values here.
+
+| Target | Project | Filter | Confirmed |
+|---|---|---|---|
+| cluster test invoker (`CLUSTER_TEST_INVOKER_URL`, Python/Werkzeug, ID-token auth) | da-cn-ci (guess) | `resource.type=("cloud_run_revision" OR "cloud_function")`, `(severity>=ERROR OR httpRequest.status>=500)` | no |

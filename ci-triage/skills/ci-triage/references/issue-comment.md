@@ -10,7 +10,8 @@ Shape (Markdown, short paragraphs; a few sentences each):
    secrets and long JSON trimmed with `...`), then one or two sentences interpreting them.
 4. What rules out the alternatives (same sha passing, later runs, unrelated commit, family checked).
 5. Resolution: the fix (file and change) or why none is needed; owner if known.
-6. Not checked: what was not verified and where the missing evidence lives; when it is worth chasing.
+6. Not checked: what was not verified and where the missing evidence lives; when it is worth chasing. If the
+   evidence is in a system the user can read (GCP logs: recipe 13), hand them the link before writing this.
 
 Leave out what the reader can see on the issue itself (links, the job list) and the triage process (which recipes
 ran, what was grepped). Duplicate-close comments stay one or two sentences: parent, and the one fact that makes it

@@ -129,6 +129,7 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | `close_duplicates.py <parent> <ref>... --comment '<text>'` | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
 | `probe_access.py` | sandbox | which method reads which private data (CLAUDE.md, Access) |
 | `inbox_from_timelines.py` | sandbox, `ghx` or `gh api` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
+| `gcp_logs.py --project <p> --start <t> --end <t> --filter <q>` | sandbox | Logs Explorer URL and `gcloud logging read` command for the user (recipe 13) |
 
 A new recipe that needs a loop, pagination or JSON handling becomes a script here, not a pasted block.
 
