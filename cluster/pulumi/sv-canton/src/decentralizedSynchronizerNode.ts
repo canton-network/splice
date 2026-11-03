@@ -107,7 +107,6 @@ abstract class InStackDecentralizedSynchronizerNode
             port: number;
           }[];
         },
-    autoInit: boolean,
     version: CnChartVersion,
     logLevel?: LogLevel,
     logLevelStdout?: LogLevel,
@@ -292,7 +291,6 @@ export class InStackCometBftDecentralizedSynchronizerNode
         host: pulumi.interpolate`${cometbftRelease.rpcServiceName}.${xns.logicalName}.svc.cluster.local`,
         port: 26657,
       },
-      false, // autoInit is used only in dSyncs, which do not support cometBFT
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,
@@ -317,7 +315,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       bftSequencerPostgres?: Postgres;
     },
     configuredPeerUrls: string[],
-    autoInit: boolean,
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     opts?: SpliceCustomResourceOptions
@@ -349,7 +346,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
           };
         }),
       },
-      autoInit,
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,

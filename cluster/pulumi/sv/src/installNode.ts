@@ -4,6 +4,7 @@ import {
   activeVersion,
   Auth0Client,
   auth0UserNameEnvVarSource,
+  DecentralizedSynchronizerUpgradeConfig,
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
@@ -11,12 +12,12 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
+  installParticipant,
   StaticSvConfig,
   svConfigs,
   svRunbookConfig,
 } from '@canton-network/splice-pulumi-common-sv';
 
-import { installParticipant } from './participant';
 import { installSvApps } from './sv';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
@@ -39,6 +40,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       logging: config.logging,
       auth0: auth0Config,
       version,
+      migrationId: DecentralizedSynchronizerUpgradeConfig.activeMigrationId,
       disableProtection: staticConfig.nodeName === svRunbookConfig.nodeName,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,

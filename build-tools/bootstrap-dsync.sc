@@ -1,8 +1,9 @@
-import com.digitalasset.canton.console.{InstanceReference, SequencerReference}
+import com.digitalasset.canton.console.{InstanceReference, ParticipantReference, SequencerReference}
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
 
 val sequencers = Seq(sequencer1, sequencer2, sequencer3, sequencer4)
 val mediators = Seq(mediator1, mediator2, mediator3, mediator4)
+val participants = Seq(participant1, participant2, participant3, participant4)
 val nodes = sequencers ++ mediators
 // We have a threshold of three, so signing the bootstrapping transactions only with the first three sequencers.
 val signingSequencers = sequencers.take(3)
@@ -121,6 +122,11 @@ def hasProposedSynchronizerParameters(
 
 nodes.foreach(initManually)
 
+participants.foreach { participant =>
+  println(s"Waiting for ${participant.name} to be initialized...")
+  participant.health.wait_for_initialized()
+}
+
 val synchronizerId =
   if (nodes.forall(_.health.initialized())) {
     println("Synchronizer is already bootstrapped, skipping")
@@ -205,3 +211,73 @@ proposeBySigningSequencers("Turning on traffic management")(
       signedBy = Some(fingerprint(node)),
     ),
 )
+
+// Onboarding is restricted, so every participant needs a permission from the synchronizer owners before it can connect.
+participants.foreach { participant =>
+  def hasPermission(node: InstanceReference, proposals: Boolean) =
+    node.topology.participant_synchronizer_permissions
+      .list(
+        store = TopologyStoreId.Synchronizer(synchronizerId),
+        proposals = proposals,
+        filterUid = participant.id.filterString,
+      )
+      .exists(r => !proposals || r.context.signedBy.contains(fingerprint(node)))
+
+  proposeBySigningSequencers(s"Granting synchronizer permission to ${participant.name}")(
+    isDone = () => hasPermission(sequencers.head, proposals = false),
+    hasProposed = hasPermission(_, proposals = true),
+    propose = node =>
+      node.topology.participant_synchronizer_permissions.propose(
+        synchronizerId,
+        participant.id,
+        ParticipantPermission.Submission,
+        synchronize = None,
+      ),
+  )
+}
+
+// Every participant connects to the sequencer in its own namespace.
+val synchronizerAlias = SynchronizerAlias.tryCreate("dedicated")
+participants.foreach { participant =>
+  if (participant.synchronizers.is_connected(synchronizerId)) {
+    println(s"${participant.name} is already connected to the synchronizer, skipping")
+  } else {
+    println(s"Connecting ${participant.name} to the synchronizer...")
+    // synchronize = None: the default waits for all console nodes to be idle, including ownsequencer, whose admin API isn't reachable from this console.
+    participant.synchronizers.connect_local(ownsequencer, synchronizerAlias, synchronize = None)
+    utils.retry_until_true(participant.synchronizers.is_connected(synchronizerId))
+  }
+}
+
+val maxTraffic = NonNegativeLong.tryCreate(Long.MaxValue)
+// The update is delivered as soon as a threshold of sequencers submitted it, and further submissions
+// of it are then refused, so only the 2 sequencers required by the threshold set above submit it.
+val trafficSubmittingSequencers = sequencers.take(2)
+
+def trafficState(sequencer: SequencerReference, participant: ParticipantReference) =
+  sequencer.traffic_control
+    .traffic_state_of_members(Seq(participant.id))
+    .trafficStates
+    .get(participant.id)
+
+// Base traffic is zero, so every participant needs purchased traffic to be able to submit anything.
+// We always use serial 1: on reruns the sequencers ignore the update as outdated, which is fine
+// since the balance is already max.
+// Resubmitting within the same submission window would be refused, so we skip participants that
+// already have a traffic balance.
+participants.foreach { participant =>
+  // The sequencers refuse top-ups for members they have not registered yet, and only report the
+  // traffic state of registered members.
+  println(s"Waiting for the sequencers to register ${participant.name}...")
+  utils.retry_until_true(
+    trafficSubmittingSequencers.forall(trafficState(_, participant).isDefined)
+  )
+  if (trafficState(trafficSubmittingSequencers.head, participant).exists(_.serial.isDefined)) {
+    println(s"${participant.name} already has a traffic balance, skipping")
+  } else {
+    println(s"Setting traffic balance of ${participant.name} to max...")
+    trafficSubmittingSequencers.foreach(
+      _.traffic_control.set_traffic_balance(participant.id, PositiveInt.one, maxTraffic)
+    )
+  }
+}
