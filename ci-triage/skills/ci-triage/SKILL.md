@@ -68,7 +68,10 @@ edits to shared files.
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md` (self-contained for a senior engineer, no
    packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
-9. Fix, only when it is test-side and small enough to review in one screen: one branch per PR off `origin/main`
+9. Fix. Create the branch without asking when all of these hold: the root cause is established with evidence, the
+   fix touches only test code or test configuration (`src/test/`, test resources, test scripts; no production code,
+   no Daml, no deployment config), and it is small enough to review in one screen. Otherwise describe the fix
+   (file, change, owner) and create a branch only when asked. One branch per PR off `origin/main`
    (or the release line for a backport, `cherry-pick -x -s`), in its own worktree so the triage branch stays checked
    out (`references/recipes.md` section 8). When one branch fixes several refs, name it after the parent ref and
    list the others in the INDEX rows. Single-subject commit, no code comments. State plainly what was and was not

@@ -102,7 +102,7 @@ to find the code quickly; the jar of the version that ran stays the authority fo
 A separate worktree keeps the triage branch checked out. `-b` refuses to overwrite an existing branch; for a
 stacked follow-up, add a worktree for the existing branch instead.
 ```
-git fetch origin main
+git fetch origin main        # SSH origin unavailable in the sandbox: git fetch https://github.com/canton-network/splice.git main:refs/remotes/https-origin/main, then use https-origin/main
 git worktree add -b <user>/fix-<ref>-<slug> ../fix-<ref> origin/main       # e.g. <user>/fix-10172-multiarch-check-retry
 git worktree add -b <user>/backport-<ref>-<pr>-<release-line> ../backport-<ref> origin/<release-line>   # e.g. <user>/backport-10169-7299-release-line-0.8.3
 git worktree add ../fix-<ref> <user>/fix-<ref>-<slug>                        # stacked follow-up on an existing fix branch

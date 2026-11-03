@@ -85,7 +85,8 @@ first. Brief each with:
 - follow the ci-triage skill, steps 1 to 9, with these limits:
   - do not edit `INDEX.tsv`, `known-families.md` or `STATE.md`, do not commit, do not create or switch branches
     (other agents work in the same checkout);
-  - a test-side fix is described precisely (file, line, change), not written;
+  - a fix is described precisely (file, line, change), not written; say whether it qualifies for an automatic
+    fix branch (ci-triage step 9: established cause, test-only, one screen), which the main thread then creates;
   - make available to the main thread, in its round files or its final message: the verdict per ref, the INDEX.tsv
     rows (exact TSV), text for `known-families.md` (an occurrence note, or a new family section with the next free
     letter, plus its index row), and the issue commands (CLAUDE.md, Commands for the user; comments in the shape of
@@ -111,7 +112,9 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
   2. Cause: the mechanism in a few sentences, with the two or three log lines that prove it (verbatim, with
      timestamps); say what is verified and what is not.
   3. Why this and not something else: the family and duplicate check, and the alternatives ruled out.
-  4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status.
+  4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status. When
+     the fix qualifies (ci-triage step 9: established cause, test-only, one screen), create the fix branch before
+     presenting and show its diff here; otherwise offer it.
   5. Its commands only (comment, close as duplicate, retitle, Status), in one `~~~` fenced block, after re-checking
      the live state of its refs (step 7, first bullet). Comments follow
      `ci-triage/skills/ci-triage/references/issue-comment.md`. Print the full body of every comment in chat for
@@ -138,7 +141,9 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
   commit for the round, `[skip ci] <round dir name>: <one line per verdict group>`; in step mode one per item
   (step 5). Commit again whenever the round's state changes
   (hand-over, user feedback), so an interrupted round can be resumed from the branch.
-- Fix branches only when the user asks, one worktree per branch (ci-triage step 9).
+- Fix branches per ci-triage step 9: created without asking for established, test-only, one-screen fixes (batch
+  mode: by the main thread after the merge, since agents share the checkout), otherwise only when the user asks; one
+  worktree per branch. List them in `STATE.md` (open fix branches) and in the hand-over.
 
 ## 7. Hand over (batch mode)
 
