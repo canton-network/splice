@@ -169,6 +169,24 @@ describe('configureScanBigQuery', () => {
     expect(routineIds.includes('sp_purge_old_records_interned_strings')).toBe(replicated);
   });
 
+  test('interned_strings is appended by new key, the other tables by watermark', async () => {
+    const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
+    const bodies = new Map<string, string>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      const routineId = await outputValue(routine.routineId);
+      if (routineId.startsWith('sp_append_')) {
+        bodies.set(routineId, await outputValue(routine.definitionBody));
+      }
+    }
+    expect(bodies.size).toBe(6);
+    for (const [routineId, body] of bodies) {
+      expect(body).not.toContain('{{');
+      const byNewKey = routineId === 'sp_append_interned_strings';
+      expect(body.includes('max_closed_timestamp')).toBe(!byNewKey);
+      expect(body.includes('WHERE prod.id = staging.id')).toBe(byNewKey);
+    }
+  });
+
   test('neither Datastream backfills automatically', async () => {
     const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
     const streams = resources.filter(gcp.datastream.Stream.isInstance);

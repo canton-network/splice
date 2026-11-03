@@ -64,6 +64,13 @@ interface ReplicatedTableConfig {
   primaryKey: string;
   datePartitionColumn: string;
   timeType: 'micros' | 'datastream_metadata';
+  // How the hourly scheduled query appends staging rows to production:
+  // - 'watermark' (default): rows up to an hour before the newest staging row, past a watermark
+  //   (hourly_append.sql). For tables written continuously, whose rows may change.
+  // - 'newKeys': every row whose single-column primaryKey isn't in production yet
+  //   (append_new_keys.sql). For insert-only tables written in bursts, which the watermark would
+  //   leave in staging until the next burst.
+  appendMode?: 'watermark' | 'newKeys';
 }
 
 type ReplicatedTables = Record<string, ReplicatedTableConfig>;
@@ -101,6 +108,8 @@ const internedStringsTable: ReplicatedTables = {
     primaryKey: 'id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
+    // new strings arrive in bursts, e.g. on package upgrades, and are never changed
+    appendMode: 'newKeys',
   },
 };
 
@@ -430,7 +439,10 @@ function installBqScheduledQueryContext(): ScheduledQueryContext {
 // HOURLY DEDUPLICATION & SCHEDULED QUERIES
 // ============================================================================
 
-const rawSqlTemplate = fs.readFileSync(path.join(__dirname, 'hourly_append.sql'), 'utf8');
+const appendSqlTemplates = {
+  watermark: fs.readFileSync(path.join(__dirname, 'hourly_append.sql'), 'utf8'),
+  newKeys: fs.readFileSync(path.join(__dirname, 'append_new_keys.sql'), 'utf8'),
+};
 
 function installHourlyScheduledQueries(
   namespace: ExactNamespace,
@@ -444,6 +456,10 @@ function installHourlyScheduledQueries(
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
     const colName = tableConfig.datePartitionColumn;
+    const appendMode = tableConfig.appendMode ?? 'watermark';
+    if (appendMode === 'newKeys' && primaryKeyExpr.includes(',')) {
+      throw new Error(`${tableName}: appendMode 'newKeys' needs a single-column primary key`);
+    }
 
     let recordTimestampExpr: string;
     if (tableConfig.timeType === 'micros') {
@@ -465,7 +481,7 @@ function installHourlyScheduledQueries(
         const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
         const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
 
-        return rawSqlTemplate
+        return appendSqlTemplates[appendMode]
           .replaceAll('{{tableName}}', tableName)
           .replaceAll('{{schemaName}}', schemaName)
           .replaceAll('{{primaryKeyExpr}}', primaryKeyExpr)
