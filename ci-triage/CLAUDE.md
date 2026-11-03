@@ -114,7 +114,8 @@ is missing or newer than the export.
 - Commits: one subject line plus `-s`. `[skip ci]` on the triage branch (never on a PR branch: it makes the PR
   unmergeable), `[ci]` on fix branches, `[static]` for lint-only.
 - The triage branch carries only `ci-triage/`. Never commit memory files or CLAUDE.md files outside `ci-triage/`.
-- Do not run sbt compiles or start Canton unless asked; triage works from the run's logs and artifacts.
+- Do not run sbt compiles or start Canton unless asked; triage works from the run's logs and artifacts. Exception:
+  every fix branch passes the CI static checks locally before it is handed over (ci-triage step 9), never skipped.
 - Artifacts the sandbox downloads go to `log/<ref>/` (gitignored), with `TMPDIR` under `log/` too; keep `.clog.gz`
   compressed and stream with `zcat`. Never pipe a large `zcat` into `sort` (it spills to `/tmp`); count with `awk`.
   Never put tokens (e.g. a contents `download_url`) into files.

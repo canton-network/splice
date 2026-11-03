@@ -75,7 +75,9 @@ edits to shared files.
    (or the release line for a backport, `cherry-pick -x -s`), in its own worktree so the triage branch stays checked
    out (`references/recipes.md` section 8). When one branch fixes several refs, name it after the parent ref and
    list the others in the INDEX rows. Single-subject commit, no code comments. State plainly what was and was not
-   verified; cheap checks only (`scalafmtCheck`, `prettier --check`, config greps). Production changes are
+   verified. Static checks are mandatory before a fix branch is handed to the user, never skipped: run
+   `sbt --batch formatFix`, then the CI static check (`references/recipes.md` section 8) and commit what formatFix
+   changed; it must exit 0 with no further diff. Integration tests may be left to CI when they are expensive. Production changes are
    described and left to the owner unless asked.
 10. Commit on the triage branch with `[skip ci]` and `-s`. Report: one line per ref with duplicate verdict and fix
     state, then the commands from step 8, then the branch tips.

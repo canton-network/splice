@@ -111,7 +111,14 @@ git -C ../fix-<ref> commit -s -m "[ci] <one subject line>"
 git worktree remove ../fix-<ref>                                             # when done (the branch stays)
 ```
 The ref in the branch name is the cn-test-failures issue the branch fixes (the parent ref when it closes a family).
-Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install prettier --check <files>`.
+Static checks, mandatory for every fix branch (the CI static_tests job; a fresh worktree compiles everything, so run
+it in the background, and a worktree on a newer main than the sandbox image downloads its nix paths first):
+```
+cd ../fix-<ref> && direnv allow .
+direnv exec . sbt --batch formatFix
+direnv exec . sbt --batch "Test/compile lint updateTestConfigForParallelRuns updateDarResources"
+git status --short          # must be empty apart from build logs; commit formatFix changes, test-*.log, DarResources
+```
 
 ## 9. Export recent issues on the host
 
