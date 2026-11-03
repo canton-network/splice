@@ -189,6 +189,24 @@ describe('configureScanBigQuery', () => {
     }
   });
 
+  test('the watermark append adds and inserts staging columns by name', async () => {
+    const resources = await installBigQuery(true, true, 'V081__partition_update_history.sql');
+    const bodies = new Map<string, string>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
+    }
+    const body = bodies.get('sp_append_update_history_creates');
+    expect(body).toBeDefined();
+    expect(body).not.toContain('{{');
+    // reads the staging table's columns from its INFORMATION_SCHEMA
+    expect(body).toMatch(
+      /INFORMATION_SCHEMA\.COLUMNS`\s+WHERE table_name = '\w+_update_history_creates'/
+    );
+    expect(body).toContain('ADD COLUMN IF NOT EXISTS');
+    expect(body).toContain('INSERT INTO %s (%s, record_date) SELECT %s, record_date');
+    expect(body).not.toContain('SELECT * FROM temp_incremental');
+  });
+
   test('neither Datastream backfills automatically', async () => {
     const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
     const streams = resources.filter(gcp.datastream.Stream.isInstance);
