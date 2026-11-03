@@ -222,3 +222,5 @@ processed in the gap. Fix is production code (validator app), so no automatic br
 Item 5: user flagged the #8192 link: a bare #N in a cn-test-failures comment links to the cn-test-failures issue N, and the commit under test needs no reference. Removed from comments/11160.md; rule added to issue-comment.md. Applies to later items: the old batch comment for 10891 (item 11) cites splice PRs #8017 and #8148 bare.
 
 Item 5: user asked for the issue tracking the 40001 contention. Export issues-since-2026-07-01 (22:33) was cut at 1000 (GitHub search cap; oldest 10177), so 10139 is missing. In it: 10197 open, comment 2026-10-15 pawelperek-da '2w no repro'; 10273 (castVote, stephencompall-DA verdict: reference-sequencer contention on the shared Postgres) open, same '2w no repro'. No dedicated contention issue found. export_issues.py now queries 7-day windows and fails if a window hits the cap.
+
+Item 5: full export (22:37, 2176 issues from 9001): 10139 open, unassigned, last comment ray-roestenburg-da 2026-10-06 (waiting for fix-fail-fast). 11160 body now references #10139 as tracking issue; recurrence comment drafted in comments/10139.md.
