@@ -179,3 +179,73 @@ instance Patchable AmuletDecentralizedSynchronizerConfig where
     requiredSynchronizers = patch new.requiredSynchronizers base.requiredSynchronizers current.requiredSynchronizers
     activeSynchronizer = patch new.activeSynchronizer base.activeSynchronizer current.activeSynchronizer
     fees = patch new.fees base.fees current.fees
+
+-- Dedicated synchronizer registry
+------------------------------------------------
+
+-- | Whether `weight` is an allowed bound for a registered synchronizer's activity weights.
+-- A weight scales how much CIP-0104 activity a paid traffic byte earns. As for the other activity
+-- weights, e.g., a `FeaturedAppRight`'s, only negative values are rejected: a weight above 1.0
+-- lets the SVs compensate a paymaster that pays for only part of the synchronizer's traffic.
+validSynchronizerActivityWeight : Decimal -> Bool
+validSynchronizerActivityWeight weight = weight >= 0.0
+
+validRegisteredSynchronizer : RegisteredSynchronizer -> Bool
+validRegisteredSynchronizer RegisteredSynchronizer{..} =
+  not (T.isEmpty synchronizerId)
+  && validSynchronizerActivityWeight maxActivityWeight
+  && validSynchronizerActivityWeight maxAssetActivityWeight
+
+data RegisteredSynchronizer_UpdateResult = RegisteredSynchronizer_UpdateResult with
+    registeredSynchronizerCid : ContractId RegisteredSynchronizer
+  deriving (Serializable)
+
+-- | A dedicated synchronizer registered by DSO governance.
+--
+-- A dedicated synchronizer runs the Splice software separately from the decentralized
+-- synchronizer that hosts Amulet. Its `paymaster` pays for the synchronizer's traffic on the
+-- decentralized synchronizer.
+--
+-- The registration is created, updated and archived only by an SV vote, through
+-- `DsoRules_RegisterSynchronizer`, `DsoRules_UpdateSynchronizerRegistration` and
+-- `DsoRules_ArchiveSynchronizerRegistration` in the governance package. It lives in splice-amulet
+-- so that `AmuletRules` can fetch it: the governance package depends on splice-amulet, not the
+-- reverse.
+template RegisteredSynchronizer with
+    dso : Party
+      -- ^ The DSO party. Sole signatory.
+    synchronizerId : Text
+      -- ^ Id of the dedicated synchronizer. It identifies the registration and does not change on
+      -- update.
+    paymaster : Party
+      -- ^ The party paying for the synchronizer's traffic on the decentralized synchronizer.
+      -- Observes the registration, so it can read it from its own ledger.
+    maxActivityWeight : Decimal
+      -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 app
+      -- activity. See `validSynchronizerActivityWeight` for the allowed range.
+    maxAssetActivityWeight : Decimal
+      -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 asset
+      -- activity. See `validSynchronizerActivityWeight` for the allowed range.
+  where
+    signatory dso
+    observer paymaster
+
+    ensure validRegisteredSynchronizer this
+
+    -- Replaces the governed fields. The synchronizerId is the identity of the registration and is
+    -- kept.
+    choice RegisteredSynchronizer_Update : RegisteredSynchronizer_UpdateResult
+      with
+        newPaymaster : Party
+        newMaxActivityWeight : Decimal
+        newMaxAssetActivityWeight : Decimal
+      controller dso
+      do
+        registeredSynchronizerCid <- create this with
+          paymaster = newPaymaster
+          maxActivityWeight = newMaxActivityWeight
+          maxAssetActivityWeight = newMaxAssetActivityWeight
+        pure RegisteredSynchronizer_UpdateResult with registeredSynchronizerCid
+
+instance HasCheckedFetch RegisteredSynchronizer ForDso where
+    contractGroupId RegisteredSynchronizer{..} = ForDso with ..

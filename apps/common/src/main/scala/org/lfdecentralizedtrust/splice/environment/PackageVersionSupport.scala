@@ -136,6 +136,26 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  // RegisteredSynchronizer (splice-amulet) and the votes to register, update and archive it
+  // (splice-dso-governance) ship in the same bump. Vetting this splice-dso-governance version
+  // implies vetting the splice-amulet version it depends on, so one check covers both.
+  def supportsDedicatedSynchronizers(
+      parties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      Seq(
+        PackageIdResolver.Package.SpliceDsoGovernance -> parties
+      ),
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_32,
+      ignoreRedundantCheck = false,
+    )
+  }
+
   // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
 
   def supportsExpireTransferInstructions(

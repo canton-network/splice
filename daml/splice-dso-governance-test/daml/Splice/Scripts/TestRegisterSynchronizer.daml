@@ -1,0 +1,197 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Register, update and archive a dedicated synchronizer by SV vote.
+module Splice.Scripts.TestRegisterSynchronizer where
+
+import DA.Action (foldlA)
+import DA.Assert
+import DA.Time (minutes)
+
+import Daml.Script
+
+import Splice.AmuletRules
+import Splice.DecentralizedSynchronizer
+import Splice.DsoRules
+
+import Splice.Scripts.DsoTestUtils
+import Splice.Scripts.Util (AmuletApp(..))
+
+testSynchronizerId : Text
+testSynchronizerId = "dedicated-sync::1220dededededededededededededededededededededededededededededede"
+
+registerAction : Party -> Decimal -> Decimal -> ActionRequiringConfirmation
+registerAction paymaster maxActivityWeight maxAssetActivityWeight =
+  registerActionFor testSynchronizerId paymaster maxActivityWeight maxAssetActivityWeight
+
+registerActionFor : Text -> Party -> Decimal -> Decimal -> ActionRequiringConfirmation
+registerActionFor synchronizerId paymaster maxActivityWeight maxAssetActivityWeight =
+  ARC_DsoRules with
+    dsoAction = SRARC_RegisterSynchronizer DsoRules_RegisterSynchronizer with
+      synchronizerId
+      paymaster
+      maxActivityWeight
+      maxAssetActivityWeight
+
+updateAction : ContractId RegisteredSynchronizer -> Party -> Decimal -> Decimal -> ActionRequiringConfirmation
+updateAction registeredSynchronizerCid newPaymaster newMaxActivityWeight newMaxAssetActivityWeight =
+  ARC_DsoRules with
+    dsoAction = SRARC_UpdateSynchronizerRegistration DsoRules_UpdateSynchronizerRegistration with
+      registeredSynchronizerCid
+      update = RegisteredSynchronizer_Update with
+        newPaymaster
+        newMaxActivityWeight
+        newMaxAssetActivityWeight
+
+archiveAction : ContractId RegisteredSynchronizer -> ActionRequiringConfirmation
+archiveAction registeredSynchronizerCid =
+  ARC_DsoRules with
+    dsoAction = SRARC_ArchiveSynchronizerRegistration DsoRules_ArchiveSynchronizerRegistration with
+      registeredSynchronizerCid
+
+-- | The one live registration, which also checks that an update replaced rather than added one.
+onlyRegistration : Party -> Script (ContractId RegisteredSynchronizer, RegisteredSynchronizer)
+onlyRegistration p = do
+  registrations <- query @RegisteredSynchronizer p
+  case registrations of
+    [registration] -> pure registration
+    _ -> abort $ "expected exactly one RegisteredSynchronizer, got " <> show (length registrations)
+
+-- | All SVs accept the action, but the vote cannot be closed because executing the action fails.
+-- The SVs then change their votes to reject it, after the vote cooldown, so the vote request does
+-- not stay open.
+acceptedVoteFailsToExecute : AmuletApp -> [Party] -> ActionRequiringConfirmation -> Script ()
+acceptedVoteFailsToExecute _ [] _ = error "acceptedVoteFailsToExecute: require at least one party"
+acceptedVoteFailsToExecute app svs@(closer::_) action = do
+  requestCid <- initiateAndCastVote app svs None action
+  [(dsoRulesCid, _)] <- query @DsoRules app.dso
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  let closeVote cid = exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+        requestCid = cid
+        amuletRulesCid = Some amuletRulesCid
+        sv = Some closer
+  submitMustFail (actAs closer <> readAs app.dso) $ closeVote requestCid
+  passTime (minutes 1)
+  rejectedCid <- foldlA (\cid sv -> castVote app sv cid False) requestCid svs
+  result <- submit (actAs closer <> readAs app.dso) $ closeVote rejectedCid
+  result.outcome === VRO_Rejected
+
+test_RegisterSynchronizer_viaVote : Script ()
+test_RegisterSynchronizer_viaVote = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  paymaster <- allocateParty "paymaster"
+
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
+    registerAction paymaster 1.0 0.5
+
+  (registrationCid, registration) <- onlyRegistration dso
+  registration === RegisteredSynchronizer with
+    dso
+    synchronizerId = testSynchronizerId
+    paymaster
+    maxActivityWeight = 1.0
+    maxAssetActivityWeight = 0.5
+
+  -- The paymaster observes the registration. An unrelated party does not.
+  paymasterView <- query @RegisteredSynchronizer paymaster
+  paymasterView === [(registrationCid, registration)]
+  other <- allocateParty "other"
+  otherView <- query @RegisteredSynchronizer other
+  otherView === []
+
+test_UpdateSynchronizerRegistration_viaVote : Script ()
+test_UpdateSynchronizerRegistration_viaVote = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  let svs = [sv1, sv2, sv3, sv4]
+  paymaster <- allocateParty "paymaster"
+  newPaymaster <- allocateParty "newPaymaster"
+
+  initiateAndAcceptVote app svs $ registerAction paymaster 1.0 1.0
+  (registrationCid, _) <- onlyRegistration dso
+
+  initiateAndAcceptVote app svs $ updateAction registrationCid newPaymaster 0.25 0.0
+
+  -- The update replaces the registration and keeps its synchronizer id.
+  (updatedCid, updated) <- onlyRegistration dso
+  updated === RegisteredSynchronizer with
+    dso
+    synchronizerId = testSynchronizerId
+    paymaster = newPaymaster
+    maxActivityWeight = 0.25
+    maxAssetActivityWeight = 0.0
+
+  -- The new paymaster sees the registration, the old one no longer does.
+  newPaymasterView <- query @RegisteredSynchronizer newPaymaster
+  newPaymasterView === [(updatedCid, updated)]
+  oldPaymasterView <- query @RegisteredSynchronizer paymaster
+  oldPaymasterView === []
+
+  -- A vote naming the replaced registration can no longer execute.
+  acceptedVoteFailsToExecute app svs $ updateAction registrationCid paymaster 1.0 1.0
+  (stillUpdatedCid, _) <- onlyRegistration dso
+  stillUpdatedCid === updatedCid
+
+test_ArchiveSynchronizerRegistration_viaVote : Script ()
+test_ArchiveSynchronizerRegistration_viaVote = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  let svs = [sv1, sv2, sv3, sv4]
+  paymaster <- allocateParty "paymaster"
+
+  initiateAndAcceptVote app svs $ registerAction paymaster 1.0 1.0
+  (registrationCid, _) <- onlyRegistration dso
+
+  initiateAndAcceptVote app svs $ archiveAction registrationCid
+
+  registrations <- query @RegisteredSynchronizer dso
+  registrations === []
+  paymasterView <- query @RegisteredSynchronizer paymaster
+  paymasterView === []
+
+test_RegisterSynchronizer_rejectsInvalidInputs : Script ()
+test_RegisterSynchronizer_rejectsInvalidInputs = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  let svs = [sv1, sv2, sv3, sv4]
+  paymaster <- allocateParty "paymaster"
+
+  acceptedVoteFailsToExecute app svs $ registerActionFor "" paymaster 1.0 1.0
+  acceptedVoteFailsToExecute app svs $ registerAction paymaster (-0.1) 1.0
+  acceptedVoteFailsToExecute app svs $ registerAction paymaster 1.0 (-0.1)
+
+  registrations <- query @RegisteredSynchronizer dso
+  registrations === []
+
+test_RegisterSynchronizer_acceptsZeroAndAboveOneWeights : Script ()
+test_RegisterSynchronizer_acceptsZeroAndAboveOneWeights = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  let svs = [sv1, sv2, sv3, sv4]
+  paymaster <- allocateParty "paymaster"
+
+  -- 0.0 is allowed, and there is no upper bound.
+  initiateAndAcceptVote app svs $ registerAction paymaster 0.0 2.0
+  (_, registration) <- onlyRegistration dso
+  registration.maxActivityWeight === 0.0
+  registration.maxAssetActivityWeight === 2.0
+
+-- | An update cannot set an empty synchronizer id, as it keeps the registration's id, so only the
+-- weights are checked here. The empty id is covered at registration.
+test_UpdateSynchronizerRegistration_rejectsNegativeWeights : Script ()
+test_UpdateSynchronizerRegistration_rejectsNegativeWeights = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  let svs = [sv1, sv2, sv3, sv4]
+  paymaster <- allocateParty "paymaster"
+
+  initiateAndAcceptVote app svs $ registerAction paymaster 1.0 1.0
+  (registrationCid, registration) <- onlyRegistration dso
+
+  acceptedVoteFailsToExecute app svs $ updateAction registrationCid paymaster (-0.1) 1.0
+  acceptedVoteFailsToExecute app svs $ updateAction registrationCid paymaster 1.0 (-0.1)
+
+  -- The registration is unchanged.
+  unchanged <- onlyRegistration dso
+  unchanged === (registrationCid, registration)
+
+  -- 0.0 is allowed, and there is no upper bound.
+  initiateAndAcceptVote app svs $ updateAction registrationCid paymaster 2.0 0.0
+  (_, updated) <- onlyRegistration dso
+  updated.maxActivityWeight === 2.0
+  updated.maxAssetActivityWeight === 0.0
