@@ -3,6 +3,7 @@ BEGIN
   DECLARE current_watermark_ts TIMESTAMP;
   DECLARE max_available_timestamp TIMESTAMP;
   DECLARE max_closed_timestamp TIMESTAMP;
+  DECLARE staging_columns STRING;
 
   {{createProdTable}}
 
@@ -48,7 +49,21 @@ BEGIN
   -- Subtract 1 hour to safely close the ingestion window
   SET max_closed_timestamp = TIMESTAMP_SUB(max_available_timestamp, INTERVAL 1 HOUR);
 
-  -- 6. Filter incremental data with Primary Key Deduplication & Partition Pruning
+  -- 6. Staging columns, by name. The production schema is fixed when
+  -- it is created in step 1, but Datastream adds columns to staging
+  -- when they are added in Postgres (e.g. the `*_interned` columns of
+  -- update_history_*). Read before temp_incremental, so it has every
+  -- column listed; a column added since only reaches rows newer than
+  -- max_closed_timestamp.
+  SET staging_columns = (
+    SELECT STRING_AGG(FORMAT('`%s`', column_name), ', ' ORDER BY ordinal_position)
+    FROM {{stagingInfoSchemaColumns}}
+    WHERE table_name = '{{stagingTableName}}'
+      AND is_hidden = 'NO' -- e.g. _PARTITIONTIME
+  );
+
+  -- 6a. Filter incremental data with Primary Key Deduplication &
+  -- Partition Pruning
   CREATE TEMP TABLE temp_incremental AS (
     SELECT 
       staging.*, 
@@ -73,9 +88,33 @@ BEGIN
 
   -- 7. Perform append and update watermark if valid new records exist
   IF EXISTS (SELECT 1 FROM temp_incremental) THEN
-    
-    INSERT INTO {{prodTable}}
-    SELECT * FROM temp_incremental;
+
+    -- 7a. Add staging columns missing from production, so they are
+    -- not dropped
+    FOR new_column IN (
+      SELECT column_name, data_type
+      FROM {{stagingInfoSchemaColumns}}
+      WHERE table_name = '{{stagingTableName}}'
+        AND is_hidden = 'NO'
+        AND column_name NOT IN (
+          SELECT column_name
+          FROM {{prodInfoSchemaColumns}}
+          WHERE table_name = '{{tableName}}'
+        )
+      ORDER BY ordinal_position
+    ) DO
+      EXECUTE IMMEDIATE FORMAT(
+        'ALTER TABLE %s ADD COLUMN IF NOT EXISTS `%s` %s',
+        '{{prodTable}}', new_column.column_name, new_column.data_type
+      );
+    END FOR;
+
+    -- 7b. Append by column name; production columns are no longer in
+    -- staging order
+    EXECUTE IMMEDIATE FORMAT(
+      'INSERT INTO %s (%s, record_date) SELECT %s, record_date FROM temp_incremental',
+      '{{prodTable}}', staging_columns, staging_columns
+    );
 
     UPDATE {{watermarksTable}}
     SET last_watermark_time = UNIX_MICROS(max_closed_timestamp)

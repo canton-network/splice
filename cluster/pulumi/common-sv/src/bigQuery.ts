@@ -519,9 +519,12 @@ function installHourlyScheduledQueries(
       .all([projectId, prodDataset.datasetId, stagingDataset.datasetId])
       .apply(([proj, prodDs, stagingDs]) => {
         const prodTable = `\`${proj}.${prodDs}.${tableName}\``;
-        const stagingTable = `\`${proj}.${stagingDs}.${schemaName}_${tableName}\``;
+        const stagingTableName = `${schemaName}_${tableName}`;
+        const stagingTable = `\`${proj}.${stagingDs}.${stagingTableName}\``;
         const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
         const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
+        const prodInfoSchemaColumns = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.COLUMNS\``;
+        const stagingInfoSchemaColumns = `\`${proj}.${stagingDs}.INFORMATION_SCHEMA.COLUMNS\``;
 
         const vars = {
           tableName,
@@ -530,9 +533,12 @@ function installHourlyScheduledQueries(
           recordTimestampExpr,
           recordDateExpr,
           prodTable,
+          stagingTableName,
           stagingTable,
           watermarksTable,
           prodInfoSchema,
+          prodInfoSchemaColumns,
+          stagingInfoSchemaColumns,
         };
         return expandSql(appendSqlTemplates[appendMode], {
           ...vars,
