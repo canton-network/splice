@@ -369,6 +369,17 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                     path: '/var/lib/grafana/dashboards/k6s',
                   },
                 },
+                {
+                  name: 'gid-pulumi-operator',
+                  orgId: 1,
+                  folder: 'platform',
+                  type: 'file',
+                  disableDeletion: false,
+                  editable: true,
+                  options: {
+                    path: '/var/lib/grafana/dashboards/pulumi-operator',
+                  },
+                },
               ],
             },
           },
@@ -378,6 +389,14 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                 gnetId: 18030,
                 datasource: 'Prometheus',
                 revision: 8,
+              },
+            },
+            'pulumi-operator': {
+              operator: {
+                // https://grafana.com/grafana/dashboards/25954-pulumi-kubernetes-operator/
+                gnetId: 25954,
+                datasource: 'Prometheus',
+                revision: 1,
               },
             },
             istio: {
