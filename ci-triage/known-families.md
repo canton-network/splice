@@ -264,6 +264,14 @@ State as recorded in the family section, not rechecked against the tracker on 20
   1: 1484, 2: 616, 3: 64, 4: 5, 8: 1 (Sv1, 11160). Failure ratio per stored batch rises through the shard
   independent of load (0 before 12:20, 0.12 at 12:21 with 846 enqueued/min, 0.48 at 12:29 with 311, 0.69 at 12:31
   with 604). So 40001 is routine and harmless; failures need an outlier chain plus a short waiter budget.
+  Driver details (3.7.1 jar): `ReferenceSequencerDriverFactory.create` builds `ProcessingTimeout()` with defaults, so
+  the driver storage ignores `timeouts.processing.storage-max-retry-interval = 1s` from canton-basic.conf
+  (canton-network/splice#5173) and backs off up to `maxRetryInterval` 10 s; `emptyBlockIntervalMillis` default
+  `Some(500)` ticks an empty-block insert per driver every 500 ms regardless of load; `writeParallelism` 1.
+  Postgres log (GCP, 11160): all aborts `Canceled on identification as a pivot, during write`; 2-3 of 4 writers
+  aborted together in 26 of 58 collisions.
+  Fix options: Canton passes node timeouts to the driver storage (cap applies) or drops `max(id) + 1` under
+  SERIALIZABLE; test config raises `sequencer.config.empty-block-interval-millis` (side effects unchecked).
 - Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
   20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
