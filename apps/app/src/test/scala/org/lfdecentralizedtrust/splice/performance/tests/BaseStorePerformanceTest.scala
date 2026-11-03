@@ -79,7 +79,7 @@ abstract class BaseStorePerformanceTest(
   /** Metrics factory wired into the storage's [[DbStorageMetrics]].
     *  The DB executor `exectime` timer is recorded and can be read back to measure DB time.
     */
-  protected val dbMetricsFactory: NanoTimerMetricsFactory = new NanoTimerMetricsFactory
+  protected val dbMetricsFactory: NanoInMemoryMetricsFactory = new NanoInMemoryMetricsFactory
 
   /** Monotonic sequence number of DB query samples recorded so far.
     *
@@ -354,10 +354,10 @@ final case class DbExecWindow(
 /** A recorded query execution. `callsite` is the `query` label set by the query cost tracker. */
 final case class DbQuerySample(timerName: String, callsite: String, nanos: Long, seq: Long)
 
-/** A metrics factory that preserves nanosecond precision for timers and keeps a monotonic log of
-  * individual query samples
+/** InMemoryMetricsFactory uses milliseconds. So we extend it to a NanoInMemoryMetricsFactory
+  * that uses nanoseconds for higher precision
   */
-class NanoTimerMetricsFactory extends InMemoryMetricsFactory {
+class NanoInMemoryMetricsFactory extends InMemoryMetricsFactory {
   import java.util.concurrent.atomic.AtomicLong
 
   private val samples = new java.util.concurrent.ConcurrentLinkedQueue[DbQuerySample]()
