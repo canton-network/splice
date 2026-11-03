@@ -19,8 +19,9 @@ cn-test-failures issues; a splice PR or commit is `canton-network/splice#N` or a
 (not to name the commit under test, which the issue already shows).
 
 Leave out what the reader can see on the issue itself (links, the job list) and the triage process (which recipes
-ran, what was grepped). Duplicate-close comments stay one or two sentences: parent, and the one fact that makes it
-the same failure.
+ran, what was grepped). Duplicate-close comments stay one or two sentences: the one fact that makes it the same failure. They do not
+name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
+already.
 
 Body files: `ci-triage/CLAUDE.md`, Commands for the user. Every comment except a single line of plain text goes
 into `<round dir>/comments/<ref>.md` and is posted with `--body-file` (or `close_duplicates.py --comment-file`);

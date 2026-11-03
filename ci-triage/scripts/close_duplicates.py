@@ -3,7 +3,7 @@
 
 Runs on the host (needs a gh login that can write issues). Only open issues are closed, so running a command twice
 is harmless; the parent itself is never closed. Usage, from the repo root:
-  direnv exec . ci-triage/scripts/close_duplicates.py 11128 11138 11139 --comment 'Duplicate of #11128 (family Z).'
+  direnv exec . ci-triage/scripts/close_duplicates.py 11128 11138 11139 --comment 'Same assertion at ScanPartyMonitorScriptIntegrationTest.scala:273.'
   direnv exec . ci-triage/scripts/close_duplicates.py --dry-run 11128 11138 11139 --comment '...'
 """
 import argparse

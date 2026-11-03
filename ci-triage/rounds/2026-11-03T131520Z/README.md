@@ -253,3 +253,5 @@ User: pause for today; only close inbox items that are duplicates. Live issue li
   11165 and 11168 (UnclaimedActivityRecordIntegrationTest, same test, likely one group), 11172 (Splitwell settle
   debts with multiple parties, FrontendLoginUtil.scala:61, different assertion from AE), 11173 (checkErrors),
   11174 (backup_status_cluster, cni), 11175 (static_tests), 11170, 11171 (needs-log).
+
+User: duplicate-close comments must not say Duplicate of #N (close --duplicate-of links the parent already). Rule in issue-comment.md; the five close commands of the duplicate check reissued without it.
