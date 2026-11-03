@@ -220,3 +220,5 @@ block retry chain (11.392 to 27.539) and block 6840 at 27.587 delivering the bro
 processed in the gap. Fix is production code (validator app), so no automatic branch. Body file comments/11160.md.
 
 Item 5: user flagged the #8192 link: a bare #N in a cn-test-failures comment links to the cn-test-failures issue N, and the commit under test needs no reference. Removed from comments/11160.md; rule added to issue-comment.md. Applies to later items: the old batch comment for 10891 (item 11) cites splice PRs #8017 and #8148 bare.
+
+Item 5: user asked for the issue tracking the 40001 contention. Export issues-since-2026-07-01 (22:33) was cut at 1000 (GitHub search cap; oldest 10177), so 10139 is missing. In it: 10197 open, comment 2026-10-15 pawelperek-da '2w no repro'; 10273 (castVote, stephencompall-DA verdict: reference-sequencer contention on the shared Postgres) open, same '2w no repro'. No dedicated contention issue found. export_issues.py now queries 7-day windows and fails if a window hits the cap.
