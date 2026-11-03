@@ -169,3 +169,10 @@ User on lessons: W45 lesson 1 is the target style; lesson 2 of lower value, keep
 - User conventions for this round (also in the skills): step mode; commands run from the ~/splice root with direnv
   loaded (no `direnv exec .`); exports via `--out ~/claude-splice/ci-triage/export/...`; every comment body printed
   in chat; no new comment where an existing root-cause comment holds; lessons generic (W45 lesson 1 is the style).
+
+## Resumed 2026-11-03 after the sandbox rebuild
+
+- Image at main 934f543eb4, no nix diff against the fix branches; access unchanged (splice via `gh api` only).
+- Item 3: the user opened PR canton-network/splice#8215 from rautenrieth-da/fix-10732-wallet-metrics-outcome-label
+  (b43adb1676); CI static_tests passed on it, so the local static check was stopped. PR 8211 static_tests also
+  passed after the user's scalafmt fix. Still open: close 11143 as dup (asked the user whether it ran).
