@@ -260,6 +260,10 @@ State as recorded in the family section, not rechecked against the tracker on 20
   retries, backoff to 6.373 s) while Sv2-4 stored 31-32 batches each (heights 6741-6839, blocks without events, no
   client requests enqueued by them); the only client request in the window, the one sent through Sv1, waited 13 s.
   Why Sv2-4 store request-free batches (likely driver time-keeping) and why Sv1 lost every retry: not verified.
+  Whole shard (12:07-12:33): 9508 stored batches, 2936 insert failures, 2170 retry chains; failures before success
+  1: 1484, 2: 616, 3: 64, 4: 5, 8: 1 (Sv1, 11160). Failure ratio per stored batch rises through the shard
+  independent of load (0 before 12:20, 0.12 at 12:21 with 846 enqueued/min, 0.48 at 12:29 with 311, 0.69 at 12:31
+  with 604). So 40001 is routine and harmless; failures need an outlier chain plus a short waiter budget.
 - Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
   20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
 - Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
