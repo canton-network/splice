@@ -257,6 +257,18 @@ participants.foreach { participant =>
   )
 }
 
+val maxTraffic = NonNegativeLong.tryCreate(Long.MaxValue)
+
+// Base traffic is zero, so every participant needs purchased traffic to be able to submit anything.
+// We always use serial 1: on reruns the sequencers ignore the update as outdated, which is fine
+// since the balance is already max.
+participants.foreach { participant =>
+  println(s"Setting traffic balance of ${participant.name} to max...")
+  sequencers.foreach(
+    _.traffic_control.set_traffic_balance(participant.id, PositiveInt.one, maxTraffic)
+  )
+}
+
 // Every participant connects to the sequencer in its own namespace.
 val synchronizerAlias = SynchronizerAlias.tryCreate("dedicated")
 participants.foreach { participant =>
