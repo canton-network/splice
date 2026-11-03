@@ -237,6 +237,7 @@ splitwell:
     additionalEnvVars:
       - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
         value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
+    disableParticipantAdminApiAuth: true
   walletGateway:
     enabled: false
     portfolioVersion: '1.14.0'
@@ -290,6 +291,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -365,6 +367,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -443,6 +446,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -518,6 +522,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -593,6 +598,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -668,6 +674,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -743,6 +750,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -818,6 +826,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -893,6 +902,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -968,6 +978,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1043,6 +1054,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1118,6 +1130,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1193,6 +1206,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1268,6 +1282,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1343,6 +1358,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1418,6 +1434,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1493,6 +1510,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1570,6 +1588,7 @@ svs:
         - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
           value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
+      disableParticipantAdminApiAuth: true
       resources:
         limits:
           memory: '18Gi'
@@ -1650,6 +1669,7 @@ validator1:
     additionalEnvVars:
       - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
         value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
+    disableParticipantAdminApiAuth: true
   participantPruningSchedule:
     cron: '0 /10 * * * ?'
     maxDuration: '5m'
@@ -1664,6 +1684,7 @@ validators:
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
     participant:
+      disableParticipantAdminApiAuth: true
       enableKeyDownload: true
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:

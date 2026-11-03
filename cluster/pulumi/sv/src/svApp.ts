@@ -133,6 +133,11 @@ export function installSvApp(
     resources: config.svApp?.resources,
     periodicTopologySnapshotConfig: config.periodicTopologySnapshotConfig,
     persistentDataPvc: persistentHeapDumpsPvc(),
+    participantClient: {
+      adminApi: {
+        disableAuth: config.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   } as ChartValues;
 
   if (config.onboarding.type == 'join-with-key') {

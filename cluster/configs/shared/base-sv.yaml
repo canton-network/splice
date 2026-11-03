@@ -22,6 +22,7 @@ participant:
       memory: '18Gi'
   additionalEnvVars:
     - !include(./participant_pruning.yaml)
+  disableParticipantAdminApiAuth: true
 validatorApp:
   resources:
     requests:

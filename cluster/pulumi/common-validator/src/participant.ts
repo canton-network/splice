@@ -18,6 +18,8 @@ import {
   spliceConfig,
   getLedgerApiAudience,
   DecentralizedSynchronizerUpgradeConfig,
+  getParticipantAdminApiAudience,
+  getClientId,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorNodeConfig } from '@canton-network/splice-pulumi-common-validator';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
@@ -42,6 +44,7 @@ export async function installParticipant(
   disableAuth?: boolean,
   version: CnChartVersion = activeVersion,
   defaultPostgres?: postgres.Postgres,
+  extraAdminApiUsers: Array<string> = [],
   customOptions?: SpliceCustomResourceOptions
 ): Promise<{ participantAddress: Output<string> }> {
   const kmsConfig = validatorConfig.kms;
@@ -65,6 +68,11 @@ export async function installParticipant(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/participant-values.yaml`,
       {
         OIDC_AUTHORITY_URL: auth0Config.auth0Domain,
+        OIDC_AUTHORITY_LEDGER_API_AUDIENCE: getLedgerApiAudience(auth0Config, xns.logicalName),
+        OIDC_AUTHORITY_ADMIN_API_AUDIENCE: getParticipantAdminApiAudience(
+          auth0Config,
+          xns.logicalName
+        ),
       }
     ),
     ...loadYamlFromFile(
@@ -78,14 +86,6 @@ export async function installParticipant(
     enableRepairCommands: validatorConfig.participant.enableRepairCommands,
   };
 
-  const participantValuesWithSpecifiedAud: ChartValues = {
-    ...participantValues,
-    auth: {
-      ...participantValues.auth,
-      targetAudience: getLedgerApiAudience(auth0Config, xns.logicalName),
-    },
-  };
-
   const name = 'participant';
   const pgName = `participant_${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`;
   const release = installSpliceHelmChart(
@@ -93,7 +93,7 @@ export async function installParticipant(
     name,
     'splice-participant',
     {
-      ...participantValuesWithSpecifiedAud,
+      ...participantValues,
       logLevel: validatorConfig.logging?.level,
       apiRequestLogLevel:
         validatorConfig.logging?.cantonApiRequestLogLevel ??
@@ -113,12 +113,21 @@ export async function installParticipant(
       additionalJvmOptions: getAdditionalJvmOptions(
         validatorConfig.participant?.additionalJvmOptions
       ),
-      additionalEnvVars: (participantValuesWithSpecifiedAud.additionalEnvVars ?? []).concat(
+      additionalEnvVars: (participantValues.additionalEnvVars ?? []).concat(
         validatorConfig.participant?.additionalEnvVars ?? []
       ),
       enablePostgresMetrics: true,
       resources: validatorConfig.participant.resources,
       disableAuth: disableAuth || false,
+      adminApi: {
+        ...participantValues.adminApi,
+        disableAuth: validatorConfig.participant?.disableParticipantAdminApiAuth ?? false,
+        auth: {
+          ...participantValues.adminApi?.auth,
+          user: `${getClientId(auth0Config, 'validator', xns.logicalName)}@clients`,
+          additionalUsers: extraAdminApiUsers,
+        },
+      },
     },
     version,
     {

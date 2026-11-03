@@ -87,6 +87,9 @@ type BasicValidatorConfig = {
     connectionType: string;
     url: string;
   };
+  participant?: {
+    disableParticipantAdminApiAuth?: boolean;
+  };
 };
 
 export type ValidatorInstallConfig = BasicValidatorConfig & {
@@ -249,6 +252,11 @@ export async function installValidatorApp(
         volumeName: `domain-migration-validator-${pvcSuffix}`,
       },
       persistentDataPvc: persistentHeapDumpsPvc(),
+      participantClient: {
+        adminApi: {
+          disableAuth: config.participant?.disableParticipantAdminApiAuth ?? false,
+        },
+      },
     },
     config.version,
     { dependsOn }

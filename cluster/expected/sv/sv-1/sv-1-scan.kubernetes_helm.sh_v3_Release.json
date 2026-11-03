@@ -78,6 +78,11 @@
         "enable": true
       },
       "participantAddress": "participant",
+      "participantClient": {
+        "adminApi": {
+          "disableAuth": true
+        }
+      },
       "persistence": {
         "databaseName": "scan_sv_1",
         "port": 5432,

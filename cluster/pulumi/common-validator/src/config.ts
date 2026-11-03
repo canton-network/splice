@@ -87,6 +87,7 @@ export const ParticipantConfigSchema = z.object({
       memory: '8Gi',
     },
   }),
+  disableParticipantAdminApiAuth: z.boolean().optional(),
 });
 
 export const WalletGatewayConfigSchema = z.object({

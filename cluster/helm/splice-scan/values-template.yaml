@@ -111,3 +111,6 @@ securityContexts:
       runAsUser: 101
       runAsGroup: 101
 
+participantClient:
+  adminApi:
+    disableAuth: true
