@@ -9,7 +9,7 @@ import {
   Loading,
 } from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ArrowCircleLeftOutlined } from '@mui/icons-material';
 import { Box, Button, Card, CardContent, Chip, Stack } from '@mui/material';
@@ -75,7 +75,7 @@ export const TransferOffers: React.FC = () => {
   const { data: tokenStandardTransferContracts } = tokenStandardTransfersQuery;
   const amuletPrice = amuletPriceQuery.data;
 
-  useMemo(() => {
+  useEffect(() => {
     if (transferOfferContracts && tokenStandardTransferContracts && amuletPrice) {
       const allTransfers: PartialWalletTransferOffer[] = transferOfferContracts
         .map(offer => {
