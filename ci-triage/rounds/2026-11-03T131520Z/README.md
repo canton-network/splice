@@ -157,3 +157,15 @@ Lessons: started lessons/2026-W45.md on user request (weekly rotation, max 10 mi
 Lessons rewritten generic on user request (no issues, PRs or test names, no blame). Sources: W45 lesson 1 from
 item 2 (family Z, 11128), lesson 2 from item 3 (family AC, 10732).
 User on lessons: W45 lesson 1 is the target style; lesson 2 of lower value, keep for now, prune at the end of the week if over the cap.
+
+## Resume point (2026-11-03, before the sandbox rebuild)
+
+- Item 3 (11143, parent 10732): waiting for the user: close 11143 as dup (command above), static checks and PR for
+  branch rautenrieth-da/fix-10732-wallet-metrics-outcome-label (b43adb1676, not yet checked).
+- PR 8211 (item 2) failed scalafmt in static_tests; the user fixes it manually. The local formatFix wanted:
+  `"...followed by a DSO-visible tap", {` on one line (the block opens on the description line).
+- Next: item 4 (11144, family AD), presented in step mode; its fix qualifies for an automatic branch (test-only),
+  which must pass the static checks before it is shown.
+- User conventions for this round (also in the skills): step mode; commands run from the ~/splice root with direnv
+  loaded (no `direnv exec .`); exports via `--out ~/claude-splice/ci-triage/export/...`; every comment body printed
+  in chat; no new comment where an existing root-cause comment holds; lessons generic (W45 lesson 1 is the style).
