@@ -16,7 +16,7 @@ export const DetailItem: React.FC<DetailItemProps> = props => {
   const { label, value, labelId, valueId } = props;
 
   return (
-    <Stack gap={3}>
+    <Stack sx={{ gap: 3 }}>
       <Typography
         component="p"
         sx={CREATE_PROPOSAL_FIELD_LABEL_SX}
@@ -26,7 +26,12 @@ export const DetailItem: React.FC<DetailItemProps> = props => {
         {label}
       </Typography>
       {typeof value === 'string' ? (
-        <Typography variant="body1" lineHeight={1} fontSize={16} id={valueId} data-testid={valueId}>
+        <Typography
+          variant="body1"
+          id={valueId}
+          data-testid={valueId}
+          sx={{ lineHeight: 1, fontSize: 16 }}
+        >
           {value}
         </Typography>
       ) : (

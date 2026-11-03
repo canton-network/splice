@@ -2,6 +2,15 @@
 
 {/* Add all release notes in this section */}
 
+  - Docker images
+
+    - Upgrade base image to 1.0.19
+
+  - Validator App
+
+    - `synchronizer-topology.num-parties` metric now includes also parties not hosted on any participant. This also fixes an issue where those were deducted from the metric on update,
+      but then inconsistently added back in an app restart.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,

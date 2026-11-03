@@ -69,7 +69,7 @@ const VoteModalContent: React.FC<VoteModalProps> = ({
   return (
     <>
       <CardContent sx={{ paddingX: '64px' }}>
-        <Stack direction="column" mb={4} spacing={1}>
+        <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
           <Typography variant="h5">Requested Action</Typography>
           <ActionView
             action={actionReq}
@@ -78,7 +78,7 @@ const VoteModalContent: React.FC<VoteModalProps> = ({
             effectiveAt={effectiveAt}
           />
         </Stack>
-        <Stack direction="column" mb={4} spacing={1}>
+        <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
           <Typography variant="h5">Request Information</Typography>
           <TableContainer>
             <Table style={{ tableLayout: 'auto' }} className="sv-voting-table">
@@ -188,7 +188,7 @@ const VoteModalContent: React.FC<VoteModalProps> = ({
         {voteForm && voteRequestContractId && (
           <Stack>{voteForm(voteRequestContractId, curSvVote)}</Stack>
         )}
-        <Stack direction="column" mb={4} spacing={1}>
+        <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
           <Typography variant="h5">Votes</Typography>
           <TableContainer>
             <Table style={{ tableLayout: 'fixed' }} className="sv-accepted-vote-table">

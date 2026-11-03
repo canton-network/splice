@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 /** Offboard a participant from the hosting of the DSO party.
   * - Runs when one of offboardedSvs still exist on the PartyToParticipant mapping
+  * - Skips participants that are still the participant of an active SV in the DsoRules
   */
 class SvOffboardingPartyToParticipantProposalTrigger(
     override protected val context: TriggerContext,
@@ -36,6 +37,8 @@ class SvOffboardingPartyToParticipantProposalTrigger(
 ) extends PollingParallelTaskExecutionTrigger[ParticipantId]
     with SyncConnectionStalenessCheck {
 
+  import SvOffboardingPartyToParticipantProposalTrigger.*
+
   private val dsoParty: PartyId = dsoStore.key.dsoParty
 
   override protected def retrieveTasks()(implicit
@@ -43,13 +46,6 @@ class SvOffboardingPartyToParticipantProposalTrigger(
   ): Future[Seq[ParticipantId]] = {
     for {
       dsoRules <- dsoStore.getDsoRules()
-      offboardedSvs = dsoRules.contract.payload.offboardedSvs
-      offboardedParticipants = offboardedSvs
-        .values()
-        .asScala
-        .map(_.participantId)
-        .map(ParticipantId.tryFromProtoPrimitive)
-        .toSeq
       currentHostingParticipantIds <- participantAdminConnection
         .getPartyToParticipant(
           dsoRules.domain,
@@ -57,7 +53,27 @@ class SvOffboardingPartyToParticipantProposalTrigger(
           topologySnapshot = TopologySnapshot.Sequenced,
         )
         .map(_.mapping.participantIds)
-    } yield currentHostingParticipantIds.filter(e => offboardedParticipants.contains(e))
+    } yield {
+      val result = participantsToOffboard(
+        offboardedParticipants = dsoRules.contract.payload.offboardedSvs
+          .values()
+          .asScala
+          .map(_.participantId)
+          .toSeq,
+        activeSvParticipants = dsoRules.contract.payload.svs
+          .values()
+          .asScala
+          .map(_.participantId)
+          .toSeq,
+        currentlyHostingParticipants = currentHostingParticipantIds,
+      )
+      result.stillUsedByActiveSv.foreach { participantId =>
+        logger.warn(
+          s"Participant $participantId is listed for an offboarded SV but is still the participant of an active SV in the DsoRules, not removing it from the hosting of the DSO party"
+        )
+      }
+      result.toOffboard
+    }
   }
 
   override protected def completeTask(task: ParticipantId)(implicit
@@ -94,5 +110,25 @@ class SvOffboardingPartyToParticipantProposalTrigger(
     } yield {
       !currentHostingParticipants.mapping.participantIds.contains(task) || notConnected
     }
+  }
+}
+
+object SvOffboardingPartyToParticipantProposalTrigger {
+
+  final case class OffboardingResult(
+      toOffboard: Seq[ParticipantId],
+      stillUsedByActiveSv: Seq[ParticipantId],
+  )
+
+  def participantsToOffboard(
+      offboardedParticipants: Seq[String],
+      activeSvParticipants: Seq[String],
+      currentlyHostingParticipants: Seq[ParticipantId],
+  ): OffboardingResult = {
+    val offboarded = offboardedParticipants.map(ParticipantId.tryFromProtoPrimitive).toSet
+    val active = activeSvParticipants.map(ParticipantId.tryFromProtoPrimitive).toSet
+    val (stillUsedByActiveSv, toOffboard) =
+      currentlyHostingParticipants.filter(offboarded.contains).partition(active.contains)
+    OffboardingResult(toOffboard, stillUsedByActiveSv)
   }
 }

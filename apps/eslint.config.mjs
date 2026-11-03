@@ -51,7 +51,6 @@ export default defineConfig([
       // TODO(#8138): fix the sites and re-enable, one rule at a time.
       "react-hooks/refs": "off",
       "react-hooks/set-state-in-effect": "off",
-      "react-hooks/set-state-in-render": "off",
       "react-hooks/immutability": "off",
       "@typescript-eslint/no-non-null-asserted-optional-chain": "off",
       "@typescript-eslint/no-unused-vars": [
