@@ -37,7 +37,12 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 | needs-log, cni GHA | 10479, 11117, 11145 | user saves job log to export/<ref>/ |
 | out of scope | 11146 (blackduck vulnerability with Status Inbox) | none |
 
-## Open fix branches (from the previous handover, 2026-11-02)
+## Open fix branches
+
+2026-11-03: `rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx` (0c380008f0, off main 8dacec5c10):
+family Z test fix, a tap after the private offer; not compiled locally (dev shell needs newer nix paths), CI via [ci].
+
+From the previous handover, 2026-11-02:
 
 Pushed to canton-network/splice without a PR, none compiled against current main:
 `ray/fix-10197-bft-read-confirmation-wait`, `ray/fix-reset-topology-plugin-no-exit` (10139),

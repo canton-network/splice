@@ -138,3 +138,8 @@ problem that was fixed. Resolution changed from Infrequent / no repro to close a
 2026-11-03, not yet confirmed as run.
 
 Item 1: commands ran (user, 2026-11-03). User: print every comment body in chat, also when posted from a file.
+
+Item 2 (family Z): user asked for automatic fix branches when the cause is established and the fix is test-only
+(skills updated, 5828036a17). Branch rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx, commit
+0c380008f0: aliceValidatorWalletClient.tap(1.0) after createTransferOffer in the act step. Not compiled: nix in the
+worktree started downloading (newer pin on main), stopped; the user was told to rebuild the image.

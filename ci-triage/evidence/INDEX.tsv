@@ -359,7 +359,7 @@ ref	date	run	branch	job	canton	summary	dup_of	category	status	file
 11125	2026-11-02					dup of 10933 (family Y traffic)			`2026-11-02/nightly-a.md`, `host-commands-a.md`	evidence/2026-11-02-nightly-a.md
 11126	2026-11-02					dup of 10927 (family X2)			`2026-11-02/nightly-a.md`, `host-commands-a.md`	evidence/2026-11-02-nightly-a.md
 11127	2026-11-02					dup of 10927 (family X2)			`2026-11-02/nightly-a.md`, `host-commands-a.md`	evidence/2026-11-02-nightly-a.md
-11128	2026-11-02					new family Z: ScanPartyMonitorScriptIntegrationTest (#8107) flake, private verdict held back by the /v0/events cap until the next DSO-visible update; open 11128, owner stephencompall-DA			`2026-11-02/singles-b.md`, `host-commands-b.md`	evidence/2026-11-02-singles-b.md
+11128	2026-11-02					new family Z: ScanPartyMonitorScriptIntegrationTest (#8107) flake, private verdict held back by the /v0/events cap until the next DSO-visible update; open 11128, owner stephencompall-DA			`2026-11-02/singles-b.md`, `host-commands-b.md` Fix branch rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx (2026-11-03).	evidence/2026-11-02-singles-b.md
 11129	2026-11-02					dup of 10927 (family X2)			`2026-11-02/nightly-a.md`, `host-commands-a.md`	evidence/2026-11-02-nightly-a.md
 11130	2026-11-02					dup of 10933 (family Y traffic)			`2026-11-02/nightly-a.md`, `host-commands-a.md`	evidence/2026-11-02-nightly-a.md
 11131	2026-11-02					dup of 10933 (family Y traffic)			`2026-11-02/nightly-a.md`, `host-commands-a.md`	evidence/2026-11-02-nightly-a.md

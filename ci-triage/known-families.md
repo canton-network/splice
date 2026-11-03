@@ -462,7 +462,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
   private verdict (`Last ingested verdict record_time is now`) but only `History N ... ingesting a => b @ None` after.
 - Mechanism: ScanEventStore.getEvents caps at min(last verdict, last update) record time; a verdict the DSO party
   does not see is served only after the next DSO-visible update. Test fix: a tap after createTransferOffer.
-- Parent 11128 (dup 11136). Owner stephencompall-DA.
+- Parent 11128 (dup 11136). Owner stephencompall-DA. Fix branch `rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx` (2026-11-03).
 - 2026-11-02: dups 11138 (41428422164 wall-clock-time (0)) and 11139 (41438225454 wall-clock-time (8)); 4 failures that day
   (05:00, 07:43, 10:23, 11:36). Variant: the hidden verdict is 1 microsecond after the last DSO-visible update (same act),
   not ~250 ms. Packet `11138-11139-scan-party-monitor-events-cap-dup-11128.md`.
