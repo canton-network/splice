@@ -59,17 +59,15 @@ edits to shared files.
    Add or update the ref's row in `ci-triage/evidence/INDEX.tsv` (format in the template). New families or
    occurrences go into `ci-triage/known-families.md` (and its index table), an open fix branch into `STATE.md`.
 8. Issue commands for the user (never run them yourself):
-   - Not a duplicate: a comment with the findings and the suggested fix (one paragraph for a simple case such as a
-     missing synchronization in a test, more for complex ones), optionally a retitle to
+   - Not a duplicate: a comment with the findings and the suggested fix, optionally a retitle to
      `<Suite or job>: <cause>` while the title still starts with `GHA Run` or `Pipeline`, and
      `direnv exec . ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
    - Duplicate: `direnv exec . ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'`, one line
      per parent with all its duplicates (closing moves them to `Closed`). When the parent is open and recurs often, a short recurrence comment on it.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
-   Comments are self-contained for a senior engineer who never opens the triage branch: no packet paths or other
-   triage-branch references; inline the decisive log lines (job, timestamp, verbatim message in backticks) or
-   summarize them; cause, evidence, what was ruled out, resolution.
+   Write every comment in the shape of `references/issue-comment.md` (self-contained for a senior engineer, no
+   packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
 9. Fix, only when it is test-side and small enough to review in one screen: one branch per PR off `origin/main`
    (or the release line for a backport, `cherry-pick -x -s`), in its own worktree so the triage branch stays checked
    out (`references/recipes.md` section 8). When one branch fixes several refs, name it after the parent ref and

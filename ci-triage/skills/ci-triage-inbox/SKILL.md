@@ -88,7 +88,8 @@ first. Brief each with:
   - a test-side fix is described precisely (file, line, change), not written;
   - make available to the main thread, in its round files or its final message: the verdict per ref, the INDEX.tsv
     rows (exact TSV), text for `known-families.md` (an occurrence note, or a new family section with the next free
-    letter, plus its index row), and the issue commands (CLAUDE.md, Commands for the user).
+    letter, plus its index row), and the issue commands (CLAUDE.md, Commands for the user; comments in the shape of
+    `ci-triage/skills/ci-triage/references/issue-comment.md`).
 
 While the agents run, do not do the same work in the main thread. Report each agent's verdict in one or two lines
 when it lands. Two agents proposing the same new family letter, or the same parent ref for different causes, are
@@ -111,8 +112,9 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
      timestamps); say what is verified and what is not.
   3. Why this and not something else: the family and duplicate check, and the alternatives ruled out.
   4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status.
-  5. Its commands only (comment, close as duplicate, retitle, Status), in one fenced block, after re-checking the
-     live state of its refs (step 7, first bullet).
+  5. Its commands only (comment, close as duplicate, retitle, Status), in one `~~~` fenced block, after re-checking
+     the live state of its refs (step 7, first bullet). Comments follow
+     `ci-triage/skills/ci-triage/references/issue-comment.md`.
 - Stop and wait. The user may ask, disagree, ask for a fix branch, edit the commands, skip, or report that the
   commands ran. Do not present the next item before the user says so.
 - Resolve: apply the user's corrections to the packet, merge this item (step 6, for its rows only), record its

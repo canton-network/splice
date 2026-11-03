@@ -21,7 +21,7 @@ ref = a cn-test-failures issue number.
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
 | `STATE.md` | current state: inbox, open questions, open fix branches |
 | `rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` | one directory per inbox round: findings, commands handed out, open ends |
-| `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md` |
+| `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
 | `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
 
