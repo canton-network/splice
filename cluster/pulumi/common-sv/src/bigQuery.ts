@@ -59,7 +59,7 @@ const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
 // ============================================================================
 // SINGLE SOURCE OF TRUTH: REPLICATED TABLE CONFIGURATION
 // ============================================================================
-// what tables from Scan to replicate to BigQuery
+
 // How the hourly scheduled query appends staging rows to production:
 // - 'watermark': rows up to an hour before the newest staging row,
 //   past a watermark (hourly_append.sql); for tables written
@@ -123,9 +123,10 @@ const internedStringsTable: ReplicatedTables = {
   },
 };
 
-// Tables that exist once `flywayMigrationToWaitFor` has been applied,
-// so the publication, both Datastreams and the scheduled queries always
-// agree on the replicated tables.
+// What tables from Scan to replicate to BigQuery. All should exist once
+// `flywayMigrationToWaitFor` has been applied, so the publication, both
+// Datastreams and the scheduled queries always agree on the replicated
+// tables.
 function replicatedTablesFor(flywayMigrationToWaitFor: FlywayMigrationToWaitFor): ReplicatedTables {
   return {
     ...alwaysReplicatedTables,
