@@ -28,6 +28,10 @@ final case class StoreIngestionPerfMetrics(
   def avgItemTimeNs: BigDecimal =
     if (totalItems > 0) totalTimeNs / totalItems else BigDecimal(0)
 
+  def updatesPerSec: BigDecimal =
+    if (totalTimeNs > 0) BigDecimal(totalItems) * BigDecimal(1000000000L) / totalTimeNs
+    else BigDecimal(0)
+
   def eventsPerSec: BigDecimal =
     if (totalTimeNs > 0) BigDecimal(totalEvents) * BigDecimal(1000000000L) / totalTimeNs
     else BigDecimal(0)
@@ -174,6 +178,11 @@ abstract class StoreIngestionPerformanceTest(
         metrics.avgItemTimeNs,
       ),
       metric("total_items", "Total number of items ingested", BigDecimal(metrics.totalItems)),
+      metric(
+        "updates_per_sec",
+        "Ingested updates per second",
+        metrics.updatesPerSec,
+      ),
       metric(
         "total_events",
         "Total number of created + exercised/archived events across all ingested updates",
