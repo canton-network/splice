@@ -236,3 +236,20 @@ Item 5: GCP Postgres log (user export downloaded-logs-20261104-001129.json): 94 
 Item 5: user: 10139 is about sys.exit, so findings go into 11160 (links 10139, 10197, 10273); comments/10139.md dropped. New: driver storage ignores the 1 s storage-max-retry-interval (ProcessingTimeout() defaults, 10 s), empty-block tick every 500 ms per driver. comments/11160.md rewritten with fix options (Canton driver timeouts, test config empty-block interval, validator wait).
 
 Item 5: user asked for a frequency check on unrelated runs. New script ref_seq_contention.py. 11144 (simtime (3)) and 11141 (frontend-wall-clock-time (2)): same rate (0.30-0.34 failed per stored batch), chains up to 5-6 failures, max 2.5 s. 11155 (wall-clock-time (3)) has no insert block at all: main wall-clock shards run Canton BFT (-we). 11160 comment sentence on rising rate replaced by the comparison.
+
+## Duplicate check 2026-11-03 late (no new triage)
+
+User: pause for today; only close inbox items that are duplicates. Live issue list via gh api (newest 11176).
+- 11169 (run 41661993096, wall-clock-time (2), main d852f3c54c): family Z, dup of 11128. Same assertion at
+  ScanPartyMonitorScriptIntegrationTest.scala:273; confirm: script `At record time 2026-11-03T15:56:14.862127Z` for 16
+  polls until the failure at 15:56:35.910; d852f3c54c does not contain the 8211 merge 50545a01cc.
+- 11176 (run 41721296163, frontend-wall-clock-time (1)): family AE, dup of 11161. Same failure
+  `[frontend=bobSplitwell step=enter-payment-accept-verify] Could not find IdQuery(user-id-field) (FrontendIntegrationTest.scala:427)`;
+  confirm: `#logout-button` FindElement no such element at 21:59:45.539 and 21:59:49.035, two `Failed clue: Waiting
+  for login page to be ready` at 21:59:48.963 and 21:59:52.041, failure screenshot shows bob logged in (Logout).
+- Earlier verdicts of this round, closes handed out now: 11163 -> 10907 (item 7), 11155 -> 10438 (item 10),
+  10891 -> 10921 (item 11; comment rewritten without bare splice PR numbers).
+- Not duplicates by signature, left in the inbox untriaged: 11164 (WalletSurviveCantonRestartIntegrationTest),
+  11165 and 11168 (UnclaimedActivityRecordIntegrationTest, same test, likely one group), 11172 (Splitwell settle
+  debts with multiple parties, FrontendLoginUtil.scala:61, different assertion from AE), 11173 (checkErrors),
+  11174 (backup_status_cluster, cni), 11175 (static_tests), 11170, 11171 (needs-log).
