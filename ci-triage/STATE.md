@@ -19,10 +19,10 @@ Taken over from the previous triage branch:
   superseded by `skills/ci-triage-inbox/`, its script is `scripts/inbox_from_timelines.py`;
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 
-Access (`scripts/probe_access.py`, 2026-11-03): only splice via `gh api`. No sandbox token for DACH-NY (the
-user's fine-grained token is still in review), no `ghx` (router not reachable: network policy for
-`localhost:18555` missing, client key not copied). Issues come from host exports in `ci-triage/export/`,
-canton-network-internal and CircleCI logs only as user downloads. Board: host only.
+Access (`scripts/probe_access.py`, 2026-11-03 evening, after the sandbox was re-created): cn-test-failures issues
+and splice via `gh api` (sandbox token of rautenrieth-da; `gh issue view` works too). No `ghx`; canton-network-internal
+and CircleCI logs only as user downloads. Board (project 48, Status) not readable: host only.
+The token is a sandbox secret: re-creating the sandbox wipes it (the user sets it again).
 
 ## Inbox 2026-11-03 13:14 (35 items, board export)
 
