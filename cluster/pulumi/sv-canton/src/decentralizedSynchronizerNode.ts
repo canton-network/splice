@@ -99,7 +99,6 @@ abstract class InStackDecentralizedSynchronizerNode
         port: number;
       }[];
     },
-    autoInit: boolean,
     version: CnChartVersion,
     logLevel?: LogLevel,
     logLevelStdout?: LogLevel,
@@ -230,7 +229,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       bftSequencerPostgres?: Postgres;
     },
     configuredPeerUrls: string[],
-    autoInit: boolean,
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     opts?: SpliceCustomResourceOptions
@@ -262,7 +260,6 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
           };
         }),
       },
-      autoInit,
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,

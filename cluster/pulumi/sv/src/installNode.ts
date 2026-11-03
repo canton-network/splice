@@ -5,6 +5,7 @@ import {
   Auth0Client,
   auth0UserNameEnvVarSource,
   config,
+  DecentralizedSynchronizerUpgradeConfig,
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
@@ -12,13 +13,13 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
+  installParticipant,
   StaticSvConfig,
   svConfigs,
   svRunbookConfig,
 } from '@canton-network/splice-pulumi-common-sv';
 import { readBackupConfig } from '@canton-network/splice-pulumi-common-validator/src/backup';
 
-import { installParticipant } from './participant';
 import { installSvApps } from './sv';
 
 // The SV runbook restores its identity from either a GCP dump or a local file,
@@ -49,6 +50,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       logging: config.logging,
       auth0: auth0Config,
       version,
+      migrationId: DecentralizedSynchronizerUpgradeConfig.activeMigrationId,
       disableProtection: isSvRunbook,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,

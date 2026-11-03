@@ -5,7 +5,6 @@ import {
   Auth0Config,
   ChartValues,
   CnChartVersion,
-  DecentralizedSynchronizerUpgradeConfig,
   DomainMigrationIndex,
   ExactNamespace,
   getAdditionalJvmOptions,
@@ -21,8 +20,9 @@ import {
   spliceConfig,
   SpliceCustomResourceOptions,
 } from '@canton-network/splice-pulumi-common';
-import { SingleSvConfiguration } from '@canton-network/splice-pulumi-common-sv';
 import { installPostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+
+import { SingleSvConfiguration } from './singleSvConfig';
 
 export async function installParticipant(
   args: ParticipantArgs,
@@ -46,6 +46,7 @@ export type ParticipantArgs = {
   participant: SingleSvConfiguration['participant'];
   logging: SingleSvConfiguration['logging'];
   version: CnChartVersion;
+  migrationId: DomainMigrationIndex;
   auth0: Auth0Config;
   existingDb?: Postgres;
   disableProtection?: boolean;
@@ -86,6 +87,7 @@ function installParticipantChart(
     participant,
     logging,
     version,
+    migrationId,
     auth0,
     participantAdminUserNameFrom,
     imagePullServiceAccountName,
@@ -95,11 +97,7 @@ function installParticipantChart(
   db: Postgres,
   customOptions?: SpliceCustomResourceOptions
 ): InstalledHelmChart {
-  const defaultValues: ChartValues = loadDefaultParticipantValues(
-    xns,
-    auth0,
-    DecentralizedSynchronizerUpgradeConfig.activeMigrationId
-  );
+  const defaultValues: ChartValues = loadDefaultParticipantValues(xns, auth0, migrationId);
 
   const { kmsValues, kmsDependencies } = participant?.kms
     ? getParticipantKmsHelmResources(xns, participant.kms)
@@ -113,7 +111,7 @@ function installParticipantChart(
       host: db.address,
       secretName: db.secretName,
       // the following will not be needed when the MIGRATION_ID gets removed from defaults
-      databaseName: `participant_${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`,
+      databaseName: `participant_${migrationId}`,
     },
     adminApi: {
       ...defaultValues.adminApi,

@@ -7,6 +7,7 @@ export * from './config';
 export * from './svConfigs';
 export * from './dsoConfig';
 export * from './loopback';
+export * from './participant';
 export * from './approvedIdentities';
 export * from './svApp';
 export * from './validatorApp';

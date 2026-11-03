@@ -24,9 +24,10 @@ def parse_args():
     parser.add_argument("--console-only", action="store_true", help="If set, only the canton console will be started in interactive mode, without running the bootstrap script.")
     return parser.parse_args()
 
-class SequencerMediatorPods(NamedTuple):
+class NodePods(NamedTuple):
     sequencer: client.V1Pod
     mediator: client.V1Pod
+    participant: client.V1Pod
 
 def wait_for_pod_to_be_running(pod, namespace):
     api_instance = client.CoreV1Api()
@@ -41,53 +42,73 @@ def wait_for_pod_to_be_running(pod, namespace):
         if time.time() - start_time > 600:
             raise TimeoutError(f"Timed out waiting for pod '{pod.metadata.name}' in namespace '{namespace}' to be running.")
 
-def wait_and_get_sequencer_mediator_pods(node_namespace: str, migration_id: int) -> SequencerMediatorPods:
+def wait_and_get_node_pods(node_namespace: str, migration_id: int) -> NodePods:
     api_instance = client.CoreV1Api()
-    # For every namespace, find the sequencer and mediator pods with the given migration ID
+    # For every namespace, find the sequencer and mediator pods with the given migration ID, and the participant pod
     sequencers = api_instance.list_namespaced_pod(namespace=node_namespace, label_selector=f"splice-component=sequencer,migration_id={migration_id}")
     mediators = api_instance.list_namespaced_pod(namespace=node_namespace, label_selector=f"splice-component=mediator,migration_id={migration_id}")
+    participants = api_instance.list_namespaced_pod(namespace=node_namespace, label_selector="app=participant")
     if not sequencers.items:
         raise RuntimeError(f"No sequencer pod found for node '{node_namespace}' with migration ID '{migration_id}'")
     if not mediators.items:
         raise RuntimeError(f"No mediator pod found for node '{node_namespace}' with migration ID '{migration_id}'")
+    if not participants.items:
+        raise RuntimeError(f"No participant pod found for node '{node_namespace}'")
     if len(sequencers.items) > 1:
         raise RuntimeError(f"Multiple sequencer pods found for node '{node_namespace}' with migration ID '{migration_id}'")
     if len(mediators.items) > 1:
         raise RuntimeError(f"Multiple mediator pods found for node '{node_namespace}' with migration ID '{migration_id}'")
+    if len(participants.items) > 1:
+        raise RuntimeError(f"Multiple participant pods found for node '{node_namespace}'")
     sequencer = sequencers.items[0]
     mediator = mediators.items[0]
+    participant = participants.items[0]
     wait_for_pod_to_be_running(sequencer, node_namespace)
     wait_for_pod_to_be_running(mediator, node_namespace)
-    return SequencerMediatorPods(sequencer=sequencer, mediator=mediator)
+    wait_for_pod_to_be_running(participant, node_namespace)
+    return NodePods(sequencer=sequencer, mediator=mediator, participant=participant)
 
-def setup_port_forwarding(pods: list[SequencerMediatorPods]):
+def setup_port_forwarding(pods: list[NodePods]):
     processes = []
 
-    for idx, pod_pair in enumerate(pods):
+    for idx, node_pods in enumerate(pods):
         local_mediator_admin_api = 11001 + (idx+1) * 100
         pod_mediator_admin_api = 5007
         local_sequencer_public_api = 11002 + (idx+1) * 100
         pod_sequencer_public_api = 5008
         local_sequencer_admin_api = 11003 + (idx+1) * 100
         pod_sequencer_admin_api = 5009
+        local_participant_admin_api = 11004 + (idx+1) * 100
+        pod_participant_admin_api = 5002
+        local_participant_ledger_api = 11005 + (idx+1) * 100
+        pod_participant_ledger_api = 5001
 
         mediator_process = subprocess.Popen(
-            ["kubectl", "port-forward", f"pod/{pod_pair.mediator.metadata.name}", f"{local_mediator_admin_api}:{pod_mediator_admin_api}", "-n", pod_pair.mediator.metadata.namespace],
+            ["kubectl", "port-forward", f"pod/{node_pods.mediator.metadata.name}", f"{local_mediator_admin_api}:{pod_mediator_admin_api}", "-n", node_pods.mediator.metadata.namespace],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             preexec_fn=os.setsid
         )
         processes.append(mediator_process)
-        logging.info(f"Port forwarding set up for mediator pod '{pod_pair.mediator.metadata.name}' on port {local_mediator_admin_api} (admin API)")
+        logging.info(f"Port forwarding set up for mediator pod '{node_pods.mediator.metadata.name}' on port {local_mediator_admin_api} (admin API)")
 
         sequencer_process = subprocess.Popen(
-            ["kubectl", "port-forward", f"pod/{pod_pair.sequencer.metadata.name}", f"{local_sequencer_public_api}:{pod_sequencer_public_api}", f"{local_sequencer_admin_api}:{pod_sequencer_admin_api}", "-n", pod_pair.sequencer.metadata.namespace],
+            ["kubectl", "port-forward", f"pod/{node_pods.sequencer.metadata.name}", f"{local_sequencer_public_api}:{pod_sequencer_public_api}", f"{local_sequencer_admin_api}:{pod_sequencer_admin_api}", "-n", node_pods.sequencer.metadata.namespace],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             preexec_fn=os.setsid
         )
         processes.append(sequencer_process)
-        logging.info(f"Port forwarding set up for sequencer pod '{pod_pair.sequencer.metadata.name}' on ports {local_sequencer_public_api} (public API) and {local_sequencer_admin_api} (admin API)")
+        logging.info(f"Port forwarding set up for sequencer pod '{node_pods.sequencer.metadata.name}' on ports {local_sequencer_public_api} (public API) and {local_sequencer_admin_api} (admin API)")
+
+        participant_process = subprocess.Popen(
+            ["kubectl", "port-forward", f"pod/{node_pods.participant.metadata.name}", f"{local_participant_admin_api}:{pod_participant_admin_api}", f"{local_participant_ledger_api}:{pod_participant_ledger_api}", "-n", node_pods.participant.metadata.namespace],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setsid
+        )
+        processes.append(participant_process)
+        logging.info(f"Port forwarding set up for participant pod '{node_pods.participant.metadata.name}' on ports {local_participant_admin_api} (admin API) and {local_participant_ledger_api} (ledger API)")
 
     return processes
 
@@ -112,7 +133,7 @@ def main(args):
     if len(node_namespaces) != 4:
         raise RuntimeError(f"Expected exactly 4 namespaces for dsync '{args.dsync_name}', but found {len(node_namespaces)}: {node_namespaces}")
 
-    pods = [wait_and_get_sequencer_mediator_pods(node_namespace, args.migration_id) for node_namespace in node_namespaces]
+    pods = [wait_and_get_node_pods(node_namespace, args.migration_id) for node_namespace in node_namespaces]
     processes = setup_port_forwarding(pods)
 
     logging.info("Port forwarding is set up. Starting Canton script.")
