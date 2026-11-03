@@ -38,10 +38,12 @@ thread owns the rest of the round directory and the shared files. What the files
 The rounds up to 2026-11-02 come from the previous triage branch (named by the time of its first commit for each).
 
 Lessons: triage is on a weekly rotation, and each week ends with `lessons/<ISO week>.md`, a Markdown read of at most
-10 minutes (about 6 lessons, 1500 words) for the engineers maintaining splice. A lesson is a test-code pattern
-others would plausibly repeat, backed by a resolved item: title (the pattern), Seen (refs, symptom), Why (the
-mechanism), Do (the right way, with a short snippet), Fix (PR or branch). Infra one-offs, Canton bugs and plain
-duplicates are not lessons. Over the cap, keep the lessons most likely to recur.
+10 minutes (about 6 lessons, 1500 words) for the engineers maintaining splice. A lesson teaches a test-code pattern
+others would plausibly repeat, backed by a resolved item: title (the pattern), the general rule and why it bites, a
+mechanism from splice as the example, Do (the right way, with a short generic snippet). No issue or PR numbers, test
+or author names, and no account of what happened: it teaches, it does not report or blame. Which items a lesson
+comes from is recorded in the round README, not in the lesson. Infra one-offs, Canton bugs and plain duplicates are
+not lessons. Over the cap, keep the lessons most likely to recur.
 
 ## Background
 
