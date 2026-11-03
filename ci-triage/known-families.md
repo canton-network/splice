@@ -416,7 +416,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - Each nightly files ~12 per-job issues; one grep per job for `found 37`, `outbox flusher failed` or
   `TOPOLOGY_CONVERSION_ERROR`, close as dups of the parent.
 - 2026-11-02: X1 fixed by #8149, X3 by #8154 (Martin Florian); both confirmed at PV 36 in the 10-31..11-02 nightlies.
-  X2 persists with Canton 3.7.1 (#8165): 16 dups in 3 nights (11108-11135, see `issues/2026-11-02-nightly-a.md`); the
+  X2 persists with Canton 3.7.1 (#8165): 16 dups in 3 nights (11108-11135, see `evidence/2026-11-02-nightly-a.md`); the
   roll-forward-lsu shard alternates between OTK on `::36-0` (3x) and the 10925 variant on `::37-2` (8x).
 
 ## Y. Test needs newer Daml packages than its scalatest tag (mainnet-Daml nightly)

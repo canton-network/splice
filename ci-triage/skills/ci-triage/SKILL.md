@@ -11,7 +11,7 @@ triage branch is not checked out, ask the user which one is current before writi
 Input: one ref. Read its body and comments from the source chosen in CLAUDE.md. If neither source has it, stop and
 ask the user to fix access or rerun the export.
 
-Output: a packet `ci-triage/issues/<ref>-<slug>.md`, its row in `ci-triage/issues/INDEX.tsv`, a duplicate verdict,
+Output: a packet `ci-triage/evidence/<ref>-<slug>.md`, its row in `ci-triage/evidence/INDEX.tsv`, a duplicate verdict,
 issue commands for the user, and optionally a fix branch. Everything you write must be reproducible by someone else:
 every claim is a command plus its verbatim output.
 
@@ -39,7 +39,7 @@ packet and asks you to return the INDEX rows, catalogue notes and commands inste
    CircleCI and canton-network-internal Actions: work from the logs the user saved in `export/<ref>/`; if there are
    none, name the exact job and step to download and stop.
 3. Duplicate check BEFORE deep analysis: compare the flagged line and the shard's suite list against
-   `ci-triage/known-families.md`, `ci-triage/issues/INDEX.tsv` and recent issues (title, body, comments; recipe 11
+   `ci-triage/known-families.md`, `ci-triage/evidence/INDEX.tsv` and recent issues (title, body, comments; recipe 11
    with `ghx`, else the recipe 9 export). A match still needs the confirming grep listed in the family. Say
    "duplicate of X" only after that grep. If X is closed as fixed, check that the run's sha contains the fix
    (step 6); if it does, this is a regression, not a duplicate.
@@ -54,7 +54,7 @@ packet and asks you to return the INDEX rows, catalogue notes and commands inste
    fix that already exists on main, check `git merge-base --is-ancestor <sha> origin/<branch>`: a missing
    backport is the most common resolution for release-line failures.
 7. Write the packet from `references/packet-template.md`: command, then verbatim output, per finding.
-   Add or update the ref's row in `ci-triage/issues/INDEX.tsv` (format in the template). New families or
+   Add or update the ref's row in `ci-triage/evidence/INDEX.tsv` (format in the template). New families or
    occurrences go into `ci-triage/known-families.md` (and its index table), an open fix branch into `STATE.md`.
 8. Issue commands for the user (never run them yourself):
    - Not a duplicate: a comment with the findings and the suggested fix (one paragraph for a simple case such as a

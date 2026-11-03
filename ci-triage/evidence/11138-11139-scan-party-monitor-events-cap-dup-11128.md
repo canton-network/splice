@@ -152,7 +152,7 @@ for p in "11138 logs-wall-clock-time-0 T10:59:(1[6-9]|[23][0-9])" "11139 logs-wa
 During the act, two verdicts are ingested 1 microsecond apart (10:59:17.853991 / .853992, 12:13:10.194132 / .194133).
 The update history records only the first record time; afterwards it moves `@ None` until after the failure. The
 script's cursor sits exactly at the update's record time, so `/v0/events` (capped at min(last verdict, last update)
-record time, see 11128 in `issues/2026-11-02-singles-b.md` section 4) never serves the later, DSO-invisible verdict. Same
+record time, see 11128 in `evidence/2026-11-02-singles-b.md` section 4) never serves the later, DSO-invisible verdict. Same
 mechanism as 11128; here the hidden verdict follows the last DSO-visible update by 1 microsecond instead of ~250 ms.
 The later of the two verdicts is attributed to the private TransferOffer by the cursor position, not by contract id;
 not checked further.

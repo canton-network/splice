@@ -29,7 +29,7 @@ One table, one row per item, exactly one class each:
 
 | Class | Test | Action |
 |---|---|---|
-| done | has a row in `issues/INDEX.tsv` or a root-cause comment, and no newer failure | check the comment against the packet or the family's confirming grep; propose the Status (`Triaged`, or close as duplicate); no new packet |
+| done | has a row in `evidence/INDEX.tsv` or a root-cause comment, and no newer failure | check the comment against the packet or the family's confirming grep; propose the Status (`Triaged`, or close as duplicate); no new packet |
 | waiting | STATE.md lists it as open on purpose (owner question, fix PR pending, umbrella) | leave it; mention it |
 | needs-log | the evidence is only in CircleCI or canton-network-internal Actions | name the exact job id and step for the user to save to `export/<ref>/`; one request for all of them |
 | assigned | assigned to a person with an active discussion | skip unless asked; mention it |
@@ -51,7 +51,7 @@ Launch one background agent per group, all in one message. Prefer forks (they in
 CLAUDE.md and the classification); a fresh agent must be told to read `ci-triage/CLAUDE.md` and the ci-triage skill
 first. Brief each with:
 - the refs with run id, job id and job name, the suspected family, and the packet file name to write
-  (`ci-triage/issues/<ref>[-<ref>...]-<slug>.md`);
+  (`ci-triage/evidence/<ref>[-<ref>...]-<slug>.md`);
 - follow the ci-triage skill, steps 1 to 9, with these limits:
   - write only your own packet file; do not edit `INDEX.tsv`, `known-families.md` or `STATE.md`, do not commit,
     do not create or switch branches (other agents work in the same checkout);
@@ -66,7 +66,7 @@ reconciled in step 5.
 ## 5. Merge (main thread only)
 
 - Check each returned packet: ASCII only, commands with verbatim output, file name as briefed.
-- Add the rows to `issues/INDEX.tsv` (keep it sorted by ref, one row per ref, 11 tab-separated columns), the family
+- Add the rows to `evidence/INDEX.tsv` (keep it sorted by ref, one row per ref, 11 tab-separated columns), the family
   text and index rows to `known-families.md`, and refresh `STATE.md`: the inbox table by class with the next
   action per item, open fix branches, open owner questions.
 - One commit for the round: `[skip ci] <date>: <one line per verdict group>`.

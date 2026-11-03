@@ -15,8 +15,8 @@ ref = a cn-test-failures issue number.
 
 | Path | Content |
 |---|---|
-| `issues/<ref>-<slug>.md` | evidence packets, one per issue or per group of issues |
-| `issues/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
+| `evidence/<ref>-<slug>.md` | evidence packets, one per issue or per group of issues |
+| `evidence/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
 | `STATE.md` | current state: inbox, open questions, open fix branches |
 | `history/rounds/` | Raymond's per-round READMEs and the host commands he ran, read-only |
@@ -24,8 +24,9 @@ ref = a cn-test-failures issue number.
 | `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
 
-Paths cited in issue comments before 2026-11-03 (e.g. `ci-triage/2026-11-02/singles-b.md`) were moved; find the
-new path with `git show --name-status -M 7c4d314acd -- ci-triage | grep '<old path>'`. Raymond's README,
+Paths cited in older issue comments (e.g. `ci-triage/2026-11-02/singles-b.md`) may have moved, possibly more than
+once. List every rename of a file, newest first, with
+`git log -M --diff-filter=R --name-status --format= -- ci-triage | grep -F '<file name>'`. Raymond's README,
 handover and onboarding are on `ray/ci-triage-2026-09-15` (also at `2bf9628c11` on this branch).
 
 ## Background
