@@ -142,6 +142,9 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               value: {
                 provider: formValues.idValue,
                 activityWeight: activityWeightToOptional(formValues.activityWeight),
+                // TODO(#7665): make these fields editable
+                appKind: null,
+                opsParties: null,
               },
             },
           },

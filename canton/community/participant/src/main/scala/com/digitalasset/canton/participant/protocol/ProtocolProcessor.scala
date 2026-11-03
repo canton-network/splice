@@ -6,17 +6,18 @@ package com.digitalasset.canton.participant.protocol
 import cats.data.{EitherT, Nested}
 import cats.syntax.either.*
 import cats.syntax.foldable.*
-import cats.syntax.functor.*
 import cats.syntax.functorFilter.*
 import cats.syntax.traverse.*
 import com.daml.metrics.api.MetricsContext
 import com.daml.nameof.NameOf.functionFullName
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.base.error.RpcError
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.RequireTypes.NonNegativeLong
 import com.digitalasset.canton.config.TestingConfigInternal
 import com.digitalasset.canton.crypto.{
+  DecryptionError,
   Signature,
+  SyncCryptoError,
   SynchronizerCryptoClient,
   SynchronizerSnapshotSyncCryptoApi,
 }
@@ -24,18 +25,24 @@ import com.digitalasset.canton.data.*
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.TransactionError
 import com.digitalasset.canton.ledger.participant.state.SequencedEventUpdate
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{
   FutureUnlessShutdown,
   PromiseUnlessShutdownFactory,
   UnlessShutdown,
 }
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.participant.event.AcsChangeSupport
 import com.digitalasset.canton.participant.protocol.EngineController.EngineAbortStatus
 import com.digitalasset.canton.participant.protocol.Phase37Synchronizer.RequestOutcome
 import com.digitalasset.canton.participant.protocol.ProcessingSteps.{
   CleanReplayData,
+  DecryptedViewData,
   DecryptedViews,
   PendingRequestData,
   ReplayDataOr,
@@ -48,6 +55,7 @@ import com.digitalasset.canton.participant.protocol.conflictdetection.{
   CommitSet,
   RequestTracker,
 }
+import com.digitalasset.canton.participant.protocol.reassignment.ReassignmentValidation
 import com.digitalasset.canton.participant.protocol.submission.*
 import com.digitalasset.canton.participant.protocol.submission.CommandDeduplicator.DeduplicationFailed
 import com.digitalasset.canton.participant.protocol.validation.RecipientsValidator
@@ -74,8 +82,8 @@ import com.digitalasset.canton.util.*
 import com.digitalasset.canton.util.EitherTUtil.condUnitET
 import com.digitalasset.canton.util.EitherUtil.RichEither
 import com.digitalasset.canton.util.Thereafter.syntax.ThereafterOps
-import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{LfPartyId, RequestCounter, SequencerCounter, checked}
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 
 import java.util.UUID
@@ -125,8 +133,6 @@ abstract class ProtocolProcessor[
       ephemeral,
       crypto,
       sequencerClient,
-      clock,
-      sequencerClient.protocolVersion,
     )
     with RequestProcessor[RequestViewType, SequencedEventUpdate] {
 
@@ -139,9 +145,8 @@ abstract class ProtocolProcessor[
 
   def participantId: ParticipantId
 
-  private val recipientsValidator
-      : RecipientsValidator[(WithRecipients[steps.DecryptedView], Option[Signature])] =
-    new RecipientsValidator(_._1.unwrap, _._1.recipients, loggerFactory)
+  private val recipientsValidator: RecipientsValidator[DecryptedViewData[steps.DecryptedView]] =
+    new RecipientsValidator(_.view.unwrap, _.view.recipients, loggerFactory)
 
   private[this] def withKind(message: String): String = s"${steps.requestKind}: $message"
 
@@ -201,6 +206,7 @@ abstract class ProtocolProcessor[
               submissionParam,
               untracked,
               pendingSubmission,
+              Some(recentSnapshot),
               untracked.approximateTimestampForSigning,
               untracked.maxSequencingTime,
             ).tapLeft(submissionError =>
@@ -211,6 +217,7 @@ abstract class ProtocolProcessor[
               submissionParam,
               tracked,
               pendingSubmission,
+              Some(recentSnapshot),
               tracked.approximateTimestampForSigning,
               tracked.maxSequencingTime,
             )
@@ -257,7 +264,8 @@ abstract class ProtocolProcessor[
               if (mod < 0) mod + mediatorCount else mod
             }
             val chosen = checked(allActiveMediatorGroups(chosenIndex)).index
-            logger.debug(s"Chose the mediator group $chosen")
+            if (mediatorCount > 1)
+              logger.debug(s"Chose the mediator group $chosen")
             Right(MediatorGroupRecipient(chosen))
           }
       }
@@ -271,6 +279,7 @@ abstract class ProtocolProcessor[
       submissionParam: SubmissionParam,
       untracked: steps.UntrackedSubmission,
       pendingSubmission: steps.PendingSubmissionData,
+      currentSnapshotApproximation: Option[SynchronizerSnapshotSyncCryptoApi],
       approximateTimestampForSigning: CantonTimestamp,
       maxSequencingTime: CantonTimestamp,
   )(implicit
@@ -282,6 +291,7 @@ abstract class ProtocolProcessor[
         untracked.pendingSubmissionId,
         MessageId.randomMessageId(),
         untracked.batch,
+        currentSnapshotApproximation,
         approximateTimestampForSigning,
         maxSequencingTime,
         untracked.embedSubmissionError,
@@ -310,6 +320,7 @@ abstract class ProtocolProcessor[
       submissionParam: SubmissionParam,
       tracked: steps.TrackedSubmission,
       pendingSubmission: steps.PendingSubmissionData,
+      currentSnapshotApproximation: Option[SynchronizerSnapshotSyncCryptoApi],
       approximateTimestampForSigning: CantonTimestamp,
       maxSequencingTime: CantonTimestamp,
   )(implicit
@@ -405,6 +416,7 @@ abstract class ProtocolProcessor[
             preparedBatch.pendingSubmissionId,
             messageId,
             preparedBatch.batch,
+            currentSnapshotApproximation,
             approximateTimestampForSigning,
             maxSequencingTime,
             preparedBatch.embedSequencerRequestError,
@@ -458,9 +470,9 @@ abstract class ProtocolProcessor[
   )(
       trafficCost: Long,
       traceContext: TraceContext,
-  ): FutureUnlessShutdown[Unit] =
+  ): EitherT[FutureUnlessShutdown, RpcError, Unit] =
     // TODO(#33681): Remove default implementation
-    FutureUnlessShutdown.unit
+    EitherT.rightT(())
 
   /** Submit the batch to the sequencer. Also registers `submissionParam` as pending submission.
     */
@@ -469,6 +481,7 @@ abstract class ProtocolProcessor[
       submissionId: steps.PendingSubmissionId,
       messageId: MessageId,
       batch: Batch[DefaultOpenEnvelope],
+      currentSnapshotApproximation: Option[SynchronizerSnapshotSyncCryptoApi],
       approximateTimestampForSigning: CantonTimestamp,
       maxSequencingTime: CantonTimestamp,
       embedSubmissionError: SequencerRequestError => steps.SubmissionSendError,
@@ -505,8 +518,8 @@ abstract class ProtocolProcessor[
       _ <- sequencerClient
         .send(
           batch,
+          currentSnapshotApproximation = currentSnapshotApproximation,
           timestamps = SendRequestTimestamps(
-            topologyTimestamp = None,
             approximateTimestampForSigning = approximateTimestampForSigning,
             maxSequencingTime = maxSequencingTime,
           ),
@@ -770,7 +783,7 @@ abstract class ProtocolProcessor[
 
           case Some((snapshot, uncheckedDecryptedViews, synchronizerParameters)) =>
             for {
-              result <- decryptAndValidateViews(
+              result <- validateAndReconstructViews(
                 rc,
                 ts,
                 rootHashMessage,
@@ -838,7 +851,6 @@ abstract class ProtocolProcessor[
                         rootHash,
                         requestDataHandle,
                         mediator,
-                        snapshot,
                         malformedPayloads,
                         publishUpdate,
                       )
@@ -988,13 +1000,14 @@ abstract class ProtocolProcessor[
           )
       )
 
+    val multiSynchronizerFlagRequired = rootHashMessage.viewType.isReassignment &&
+      ReassignmentValidation.isMultiSynchronizerFlagRequired(sequencerClient.psid)
+
     for {
       snapshot <- EitherT.right(crypto.awaitSnapshotUSSupervised(s"await crypto snapshot $ts")(ts))
       multiSynchronizerEnabled <- isMultiSynchronizerEnabled(snapshot)
       result <-
-        if (
-          rootHashMessage.viewType.isReassignment && !multiSynchronizerEnabled && protocolVersion >= ProtocolVersion.v35
-        ) {
+        if (multiSynchronizerFlagRequired && !multiSynchronizerEnabled) {
           // Whether an alarm is raised depends on each participant's feature flag setting.
           // Participants with the flag enabled will still reject the request, but without triggering an alarm.
           SyncServiceAlarm
@@ -1011,7 +1024,6 @@ abstract class ProtocolProcessor[
             rootHash,
             requestDataHandle,
             mediator,
-            snapshot,
             Nil,
             publishUpdate,
           ).map(_ => None)
@@ -1021,6 +1033,7 @@ abstract class ProtocolProcessor[
             uncheckedDecryptedViews <- steps.decryptViews(
               viewMessages,
               snapshot,
+              crypto.ips.getSynchronizerLimits,
               ephemeral.sessionKeyStore.convertStore,
             )
           } yield Option((snapshot, uncheckedDecryptedViews, synchronizerParameters))
@@ -1028,7 +1041,7 @@ abstract class ProtocolProcessor[
     } yield result
   }
 
-  private def decryptAndValidateViews(
+  private def validateAndReconstructViews(
       rc: RequestCounter,
       ts: CantonTimestamp,
       rootHashMessage: RootHashMessage[SerializedRootHashMessagePayload],
@@ -1054,24 +1067,44 @@ abstract class ProtocolProcessor[
       logger.warn(s"Request $rc: Decryption error: $decryptionError")
     }
 
-    val decryptionErrors = rawDecryptionErrors.map(ViewMessageError(_))
+    // Hide internal decryption details to prevent leaking sensitive information to callers
+    val decryptionErrors = rawDecryptionErrors.map {
+      case EncryptedViewMessageError.SymmetricDecryptError(DecryptionError.FailedToDecrypt(_)) =>
+        ViewMessageError(
+          EncryptedViewMessageError.SymmetricDecryptError(
+            DecryptionError.FailedToDecrypt("Symmetric decryption failed")
+          )
+        )
+      case EncryptedViewMessageError.SyncCryptoDecryptError(
+            SyncCryptoError.SyncCryptoDecryptionError(DecryptionError.FailedToDecrypt(_))
+          ) =>
+        ViewMessageError(
+          EncryptedViewMessageError.SyncCryptoDecryptError(
+            SyncCryptoError.SyncCryptoDecryptionError(
+              DecryptionError.FailedToDecrypt("Asymmetric decryption failed")
+            )
+          )
+        )
+      case other =>
+        ViewMessageError(other)
+    }
 
     val (viewsWithCorrectRootHash, viewsWithWrongRootHash) =
-      decryptedViewsWithSignatures.partition { case (view, _) =>
-        view.unwrap.rootHash == correctRootHash
-      }
+      decryptedViewsWithSignatures.partition(decryptedView =>
+        decryptedView.view.unwrap.rootHash == correctRootHash
+      )
 
     val incorrectRootHashes: Seq[MalformedPayload] =
-      viewsWithWrongRootHash.map { case (viewTree, _) =>
-        ProtocolProcessor.WrongRootHash(viewTree.unwrap, correctRootHash)
-      }
+      viewsWithWrongRootHash.map(decryptedView =>
+        ProtocolProcessor.WrongRootHash(decryptedView.view.unwrap, correctRootHash)
+      )
 
     incorrectRootHashes.foreach { incorrectRootHash =>
       logger.warn(s"Request $rc: Found malformed payload: $incorrectRootHash")
     }
 
     val submitterMetadataO = steps.getSubmitterInformation(
-      viewsWithCorrectRootHash.map { case (view, _) => view.unwrap }
+      viewsWithCorrectRootHash.map(decryptedView => decryptedView.view.unwrap)
     )
 
     val submissionTopologyTimestamp = rootHashMessage.submissionTopologyTimestamp
@@ -1184,8 +1217,9 @@ abstract class ProtocolProcessor[
     phase3validationCompleted(parsedRequest.rootHash)
     // Check whether the declared mediator is still an active mediator.
     for {
+      snapshot <- EitherT.rightT(parsedRequest.snapshot)
       mediatorIsActive <- EitherT
-        .right(parsedRequest.snapshot.ipsSnapshot.isMediatorActive(mediator))
+        .right(snapshot.ipsSnapshot.isMediatorActive(mediator))
       _ <-
         if (mediatorIsActive)
           for {
@@ -1343,10 +1377,37 @@ abstract class ProtocolProcessor[
       _ = EitherTUtil.doNotAwaitUS(timeoutET, "Handling timeout failed")
 
       responsesTo <- responsesToET
+      // we use a snapshot approximation so we can potentially batch multiple requests together
+      currentSnapshotApproximation <- EitherT.right[steps.RequestError](
+        crypto.currentSnapshotApproximation
+      )
+      synchronizerParameters <- EitherT(
+        currentSnapshotApproximation.ipsSnapshot.findDynamicSynchronizerParameters()
+      ).leftMap(_ =>
+        steps.embedRequestError(
+          UnableToGetDynamicSynchronizerParameters(
+            currentSnapshotApproximation.psid,
+            currentSnapshotApproximation.ipsSnapshot.timestamp,
+          )
+        )
+      )
+      maxSequencingTime = requestId.unwrap.add(
+        synchronizerParameters.parameters.confirmationResponseTimeout.unwrap
+      )
+      // Reused for both the inner response signing and the submission request signing below, so
+      // that both signatures are computed as of the same approximate time.
+      signingTimestamp = clock.now
 
       signedResponsesTo <- EitherT.right[steps.RequestError](
         responsesTo.traverse { case (responses, recipients) =>
-          signResponses(parsedRequest.snapshot, responses).map(_ -> recipients)
+          signResponses(
+            currentSnapshotApproximation,
+            responses,
+            signingTimestamp,
+            maxSequencingTime,
+          ).map(
+            _ -> recipients
+          )
         }
       )
 
@@ -1374,7 +1435,14 @@ abstract class ProtocolProcessor[
                 s"Phase 4: Sending for request=${requestId.unwrap} with msgId=$messageId approved=$approved, rejected=$rejected, abstained=$abstained"
               )
               EitherT.right[steps.RequestError](
-                sendResponses(requestId, Seq(spm -> recipients), Some(messageId))
+                sendResponses(
+                  requestId,
+                  Seq(spm -> recipients),
+                  currentSnapshotApproximation,
+                  signingTimestamp,
+                  maxSequencingTime,
+                  Some(messageId),
+                )
               )
             case _ =>
               logger.info(
@@ -1397,7 +1465,6 @@ abstract class ProtocolProcessor[
         steps.requestType.PendingRequestData
       ],
       mediatorGroup: MediatorGroupRecipient,
-      snapshot: SynchronizerSnapshotSyncCryptoApi,
       malformedPayloads: Seq[MalformedPayload],
       publishUpdate: PublishUpdateViaRecordOrderPublisher[SequencedEventUpdate],
   )(implicit
@@ -1422,12 +1489,39 @@ abstract class ProtocolProcessor[
           rootHash,
           malformedPayloads,
         )
+
+        // we use a snapshot approximation for signing so we can potentially batch multiple requests together
+        currentSnapshotApproximation <- EitherT.right(crypto.currentSnapshotApproximation)
+
+        maxSequencingTime <- EitherT.right(
+          maxSequencingTimeForConfirmationResponse(
+            requestId,
+            currentSnapshotApproximation,
+          )
+        )
+        // Reused for both the inner response signing and the submission request signing below, so
+        // that both signatures are computed as of the same approximate time.
+        signingTimestamp = clock.now
+
         _ <- confirmationResponsesO match {
           case Some(responses) =>
             val recipients = Recipients.cc(mediatorGroup)
             EitherT.right(
-              signResponses(snapshot, responses)
-                .map(message => sendResponses(requestId, Seq(message -> recipients)))
+              signResponses(
+                currentSnapshotApproximation,
+                responses,
+                signingTimestamp,
+                maxSequencingTime,
+              )
+                .map(message =>
+                  sendResponses(
+                    requestId,
+                    Seq(message -> recipients),
+                    currentSnapshotApproximation,
+                    signingTimestamp,
+                    maxSequencingTime,
+                  )
+                )
             )
           case None => EitherTUtil.unitUS
         }
@@ -1459,7 +1553,7 @@ abstract class ProtocolProcessor[
 
   override def processResult(
       counter: SequencerCounter,
-      event: WithOpeningErrors[SignedContent[Deliver[DefaultOpenEnvelope]]],
+      event: WithOpeningErrors[SignedContent[Deliver[Batch[DefaultOpenEnvelope]]]],
   )(implicit traceContext: TraceContext): HandlerResult = {
     val content = event.event.content
     val ts = content.timestamp
@@ -1491,7 +1585,7 @@ abstract class ProtocolProcessor[
 
   @VisibleForTesting
   private[protocol] def processResultInternal1(
-      event: WithOpeningErrors[SignedContent[Deliver[DefaultOpenEnvelope]]],
+      event: WithOpeningErrors[SignedContent[Deliver[Batch[DefaultOpenEnvelope]]]],
       result: SignedProtocolMessage[ConfirmationResultMessage],
       requestId: RequestId,
       resultTs: CantonTimestamp,
@@ -1591,7 +1685,7 @@ abstract class ProtocolProcessor[
     * confirmation result. The inner `EitherT` corresponds to the subsequent async stage.
     */
   private[this] def processResultInternal2(
-      event: WithOpeningErrors[SignedContent[Deliver[DefaultOpenEnvelope]]],
+      event: WithOpeningErrors[SignedContent[Deliver[Batch[DefaultOpenEnvelope]]]],
       result: SignedProtocolMessage[ConfirmationResultMessage],
       requestId: RequestId,
       resultTs: CantonTimestamp,
@@ -1610,12 +1704,7 @@ abstract class ProtocolProcessor[
         pendingRequestData: PendingRequestData
     ): FutureUnlessShutdown[Boolean] =
       for {
-        snapshot <- crypto.awaitSnapshot(
-          // use topologyTimestamp on pv34, otherwise use sequencing timestamp as aggregation
-          // will now only contain signatures from mediators valid at the sequencing timestamp of
-          // the verdict delivery
-          if (protocolVersion <= ProtocolVersion.v34) requestId.unwrap else resultTs
-        )
+        snapshot <- crypto.awaitSnapshot(resultTs)
         res <- result.verifyMediatorSignatures(snapshot, pendingRequestData.mediator.group).value
       } yield {
         res match {
@@ -1716,7 +1805,7 @@ abstract class ProtocolProcessor[
   // Assigning the internal contract ids to the contracts requires that all the contracts are
   // already persisted in the contract store.
   private[this] def processResultInternal3(
-      event: WithOpeningErrors[SignedContent[Deliver[DefaultOpenEnvelope]]],
+      event: WithOpeningErrors[SignedContent[Deliver[Batch[DefaultOpenEnvelope]]]],
       verdict: Verdict,
       requestId: RequestId,
       resultTs: CantonTimestamp,
@@ -2037,7 +2126,7 @@ abstract class ProtocolProcessor[
 
 object ProtocolProcessor {
 
-  sealed trait ProcessorError extends Product with Serializable with PrettyPrinting
+  sealed trait ProcessorError extends Product with Serializable with PrettyPrintingFromCompanion
 
   sealed trait SubmissionProcessingError extends ProcessorError
 
@@ -2051,20 +2140,34 @@ object ProtocolProcessor {
   final case class SequencerRequestError(sendError: SendAsyncClientError)
       extends SubmissionOrTimeoutError
       with RequestProcessingError {
-    override protected def pretty: Pretty[SequencerRequestError] = prettyOfParam(_.sendError)
+    override def prettyCompanion: PrettyPrintingCompanion[SequencerRequestError] =
+      SequencerRequestError
+  }
+
+  object SequencerRequestError extends PrettyPrintingCompanion[SequencerRequestError] {
+    override protected val pretty: Pretty[SequencerRequestError] = prettyOfParam(_.sendError)
   }
 
   /** The sequencer refused to sequence the batch for delivery */
   final case class SequencerDeliverError(deliverError: DeliverError)
       extends SubmissionProcessingError
       with RequestProcessingError {
-    override protected def pretty: Pretty[SequencerDeliverError] = prettyOfParam(_.deliverError)
+    override def prettyCompanion: PrettyPrintingCompanion[SequencerDeliverError] =
+      SequencerDeliverError
+  }
+
+  object SequencerDeliverError extends PrettyPrintingCompanion[SequencerDeliverError] {
+    override protected val pretty: Pretty[SequencerDeliverError] = prettyOfParam(_.deliverError)
   }
 
   /** The identity snapshot does not list a mediator, so we cannot pick one. */
   final case class NoMediatorError(topologySnapshotTimestamp: CantonTimestamp)
       extends SubmissionProcessingError {
-    override protected def pretty: Pretty[NoMediatorError] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[NoMediatorError] = NoMediatorError
+  }
+
+  object NoMediatorError extends PrettyPrintingCompanion[NoMediatorError] {
+    override protected val pretty: Pretty[NoMediatorError] = prettyOfClass(
       param("topology snapshot timestamp", _.topologySnapshotTimestamp)
     )
   }
@@ -2072,7 +2175,13 @@ object ProtocolProcessor {
   /** The sequencer did not sequence our event within the allotted time
     */
   case object SequencerTimeoutError extends SubmissionOrTimeoutError with RequestProcessingError {
-    override protected def pretty: Pretty[SequencerTimeoutError] =
+    override def prettyCompanion: PrettyPrintingCompanion[SequencerTimeoutError.this.type] =
+      SequencerTimeoutErrorPrettyPrintingCompanion
+  }
+
+  private object SequencerTimeoutErrorPrettyPrintingCompanion
+      extends PrettyPrintingCompanion[SequencerTimeoutError.type] {
+    override protected val pretty: Pretty[SequencerTimeoutError.type] =
       prettyOfObject[SequencerTimeoutError]
   }
   type SequencerTimeoutError = SequencerTimeoutError.type
@@ -2082,7 +2191,14 @@ object ProtocolProcessor {
       ts: CantonTimestamp,
   ) extends RequestProcessingError
       with ResultProcessingError {
-    override protected def pretty: Pretty[UnableToGetDynamicSynchronizerParameters] = prettyOfClass(
+    override def prettyCompanion
+        : PrettyPrintingCompanion[UnableToGetDynamicSynchronizerParameters] =
+      UnableToGetDynamicSynchronizerParameters
+  }
+
+  object UnableToGetDynamicSynchronizerParameters
+      extends PrettyPrintingCompanion[UnableToGetDynamicSynchronizerParameters] {
+    override protected val pretty: Pretty[UnableToGetDynamicSynchronizerParameters] = prettyOfClass(
       param("synchronizer id", _.synchronizerId),
       param("timestamp", _.ts),
     )
@@ -2091,54 +2207,89 @@ object ProtocolProcessor {
   final case class RequestTrackerError(error: RequestTracker.RequestTrackerError)
       extends RequestProcessingError
       with ResultProcessingError {
-    override protected def pretty: Pretty[RequestTrackerError] = prettyOfParam(_.error)
+    override def prettyCompanion: PrettyPrintingCompanion[RequestTrackerError] = RequestTrackerError
+  }
+
+  object RequestTrackerError extends PrettyPrintingCompanion[RequestTrackerError] {
+    override protected val pretty: Pretty[RequestTrackerError] = prettyOfParam(_.error)
   }
 
   final case class DecisionTimeElapsed(requestId: RequestId, timestamp: CantonTimestamp)
       extends ResultProcessingError {
-    override protected def pretty: Pretty[DecisionTimeElapsed] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[DecisionTimeElapsed] = DecisionTimeElapsed
+  }
+
+  object DecisionTimeElapsed extends PrettyPrintingCompanion[DecisionTimeElapsed] {
+    override protected val pretty: Pretty[DecisionTimeElapsed] = prettyOfClass(
       param("request id", _.requestId),
       param("timestamp", _.timestamp),
     )
   }
 
   final case class UnknownPendingRequest(requestId: RequestId) extends ResultProcessingError {
-    override protected def pretty: Pretty[UnknownPendingRequest] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[UnknownPendingRequest] =
+      UnknownPendingRequest
+  }
+
+  object UnknownPendingRequest extends PrettyPrintingCompanion[UnknownPendingRequest] {
+    override protected val pretty: Pretty[UnknownPendingRequest] = prettyOfClass(
       unnamedParam(_.requestId)
     )
   }
 
   final case class InvalidPendingRequest(requestId: RequestId) extends ResultProcessingError {
-    override protected def pretty: Pretty[InvalidPendingRequest] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[InvalidPendingRequest] =
+      InvalidPendingRequest
+  }
+
+  object InvalidPendingRequest extends PrettyPrintingCompanion[InvalidPendingRequest] {
+    override protected val pretty: Pretty[InvalidPendingRequest] = prettyOfClass(
       unnamedParam(_.requestId)
     )
   }
 
   final case class TimeoutResultTooEarly(requestId: RequestId) extends ResultProcessingError {
-    override protected def pretty: Pretty[TimeoutResultTooEarly] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[TimeoutResultTooEarly] =
+      TimeoutResultTooEarly
+  }
+
+  object TimeoutResultTooEarly extends PrettyPrintingCompanion[TimeoutResultTooEarly] {
+    override protected val pretty: Pretty[TimeoutResultTooEarly] = prettyOfClass(
       unnamedParam(_.requestId)
     )
   }
 
   final case class FutureRequestId(requestId: RequestId, resultTs: CantonTimestamp)
       extends ResultProcessingError {
-    override protected def pretty: Pretty[FutureRequestId] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[FutureRequestId] = FutureRequestId
+  }
+
+  object FutureRequestId extends PrettyPrintingCompanion[FutureRequestId] {
+    override protected val pretty: Pretty[FutureRequestId] = prettyOfClass(
       param("request id", _.requestId),
       param("result timestamp", _.resultTs),
     )
   }
 
-  sealed trait MalformedPayload extends Product with Serializable with PrettyPrinting
+  sealed trait MalformedPayload extends Product with Serializable with PrettyPrintingFromCompanion
 
   final case class ViewMessageError[VT <: ViewType](
       error: EncryptedViewMessageError
   ) extends MalformedPayload {
-    override protected def pretty: Pretty[ViewMessageError.this.type] = prettyOfParam(_.error)
+    override def prettyCompanion: PrettyPrintingCompanion[ViewMessageError[?]] = ViewMessageError
+  }
+
+  object ViewMessageError extends PrettyPrintingCompanion[ViewMessageError[?]] {
+    override protected val pretty: Pretty[ViewMessageError[?]] = prettyOfParam(_.error)
   }
 
   final case class WrongRootHash(viewTree: ViewTree, expectedRootHash: RootHash)
       extends MalformedPayload {
-    override protected def pretty: Pretty[WrongRootHash] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[WrongRootHash] = WrongRootHash
+  }
+
+  object WrongRootHash extends PrettyPrintingCompanion[WrongRootHash] {
+    override protected val pretty: Pretty[WrongRootHash] = prettyOfClass(
       param("view tree", _.viewTree),
       param("expected root hash", _.expectedRootHash),
     )
@@ -2148,20 +2299,30 @@ object ProtocolProcessor {
 
   final case class WrongRecipients(viewTree: ViewTree) extends WrongRecipientsBase {
 
-    override protected def pretty: Pretty[WrongRecipients] =
-      prettyOfClass(
-        param("viewHash", _.viewTree.viewHash),
-        param("viewPosition", _.viewTree.viewPosition),
-      )
+    override def prettyCompanion: PrettyPrintingCompanion[WrongRecipients] = WrongRecipients
 
     def dueToTopologyChange: WrongRecipientsDueToTopologyChange =
       WrongRecipientsDueToTopologyChange(viewTree)
   }
 
+  object WrongRecipients extends PrettyPrintingCompanion[WrongRecipients] {
+    override protected val pretty: Pretty[WrongRecipients] =
+      prettyOfClass(
+        param("viewHash", _.viewTree.viewHash),
+        param("viewPosition", _.viewTree.viewPosition),
+      )
+  }
+
   final case class WrongRecipientsDueToTopologyChange(viewTree: ViewTree)
       extends WrongRecipientsBase {
 
-    override protected def pretty: Pretty[WrongRecipientsDueToTopologyChange] =
+    override def prettyCompanion: PrettyPrintingCompanion[WrongRecipientsDueToTopologyChange] =
+      WrongRecipientsDueToTopologyChange
+  }
+
+  object WrongRecipientsDueToTopologyChange
+      extends PrettyPrintingCompanion[WrongRecipientsDueToTopologyChange] {
+    override protected val pretty: Pretty[WrongRecipientsDueToTopologyChange] =
       prettyOfClass(
         param("viewHash", _.viewTree.viewHash),
         param("viewPosition", _.viewTree.viewPosition),
@@ -2172,7 +2333,12 @@ object ProtocolProcessor {
       position: ViewPosition
   ) extends MalformedPayload {
 
-    override protected def pretty: Pretty[IncompleteLightViewTree] =
+    override def prettyCompanion: PrettyPrintingCompanion[IncompleteLightViewTree] =
+      IncompleteLightViewTree
+  }
+
+  object IncompleteLightViewTree extends PrettyPrintingCompanion[IncompleteLightViewTree] {
+    override protected val pretty: Pretty[IncompleteLightViewTree] =
       prettyOfClass(param("position", _.position))
   }
 
@@ -2180,7 +2346,12 @@ object ProtocolProcessor {
       position: ViewPosition
   ) extends MalformedPayload {
 
-    override protected def pretty: Pretty[DuplicateLightViewTree] =
+    override def prettyCompanion: PrettyPrintingCompanion[DuplicateLightViewTree] =
+      DuplicateLightViewTree
+  }
+
+  object DuplicateLightViewTree extends PrettyPrintingCompanion[DuplicateLightViewTree] {
+    override protected val pretty: Pretty[DuplicateLightViewTree] =
       prettyOfClass(param("position", _.position))
   }
 }

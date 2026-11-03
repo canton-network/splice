@@ -31,8 +31,10 @@ val baseBranch = {
   }
 }
 val runningInCI = sys.env.contains("CI")
-val releaseLineStr = "release-line"
-val onReleaseLine = baseBranch.exists(_.contains(releaseLineStr)) || branch.contains(releaseLineStr)
+val releaseLineRegex = "^release-line-[0-9]+\\.[0-9]+\\.[0-9]+$".r
+val onReleaseLine =
+  baseBranch.exists(b => releaseLineRegex.matches(b.strip())) ||
+    releaseLineRegex.matches(branch)
 val disableTodoChecker = onReleaseLine && runningInCI
 
 if (disableTodoChecker) {

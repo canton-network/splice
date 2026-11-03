@@ -24,9 +24,9 @@ const NetworkBanner: React.FC<NetworkBannerProps> = ({ networkName }) => {
   return (
     <Stack
       direction="row"
-      alignItems="center"
-      justifyContent="center"
       sx={{
+        alignItems: 'center',
+        justifyContent: 'center',
         backgroundColor,
         color: 'black',
         height: '50px',

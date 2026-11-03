@@ -6,6 +6,7 @@ package com.digitalasset.canton.synchronizer.service
 import cats.data.{EitherT, OptionT}
 import cats.syntax.either.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{
   HasLoggerName,
@@ -17,24 +18,25 @@ import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.mediator.admin.v30.SequencerConnectionServiceGrpc.SequencerConnectionService
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.GrpcErrors.AbortedDueToShutdown
 import com.digitalasset.canton.networking.grpc.{CantonGrpcUtil, CantonMutableHandlerRegistry}
+import com.digitalasset.canton.sequencing.client.RichSequencerClient
 import com.digitalasset.canton.sequencing.client.SequencerClient.SequencerTransports
 import com.digitalasset.canton.sequencing.client.pool.SequencerConnectionPool.SequencerConnectionPoolError
 import com.digitalasset.canton.sequencing.client.pool.{
   SequencerConnectionPool,
   SequencerConnectionPoolFactory,
 }
-import com.digitalasset.canton.sequencing.client.{RichSequencerClient, SequencerClient}
 import com.digitalasset.canton.sequencing.{
   GrpcSequencerConnection,
   SequencerConnectionValidation,
   SequencerConnections,
 }
 import com.digitalasset.canton.serialization.ProtoConverter
+import com.digitalasset.canton.synchronizer.mediator.store.MediatorSynchronizerConfigurationStore
+import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc, TracingConfig}
 import com.digitalasset.canton.util.retry.NoExceptionRetryPolicy
 import com.digitalasset.canton.util.{EitherTUtil, retry}
 import io.grpc.{Status, StatusException}
-import monocle.Lens
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
 
@@ -42,8 +44,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 class GrpcSequencerConnectionService(
-    fetchConnection: () => FutureUnlessShutdown[Option[SequencerConnections]],
-    setConnection: SequencerConnections => EitherT[
+    fetchConnections: () => FutureUnlessShutdown[Option[SequencerConnections]],
+    setConnections: SequencerConnections => EitherT[
       FutureUnlessShutdown,
       String,
       Unit,
@@ -57,11 +59,9 @@ class GrpcSequencerConnectionService(
       request: v30.GetConnectionRequest
   ): Future[v30.GetConnectionResponse] =
     TraceContextGrpc.withGrpcTraceContext { implicit traceContext =>
-      CantonGrpcUtil.shutdownAsGrpcError(
-        fetchConnection().map { sequencerConnectionsO =>
-          v30.GetConnectionResponse(sequencerConnectionsO.map(_.toProtoV30))
-        }
-      )
+      fetchConnections().map { sequencerConnectionsO =>
+        v30.GetConnectionResponse(sequencerConnectionsO.map(_.toProtoV30))
+      }.asGrpcFuture
     }
 
   override def setConnection(request: v30.SetConnectionRequest): Future[v30.SetConnectionResponse] =
@@ -80,13 +80,13 @@ class GrpcSequencerConnectionService(
             .fromProtoV30(request.sequencerConnectionValidation)
             .leftMap(err => Status.INVALID_ARGUMENT.withDescription(err.message).asException())
         )
-        _ <- setConnection(requestedReplacement)
+        _ <- setConnections(requestedReplacement)
           .leftMap(error => Status.FAILED_PRECONDITION.withDescription(error).asException())
       } yield v30.SetConnectionResponse()))
     }
 
   private def getConnection: FutureUnlessShutdown[SequencerConnections] =
-    fetchConnection().map(
+    fetchConnections().map(
       _.getOrElse(
         throw Status.FAILED_PRECONDITION
           .withDescription("Initialize node before attempting to change sequencer connection")
@@ -153,13 +153,10 @@ object GrpcSequencerConnectionService extends HasLoggerName {
     def set(client: RichSequencerClient): Unit
   }
 
-  def setup[C](
+  def setup(
       registry: CantonMutableHandlerRegistry,
-      fetchConfig: () => FutureUnlessShutdown[Option[C]],
-      saveConfig: C => FutureUnlessShutdown[Unit],
-      sequencerConnectionLens: Lens[C, SequencerConnections],
+      synchronizerConfigurationStore: MediatorSynchronizerConfigurationStore,
       connectionPoolFactory: SequencerConnectionPoolFactory,
-      sequencerClient: SequencerClient,
       tracingConfig: TracingConfig,
       loggerFactory: NamedLoggerFactory,
   )(implicit
@@ -168,19 +165,20 @@ object GrpcSequencerConnectionService extends HasLoggerName {
       materializer: Materializer,
       traceContext: TraceContext,
   ): UpdateSequencerClient = {
-    val clientO = new AtomicReference[Option[RichSequencerClient]](None)
     implicit val namedLoggingContext: NamedLoggingContext =
       NamedLoggingContext(loggerFactory, traceContext)
+    val clientO = new AtomicReference[Option[RichSequencerClient]](None)
     registry.addServiceU(
       SequencerConnectionService.bindService(
         new GrpcSequencerConnectionService(
-          fetchConnection = () => fetchConfig().map(_.map(sequencerConnectionLens.get)),
-          setConnection = newSequencerConnections =>
+          fetchConnections = () =>
+            synchronizerConfigurationStore.fetchConfiguration().map(_.map(_.sequencerConnections)),
+          setConnections = newSequencerConnections =>
             for {
-              currentConfig <- OptionT(fetchConfig()).toRight(
+              currentConfig <- OptionT(synchronizerConfigurationStore.fetchConfiguration()).toRight(
                 "Can't update config when none has yet been set. Please initialize node."
               )
-              newConfig = sequencerConnectionLens.replace(newSequencerConnections)(currentConfig)
+              newConfig = currentConfig.copy(sequencerConnections = newSequencerConnections)
 
               // load and potentially validate the new connection
               //
@@ -208,6 +206,7 @@ object GrpcSequencerConnectionService extends HasLoggerName {
               // As we cannot satisfy both needs here, this will likely be discussed and revisited.
               connectionPool <- validateConfig(
                 connectionPoolFactory = connectionPoolFactory,
+                psid = currentConfig.synchronizerId,
                 sequencerConnections = newSequencerConnections,
                 poolName = "temp",
                 tracingConfig = tracingConfig,
@@ -220,6 +219,7 @@ object GrpcSequencerConnectionService extends HasLoggerName {
                 newSequencerConnections.sequencerLivenessMargin,
                 newSequencerConnections.submissionRequestAmplification,
                 newSequencerConnections.sequencerConnectionPoolDelays,
+                newSequencerConnections.subscriptionLivenessLimits,
               )
 
               // important to only save the config and change the transport after the `makeTransport` has run and done the handshake
@@ -228,9 +228,10 @@ object GrpcSequencerConnectionService extends HasLoggerName {
                   _.changeTransport(sequencerTransports, newPoolConfig)
                 )
               )
-              _ <- EitherT.right(saveConfig(newConfig))
+
+              _ <- EitherT.right(synchronizerConfigurationStore.saveConfiguration(newConfig))
             } yield (),
-          sequencerClient.logout _,
+          () => clientO.get().fold(EitherT.pure[FutureUnlessShutdown, Status](()))(_.logout()),
           loggerFactory,
         ),
         executionContext,
@@ -243,6 +244,7 @@ object GrpcSequencerConnectionService extends HasLoggerName {
 
   def waitUntilSequencerConnectionIsValidWithPool(
       connectionPoolFactory: SequencerConnectionPoolFactory,
+      psid: PhysicalSynchronizerId,
       tracingConfig: TracingConfig,
       flagCloseable: FlagCloseable,
       loadConfig: => FutureUnlessShutdown[Option[SequencerConnections]],
@@ -263,6 +265,7 @@ object GrpcSequencerConnectionService extends HasLoggerName {
         sequencerConnections <- OptionT(loadConfig).toRight("No sequencer connection config")
         connectionPool <- validateConfig(
           connectionPoolFactory = connectionPoolFactory,
+          psid = psid,
           sequencerConnections = sequencerConnections,
           poolName = "main",
           tracingConfig = tracingConfig,
@@ -290,6 +293,7 @@ object GrpcSequencerConnectionService extends HasLoggerName {
 
   private def validateConfig(
       connectionPoolFactory: SequencerConnectionPoolFactory,
+      psid: PhysicalSynchronizerId,
       sequencerConnections: SequencerConnections,
       poolName: String,
       tracingConfig: TracingConfig,
@@ -307,7 +311,7 @@ object GrpcSequencerConnectionService extends HasLoggerName {
         connectionPoolFactory
           .createFromOldConfig(
             sequencerConnections,
-            expectedPsidO = None,
+            expectedPsidO = Some(psid),
             tracingConfig = tracingConfig,
             name = poolName,
           )

@@ -6,6 +6,9 @@ package org.lfdecentralizedtrust.splice.sv.automation
 import cats.implicits.catsSyntaxOptionId
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.config.ClientConfig
 import com.digitalasset.canton.lifecycle.{
   AsyncCloseable,
@@ -44,8 +47,8 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UnavailablePartiesStore}
 import org.lfdecentralizedtrust.splice.sv.{CantonBftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientConfig,
@@ -92,6 +95,7 @@ class SvDsoAutomationService(
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
     val synchronizerNodeReconciler: SynchronizerNodeReconciler,
+    unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -278,6 +282,7 @@ class SvDsoAutomationService(
       () => getOrCreatePeerScanConnection(),
       retryProvider,
       loggerFactory,
+      unavailablePartiesStore,
     )
 
   // required for triggers that must run in sim time as well
@@ -688,7 +693,7 @@ class SvDsoAutomationService(
         synchronizerNodeService,
         config.participantClient.sequencerRequestAmplification.toInternal,
         config.participantClient.sequencerConnectionPoolDelays.toInternal,
-        dsoStore.domainMigrationId,
+        config.participantClient.subscriptionLivenessLimits.toInternal,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
         useInternalSequencerApi = config.useInternalSequencerApi,
@@ -726,7 +731,6 @@ class SvDsoAutomationService(
   registerTrigger(
     new CreateBootstrapExternalPartyConfigStateInstructionTrigger(
       triggerContext,
-      packageVersionSupport,
       dsoStore,
       connection(SpliceLedgerConnectionPriority.Low),
     )

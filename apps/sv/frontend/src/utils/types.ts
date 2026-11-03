@@ -119,7 +119,7 @@ export type ProposalActionKeys = keyof ProposalActionMap;
 
 export type ProposalDetails = {
   actionName: string;
-  createdAt: string;
+  createdAt?: string;
   url: string;
   summary: string;
   isVoteRequest?: boolean;
@@ -153,12 +153,7 @@ export type SupportedActionTag =
   | 'SRARC_UpdateFeaturedAppRight';
 
 export type ProposalListingStatus =
-  | 'Accepted'
-  | 'In Progress'
-  | 'Implemented'
-  | 'Rejected'
-  | 'Expired'
-  | 'Unknown';
+  'Accepted' | 'In Progress' | 'Implemented' | 'Rejected' | 'Expired' | 'Unknown';
 
 export interface ProposalListingData {
   contractId: ContractId<VoteRequest>;

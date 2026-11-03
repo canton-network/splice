@@ -3,37 +3,42 @@
 
 package com.digitalasset.canton.protocol.messages
 
-import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.crypto.Signature
-import com.digitalasset.canton.protocol.{v30, v31}
+import cats.data.EitherT
+import cats.syntax.bifunctor.*
+import cats.syntax.option.*
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.digitalasset.canton.crypto.{
+  HashPurpose,
+  Signature,
+  SigningKeyUsage,
+  SyncCryptoApi,
+  SynchronizerCryptoClient,
+}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.protocol.messages.ProtocolMessage.ProtocolMessageContentCast
+import com.digitalasset.canton.protocol.{SynchronizerLimits, v32}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
-import com.digitalasset.canton.topology.PhysicalSynchronizerId
+import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId, UniqueIdentifier}
+import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.validation.{ProtoValidation, ValidationParam}
 import com.digitalasset.canton.version.{
   HasProtocolVersionedWrapper,
   ProtoVersion,
   ProtocolVersion,
+  ProtocolVersionValidation,
   RepresentativeProtocolVersion,
-  UnsupportedProtoCodec,
   VersionedProtoCodec,
   VersioningCompanionContext,
 }
+import com.google.common.annotations.VisibleForTesting
 
-/** INTERNAL protocol message type used for ACS commitments in transit starting with PV35. Do NOT
-  * USE this message outside of envelope transit (e.g.,
-  * `ClosedUncompressedEnvelope.tryFromProtocolMessage` and
-  * `ClosedUncompressedEnvelope.toOpenEnvelope`).
-  *
-  * This type allows us to hide the signatures from the sequencer so that they are not verified when
-  * inspecting the closed envelope. It is converted to a `SignedProtocolMessage[AcsCommitment]`
-  * immediately upon deserialization when the envelope is opened.
-  *
-  * TODO(#30888): Make `AcsCommitmentProtocolMessage` the default and get rid of
-  * `SignedProtocolMessage[AcsCommitment]`
-  */
-final case class AcsCommitmentProtocolMessage(
+import scala.concurrent.ExecutionContext
+
+final case class AcsCommitmentProtocolMessage private (
     acsCommitment: AcsCommitment,
-    signatures: NonEmpty[Seq[Signature]],
+    signature: Signature,
 ) extends UnsignedProtocolMessage
     with HasProtocolVersionedWrapper[AcsCommitmentProtocolMessage] {
 
@@ -46,55 +51,147 @@ final case class AcsCommitmentProtocolMessage(
     AcsCommitmentProtocolMessage.type
   ] = AcsCommitmentProtocolMessage.protocolVersionRepresentativeFor(psid.protocolVersion)
 
-  protected def toProtoV30: v30.AcsCommitmentProtocolMessage =
-    v30.AcsCommitmentProtocolMessage(
+  protected def toProtoV32: v32.AcsCommitmentProtocolMessage =
+    v32.AcsCommitmentProtocolMessage(
       acsCommitment = acsCommitment.toByteString,
-      signatures = signatures.map(_.toProtoV30),
+      signature = signature.toProtoV30.some,
     )
 
-  override protected[messages] def toProtoSomeEnvelopeContentV30
-      : v30.EnvelopeContent.SomeEnvelopeContent =
-    throw new UnsupportedOperationException(
-      s"${this.getClass.getSimpleName} cannot be serialized to envelope content v30"
-    )
-
-  override protected[messages] def toProtoSomeEnvelopeContentV31
-      : v31.EnvelopeContent.SomeEnvelopeContent =
-    v31.EnvelopeContent.SomeEnvelopeContent.AcsCommitmentProtocolMessage(toProtoV30)
-
+  override protected[messages] def toProtoSomeEnvelopeContentV32
+      : v32.EnvelopeContent.SomeEnvelopeContent =
+    v32.EnvelopeContent.SomeEnvelopeContent.AcsCommitmentProtocolMessage(toProtoV32)
 }
 
+final case class AcsCommitmentDeserializationContext(
+    synchronizerLimits: SynchronizerLimits
+)
 object AcsCommitmentProtocolMessage
     extends VersioningCompanionContext[
       AcsCommitmentProtocolMessage,
-      ProtocolVersion,
+      AcsCommitmentDeserializationContext,
     ] {
 
   override def name: String = "AcsCommitmentProtocolMessage"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(-1) -> UnsupportedProtoCodec(),
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v35)(
-      v30.AcsCommitmentProtocolMessage
+    ProtoVersion(32) -> VersionedProtoCodec(ProtocolVersion.v36)(
+      v32.AcsCommitmentProtocolMessage
     )(
-      supportedProtoVersion(_)(fromProtoV30),
-      _.toProtoV30,
-    ),
+      supportedProtoVersionPVV(_)(fromProtoV32),
+      _.toProtoV32,
+    )
   )
 
-  private[messages] def fromProtoV30(
-      expectedProtocolVersion: ProtocolVersion,
-      message: v30.AcsCommitmentProtocolMessage,
-  ): ParsingResult[AcsCommitmentProtocolMessage] = {
-    val v30.AcsCommitmentProtocolMessage(acsCommitmentP, signaturesP) = message
-    for {
-      acsCommitment <- AcsCommitment.fromByteString(expectedProtocolVersion, acsCommitmentP)
-      signatures <- ProtoConverter.parseRequiredNonEmpty(
-        Signature.fromProtoV30,
-        "signatures",
-        signaturesP,
+  def create(
+      acsCommitment: AcsCommitment,
+      signature: Signature,
+      sizeLimit: PositiveInt,
+  ): Either[String, AcsCommitmentProtocolMessage] = {
+    val pvv = ProtocolVersionValidation.PV(acsCommitment.psid.protocolVersion)
+
+    ProtoValidation
+      .validateLength(
+        acsCommitment.toByteString,
+        "acs_commitment",
+        pvv,
+        ValidationParam(ProtocolVersion.newBoundsOnPV37 -> sizeLimit),
       )
-    } yield AcsCommitmentProtocolMessage(acsCommitment, signatures)
+      .leftMap(_.message)
+      .map(_ => new AcsCommitmentProtocolMessage(acsCommitment, signature))
   }
+
+  private[messages] def fromProtoV32(
+      expectedProtocolVersion: ProtocolVersionValidation,
+      context: AcsCommitmentDeserializationContext,
+      message: v32.AcsCommitmentProtocolMessage,
+  ): ParsingResult[AcsCommitmentProtocolMessage] = {
+    val v32.AcsCommitmentProtocolMessage(acsCommitmentP, signatureP) = message
+
+    for {
+      acsCommitment <- ProtoValidation.validateLengthThen(
+        acsCommitmentP,
+        "acs_commitment",
+        expectedProtocolVersion,
+        ValidationParam(
+          ProtocolVersion.newBoundsOnPV37 -> context.synchronizerLimits.acsCommitmentLimits.maxCommitmentSizeBytes
+        ),
+      )(AcsCommitment.fromByteString(expectedProtocolVersion, _))
+      signature <- ProtoConverter.parseRequired(
+        Signature.fromProtoV30,
+        "signature",
+        signatureP,
+      )
+      // Direct instantiation bypasses `create` limit check because `acsCommitmentP` is already length-validated above
+    } yield new AcsCommitmentProtocolMessage(acsCommitment, signature)
+  }
+
+  def signAndCreate(
+      cryptoApi: SynchronizerCryptoClient,
+      acsCommitment: AcsCommitment,
+      sizeLimit: PositiveInt,
+  )(implicit
+      traceContext: TraceContext,
+      executionContext: ExecutionContext,
+  ): EitherT[FutureUnlessShutdown, String, AcsCommitmentProtocolMessage] = {
+    val hashPurpose = HashPurpose.AcsCommitment
+    val serialization = acsCommitment.getCryptographicEvidence
+
+    val hash = cryptoApi.pureCrypto.digest(hashPurpose, serialization)
+    for {
+      snapshot <- EitherT.liftF(cryptoApi.awaitSnapshot(acsCommitment.period.toInclusive))
+      signature <- snapshot.sign(hash, SigningKeyUsage.ProtocolOnly, None).leftMap(_.toString)
+      message <- EitherT.fromEither[FutureUnlessShutdown](
+        create(acsCommitment, signature, sizeLimit)
+      )
+    } yield message
+  }
+
+  @VisibleForTesting
+  private[canton] def signImmediatelyAndCreate(
+      cryptoApi: SyncCryptoApi,
+      acsCommitment: AcsCommitment,
+      sizeLimit: PositiveInt,
+  )(implicit
+      traceContext: TraceContext,
+      executionContext: ExecutionContext,
+  ): EitherT[FutureUnlessShutdown, String, AcsCommitmentProtocolMessage] = {
+    val hashPurpose = HashPurpose.AcsCommitment
+    val serialization = acsCommitment.getCryptographicEvidence
+    val hash = cryptoApi.pureCrypto.digest(hashPurpose, serialization)
+    for {
+      signature <- cryptoApi.sign(hash, SigningKeyUsage.ProtocolOnly, None).leftMap(_.toString)
+      message <- EitherT.fromEither(create(acsCommitment, signature, sizeLimit))
+    } yield message
+  }
+
+  def verifySignature(
+      snapshot: SyncCryptoApi,
+      message: AcsCommitmentProtocolMessage,
+  )(implicit
+      ec: ExecutionContext,
+      traceContext: TraceContext,
+  ): EitherT[FutureUnlessShutdown, String, Unit] = {
+    val hash = snapshot.pureCrypto.digest(
+      HashPurpose.AcsCommitment,
+      message.acsCommitment.getCryptographicEvidence,
+    )
+    for {
+      sender <- EitherT.fromEither[FutureUnlessShutdown](
+        UniqueIdentifier
+          .fromProtoPrimitive(message.acsCommitment.sender, "sender")
+          .bimap(_.toString, ParticipantId.apply)
+      )
+      _ <- snapshot
+        .verifySignature(hash, sender, message.signature, SigningKeyUsage.ProtocolOnly)
+        .leftMap(_.toString)
+    } yield ()
+  }
+
+  implicit val acsCommitmentProtocolMessageMessageCast
+      : ProtocolMessageContentCast[AcsCommitmentProtocolMessage] =
+    ProtocolMessageContentCast.create[AcsCommitmentProtocolMessage](name) {
+      case m: AcsCommitmentProtocolMessage => Some(m)
+      case _ => None
+    }
 
 }

@@ -27,7 +27,8 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanStore,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbScanVerdictStore}
+import org.lfdecentralizedtrust.splice.scan.store.historystart.{HistoryReadiness, ScanHistoryStart}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
@@ -55,6 +56,7 @@ class ScanAutomationService(
     svName: String,
     upgradesConfig: UpgradesConfig,
     packageVersionSupport: PackageVersionSupport,
+    historyReadiness: HistoryReadiness,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -85,6 +87,24 @@ class ScanAutomationService(
         appActivityStore,
         rewardsReferenceStore,
         updateHistory,
+        triggerContext,
+      )
+    )
+
+  def registerHistoryStartTrigger(historyStart: ScanHistoryStart): Unit =
+    registerTrigger(new ScanHistoryStartTrigger(historyStart, triggerContext))
+
+  def registerPruneRewardAccountingTrigger(
+      rewardsReferenceStore: ScanRewardsReferenceStore,
+      verdictStore: DbScanVerdictStore,
+  ): Unit =
+    registerTrigger(
+      new PruneRewardAccountingTrigger(
+        appRewardsStore,
+        rewardsReferenceStore,
+        verdictStore,
+        updateHistory,
+        config.rewardAccountingRetentionPeriod,
         triggerContext,
       )
     )
@@ -128,9 +148,19 @@ class ScanAutomationService(
       snapshotStore,
       updateHistory,
       scanStorageConfigV1,
+      config.perAcsSnapshotTablesEnabled,
+      historyReadiness,
       triggerContext,
     )
   )
+  if (config.perAcsSnapshotTablesEnabled) {
+    registerTrigger(
+      new AcsSnapshotIndexTrigger(
+        snapshotStore,
+        triggerContext,
+      )
+    )
+  }
   // The acs snapshot backfilling trigger should not attempt to backfill snapshots unless the
   // backfilling UpdateHistory is fully enabled and complete.
   if (config.updateHistoryBackfillEnabled && config.updateHistoryBackfillImportUpdatesEnabled) {

@@ -62,10 +62,10 @@ export const Delegations: React.FC = () => {
   }
 
   // Sort by expiration date, earliest first
-  const delegations = [...(delegationsQuery.data || [])].sort((a, b) =>
+  const delegations = (delegationsQuery.data ?? []).toSorted((a, b) =>
     a.contract.payload.expiresAt.localeCompare(b.contract.payload.expiresAt)
   );
-  const proposals = [...(proposalsQuery.data || [])].sort((a, b) =>
+  const proposals = (proposalsQuery.data ?? []).toSorted((a, b) =>
     a.contract.payload.delegation.expiresAt.localeCompare(b.contract.payload.delegation.expiresAt)
   );
 
@@ -76,9 +76,8 @@ export const Delegations: React.FC = () => {
     <Stack
       spacing={4}
       direction="column"
-      justifyContent="center"
       id="delegations-page"
-      marginTop={4}
+      sx={{ justifyContent: 'center', marginTop: 4 }}
     >
       <Typography variant="h4" id="proposals-label">
         Proposed Minting Delegations
@@ -364,7 +363,7 @@ const ProposalRow: React.FC<ProposalRowProps> = ({ proposal, existingDelegation 
                 this proposal will replace the existing delegation.
               </Typography>
               <Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                   Merge Threshold:
                 </Typography>
                 <Paper
@@ -372,7 +371,7 @@ const ProposalRow: React.FC<ProposalRowProps> = ({ proposal, existingDelegation 
                   sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}
                 >
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       Current
                     </Typography>
                     <Typography className="existing-max-amulets">
@@ -381,7 +380,7 @@ const ProposalRow: React.FC<ProposalRowProps> = ({ proposal, existingDelegation 
                   </Box>
                   <Typography variant="h6">→</Typography>
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       New
                     </Typography>
                     <Typography className="new-max-amulets">
@@ -391,7 +390,7 @@ const ProposalRow: React.FC<ProposalRowProps> = ({ proposal, existingDelegation 
                 </Paper>
               </Box>
               <Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                   Expiration:
                 </Typography>
                 <Paper
@@ -399,7 +398,7 @@ const ProposalRow: React.FC<ProposalRowProps> = ({ proposal, existingDelegation 
                   sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}
                 >
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       Current
                     </Typography>
                     <Typography className="existing-expiration">
@@ -408,7 +407,7 @@ const ProposalRow: React.FC<ProposalRowProps> = ({ proposal, existingDelegation 
                   </Box>
                   <Typography variant="h6">→</Typography>
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       New
                     </Typography>
                     <Typography className="new-expiration">

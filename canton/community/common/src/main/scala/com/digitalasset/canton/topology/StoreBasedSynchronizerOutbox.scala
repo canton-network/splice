@@ -17,6 +17,7 @@ import com.digitalasset.canton.crypto.SynchronizerCrypto
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.*
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
 import com.digitalasset.canton.protocol.messages.TopologyTransactionsBroadcast
 import com.digitalasset.canton.sequencing.client.SequencerClient
@@ -29,9 +30,16 @@ import com.digitalasset.canton.topology.transaction.{
   SignedTopologyTransaction,
   TopologyChangeOp,
   TopologyMapping,
+  TopologyTransaction,
 }
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.{DelayUtil, EitherTUtil, SingleUseCell}
+import com.digitalasset.canton.util.{
+  DelayUtil,
+  EitherTUtil,
+  FutureUnlessShutdownUtil,
+  MonadUtil,
+  SingleUseCell,
+}
 import org.slf4j.event.Level
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -237,18 +245,27 @@ class StoreBasedSynchronizerOutbox(
           // filter out applicable
           applicablePotentiallyPresent <- onlyApplicable(pending.transactions)
           // not already present
-          applicable <- notAlreadyPresent(applicablePotentiallyPresent)
+          notPresent <- notAlreadyPresent(applicablePotentiallyPresent)
+          applicable <- notPresentInSynchronizerVersion(notPresent)
         } yield (pending, applicable))
         val ret = for {
           pendingAndApplicable <- EitherT.right(pendingAndApplicableF)
           (pending, applicable) = pendingAndApplicable
-          _ = lastDispatched.set(applicable.lastOption)
+          converted <- synchronizeWithClosing(functionFullName)(
+            TopologySigningHelper.convertTransactions(
+              applicable,
+              protocolVersion,
+              crypto,
+              topologyConfig,
+            )
+          )
+          _ = lastDispatched.set(converted.lastOption)
           // dispatch to synchronizer
-          responses <- dispatch(synchronizerAlias, transactions = applicable)
+          responses <- dispatch(synchronizerAlias, transactions = converted)
           observed <- EitherT.right(
             // we either receive accepted or failed for all transactions in a submission batch.
             // failed submissions are turned into a Left in dispatch. Therefore, it's safe to await without additional checks.
-            applicable.headOption
+            converted.headOption
               .map(
                 awaitTransactionObserved(
                   _,
@@ -264,9 +281,15 @@ class StoreBasedSynchronizerOutbox(
             observed,
             "Did not observe transactions in target synchronizer store.",
           )
+          // Log transactions rejected by the synchronizer.
+          _ = FutureUnlessShutdownUtil.doNotAwaitUnlessShutdown(
+            logRejectedTransactions(converted, targetStore),
+            level = Level.WARN,
+            failureMessage = "Failed to log rejected transactions",
+          )
           // update watermark according to responses
           _ <- EitherT.right[String](
-            updateWatermark(pending, applicable, responses)
+            updateWatermark(pending, converted, responses)
           )
         } yield ()
 
@@ -346,6 +369,35 @@ class StoreBasedSynchronizerOutbox(
         )
       )
 
+  /** Filters out transactions whose conversion to the synchronizer's protocol version is already in
+    * the target store, for example because the operator provided it when onboarding.
+    */
+  private def notPresentInSynchronizerVersion(
+      transactions: Seq[GenericSignedTopologyTransaction]
+  )(implicit
+      traceContext: TraceContext
+  ): FutureUnlessShutdown[Seq[GenericSignedTopologyTransaction]] =
+    MonadUtil
+      .parTraverseWithLimit(topologyConfig.broadcastBatchSize)(transactions) { tx =>
+        if (tx.transaction.isAdmissibleFor(protocolVersion))
+          FutureUnlessShutdown.pure(Option(tx))
+        else
+          TopologyTransaction
+            .create(tx.transaction.operation, tx.transaction.serial, tx.mapping, protocolVersion)
+            .fold(
+              _ => FutureUnlessShutdown.pure(Option(tx)),
+              converted =>
+                targetStore
+                  .findStoredForVersion(CantonTimestamp.MaxValue, converted)
+                  .map(stored =>
+                    Option.when(
+                      stored.forall(TopologyStore.providesAdditionalSignatures(tx, _))
+                    )(tx)
+                  ),
+            )
+      }
+      .map(_.flatten)
+
   private def maxAuthorizedStoreTimestamp()(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[Option[(SequencedTime, EffectiveTime)]] =
@@ -353,7 +405,7 @@ class StoreBasedSynchronizerOutbox(
 
   override protected def onClosed(): Unit = {
     val closeables = maybeObserverCloseable.toList ++ List(handle)
-    LifeCycle.close(closeables*)(logger)
+    LifeCycle.close(closeables)(logger)
     super.onClosed()
   }
 }

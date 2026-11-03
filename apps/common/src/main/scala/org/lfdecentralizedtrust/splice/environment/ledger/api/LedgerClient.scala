@@ -32,7 +32,7 @@ import com.daml.ledger.javaapi.data.{
 }
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.ledger.javaapi.data.User.Right
-import org.lfdecentralizedtrust.splice.auth.AuthToken
+import org.lfdecentralizedtrust.splice.auth.{AuthToken, AuthTokenProvider}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.LedgerClient.GetTreeUpdatesResponse
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionFilter
 import org.lfdecentralizedtrust.splice.util.DisclosedContracts
@@ -45,24 +45,24 @@ import com.digitalasset.canton.config.{
 }
 import com.digitalasset.canton.crypto.Fingerprint
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.data.CantonTimestampExtensions.*
 import com.digitalasset.canton.ledger.client.GrpcChannel
-import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.participant.pretty.Implicits.prettyContractId
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
-import com.digitalasset.canton.util.ErrorUtil
 import com.google.protobuf.{ByteString, Duration}
 import com.google.protobuf.field_mask.FieldMask
 import io.grpc.{Channel, Deadline, StatusRuntimeException, Status as GrpcStatus}
-import io.grpc.stub.{AbstractStub, StreamObserver}
+import io.grpc.stub.AbstractStub
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.Source
 
 import java.io.Closeable
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
 sealed abstract class DedupConfig extends PrettyPrinting {}
@@ -103,7 +103,7 @@ final case class DedupDuration(duration: Duration) extends DedupConfig {
 private[environment] class LedgerClient(
     channel: Channel,
     expectedTokenUser: String,
-    getToken: () => Future[Option[AuthToken]],
+    tokenProvider: AuthTokenProvider,
     override protected val loggerFactory: NamedLoggerFactory,
     timeouts: ProcessingTimeout,
 )(implicit
@@ -129,7 +129,7 @@ private[environment] class LedgerClient(
       stub: T,
       timeout: Option[NonNegativeDuration] = Some(timeouts.default),
   )(implicit tc: TraceContext): Future[T] = {
-    getToken().map { token =>
+    tokenProvider.getToken.map { token =>
       val authedStub = token.fold(stub) { token =>
         checkTokenUser(token)
         TraceContextGrpc.addTraceContextToCallOptions(
@@ -180,11 +180,33 @@ private[environment] class LedgerClient(
   def ledgerEnd()(implicit
       traceContext: TraceContext
   ): Future[Long] = {
-    val req = lapi.state_service.GetLedgerEndRequest()
+    val req = lapi.state_service.GetLedgerEndRequest(Seq.empty)
     for {
       stub <- withGrpcContext(stateServiceStub)
       resp <- stub.getLedgerEnd(req)
     } yield resp.offset
+  }
+
+  def ledgerEndWithSynchronizerTimes(synchronizerIds: Seq[SynchronizerId])(implicit
+      traceContext: TraceContext
+  ): Future[(Long, Map[SynchronizerId, CantonTimestamp])] = {
+    val req = lapi.state_service.GetLedgerEndRequest(synchronizerIds.map(_.toProtoPrimitive))
+    for {
+      stub <- withGrpcContext(stateServiceStub)
+      resp <- stub.getLedgerEnd(req)
+    } yield (
+      resp.offset,
+      resp.synchronizerTimes.map { syncTime =>
+        SynchronizerId.tryFromString(syncTime.synchronizerId) -> CantonTimestamp
+          .tryFromProtoTimestamp(
+            syncTime.recordTime.getOrElse(
+              throw new IllegalArgumentException(
+                s"Synchronizer time for ${syncTime.synchronizerId} has no record time"
+              )
+            )
+          )
+      }.toMap,
+    )
   }
 
   def latestPrunedOffset()(implicit
@@ -236,6 +258,41 @@ private[environment] class LedgerClient(
       } yield ClientAdapter
         .serverStreaming(request.toProto, stub.getUpdates)
         .mapConcat(GetTreeUpdatesResponse.fromProto)
+    )
+  }
+
+  def topologyTransactions(
+      beginExclusive: Long
+  )(implicit tc: TraceContext): Source[TopologyTransactionUpdate, NotUsed] = {
+    import lapi.update_service.GetUpdatesResponse.Update as TU
+    val request = lapi.update_service.GetUpdatesRequest(
+      beginExclusive = beginExclusive,
+      endInclusive = None,
+      updateFormat = Some(
+        transaction_filter.UpdateFormat(
+          includeTransactions = None,
+          includeReassignments = None,
+          includeTopologyEvents = Some(
+            transaction_filter.TopologyFormat(
+              Some(transaction_filter.ParticipantAuthorizationTopologyFormat(parties = Seq.empty))
+            )
+          ),
+        )
+      ),
+      descendingOrder = false,
+    )
+    toSource(
+      for {
+        stub <- withGrpcContext(
+          updateServiceStub,
+          timeout = Some(timeouts.unbounded),
+        )
+      } yield ClientAdapter
+        .serverStreaming(request, stub.getUpdates)
+        .mapConcat(_.update match {
+          case TU.TopologyTransaction(tx) => Some(TopologyTransactionUpdate.fromProto(tx))
+          case _ => None
+        })
     )
   }
 
@@ -745,31 +802,6 @@ private[environment] class LedgerClient(
     } yield res.identityProviderConfigs
   }
 
-  def createIdentityProviderConfig(
-      id: String,
-      isDeactivated: Boolean,
-      jwksUrl: String,
-      issuer: String,
-      audience: String,
-  )(implicit tc: TraceContext): Future[Unit] = {
-    for {
-      stub <- withGrpcContext(identityProviderConfigServiceStub)
-      _ <- stub.createIdentityProviderConfig(
-        identity_provider_config_service.CreateIdentityProviderConfigRequest(
-          Some(
-            identity_provider_config_service.IdentityProviderConfig(
-              identityProviderId = id,
-              isDeactivated = isDeactivated,
-              jwksUrl = jwksUrl,
-              issuer = issuer,
-              audience = audience,
-            )
-          )
-        )
-      )
-    } yield ()
-  }
-
   def getSupportedPackageVersion(
       synchronizerId: SynchronizerId,
       packageRequirements: Seq[(String, Seq[PartyId])],
@@ -796,30 +828,6 @@ private[environment] class LedgerClient(
 }
 
 object LedgerClient {
-  @SuppressWarnings(Array("org.wartremover.warts.Var"))
-  class FutureObserver[T](implicit elc: ErrorLoggingContext) extends StreamObserver[T] {
-    val promise = Promise[T]()
-    private var result: Option[T] = None
-
-    override def onError(t: Throwable) = {
-      promise.failure(t)
-    }
-
-    override def onNext(result: T) = {
-      this.result = Some(result)
-    }
-
-    override def onCompleted() = {
-      promise.success(
-        result.getOrElse(
-          ErrorUtil.internalError(
-            new IllegalStateException("onComplete was called without prior call to onNext")
-          )
-        )
-      )
-    }
-  }
-
   final case class GetUpdatesRequest(
       begin: Long,
       end: Option[Long],
@@ -1023,6 +1031,8 @@ object LedgerClient {
           contractId = contractId.contractId,
           source = source.toProtoPrimitive,
           target = target.toProtoPrimitive,
+          overrideSourceValidationPackageId = None,
+          overrideTargetValidationPackageId = None,
         )
     }
 

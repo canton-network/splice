@@ -26,9 +26,9 @@ import org.lfdecentralizedtrust.splice.wallet.store.BalanceChangeTxLogEntry
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery.HeadState
+import com.digitalasset.canton.topology.PartyId
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_SetConfig
@@ -207,9 +207,6 @@ class AppUpgradeIntegrationTest
             sv2Wallet.tap(1003)
             sv2Wallet.balance().unlockedQty should be > BigDecimal(2000)
             // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's).
-            // Note: we cannot use sv1's (authenticated, current-version) /v1/dso to look up its
-            // party here, as sv1 is still running the old release at this point.
-            // TODO(DACH-NY/canton-network-internal#2106) clean this up once the old release is new enough
             p2pTransfer(
               bobValidatorWalletClient,
               sv1WalletClient,
@@ -257,6 +254,7 @@ class AppUpgradeIntegrationTest
             amuletConfig.developmentFundManagerBlacklist,
             amuletConfig.minDevelopmentFundMintingDelay,
             amuletConfig.amuletSwitchOverTimes,
+            amuletConfig.governanceLockConfig,
           )
           val upgradeAction = new ARC_AmuletRules(
             new CRARC_SetConfig(

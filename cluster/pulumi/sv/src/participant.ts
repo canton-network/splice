@@ -32,6 +32,13 @@ export async function installParticipant(
   return { db, chart };
 }
 
+export function svParticipantKeyDownloadEnabled(
+  participant: SingleSvConfiguration['participant']
+): boolean {
+  // TODO(DACH-NY/canton-network-internal#7687): Revisit enabling this for all SVs by default.
+  return participant?.enableKeyDownload ?? true;
+}
+
 export type ParticipantArgs = {
   xns: ExactNamespace;
   participant: SingleSvConfiguration['participant'];
@@ -46,7 +53,7 @@ export type ParticipantArgs = {
 
 export type ParticipantOutput = {
   db: Postgres;
-  chart?: InstalledHelmChart;
+  chart: InstalledHelmChart;
 };
 
 async function installParticipantPostgres({
@@ -120,6 +127,7 @@ function installParticipantChart(
     },
     additionalJvmOptions: getAdditionalJvmOptions(participant?.additionalJvmOptions),
     enablePostgresMetrics: true,
+    enableKeyDownload: svParticipantKeyDownloadEnabled(participant),
     serviceAccountName: imagePullServiceAccountName,
     resources: participant?.resources,
     pvc: persistentHeapDumpsPvc(),

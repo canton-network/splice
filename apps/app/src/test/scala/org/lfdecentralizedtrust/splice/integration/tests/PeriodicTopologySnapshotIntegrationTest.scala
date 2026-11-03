@@ -11,10 +11,13 @@ import org.slf4j.event.Level
 
 import java.nio.charset.StandardCharsets
 import java.time.{ZoneOffset, ZonedDateTime}
+import java.util.UUID
 import scala.concurrent.duration.DurationInt
 
 class PeriodicTopologySnapshotIntegrationTest[T <: BackupDumpConfig]
     extends IntegrationTestWithIsolatedEnvironment {
+
+  private val runPrefix = s"periodic-topology-snapshot-test/${UUID.randomUUID()}"
 
   private val bucket = new GcpBucket(topologySnapshotLocation.bucket, loggerFactory)
 
@@ -25,10 +28,10 @@ class PeriodicTopologySnapshotIntegrationTest[T <: BackupDumpConfig]
     PeriodicBackupDumpConfig(topologySnapshotLocation, topologySnapshotInterval)
 
   private def topologySnapshotLocation: BackupDumpConfig.Gcp =
-    BackupDumpConfig.Gcp(GcpBucketConfig.inferForTesting(TopologySnapshotTest), None)
+    BackupDumpConfig.Gcp(GcpBucketConfig.inferForTesting(TopologySnapshotTest), Some(runPrefix))
 
   private def listDump(utcDate: String): Seq[Blob] =
-    bucket.listBlobsByPrefix(prefix = s"topology_snapshot_$utcDate")
+    bucket.listBlobsByPrefix(prefix = s"$runPrefix/topology_snapshot_$utcDate")
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -54,8 +57,7 @@ class PeriodicTopologySnapshotIntegrationTest[T <: BackupDumpConfig]
               1,
               logEntries,
             )(logEntry =>
-              logEntry.message should (include(s"Took a new topology snapshot on $utcDate") or
-                include("Today's topology snapshot already exists."))
+              logEntry.message should include(s"Took a new topology snapshot on $utcDate")
             )
           },
         )
@@ -73,6 +75,11 @@ class PeriodicTopologySnapshotIntegrationTest[T <: BackupDumpConfig]
         ) should include("SEQ::sv1") // the sequencerId change through ci runs
         forExactly(1, dumps) { dump => dump.getName should include("authorized") }
         forExactly(1, dumps) { dump => dump.getName should include("onboarding-state") }
+      })
+
+      clue("the topology snapshot of this run is removed from gcp.")({
+        val notDeleted = bucket.listBlobsByPrefix(prefix = runPrefix).filterNot(_.delete())
+        notDeleted.map(_.getName) shouldBe empty
       })
     }
   }

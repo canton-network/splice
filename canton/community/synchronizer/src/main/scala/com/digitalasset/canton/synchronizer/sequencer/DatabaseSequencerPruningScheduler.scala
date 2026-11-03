@@ -7,6 +7,7 @@ import cats.data.EitherT
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.Storage
 import com.digitalasset.canton.scheduler.*
@@ -17,7 +18,7 @@ import com.digitalasset.canton.topology.SequencerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.EitherTUtil
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 private[sequencer] class DatabaseSequencerPruningScheduler(
     clock: Clock,
@@ -125,15 +126,14 @@ private[sequencer] class DatabaseSequencerPruningScheduler(
 
   override def initializeSchedule()(implicit
       traceContext: TraceContext
-  ): Future[Option[JobSchedule]] =
+  ): FutureUnlessShutdown[Option[JobSchedule]] =
     getSchedule().map(
-      JobSchedule
-        .fromPruningSchedule(
-          _,
-          pruningConfig.pruningMetricUpdateInterval.map(PositiveSeconds.fromConfig),
-          clock,
-          logger,
-        )
+      JobSchedule.fromPruningSchedule(
+        _,
+        pruningConfig.pruningMetricUpdateInterval.map(PositiveSeconds.fromConfig),
+        clock,
+        logger,
+      )
     )
 
   override def onClosed(): Unit = {

@@ -5,9 +5,12 @@ package org.lfdecentralizedtrust.splice.sv.lsu
 
 import cats.implicits.showInterpolator
 import cats.syntax.foldable.*
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
 import com.digitalasset.canton.admin.api.client.data.SequencerHealthStatus.implicitPrettyString
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking
@@ -81,7 +84,8 @@ class LsuNodeInitializer(
       _ <- newMediatorInitializer.initializeFromDump(state.nodeIdentities.mediator)
       _ <- newSequencerIntializer.initializeFromDump(state.nodeIdentities.sequencer)
       parameters = successorSynchronizerNode.staticSynchronizerParameters(
-        successorSynchronizerId.serial
+        successorSynchronizerId.serial,
+        successorSynchronizerId.protocolVersion,
       )
       _ <- retryProvider.ensureThat(
         RetryFor.InitializingClientCalls,
@@ -95,16 +99,14 @@ class LsuNodeInitializer(
             Right(())
         },
         (_: String) => {
-          val initParams = parameters.copy(
-            protocolVersion = successorSynchronizerId.protocolVersion
-          )
           logger.info(
-            show"Initializing sequencer from predecessor with $initParams"
+            show"Initializing sequencer from predecessor with $parameters"
           )
           successorSynchronizerNode.sequencerAdminConnection.initializeFromPredecessor(
             state.synchronizerStatePath,
-            initParams,
+            parameters,
             ignorePsidCheck,
+            successorSynchronizerId.logical,
           )
         },
         logger,
@@ -143,6 +145,7 @@ class LsuNodeInitializer(
             successorSynchronizerNode.internalSequencerConnection,
             successorSynchronizerNode.mediatorSequencerAmplification.toInternal,
             successorSynchronizerNode.mediatorSequencerConnectionPoolDelays.toInternal,
+            successorSynchronizerNode.mediatorSubscriptionLivenessLimits.toInternal,
           )
         },
         logger,

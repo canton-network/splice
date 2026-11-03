@@ -9,6 +9,9 @@ import cats.syntax.apply.*
 import cats.syntax.foldable.*
 import cats.syntax.traverse.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.config.SynchronizerTimeTrackerConfig
 import com.digitalasset.canton.lifecycle.CloseContext
@@ -24,7 +27,7 @@ import com.digitalasset.canton.topology.{
   TopologyManagerError,
 }
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
-import com.digitalasset.canton.topology.transaction.{HostingParticipant, ParticipantPermission}
+import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.base.error.utils.ErrorDetails
@@ -160,6 +163,8 @@ class JoiningNodeInitializer(
           config.participantClient.sequencerRequestAmplification.toInternal,
           sequencerConnectionPoolDelays =
             config.participantClient.sequencerConnectionPoolDelays.toInternal,
+          subscriptionLivenessLimits =
+            config.participantClient.subscriptionLivenessLimits.toInternal,
         ),
         // Set manualConnect = true to avoid any issues with interrupted SV onboardings.
         // This is changed to false after SV onboarding completes.
@@ -185,8 +190,14 @@ class JoiningNodeInitializer(
           )
         ),
       ).tupled
-      psid <- participantAdminConnection
-        .getPhysicalSynchronizerId(config.domains.global.alias)
+      psid <- retryProvider.retry(
+        RetryFor.WaitingOnInitDependency,
+        "getPhysicalSynchronizerId",
+        "Get the physical synchronizer id in joinDsoAndOnboardNodes",
+        participantAdminConnection
+          .getPhysicalSynchronizerId(config.domains.global.alias),
+        logger,
+      )
       decentralizedSynchronizerId = psid.logical
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
       dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
@@ -219,13 +230,13 @@ class JoiningNodeInitializer(
         } else Future.unit
       }
       domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
-      svStore = newSvStore(
+      svStore <- newSvStore(
         storeKey,
         domainMigrationId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
-      dsoStore = newDsoStore(
+      dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
         participantId,
@@ -282,14 +293,12 @@ class JoiningNodeInitializer(
             synchronizerNodeReconciler = new SynchronizerNodeReconciler(
               dsoStore,
               connection,
-              packageVersionSupport,
               clock,
               retryProvider,
               loggerFactory,
-              domainMigrationId,
               config.scan,
             )
-            dsoAutomation =
+            dsoAutomation <-
               newSvDsoAutomationService(
                 svStore,
                 dsoStore,
@@ -463,8 +472,15 @@ class JoiningNodeInitializer(
       )
       // Register triggers once the DsoRules are visible and have been ingested
       _ = dsoAutomationService.registerPostOnboardingTriggers()
-      participantReportedPSid <- participantAdminConnection.getPhysicalSynchronizerId(
-        config.domains.global.alias
+      // During LSUs this can fail with 'NOT_FOUND: No synchronizer registered and handshaked for Synchronizer'
+      // If the call happens while the participant is reconnecting.
+      participantReportedPSid <- retryProvider.retry(
+        RetryFor.WaitingOnInitDependency,
+        "getPhysicalSynchronizerId",
+        "Get the physical synchronizer id in onboard",
+        participantAdminConnection
+          .getPhysicalSynchronizerId(config.domains.global.alias),
+        logger,
       )
       currentNode <- synchronizerNodeService.activeSynchronizerNode()
       // It is important to wait only here since at this point we may have been added
@@ -484,9 +500,11 @@ class JoiningNodeInitializer(
                 currentNode.addLocalSequencerIdentityIfRequired(
                   config.domains.global.alias,
                   decentralizedSynchronizer,
+                  participantReportedPSid.protocolVersion,
                 ),
                 currentNode.addLocalMediatorIdentityIfRequired(
-                  decentralizedSynchronizer
+                  decentralizedSynchronizer,
+                  participantReportedPSid.protocolVersion,
                 ),
               ).tupled
             // Finally, fully onboard the sequencer and mediator
@@ -497,7 +515,7 @@ class JoiningNodeInitializer(
                 // This triggers automation in other SV apps, that's why we make sure the sequencer is known first
                 preInit = () =>
                   synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
-                    Some(synchronizerNodeService.nodes),
+                    synchronizerNodeService.nodes,
                     decentralizedSynchronizer,
                     Onboarding(participantReportedPSid.serial),
                   ),
@@ -529,7 +547,7 @@ class JoiningNodeInitializer(
         if (!config.shouldSkipSynchronizerInitialization) {
           synchronizerNodeReconciler
             .reconcileSynchronizerNodeConfigIfRequired(
-              synchronizerNodeService.nodes.some,
+              synchronizerNodeService.nodes,
               decentralizedSynchronizer,
               OnboardedAfterDelay,
             )
@@ -639,8 +657,8 @@ class JoiningNodeInitializer(
                 show"Party $dsoParty is not hosted on participant $participantId"
               )
               .asRuntimeException()
-          case Some(HostingParticipant(_, permission, onboarding)) =>
-            if (permission == ParticipantPermission.Submission && !onboarding)
+          case Some(hosting) =>
+            if (hosting.permission == ParticipantPermission.Submission && !hosting.onboarding)
               dsoPartyHosting
             else
               throw Status.FAILED_PRECONDITION.withDescription(description).asRuntimeException()
@@ -910,18 +928,15 @@ class JoiningNodeInitializer(
                   svStore.key.dsoParty,
                 )
                 _ = logger.info(s"granted ${config.ledgerApiUser} readAs rights for dsoParty")
-                domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
-                  packageVersionSupport,
                   clock,
                   retryProvider,
                   loggerFactory,
-                  domainMigrationId,
                   config.scan,
                 )
-                dsoAutomation = newSvDsoAutomationService(
+                dsoAutomation <- newSvDsoAutomationService(
                   svStore,
                   dsoStore,
                   synchronizerNodeService,

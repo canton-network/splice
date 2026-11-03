@@ -21,6 +21,8 @@ import {
   CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
   CREATE_PROPOSAL_FIELD_BODY_SX,
 } from '../../constants/createProposalLayout';
+import { isSwitchOverField } from '../forms/formValidators';
+import { SwitchOverTimesValue } from '../governance/SwitchOverTimesValue';
 
 dayjs.extend(relativeTime);
 
@@ -76,9 +78,9 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
       input: {
         sx: configFieldInputSx,
       },
-    },
-    inputProps: {
-      'data-testid': `config-field-${configChange.fieldName}`,
+      htmlInput: {
+        'data-testid': `config-field-${configChange.fieldName}`,
+      },
     },
     disabled: isDisabled,
   };
@@ -178,7 +180,10 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
           )}
 
           {configChange.description && (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}
+            >
               {configChange.description}
             </Typography>
           )}
@@ -186,15 +191,15 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
           {!field.state.meta.isDefaultValue && (
             <Typography
               variant="caption"
-              color="text.secondary"
               title={configChange.currentValue}
+              data-testid={`config-current-value-${configChange.fieldName}`}
               sx={{
+                color: 'text.secondary',
                 mt: 0.5,
                 display: 'block',
                 overflowWrap: 'anywhere',
                 wordBreak: 'break-word',
               }}
-              data-testid={`config-current-value-${configChange.fieldName}`}
             >
               Current Configuration: {configChange.currentValue}
             </Typography>
@@ -232,27 +237,31 @@ export const PendingConfigDisplay: React.FC<PendingConfigDisplayProps> = ({ pend
     >
       <Typography
         variant="caption"
-        color="text.secondary"
-        sx={{ display: 'block', textAlign: 'left' }}
+        sx={{ color: 'text.secondary', display: 'block', textAlign: 'left' }}
       >
         Pending Configuration:{' '}
-        <Box
-          component="strong"
-          title={pendingValue}
-          sx={{
-            display: 'inline',
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word',
-            fontWeight: 700,
-          }}
-        >
-          {pendingValue}
-        </Box>
+        {isSwitchOverField(fieldName) ? (
+          <Box component="span" sx={{ display: 'inline-block', verticalAlign: 'top' }}>
+            <SwitchOverTimesValue value={pendingValue} />
+          </Box>
+        ) : (
+          <Box
+            component="strong"
+            title={pendingValue}
+            sx={{
+              display: 'inline',
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+              fontWeight: 700,
+            }}
+          >
+            {pendingValue}
+          </Box>
+        )}
       </Typography>
       <Typography
         variant="caption"
-        color="text.secondary"
-        sx={{ display: 'block', textAlign: 'left', mt: 0.5 }}
+        sx={{ color: 'text.secondary', display: 'block', textAlign: 'left', mt: 0.5 }}
       >
         This{' '}
         <RouterLink
@@ -296,9 +305,8 @@ export const SynchronizerUpgradeTimeDisplay: React.FC<
   return (
     <Typography
       variant="caption"
-      color="text.secondary"
-      sx={{ mt: 0.5, display: 'block', textAlign: 'left' }}
       data-testid={`${fieldName}-default`}
+      sx={{ color: 'text.secondary', mt: 0.5, display: 'block', textAlign: 'left' }}
     >
       {`Default: ${defaultMigrationTime}`}
     </Typography>

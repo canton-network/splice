@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import {
+  checkKeyDownloadForPeriodicBackups,
   DecentralizedSynchronizerMigrationConfig,
   ExactNamespace,
   sanitizedForPostgres,
@@ -16,6 +17,7 @@ import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/co
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { Resource } from '@pulumi/pulumi';
 
+import { svParticipantKeyDownloadEnabled } from './participant';
 import { persistenceConfig } from './persistence';
 import { internalScanUrl } from './scan';
 
@@ -29,6 +31,11 @@ export async function installValidator(
   svApp: Resource,
   scan: Resource
 ): Promise<Resource> {
+  checkKeyDownloadForPeriodicBackups(svConfig.nodeName, {
+    usesKms: svConfig.participant?.kms !== undefined,
+    enableKeyDownload: svParticipantKeyDownloadEnabled(svConfig.participant),
+    periodicBackups: svConfig.periodicBackupConfig !== undefined,
+  });
   const validatorDbName = `validator_${sanitizedForPostgres(svConfig.nodeName)}`;
   const commonValidatorAppValues = valuesForSvValidatorApp(
     decentralizedSynchronizerMigrationConfig,

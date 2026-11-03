@@ -6,7 +6,7 @@ import sbt.*
 /** Copied from Canton OSS repo. */
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
-  val canton_library_version = "3.5.15"
+  val canton_library_version = "3.7.0-snapshot.20261022.20797.0.vd0a4e6f2"
   // Canton does some sbt magic that depends on this field called version even though it is not explicitly used.
   val version = canton_library_version
   val daml_language_versions = Seq("2.1")
@@ -20,7 +20,7 @@ object CantonDependencies {
     if (sys.props("os.name").contains("Mac")) "osx"
     else sys.props("os.name").toLowerCase
 
-  lazy val scala_version = "2.13.16"
+  lazy val scala_version = "2.13.18"
   lazy val scala_version_short = "2.13"
 
   lazy val anorm = "org.playframework.anorm" %% "anorm" % "2.7.0"
@@ -33,11 +33,11 @@ object CantonDependencies {
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
   lazy val awaitility = "org.awaitility" % "awaitility" % "4.2.0"
   lazy val grpc_version = "1.81.0"
-  lazy val logback_version = "1.5.3"
+  lazy val logback_version = "1.6.3"
   lazy val slf4j_version = "2.0.6"
-  lazy val log4j_version = "2.17.0"
-  lazy val ammonite_version = "3.0.1"
-  lazy val pprint_version = "0.7.1"
+  lazy val log4j_version = "2.25.5"
+  lazy val ammonite_version = "3.0.9"
+  lazy val pprint_version = "0.9.3"
   // if you update the slick version, please also update our forked code in common/slick.util.*
   lazy val slick_version = "3.5.2"
   lazy val bouncy_castle_version = "1.83"
@@ -58,11 +58,11 @@ object CantonDependencies {
     "com.github.pureconfig" %% "pureconfig-generic" % pureconfig_version // TODO(SC) exclude ("com.chuusai", s"shapeless_$scala_version_short")
 
   lazy val scala_collection_contrib =
-    "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2"
+    "org.scala-lang.modules" %% "scala-collection-contrib" % "0.4.0"
   lazy val scala_reflect = "org.scala-lang" % "scala-reflect" % scala_version
   lazy val shapeless = "com.chuusai" %% "shapeless" % "2.3.12"
 
-  lazy val monocle_version = "3.2.0"
+  lazy val monocle_version = "3.3.0"
   lazy val monocle_core = "dev.optics" %% "monocle-core" % monocle_version
   lazy val monocle_macro = "dev.optics" %% "monocle-macro" % monocle_version
 
@@ -101,6 +101,7 @@ object CantonDependencies {
   lazy val canton_ledger_api_core = "com.daml" %% "ledger-api-core" % canton_library_version
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
   lazy val canton_base_errors = "com.daml" %% "base-errors" % canton_library_version
+  lazy val canton_base_validation = "com.daml" %% "base-validation" % canton_library_version
   lazy val canton_observability_metrics =
     "com.daml" %% "observability-metrics" % canton_library_version
   lazy val canton_contextualized_logging =
@@ -109,6 +110,8 @@ object CantonDependencies {
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
   lazy val canton_util_external = "com.daml" %% "util-external" % canton_library_version
+  lazy val canton_util_observability =
+    "com.daml" %% "util-observability" % canton_library_version
   lazy val canton_wartremover_annotations =
     "com.daml" %% "wartremover-annotations" % canton_library_version
 
@@ -133,7 +136,6 @@ object CantonDependencies {
   lazy val sourcecode = "com.lihaoyi" %% "sourcecode" % "0.4.2"
 
   lazy val daml_nonempty = "com.daml" %% "nonempty" % canton_library_version
-  lazy val daml_nonempty_cats = "com.daml" %% "nonempty-cats" % canton_library_version
   lazy val daml_tracing = "com.daml" %% "observability-tracing" % canton_library_version
   lazy val daml_executors = "com.daml" %% "executors" % canton_library_version
   lazy val daml_jwt = "com.daml" %% "daml-jwt" % canton_library_version
@@ -149,6 +151,8 @@ object CantonDependencies {
 
   lazy val daml_testing_utils =
     "com.daml" %% "testing-utils" % canton_library_version
+  lazy val daml_scalatest_utils =
+    "com.daml" %% "scalatest-utils" % canton_library_version
 
   lazy val bouncycastle_bcprov_jdk15on =
     "org.bouncycastle" % "bcprov-jdk18on" % bouncy_castle_version
@@ -275,7 +279,7 @@ object CantonDependencies {
   lazy val testcontainers_postgresql =
     "org.testcontainers" % "testcontainers-postgresql" % testcontainers_version
 
-  lazy val sttp_version = "3.8.16"
+  lazy val sttp_version = "3.11.0"
   lazy val sttp = "com.softwaremill.sttp.client3" %% "core" % sttp_version
   lazy val sttp_okhttp = "com.softwaremill.sttp.client3" %% "okhttp-backend" % sttp_version
   lazy val sttp_circe = "com.softwaremill.sttp.client3" %% "circe" % sttp_version
@@ -332,11 +336,14 @@ object CantonDependencies {
     "com.google.protobuf" % "protobuf-java-util" % protobuf_version
 
   // AWS SDK for Java API to encrypt/decrypt keys using AWS KMS
-  lazy val aws_version = "2.49.4"
+  lazy val aws_version = "2.55.2"
   lazy val aws_kms = "software.amazon.awssdk" % "kms" % aws_version
   lazy val aws_sts = "software.amazon.awssdk" % "sts" % aws_version
 
   // GCP SDK for Java API to encrypt/decrypt keys using GCP KMS
-  lazy val gcp_kms_version = "2.55.0"
+  lazy val gcp_kms_version = "2.97.0"
   lazy val gcp_kms = "com.google.cloud" % "google-cloud-kms" % gcp_kms_version
+
+  lazy val zstd_version = "1.5.7-12"
+  lazy val zstd = "com.github.luben" % "zstd-jni" % zstd_version
 }

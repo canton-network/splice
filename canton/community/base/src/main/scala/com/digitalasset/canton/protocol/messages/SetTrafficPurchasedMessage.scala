@@ -5,12 +5,13 @@ package com.digitalasset.canton.protocol.messages
 
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrintingCompanion}
 import com.digitalasset.canton.protocol.messages.SignedProtocolMessageContent.SignedMessageContentCast
 import com.digitalasset.canton.protocol.v30
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.serialization.{ProtoConverter, ProtocolVersionedMemoizedEvidence}
 import com.digitalasset.canton.topology.{Member, PhysicalSynchronizerId}
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 import com.google.protobuf.ByteString
 
@@ -23,7 +24,6 @@ final case class SetTrafficPurchasedMessage private (
     override val deserializedFrom: Option[ByteString]
 ) extends ProtocolVersionedMemoizedEvidence
     with HasProtocolVersionedWrapper[SetTrafficPurchasedMessage]
-    with PrettyPrinting
     with SignedProtocolMessageContent {
 
   val representativeProtocolVersion: RepresentativeProtocolVersion[
@@ -53,25 +53,29 @@ final case class SetTrafficPurchasedMessage private (
       getCryptographicEvidence
     )
 
-  override protected def pretty: Pretty[SetTrafficPurchasedMessage] = prettyOfClass(
-    param("member", _.member),
-    param("serial", _.serial),
-    param("totalTrafficPurchased", _.totalTrafficPurchased),
-    param("psid", _.psid),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[SetTrafficPurchasedMessage] =
+    SetTrafficPurchasedMessage
 }
 
 object SetTrafficPurchasedMessage
     extends VersioningCompanionMemoization[
       SetTrafficPurchasedMessage
-    ] {
+    ]
+    with PrettyPrintingCompanion[SetTrafficPurchasedMessage] {
   override val name: String = "SetTrafficPurchasedMessage"
 
+  override protected val pretty: Pretty[SetTrafficPurchasedMessage] = prettyOfClass(
+    param("member", _.member),
+    param("serial", _.serial),
+    param("totalTrafficPurchased", _.totalTrafficPurchased),
+    param("psid", _.psid),
+  )
+
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(1) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(1) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.SetTrafficPurchasedMessage
     )(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -87,19 +91,23 @@ object SetTrafficPurchasedMessage
     )
 
   def fromProtoV30(
-      proto: v30.SetTrafficPurchasedMessage
+      pvv: ProtocolVersionValidation,
+      proto: v30.SetTrafficPurchasedMessage,
   )(bytes: ByteString): ParsingResult[SetTrafficPurchasedMessage] =
     for {
-      member <- Member.fromProtoPrimitive(proto.member, "member")
+      member <- ProtoValidation.validateThen(proto.member, "member", pvv)(
+        Member.fromProtoPrimitive
+      )
       serial <- ProtoConverter.parsePositiveInt("serial", proto.serial)
       totalTrafficPurchased <- ProtoConverter.parseNonNegativeLong(
         "total_traffic_purchased",
         proto.totalTrafficPurchased,
       )
-      synchronizerId <- PhysicalSynchronizerId.fromProtoPrimitive(
+      synchronizerId <- ProtoValidation.validateThen(
         proto.physicalSynchronizerId,
         "physical_synchronizer_id",
-      )
+        pvv,
+      )(PhysicalSynchronizerId.fromProtoPrimitive)
     } yield new SetTrafficPurchasedMessage(
       member,
       serial,

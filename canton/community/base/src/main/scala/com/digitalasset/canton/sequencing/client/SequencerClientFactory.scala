@@ -6,12 +6,12 @@ package com.digitalasset.canton.sequencing.client
 import cats.data.EitherT
 import cats.syntax.traverse.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.crypto.{SyncCryptoApi, SyncCryptoClient}
 import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerPredecessor}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, NamedLoggingContext}
 import com.digitalasset.canton.metrics.SequencerClientMetrics
@@ -34,6 +34,7 @@ import com.digitalasset.canton.topology.client.SynchronizerTopologyClient
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.retry
 import com.digitalasset.canton.util.retry.AllExceptionRetryPolicy
+import com.digitalasset.nonempty.NonEmpty
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
@@ -79,6 +80,7 @@ object SequencerClientFactory {
       recordingConfigForMember: Member => Option[RecordingConfig],
       replayConfigForMember: Member => Option[ReplayConfig],
       metrics: SequencerClientMetrics,
+      bftTopologyForInitDownloader: BftTopologyForInitDownloader,
       loggingConfig: LoggingConfig,
       exitOnFatalErrors: Boolean,
       namedLoggerFactory: NamedLoggerFactory,
@@ -188,14 +190,22 @@ object SequencerClientFactory {
                   s"Failed to retrieve traffic state from synchronizer for $member: $err"
                 )
               }
-
           } yield result
+
+        def getApproximateSequencingTime: FutureUnlessShutdown[CantonTimestamp] =
+          syncCryptoApi.currentSnapshotApproximation
+            .flatMap(_.ipsSnapshot.memberFirstKnownAt(member))
+            .map {
+              case Some((sequencedTime, _)) => sequencedTime.value
+              case None => clock.now
+            }
 
         val sequencerTransports = SequencerTransports.from(
           sequencerConnections.sequencerTrustThreshold,
           sequencerConnections.sequencerLivenessMargin,
           sequencerConnections.submissionRequestAmplification,
           sequencerConnections.sequencerConnectionPoolDelays,
+          sequencerConnections.subscriptionLivenessLimits,
         )
         for {
           // Reinitialize the sequencer counter allocator to ensure that passive->active replica transitions
@@ -240,10 +250,21 @@ object SequencerClientFactory {
               EitherT.pure[FutureUnlessShutdown, CreateError](None)
             } else getTrafficStateWithConnectionPool _
 
+          // On a first connection we have neither a stored event nor a predecessor to anchor on,
+          // so the traffic state would not be queried. Thus, we need to find an approximate
+          // timestamp to use in the query.
+          isFirstConnection = latestSequencedTimestampO.isEmpty && synchronizerPredecessor.isEmpty
+          firstConnectionTimestamp <-
+            if (isFirstConnection && trafficControlEnabled && member.code != MediatorId.Code)
+              EitherT.right(getApproximateSequencingTime.map(Some(_)))
+            else
+              EitherT.pure[FutureUnlessShutdown, CreateError](None)
+
           // Make a BFT call to all the transports to retrieve the current traffic state from the synchronizer
           // and initialize the trafficStateController with it
           trafficInitTimestampO = latestSequencedTimestampO
             .orElse(synchronizerPredecessor.map(_.upgradeTime))
+            .orElse(firstConnectionTimestamp)
             /*
             Mediator nodes don't expose traffic.
             This also prevent them from connecting to the sequencer during LSU before upgrade time, which
@@ -337,6 +358,7 @@ object SequencerClientFactory {
           recorderO,
           replayConfigForMember(member),
           syncCryptoApi,
+          bftTopologyForInitDownloader,
           loggingConfig,
           Some(trafficStateController),
           exitOnFatalErrors,

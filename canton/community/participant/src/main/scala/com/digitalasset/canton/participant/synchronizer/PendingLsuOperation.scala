@@ -48,9 +48,15 @@ final case class PendingLsuOperation(successorPsid: PhysicalSynchronizerId)(
 object PendingLsuOperation extends VersioningCompanion[PendingLsuOperation] {
   override val name: String = "PendingLsuOperation"
 
+  def apply(
+      successorPsid: PhysicalSynchronizerId,
+      protocolVersion: ProtocolVersion,
+  ): PendingLsuOperation =
+    PendingLsuOperation(successorPsid)(protocolVersionRepresentativeFor(protocolVersion))
+
   override val versioningTable: VersioningTable = VersioningTable(
     ProtoVersion(30) -> VersionedProtoCodec
-      .storage(ReleaseProtocolVersion(ProtocolVersion.v34), v30.PendingLsuOperation)(
+      .storage(ReleaseProtocolVersion(ProtocolVersion.v36), v30.PendingLsuOperation)(
         supportedProtoVersion(_)(fromProtoV30),
         _.toProtoV30,
       )

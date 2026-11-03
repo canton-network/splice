@@ -7,7 +7,6 @@ import cats.data.EitherT
 import cats.syntax.either.*
 import cats.syntax.functor.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.config.RequireTypes.NonNegativeLong
 import com.digitalasset.canton.crypto.signer.SyncCryptoSigner.SigningTimestampOverrides
 import com.digitalasset.canton.crypto.{DecryptionError as _, EncryptionError as _, *}
@@ -15,7 +14,10 @@ import com.digitalasset.canton.data.*
 import com.digitalasset.canton.data.ViewType.AssignmentViewType
 import com.digitalasset.canton.ledger.participant.state.SequencedEventUpdate
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.participant.ParticipantNodeParameters
+import com.digitalasset.canton.participant.metrics.ReassignmentMetrics
 import com.digitalasset.canton.participant.protocol.EngineController.EngineAbortStatus
 import com.digitalasset.canton.participant.protocol.conflictdetection.{
   ActivenessCheck,
@@ -33,22 +35,24 @@ import com.digitalasset.canton.participant.protocol.submission.{
 import com.digitalasset.canton.participant.protocol.{EngineController, ProcessingSteps}
 import com.digitalasset.canton.participant.store.*
 import com.digitalasset.canton.participant.sync.SyncEphemeralState
+import com.digitalasset.canton.participant.sync.SyncServiceError.SyncServiceAlarm
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.Phase37Processor.PublishUpdateViaRecordOrderPublisher
 import com.digitalasset.canton.protocol.messages.*
 import com.digitalasset.canton.protocol.messages.EncryptedViewMessageError.TooManyViews
 import com.digitalasset.canton.sequencing.protocol.*
 import com.digitalasset.canton.serialization.{DefaultDeserializationError, DeserializationError}
-import com.digitalasset.canton.store.ConfirmationRequestSessionKeyStore
+import com.digitalasset.canton.store.{ConfirmationRequestSessionKeyStore, SessionKeyStore}
 import com.digitalasset.canton.time.{Clock, SynchronizerTimeTracker}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.ContractValidator
 import com.digitalasset.canton.util.ReassignmentTag.{Source, Target}
-import com.digitalasset.canton.util.{ContractValidator, EitherTUtil}
-import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation}
 import com.digitalasset.canton.{LfPartyId, RequestCounter, SequencerCounter, checked}
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 import com.google.protobuf.ByteString
 
 import java.util.UUID
@@ -64,6 +68,8 @@ private[reassignment] class AssignmentProcessingSteps(
     staticSynchronizerParameters: Target[StaticSynchronizerParameters],
     clock: Clock,
     val protocolVersion: Target[ProtocolVersion],
+    reassignmentMetrics: ReassignmentMetrics,
+    participantNodeParameters: ParticipantNodeParameters,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit val ec: ExecutionContext)
     extends ReassignmentProcessingSteps[
@@ -106,26 +112,23 @@ private[reassignment] class AssignmentProcessingSteps(
   override def submissionIdOfPendingRequest(pendingData: PendingAssignment): RootHash =
     pendingData.assignmentValidationResult.rootHash
 
-  override def createSubmission(
-      submissionParam: SubmissionParam,
+  def buildSubmissionData(
+      reassignmentId: ReassignmentId,
+      submitterMetadata: ReassignmentSubmitterMetadata,
+      contractsBatch: ContractsReassignmentBatch,
+      sourceSynchronizer: Source[PhysicalSynchronizerId],
       mediator: MediatorGroupRecipient,
-      ephemeralState: SyncEphemeralState,
+      reassigningParticipants: Set[ParticipantId],
+      unassignmentTs: CantonTimestamp,
+      stakeholders: Stakeholders,
       recentSnapshot: SynchronizerSnapshotSyncCryptoApi,
+      sessionKeyStore: SessionKeyStore,
       generateMaxSequencingTime: CantonTimestamp => CantonTimestamp,
   )(implicit
       traceContext: TraceContext
-  ): EitherT[
-    FutureUnlessShutdown,
-    ReassignmentProcessorError,
-    (Submission, PendingSubmissionData),
-  ] = {
-    val SubmissionParam(
-      submitterMetadata,
-      reassignmentId,
-    ) = submissionParam
+  ): EitherT[FutureUnlessShutdown, ReassignmentProcessorError, AssignmentSubmissionData] = {
     val topologySnapshot = Target(recentSnapshot.ipsSnapshot)
     val pureCrypto = recentSnapshot.pureCrypto
-    val submitter = submitterMetadata.submitter
 
     def activeParticipantsOfParty(
         parties: Seq[LfPartyId]
@@ -144,51 +147,23 @@ private[reassignment] class AssignmentProcessingSteps(
       }
     )
 
+    val assignmentUuid = seedGenerator.generateUuid()
+    val seed = seedGenerator.generateSaltSeed()
     for {
-      unassignmentData <- ephemeralState.reassignmentLookup
-        .lookup(reassignmentId)
-        .leftMap(err => NoReassignmentData(reassignmentId, err))
-
-      sourceSynchronizer = unassignmentData.sourcePsid
-
-      /*
-       Because an upgrade of the target synchronizer can happen between unassignment
-       and assignment, the comparison needs to be logical.
-       */
-      _ = if (unassignmentData.targetPsid.map(_.logical) != psid.map(_.logical))
-        throw new IllegalStateException(
-          s"Assignment $reassignmentId: Reassignment data for ${unassignmentData.targetPsid
-              .map(_.logical)} found on wrong synchronizer ${psid.map(_.logical)}"
-        )
-
-      stakeholders = unassignmentData.stakeholders
-      _ <- ReassignmentValidation
-        .checkSubmitter(
-          ReassignmentRef(reassignmentId),
-          topologySnapshot,
-          submitter,
-          participantId,
-          stakeholders = stakeholders.all,
-        )
-        .leftMap(_.toSubmissionValidationError)
-
-      assignmentUuid = seedGenerator.generateUuid()
-      seed = seedGenerator.generateSaltSeed()
-
       fullTree <- EitherT.fromEither[FutureUnlessShutdown](
         makeFullAssignmentTree(
           pureCrypto,
           seed,
           reassignmentId,
           submitterMetadata,
-          unassignmentData.contractsBatch,
+          contractsBatch,
           sourceSynchronizer,
           psid,
           mediator,
           assignmentUuid,
           protocolVersion,
-          unassignmentData.reassigningParticipants,
-          unassignmentData.unassignmentTs,
+          reassigningParticipants,
+          unassignmentTs,
         )
       )
 
@@ -223,7 +198,7 @@ private[reassignment] class AssignmentProcessingSteps(
         )
         .leftMap(_.toSubmissionValidationError)
 
-      contractIds = unassignmentData.contractsBatch.contractIds.toSeq
+      contractIds = contractsBatch.contractIds.toSeq
       recipients <- EitherT.fromEither[FutureUnlessShutdown](
         Recipients
           .ofSet(recipientsSet)
@@ -237,7 +212,7 @@ private[reassignment] class AssignmentProcessingSteps(
           parallel = true,
           pureCrypto,
           recentSnapshot,
-          ephemeralState.sessionKeyStoreLookup.convertStore,
+          sessionKeyStore.convertStore,
         )
         .leftMap[ReassignmentProcessorError](
           EncryptionError(contractIds, _)
@@ -247,8 +222,8 @@ private[reassignment] class AssignmentProcessingSteps(
         .encryptView(AssignmentViewType)(
           fullTree,
           viewsToKeyMap.keyAndEncryptedRandomnessByRecipients(recipients),
+          submittingParticipantSignature,
           recentSnapshot,
-          Some(signingTimestampOverrides),
           protocolVersion.unwrap,
         )
         .leftMap[ReassignmentProcessorError](
@@ -279,20 +254,95 @@ private[reassignment] class AssignmentProcessingSteps(
         viewMessage -> recipients,
         rootHashMessage -> rootHashRecipients,
       )
+    } yield AssignmentSubmissionData(
+      messages = messages,
+      rootHash = rootHash,
+      approximateTimestampForSigning = now,
+      maxSequencingTime = maxSequencingTime,
+    )
+  }
+
+  override def createSubmission(
+      submissionParam: SubmissionParam,
+      mediator: MediatorGroupRecipient,
+      ephemeralState: SyncEphemeralState,
+      recentSnapshot: SynchronizerSnapshotSyncCryptoApi,
+      generateMaxSequencingTime: CantonTimestamp => CantonTimestamp,
+  )(implicit
+      traceContext: TraceContext
+  ): EitherT[
+    FutureUnlessShutdown,
+    ReassignmentProcessorError,
+    (Submission, PendingSubmissionData),
+  ] = {
+    val SubmissionParam(
+      submitterMetadata,
+      reassignmentId,
+    ) = submissionParam
+    val topologySnapshot = Target(recentSnapshot.ipsSnapshot)
+    val submitter = submitterMetadata.submitter
+
+    for {
+      unassignmentData <- ephemeralState.reassignmentLookup
+        .lookup(reassignmentId)
+        .leftMap(err => NoReassignmentData(reassignmentId, err))
+
+      sourceSynchronizer = unassignmentData.sourcePsid
+
+      /*
+       Because an upgrade of the target synchronizer can happen between unassignment
+       and assignment, the comparison needs to be logical.
+       */
+      _ = if (unassignmentData.targetPsid.map(_.logical) != psid.map(_.logical))
+        throw new IllegalStateException(
+          s"Assignment $reassignmentId: Reassignment data for ${unassignmentData.targetPsid
+              .map(_.logical)} found on wrong synchronizer ${psid.map(_.logical)}"
+        )
+
+      stakeholders = unassignmentData.stakeholders
+      _ <- ReassignmentValidation
+        .checkSubmitter(
+          ReassignmentRef(reassignmentId),
+          topologySnapshot,
+          submitter,
+          participantId,
+          stakeholders = stakeholders.all,
+        )
+        .leftMap(_.toSubmissionValidationError)
+
+      submissionData <- buildSubmissionData(
+        reassignmentId = reassignmentId,
+        submitterMetadata = submitterMetadata,
+        contractsBatch = unassignmentData.contractsBatch,
+        sourceSynchronizer = sourceSynchronizer,
+        mediator = mediator,
+        reassigningParticipants = unassignmentData.reassigningParticipants,
+        unassignmentTs = unassignmentData.unassignmentTs,
+        stakeholders = stakeholders,
+        recentSnapshot = recentSnapshot,
+        sessionKeyStore = ephemeralState.sessionKeyStore,
+        generateMaxSequencingTime = generateMaxSequencingTime,
+      )
+
       pendingSubmission <-
         performPendingSubmissionMapUpdate(
           pendingSubmissions(ephemeralState),
           ReassignmentRef(submissionParam.reassignmentId),
           submissionParam.submitterLf,
-          rootHash,
+          submissionData.rootHash,
           _ => reassignmentId,
         )
+
+      _ = reassignmentMetrics.submitted.inc()(
+        ReassignmentMetrics.assignment(sourceSynchronizer.map(_.logical), psid.map(_.logical))
+      )
+
     } yield (
       ReassignmentsSubmission(
-        Batch.of(protocolVersion.unwrap, messages*),
-        rootHash,
-        now,
-        maxSequencingTime,
+        Batch.of(protocolVersion.unwrap, submissionData.messages*),
+        submissionData.rootHash,
+        submissionData.approximateTimestampForSigning,
+        submissionData.maxSequencingTime,
       ),
       Some(pendingSubmission),
     )
@@ -324,7 +374,7 @@ private[reassignment] class AssignmentProcessingSteps(
   }
 
   override def createSubmissionResult(
-      deliver: Deliver[Envelope[?]],
+      deliver: Deliver[Batch[Envelope[?]]],
       pendingSubmission: PendingSubmissionData,
   ): SubmissionResult =
     SubmissionResult(pendingSubmission.value.reassignmentCompletion.future)
@@ -343,10 +393,12 @@ private[reassignment] class AssignmentProcessingSteps(
   ] = {
     val message = envelope.protocolMessage
 
-    def deserializeTree(bytes: ByteString): Either[DeserializationError, FullAssignmentTree] =
+    def deserializeTree(bytes: ByteString): Either[DeserializationError, FullAssignmentTree] = {
+      val targetPVV = protocolVersion.map(ProtocolVersionValidation.PV(_))
       FullAssignmentTree
-        .fromByteString(snapshot.pureCrypto, protocolVersion)(bytes)
+        .fromByteString(snapshot.pureCrypto, targetPVV)(bytes)
         .leftMap(e => DefaultDeserializationError(e.toString))
+    }
 
     EncryptedViewMessage
       .decryptFor(
@@ -386,10 +438,7 @@ private[reassignment] class AssignmentProcessingSteps(
       )
       val activenessSet = ActivenessSet(
         contracts = contractCheck,
-        reassignmentIds =
-          if (parsedRequest.fullViewTree.isReassigningParticipant(participantId))
-            Set(parsedRequest.reassignmentId)
-          else Set.empty,
+        reassignmentIds = Set(parsedRequest.reassignmentId),
       )
       Right(activenessSet)
     } else
@@ -424,8 +473,11 @@ private[reassignment] class AssignmentProcessingSteps(
   ] = {
     val reassignmentId = parsedRequest.reassignmentId
     val sourceSynchronizer = parsedRequest.fullViewTree.sourceSynchronizer
-    val isReassigningParticipant =
-      parsedRequest.fullViewTree.isReassigningParticipant(participantId)
+
+    reassignmentMetrics.requests.inc()(ReassignmentMetrics.assignmentRequest)
+    reassignmentMetrics.batchSize.update(parsedRequest.fullViewTree.contracts.contractIds.size)(
+      ReassignmentMetrics.assignmentRequest
+    )
 
     for {
       reassignmentDataE <- EitherT.right[ReassignmentProcessorError](
@@ -442,33 +494,12 @@ private[reassignment] class AssignmentProcessingSteps(
 
     } yield {
       val confirmationResponseF =
-        if (assignmentValidationResult.hostedConfirmingReassigningParties.isEmpty) {
-          logger.debug(
-            "Not sending a verdict because the list of hosted confirming parties is empty"
-          )
-          FutureUnlessShutdown.pure(None)
-        } else if (
-          assignmentValidationResult.reassigningParticipantValidationResult.isUnassignmentDataNotFound && isReassigningParticipant
-        ) {
-          logger.info(
-            s"Sending an abstain verdict for ${assignmentValidationResult.hostedConfirmingReassigningParties} because unassignment data is not found in the reassignment store"
-          )
-          val confirmationResponses = createAbstainResponse(
-            parsedRequest.requestId,
-            assignmentValidationResult.rootHash,
-            s"Unassignment data not found when processing assignment $reassignmentId.",
-            assignmentValidationResult.hostedConfirmingReassigningParties,
-          )
-
-          FutureUnlessShutdown.pure(confirmationResponses)
-        } else {
-          createConfirmationResponses(
-            parsedRequest.requestId,
-            parsedRequest.malformedPayloads,
-            protocolVersion.unwrap,
-            assignmentValidationResult,
-          )
-        }
+        createConfirmationResponses(
+          parsedRequest.requestId,
+          parsedRequest.malformedPayloads,
+          protocolVersion.unwrap,
+          assignmentValidationResult,
+        )
 
       val responseF = confirmationResponseF.map(_.map((_, Recipients.cc(parsedRequest.mediator))))
 
@@ -515,7 +546,7 @@ private[reassignment] class AssignmentProcessingSteps(
   }
 
   override def getCommitSetAndContractsToBeStoredAndEventFactory(
-      event: WithOpeningErrors[SignedContent[Deliver[DefaultOpenEnvelope]]],
+      event: WithOpeningErrors[SignedContent[Deliver[Batch[DefaultOpenEnvelope]]]],
       verdict: Verdict,
       pendingRequestData: PendingAssignment,
       pendingSubmissionMap: PendingSubmissions,
@@ -568,7 +599,9 @@ private[reassignment] class AssignmentProcessingSteps(
         .getOrElse(errorDetails)
 
     for {
-      rejectionFromPhase3 <- EitherT.right(checkPhase7Validations(assignmentValidationResult))
+      rejectionFromPhase3 <- EitherT.right(
+        checkPhase7Validations(assignmentValidationResult.commonValidationResult)
+      )
 
       // Additional validation requested during security audit as DIA-003-013.
       // Activeness of the mediator already gets checked in Phase 3,
@@ -600,31 +633,59 @@ private[reassignment] class AssignmentProcessingSteps(
         case (_: Verdict.Approve, Some(rejection)) =>
           rejected(ErrorDetails.fromLocalError(rejection))
         case (_: Verdict.Approve, _) =>
-          val commitSet = assignmentValidationResult.commitSet
-          val commitSetO = Some(FutureUnlessShutdown.pure(commitSet))
+          assignmentValidationResult.alarmIfActivenessCheckFailed(
+            requestId,
+            participantNodeParameters.crashAfterFailedValidation,
+          )
           val contractsToBeStored = assignmentValidationResult.contracts.contracts.map(_.contract)
 
           for {
-            _ <-
+            storedInReassignmentStore <-
               if (
                 assignmentValidationResult.reassigningParticipantValidationResult.isUnassignmentDataNotFound
                 && assignmentValidationResult.isReassigningParticipant
               ) {
-                reassignmentCoordination.addAssignmentData(
-                  assignmentValidationResult.reassignmentId,
-                  contracts = assignmentValidationResult.contracts,
-                  source = assignmentValidationResult.sourcePsid.map(_.logical),
-                  target = psid.map(_.logical),
+                EitherT(
+                  reassignmentCoordination
+                    .addAssignmentData(
+                      assignmentValidationResult.reassignmentId,
+                      contracts = assignmentValidationResult.contracts,
+                      source = assignmentValidationResult.sourcePsid.map(_.logical),
+                      target = psid.map(_.logical),
+                    )
+                    .value
+                    .map {
+                      case Left(error: UnknownSynchronizer) =>
+                        alarmOnUnknownSource(error)
+                        Right(false)
+                      case outcome => outcome.map(_ => true)
+                    }
                 )
-              } else EitherTUtil.unitUS[ReassignmentProcessorError]
+              } else
+                EitherT.pure[FutureUnlessShutdown, ReassignmentProcessorError](
+                  assignmentValidationResult.isReassigningParticipant
+                )
+
+            _ = if (storedInReassignmentStore)
+              reassignmentMetrics.finalized.inc()(
+                ReassignmentMetrics.assignment(
+                  assignmentValidationResult.sourcePsid.map(_.logical),
+                  psid.map(_.logical),
+                )
+              )
             update = assignmentValidationResult.createReassignmentAccepted(
               psid.map(_.logical),
               participantId,
               requestId.unwrap,
               trafficCost,
+              storedInReassignmentStore = storedInReassignmentStore,
             )
           } yield CommitAndStoreContractsAndPublishEvent(
-            commitSetO,
+            Some(
+              FutureUnlessShutdown.pure(
+                assignmentValidationResult.commitSet(storedInReassignmentStore)
+              )
+            ),
             contractsToBeStored,
             Some(update),
           )
@@ -640,6 +701,12 @@ private[reassignment] class AssignmentProcessingSteps(
       }
     } yield commitAndStoreContract
   }
+
+  /** An unknown source synchronizer looks like malicious behaviour. */
+  private[this] def alarmOnUnknownSource(error: UnknownSynchronizer)(implicit
+      traceContext: TraceContext
+  ): Unit =
+    SyncServiceAlarm.Warn(s"${error.message}. Skipping storing assignment data.").report()
 
   override def handleTimeout(parsedRequest: ParsedReassignmentRequest[FullView])(implicit
       traceContext: TraceContext
@@ -674,6 +741,13 @@ private[reassignment] class AssignmentProcessingSteps(
 }
 
 object AssignmentProcessingSteps {
+
+  final case class AssignmentSubmissionData(
+      messages: Seq[(ProtocolMessage, Recipients)],
+      rootHash: RootHash,
+      approximateTimestampForSigning: CantonTimestamp,
+      maxSequencingTime: CantonTimestamp,
+  )
 
   final case class SubmissionParam(
       submitterMetadata: ReassignmentSubmitterMetadata,

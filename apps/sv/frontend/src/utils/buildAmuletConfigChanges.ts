@@ -3,6 +3,7 @@
 import { Optional } from '@daml/types';
 import {
   AmuletConfig,
+  GovernanceLockConfig,
   PackageConfig,
   RewardConfig,
   RewardVersion,
@@ -14,6 +15,7 @@ import { IssuanceConfig } from '@daml.js/splice-amulet/lib/Splice/Issuance';
 import { Schedule } from '@daml.js/splice-amulet/lib/Splice/Schedule';
 import { AmuletDecentralizedSynchronizerConfig } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
 import { ConfigChange } from './types';
+import { switchOverMapToConfigValue } from '../components/forms/formValidators';
 
 export function buildAmuletConfigChanges(
   before: Optional<AmuletConfig<'USD'>>,
@@ -131,6 +133,15 @@ export function buildAmuletConfigChanges(
     ...buildPackageConfigChanges(before?.packageConfig, after?.packageConfig),
 
     ...buildRewardConfigChanges(before?.rewardConfig, after?.rewardConfig),
+
+    {
+      fieldName: 'amuletSwitchOverTimes',
+      label: 'Amulet switch-over times',
+      currentValue: switchOverMapToConfigValue(before?.amuletSwitchOverTimes),
+      newValue: switchOverMapToConfigValue(after?.amuletSwitchOverTimes),
+    },
+
+    ...buildGovernanceLockConfigChanges(before?.governanceLockConfig, after?.governanceLockConfig),
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);
@@ -403,7 +414,7 @@ function buildDecentralizedSynchronizerChanges(
     return synchronizers.map
       .entriesArray()
       .map(r => r[0])
-      .sort();
+      .toSorted();
   };
 
   const beforeRequiredSynchronizers = getRequiredSynchronizers(before?.requiredSynchronizers);
@@ -411,7 +422,7 @@ function buildDecentralizedSynchronizerChanges(
 
   const allSynchronizers = [
     ...new Set([...beforeRequiredSynchronizers, ...afterRequiredSynchronizers]),
-  ].sort();
+  ].toSorted();
   const requiredSynchronizersChanges = allSynchronizers.map((sync, idx) => ({
     fieldName: `decentralizedSynchronizerRequiredSynchronizers${idx + 1}`,
     label: `(unused) Decentralized synchronizer (required synchronizer ${idx + 1})`,
@@ -460,5 +471,35 @@ function buildDecentralizedSynchronizerChanges(
       newValue: after?.fees.minTopupAmount || '',
     },
     ...requiredSynchronizersChanges,
+  ] as ConfigChange[];
+}
+
+function buildGovernanceLockConfigChanges(
+  before: Optional<GovernanceLockConfig> | undefined,
+  after: Optional<GovernanceLockConfig> | undefined
+) {
+  return [
+    {
+      fieldName: 'governanceLockConfigMinimumLockAmount',
+      label: 'Governance lock config: Minimum governance lock amount (Amulet)',
+      currentValue: before?.minimumLockAmount || '',
+      newValue: after?.minimumLockAmount || '',
+      description:
+        'Minimum amount in Amulet required to create a governance lock (default: 10000 Amulet)',
+    },
+    {
+      fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
+      label: 'Governance lock config: SV lock vesting duration (microseconds)',
+      currentValue: before?.superValidatorLockVestingDuration?.microseconds || '',
+      newValue: after?.superValidatorLockVestingDuration?.microseconds || '',
+      description: 'Vesting duration for SV governance locks (default: 365.25 days)',
+    },
+    {
+      fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
+      label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+      currentValue: before?.featuredAppLockVestingDuration?.microseconds || '',
+      newValue: after?.featuredAppLockVestingDuration?.microseconds || '',
+      description: 'Vesting duration for featured app governance locks (default: 60 days)',
+    },
   ] as ConfigChange[];
 }

@@ -8,12 +8,8 @@ import Typography from '@mui/material/Typography';
 const Copyright: React.FC = () => (
   <Typography
     variant="body1"
-    color="text.secondary"
     align="center"
-    position={'relative'}
-    bottom={0}
-    margin={2}
-    padding={2}
+    sx={{ color: 'text.secondary', position: 'relative', bottom: 0, margin: 2, padding: 2 }}
   >
     {'Copyright © '}
     <Link color="inherit" href="https://digitalasset.com/">

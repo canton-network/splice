@@ -9,11 +9,16 @@ import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.config.CantonRequireTypes.String73
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.sequencing.client.SequencerClientSend.SendRequestTimestamps
 import com.digitalasset.canton.sequencing.client.{SendAsyncClientError, SequencerClient}
 import com.digitalasset.canton.serialization.HasCryptographicEvidence
 import com.digitalasset.canton.store.SequencedEventStore.OrdinarySequencedEvent
+import com.digitalasset.canton.time.NonNegativeFiniteDuration
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
@@ -30,9 +35,9 @@ import java.util.UUID
   *   the time proof event itself. this must be the event content signedEvent wrapper.
   */
 final case class TimeProof private (
-    private val event: OrdinarySequencedEvent[Envelope[?]],
+    private val event: OrdinarySequencedEvent[Batch[Envelope[?]]],
     private val deliver: Deliver[Nothing],
-) extends PrettyPrinting
+) extends PrettyPrintingFromCompanion
     with HasCryptographicEvidence {
 
   require(
@@ -44,27 +49,32 @@ final case class TimeProof private (
 
   def traceContext: TraceContext = event.traceContext
 
-  override protected def pretty: Pretty[TimeProof.this.type] = prettyOfClass(
-    unnamedParam(_.timestamp)
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[TimeProof] = TimeProof
 
   override def getCryptographicEvidence: ByteString = deliver.getCryptographicEvidence
 }
 
-object TimeProof {
+object TimeProof extends PrettyPrintingCompanion[TimeProof] {
+  override protected val pretty: Pretty[TimeProof] = prettyOfClass(
+    unnamedParam(_.timestamp)
+  )
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  def fromEvent(event: OrdinarySequencedEvent[Envelope[?]]): Either[String, TimeProof] =
+  private def fromEvent(
+      event: OrdinarySequencedEvent[Batch[Envelope[?]]]
+  ): Either[String, TimeProof] =
     for {
       deliver <- PartialFunction
-        .condOpt(event.signedEvent.content) { case deliver: Deliver[?] => deliver }
+        .condOpt(event.signedEvent.content) { case deliver: Deliver[Batch[Envelope[?]]] =>
+          deliver
+        }
         .toRight("Time Proof must be a deliver event")
       _ <- validateDeliver(deliver)
       // is now safe to cast to a `Deliver[Nothing]` as we've validated it has no envelopes
       emptyDeliver = deliver.asInstanceOf[Deliver[Nothing]]
     } yield new TimeProof(event, emptyDeliver)
 
-  private def validateDeliver(deliver: Deliver[Envelope[?]]): Either[String, Unit] =
+  private def validateDeliver(deliver: Deliver[Batch[Envelope[?]]]): Either[String, Unit] =
     for {
       _ <- Either.cond(
         isTimeEventBatch(deliver.batch),
@@ -79,11 +89,11 @@ object TimeProof {
     } yield ()
 
   /** Return a wrapped [[TimeProof]] if the given `event` has the correct properties. */
-  def fromEventO(event: OrdinarySequencedEvent[Envelope[?]]): Option[TimeProof] =
+  def fromEventO(event: OrdinarySequencedEvent[Batch[Envelope[?]]]): Option[TimeProof] =
     fromEvent(event).toOption
 
   /** Is the event a time proof */
-  def isTimeProofDeliver(deliver: Deliver[Envelope[?]]): Boolean =
+  def isTimeProofDeliver(deliver: Deliver[Batch[Envelope[?]]]): Boolean =
     validateDeliver(deliver).isRight
 
   /** Does the submission request look like a request to create a time event */
@@ -94,7 +104,8 @@ object TimeProof {
     * consistent
     */
   def sendRequest(
-      client: SequencerClient
+      client: SequencerClient,
+      timeProofRequestExpiry: NonNegativeFiniteDuration,
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SendAsyncClientError, Unit] = {
@@ -103,20 +114,15 @@ object TimeProof {
       // we intentionally ask for an empty event to be sequenced to observe the time.
       // this means we can safely share this event without mentioning other recipients.
       batch = Batch.empty(client.protocolVersion),
-      // as we typically won't know the synchronizer time at the point of doing this request (hence doing the request for the time...),
-      // we can't pick a known good synchronizer time for the max sequencing time.
-      // if we were to guess it we may get it wrong and then in the event of no activity on the synchronizer for our recipient,
-      // we'd then never actually learn of the time.
-      // so instead we just use the maximum value allowed.
+      // the inner message is empty so we don't need to provide a snapshot approximation and
+      // can let the sequencer client retrieve the latest snapshot itself.
+      currentSnapshotApproximation = None,
       timestamps = SendRequestTimestamps(
-        topologyTimestamp = None,
-        // It's safe to use `clock.now` regardless of the max sequencing time, as the latter is set to `MaxValue`,
-        // which causes a fallback to the long-term key when signing.
         approximateTimestampForSigning = client.clock.now,
-        maxSequencingTime = CantonTimestamp.MaxValue,
+        maxSequencingTime = client.clock.now.plus(timeProofRequestExpiry.unwrap),
       ),
       messageId = mkTimeProofRequestMessageId,
-      // Do not amplify because max sequencing time is set to MaxValue and therefore will exceed the aggregation time bound
+      // Do not amplify as there is anyway an outer retry mechanism in TimeProofRequestSubmitter
       amplify = false,
     )
   }

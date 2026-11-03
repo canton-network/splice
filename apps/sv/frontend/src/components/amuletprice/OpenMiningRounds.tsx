@@ -34,13 +34,13 @@ const OpenMiningRounds: React.FC = () => {
     return <p>Error, something went wrong.</p>;
   }
 
-  const sortedRounds = openMiningRoundsQuery.data.sort(
+  const sortedRounds = openMiningRoundsQuery.data.toSorted(
     (a, b) => parseInt(b.payload.round.number) - parseInt(a.payload.round.number)
   );
 
   return (
     <>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Open Mining Rounds
       </Typography>
       <TableContainer>

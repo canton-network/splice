@@ -9,14 +9,19 @@ import com.digitalasset.canton.health.{
   ComponentHealthState,
   HealthQuasiComponent,
 }
-import com.digitalasset.canton.lifecycle.{FlagCloseable, HasRunOnClosing}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.{FlagCloseable, HasCloseContext, HasRunOnClosing}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{NamedLogging, TracedLogger}
 import com.digitalasset.canton.sequencing.ProcessingSerializedEvent
+import com.digitalasset.canton.sequencing.SequencerAggregatorXImpl.EventAndOrdinal
+import com.digitalasset.canton.sequencing.client.SequencerClient
 import com.digitalasset.canton.sequencing.client.SequencerClient.SequencerTransports
 import com.digitalasset.canton.sequencing.client.pool.SequencerSubscriptionPool.SequencerSubscriptionPoolConfig
 import com.digitalasset.canton.sequencing.client.pool.SequencerSubscriptionPoolImpl.SubscriptionStartProvider
-import com.digitalasset.canton.sequencing.client.{SequencerClient, SequencerClientSubscriptionError}
 import com.digitalasset.canton.time.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.tracing.TraceContext
@@ -41,7 +46,7 @@ import scala.concurrent.{ExecutionContext, Future}
   *     fewer extra subscriptions than the liveness margin;
   *   - it is failing if the number of subscriptions is below the trust threshold.
   */
-trait SequencerSubscriptionPool extends FlagCloseable with NamedLogging {
+trait SequencerSubscriptionPool extends FlagCloseable with HasCloseContext with NamedLogging {
   import SequencerSubscriptionPool.*
 
   def start()(implicit traceContext: TraceContext): Unit
@@ -60,35 +65,57 @@ trait SequencerSubscriptionPool extends FlagCloseable with NamedLogging {
   def getSubscriptionsHealthStatus: Seq[HealthQuasiComponent]
 
   /** Return the current active subscriptions in the pool. */
-  def subscriptions: Set[SequencerSubscription[SequencerClientSubscriptionError]]
+  def subscriptions: Set[SequencerSubscriptionWrapper]
 
   /** Return the number of active subscriptions in the pool. */
   final def nbSubscriptions: NonNegativeInt = NonNegativeInt.tryCreate(subscriptions.size)
 
   /** Future that completes when the sequencer subscription pool closes */
   def completion: Future[SequencerClient.CloseReason]
+
+  def checkLiveness(eventAndCounter: EventAndOrdinal)(implicit traceContext: TraceContext): Unit
 }
 
 object SequencerSubscriptionPool {
 
   /** Subscription pool configuration
+    *
     * @param livenessMargin
     *   Number of extra subscriptions to maintain to ensure liveness.
     * @param subscriptionRequestDelay
     *   Delay between the attempts to obtain new connections, when the current number of
     *   subscriptions is not `trustThreshold` + [[livenessMargin]].
+    * @param maxTimestampDelta
+    *   Maximum difference between the latest aggregated event and the latest event provided by a
+    *   subscription.
+    * @param maxOrdinalDelta
+    *   Maximum difference between the ordinal of the latest aggregated event and the ordinal of the
+    *   latest event provided by a subscription.
+    *
+    * Setting both [[maxTimestampDelta]] and [[maxOrdinalDelta]] to 0 disables the silent
+    * subscription detection.
     */
   final case class SequencerSubscriptionPoolConfig(
       livenessMargin: NonNegativeInt,
       subscriptionRequestDelay: NonNegativeFiniteDuration,
-  ) extends PrettyPrinting {
-    override protected def pretty: Pretty[SequencerSubscriptionPoolConfig] = prettyOfClass(
-      param("livenessMargin", _.livenessMargin),
-      param("subscriptionRequestDelay", _.subscriptionRequestDelay),
-    )
+      maxTimestampDelta: NonNegativeFiniteDuration,
+      maxOrdinalDelta: NonNegativeInt,
+  ) extends PrettyPrintingFromCompanion {
+    override def prettyCompanion: PrettyPrintingCompanion[SequencerSubscriptionPoolConfig] =
+      SequencerSubscriptionPoolConfig
+
+    lazy val silentSubscriptionDetectionIsDisabled: Boolean =
+      maxTimestampDelta == NonNegativeFiniteDuration.Zero && maxOrdinalDelta == NonNegativeInt.zero
   }
 
-  object SequencerSubscriptionPoolConfig {
+  object SequencerSubscriptionPoolConfig
+      extends PrettyPrintingCompanion[SequencerSubscriptionPoolConfig] {
+    override protected val pretty: Pretty[SequencerSubscriptionPoolConfig] = prettyOfClass(
+      param("livenessMargin", _.livenessMargin),
+      param("subscriptionRequestDelay", _.subscriptionRequestDelay),
+      param("maxTimestampDelta", _.maxTimestampDelta),
+      param("maxOrdinalDelta", _.maxOrdinalDelta),
+    )
 
     /** Create a sequencer subscription pool configuration from the existing format.
       *
@@ -101,6 +128,8 @@ object SequencerSubscriptionPool {
         livenessMargin = sequencerTransports.sequencerLivenessMargin,
         subscriptionRequestDelay =
           sequencerTransports.sequencerConnectionPoolDelays.subscriptionRequestDelay,
+        maxTimestampDelta = sequencerTransports.subscriptionLivenessLimits.maxTimestampDelta,
+        maxOrdinalDelta = sequencerTransports.subscriptionLivenessLimits.maxOrdinalDelta,
       )
   }
 

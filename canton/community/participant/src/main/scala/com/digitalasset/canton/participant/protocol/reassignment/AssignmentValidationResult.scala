@@ -4,6 +4,7 @@
 package com.digitalasset.canton.participant.protocol.reassignment
 
 import cats.data.EitherT
+import cats.syntax.either.*
 import cats.syntax.functor.*
 import com.digitalasset.canton.config.RequireTypes.NonNegativeLong
 import com.digitalasset.canton.data.{
@@ -40,7 +41,7 @@ final case class AssignmentValidationResult private[reassignment] (
     submitterMetadata: ReassignmentSubmitterMetadata,
     reassignmentId: ReassignmentId,
     sourcePsid: Source[PhysicalSynchronizerId],
-    hostedConfirmingReassigningParties: Set[LfPartyId],
+    hostedConfirmingParties: Set[LfPartyId],
     isReassigningParticipant: Boolean,
     commonValidationResult: CommonValidationResult,
     reassigningParticipantValidationResult: ReassigningParticipantValidationResult,
@@ -51,32 +52,62 @@ final case class AssignmentValidationResult private[reassignment] (
   override def activenessResultIsSuccessful: Boolean = {
 
     // The activeness check is performed at request time and may flag the reassignmentId as inactive
-    // if the unassignment is still in progress. Once the unassignment is complete, its data becomes
-    // available in the reassignment cache. If the activeness check flags the reassignmentId as inactive
-    // but the reassignment cache indicates it is known and the assignment is not yet completed,
-    // the activeness check can be considered valid.
+    // if the unassignment is still in progress. This covers two cases:
+    //   Case 1: the unassignment data is still not available at validation time. If the activeness check flags the reassignmentId as inactive
+    //          but the reassignment cache indicates it is known and the assignment is not yet completed, the activeness check can be considered valid.
+    //           Nevertheless, since the unassignment data is not yet available, we will send an abstain
+    //   Case 2: once the unassignment is complete, its data becomes available in the reassignment cache,
+    //           so the data only becomes available after the check. We tolerate the inactive flag here
+    //           so that we approve.
+    // On a non-reassigning participant, the reassignmentId is always flagged as inactive, as the
+    // participant does not store the unassignment data. Since isAssignmentCompleted is false there,
+    // only the contract activeness is taken into account.
+    // The only inactive case we must not tolerate is an actually completed assignment, hence the
+    // isAssignmentCompleted guard. The contract activeness must still be successful on its own.
+    // TODO(#12871): Once the reassignment store becomes prunable, a completed-and-pruned
+    //   reassignment will be reported as UnassignmentDataNotFound, indistinguishable from one
+    //   that was never seen. With this guard, isAssignmentCompleted would then be false and we
+    //   would wrongly treat it as active (isReassignmentActive = true) instead of rejecting.
     val isReassignmentActive: Boolean =
-      !reassigningParticipantValidationResult.isUnassignmentDataNotFound &&
-        !reassigningParticipantValidationResult.isAssignmentCompleted &&
-        commonValidationResult.activenessResult.inactiveReassignments.contains(reassignmentId) &&
-        commonValidationResult.activenessResult.contracts.isSuccessful
+      !reassigningParticipantValidationResult.isAssignmentCompleted &&
+        commonValidationResult.activenessResult.inactiveReassignments.contains(reassignmentId)
+        && commonValidationResult.activenessResult.contracts.isSuccessful
 
     commonValidationResult.activenessResult.isSuccessful || isReassignmentActive
   }
 
-  private[reassignment] def commitSet = CommitSet.createForAssignment(
-    reassignmentId,
-    contracts.contracts,
-    sourcePsid.map(_.logical),
-  )
+  override protected def requestDescription: String = "Assignment request"
 
-  // Assigning the internal contract ids to the contracts requires that all the contracts are
-  // already persisted in the contract store.
+  private[reassignment] def commitSet(storedInReassignmentStore: Boolean) =
+    CommitSet.createForAssignment(
+      reassignmentId,
+      contracts.contracts,
+      sourcePsid.map(_.logical),
+      completeReassignmentInStore = storedInReassignmentStore,
+    )
+
+  /** Returns a factory for the assignment event. The factory must only be applied once the assigned
+    * contracts are persisted in the contract store, since the event carries their internal contract
+    * ids.
+    *
+    * @param targetSynchronizer
+    *   the synchronizer the contracts are assigned to
+    * @param participantId
+    *   the id of the local participant
+    * @param recordTime
+    *   record time of the assignment
+    * @param trafficCost
+    *   traffic cost of the assignment
+    * @param storedInReassignmentStore
+    *   whether the reassignment was recorded in the reassignment store, emitted as
+    *   `isReassigningParticipant`
+    */
   private[reassignment] def createReassignmentAccepted(
       targetSynchronizer: Target[SynchronizerId],
       participantId: ParticipantId,
       recordTime: CantonTimestamp,
       trafficCost: NonNegativeLong,
+      storedInReassignmentStore: Boolean,
   )(implicit
       traceContext: TraceContext
   ): AcsChangeFactory => InternalContractIds => SequencedEventUpdate = {
@@ -110,6 +141,7 @@ final case class AssignmentValidationResult private[reassignment] (
               },
               inst = reassign.contract.inst,
             ),
+            representativePackageId = reassign.targetValidationPackageId.unwrap,
           )
         }
         Update.SequencedReassignmentAccepted(
@@ -121,12 +153,13 @@ final case class AssignmentValidationResult private[reassignment] (
             targetSynchronizer = targetSynchronizer,
             submitter = Option(submitterMetadata.submitter),
             reassignmentId = reassignmentId,
-            isReassigningParticipant = isReassigningParticipant,
+            isReassigningParticipant = storedInReassignmentStore,
           ),
           reassignment = Reassignment.Batch(reassignment),
           recordTime = recordTime,
           synchronizerId = targetSynchronizer.unwrap,
           acsChangeFactory = acsChangeFactory,
+          traceContext = traceContext,
         )
   }
 }
@@ -140,6 +173,8 @@ object AssignmentValidationResult {
         ReassignmentValidationError,
         Unit,
       ],
+      packageVettingResult: Option[ReassignmentValidationError],
+      contractSerializationResult: Option[ReassignmentValidationError],
       submitterCheckResult: Option[ReassignmentValidationError],
       reassignmentIdResult: Option[ReassignmentValidationError],
       multiSynchronizerFeatureFlagCheckResult: Option[ReassignmentValidationError],
@@ -148,6 +183,19 @@ object AssignmentValidationResult {
   final case class ReassigningParticipantValidationResult(
       errors: Seq[ReassignmentValidationError]
   ) extends ReassignmentValidationResult.ReassigningParticipantValidationResult {
+
+    // On assignment, the contract authentication against the target package is a common validation performed by all
+    // participants. We don't authenticate the contract against the source package as vetting may have changed
+    // since the unassignment and we don't want this to block assignment.
+    override def contractAuthenticationResultF: EitherT[
+      FutureUnlessShutdown,
+      ReassignmentValidationError,
+      Unit,
+    ] = EitherT(FutureUnlessShutdown.pure(Either.unit))
+
+    // We abstain when the unassignment data is not found, as this participant may
+    // simply not have processed the unassignment yet.
+    override def isAbstain: Boolean = isUnassignmentDataNotFound
 
     def isUnassignmentDataNotFound: Boolean = errors.exists {
       case AssignmentValidationError.UnassignmentDataNotFound(_) => true

@@ -8,12 +8,11 @@ import cats.syntax.either.*
 import cats.syntax.foldable.*
 import cats.syntax.option.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.NonEmpty
-import com.daml.nonempty.catsinstances.*
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.{CantonTimestamp, LogicalUpgradeTime}
 import com.digitalasset.canton.error.CantonBaseError
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.*
 import com.digitalasset.canton.sequencing.protocol.*
 import com.digitalasset.canton.sequencing.traffic.TrafficReceipt
@@ -32,12 +31,13 @@ import com.digitalasset.canton.time.{Clock, NonNegativeFiniteDuration}
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.tracing.BatchTracing.withTracedBatch
 import com.digitalasset.canton.tracing.{HasTraceContext, TraceContext, Traced}
-import com.digitalasset.canton.util.BatchN.MaximizeBatchSize
 import com.digitalasset.canton.util.EitherUtil.*
 import com.digitalasset.canton.util.PekkoUtil.WithKillSwitch
 import com.digitalasset.canton.util.PekkoUtil.syntax.*
+import com.digitalasset.canton.util.signalling.{EventSignaller, Notification}
 import com.digitalasset.canton.util.{BatchN, EitherTUtil, ErrorUtil}
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.*
@@ -192,7 +192,7 @@ object SequencerWriterSource {
       keepAliveInterval: Option[NonNegativeFiniteDuration],
       store: SequencerWriterStore,
       clock: Clock,
-      eventSignaller: EventSignaller,
+      eventSignaller: EventSignaller[SequencerMemberId, Unit],
       loggerFactory: NamedLoggerFactory,
       protocolVersion: ProtocolVersion,
       metrics: SequencerMetrics,
@@ -270,7 +270,6 @@ object SequencerWriterSource {
           lsuSequencingBounds,
           drSequencingTimeUpperBound,
           loggerFactory,
-          protocolVersion,
           blockSequencerMode,
         )
       )
@@ -283,7 +282,7 @@ object SequencerWriterSource {
           tracedRight.map {
             _.map { right =>
               BatchWritten(
-                left.value.notifies.union(right.notifies),
+                Notification.union(left.value.notifies, right.notifies),
                 left.value.latestTimestamp.max(right.latestTimestamp),
                 left.value.events ++ right.events,
               )
@@ -409,7 +408,6 @@ class SendEventGenerator(
           submission.messageId,
           finalRecipientIds,
           payload,
-          submission.topologyTimestamp,
           trafficReceiptO,
         )
       }
@@ -441,7 +439,6 @@ class SendEventGenerator(
               ReceiptStoreEvent(
                 senderId,
                 submission.messageId,
-                submission.topologyTimestamp,
                 traceContext,
                 deliverReceipt.trafficReceiptO,
               )
@@ -519,7 +516,6 @@ object SequenceWritesFlow {
       lsuSequencingBounds: Option[LsuSequencingBounds],
       drSequencingTimeUpperBound: Option[DisasterRecoverySequencingTimeUpperBound],
       loggerFactory: NamedLoggerFactory,
-      protocolVersion: ProtocolVersion,
       blockSequencerMode: Boolean,
   )(implicit
       executionContext: ExecutionContext,
@@ -541,7 +537,7 @@ object SequenceWritesFlow {
             event
           })
         val notifies =
-          events.fold[WriteNotification](WriteNotification.NoTarget)(WriteNotification.forEvents(_))
+          events.fold[WriteNotification](Notification.noTarget)(WriteNotification.forEvents(_))
         for {
           // if this write batch had any events then save them
           _ <- events.fold(FutureUnlessShutdown.unit)(eventsWithPayload =>
@@ -648,47 +644,6 @@ object SequenceWritesFlow {
           case None => ().asRight
         }
 
-      def deliverErrorForInvalidTopologyTimestamp(
-          event: Presequenced[StoreEvent[BytesPayload]]
-      ): Presequenced[StoreEvent[BytesPayload]] =
-        event.map {
-          // we only do this validation for deliver events that specify a signing timestamp
-          case deliver @ DeliverStoreEvent(
-                sender,
-                messageId,
-                _,
-                _,
-                Some(topologyTimestamp),
-                _,
-                trafficReceiptO,
-              ) =>
-            // We only check that the signing timestamp is at most the assigned timestamp.
-            // The lower bound will be checked only when reading the event
-            // because only then we know the topology state at the signing timestamp,
-            // which we need to determine the dynamic synchronizer parameter sequencerSigningTolerance.
-            //
-            // Sequencer clients should set the signing timestamp only to timestamps that they have read from the
-            // synchronizer. In a setting with multiple sequencers, the SequencerReader delivers only events up to
-            // the lowest watermark of all sequencers. So even if the sequencer client sends a follow-up submission request
-            // to a different sequencer, this sequencer will assign a higher timestamp than the requested topology timestamp.
-            // So this check should only fail if the sequencer client violates this policy.
-            if (topologyTimestamp <= timestamp) deliver
-            else {
-              val reason = SequencerErrors
-                .TopologyTimestampAfterSequencingTimestamp(topologyTimestamp, timestamp)
-
-              DeliverErrorStoreEvent(
-                sender,
-                messageId,
-                reason.rpcStatusWithoutLoggingContext(),
-                protocolVersion,
-                event.traceContext,
-                trafficReceiptO,
-              )
-            }
-          case other => other
-        }
-
       def checkPayloadToEventMargin(
           presequencedEvent: Presequenced[StoreEvent[BytesPayload]]
       ): Either[CantonBaseError, Unit] =
@@ -718,8 +673,7 @@ object SequenceWritesFlow {
         _ <- checkMaxSequencingTime(presequencedEvent)
         _ <- checkSequencingTimeLowerBound(presequencedEvent)
         _ <- checkDrSequencingTimeUpperBound(presequencedEvent)
-        checkedEvent = deliverErrorForInvalidTopologyTimestamp(presequencedEvent)
-      } yield Sequenced(timestamp, checkedEvent.event, fromStore = false)
+      } yield Sequenced(timestamp, presequencedEvent.event, fromStore = false)
 
       resultE.tapLeft { error =>
         // log here as we don't have the trace context in the error itself
@@ -730,16 +684,16 @@ object SequenceWritesFlow {
     }
 
     val batching =
-      BatchN[WithKillSwitch[Write]](
-        writerConfig.eventWriteBatchMaxSize,
-        maxBatchCount =
-          // only block sequencers can write events parallel, because the sequencing had already happened at this point
-          if (blockSequencerMode) writerConfig.eventWriteMaxConcurrency
-          // in line with mapAsync(1) in non blocksequencer mode
-          else 1,
-        // for the sequencer, we'd rather optimize for writing fewer but fuller batches
-        catchUpMode = BatchN.MaximizeBatchSize,
-      )
+      // for the sequencer, we'd rather optimize for writing fewer but fuller batches
+      BatchN
+        .forMaxBatchSize[WithKillSwitch[Write]](
+          maxBatchSize = writerConfig.eventWriteBatchMaxSize,
+          maxBatchCount =
+            // only block sequencers can write events parallel, because the sequencing had already happened at this point
+            if (blockSequencerMode) writerConfig.eventWriteMaxConcurrency
+            // in line with mapAsync(1) in non blocksequencer mode
+            else 1,
+        )
         .mapConcat { withKsWriteSeq =>
           NonEmpty.from(withKsWriteSeq.toSeq).map { nonEmptyBatch =>
             // Assume all WithKillSwitch in the batch result in the same cancelling behavior of the stream
@@ -819,15 +773,14 @@ object WritePayloadsFlow {
     def extractPayload(
         event: WithKillSwitch[StoreEvent[BytesPayload]]
     ): Option[WithKillSwitch[BytesPayload]] = event.value match {
-      case DeliverStoreEvent(_, _, _, payload, _, _, _) => event.map(_ => payload).some
+      case DeliverStoreEvent(_, _, _, payload, _, _) => event.map(_ => payload).some
       case _other => None
     }
 
-    val batching = BatchN[WithKillSwitch[Presequenced[StoreEvent[BytesPayload]]]](
-      writerConfig.payloadWriteBatchMaxSize,
-      writerConfig.payloadWriteMaxConcurrency,
+    val batching = BatchN.forMaxBatchSize[WithKillSwitch[Presequenced[StoreEvent[BytesPayload]]]](
+      maxBatchSize = writerConfig.payloadWriteBatchMaxSize,
+      maxBatchCount = writerConfig.payloadWriteMaxConcurrency,
       // for the sequencer, we'd rather optimize for writing fewer but fuller batches
-      catchUpMode = MaximizeBatchSize,
     )
     val writingPayloads =
       if (blockSequencerMode) {
@@ -883,7 +836,7 @@ object UpdateWatermarkFlow {
 
 object NotifyEventSignallerFlow {
   def apply(
-      eventSignaller: EventSignaller
+      eventSignaller: EventSignaller[SequencerMemberId, Unit]
   ): Flow[Traced[BatchWritten], Traced[BatchWritten], NotUsed] =
     Flow[Traced[BatchWritten]].alsoTo(
       // `alsoTo` propagates backpressure coming from the sink, but backpressure shouldn't happen
@@ -894,9 +847,9 @@ object NotifyEventSignallerFlow {
         .addAttributes(Attributes.inputBuffer(1, 1))
         .map(_.value.notifies)
         // combine multiple event signals
-        .conflate(_ union _)
+        .conflate(Notification.union[SequencerMemberId])
         // this could also be dispatched in parallel
-        .map(eventSignaller.notifyOfLocalWrite)
+        .map(eventSignaller.notify(_, ()))
         .to(Sink.ignore)
     )
 

@@ -200,7 +200,7 @@ class State(BaseModel):
     public_num_comments: dict[int, int]
     internal_num_comments: dict[int, int]
 
-def save_state(state: State, state_filename: str):
+def save_state(state: State, state_filename: str) -> None:
     with open(state_filename, 'w', encoding='utf-8') as f:
         f.write(state.model_dump_json(indent = 2))
 
@@ -209,7 +209,7 @@ def save_state(state: State, state_filename: str):
 ref_pattern = re.compile(r"(?P<short>\B#(?P<short_num>\d+)\b)|(?P<url>https://github.com/DACH-NY/canton-network-node/issues/(?P<url_num>\d+(?![#\d])))")
 
 def get_refs(text: str) -> set[int]:
-    refs = set()
+    refs: set[int] = set()
     found = ref_pattern.finditer(text)
     for match in found:
         if match.group('short'):
@@ -219,12 +219,12 @@ def get_refs(text: str) -> set[int]:
     return refs
 
 
-def read_from_github(source_repo: str, dump_filename: str, limit: int | None = None):
+def read_from_github(source_repo: str, dump_filename: str, limit: int | None = None) -> None:
 
-    internal_issues = {}
-    public_issues = {}
-    internal_milestones = set()
-    public_milestones = set()
+    internal_issues: dict[int, Issue] = {}
+    public_issues: dict[int, Issue] = {}
+    internal_milestones: set[Milestone] = set()
+    public_milestones: set[Milestone] = set()
 
     if os.environ.get("GITHUB_TOKEN") is None:
         raise ValueError("GITHUB_TOKEN environment variable is not set.")
@@ -232,11 +232,7 @@ def read_from_github(source_repo: str, dump_filename: str, limit: int | None = N
     auth = Auth.Token(os.environ["GITHUB_TOKEN"])
     github = Github(auth=auth)
 
-    source_repo = github.get_repo(source_repo)
-
-    issues = source_repo.get_issues(state="open")
-
-    internal = []
+    issues = github.get_repo(source_repo).get_issues(state="open")
 
     for issue in issues:
         print(".", end="", flush=True)
@@ -263,7 +259,7 @@ def read_from_github(source_repo: str, dump_filename: str, limit: int | None = N
         for comment in comments:
             refs = refs.union(get_refs(comment))
 
-        has_subissues = issue.raw_data.get('sub_issues_summary').get('total') > 0
+        has_subissues = (issue.raw_data.get('sub_issues_summary') or {}).get('total', 0) > 0
 
         i = Issue(
                 number=number,
@@ -312,9 +308,9 @@ def sort_issues(src: dict[int, Issue]) -> list[int]:
     sorted = list(TopologicalSorter(dep_graph).static_order())
     return sorted
 
-def migrate_issues(src: dict[int, Issue], sorted_issues: list[int], trgt: TargetRepo, milestones_map: dict[int, int], issues_map: dict[int, int], comments_count: dict[int, int], state: State, state_filename: str):
+def migrate_issues(src: dict[int, Issue], sorted_issues: list[int], trgt: TargetRepo, milestones_map: dict[int, int], issues_map: dict[int, int], comments_count: dict[int, int], state: State, state_filename: str) -> None:
 
-    def ref_replacer(match) -> str:
+    def ref_replacer(match: re.Match[str]) -> str:
         ref = int(match.group('short_num') or match.group('url_num'))
         if ref in issues_map:
             return f"#{issues_map[ref]}"
@@ -329,7 +325,7 @@ def migrate_issues(src: dict[int, Issue], sorted_issues: list[int], trgt: Target
             # An issue referred to, but not an open issue (e.g. closed or is a PR), we just skip those and reference the original issue
             continue
 
-        issue = src.get(issue_number)
+        issue = src[issue_number]
         if issue_number not in issues_map:
             # Issue hasn't been migrated yet, migrate it
             # (if it has been migrated, that's because we continued from a saved state, and this issue was handled in a previous run)
@@ -371,18 +367,19 @@ def migrate_issues(src: dict[int, Issue], sorted_issues: list[int], trgt: Target
                 save_state(state, state_filename)
 
 
-def migrate_todo_comments(all, public_repo_path, internal_repo_path, public_issues_map, internal_issues_map):
+def migrate_todo_comments(all: IssueCollection, public_repo_path: str, internal_repo_path: str, public_issues_map: dict[int, int], internal_issues_map: dict[int, int]) -> None:
     cmd = ['rg', r'TODO ?\(#(\d+)\)', '--vimgrep', '-o', '--no-column', public_repo_path, '-g', '!**/canton/community/**', '-.']
     print(f"Running command: {' '.join(cmd)}")
     todo_comments = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.splitlines()
     print("\nTODO comments found in the Splice codebase:")
-    todo_refs = set()
+    todo_refs: set[int] = set()
     for line in todo_comments:
         split = line.split(':')
         filename = split[0]
         line_number = split[1]
         todo = split[2]
         match = re.search(r'TODO ?\(#(\d+)\)', todo)
+        assert match is not None  # rg only printed matches of this pattern
         ref = int(match.group(1))
         todo_refs.add(ref)
         if ref in all.public:
@@ -414,6 +411,7 @@ def migrate_todo_comments(all, public_repo_path, internal_repo_path, public_issu
         line_number = split[1]
         todo = split[2]
         match = re.search(r'\(#(\d+)\)', todo)
+        assert match is not None  # rg only printed matches of TODO(#N)
         ref = int(match.group(1))
         todo_refs.add(ref)
         if ref in all.public:
@@ -436,7 +434,7 @@ def migrate_todo_comments(all, public_repo_path, internal_repo_path, public_issu
     print(f"  {len(internal_todo_refs)} TODO references to the internal repo: {[f"{ref} => #{internal_issues_map[ref]}" for ref in internal_todo_refs]}")
     print(f"  {len(unknonwn_todo_refs)} unknown TODO references: {unknonwn_todo_refs}")
 
-def validate_issue_references(all: IssueCollection):
+def validate_issue_references(all: IssueCollection) -> None:
     with_subissues = [issue for issue in all.internal.values() if issue.has_sub_issues] + [issue for issue in all.public.values() if issue.has_sub_issues]
     if with_subissues:
         print(f"\nWARNING: {len(with_subissues)} issues have sub-issues, that relation will be lost")
@@ -461,7 +459,7 @@ def validate_issue_references(all: IssueCollection):
             print(f"  Internal issue {ref} is referenced by public issue(s): {find_ref_sources(all, ref)[1]}")
         raise ValueError("Public issues should not reference internal issues. Please fix the references before migrating.")
 
-def migrate_milestones(milestones: list[Milestone], trgt: TargetRepo, state: State, milestones_map_state: dict[int, int], state_filename: str):
+def migrate_milestones(milestones: list[Milestone], trgt: TargetRepo, state: State, milestones_map_state: dict[int, int], state_filename: str) -> None:
     for milestone in milestones:
         if not milestone.number in milestones_map_state:
             target = trgt.new_milestone(milestone.title, milestone.description)
@@ -471,9 +469,11 @@ def migrate_milestones(milestones: list[Milestone], trgt: TargetRepo, state: Sta
         else:
             print(f"Milestone {milestone.number} already migrated")
 
-def process(all: IssueCollection, public_repo: str, public_repo_path: str, internal_repo:str, internal_repo_path: str, state_filename: str, dry_run: bool = True):
+def process(all: IssueCollection, public_repo: str, public_repo_path: str, internal_repo:str, internal_repo_path: str, state_filename: str, dry_run: bool = True) -> None:
     print(f"Found {len(all.internal)} internal issues and {len(all.public)} public issues.")
 
+    trgt_internal: TargetRepo
+    trgt_public: TargetRepo
     if dry_run:
         trgt_internal = DryRunTargetRepo("internal")
         trgt_public = DryRunTargetRepo("public")
@@ -511,7 +511,7 @@ def process(all: IssueCollection, public_repo: str, public_repo_path: str, inter
 
     migrate_todo_comments(all, public_repo_path, internal_repo_path, state.public_issues_map, state.internal_issues_map)
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Migrate GitHub issues between repos.")
     parser.add_argument("--renew-dump", action="store_true", help="Renew the dump from GitHub instead of reading from the file.")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of issues to process (useful for quick iterations during testing).")

@@ -133,11 +133,23 @@ export interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
   // consumed by every request, keyed on the client IP, with optional per-IP overrides
   globalPerIpLimits: PerIpLimits;
 
-  // http by default with no validation, gRPC can be configured to validate the configured path prefixes
-  endpointValidation?: EndpointValidation;
+  // the protocol spoken on the rate limited port, `http` by default
+  protocol?: RateLimitProtocol;
+
+  // the number of X-Forwarded-For entries appended between the client and the sidecar,
+  // see `xffNumTrustedHops`. Defaults to `directIngressXffNumTrustedHops`.
+  xffNumTrustedHops?: number;
 }
 
-export type EndpointValidation = 'http' | 'grpc';
+// The protocol the rate limited workload speaks. It determines how the configured path prefixes are
+// validated, and how envoy reports a rejection: an HTTP request rejected by the local rate limit
+// filter gets `429`, whereas a gRPC call gets HTTP `200` and a gRPC status in the response, so the
+// two are recognized differently in the metrics and the access logs.
+export type RateLimitProtocol = 'http' | 'grpc';
+
+// The gRPC status code (`RESOURCE_EXHAUSTED`) envoy returns for a rate limited gRPC call, see
+// `rate_limited_as_resource_exhausted` in `localRateLimitFilterConfig`.
+export const rateLimitedGrpcStatus = 8;
 
 export interface PerEndpointLimits {
   // all the rate limits must be respected, there's an AND relationship between them
@@ -297,7 +309,7 @@ export function validateEffectiveRateLimits(
     );
   }
 
-  if (args.endpointValidation === 'grpc') {
+  if (args.protocol === 'grpc') {
     validateGrpcPathPrefixes(effectiveRateLimits);
   }
 
@@ -319,9 +331,10 @@ export function clientIpDescriptorValue(ip: string): string {
 // prepend arbitrary entries to it, and our gateway only appends to it, so
 // the header value is attacker controlled and per-IP limits could be evaded
 // by simply varying the header on every request.
-// masked_remote_address instead uses the address envoy trusts, which for the
-// sidecar is the last x-forwarded-for hop, i.e. the one appended by our own
-// ingress gateway.
+// masked_remote_address instead uses the address envoy trusts, i.e. the one it derives from
+// x-forwarded-for by skipping `xff_num_trusted_hops` entries from the *right*, which are
+// appended by our own infrastructure and hence cannot be spoofed (see
+// `buildXffNumTrustedHopsPatch`).
 const maskedRemoteAddressAction = {
   masked_remote_address: {
     // one bucket per client address
@@ -330,6 +343,50 @@ const maskedRemoteAddressAction = {
     v6_prefix_mask_len: 128,
   },
 };
+
+// The istio ingress gateway is exposed by a GCP NLB with `externalTrafficPolicy: Local`, which
+// preserves the client IP without adding a hop, so the gateway appends the client's address and
+// the sidecar sees it as the last (and only infrastructure appended) x-forwarded-for entry.
+export const directIngressXffNumTrustedHops = 1;
+
+// The GKE L7 gateway (required for Cloud Armor) adds a proxy in front of the istio ingress gateway, which appends its own address to x-forwarded-for, so the sidecar must trust two hops to get the client address.
+export const gkeL7GatewayNumTrustedProxies = 2;
+
+/**
+ * The `NETWORK_FILTER` config patch aligning the sidecar's `xff_num_trusted_hops` with the number
+ * of proxies in front of it, so that the per-client-IP limits are keyed on the actual client.
+ * Scoped to `inboundPort` like the HTTP filter patches, so that the workload's internal listeners
+ * keep the istio defaults.
+ */
+export function buildXffNumTrustedHopsPatch(
+  inboundPort: pulumi.Input<number>,
+  xffNumTrustedHops: number
+): unknown {
+  return {
+    applyTo: 'NETWORK_FILTER',
+    match: {
+      context: 'SIDECAR_INBOUND',
+      listener: {
+        portNumber: inboundPort,
+        filterChain: {
+          filter: {
+            name: 'envoy.filters.network.http_connection_manager',
+          },
+        },
+      },
+    },
+    patch: {
+      operation: 'MERGE',
+      value: {
+        typed_config: {
+          '@type':
+            'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
+          xff_num_trusted_hops: xffNumTrustedHops,
+        },
+      },
+    },
+  };
+}
 
 export function buildGlobalPerIpRateLimitAction(): unknown {
   return { actions: [maskedRemoteAddressAction] };
@@ -509,7 +566,7 @@ export interface RateLimitFilter {
   descriptors: unknown[];
 }
 
-function localRateLimitFilterConfig(filter: RateLimitFilter): unknown {
+function localRateLimitFilterConfig(filter: RateLimitFilter, protocol: RateLimitProtocol): unknown {
   return {
     '@type': 'type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit',
     stat_prefix: filter.statPrefix,
@@ -517,6 +574,11 @@ function localRateLimitFilterConfig(filter: RateLimitFilter): unknown {
     // whether the default (non-descriptor) bucket is consumed by requests that matched one
     // of the descriptors below
     always_consume_default_token_bucket: filter.alwaysConsumeDefaultTokenBucket,
+    // A rate limited gRPC call is answered with HTTP 200 and a gRPC status; without this envoy
+    // reports the generic `UNAVAILABLE` (14), which clients cannot tell apart from a genuinely
+    // unavailable server (and typically retry). `RESOURCE_EXHAUSTED` (8) unambiguously identifies
+    // a rejection by the rate limiter, both for the client and in the sidecar access logs.
+    rate_limited_as_resource_exhausted: protocol === 'grpc',
     filter_enabled: {
       runtime_key: 'local_rate_limit_enabled',
       default_value: {
@@ -628,9 +690,12 @@ export function buildRateLimitFilters(
 /**
  * The per-route configuration of the local rate limit filters, keyed by filter name.
  */
-export function buildTypedPerFilterConfig(filters: RateLimitFilter[]): Record<string, unknown> {
+export function buildTypedPerFilterConfig(
+  filters: RateLimitFilter[],
+  protocol: RateLimitProtocol = 'http'
+): Record<string, unknown> {
   return Object.fromEntries(
-    filters.map(filter => [filter.name, localRateLimitFilterConfig(filter)])
+    filters.map(filter => [filter.name, localRateLimitFilterConfig(filter, protocol)])
   );
 }
 
@@ -644,13 +709,22 @@ export function buildTypedPerFilterConfig(filters: RateLimitFilter[]): Record<st
  * the filters end up in the chain in the order of `buildRateLimitFilters`, i.e. from the most to
  * the least specific limit. Without the `subFilter` match istio would instead insert every filter
  * before the *first* filter of the chain, silently reversing them.
+ * The patches are scoped to `inboundPort`, the port carrying the externally reachable API. A
+ * workload typically listens on further ports that are not exposed to the outside (e.g. the
+ * sequencer's admin and peer-to-peer ports, which istio also treats as HTTP because they are
+ * named `grpc-*`); without the port match the filters would be inserted into the filter chains of
+ * those listeners too, and internal traffic must never be rate limited.
  */
-export function buildHttpFilterPatches(filters: RateLimitFilter[]): unknown[] {
+export function buildHttpFilterPatches(
+  filters: RateLimitFilter[],
+  inboundPort: pulumi.Input<number>
+): unknown[] {
   return filters.map(filter => ({
     applyTo: 'HTTP_FILTER',
     match: {
       context: 'SIDECAR_INBOUND',
       listener: {
+        portNumber: inboundPort,
         filterChain: {
           filter: {
             name: 'envoy.filters.network.http_connection_manager',
@@ -690,7 +764,7 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
   ) {
     super('splice:RateLimit', `splice-${args.namespace}-${name}`, args, opts);
     const effectiveRateLimits = validateEffectiveRateLimits(args);
-
+    const xffNumTrustedHops = args.xffNumTrustedHops ?? directIngressXffNumTrustedHops;
     // The global per-IP action comes last so that the more specific per-endpoint
     // descriptors are matched first.
     const rateLimitActions = buildRateLimitActions(effectiveRateLimits).concat([
@@ -718,7 +792,12 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
             },
           },
           configPatches: [
-            ...buildHttpFilterPatches(rateLimitFilters),
+            // must come before the rate limit filters: they key their per-client-IP buckets on
+            // the address envoy derives from x-forwarded-for using this setting
+            ...(xffNumTrustedHops !== directIngressXffNumTrustedHops
+              ? [buildXffNumTrustedHopsPatch(args.inboundPort, xffNumTrustedHops)]
+              : []),
+            ...buildHttpFilterPatches(rateLimitFilters, args.inboundPort),
             // Configure the rate limiting rules on the HTTP route.
             {
               applyTo: 'HTTP_ROUTE',
@@ -739,7 +818,10 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
                     // against the descriptors of each filter, which are disjoint
                     rate_limits: rateLimitActions,
                   },
-                  typed_per_filter_config: buildTypedPerFilterConfig(rateLimitFilters),
+                  typed_per_filter_config: buildTypedPerFilterConfig(
+                    rateLimitFilters,
+                    args.protocol || 'http'
+                  ),
                 },
               },
             },

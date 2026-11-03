@@ -8,8 +8,10 @@ import {
   coreSvsToDeployBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { cometBFTExternalPort } from '@canton-network/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
+import { gkeL7GatewayNumTrustedProxies } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 import { rateLimitResponseHeaders } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimitHeaders';
 import { mergeWith } from 'lodash';
+import { z } from 'zod';
 
 import {
   CLUSTER_HOSTNAME,
@@ -24,7 +26,7 @@ import {
   isDevNet,
   isMainNet,
 } from '../../common';
-import { clusterBasename, infraConfig } from './config';
+import { clusterBasename, flowControlConfigSchema, infraConfig } from './config';
 import { configureIstioGatewayPolicies, installAppWhitelisting } from './whitelisting';
 import { loadInternalWhitelistedIps, loadIPRanges } from './whitelisting/ipRanges';
 import { configurePublicInfo } from './whitelisting/publicInfo';
@@ -37,11 +39,11 @@ interface ConfiguredIstio {
 }
 
 export const istioVersion = {
-  istio: '1.29.2',
+  istio: '1.30.5',
   //   updated from https://grafana.com/orgs/istio/dashboards, must be updated on each istio version
   dashboards: {
-    general: 300,
-    wasm: 258,
+    general: 332, // https://grafana.com/grafana/dashboards/7645-istio-control-plane-dashboard/
+    wasm: 290, // https://grafana.com/grafana/dashboards/13277-istio-wasm-extension-dashboard/
   },
 };
 
@@ -60,7 +62,7 @@ function configureIstioBase(
       version: istioVersion.istio,
       namespace: ns.metadata.name,
       repositoryOpts: {
-        repo: 'https://istio-release.storage.googleapis.com/charts',
+        repo: 'https://blob.istio.io/istio-release/charts',
       },
       values: {
         global: {
@@ -121,6 +123,10 @@ function configureIstiod(
         requested_server_name: '%REQUESTED_SERVER_NAME%',
         response_code: '%RESPONSE_CODE%',
         response_code_details: '%RESPONSE_CODE_DETAILS%',
+        // gRPC calls always end with HTTP 200, the outcome is in the gRPC status: a rate limited
+        // call is reported as `ResourceExhausted` (see `rate_limited_as_resource_exhausted`),
+        // whereas a rate limited HTTP request is reported as response_code 429
+        grpc_status: '%GRPC_STATUS(CAMEL_STRING)%',
         response_flags: '%RESPONSE_FLAGS%',
         start_time: '%START_TIME%',
         upstream_cluster: '%UPSTREAM_CLUSTER%',
@@ -197,7 +203,7 @@ function configureIstiod(
       version: istioVersion.istio,
       namespace: ingressNs.metadata.name,
       repositoryOpts: {
-        repo: 'https://istio-release.storage.googleapis.com/charts',
+        repo: 'https://blob.istio.io/istio-release/charts',
       },
       values: mergeWith(
         defaultValues,
@@ -213,6 +219,14 @@ function configureIstiod(
   );
   return istiodRelease;
 }
+
+// The pod must outlive the load balancer's backend draining window plus the time it
+// takes for the NEG endpoint removal to propagate; Google suggests about a minute for
+// the latter. The grace period then has to cover the preStop sleep, envoy's own drain
+// and some buffer: 120 + 60 + 30 = 210.
+const PRE_STOP_DRAIN_SECONDS = 120;
+const TERMINATION_DRAIN_DURATION_SECONDS = 60;
+const TERMINATION_GRACE_PERIOD_SECONDS = 210;
 
 type IngressPort = {
   name: string;
@@ -252,7 +266,8 @@ Changes that do not improve things at all:
 function configureInternalGatewayService(
   ingressNs: k8s.core.v1.Namespace,
   ingress: { ip: pulumi.Output<string>; viaGKEL7: false } | { viaGKEL7: true },
-  istiod: k8s.helm.v3.Release
+  istiod: k8s.helm.v3.Release,
+  extraDependencies: pulumi.Resource[] = []
 ) {
   const cluster = gcp.container.getCluster({
     name: CLUSTER_NAME,
@@ -265,11 +280,9 @@ function configureInternalGatewayService(
   const gcpInternalIPRanges = cluster.then(c =>
     c.nodePools.map(p => p.networkConfigs.map(c => c.podIpv4CidrBlock)).flat()
   );
-  const gatewayIPRanges = infraConfig.istio.enableGeneralIpWhitelist
-    ? pulumi.all([loadIPRanges(), gcpInternalIPRanges]).apply(([a, b]) => a.concat(b))
-    : pulumi
-        .all([loadInternalWhitelistedIps(), gcpInternalIPRanges])
-        .apply(([a, b]) => a.concat(b));
+  const gatewayIPRanges = pulumi
+    .all([loadInternalWhitelistedIps(), gcpInternalIPRanges])
+    .apply(([a, b]) => a.concat(b));
   return configureGatewayService(
     ingressNs,
     gatewayIPRanges,
@@ -299,7 +312,8 @@ function configureInternalGatewayService(
       ingressPort('sw-lg-gw', 6201),
     ],
     istiod,
-    ''
+    '',
+    extraDependencies
   );
 }
 
@@ -355,7 +369,8 @@ function configureGatewayService(
   gatewayVariant: IstioGatewayVariant,
   ingressPorts: IngressPort[],
   istiod: k8s.helm.v3.Release,
-  suffix: string
+  suffix: string,
+  extraDependencies: pulumi.Resource[] = []
 ) {
   // We limit source IPs in two ways:
   // - For most traffic, we use istio instead of through loadBalancerSourceRanges as the latter has a size limit.
@@ -392,10 +407,36 @@ function configureGatewayService(
           deploymentValues: {
             podAnnotations: {
               'proxy.istio.io/config': JSON.stringify({
-                // the 2 are an IP from the proxy-only subnet and the ingress IP itself
-                gatewayTopology: { numTrustedProxies: 2 },
+                // the 2 are an IP from the proxy-only subnet and the ingress IP itself.
+                gatewayTopology: { numTrustedProxies: gkeL7GatewayNumTrustedProxies },
+                // Once SIGTERM arrives, istio-agent drains envoy and then kills it after
+                // this long; the default of 5s is short enough to cut requests that are
+                // still in flight. Scoped to this pod rather than set in meshConfig, so
+                // that app sidecar shutdown (and therefore rollout speed) is unaffected.
+                terminationDrainDuration: `${TERMINATION_DRAIN_DURATION_SECONDS}s`,
               }),
             },
+            // Behind the GKE L7 Gateway these pods are NEG endpoints. Deleting one (HPA
+            // scale-down, rollout, node drain) removes it from the NEG, but the load
+            // balancer keeps dispatching over its already pooled connections until that
+            // removal propagates, so requests in flight at that moment fail. They surface
+            // as `proxyStatus: error="connection_terminated"` in the load balancer logs,
+            // with no matching app log when the connection is cut before the request is
+            // forwarded.
+            // The pod therefore has to keep serving until the drain has propagated:
+            //   preStop >= backend service draining timeout + propagation latency
+            //   terminationGracePeriod >= preStop + terminationDrainDuration + buffer
+            // Values are Google's recommended starting point, and must stay consistent
+            // with BACKEND_DRAINING_TIMEOUT_SECONDS in gcpLoadBalancer.ts.
+            // https://cloud.google.com/kubernetes-engine/docs/troubleshooting/load-balancing#addressing_500_series_errors_with_negs_during_workload_scaling_in_gke
+            lifecycle: {
+              preStop: {
+                exec: {
+                  command: ['sleep', `${PRE_STOP_DRAIN_SECONDS}`],
+                },
+              },
+            },
+            terminationGracePeriodSeconds: TERMINATION_GRACE_PERIOD_SECONDS,
           },
           // force HTTP/2 (h2c) between GKE L7 Gateway and istio-ingress for
           // gRPC routes
@@ -410,7 +451,7 @@ function configureGatewayService(
       version: istioVersion.istio,
       namespace: ingressNs.metadata.name,
       repositoryOpts: {
-        repo: 'https://istio-release.storage.googleapis.com/charts',
+        repo: 'https://blob.istio.io/istio-release/charts',
       },
       values: {
         resources: {
@@ -424,6 +465,8 @@ function configureGatewayService(
           },
         },
         autoscaling: {
+          // The chart only creates a PodDisruptionBudget when minReplicas > 1.
+          minReplicas: 2,
           maxReplicas: 15,
         },
         podDisruptionBudget: {
@@ -454,7 +497,7 @@ function configureGatewayService(
             const base: pulumi.Resource[] = [ingressNs, istiod];
             return base.concat(policies);
           })
-        : [ingressNs, istiod],
+        : [ingressNs, istiod, ...extraDependencies],
     }
   );
   if (infraConfig.istio.enableIngressAccessLogging) {
@@ -730,10 +773,6 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
   });
 }
 
-// Ports of the http2 servers that we apply the upstream flow control config to:
-// the sequencer public API and the sequencer BFT P2P API.
-const sequencerFlowControlUpstreamPorts = [5008, 5010];
-
 // Istio proxies lots of client connections over relatively few connections. If one of the client connections gets stuck
 // (e.g. because the client died) buffers will fill up and eventually istio will stop sending connection-level window updates
 // to the sequencer and trigger netty flow control. This surfaces as requests that send back response headers but then nothing else until the client times out.
@@ -746,17 +785,16 @@ const sequencerFlowControlUpstreamPorts = [5008, 5010];
 function configureSequencerFlowControl(
   ingressNs: k8s.core.v1.Namespace
 ): k8s.apiextensions.CustomResource {
-  const http2ProtocolOptions = {
-    initial_stream_window_size: infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
-    initial_connection_window_size:
-      infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+  const http2ProtocolOptions = (config: z.infer<typeof flowControlConfigSchema>) => ({
+    initial_stream_window_size: config.initialStreamWindowSize,
+    initial_connection_window_size: config.initialConnectionWindowSize,
     connection_keepalive: {
       interval: '30s',
       timeout: '5s',
     },
-  };
-  // istio -> upstream (aka sequencer)
-  const upstreamPatch = (portNumber: number) => ({
+  });
+  // istio sidecar of upstream -> upstream (e.g. sequencer)
+  const upstreamPatch = (portNumber: number, config: z.infer<typeof flowControlConfigSchema>) => ({
     applyTo: 'CLUSTER',
     match: {
       cluster: {
@@ -773,7 +811,7 @@ function configureSequencerFlowControl(
             '@type': 'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
             use_downstream_protocol_config: {
               http_protocol_options: {},
-              http2_protocol_options: http2ProtocolOptions,
+              http2_protocol_options: http2ProtocolOptions(config),
             },
           },
         },
@@ -784,16 +822,26 @@ function configureSequencerFlowControl(
     apiVersion: 'networking.istio.io/v1alpha3',
     kind: 'EnvoyFilter',
     metadata: {
-      name: 'sequencer-flow-control',
+      name: 'flow-control',
       namespace: ingressNs.metadata.name,
     },
     spec: {
       configPatches: [
-        {
-          // downstream (aka participant) -> istio
+        ...[
+          {
+            context: 'SIDECAR_INBOUND',
+            // Shared by public and internal APIs.
+            config: infraConfig.istio.flowControl.internal,
+          },
+          {
+            context: 'GATEWAY',
+            // Cover client/L7 load balancer -> ingress, not just ingress -> upstream.
+            config: infraConfig.istio.flowControl.public,
+          },
+        ].map(({ context, config }) => ({
           applyTo: 'NETWORK_FILTER',
           match: {
-            context: 'SIDECAR_INBOUND',
+            context,
             listener: {
               filterChain: {
                 filter: {
@@ -808,12 +856,22 @@ function configureSequencerFlowControl(
               typed_config: {
                 '@type':
                   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-                http2_protocol_options: http2ProtocolOptions,
+                http2_protocol_options: {
+                  ...http2ProtocolOptions(config),
+                  // The L7 load balancer forwards WebSockets as HTTP/2 extended CONNECT.
+                  // Rejecting these headers closes the shared connection, failing unrelated requests.
+                  ...(context === 'GATEWAY' ? { allow_connect: true } : {}),
+                },
               },
             },
           },
-        },
-        ...sequencerFlowControlUpstreamPorts.map(upstreamPatch),
+        })),
+        ...infraConfig.istio.flowControl.public.ports.map(p =>
+          upstreamPatch(p, infraConfig.istio.flowControl.public)
+        ),
+        ...infraConfig.istio.flowControl.internal.ports.map(p =>
+          upstreamPatch(p, infraConfig.istio.flowControl.internal)
+        ),
       ],
     },
   });
@@ -865,7 +923,8 @@ export function configureIstio(
   ingressNs: ExactNamespace,
   ingressIp: pulumi.Output<string>,
   cometBftIngressIp: pulumi.Output<string>,
-  expectGKEL7Gateway: boolean
+  expectGKEL7Gateway: boolean,
+  extraIngressDependencies: pulumi.Resource[] = []
 ): ConfiguredIstio {
   const nsName = 'istio-system';
   const istioSystemNs = new k8s.core.v1.Namespace(nsName, {
@@ -878,7 +937,8 @@ export function configureIstio(
   const gwSvc = configureInternalGatewayService(
     ingressNs.ns,
     expectGKEL7Gateway ? { viaGKEL7: true } : { viaGKEL7: false, ip: ingressIp },
-    istiod
+    istiod,
+    extraIngressDependencies
   );
   const cometBftSvc = DecentralizedSynchronizerUpgradeConfig.usesCometbft()
     ? configureCometBFTGatewayService(ingressNs.ns, cometBftIngressIp, istiod)

@@ -6,6 +6,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.store.{
+  HardLimit,
   HistoryMetrics,
   PageLimit,
   StoreTestBase,
@@ -13,12 +14,14 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{TrafficSummaryT, EnvelopeT}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{EnvelopeT, TrafficSummaryT}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import io.circe.Json
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 import scala.concurrent.Future
 
@@ -424,7 +427,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         ctx <- newEventStore()
         // First assignment
         recordTs1 = CantonTimestamp.now()
-        assignment1 <- insertAssign(ctx.updateHistory, recordTs1, "assign-cap-1")
+        _ <- insertAssign(ctx.updateHistory, recordTs1, "assign-cap-1")
 
         recordTs2 = recordTs1.plusSeconds(1)
         _ <- insertVerdict(ctx.verdictStore, "verdict-1", recordTs2)
@@ -513,7 +516,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         ctx <- newEventStore()
         // First unassignment
         recordTs1 = CantonTimestamp.now()
-        unassignment1 <- insertUnassign(ctx.updateHistory, recordTs1, "unassign-cap-1")
+        _ <- insertUnassign(ctx.updateHistory, recordTs1, "unassign-cap-1")
 
         recordTs2 = recordTs1.plusSeconds(1)
         _ <- insertVerdict(ctx.verdictStore, "verdict-1", recordTs2)
@@ -867,25 +870,210 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         allow(mig2, recordTs3) shouldBe false // > after and > cap
       }
     }
+
+    "getLatestEventRecordTime returns the record time of the last event getEvents returns" in {
+      for {
+        ctx <- newEventStore()
+        // update + verdict at ts1
+        ts1 = CantonTimestamp.now()
+        tx1 <- insertUpdate(ctx.updateHistory, ts1, "update1")
+        _ <- insertVerdict(ctx.verdictStore, tx1.getUpdateId, ts1)
+
+        // update + verdict at ts2
+        ts2 = ts1.plusSeconds(1)
+        tx2 <- insertUpdate(ctx.updateHistory, ts2, "update2")
+        _ <- insertVerdict(ctx.verdictStore, tx2.getUpdateId, ts2)
+
+        // loose update at ts3 must be filtered out of getEvents
+        ts3 = ts2.plusSeconds(1)
+        _ <- insertUpdate(ctx.updateHistory, ts3, "update-loose")
+
+        events <- fetchEvents(ctx.eventStore, None, domainMigrationId, pageLimit)
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        // getEvents caps at ts2, the ts3 loose update is excluded
+        events.nonEmpty shouldBe true
+        val lastReturnedRt = events.last._1
+          .map(_._1.recordTime)
+          .orElse(events.last._2.map(_.update.update.recordTime))
+          .value
+        lastReturnedRt shouldBe ts2
+
+        latest shouldBe Some(lastReturnedRt)
+      }
+    }
+
+    "getLatestEventRecordTime returns None when there are no events" in {
+      for {
+        ctx <- newEventStore()
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
+      }
+    }
+
+    "getLatestEventRecordTime returns None when there is only a loose update" in {
+      for {
+        ctx <- newEventStore()
+        _ <- insertUpdate(ctx.updateHistory, CantonTimestamp.now(), "update1")
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
+      }
+    }
   }
+
+  "DbScanVerdictStore.listTransactionViews" should {
+
+    "return a verdict's views in view_id order, failing past the limit" in {
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        _ <- verdictStore.insertVerdictAndTransactionViews(
+          Seq(
+            mkVerdict(verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L)) -> {
+              (rowId: Long) =>
+                Seq(2, 0, 1).map(viewId =>
+                  new verdictStore.TransactionViewT(
+                    verdictRowId = rowId,
+                    viewId = viewId,
+                    informees = Seq(dsoParty.toProtoPrimitive),
+                    confirmingParties = Json.arr(),
+                    subViews = Seq.empty,
+                  )
+                )
+            }
+          )
+        )
+        verdict <- verdictStore.getVerdictByUpdateId("update1")
+        rowId = verdict.value.rowId
+        all <- verdictStore.listTransactionViews(rowId)
+        atLimit <- verdictStore.listTransactionViews(rowId, HardLimit.tryCreate(3))
+        overLimit <- verdictStore.listTransactionViews(rowId, HardLimit.tryCreate(2)).failed
+      } yield {
+        all.map(_.viewId) shouldBe Seq(0, 1, 2)
+        atLimit shouldBe all
+        overLimit.getMessage should include(
+          "Size of the result exceeded the limit in scanVerdict.listTransactionViews"
+        ).and(include("Result size: 3. Limit: 2"))
+      }
+    }
+  }
+
+  "DbScanVerdictStore.listTransactionViewsByVerdictRowIds" should {
+
+    "return the same views as listTransactionViews for each verdict" in {
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        rowId1 <- insertVerdictWithViews(verdictStore, "update1", 1L, Seq(2, 0, 1))
+        rowId2 <- insertVerdictWithViews(verdictStore, "update2", 2L, Seq(0))
+        rowId3 <- insertVerdictWithViews(verdictStore, "update3", 3L, Seq.empty)
+        rowIds = Seq(rowId1, rowId2, rowId3)
+        singly <- Future.traverse(rowIds)(rowId =>
+          verdictStore.listTransactionViews(rowId).map(rowId -> _)
+        )
+        // duplicates and unknown row IDs don't add entries
+        batched <- verdictStore.listTransactionViewsByVerdictRowIds(
+          rowIds ++ Seq(rowId1, rowId3 + 1000)
+        )
+        noRowIds <- verdictStore.listTransactionViewsByVerdictRowIds(Seq.empty)
+      } yield {
+        batched shouldBe singly.filter(_._2.nonEmpty).toMap
+        batched(rowId1).map(_.viewId) shouldBe Seq(0, 1, 2)
+        noRowIds shouldBe empty
+      }
+    }
+
+    "fail when any verdict has more than maxViewsPerVerdict views" in {
+      for {
+        ctx <- newEventStore()
+        verdictStore = ctx.verdictStore
+        rowId1 <- insertVerdictWithViews(verdictStore, "update1", 1L, Seq(0, 1, 2))
+        rowId2 <- insertVerdictWithViews(verdictStore, "update2", 2L, Seq(0))
+        rowId3 <- insertVerdictWithViews(verdictStore, "update3", 3L, Seq.empty)
+        name =
+          "Size of the result exceeded the limit in scanVerdict.listTransactionViewsByVerdictRowIds"
+        atLimit <- verdictStore.listTransactionViewsByVerdictRowIds(
+          Seq(rowId1, rowId2),
+          maxViewsPerVerdict = HardLimit.tryCreate(3),
+        )
+        // more views than maxViewsPerVerdict times the number of verdicts
+        overTotal <- verdictStore
+          .listTransactionViewsByVerdictRowIds(
+            Seq(rowId1, rowId2),
+            maxViewsPerVerdict = HardLimit.tryCreate(1),
+          )
+          .failed
+        // within the total, but not for rowId1
+        overOneVerdict <- verdictStore
+          .listTransactionViewsByVerdictRowIds(
+            Seq(rowId1, rowId3),
+            maxViewsPerVerdict = HardLimit.tryCreate(2),
+          )
+          .failed
+      } yield {
+        atLimit.view.mapValues(_.map(_.viewId)).toMap shouldBe Map(
+          rowId1 -> Seq(0, 1, 2),
+          rowId2 -> Seq(0),
+        )
+        overTotal.getMessage should include(name).and(include("Result size: 3. Limit: 2"))
+        overOneVerdict.getMessage should include(s"$name for verdict $rowId1")
+          .and(include("Result size: 3. Limit: 2"))
+      }
+    }
+  }
+
+  /** @return the row ID of the inserted verdict */
+  private def insertVerdictWithViews(
+      verdictStore: DbScanVerdictStore,
+      updateId: String,
+      recordTimeSeconds: Long,
+      viewIds: Seq[Int],
+  ): Future[Long] =
+    for {
+      _ <- verdictStore.insertVerdictAndTransactionViews(
+        Seq(
+          mkVerdict(
+            verdictStore,
+            updateId,
+            CantonTimestamp.MinValue.plusSeconds(recordTimeSeconds),
+          ) -> { (rowId: Long) =>
+            viewIds.map(viewId =>
+              new verdictStore.TransactionViewT(
+                verdictRowId = rowId,
+                viewId = viewId,
+                informees = Seq(dsoParty.toProtoPrimitive),
+                confirmingParties = Json.arr(),
+                subViews = Seq.empty,
+              )
+            )
+          }
+        )
+      )
+      verdict <- verdictStore.getVerdictByUpdateId(updateId)
+    } yield verdict.value.rowId
 
   private def newUpdateHistory(
       migrationId: Long
   ): Future[UpdateHistory] = {
     val participantId = mkParticipantId("ScanEventStoreTest")
-    val uh = new UpdateHistory(
-      storage.underlying,
-      migrationId,
-      "scan_event_store_test",
-      participantId,
-      dsoParty,
-      BackfillingRequirement.BackfillingNotRequired,
-      loggerFactory,
-      enableissue12777Workaround = true,
-      enableImportUpdateBackfill = true,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
-    )
-    uh.ingestionSink.initialize().map(_ => uh)
+    for {
+      updateHistory <- UpdateHistory.create(
+        storage.underlying,
+        migrationId,
+        "scan_event_store_test",
+        StoreMemberId(participantId),
+        dsoParty,
+        BackfillingRequirement.BackfillingNotRequired,
+        internedStringStore(storage),
+        analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
+        loggerFactory,
+        enableImportUpdateBackfill = true,
+        HistoryMetrics(NoOpMetricsFactory, migrationId),
+      )
+      _ <- updateHistory.ingestionSink.initialize()
+    } yield updateHistory
   }
 
   private def newVerdictStore(updateHistory: UpdateHistory) =
@@ -1039,6 +1227,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       informees.map(_.toProtoPrimitive),
       Seq(viewId),
       summary,
+      None,
     )
   }
 

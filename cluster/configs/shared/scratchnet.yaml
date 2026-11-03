@@ -5,6 +5,11 @@ cluster:
       zones: '*'
       maxNodes: 40
       nodeType: c3d-standard-8
+    additionalInfra:
+    - nodeType: c3d-standard-8
+      minNodes: 0
+      maxNodes: 3
+      zones: '*'
 infra:
   prometheus:
     retentionDuration: "30d"
@@ -21,8 +26,17 @@ validator1:
     maxDuration: "5m"
     retention: "1h" # Keep 1h
   deduplicationDuration: 30m
+  walletGateway:
+    enabled: true
+validators:
+  validator-runbook:
+    participant:
+      # so we can test taking identity dumps from it
+      enableKeyDownload: true
+    walletGateway:
+      enabled: true
 svs:
-  sv-1: !include(scratchnet-sv.yaml) {}
+  sv-1: !include(scratchnet-sv.yaml;$SPLICE_ROOT/cluster/configs/shared/validator-topology-metrics-export.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}
   sv-3: !include(scratchnet-sv.yaml) {}
   sv-4: !include(scratchnet-sv.yaml) {}

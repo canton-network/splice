@@ -5,18 +5,19 @@ package com.digitalasset.canton.participant.protocol.submission.routing
 
 import cats.data.EitherT
 import cats.syntax.alternative.*
-import com.daml.nonempty.NonEmpty
-import com.daml.nonempty.NonEmptyColl.*
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.error.TransactionRoutingError
 import com.digitalasset.canton.ledger.participant.state.{RoutingSynchronizerState, SynchronizerRank}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.protocol.submission.UsableSynchronizers
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.EitherTUtil
 import com.digitalasset.canton.util.ReassignmentTag.Target
+import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmptyColl.*
 
 import scala.concurrent.ExecutionContext
 
@@ -41,6 +42,7 @@ private[routing] class SynchronizerSelectorFactory(
       admissibleSynchronizers <- admissibleSynchronizersComputation.forParties(
         submitters = submitters,
         informees = transactionData.informees,
+        prescribedSynchronizerO = transactionData.prescribedSynchronizerIdO,
         synchronizerState = synchronizerState,
       )
     } yield new SynchronizerSelector(

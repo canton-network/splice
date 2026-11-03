@@ -42,7 +42,11 @@ class SqlIndexInitializationTriggerStoreTest
     "updt_hist_crea_hi_mi_ci_import_updates",
     "updt_hist_tran_hi_eth",
     "dso_acs_store_sid_mid_pn_tid_rbio",
+    "dso_acs_store_sid_mid_glt_gls",
+    "scan_acs_store_sid_mid_glt_gls",
     "scan_txlog_store_sid_effat_en_vot",
+    "user_wallet_acs_store_sid_mid_glt_gls",
+    "external_party_wallet_acs_store_sid_mid_glt_gls",
   )
 
   "SqlIndexInitializationTrigger" should {
@@ -205,7 +209,7 @@ class SqlIndexInitializationTriggerStoreTest
               $$$$ language plpgsql immutable;
               """,
             "create slow_function",
-          )(implicitly, implicitly, _ => false)
+          )
           .failOnShutdown
         _ <- storage.underlying
           .update(
@@ -223,7 +227,7 @@ class SqlIndexInitializationTriggerStoreTest
               )
               .asTry,
             "insert test data",
-          )(implicitly, implicitly, _ => false)
+          )
           .failOnShutdown
 
         indexNamesBefore <- listIndexNames()
@@ -330,7 +334,7 @@ class SqlIndexInitializationTriggerStoreTest
                   )
                   .asTry,
                 "insert test data",
-              )(implicitly, implicitly, _ => false)
+              )
               .failOnShutdown,
             loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
               within = {

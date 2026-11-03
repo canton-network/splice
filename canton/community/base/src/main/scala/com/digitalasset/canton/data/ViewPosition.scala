@@ -5,11 +5,19 @@ package com.digitalasset.canton.data
 
 import cats.Order
 import cats.instances.list.*
+import cats.syntax.traverse.*
 import com.digitalasset.canton.data.ViewPosition.MerklePathElement
 import com.digitalasset.canton.data.ViewPosition.MerkleSeqIndex.Direction
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.protocol.v30
 import com.digitalasset.canton.serialization.DeterministicEncoding
+import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
+import com.digitalasset.canton.validation.ProtoValidation
+import com.digitalasset.canton.version.ProtocolVersionValidation
 import com.google.protobuf.ByteString
 
 /** A position encodes the path from a view in a [[GenTransactionTree]] to its root. The encoding
@@ -19,7 +27,8 @@ import com.google.protobuf.ByteString
   *   The path from the view to the root as a singly-linked list. The path starts at the view rather
   *   than the root so that paths to the root can be shared.
   */
-final case class ViewPosition(position: List[MerklePathElement]) extends PrettyPrinting {
+final case class ViewPosition(position: List[MerklePathElement])
+    extends PrettyPrintingFromCompanion {
 
   /** Adds a [[ViewPosition.MerklePathElement]] at the start of the path. */
   def +:(index: MerklePathElement): ViewPosition = new ViewPosition(index :: position)
@@ -32,7 +41,7 @@ final case class ViewPosition(position: List[MerklePathElement]) extends PrettyP
 
   def toProtoV30: v30.ViewPosition = v30.ViewPosition(position = position.map(_.toProtoV30))
 
-  override def pretty: Pretty[ViewPosition] = prettyOfClass(unnamedParam(_.position.mkShow()))
+  override def prettyCompanion: PrettyPrintingCompanion[ViewPosition] = ViewPosition
 }
 
 /** Same as [[ViewPosition]], with the position directed from the root to the leaf */
@@ -41,7 +50,11 @@ final case class ViewPositionFromRoot(position: List[MerklePathElement]) extends
   def isEmpty: Boolean = position.isEmpty
 }
 
-object ViewPosition {
+object ViewPosition extends PrettyPrintingCompanion[ViewPosition] {
+
+  override val pretty: Pretty[ViewPosition] = prettyOfClass(
+    unnamedParam(_.position.mkShow())
+  )
 
   /** The root [[ViewPosition]] has an empty path. */
   val root: ViewPosition = new ViewPosition(List.empty[MerklePathElement])
@@ -56,14 +69,22 @@ object ViewPosition {
       catsKernelStdOrderForList(MerklePathElement.orderMerklePathElement)
     )
 
-  def fromProtoV30(viewPositionP: v30.ViewPosition): ViewPosition = {
+  def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      viewPositionP: v30.ViewPosition,
+  ): ParsingResult[ViewPosition] = {
     val v30.ViewPosition(positionP) = viewPositionP
-    val position = positionP.map(MerkleSeqIndex.fromProtoV30).toList
-    ViewPosition(position)
+    ProtoValidation
+      .validateLength(positionP, "position", pvv, ProtoValidation.MaxCollectionSize)
+      .flatMap(_.toList.traverse(MerkleSeqIndex.fromProtoV30(pvv, _)))
+      .map(ViewPosition(_))
   }
 
   /** A single element on a path through a Merkle tree. */
-  sealed trait MerklePathElement extends Product with Serializable with PrettyPrinting {
+  sealed trait MerklePathElement
+      extends Product
+      with Serializable
+      with PrettyPrintingFromCompanion {
     def encodeDeterministically: ByteString
     def reverse: MerklePathElement
 
@@ -77,8 +98,7 @@ object ViewPosition {
     override def encodeDeterministically: ByteString =
       DeterministicEncoding.encodeSeqWith(index)(_.encodeDeterministically)
 
-    override protected def pretty: Pretty[MerkleSeqIndex] =
-      prettyOfString(_ => index.reverse.map(_.show).mkString(""))
+    override def prettyCompanion: PrettyPrintingCompanion[MerkleSeqIndex] = MerkleSeqIndex
 
     override lazy val reverse: MerkleSeqIndexFromRoot = MerkleSeqIndexFromRoot(index.reverse)
 
@@ -93,14 +113,19 @@ object ViewPosition {
         "MerkleSeqIndexFromRoot is for internal use only and should not be encoded"
       )
 
-    override protected def pretty: Pretty[MerkleSeqIndexFromRoot] =
-      prettyOfString(_ => index.map(_.show).mkString(""))
+    override def prettyCompanion: PrettyPrintingCompanion[MerkleSeqIndexFromRoot] =
+      MerkleSeqIndexFromRoot
 
     override lazy val reverse: MerkleSeqIndex = MerkleSeqIndex(index.reverse)
 
     def toProtoV30: v30.MerkleSeqIndex = throw new UnsupportedOperationException(
       "MerkleSeqIndexFromRoot is for internal use only and should not be serialized"
     )
+  }
+
+  object MerkleSeqIndexFromRoot extends PrettyPrintingCompanion[MerkleSeqIndexFromRoot] {
+    override protected val pretty: Pretty[MerkleSeqIndexFromRoot] =
+      prettyOfString(_.index.map(_.show).mkString(""))
   }
 
   object MerklePathElement {
@@ -116,8 +141,12 @@ object ViewPosition {
     }
   }
 
-  object MerkleSeqIndex {
-    sealed trait Direction extends Product with Serializable with PrettyPrinting {
+  object MerkleSeqIndex extends PrettyPrintingCompanion[MerkleSeqIndex] {
+
+    override protected val pretty: Pretty[MerkleSeqIndex] =
+      prettyOfString(_.index.reverse.map(_.show).mkString(""))
+
+    sealed trait Direction extends Product with Serializable with PrettyPrintingFromCompanion {
       def encodeDeterministically: ByteString
     }
     object Direction {
@@ -130,19 +159,41 @@ object ViewPosition {
       case object Left extends Direction {
         override def encodeDeterministically: ByteString = DeterministicEncoding.encodeByte(0)
 
-        override protected def pretty: Pretty[Left.type] = prettyOfString(_ => "L")
+        override def prettyCompanion: PrettyPrintingCompanion[Left.type] =
+          LeftPrettyPrintingCompanion
+      }
+
+      private object LeftPrettyPrintingCompanion extends PrettyPrintingCompanion[Left.type] {
+        override protected val pretty: Pretty[Left.type] = prettyOfString(_ => "L")
       }
 
       case object Right extends Direction {
         override def encodeDeterministically: ByteString = DeterministicEncoding.encodeByte(1)
 
-        override protected def pretty: Pretty[Right.type] = prettyOfString(_ => "R")
+        override def prettyCompanion: PrettyPrintingCompanion[Right.type] =
+          RightPrettyPrintingCompanion
+      }
+
+      private object RightPrettyPrintingCompanion extends PrettyPrintingCompanion[Right.type] {
+        override protected val pretty: Pretty[Right.type] = prettyOfString(_ => "R")
       }
     }
 
-    def fromProtoV30(merkleSeqIndexP: v30.MerkleSeqIndex): MerkleSeqIndex = {
+    def fromProtoV30(
+        pvv: ProtocolVersionValidation,
+        merkleSeqIndexP: v30.MerkleSeqIndex,
+    ): ParsingResult[MerkleSeqIndex] = {
       val v30.MerkleSeqIndex(isRightP) = merkleSeqIndexP
-      MerkleSeqIndex(isRightP.map(if (_) Direction.Right else Direction.Left).toList)
+      ProtoValidation
+        .validateLength(
+          isRightP,
+          "is_right",
+          pvv,
+          ProtoValidation.MaxCollectionSize,
+        )
+        .map(isRight =>
+          MerkleSeqIndex(isRight.map(if (_) Direction.Right else Direction.Left).toList)
+        )
     }
   }
 

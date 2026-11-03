@@ -8,8 +8,13 @@ import com.daml.metrics.api.MetricsContext
 import com.daml.nameof.NameOf.functionFullName
 import com.digitalasset.canton.config.{ProcessingTimeout, TopologyConfig}
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.protocol.messages.*
 import com.digitalasset.canton.sequencing.client.*
@@ -19,7 +24,6 @@ import com.digitalasset.canton.time.{Clock, SynchronizerTimeTracker}
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.topology.{Member, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.LoggerUtil
 
 import scala.concurrent.ExecutionContext
 
@@ -41,7 +45,7 @@ class SequencerBasedRegisterTopologyTransactionHandle(
 )(implicit ec: ExecutionContext)
     extends RegisterTopologyTransactionHandle
     with NamedLogging
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
 
   private val psid: PhysicalSynchronizerId = sequencerClient.psid
 
@@ -63,10 +67,8 @@ class SequencerBasedRegisterTopologyTransactionHandle(
     )
       .biSemiflatMap(
         { sendAsyncClientError =>
-          val logLevel = SendAsyncClientError.logLevel(sendAsyncClientError)
-          LoggerUtil.logAtLevel(
-            logLevel,
-            s"Failed broadcasting topology transactions: $sendAsyncClientError. This will be retried automatically.",
+          logger.info(
+            s"Failed broadcasting topology transactions: $sendAsyncClientError. This will be retried automatically."
           )
           FutureUnlessShutdown.pure[TopologyTransactionsBroadcast.State](
             TopologyTransactionsBroadcast.State.Failed
@@ -111,8 +113,10 @@ class SequencerBasedRegisterTopologyTransactionHandle(
     )
     sequencerClient.send(
       Batch.of(psid.protocolVersion, (request, Recipients.cc(TopologyBroadcastAddress.recipient))),
+      // we don't sign the inner `TopologyTransactionBroadcast` request so we don't need to provide a snapshot
+      // approximation and can let the sequencer client retrieve the latest snapshot itself.
+      currentSnapshotApproximation = None,
       timestamps = SendRequestTimestamps(
-        topologyTimestamp = None,
         approximateTimestampForSigning = approximateTimestampForSigning,
         maxSequencingTime = maxSequencingTime,
       ),
@@ -122,7 +126,14 @@ class SequencerBasedRegisterTopologyTransactionHandle(
     )
   }
 
-  override protected def pretty: Pretty[SequencerBasedRegisterTopologyTransactionHandle.this.type] =
+  override def prettyCompanion
+      : PrettyPrintingCompanion[SequencerBasedRegisterTopologyTransactionHandle] =
+    SequencerBasedRegisterTopologyTransactionHandle
+}
+
+object SequencerBasedRegisterTopologyTransactionHandle
+    extends PrettyPrintingCompanion[SequencerBasedRegisterTopologyTransactionHandle] {
+  override protected val pretty: Pretty[SequencerBasedRegisterTopologyTransactionHandle] =
     prettyOfClass(
       param("psid", _.psid),
       param("member", _.member),

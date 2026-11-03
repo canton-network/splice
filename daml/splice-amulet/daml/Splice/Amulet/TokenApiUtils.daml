@@ -17,6 +17,8 @@ import Splice.Api.FeaturedAppRightV1
 import Splice.Api.Token.HoldingV1 qualified as Api.Token.HoldingV1
 import Splice.Api.Token.HoldingV2 qualified as Api.Token.HoldingV2
 
+import Splice.TokenStandard.Utils qualified as TSU
+
 
 splicePrefix : Text
 splicePrefix = "splice.lfdecentralizedtrust.org/"
@@ -139,7 +141,7 @@ data TxKind
   | TxKind_Burn
   | TxKind_Mint
   | TxKind_ExpireDust
-  deriving (Eq, Serializable) 
+  deriving (Eq, Serializable)
 
 -- helper instances: defined here as they are not part of the API
 instance Semigroup Metadata  where
@@ -149,11 +151,29 @@ instance Monoid Metadata  where
   mempty = emptyMetadata
 
 
+-- Splice memos
+---------------
+
+spliceMemoPrefix : Text
+spliceMemoPrefix = "splice/memo"
+
+-- | Whether the transfer reason starts with a prefix of the form `splice/memo`.
+--
+-- Normal transfers must not use such memos, so that users cannot mistake
+-- them for memos triggering splice built-in functionality exposed via Token Standard choices.
+reasonIsSpliceMemo : Metadata -> Bool
+reasonIsSpliceMemo meta =
+  spliceMemoPrefix `T.isPrefixOf` TSU.reasonFromMeta meta
+
+
 -- Choice context keys for splice
 ---------------------------------
 
 externalPartyConfigStateContextKey : Text
 externalPartyConfigStateContextKey = "external-party-config-state"
+
+openRoundContextKey : Text
+openRoundContextKey = "open-round"
 
 featuredAppRightContextKey : Text
 featuredAppRightContextKey = "featured-app-right"

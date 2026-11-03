@@ -4,12 +4,12 @@
 package com.digitalasset.canton.participant.protocol
 
 import com.daml.nameof.NameOf.functionFullName
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.checked
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.crypto.SynchronizerCryptoClient
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.sync.SyncEphemeralState
 import com.digitalasset.canton.protocol.messages.{ConfirmationResponse, ConfirmationResponses}
@@ -19,6 +19,7 @@ import com.digitalasset.canton.sequencing.protocol.{MediatorGroupRecipient, Reci
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.concurrent.ExecutionContext
 
@@ -35,8 +36,6 @@ class BadRootHashMessagesRequestProcessor(
       ephemeral,
       crypto,
       sequencerClient,
-      clock,
-      sequencerClient.protocolVersion,
     ) {
 
   /** Sends `reject` for the given `rootHash`. Also ticks the record order publisher.
@@ -49,8 +48,17 @@ class BadRootHashMessagesRequestProcessor(
   )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
     synchronizeWithClosing(functionFullName) {
       for {
-        snapshot <- crypto.awaitSnapshot(timestamp)
+        currentSnapshotApproximation <- crypto.currentSnapshotApproximation
         requestId = RequestId(timestamp)
+
+        maxSequencingTime <- maxSequencingTimeForConfirmationResponse(
+          requestId,
+          currentSnapshotApproximation,
+        )
+        // Reused for both the inner response signing and the submission request signing below, so
+        // that both signatures are computed as of the same approximate time.
+        now = clock.now
+
         _ = reject.log()
         rejection = checked(
           ConfirmationResponses.tryCreate(
@@ -69,10 +77,18 @@ class BadRootHashMessagesRequestProcessor(
             sequencerClient.protocolVersion,
           )
         )
-        signedRejection <- signResponses(snapshot, rejection)
+        signedRejection <- signResponses(
+          currentSnapshotApproximation,
+          rejection,
+          now,
+          maxSequencingTime,
+        )
         _ <- sendResponses(
           requestId,
           Seq(signedRejection -> Recipients.cc(mediator)),
+          currentSnapshotApproximation,
+          now,
+          maxSequencingTime,
         )
       } yield ()
     }

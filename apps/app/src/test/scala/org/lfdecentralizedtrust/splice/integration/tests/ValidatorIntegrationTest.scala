@@ -7,6 +7,9 @@ import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResources}
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.metrics.MetricValue
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
@@ -17,12 +20,34 @@ import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.sequencing.SubmissionRequestAmplification
 import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
-import org.apache.pekko.http.scaladsl.model.StatusCodes
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.apache.pekko.http.scaladsl.model.{
+  HttpHeader,
+  HttpMethods,
+  HttpRequest,
+  HttpResponse,
+  StatusCodes,
+}
+import org.apache.pekko.http.scaladsl.model.headers.{
+  `Access-Control-Allow-Origin`,
+  `Access-Control-Request-Headers`,
+  `Access-Control-Request-Method`,
+  Authorization,
+  HttpOrigin,
+  OAuth2BearerToken,
+  Origin,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetChoiceContextRequest
+import org.lfdecentralizedtrust.tokenstandard.{
+  allocation,
+  allocationinstruction,
+  metadata,
+  transferinstruction,
+}
 import org.slf4j.event.Level
 
 import scala.concurrent.Future
@@ -34,6 +59,7 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
 
   private val invalidValidator = "aliceValidatorInvalid"
   private val validatorPartyHint = s"imnotvalid_${(new scala.util.Random).nextInt(10000)}"
+  private val allowedOrigin = "http://wallet.localhost"
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -52,9 +78,10 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
                   ledgerApiUser = s"${aliceValidatorConfig.ledgerApiUser}2",
                 )
           ) + (aliceValidatorName -> aliceValidatorConfig.copy(
+            allowedOrigins = Some(Seq(allowedOrigin)),
             validatorWalletUsers =
               // Add a second wallet user to test that both get onboarded
-              aliceValidatorConfig.validatorWalletUsers :+ s"${aliceValidatorConfig.validatorWalletUsers.loneElement}-duplicate"
+              aliceValidatorConfig.validatorWalletUsers :+ s"${aliceValidatorConfig.validatorWalletUsers.loneElement}-duplicate",
           ))
         )
       })
@@ -87,7 +114,7 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
   }
 
   "initialize DSO and validator apps" in { implicit env =>
-    initDsoWithSv1Only()
+    initDso()
     // Check that there is exactly one AmuletRule and OpenMiningRound
     val amuletRules = sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
       .filterJava(splice.amuletrules.AmuletRules.COMPANION)(dsoParty)
@@ -112,7 +139,10 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
     aliceValidatorBackend.scanProxy.getDsoParty() shouldBe dsoParty
 
     // dso info is available on the scan proxy
-    aliceValidatorBackend.scanProxy.getDsoInfo() shouldBe sv1ScanBackend.getDsoInfo()
+    val dsoInfo = aliceValidatorBackend.scanProxy.getDsoInfoV1()
+    dsoInfo.dsoParty shouldBe dsoParty
+    dsoInfo.dsoRules.payload.svs should have size 4
+    dsoInfo shouldBe sv1ScanBackend.getDsoInfoV1()
 
     val now = env.environment.clock.now
     aliceValidatorBackend.scanProxy.getHoldingsSummaryAt(
@@ -178,6 +208,119 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         ValidatorAppBackendConfig.DefaultSequencerRequestAmplificationPatience.toInternal,
       )
     }
+  }
+
+  "export party to participant metrics" in { implicit env =>
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+    val participantId = aliceValidatorBackend.participantClient.id
+    val partiesPerParticipantMetricName =
+      s"$MetricsPrefix.synchronizer-topology.num-parties-per-participant"
+    val numPartiesMetricName = s"$MetricsPrefix.synchronizer-topology.num-parties"
+    def numPartiesOnAliceParticipant() =
+      aliceValidatorBackend.metrics
+        .list(partiesPerParticipantMetricName, Map("participant_id" -> participantId.toString))
+        .get(partiesPerParticipantMetricName)
+        .value
+        .loneElement
+        .select[MetricValue.DoublePoint]
+        .value
+        .value
+    def numPartiesOnAliceParticipantFromTopology() =
+      aliceValidatorBackend.participantClient.topology.party_to_participant_mappings
+        .list(
+          synchronizerId = decentralizedSynchronizerId,
+          filterParticipant = participantId.filterString,
+        )
+        .size
+        .toDouble
+    def numParties() =
+      aliceValidatorBackend.metrics
+        .list(numPartiesMetricName)
+        .get(numPartiesMetricName)
+        .value
+        .loneElement
+        .select[MetricValue.DoublePoint]
+        .value
+        .value
+    val synchronizerStore = TopologyStoreId.Synchronizer(decentralizedSynchronizerId)
+    def partyToParticipant(party: PartyId) =
+      aliceValidatorBackend.participantClient.topology.party_to_participant_mappings
+        .list(synchronizerStore, filterParty = party.filterString)
+        .loneElement
+
+    clue("Metrics match the topology state") {
+      eventually() {
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() should be >= numPartiesOnAliceParticipant()
+      }
+    }
+    val initialPartiesOnAliceParticipant = numPartiesOnAliceParticipant()
+    val initialNumParties = numParties()
+
+    clue("Metrics are updated when a new party is onboarded") {
+      aliceValidatorBackend.onboardUser(s"topology-metrics-user-${Random.nextInt(10000)}")
+      eventually() {
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 1
+      }
+    }
+
+    val (party, _) = actAndCheck(
+      "Allocate a new party",
+      aliceValidatorBackend.participantClientWithAdminToken.ledger_api.parties
+        .allocate(
+          s"topology-metrics-party-${Random.nextInt(10000)}",
+          synchronizerId = Some(decentralizedSynchronizerId),
+        )
+        .party,
+    )(
+      "Metrics are updated",
+      party => {
+        partyToParticipant(party).item.participants.map(_.participantId) shouldBe Seq(
+          participantId
+        )
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 2
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 2
+      },
+    )
+
+    actAndCheck(
+      "Offboard the party from the participant via a topology transaction", {
+        val current = partyToParticipant(party)
+        aliceValidatorBackend.participantClient.topology.party_to_participant_mappings.propose(
+          party,
+          newParticipants = Seq.empty,
+          serial = Some(current.context.serial + PositiveInt.one),
+          store = synchronizerStore,
+          mustFullyAuthorize = true,
+        )
+      },
+    )(
+      "Metrics are updated",
+      _ => {
+        partyToParticipant(party).item.participants shouldBe empty
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 2
+      },
+    )
+
+    actAndCheck(
+      "Restart the validator", {
+        aliceValidatorBackend.stop()
+        aliceValidatorBackend.startSync()
+      },
+    )(
+      "Metrics remain correct after restart",
+      _ => {
+        numPartiesOnAliceParticipant() shouldBe initialPartiesOnAliceParticipant + 1
+        numPartiesOnAliceParticipant() shouldBe numPartiesOnAliceParticipantFromTopology()
+        numParties() shouldBe initialNumParties + 2
+      },
+    )
   }
 
   "onboard users with party hint sanitizer" in { implicit env =>
@@ -260,6 +403,52 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
       .singleRequest(registerPost.withHeaders(headers))
       .futureValue
     validResponse.status should be(StatusCodes.OK)
+  }
+
+  "only accept requests from allowed origins" in { implicit env =>
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+
+    implicit val sys = env.actorSystem
+    registerHttpConnectionPoolsCleanup(env)
+
+    val listUsersUri = s"${aliceValidatorBackend.httpClientConfig.url}/api/validator/v0/admin/users"
+
+    def preflight(origin: String) =
+      Http()
+        .singleRequest(
+          HttpRequest(
+            HttpMethods.OPTIONS,
+            listUsersUri,
+            Seq[HttpHeader](
+              Origin(HttpOrigin(origin)),
+              `Access-Control-Request-Method`(HttpMethods.GET),
+              `Access-Control-Request-Headers`("authorization"),
+            ),
+          )
+        )
+        .futureValue
+
+    def listUsers(origin: Option[String]) =
+      Http()
+        .singleRequest(
+          Get(listUsersUri).withHeaders(
+            aliceValidatorBackend.headers ++ origin.map(o => Origin(HttpOrigin(o))).toList
+          )
+        )
+        .futureValue
+        .status
+
+    val allowedPreflight = preflight(allowedOrigin)
+    allowedPreflight.status should be(StatusCodes.OK)
+    allowedPreflight.header[`Access-Control-Allow-Origin`].map(_.value) should be(
+      Some(allowedOrigin)
+    )
+    preflight("http://example.com").status shouldBe a[StatusCodes.ClientError]
+
+    listUsers(None) should be(StatusCodes.OK)
+    listUsers(Some(allowedOrigin)) should be(StatusCodes.OK)
+    listUsers(Some("http://example.com")) shouldBe a[StatusCodes.ClientError]
   }
 
   "fail admin endpoint when not authenticated as validator operator" in { implicit env =>
@@ -720,6 +909,251 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
           ).create().commands().asScala.toSeq,
         )
     }
+  }
+
+  "serve all token standard endpoints via the scan-proxy" in { implicit env =>
+    startAllSync(
+      sv1ScanBackend,
+      sv1Backend,
+      sv2ScanBackend,
+      sv2Backend,
+      sv3ScanBackend,
+      sv3Backend,
+      sv4ScanBackend,
+      sv4Backend,
+    )
+
+    aliceValidatorBackend.startSync()
+    onboardWalletUser(aliceValidatorWalletClient, aliceValidatorBackend)
+    val headers = List(
+      Authorization(
+        OAuth2BearerToken(aliceValidatorWalletClient.token.valueOrFail("No token found"))
+      )
+    )
+
+    implicit val sys = env.actorSystem
+    implicit val ec = env.executionContext
+
+    val scanProxyUrl =
+      s"http://${aliceValidatorBackend.config.adminApi.address}:${aliceValidatorBackend.config.adminApi.port.unwrap}/api/validator/v0/scan-proxy"
+    val send: HttpRequest => Future[HttpResponse] = Http().singleRequest(_)
+    val fakeCid = "00" + "01" * 31 + "42"
+    // Invalid choice arguments: factories are expected to reject them with a 400.
+    val emptyChoiceArgs = io.circe.Json.obj()
+
+    val metadataClient = metadata.v1.Client.httpClient(send, scanProxyUrl)
+    val transferV1Client = transferinstruction.v1.Client.httpClient(send, scanProxyUrl)
+    val transferV2Client = transferinstruction.v2.Client.httpClient(send, scanProxyUrl)
+    val allocationInstructionV1Client =
+      allocationinstruction.v1.Client.httpClient(send, scanProxyUrl)
+    val allocationInstructionV2Client =
+      allocationinstruction.v2.Client.httpClient(send, scanProxyUrl)
+    val allocationV1Client = allocation.v1.Client.httpClient(send, scanProxyUrl)
+    val allocationV2Client = allocation.v2.Client.httpClient(send, scanProxyUrl)
+
+    def check[R](endpoint: String)(response: => Either[Either[Throwable, HttpResponse], R])(
+        expected: PartialFunction[R, Unit]
+    ) =
+      withClue(s"$endpoint via scan-proxy") {
+        inside(response) { case Right(r) => inside(r)(expected) }
+      }
+
+    // We just need to check that the responses can be parsed to know that they're wired correctly
+
+    // metadata v1
+    check("GET /registry/metadata/v1/info")(
+      metadataClient.getRegistryInfo(headers).value.futureValue
+    ) { case metadata.v1.GetRegistryInfoResponse.OK(info) =>
+      info.adminId shouldBe dsoParty.toProtoPrimitive
+    }
+    check("GET /registry/metadata/v1/instruments")(
+      metadataClient.listInstruments(None, None, headers).value.futureValue
+    ) { case metadata.v1.ListInstrumentsResponse.OK(instruments) =>
+      instruments.instruments.map(_.id) shouldBe Vector("Amulet")
+    }
+    check("GET /registry/metadata/v1/instruments/{instrumentId}")(
+      metadataClient.getInstrument("Amulet", headers).value.futureValue
+    ) { case metadata.v1.GetInstrumentResponse.OK(instrument) =>
+      instrument.id shouldBe "Amulet"
+    }
+
+    // transfer-instruction v1
+    check("POST /registry/transfer-instruction/v1/transfer-factory")(
+      transferV1Client
+        .getTransferFactory(
+          transferinstruction.v1.definitions.GetFactoryRequest(emptyChoiceArgs, None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case transferinstruction.v1.GetTransferFactoryResponse.BadRequest(_) => }
+    check("POST /registry/transfer-instruction/v1/{id}/choice-contexts/accept")(
+      transferV1Client
+        .getTransferInstructionAcceptContext(fakeCid, GetChoiceContextRequest(None), headers)
+        .value
+        .futureValue
+    ) { case transferinstruction.v1.GetTransferInstructionAcceptContextResponse.NotFound(_) => }
+    check("POST /registry/transfer-instruction/v1/{id}/choice-contexts/reject")(
+      transferV1Client
+        .getTransferInstructionRejectContext(fakeCid, GetChoiceContextRequest(None), headers)
+        .value
+        .futureValue
+    ) { case transferinstruction.v1.GetTransferInstructionRejectContextResponse.NotFound(_) => }
+    check("POST /registry/transfer-instruction/v1/{id}/choice-contexts/withdraw")(
+      transferV1Client
+        .getTransferInstructionWithdrawContext(fakeCid, GetChoiceContextRequest(None), headers)
+        .value
+        .futureValue
+    ) { case transferinstruction.v1.GetTransferInstructionWithdrawContextResponse.NotFound(_) => }
+
+    // transfer-instruction v2
+    check("POST /registry/transfer-instruction/v2/transfer-factory")(
+      transferV2Client
+        .getTransferFactory(
+          transferinstruction.v2.definitions.GetFactoryRequest(emptyChoiceArgs, None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case transferinstruction.v2.GetTransferFactoryResponse.BadRequest(_) => }
+    check("POST /registry/transfer-instruction/v2/{id}/choice-contexts/accept")(
+      transferV2Client
+        .getTransferInstructionAcceptContext(
+          fakeCid,
+          transferinstruction.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case transferinstruction.v2.GetTransferInstructionAcceptContextResponse.NotFound(_) => }
+    check("POST /registry/transfer-instruction/v2/{id}/choice-contexts/reject")(
+      transferV2Client
+        .getTransferInstructionRejectContext(
+          fakeCid,
+          transferinstruction.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case transferinstruction.v2.GetTransferInstructionRejectContextResponse.NotFound(_) => }
+    check("POST /registry/transfer-instruction/v2/{id}/choice-contexts/withdraw")(
+      transferV2Client
+        .getTransferInstructionWithdrawContext(
+          fakeCid,
+          transferinstruction.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case transferinstruction.v2.GetTransferInstructionWithdrawContextResponse.NotFound(_) => }
+
+    // allocation-instruction v1
+    check("POST /registry/allocation-instruction/v1/allocation-factory")(
+      allocationInstructionV1Client
+        .getAllocationFactory(
+          allocationinstruction.v1.definitions.GetFactoryRequest(emptyChoiceArgs, None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocationinstruction.v1.GetAllocationFactoryResponse.OK(_) => }
+
+    // allocation-instruction v2
+    check("POST /registry/allocation-instruction/v2/allocation-factory")(
+      allocationInstructionV2Client
+        .getAllocationFactory(
+          allocationinstruction.v2.definitions.GetFactoryRequest(emptyChoiceArgs, None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocationinstruction.v2.GetAllocationFactoryResponse.BadRequest(_) => }
+    check("POST /registry/allocation-instruction/v2/{id}/choice-contexts/accept")(
+      allocationInstructionV2Client
+        .getAllocationInstructionAcceptContext(
+          fakeCid,
+          allocationinstruction.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocationinstruction.v2.GetAllocationInstructionAcceptContextResponse.BadRequest(_) =>
+    }
+    check("POST /registry/allocation-instruction/v2/{id}/choice-contexts/withdraw")(
+      allocationInstructionV2Client
+        .getAllocationInstructionWithdrawContext(
+          fakeCid,
+          allocationinstruction.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) {
+      case allocationinstruction.v2.GetAllocationInstructionWithdrawContextResponse.BadRequest(_) =>
+    }
+
+    // allocation v1
+    check("POST /registry/allocations/v1/{id}/choice-contexts/execute-transfer")(
+      allocationV1Client
+        .getAllocationTransferContext(
+          fakeCid,
+          allocation.v1.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocation.v1.GetAllocationTransferContextResponse.NotFound(_) => }
+    check("POST /registry/allocations/v1/{id}/choice-contexts/withdraw")(
+      allocationV1Client
+        .getAllocationWithdrawContext(
+          fakeCid,
+          allocation.v1.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocation.v1.GetAllocationWithdrawContextResponse.NotFound(_) => }
+    check("POST /registry/allocations/v1/{id}/choice-contexts/cancel")(
+      allocationV1Client
+        .getAllocationCancelContext(
+          fakeCid,
+          allocation.v1.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocation.v1.GetAllocationCancelContextResponse.NotFound(_) => }
+
+    // allocation v2
+    check("POST /registry/allocation/v2/settlement-factory")(
+      allocationV2Client
+        .getSettlementFactory(
+          allocation.v2.definitions.GetFactoryRequest(emptyChoiceArgs, None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocation.v2.GetSettlementFactoryResponse.BadRequest(_) => }
+    check("POST /registry/allocations/v2/{id}/choice-contexts/withdraw")(
+      allocationV2Client
+        .getAllocationWithdrawContext(
+          fakeCid,
+          allocation.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocation.v2.GetAllocationWithdrawContextResponse.NotFound(_) => }
+    check("POST /registry/allocations/v2/{id}/choice-contexts/cancel")(
+      allocationV2Client
+        .getAllocationCancelContext(
+          fakeCid,
+          allocation.v2.definitions.GetChoiceContextRequest(None),
+          headers,
+        )
+        .value
+        .futureValue
+    ) { case allocation.v2.GetAllocationCancelContextResponse.NotFound(_) => }
   }
 
 }

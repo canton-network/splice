@@ -19,7 +19,20 @@ import com.digitalasset.canton.http.metrics.{HttpApiHistograms, HttpApiMetrics}
 import com.digitalasset.canton.metrics.*
 import com.digitalasset.canton.metrics.ActiveRequestsMetrics.GrpcServerMetricsX
 import com.digitalasset.canton.participant.metrics.PruningMetrics as ParticipantPruningMetrics
-import com.digitalasset.canton.topology.PhysicalSynchronizerId
+import com.digitalasset.canton.platform.apiserver.services.metrics.{
+  TrafficEnforcementInventory,
+  TrafficEnforcementMetrics,
+}
+import com.digitalasset.canton.topology.{
+  OpaquePhysicalSynchronizerId,
+  ParticipantId,
+  SynchronizerId,
+}
+import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.daml.lf.transaction.metrics.{
+  TransactionNodeHistograms,
+  TransactionNodeMetrics,
+}
 
 import scala.collection.concurrent.TrieMap
 
@@ -77,6 +90,9 @@ class ParticipantHistograms(val parent: MetricName)(implicit
       ),
     )
 
+  val trafficEnforcement = new TrafficEnforcementInventory(prefix)
+
+  val transactionNode = new TransactionNodeHistograms(prefix)
 }
 
 class ParticipantMetrics(
@@ -136,11 +152,26 @@ class ParticipantMetrics(
   val httpApiServer: HttpApiMetrics =
     new HttpApiMetrics(inventory.httpApi, openTelemetryMetricsFactory)
 
+  val trafficEnforcement: TrafficEnforcementMetrics =
+    new TrafficEnforcementMetrics(
+      inventory.trafficEnforcement,
+      openTelemetryMetricsFactory,
+    )
+
+  val transactionNode: TransactionNodeMetrics =
+    new TransactionNodeMetrics(
+      inventory.transactionNode,
+      openTelemetryMetricsFactory,
+    )
+
   private val clients = TrieMap[SynchronizerAlias, Eval[ConnectedSynchronizerMetrics]]()
 
   val pruning = new ParticipantPruningMetrics(inventory.pruning, openTelemetryMetricsFactory)
 
-  def connectedSynchronizerMetrics(alias: SynchronizerAlias): ConnectedSynchronizerMetrics =
+  def connectedSynchronizerMetrics(
+      alias: SynchronizerAlias,
+      participantId: ParticipantId,
+  ): ConnectedSynchronizerMetrics =
     clients
       .getOrElseUpdate(
         alias,
@@ -152,7 +183,12 @@ class ParticipantMetrics(
           new ConnectedSynchronizerMetrics(
             inventory.connectedSynchronizer,
             openTelemetryMetricsFactory,
-          )(mc.withExtraLabels("synchronizer" -> alias.unwrap))
+          )(
+            mc.withExtraLabels(
+              "synchronizer" -> alias.unwrap,
+              "participant_id" -> participantId.toProtoPrimitive.stripPrefix("PAR::"),
+            )
+          )
         ),
       )
       .value
@@ -198,14 +234,14 @@ class ParticipantMetrics(
     )
 
   // Since gauges don't support metrics context per update, create a map with a gauge per successor psid.
-  private val lsuStatus: TrieMap[PhysicalSynchronizerId, Gauge[Int]] = TrieMap.empty
+  private val lsuStatus: TrieMap[OpaquePhysicalSynchronizerId, Gauge[Int]] = TrieMap.empty
 
   /** Update the value of the metric if the provided value is bigger than the stored value. Create
     * the metric otherwise.
     */
   def setLsuStatus(
       value: NonNegativeInt,
-      successorPsid: PhysicalSynchronizerId,
+      successorPsid: OpaquePhysicalSynchronizerId,
   ): Unit =
     lsuStatus
       .updateWith(successorPsid) {
@@ -225,7 +261,7 @@ class ParticipantMetrics(
   /** Update the value of the metric to zero. Create the metric otherwise.
     */
   def resetLsuStatus(
-      successorPsid: PhysicalSynchronizerId
+      successorPsid: OpaquePhysicalSynchronizerId
   ): Unit = {
     val value = ParticipantMetrics.LsuStatus.NoLsu.unwrap
 
@@ -238,9 +274,9 @@ class ParticipantMetrics(
               value = value,
             )
           )
-        case Some(gauge) =>
+        case previous @ Some(gauge) =>
           gauge.updateValue(value)
-          Some(gauge)
+          previous
       }
       .discard
   }
@@ -266,20 +302,35 @@ class ParticipantMetrics(
   )(mc)
 
   // The metrics documentation generation requires all metrics to be registered in the factory.
-  // However, the following metric is registered on-demand during normal operation. Therefore,
+  // However, the following metrics are registered on-demand during normal operation. Therefore,
   // we use this environment variable approach to guard against instantiation in production; but
-  // register the metric for the documentation generation.
+  // register the metrics for the documentation generation.
   if (sys.env.contains("GENERATE_METRICS_FOR_DOCS")) {
-    val dummyPsid = PhysicalSynchronizerId.tryFromString(
-      "da::1220c72c0cdfb591769534ae47a26ee7b2f8ea55e86380eb38499f3fae4702744fe1::34-0"
+    val dummySynchronizerId = SynchronizerId.tryFromString(
+      "da::1220c72c0cdfb591769534ae47a26ee7b2f8ea55e86380eb38499f3fae4702744fe1"
+    )
+    val dummyPsid = OpaquePhysicalSynchronizerId(
+      dummySynchronizerId,
+      NonNegativeInt.zero,
+      ProtocolVersion.latest.v,
     )
 
     resetLsuStatus(dummyPsid)
 
-    new ConnectedSynchronizerMetrics(
+    val connectedSynchronizerMetrics = new ConnectedSynchronizerMetrics(
       inventory.connectedSynchronizer,
       openTelemetryMetricsFactory,
     )
+
+    val dummyParticipant = ParticipantId("dummy", dummySynchronizerId.namespace)
+    val dummyContext = MetricsContext("counter-participant" -> "dummy")
+    connectedSynchronizerMetrics.commitments.counterParticipantLatency(dummyParticipant).discard
+    connectedSynchronizerMetrics.commitments.commitmentMatchingStatus(dummyContext).discard
+    connectedSynchronizerMetrics.commitments
+      .commitmentMatchingStatusPeriodEnd(dummyContext)
+      .discard
+    connectedSynchronizerMetrics.conflictDetection.taskQueue(() => 0).discard
+    connectedSynchronizerMetrics.recordOrderPublisher.taskQueue(() => 0).discard
   }
 }
 
@@ -307,6 +358,8 @@ class ConnectedSynchronizerHistograms private[metrics] (
     new TransactionProcessingHistograms(prefix)
 
   private[metrics] val commitments: CommitmentHistograms = new CommitmentHistograms(prefix)
+
+  private[metrics] val reassignments: ReassignmentHistograms = new ReassignmentHistograms(prefix)
 
 }
 
@@ -357,6 +410,9 @@ class ConnectedSynchronizerMetrics private[metrics] (
 
   val transactionProcessing: TransactionProcessingMetrics =
     new TransactionProcessingMetrics(histograms.transactionProcessing, factory)
+
+  val reassignments: ReassignmentMetrics =
+    new ReassignmentMetrics(histograms.reassignments, factory)
 
   val numInflightValidations: Counter = factory.counter(
     MetricInfo(

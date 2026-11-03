@@ -3,19 +3,25 @@
 
 package com.digitalasset.canton.protocol.messages
 
-import cats.syntax.traverse.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.utils.DecodedCantonError
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.ProtoDeserializationError.{InvariantViolation, OtherError}
 import com.digitalasset.canton.error.*
 import com.digitalasset.canton.logging.ErrorLoggingContext
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.protocol.v30
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.ParticipantId
+import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
+import com.digitalasset.canton.validation.{ProtoUnvalidatedSeq, ProtoValidation}
 import com.digitalasset.canton.version.*
+import com.digitalasset.nonempty.NonEmpty
 import com.google.protobuf.empty
 import pprint.Tree
 
@@ -23,7 +29,7 @@ import pprint.Tree
 sealed trait Verdict
     extends Product
     with Serializable
-    with PrettyPrinting
+    with PrettyPrintingFromCompanion
     with HasProtocolVersionedWrapper[Verdict] {
 
   def isApprove: Boolean = false
@@ -41,8 +47,8 @@ object Verdict
     with ProtocolVersionedCompanionDbHelpers[Verdict] {
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.Verdict)(
-      supportedProtoVersion(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.Verdict)(
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -58,10 +64,13 @@ object Verdict
     private[messages] override def toProtoV30: v30.Verdict =
       v30.Verdict(someVerdict = v30.Verdict.SomeVerdict.Approve(empty.Empty()))
 
-    override protected def pretty: Pretty[Verdict] = prettyOfString(_ => "Approve")
+    override def prettyCompanion: PrettyPrintingCompanion[Approve] = Approve
   }
 
-  object Approve {
+  object Approve extends PrettyPrintingCompanion[Approve] {
+
+    override protected val pretty: Pretty[Approve] = prettyOfString(_ => "Approve")
+
     def apply(protocolVersion: ProtocolVersion): Approve = Approve()(
       Verdict.protocolVersionRepresentativeFor(protocolVersion)
     )
@@ -81,10 +90,7 @@ object Verdict
     def toProtoMediatorRejectV30: v30.MediatorReject =
       v30.MediatorReject(reason = Some(reason), isMalformed = isMalformed)
 
-    override protected def pretty: Pretty[MediatorReject.this.type] = prettyOfClass(
-      unnamedParam(_.reason),
-      param("isMalformed", _.isMalformed),
-    )
+    override def prettyCompanion: PrettyPrintingCompanion[MediatorReject] = MediatorReject
 
     override def isTimeoutDeterminedByMediator: Boolean =
       DecodedCantonError.fromGrpcStatus(reason).exists(_.code.id == MediatorError.Timeout.id)
@@ -92,7 +98,13 @@ object Verdict
     def errorDetails: ErrorDetails = ErrorDetails(reason, isMalformed)
   }
 
-  object MediatorReject {
+  object MediatorReject extends PrettyPrintingCompanion[MediatorReject] {
+
+    override protected val pretty: Pretty[MediatorReject] = prettyOfClass(
+      unnamedParam(_.reason),
+      param("isMalformed", _.isMalformed),
+    )
+
     // TODO(#15628) Make it safe (intercept the exception and return an either)
     def tryCreate(
         status: com.google.rpc.status.Status,
@@ -124,23 +136,18 @@ object Verdict
   ) extends Verdict {
 
     private[messages] override def toProtoV30: v30.Verdict = {
-      val reasonsP = v30.ParticipantReject(reasons.map { case (parties, participantId, message) =>
-        v30.RejectionReason(parties.toSeq, Some(message.toProtoV30), participantId.toProtoPrimitive)
-      })
+      val reasonsP =
+        v30.ParticipantReject(reasons.map { case (parties, participantId, message) =>
+          v30.RejectionReason(
+            parties.toSeq.map(_.toProtoUnvalidated),
+            Some(message.toProtoV30),
+            participantId.toProtoPrimitive,
+          )
+        })
       v30.Verdict(someVerdict = v30.Verdict.SomeVerdict.ParticipantReject(reasonsP))
     }
 
-    override protected def pretty: Pretty[ParticipantReject] = {
-      import Pretty.PrettyOps
-
-      prettyOfClass(
-        unnamedParam(
-          _.reasons.map { case (parties, participantId, reason) =>
-            Tree.Infix(reason.toTree, s"- reported by $participantId for:", parties.toTree)
-          }
-        )
-      )
-    }
+    override def prettyCompanion: PrettyPrintingCompanion[ParticipantReject] = ParticipantReject
 
     /** Returns the first error by enriching the reason with the confirming parties and participant
       * ID who reported it.
@@ -174,7 +181,20 @@ object Verdict
     override def isTimeoutDeterminedByMediator: Boolean = false
   }
 
-  object ParticipantReject {
+  object ParticipantReject extends PrettyPrintingCompanion[ParticipantReject] {
+
+    override protected val pretty: Pretty[ParticipantReject] = {
+      import Pretty.PrettyOps
+
+      prettyOfClass(
+        unnamedParam(
+          _.reasons.map { case (parties, participantId, reason) =>
+            Tree.Infix(reason.toTree, s"- reported by $participantId for:", parties.toTree)
+          }
+        )
+      )
+    }
+
     def apply(
         reasons: NonEmpty[List[(Set[LfPartyId], ParticipantId, NonPositiveLocalVerdict)]],
         protocolVersion: ProtocolVersion,
@@ -182,11 +202,15 @@ object Verdict
       ParticipantReject(reasons)(Verdict.protocolVersionRepresentativeFor(protocolVersion))
 
     private def fromProtoRejectionReasonsV30(
-        reasonsP: Seq[v30.RejectionReason],
+        reasonsP: ProtoUnvalidatedSeq[v30.RejectionReason],
         pv: RepresentativeProtocolVersion[Verdict.type],
+        pvv: ProtocolVersionValidation,
     ): ParsingResult[ParticipantReject] =
       for {
-        reasons <- reasonsP.traverse(fromProtoReasonV30)
+        reasons <- ProtoValidation
+          .validateLengthThen(reasonsP, "reasons", pvv, ProtoValidation.MaxCollectionSize)(
+            (element, _) => fromProtoReasonV30(element, pvv)
+          )
         reasonsNE <- NonEmpty
           .from(reasons.toList)
           .toRight(InvariantViolation("reasons", "must not be empty!"))
@@ -195,15 +219,19 @@ object Verdict
     def fromProtoV30(
         participantRejectP: v30.ParticipantReject,
         pv: RepresentativeProtocolVersion[Verdict.type],
+        pvv: ProtocolVersionValidation,
     ): ParsingResult[ParticipantReject] = {
       val v30.ParticipantReject(reasonsP) = participantRejectP
-      fromProtoRejectionReasonsV30(reasonsP, pv)
+      fromProtoRejectionReasonsV30(reasonsP, pv, pvv)
     }
   }
 
   override def name: String = "verdict"
 
-  def fromProtoV30(verdictP: v30.Verdict): ParsingResult[Verdict] = {
+  def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      verdictP: v30.Verdict,
+  ): ParsingResult[Verdict] = {
     val v30.Verdict(someVerdictP) = verdictP
     import v30.Verdict.SomeVerdict as V
 
@@ -213,18 +241,23 @@ object Verdict
         case V.MediatorReject(mediatorRejectP) =>
           MediatorReject.fromProtoV30(mediatorRejectP)
         case V.ParticipantReject(participantRejectP) =>
-          ParticipantReject.fromProtoV30(participantRejectP, rpv)
+          ParticipantReject.fromProtoV30(participantRejectP, rpv, pvv)
         case V.Empty => Left(OtherError("empty verdict type"))
       }
     }
   }
 
   private def fromProtoReasonV30(
-      protoReason: v30.RejectionReason
+      protoReason: v30.RejectionReason,
+      pvv: ProtocolVersionValidation,
   ): ParsingResult[(Set[LfPartyId], ParticipantId, NonPositiveLocalVerdict)] = {
     val v30.RejectionReason(partiesP, rejectP, participantIdP) = protoReason
     for {
-      parties <- partiesP.traverse(ProtoConverter.parseLfPartyId(_, "parties")).map(_.toSet)
+      parties <- ProtoValidation
+        .validateThen(partiesP, "parties", pvv, ProtoValidation.MaxCollectionSize)(
+          ProtoConverter.parseLfPartyId
+        )
+        .map(_.toSet)
       localVerdict <- ProtoConverter.parseRequired(LocalVerdict.fromProtoV30, "reject", rejectP)
       nonPositiveVerdict <- localVerdict match {
         case localReject: LocalReject => Right(localReject)
@@ -233,7 +266,11 @@ object Verdict
         case abstain: LocalAbstain =>
           Right(abstain)
       }
-      participantId <- ParticipantId.fromProtoPrimitive(participantIdP, "participant_id")
+      participantId <- ProtoValidation.validateThen(
+        participantIdP,
+        "participant_id",
+        pvv,
+      )(ParticipantId.fromProtoPrimitive)
     } yield (parties, participantId, nonPositiveVerdict)
   }
 }

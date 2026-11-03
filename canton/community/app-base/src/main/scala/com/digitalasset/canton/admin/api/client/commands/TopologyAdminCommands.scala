@@ -4,7 +4,9 @@
 package com.digitalasset.canton.admin.api.client.commands
 
 import cats.syntax.either.*
+import cats.syntax.option.*
 import cats.syntax.traverse.*
+import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   DefaultUnboundedTimeout,
   ServerEnforcedTimeout,
@@ -16,9 +18,11 @@ import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.{Fingerprint, Hash}
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.ErrorLoggingContext
+import com.digitalasset.canton.protocol.SynchronizerLimits
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.topology.*
-import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
+import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, BaseWriteRequest, TopologyStoreId}
 import com.digitalasset.canton.topology.admin.v30
 import com.digitalasset.canton.topology.admin.v30.*
 import com.digitalasset.canton.topology.admin.v30.AuthorizeRequest.Type.{Proposal, TransactionHash}
@@ -31,21 +35,30 @@ import com.digitalasset.canton.topology.store.StoredTopologyTransactions.Generic
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.topology.transaction.{
   SignedTopologyTransaction,
+  SignedTopologyTransactions,
   TopologyChangeOp,
   TopologyMapping,
   TopologyTransaction,
+  TopologyTransactionDeserializationContext,
 }
 import com.digitalasset.canton.util.GrpcStreamingUtils
-import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation}
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
+import com.digitalasset.canton.validation.ProtoValidation
+import com.digitalasset.canton.version.{
+  ProtoVersion,
+  ProtocolVersion,
+  ProtocolVersionValidation,
+  ReleaseVersion,
+}
 import com.google.protobuf.ByteString
 import com.google.protobuf.timestamp.Timestamp
 import io.grpc.Context.CancellableContext
 import io.grpc.stub.StreamObserver
 import io.grpc.{Context, ManagedChannel}
 
-import java.io.ByteArrayInputStream
+import java.io.{ByteArrayInputStream, InputStream}
 import java.time.Instant
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
 object TopologyAdminCommands {
@@ -77,7 +90,8 @@ object TopologyAdminCommands {
           new v30.ListNamespaceDelegationRequest(
             baseQuery = Some(query.toProtoV1),
             filterNamespace = filterNamespace,
-            filterTargetKeyFingerprint = filterTargetKey.map(_.toProtoPrimitive).getOrElse(""),
+            filterTargetKeyFingerprint =
+              filterTargetKey.map(_.toProtoPrimitive).getOrElse("").toProtoUnvalidated,
           )
         )
 
@@ -90,7 +104,14 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListNamespaceDelegationResponse
       ): Either[String, Seq[ListNamespaceDelegationResult]] =
-        response.results.traverse(ListNamespaceDelegationResult.fromProtoV30).leftMap(_.toString)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListNamespaceDelegationResult.fromProtoV30(result))
+          .leftMap(_.toString)
     }
 
     final case class ListDecentralizedNamespaceDefinition(
@@ -120,8 +141,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListDecentralizedNamespaceDefinitionResponse
       ): Either[String, Seq[ListDecentralizedNamespaceDefinitionResult]] =
-        response.results
-          .traverse(ListDecentralizedNamespaceDefinitionResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListDecentralizedNamespaceDefinitionResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -137,7 +163,8 @@ object TopologyAdminCommands {
         Right(
           new v30.ListOwnerToKeyMappingRequest(
             baseQuery = Some(query.toProtoV1),
-            filterKeyOwnerType = filterKeyOwnerType.map(_.toProtoPrimitive).getOrElse(""),
+            filterKeyOwnerType =
+              filterKeyOwnerType.map(_.toProtoPrimitive).getOrElse("").toProtoUnvalidated,
             filterKeyOwnerUid = filterKeyOwnerUid,
           )
         )
@@ -151,7 +178,14 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListOwnerToKeyMappingResponse
       ): Either[String, Seq[ListOwnerToKeyMappingResult]] =
-        response.results.traverse(ListOwnerToKeyMappingResult.fromProtoV30).leftMap(_.toString)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListOwnerToKeyMappingResult.fromProtoV30(result))
+          .leftMap(_.toString)
     }
 
     final case class ListPartyToKeyMapping(
@@ -178,7 +212,14 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListPartyToKeyMappingResponse
       ): Either[String, Seq[ListPartyToKeyMappingResult]] =
-        response.results.traverse(ListPartyToKeyMappingResult.fromProtoV30).leftMap(_.toString)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListPartyToKeyMappingResult.fromProtoV30(result))
+          .leftMap(_.toString)
     }
 
     final case class ListSynchronizerTrustCertificate(
@@ -208,8 +249,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListSynchronizerTrustCertificateResponse
       ): Either[String, Seq[ListSynchronizerTrustCertificateResult]] =
-        response.results
-          .traverse(ListSynchronizerTrustCertificateResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListSynchronizerTrustCertificateResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -240,8 +286,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListParticipantSynchronizerPermissionResponse
       ): Either[String, Seq[ListParticipantSynchronizerPermissionResult]] =
-        response.results
-          .traverse(ListParticipantSynchronizerPermissionResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListParticipantSynchronizerPermissionResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -271,8 +322,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListPartyHostingLimitsResponse
       ): Either[String, Seq[ListPartyHostingLimitsResult]] =
-        response.results
-          .traverse(ListPartyHostingLimitsResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListPartyHostingLimitsResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -302,8 +358,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListVettedPackagesResponse
       ): Either[String, Seq[ListVettedPackagesResult]] =
-        response.results
-          .traverse(ListVettedPackagesResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListVettedPackagesResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -335,8 +396,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListPartyToParticipantResponse
       ): Either[String, Seq[ListPartyToParticipantResult]] =
-        response.results
-          .traverse(ListPartyToParticipantResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListPartyToParticipantResult.fromProtoV30(result))
           .leftMap(_.toString)
 
     }
@@ -368,8 +434,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListSynchronizerParametersStateResponse
       ): Either[String, Seq[ListSynchronizerParametersStateResult]] =
-        response.results
-          .traverse(ListSynchronizerParametersStateResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListSynchronizerParametersStateResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -400,8 +471,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListSequencingParametersStateResponse
       ): Either[String, Seq[ListSequencingParametersStateResult]] =
-        response.results
-          .traverse(ListSequencingParametersStateResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListSequencingParametersStateResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -432,8 +508,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListMediatorSynchronizerStateResponse
       ): Either[String, Seq[ListMediatorSynchronizerStateResult]] =
-        response.results
-          .traverse(ListMediatorSynchronizerStateResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListMediatorSynchronizerStateResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -464,8 +545,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListSequencerSynchronizerStateResponse
       ): Either[String, Seq[ListSequencerSynchronizerStateResult]] =
-        response.results
-          .traverse(ListSequencerSynchronizerStateResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListSequencerSynchronizerStateResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -495,8 +581,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListLsuAnnouncementResponse
       ): Either[String, Seq[ListLsuAnnouncementResult]] =
-        response.results
-          .traverse(ListLsuAnnouncementResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListLsuAnnouncementResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -529,8 +620,13 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListLsuSequencerConnectionSuccessorResponse
       ): Either[String, Seq[ListLsuSequencerConnectionSuccessorResult]] =
-        response.results
-          .traverse(ListLsuSequencerConnectionSuccessorResult.fromProtoV30)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListLsuSequencerConnectionSuccessorResult.fromProtoV30(result))
           .leftMap(_.toString)
     }
 
@@ -551,7 +647,14 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListAvailableStoresResponse
       ): Either[String, Seq[TopologyStoreId]] =
-        response.storeIds.traverse(TopologyStoreId.fromProtoV30(_, "store_ids")).leftMap(_.message)
+        ProtoValidation
+          .validateLengthThen(
+            response.storeIds,
+            "store_ids",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((storeId, field) => TopologyStoreId.fromProtoV30(storeId, field))
+          .leftMap(_.message)
     }
 
     @deprecated("Use ListAllV2 instead", since = "3.5")
@@ -568,7 +671,7 @@ object TopologyAdminCommands {
         Right(
           new v30.ListAllRequest(
             baseQuery = Some(query.toProtoV1),
-            excludeMappings = excludeMappings,
+            excludeMappings = excludeMappings.map(_.toProtoUnvalidated),
             filterNamespace = filterNamespace,
           )
         )
@@ -602,7 +705,7 @@ object TopologyAdminCommands {
         Right(
           new v30.ListAllV2Request(
             baseQuery = Some(query.toProtoV1),
-            includeMappings = includeMappings,
+            includeMappings = includeMappings.map(_.toProtoUnvalidated),
             filterNamespace = filterNamespace,
           )
         )
@@ -641,7 +744,7 @@ object TopologyAdminCommands {
         Right(
           new v30.ExportTopologySnapshotRequest(
             baseQuery = Some(query.toProtoV1),
-            excludeMappings = excludeMappings,
+            excludeMappings = excludeMappings.map(_.toProtoUnvalidated),
             filterNamespace = filterNamespace,
           )
         )
@@ -677,7 +780,7 @@ object TopologyAdminCommands {
         Right(
           new v30.ExportTopologySnapshotV2Request(
             baseQuery = Some(query.toProtoV1),
-            excludeMappings = excludeMappings,
+            excludeMappings = excludeMappings.map(_.toProtoUnvalidated),
             filterNamespace = filterNamespace,
           )
         )
@@ -800,6 +903,45 @@ object TopologyAdminCommands {
       override def timeoutType: TimeoutType = DefaultUnboundedTimeout
     }
 
+    final case class GenerateOnboardingTopologyTransactions(
+        protocolVersion: ProtocolVersion,
+        temporaryStore: Option[TopologyStoreId.Temporary] = None,
+    ) extends BaseCommand[
+          v30.GenerateOnboardingTopologyTransactionsRequest,
+          v30.GenerateOnboardingTopologyTransactionsResponse,
+          SignedTopologyTransactions[TopologyChangeOp, TopologyMapping],
+        ] {
+      override protected def createRequest()
+          : Either[String, v30.GenerateOnboardingTopologyTransactionsRequest] =
+        Right(
+          v30.GenerateOnboardingTopologyTransactionsRequest(
+            protocolVersion = protocolVersion.toProtoPrimitive,
+            temporaryStore = temporaryStore.map(id => v30.StoreId.Temporary(id.name.unwrap)),
+          )
+        )
+
+      override protected def submitRequest(
+          service: TopologyManagerReadServiceStub,
+          request: v30.GenerateOnboardingTopologyTransactionsRequest,
+      ): Future[v30.GenerateOnboardingTopologyTransactionsResponse] =
+        service.generateOnboardingTopologyTransactions(request)
+
+      override protected def handleResponse(
+          response: v30.GenerateOnboardingTopologyTransactionsResponse
+      ) =
+        ProtoConverter
+          .parseRequired(
+            SignedTopologyTransactions
+              .fromProtoV30(
+                ProtocolVersionValidation.AlwaysValidation,
+                TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+                _,
+              ),
+            "result",
+            response.result,
+          )
+          .leftMap(_.toString)
+    }
   }
 
   object Aggregation {
@@ -824,7 +966,7 @@ object TopologyAdminCommands {
       override protected def createRequest(): Either[String, v30.ListPartiesRequest] =
         Right(
           v30.ListPartiesRequest(
-            synchronizerIds = synchronizerIds.map(_.toProtoPrimitive).toSeq,
+            synchronizerIds = synchronizerIds.map(_.toProtoPrimitive.toProtoUnvalidated).toSeq,
             filterParty = filterParty,
             filterParticipant = filterParticipant,
             asOf = asOf.map(ts => Timestamp(ts.getEpochSecond)),
@@ -841,7 +983,14 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListPartiesResponse
       ): Either[String, Seq[ListPartiesResult]] =
-        response.results.traverse(ListPartiesResult.fromProtoV30).leftMap(_.toString)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListPartiesResult.fromProtoV30(result))
+          .leftMap(_.toString)
 
       //  command will potentially take a long time
       override def timeoutType: TimeoutType = DefaultUnboundedTimeout
@@ -854,6 +1003,7 @@ object TopologyAdminCommands {
         filterKeyOwnerUid: String,
         asOf: Option[Instant],
         limit: PositiveInt,
+        clientVersion: ReleaseVersion,
     ) extends BaseCommand[v30.ListKeyOwnersRequest, v30.ListKeyOwnersResponse, Seq[
           ListKeyOwnersResult
         ]] {
@@ -861,11 +1011,13 @@ object TopologyAdminCommands {
       override protected def createRequest(): Either[String, v30.ListKeyOwnersRequest] =
         Right(
           v30.ListKeyOwnersRequest(
-            synchronizerIds = synchronizerIds.toSeq.map(_.toProtoPrimitive),
-            filterKeyOwnerType = filterKeyOwnerType.map(_.toProtoPrimitive).getOrElse(""),
+            synchronizerIds = synchronizerIds.toSeq.map(_.toProtoPrimitive.toProtoUnvalidated),
+            filterKeyOwnerType =
+              filterKeyOwnerType.map(_.toProtoPrimitive).getOrElse("").toProtoUnvalidated,
             filterKeyOwnerUid = filterKeyOwnerUid,
             asOf = asOf.map(ts => Timestamp(ts.getEpochSecond)),
             limit = limit.value,
+            baseAggregationRequest = v30.BaseAggregationRequest(clientVersion.toProtoPrimitive).some,
           )
         )
 
@@ -878,7 +1030,14 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.ListKeyOwnersResponse
       ): Either[String, Seq[ListKeyOwnersResult]] =
-        response.results.traverse(ListKeyOwnersResult.fromProtoV30).leftMap(_.toString)
+        ProtoValidation
+          .validateLengthThen(
+            response.results,
+            "results",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((result, _) => ListKeyOwnersResult.fromProtoV30(result))
+          .leftMap(_.toString)
 
       //  command will potentially take a long time
       override def timeoutType: TimeoutType = DefaultUnboundedTimeout
@@ -895,6 +1054,104 @@ object TopologyAdminCommands {
 
       //  command will potentially take a long time
       override def timeoutType: TimeoutType = DefaultUnboundedTimeout
+    }
+
+    /** Serializes a [[TopologyMapping]] into a versioned Protobuf request, prioritizing the highest
+      * supported [[ProtoVersion]].
+      *
+      * To add a new version (e.g., v32):
+      *   1. Add the type parameter (`ProtoV32`), conversion arg (`toProtoV32`), and wrapper arg
+      *      (`wrapV32`).
+      *   1. Add an `.attemptVersion` block below with the target version and its feature flag.
+      */
+    private def serializeTopologyMapping[T, ProtoV30, ProtoV31](
+        mapping: TopologyMapping,
+        serverVersion: Option[ReleaseVersion],
+        toProtoV30: TopologyMapping => Either[String, ProtoV30],
+        toProtoV31: TopologyMapping => Either[String, ProtoV31],
+    )(
+        wrapV30: ProtoV30 => T,
+        wrapV31: ProtoV31 => T,
+    ): Either[String, T] = {
+
+      // TODO(#32231): Revise when the feature (signingKeyUsageProtoV31) is actually implemented.
+      // We force to v31 ONLY if v30 validation explicitly fails (e.g. a PartyToParticipant hosting state is Nominated or Freezing)
+      val useV31 = mapping
+        .canBeSerializedTo(ProtoVersion(30))
+        .isLeft || ReleaseVersion.Feature.signingKeyUsageProtoV31.supported(serverVersion)
+
+      ProposalMappingSerializer[T](mapping)
+        .attemptVersion(
+          version = ProtoVersion(31),
+          isSupported = useV31,
+          serializeAttempt = toProtoV31(_).map(wrapV31),
+        )
+        .attemptVersion(
+          version = ProtoVersion(30),
+          isSupported = true,
+          serializeAttempt = toProtoV30(_).map(wrapV30),
+        )
+        .serialize
+    }
+
+    /** Builder to attempt serializing a TopologyMapping into a specific Protobuf wrapper type `T`.
+      *
+      * Ensures that serialization attempts are executed in descending order of the protocol version
+      * (e.g., v32 -> v31 -> v30); higher versions are always prioritized regardless of the order in
+      * which `.attemptVersion` is called.
+      *
+      * The highest version that is both supported by the server and successfully serializes will
+      * short-circuit the remaining attempts.
+      */
+    private final class ProposalMappingSerializer[T] private (
+        mapping: TopologyMapping,
+        attempts: List[ProposalMappingSerializer.Attempt[T]],
+    ) {
+      def attemptVersion(
+          version: ProtoVersion,
+          isSupported: Boolean,
+          serializeAttempt: TopologyMapping => Either[String, T],
+      ): ProposalMappingSerializer[T] =
+        new ProposalMappingSerializer(
+          mapping,
+          ProposalMappingSerializer.Attempt(version, isSupported, serializeAttempt) :: attempts,
+        )
+
+      def serialize: Either[String, T] = {
+        // Sort so the highest version (e.g., 32, then 31, then 30) is always first
+        val sortedAttempts = attempts.sortBy(_.version.v)(Ordering[Int].reverse)
+
+        val executionResult = sortedAttempts.foldLeft[Either[List[String], T]](Left(Nil)) {
+          // If an earlier (higher) version succeeded, do nothing
+          case (success @ Right(_), _) => success
+
+          // If the server doesn't support this version, keep existing errors and skip
+          case (Left(errors), attempt) if !attempt.isSupported => Left(errors)
+
+          // Try serializing, keeping the success or prepending the new error
+          case (Left(errors), attempt) =>
+            mapping
+              .canBeSerializedTo(attempt.version)
+              .flatMap(_ => attempt.serialize(mapping))
+              .leftMap(err => s"v${attempt.version.v}=$err" :: errors)
+        }
+
+        // Reverse the accumulated errors once at the very end
+        executionResult.leftMap(errors =>
+          s"Cannot serialize mapping: ${errors.reverse.mkString(", ")}"
+        )
+      }
+    }
+
+    private object ProposalMappingSerializer {
+      private final case class Attempt[T](
+          version: ProtoVersion,
+          isSupported: Boolean,
+          serialize: TopologyMapping => Either[String, T],
+      )
+
+      def apply[T](mapping: TopologyMapping): ProposalMappingSerializer[T] =
+        new ProposalMappingSerializer(mapping, Nil)
     }
 
     final case class AddTransactions(
@@ -929,7 +1186,8 @@ object TopologyAdminCommands {
         topologySnapshot: ByteString,
         store: TopologyStoreId,
         waitToBecomeEffective: Option[NonNegativeDuration],
-    ) extends BaseWriteCommand[
+    )(implicit ec: ExecutionContext, loggingContext: ErrorLoggingContext)
+        extends BaseWriteCommand[
           ImportTopologySnapshotRequest,
           ImportTopologySnapshotResponse,
           Unit,
@@ -954,7 +1212,7 @@ object TopologyAdminCommands {
           service.withDeadline(null).importTopologySnapshot,
           bytes =>
             ImportTopologySnapshotRequest(
-              ByteString.copyFrom(bytes),
+              bytes,
               Some(store.toProtoV30),
               waitToBecomeEffective.map(_.toProtoPrimitive),
             ),
@@ -966,36 +1224,33 @@ object TopologyAdminCommands {
     }
 
     final case class ImportTopologySnapshotV2(
-        topologySnapshot: ByteString,
+        topologySnapshotStream: InputStream,
         store: TopologyStoreId,
         waitToBecomeEffective: Option[NonNegativeDuration],
-    ) extends BaseWriteCommand[
-          ImportTopologySnapshotV2Request,
+    )(implicit ec: ExecutionContext, loggingContext: ErrorLoggingContext)
+        extends BaseWriteCommand[
+          Unit,
           ImportTopologySnapshotV2Response,
           Unit,
         ] {
-      override protected def createRequest(): Either[String, ImportTopologySnapshotV2Request] =
-        Right(
-          ImportTopologySnapshotV2Request(
-            topologySnapshot,
-            Some(store.toProtoV30),
-            waitToBecomeEffective.map(_.asNonNegativeFiniteApproximation.toProtoPrimitive),
-          )
-        )
+      override protected def createRequest(): Either[String, Unit] =
+        Right(())
+
       override protected def submitRequest(
           service: TopologyManagerWriteServiceStub,
-          request: ImportTopologySnapshotV2Request,
+          request: Unit,
       ): Future[ImportTopologySnapshotV2Response] =
         GrpcStreamingUtils.streamToServer(
           service.importTopologySnapshotV2,
           bytes =>
             ImportTopologySnapshotV2Request(
-              ByteString.copyFrom(bytes),
+              bytes,
               Some(store.toProtoV30),
               waitToBecomeEffective.map(_.toProtoPrimitive),
             ),
-          new ByteArrayInputStream(topologySnapshot.toByteArray),
+          topologySnapshotStream,
         )
+
       override protected def handleResponse(
           response: ImportTopologySnapshotV2Response
       ): Either[String, Unit] = Either.unit
@@ -1013,7 +1268,7 @@ object TopologyAdminCommands {
         Right(
           SignTransactionsRequest(
             transactions.map(_.toProtoV30),
-            signedBy.map(_.toProtoPrimitive),
+            signedBy.map(_.toProtoPrimitive.toProtoUnvalidated),
             Some(store.toProtoV30),
             forceFlags.toProtoV30,
           )
@@ -1027,15 +1282,27 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: SignTransactionsResponse
       ): Either[String, Seq[GenericSignedTopologyTransaction]] =
-        response.transactions
-          .traverse(tx =>
-            SignedTopologyTransaction.fromProtoV30(ProtocolVersionValidation.NoValidation, tx)
+        ProtoValidation
+          .validateLengthThen(
+            response.transactions,
+            "transactions",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          )((tx, _) =>
+            SignedTopologyTransaction
+              .fromProtoV30(
+                ProtocolVersionValidation.AlwaysValidation,
+                TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+                tx,
+              )
           )
           .leftMap(_.message)
     }
 
     final case class GenerateTransactions(
-        proposals: Seq[GenerateTransactions.Proposal]
+        baseRequest: BaseWriteRequest,
+        proposals: Seq[GenerateTransactions.Proposal],
+        serverVersion: Option[ReleaseVersion],
     ) extends BaseWriteCommand[
           GenerateTransactionsRequest,
           GenerateTransactionsResponse,
@@ -1043,7 +1310,10 @@ object TopologyAdminCommands {
         ] {
 
       override protected def createRequest(): Either[String, GenerateTransactionsRequest] =
-        Right(GenerateTransactionsRequest(proposals.map(_.toGenerateTransactionProposal)))
+        proposals
+          .traverse(_.toGenerateTransactionProposal(serverVersion))
+          .map(GenerateTransactionsRequest(_, Some(baseRequest.toProtoV30)))
+
       override protected def submitRequest(
           service: TopologyManagerWriteServiceStub,
           request: GenerateTransactionsRequest,
@@ -1052,27 +1322,42 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: GenerateTransactionsResponse
       ): Either[String, Seq[TopologyTransaction[TopologyChangeOp, TopologyMapping]]] =
-        response.generatedTransactions
-          .traverse { generatedTransaction =>
+        ProtoValidation
+          .validateLengthThen(
+            response.generatedTransactions,
+            "generated_transactions",
+            ProtocolVersionValidation.AlwaysValidation,
+            ProtoValidation.MaxCollectionSize,
+          ) { case (generatedTransaction, _) =>
             val serializedTransaction = generatedTransaction.serializedTransaction
             val serializedHash = generatedTransaction.transactionHash
             for {
               parsedTopologyTransaction <-
-                TopologyTransaction
-                  .fromByteString(ProtocolVersionValidation.NoValidation, serializedTransaction)
-                  .leftMap(_.message)
+                TopologyTransaction.fromByteString(
+                  ProtocolVersionValidation.AlwaysValidation,
+                  TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+                  serializedTransaction,
+                )
               // We don't really need the hash from the response here because we can re-build it from the deserialized
               // topology transaction. But users of the API without access to this code wouldn't be able to do that,
               // which is why the hash is returned by the API. Let's still verify that they match here.
-              parsedHash <- Hash.fromByteString(serializedHash).leftMap(_.message)
+              parsedHash <- Hash
+                .fromByteString(serializedHash)
+                .leftMap(err =>
+                  ProtoDeserializationError
+                    .ValueDeserializationError(err.toString, "transaction_hash")
+                )
               _ = Either.cond(
                 parsedTopologyTransaction.hash.hash.compare(parsedHash) == 0,
                 (),
-                s"Response hash did not match transaction hash",
+                ProtoDeserializationError
+                  .InvariantViolation(None, "Response hash did not match transaction hash"),
               )
             } yield parsedTopologyTransaction
           }
+          .leftMap(_.message)
     }
+
     object GenerateTransactions {
       final case class Proposal(
           mapping: TopologyMapping,
@@ -1080,17 +1365,30 @@ object TopologyAdminCommands {
           change: TopologyChangeOp = TopologyChangeOp.Replace,
           serial: Option[PositiveInt] = None,
       ) {
-        def toGenerateTransactionProposal: GenerateTransactionsRequest.Proposal =
-          GenerateTransactionsRequest.Proposal(
-            change.toProto,
-            serial.map(_.value).getOrElse(0),
-            Some(mapping.toProtoV30),
-            Some(store.toProtoV30),
+        def toGenerateTransactionProposal(
+            serverVersion: Option[ReleaseVersion]
+        ): Either[String, GenerateTransactionsRequest.Proposal] =
+          serializeTopologyMapping(
+            mapping,
+            serverVersion,
+            _.toProtoV30,
+            _.toProtoV31,
+          )(
+            GenerateTransactionsRequest.Proposal.Mapping.V30(_),
+            GenerateTransactionsRequest.Proposal.Mapping.V31(_),
+          ).map(protoMapping =>
+            GenerateTransactionsRequest.Proposal(
+              change.toProto,
+              serial.map(_.value).getOrElse(0),
+              protoMapping,
+              Some(store.toProtoV30),
+            )
           )
       }
     }
 
     final case class Propose[M <: TopologyMapping: ClassTag](
+        baseRequest: BaseWriteRequest,
         mapping: Either[String, M],
         signedBy: Seq[Fingerprint],
         change: TopologyChangeOp,
@@ -1099,29 +1397,42 @@ object TopologyAdminCommands {
         forceChanges: ForceFlags,
         store: TopologyStoreId,
         waitToBecomeEffective: Option[NonNegativeDuration],
+        serverVersion: Option[ReleaseVersion],
     ) extends BaseWriteCommand[
           AuthorizeRequest,
           AuthorizeResponse,
           SignedTopologyTransaction[TopologyChangeOp, M],
         ] {
 
-      override protected def createRequest(): Either[String, AuthorizeRequest] = mapping.map(m =>
-        AuthorizeRequest(
-          Proposal(
-            AuthorizeRequest.Proposal(
-              change.toProto,
-              serial.map(_.value).getOrElse(0),
-              Some(m.toProtoV30),
+      override protected def createRequest(): Either[String, AuthorizeRequest] = mapping.flatMap {
+        m =>
+          serializeTopologyMapping(
+            m,
+            serverVersion,
+            _.toProtoV30,
+            _.toProtoV31,
+          )(
+            AuthorizeRequest.Proposal.Mapping.V30(_),
+            AuthorizeRequest.Proposal.Mapping.V31(_),
+          ).map(protoMapping =>
+            AuthorizeRequest(
+              Proposal(
+                AuthorizeRequest.Proposal(
+                  change.toProto,
+                  serial.map(_.value).getOrElse(0),
+                  protoMapping,
+                )
+              ),
+              mustFullyAuthorize = mustFullyAuthorize,
+              forceChanges = forceChanges.toProtoV30,
+              signedBy = signedBy.map(_.toProtoPrimitive.toProtoUnvalidated),
+              store = Some(store.toProtoV30),
+              waitToBecomeEffective =
+                waitToBecomeEffective.map(_.asNonNegativeFiniteApproximation.toProtoPrimitive),
             )
-          ),
-          mustFullyAuthorize = mustFullyAuthorize,
-          forceChanges = forceChanges.toProtoV30,
-          signedBy = signedBy.map(_.toProtoPrimitive),
-          store = Some(store.toProtoV30),
-          waitToBecomeEffective =
-            waitToBecomeEffective.map(_.asNonNegativeFiniteApproximation.toProtoPrimitive),
-        )
-      )
+          )
+      }
+
       override protected def submitRequest(
           service: TopologyManagerWriteServiceStub,
           request: AuthorizeRequest,
@@ -1133,7 +1444,11 @@ object TopologyAdminCommands {
         .toRight("no transaction in response")
         .flatMap(
           SignedTopologyTransaction
-            .fromProtoV30(ProtocolVersionValidation.NoValidation, _)
+            .fromProtoV30(
+              ProtocolVersionValidation.AlwaysValidation,
+              TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+              _,
+            )
             .leftMap(_.message)
             .flatMap(tx =>
               tx.selectMapping[M]
@@ -1145,6 +1460,7 @@ object TopologyAdminCommands {
     }
     object Propose {
       def apply[M <: TopologyMapping: ClassTag](
+          baseRequest: BaseWriteRequest,
           mapping: M,
           signedBy: Seq[Fingerprint],
           store: TopologyStoreId,
@@ -1153,8 +1469,10 @@ object TopologyAdminCommands {
           mustFullyAuthorize: Boolean = false,
           forceChanges: ForceFlags = ForceFlags.none,
           waitToBecomeEffective: Option[NonNegativeDuration],
+          serverVersion: Option[ReleaseVersion],
       ): Propose[M] =
         Propose(
+          baseRequest,
           Right(mapping),
           signedBy,
           change,
@@ -1163,6 +1481,7 @@ object TopologyAdminCommands {
           forceChanges,
           store,
           waitToBecomeEffective,
+          serverVersion,
         )
 
     }
@@ -1183,8 +1502,8 @@ object TopologyAdminCommands {
         AuthorizeRequest(
           TransactionHash(transactionHash),
           mustFullyAuthorize = mustFullyAuthorize,
-          forceChanges = Seq.empty,
-          signedBy = signedBy.map(_.toProtoPrimitive),
+          forceChanges = Seq.empty[v30.ForceFlag],
+          signedBy = signedBy.map(_.toProtoPrimitive.toProtoUnvalidated),
           store = Some(store.toProtoV30),
           waitToBecomeEffective.map(_.asNonNegativeFiniteApproximation.toProtoPrimitive),
         )
@@ -1201,7 +1520,11 @@ object TopologyAdminCommands {
         .toRight("no transaction in response")
         .flatMap(
           SignedTopologyTransaction
-            .fromProtoV30(ProtocolVersionValidation.NoValidation, _)
+            .fromProtoV30(
+              ProtocolVersionValidation.AlwaysValidation,
+              TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+              _,
+            )
             .leftMap(_.message)
             .flatMap(tx =>
               tx.selectMapping[M]
@@ -1308,13 +1631,22 @@ object TopologyAdminCommands {
       override protected def handleResponse(
           response: v30.GetIdResponse
       ): Either[String, GetIdResult] =
-        if (response.uniqueIdentifier.nonEmpty)
-          UniqueIdentifier
-            .fromProtoPrimitive_(response.uniqueIdentifier)
-            .leftMap(_.message)
-            .map(id => GetIdResult(response.initialized, Some(id)))
-        else
-          Right(GetIdResult(response.initialized, None))
+        ProtoValidation
+          .validate(
+            response.uniqueIdentifier,
+            "unique_identifier",
+            ProtocolVersionValidation.AlwaysValidation,
+          )
+          .leftMap(_.message)
+          .flatMap { uniqueIdentifier =>
+            if (uniqueIdentifier.nonEmpty)
+              UniqueIdentifier
+                .fromProtoPrimitive_(uniqueIdentifier)
+                .leftMap(_.message)
+                .map(id => GetIdResult(response.initialized, Some(id)))
+            else
+              Right(GetIdResult(response.initialized, None))
+          }
     }
 
     final case class GetIdResult(

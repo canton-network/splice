@@ -13,7 +13,12 @@ import com.digitalasset.canton.crypto.{
 }
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{HasLoggerName, NamedLoggingContext}
 import com.digitalasset.canton.sequencing.protocol.{AggregationBySender, AggregationRule}
 import com.digitalasset.canton.topology.Member
@@ -26,10 +31,9 @@ import scala.concurrent.ExecutionContext
 /** Stores the state of an in-flight aggregation of submission requests.
   *
   * Since the [[com.digitalasset.canton.sequencing.protocol.AggregationId]] computationally
-  * identifies the envelope contents, their recipients, and the
-  * [[com.digitalasset.canton.sequencing.protocol.SubmissionRequest.topologyTimestamp]], we do not
-  * need to maintain these data as part of the in-flight tracking. Instead, we can derive them from
-  * the submission request that makes the aggregation reach its threshold.
+  * identifies the envelope contents and their recipients we do not need to maintain these data as
+  * part of the in-flight tracking. Instead, we can derive them from the submission request that
+  * makes the aggregation reach its threshold.
   *
   * @param aggregatedSenders
   *   The senders whose submission request have already been aggregated with the timestamp of their
@@ -47,7 +51,7 @@ final case class InFlightAggregation(
     maxSequencingTimestamp: CantonTimestamp,
     rule: AggregationRule,
     cachedDeliveredAt: Option[Option[CantonTimestamp]] = None,
-) extends PrettyPrinting
+) extends PrettyPrintingFromCompanion
     with HasLoggerName {
   import InFlightAggregation.*
 
@@ -99,7 +103,7 @@ final case class InFlightAggregation(
               maxSequencingTime <= sequencingTimestamp,
               s"Cannot prepare in-flight aggregation for new aggregation at sequencing timestamp $sequencingTimestamp because it contains signatures with sequencing timestamp up to $maxSequencingTime",
             )
-            // We need to be careful with the snapshot we are using for computing the delivered at and use the
+            // We need to e careful with the snapshot we are using for computing the delivered at and use the
             // standard method for finding the right snapshot in the sequencer, respecting the events that
             // this client has seen.
             SyncCryptoClient
@@ -233,12 +237,7 @@ final case class InFlightAggregation(
       )
     }
 
-  override protected def pretty: Pretty[this.type] = prettyOfClass(
-    param("aggregated senders", _.aggregatedSenders),
-    param("max sequencing time", _.maxSequencingTimestamp),
-    paramIfNonEmpty("sequencing timestamp", _.cachedDeliveredAt.flatten),
-    param("rule", _.rule),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[InFlightAggregation] = InFlightAggregation
 
   /** @throws java.lang.IllegalStateException if the class invariant does not hold */
   def checkInvariant()(implicit loggingContext: NamedLoggingContext): Unit =
@@ -247,7 +246,14 @@ final case class InFlightAggregation(
       .valueOr(err => ErrorUtil.invalidState(err))
 }
 
-object InFlightAggregation {
+object InFlightAggregation extends PrettyPrintingCompanion[InFlightAggregation] {
+
+  override protected val pretty: Pretty[InFlightAggregation] = prettyOfClass(
+    param("aggregated senders", _.aggregatedSenders),
+    param("max sequencing time", _.maxSequencingTimestamp),
+    paramIfNonEmpty("sequencing timestamp", _.cachedDeliveredAt.flatten),
+    param("rule", _.rule),
+  )
 
   def create(
       aggregatedSenders: Map[Member, AggregationBySender],

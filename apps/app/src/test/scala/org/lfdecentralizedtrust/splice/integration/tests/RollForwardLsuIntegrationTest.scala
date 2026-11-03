@@ -58,6 +58,8 @@ class RollForwardLsuIntegrationTest
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(5, Minutes)))
 
+  private val successorPv = ProtocolVersion.v37
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
@@ -99,14 +101,18 @@ class RollForwardLsuIntegrationTest
                   config
                     .svApps(InstanceName.tryCreate(s"sv$sv"))
                     .focus(_.localSynchronizerNodes)
-                    .modify(c => c.copy(legacy = c.current.some))
+                    .modify(c =>
+                      c.copy(
+                        legacy = c.current.some
+                      )
+                    )
                     .focus(_.onboarding)
                     .modify(c =>
                       SvOnboardingConfig
                         .RollForwardLsu(
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
-                          ProtocolVersion.v35,
+                          successorPv,
                           exportTimes = None,
                         )
                         .some
@@ -178,15 +184,9 @@ class RollForwardLsuIntegrationTest
         inside(sv1ScanBackend.listDsoSequencers()) {
           case Seq(DomainSequencers(synchronizerId, sequencers)) =>
             synchronizerId shouldBe decentralizedSynchronizerId
-            sequencers should have size 8
+            sequencers should have size 4
             sequencers.foreach { sequencer =>
-              sequencer.serial match {
-                case Some(serial) =>
-                  serial shouldBe 0
-                  sequencer.migrationId shouldBe -1
-                case None =>
-                  sequencer.migrationId shouldBe 0
-              }
+              sequencer.serial shouldBe 0
             }
         }
       }
@@ -199,17 +199,22 @@ class RollForwardLsuIntegrationTest
     val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
     val successorPsid = decentralizedSynchronizerPSId.copy(
       serial = newSynchronizerSerial,
-      protocolVersion = ProtocolVersion.v35,
+      protocolVersion = successorPv,
     )
     val topologyFreezeTime = CantonTimestamp.now()
     val upgradeTime = CantonTimestamp.now().plusSeconds(60)
     clue("Schedule logical synchronizer upgrade") {
-      scheduleLsu(topologyFreezeTime, upgradeTime, announcementNewSynchronizerSerial.value.toLong)
+      scheduleLsu(
+        topologyFreezeTime,
+        upgradeTime,
+        announcementNewSynchronizerSerial.value.toLong,
+        successorPv,
+      )
     }
     clue("Topology state contains LSU announcement") {
       eventually(3.minutes) {
         sv1ScanBackend.participantClient.topology.lsu.announcement
-          .list(Some(decentralizedSynchronizerId)) should have size (1)
+          .list(Some(decentralizedSynchronizerId)) should have size 1
       }
     }
     val allSvBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
@@ -230,6 +235,8 @@ class RollForwardLsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "roll-forward-lsu",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
       extraSequencerConfig = Seq(
         s"parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=${upgradeTime}",
         s"parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=${upgradeTime}",
@@ -347,21 +354,15 @@ class RollForwardLsuIntegrationTest
           inside(sv1ScanLocalBackend.listDsoSequencers()) {
             case Seq(DomainSequencers(synchronizerId, sequencers)) =>
               synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 12
+              sequencers should have size 8
               sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                 clue(s"check sequencers for $sv") {
-                  sequencers.size shouldBe 3
+                  sequencers.size shouldBe 2
                   forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial.value shouldBe 0
-                    sequencer.migrationId shouldBe -1
+                    sequencer.serial shouldBe 0
                   }
                   forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
-                    sequencer.migrationId shouldBe -1
-                  }
-                  forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial should be(empty)
-                    sequencer.migrationId shouldBe 0
+                    sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                   }
                 }
               }

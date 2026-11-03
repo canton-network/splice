@@ -5,12 +5,13 @@ package com.digitalasset.canton.data
 
 import cats.syntax.either.*
 import com.digitalasset.canton.crypto.*
-import com.digitalasset.canton.logging.pretty.Pretty
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrintingCompanion}
 import com.digitalasset.canton.protocol.v30
 import com.digitalasset.canton.sequencing.protocol.MediatorGroupRecipient
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.serialization.{ProtoConverter, ProtocolVersionedMemoizedEvidence}
 import com.digitalasset.canton.topology.*
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 import com.google.protobuf.ByteString
 
@@ -47,12 +48,7 @@ final case class CommonMetadata private (
 
   override val hashPurpose: HashPurpose = HashPurpose.CommonMetadata
 
-  override protected def pretty: Pretty[CommonMetadata] = prettyOfClass(
-    param("synchronizer id", _.synchronizerId),
-    param("mediator", _.mediator),
-    param("uuid", _.uuid),
-    param("salt", _.salt),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[CommonMetadata] = CommonMetadata
 
   @transient override protected lazy val companionObj: CommonMetadata.type = CommonMetadata
 
@@ -69,12 +65,20 @@ object CommonMetadata
     extends VersioningCompanionContextMemoization[
       CommonMetadata,
       HashOps,
-    ] {
+    ]
+    with PrettyPrintingCompanion[CommonMetadata] {
   override val name: String = "CommonMetadata"
 
+  override protected val pretty: Pretty[CommonMetadata] = prettyOfClass(
+    param("synchronizer id", _.synchronizerId),
+    param("mediator", _.mediator),
+    param("uuid", _.uuid),
+    param("salt", _.salt),
+  )
+
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.CommonMetadata)(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.CommonMetadata)(
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -92,20 +96,29 @@ object CommonMetadata
       None,
     )
 
-  private def fromProtoV30(hashOps: HashOps, metaDataP: v30.CommonMetadata)(
+  private def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      hashOps: HashOps,
+      metaDataP: v30.CommonMetadata,
+  )(
       bytes: ByteString
   ): ParsingResult[CommonMetadata] = {
     val v30.CommonMetadata(saltP, synchronizerIdP, uuidP, mediatorP) = metaDataP
     for {
-      synchronizerId <- PhysicalSynchronizerId
-        .fromProtoPrimitive(synchronizerIdP, "physical_synchronizer_id")
+      synchronizerId <- ProtoValidation.validateThen(
+        synchronizerIdP,
+        "physical_synchronizer_id",
+        pvv,
+      )(PhysicalSynchronizerId.fromProtoPrimitive)
 
       mediatorGroup <- ProtoConverter.parseNonNegativeInt("mediator", mediatorP)
       mediatorGroupRecipient = MediatorGroupRecipient.apply(mediatorGroup)
       salt <- ProtoConverter
         .parseRequired(Salt.fromProtoV30, "salt", saltP)
         .leftMap(_.inField("salt"))
-      uuid <- ProtoConverter.UuidConverter.fromProtoPrimitive(uuidP).leftMap(_.inField("uuid"))
+      uuid <- ProtoValidation.validateThen(uuidP, "uuid", pvv)(
+        ProtoConverter.UuidConverter.fromProtoPrimitive
+      )
     } yield CommonMetadata(synchronizerId, mediatorGroupRecipient, salt, uuid)(
       hashOps,
       Some(bytes),

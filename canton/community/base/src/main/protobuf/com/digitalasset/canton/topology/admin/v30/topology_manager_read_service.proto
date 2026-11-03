@@ -8,6 +8,7 @@ package com.digitalasset.canton.topology.admin.v30;
 import "com/digitalasset/canton/protocol/v30/sequencing_parameters.proto";
 import "com/digitalasset/canton/protocol/v30/synchronizer_parameters.proto";
 import "com/digitalasset/canton/protocol/v30/topology.proto";
+import "com/digitalasset/canton/protocol/v31/topology.proto";
 import "com/digitalasset/canton/topology/admin/v30/common.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
@@ -57,10 +58,12 @@ service TopologyManagerReadService {
   // Fetch the topology state
   // The returned bytestring can be used directly to initialize a successor sequencer
   rpc SequencerLsuState(SequencerLsuStateRequest) returns (stream SequencerLsuStateResponse);
+
+  rpc GenerateOnboardingTopologyTransactions(GenerateOnboardingTopologyTransactionsRequest) returns (GenerateOnboardingTopologyTransactionsResponse);
 }
 
 message BaseQuery {
-  StoreId store = 1;
+  v30.StoreId store = 1;
 
   // whether to query only for proposals instead of approved topology mappings
   bool proposals = 2;
@@ -81,10 +84,13 @@ message BaseQuery {
   }
   string filter_signed_key = 8;
   optional int32 protocol_version = 9;
+
+  // The canton version of the client issuing the request, e.g. "3.5.0-rc3"
+  optional string client_version = 10;
 }
 
 message BaseResult {
-  StoreId store = 1;
+  v30.StoreId store = 1;
   google.protobuf.Timestamp sequenced = 2;
   google.protobuf.Timestamp valid_from = 3;
   google.protobuf.Timestamp valid_until = 4;
@@ -103,7 +109,9 @@ message ListNamespaceDelegationRequest {
 message ListNamespaceDelegationResponse {
   message Result {
     BaseResult context = 1;
-    com.digitalasset.canton.protocol.v30.NamespaceDelegation item = 2;
+    oneof item {
+      com.digitalasset.canton.protocol.v30.NamespaceDelegation v30 = 2;
+    }
   }
   repeated Result results = 1;
 }
@@ -130,7 +138,9 @@ message ListOwnerToKeyMappingRequest {
 message ListOwnerToKeyMappingResponse {
   message Result {
     BaseResult context = 1;
-    com.digitalasset.canton.protocol.v30.OwnerToKeyMapping item = 2;
+    oneof item {
+      com.digitalasset.canton.protocol.v30.OwnerToKeyMapping v30 = 2;
+    }
   }
   repeated Result results = 1;
 }
@@ -143,7 +153,9 @@ message ListPartyToKeyMappingRequest {
 message ListPartyToKeyMappingResponse {
   message Result {
     BaseResult context = 1;
-    com.digitalasset.canton.protocol.v30.PartyToKeyMapping item = 2;
+    oneof item {
+      com.digitalasset.canton.protocol.v30.PartyToKeyMapping v30 = 2;
+    }
   }
   repeated Result results = 1;
 }
@@ -208,7 +220,10 @@ message ListPartyToParticipantRequest {
 message ListPartyToParticipantResponse {
   message Result {
     BaseResult context = 1;
-    com.digitalasset.canton.protocol.v30.PartyToParticipant item = 2;
+    oneof item {
+      com.digitalasset.canton.protocol.v30.PartyToParticipant v30 = 2;
+      com.digitalasset.canton.protocol.v31.PartyToParticipant v31 = 3;
+    }
   }
   repeated Result results = 2;
 }
@@ -295,7 +310,7 @@ message ListLsuSequencerConnectionSuccessorResponse {
 message ListAvailableStoresRequest {}
 
 message ListAvailableStoresResponse {
-  repeated StoreId store_ids = 1;
+  repeated v30.StoreId store_ids = 1;
 }
 
 message ListAllRequest {
@@ -347,7 +362,7 @@ message ExportTopologySnapshotV2Response {
 
 message GenesisStateRequest {
   // Must be specified if the genesis state is requested from a participant node.
-  optional StoreId synchronizer_store = 1;
+  optional v30.StoreId synchronizer_store = 1;
   // Optional - the effective time used to fetch the topology transactions. If not provided the effective time of the last topology transaction is used.
   google.protobuf.Timestamp timestamp = 2;
 }
@@ -359,7 +374,7 @@ message GenesisStateResponse {
 
 message GenesisStateV2Request {
   // Must be specified if the genesis state is requested from a participant node.
-  optional StoreId synchronizer_store = 1;
+  optional v30.StoreId synchronizer_store = 1;
   // Optional - the effective time used to fetch the topology transactions. If not provided the effective time of the last topology transaction is used.
   google.protobuf.Timestamp timestamp = 2;
 }
@@ -371,7 +386,7 @@ message GenesisStateV2Response {
 
 message SequencerLsuStateRequest {
   // Must be specified if the node is configured with more than one active synchronizer.
-  optional StoreId synchronizer_store = 1;
+  optional v30.StoreId synchronizer_store = 1;
 
   // The effective time used to fetch the topology transactions
   // MUST be empty for regular LSUs.
@@ -383,4 +398,20 @@ message SequencerLsuStateRequest {
 message SequencerLsuStateResponse {
   // versioned stored topology transactions
   bytes chunk = 1;
+}
+
+message GenerateOnboardingTopologyTransactionsRequest {
+  // The protocol version for which the topology transactions should be generated.
+  int32 protocol_version = 1;
+
+  // When this param is not set, a new temporary topology store will be created to
+  // generate the topology transactions.  However, this does not work if the root
+  // key is not present on the node.  Therefore, one can pass in a temporary store
+  // to use that is already seeded with both a signed root certificate, as well as
+  // a namespace delegation to an intermediate key that is present on the node.
+  optional v30.StoreId.Temporary temporary_store = 2;
+}
+
+message GenerateOnboardingTopologyTransactionsResponse {
+  com.digitalasset.canton.protocol.v30.SignedTopologyTransactions result = 1;
 }

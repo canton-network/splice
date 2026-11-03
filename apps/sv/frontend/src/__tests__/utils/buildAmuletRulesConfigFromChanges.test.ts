@@ -248,6 +248,24 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '0.5',
         newValue: '1.0',
       },
+      {
+        fieldName: 'governanceLockConfigMinimumLockAmount',
+        label: 'Governance lock config: Minimum governance lock amount in Amulet',
+        currentValue: '',
+        newValue: '20000',
+      },
+      {
+        fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
+        label: 'Governance lock config: SV lock vesting duration (microseconds)',
+        currentValue: '3600000000',
+        newValue: '7200000000',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
+        label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+        currentValue: '7200000000',
+        newValue: '3600000000',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -278,7 +296,7 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     expect(result.decentralizedSynchronizer.activeSynchronizer).toBe('sync2');
     const expectedRequiredSynchronizers = Array.from(
       result.decentralizedSynchronizer.requiredSynchronizers.map.entriesArray().map(e => e[0])
-    ).sort();
+    ).toSorted();
     expect(expectedRequiredSynchronizers).toEqual(['sync1', 'sync2']);
     expect(result.decentralizedSynchronizer.fees.baseRateTrafficLimits.burstAmount).toBe('2000');
     expect(
@@ -301,6 +319,15 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       batchSize: '200',
       rewardCouponTimeToLive: { microseconds: '259200000000' },
       appRewardCouponThreshold: '1.0',
+      extraFeaturedAssetActivityWeight: null,
+      maxExtraFeaturedAssetActivityWeightPerAsset: null,
+      dsoAppActivityWeight: null,
+    });
+
+    expect(result.governanceLockConfig).toEqual({
+      minimumLockAmount: '20000',
+      superValidatorLockVestingDuration: { microseconds: '7200000000' },
+      featuredAppLockVestingDuration: { microseconds: '3600000000' },
     });
   });
 
@@ -479,5 +506,57 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         optDevelopmentFundPercentage: '0.06',
       },
     });
+  });
+
+  test('should map empty governance lock configs to null', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'governanceLockConfigMinimumLockAmount',
+        label: 'Governance lock config: Minimum governance lock amount in Amulet',
+        currentValue: '20000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
+        label: 'Governance lock config: SV lock vesting duration (microseconds)',
+        currentValue: '7200000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
+        label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+        currentValue: '3600000000',
+        newValue: '',
+      },
+    ];
+
+    const result = buildAmuletRulesConfigFromChanges(changes);
+
+    expect(result.governanceLockConfig).toBeNull();
+  });
+});
+
+describe('buildAmuletRulesConfigFromChanges switch-over times', () => {
+  const switchOverChange = (value: string) => ({
+    fieldName: 'amuletSwitchOverTimes',
+    label: 'Amulet switch-over times',
+    currentValue: '',
+    newValue: value,
+  });
+
+  test('is null when the switch-over field is absent', () => {
+    expect(buildAmuletRulesConfigFromChanges([]).amuletSwitchOverTimes).toBeNull();
+  });
+
+  test('is null when the switch-over field value is empty', () => {
+    const result = buildAmuletRulesConfigFromChanges([switchOverChange('')]);
+    expect(result.amuletSwitchOverTimes).toBeNull();
+  });
+
+  test('parses the serialized map back into a switch-over map', () => {
+    const result = buildAmuletRulesConfigFromChanges([
+      switchOverChange('{"amulet-v2":"2026-09-06T00:00:00Z"}'),
+    ]);
+    expect(result.amuletSwitchOverTimes).toEqual({ 'amulet-v2': '2026-09-06T00:00:00Z' });
   });
 });

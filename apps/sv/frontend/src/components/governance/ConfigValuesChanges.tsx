@@ -5,6 +5,8 @@ import { Box, Typography } from '@mui/material';
 import { PartyId } from '@canton-network/splice-common-frontend';
 import { CREATE_PROPOSAL_FIELD_BODY_SX } from '../../constants/createProposalLayout';
 import { ConfigChange } from '../../utils/types';
+import { isSwitchOverField } from '../forms/formValidators';
+import { SwitchOverTimesValue } from './SwitchOverTimesValue';
 
 interface ConfigValuesChangesProps {
   changes: ConfigChange[];
@@ -65,8 +67,8 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
               {change.disabled && (
                 <Typography
                   variant="caption"
-                  color="warning.main"
                   data-testid="config-change-disabled-label"
+                  sx={{ color: 'warning.main' }}
                 >
                   Disabled field
                 </Typography>
@@ -88,11 +90,16 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
                 >
                   {change.isId ? (
                     <PartyId partyId={`${change.currentValue}`} id="config-change-current-value" />
+                  ) : isSwitchOverField(change.fieldName) ? (
+                    <SwitchOverTimesValue
+                      value={change.currentValue}
+                      data-testid="config-change-current-value"
+                    />
                   ) : (
                     <Typography
                       variant="body2"
-                      fontFamily="monospace"
                       data-testid="config-change-current-value"
+                      sx={{ fontFamily: 'monospace' }}
                     >
                       {change.currentValue}
                     </Typography>
@@ -118,11 +125,16 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
             >
               {change.isId ? (
                 <PartyId partyId={`${change.newValue}`} id="config-change-new-value" />
+              ) : isSwitchOverField(change.fieldName) ? (
+                <SwitchOverTimesValue
+                  value={change.newValue}
+                  data-testid="config-change-new-value"
+                />
               ) : (
                 <Typography
                   variant="body2"
-                  fontFamily="monospace"
                   data-testid="config-change-new-value"
+                  sx={{ fontFamily: 'monospace' }}
                 >
                   {change.newValue}
                 </Typography>

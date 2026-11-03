@@ -42,8 +42,8 @@ const VoteRequestModalContent: React.FC<VoteRequestModalProps> = ({
     }
   }, [votesQuery, handleClose]);
 
-  const dsoInfosQuery = votesHooks.useDsoInfos();
-  const svPartyId = dsoInfosQuery.data?.svPartyId;
+  const svInfoQuery = votesHooks.useSvInfo();
+  const svPartyId = svInfoQuery.data?.svPartyId;
 
   if (voteRequestQuery.isLoading || voteRequests.isLoading) {
     return <Loading />;
@@ -71,7 +71,7 @@ const VoteRequestModalContent: React.FC<VoteRequestModalProps> = ({
 
   const curSvVote: SvVote | undefined = votesQuery.data.find(v => v.voter === svPartyId);
 
-  const allVotes = [...votesQuery.data].sort((a, b) => {
+  const allVotes = votesQuery.data.toSorted((a, b) => {
     return b.expiresAt.valueOf() - a.expiresAt.valueOf();
   });
 

@@ -38,21 +38,25 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.grpc.OutputFileStreamObserver
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.admin.data.{
+  AcsReplicationStatus,
   ContractImportMode,
   PartyReplicationStatus,
   RepresentativePackageIdOverride,
 }
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.topology.*
+import com.digitalasset.canton.topology.admin.grpc.BaseWriteRequest
 import com.digitalasset.canton.topology.transaction.*
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.version.ReleaseVersion
 import com.digitalasset.canton.{LedgerParticipantId, SynchronizerAlias, config}
 import com.google.common.annotations.VisibleForTesting
 import io.grpc.Context
 
-import java.io.FileInputStream
 import java.time.Instant
 import java.util.UUID
+import scala.concurrent.ExecutionContext
 
 class PartiesAdministrationGroup(
     runner: AdminCommandRunner,
@@ -114,6 +118,7 @@ class ParticipantPartiesAdministrationGroup(
     with FeatureFlagFilter {
 
   private def timeouts: ConsoleCommandTimeout = consoleEnvironment.commandTimeouts
+  private implicit def ec: ExecutionContext = consoleEnvironment.environment.executionContext
 
   @Help.Summary("List parties hosted by this participant")
   @Help.Description(
@@ -410,33 +415,58 @@ class ParticipantPartiesAdministrationGroup(
       .list(synchronizerId, filterParty = partyId.filterString)
       .maxByOption(_.context.serial)
     val nextSerial = currentTransaction
-      .map(_.context.serial.increment)
-
-    reference
-      .adminCommand(
-        TopologyAdminCommands.Write.Propose(
-          mapping = PartyToParticipant.create(
-            partyId,
-            PositiveInt.one,
-            Seq(
-              HostingParticipant(
-                participantId,
-                ParticipantPermission.Submission,
-              )
-            ),
-            partySigningKeysWithThreshold =
-              currentTransaction.flatMap(_.item.partySigningKeysWithThreshold),
-          ),
-          // let the topology service determine the appropriate keys to use
-          signedBy = Seq.empty,
-          serial = nextSerial,
-          store = synchronizerId,
-          mustFullyAuthorize = true,
-          change = TopologyChangeOp.Replace,
-          forceChanges = ForceFlags.none,
-          waitToBecomeEffective = synchronize,
+      .map(
+        _.context.serial.increment.getOrElse(
+          consoleEnvironment.raiseError("PartyToParticipant max serial reached")
         )
       )
+
+    // The command rewrites this participant's entry to Active. A Nominated or Freezing entry must
+    // move forward only through an explicit hosting state change, so the command fails instead.
+    val checkOwnEntryCanHost = currentTransaction
+      .flatMap(_.item.participants.find(_.participantId == participantId))
+      .map(_.state)
+      .filterNot(_.canHost)
+      .map(state =>
+        s"This participant's hosting state for party $partyId is $state. Enabling the party would rewrite it to Active."
+      )
+      .toLeft(())
+
+    for {
+      _ <- ConsoleCommandResult.fromEither(checkOwnEntryCanHost)
+      nodeStatus <- reference.adminCommand(
+        ParticipantAdminCommands.Health.ParticipantStatusCommand()
+      )
+      result <- reference
+        .adminCommand(
+          TopologyAdminCommands.Write.Propose(
+            baseRequest = BaseWriteRequest(
+              clientVersion = Some(ReleaseVersion.current)
+            ),
+            mapping = PartyToParticipant.create(
+              partyId,
+              PositiveInt.one,
+              Seq(
+                HostingParticipant(
+                  participantId,
+                  ParticipantPermission.Submission,
+                )
+              ),
+              partySigningKeysWithThreshold =
+                currentTransaction.flatMap(_.item.partySigningKeysWithThreshold),
+            ),
+            // let the topology service determine the appropriate keys to use
+            signedBy = Seq.empty,
+            serial = nextSerial,
+            store = synchronizerId,
+            mustFullyAuthorize = true,
+            change = TopologyChangeOp.Replace,
+            forceChanges = ForceFlags.none,
+            waitToBecomeEffective = synchronize,
+            serverVersion = nodeStatus.releaseVersion,
+          )
+        )
+    } yield result
   }
 
   @Help.Summary("Disable party on participant")
@@ -521,17 +551,19 @@ class ParticipantPartiesAdministrationGroup(
       serial: PositiveInt,
       participantPermission: ParticipantPermission,
   ): String = check(FeatureFlag.Preview) {
-    consoleEnvironment.run {
-      reference.adminCommand(
-        ParticipantAdminCommands.PartyManagement.AddPartyWithAcsAsync(
-          new java.io.File(importFilePath),
-          party,
-          synchronizerId,
-          sourceParticipant,
-          serial,
-          participantPermission,
+    TraceContext.withNewTraceContext("add_party_with_acs_async") { implicit traceContext =>
+      consoleEnvironment.run {
+        reference.adminCommand(
+          ParticipantAdminCommands.PartyManagement.AddPartyWithAcsAsync(
+            new java.io.File(importFilePath),
+            party,
+            synchronizerId,
+            sourceParticipant,
+            serial,
+            participantPermission,
+          )
         )
-      )
+      }
     }
   }
 
@@ -546,6 +578,22 @@ class ParticipantPartiesAdministrationGroup(
       consoleEnvironment.run {
         reference.adminCommand(
           ParticipantAdminCommands.PartyManagement.GetAddPartyStatus(addPartyRequestId)
+        )
+      }
+    }
+
+  @Help.Summary("Obtain status on a pending ACS replication", FeatureFlag.Preview)
+  @Help.Description(
+    """Retrieve status information on an ACS replication previously triggered either via
+      |the `add_party_async` or `get_remote_acs`
+      |endpoint by specifying the previously returned request id parameter.
+      """
+  )
+  def get_acs_replication_status(acsReplicationRequestId: String): AcsReplicationStatus =
+    check(FeatureFlag.Preview) {
+      consoleEnvironment.run {
+        reference.adminCommand(
+          ParticipantAdminCommands.PartyManagement.GetAcsReplicationStatus(acsReplicationRequestId)
         )
       }
     }
@@ -781,8 +829,9 @@ class ParticipantPartiesAdministrationGroup(
       |- party: The party being replicated, it must already be active on the target
       |  participant.
       |- synchronizerId: Restricts the export to the given synchronizer.
-      |- targetParticipantId: Unique identifier of the target participant where the
-      |  party will be replicated.
+      |- targetParticipantId: Unique identifier of the target participant where the party
+      |  will be replicated. Restricts the export to contracts not already known to
+      |  the target participant.
       |- beginOffsetExclusive: Exclusive ledger offset used as a starting point to find
       |  the party's activation on the target participant.
       |- exportFilePath: The path denoting the file where the ACS snapshot will be
@@ -880,17 +929,19 @@ class ParticipantPartiesAdministrationGroup(
       representativePackageIdOverride: RepresentativePackageIdOverride =
         RepresentativePackageIdOverride.NoOverride,
   ): Unit =
-    consoleEnvironment.run {
-      reference.adminCommand(
-        ParticipantAdminCommands.PartyManagement.ImportPartyAcs(
-          new FileInputStream(new java.io.File(importFilePath)),
-          synchronizerId,
-          if (workflowIdPrefix.nonEmpty) workflowIdPrefix else s"import-${UUID.randomUUID}",
-          contractImportMode,
-          representativePackageIdOverride,
-          party,
+    TraceContext.withNewTraceContext("import_party_acs") { implicit traceContext =>
+      consoleEnvironment.run {
+        reference.adminCommand(
+          ParticipantAdminCommands.PartyManagement.ImportPartyAcs(
+            new java.io.FileInputStream(importFilePath),
+            synchronizerId,
+            if (workflowIdPrefix.nonEmpty) workflowIdPrefix else s"import-${UUID.randomUUID}",
+            contractImportMode,
+            representativePackageIdOverride,
+            party,
+          )
         )
-      )
+      }
     }
 
   @Help.Summary(

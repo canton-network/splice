@@ -4,9 +4,11 @@
 package com.digitalasset.canton.console.commands
 
 import better.files.File
+import cats.syntax.either.*
 import cats.syntax.foldable.*
 import com.digitalasset.canton.admin.api.client.commands.ParticipantAdminCommands
 import com.digitalasset.canton.admin.api.client.data.{
+  PendingOperationMetadata,
   SequencerConnectionValidation,
   SynchronizerConnectionConfig,
 }
@@ -25,18 +27,26 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.grpc.OutputFileStreamObserver
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.admin.data.{
+  ActiveContract,
   ContractImportMode,
   RepairContract,
   RepresentativePackageIdOverride,
 }
 import com.digitalasset.canton.protocol.LfContractId
-import com.digitalasset.canton.topology.{PartyId, PhysicalSynchronizerId, SynchronizerId}
+import com.digitalasset.canton.topology.{
+  PartyId,
+  PhysicalSynchronizerId,
+  Synchronizer,
+  SynchronizerId,
+}
 import com.digitalasset.canton.tracing.NoTracing
+import com.digitalasset.canton.util.ResourceUtil
 import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{ReassignmentCounter, SequencerCounter, SynchronizerAlias}
-import java.util.UUID
 import io.grpc.Context
 
+import java.util.UUID
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 class ParticipantRepairAdministration(
@@ -47,6 +57,7 @@ class ParticipantRepairAdministration(
     with NoTracing
     with Helpful {
   private def timeouts: ConsoleCommandTimeout = consoleEnvironment.commandTimeouts
+  private implicit def ec: ExecutionContext = consoleEnvironment.environment.executionContext
 
   @Help.Summary("Purge contracts with specified Contract IDs from local participant")
   @Help.Description(
@@ -70,6 +81,7 @@ class ParticipantRepairAdministration(
       synchronizerAlias: SynchronizerAlias,
       contractIds: Seq[LfContractId],
       ignoreAlreadyPurged: Boolean = true,
+      forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean = false,
   ): Unit = check(FeatureFlag.Repair) {
     consoleEnvironment.run {
       runner.adminCommand(
@@ -77,6 +89,8 @@ class ParticipantRepairAdministration(
           synchronizerAlias = synchronizerAlias,
           contracts = contractIds,
           ignoreAlreadyPurged = ignoreAlreadyPurged,
+          forceRepairWhenTopologyTransactionAtLedgerEnd =
+            forceRepairWhenTopologyTransactionAtLedgerEnd,
         )
       )
     }
@@ -101,21 +115,87 @@ class ParticipantRepairAdministration(
       |- source: The synchronizer alias of the source synchronizer.
       |- target: The configuration for the target synchronizer.
       |- force: If true, migration is forced ignoring in-flight transactions. Defaults to false.
+      |- forceRepairWhenTopologyTransactionAtLedgerEnd: force flag to proceed even if a topology
+      |  transaction is at the ledger end. Defaults to false.
       """
   )
   def migrate_synchronizer(
       source: SynchronizerAlias,
       target: SynchronizerConnectionConfig,
       force: Boolean = false,
+      forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean = false,
   ): Unit =
     check(FeatureFlag.Repair) {
       consoleEnvironment.run {
         runner.adminCommand(
           ParticipantAdminCommands.ParticipantRepairManagement
-            .MigrateSynchronizer(source, target.toInternal, force = force)
+            .MigrateSynchronizer(
+              source,
+              target.toInternal,
+              force = force,
+              forceRepairWhenTopologyTransactionAtLedgerEnd =
+                forceRepairWhenTopologyTransactionAtLedgerEnd,
+            )
         )
       }
     }
+
+  object pending_operations {
+    @Help.Summary("List all pending operation for the given filters", FeatureFlag.Repair)
+    @Help.Description(
+      """Lists pending operations matching the provided filters.
+        |
+        |Parameters:
+        |- filterOperationName: Optional filter, restricts results to a specific operation type.
+        |- filterSynchronizer: Optional filter, restricts results to a specific synchronizer.
+        |- filterOperationKey: Optional filter, restricts results to a specific operation key.
+        |
+        |Returns:
+        |- A sequence of pending operation metadata entries.
+    """
+    )
+    def list(
+        filterOperationName: Option[String] = None,
+        filterSynchronizer: Option[Synchronizer] = None,
+        filterOperationKey: Option[String] = None,
+    ): Seq[PendingOperationMetadata] =
+      check(FeatureFlag.Repair) {
+        consoleEnvironment.run {
+          runner.adminCommand(
+            ParticipantAdminCommands.ParticipantRepairManagement
+              .ListPendingOperations(filterOperationName, filterSynchronizer, filterOperationKey)
+          )
+        }
+      }
+
+    @Help.Summary("Delete pending operation for the given filters", FeatureFlag.Repair)
+    @Help.Description(
+      """Delete pending operation matching the provided filters.
+        |
+        |Parameters:
+        |- operationName: restricts results to a specific operation type. Mandatory parameter.
+        |- synchronizer: restricts results to a specific synchronizer. Mandatory parameter.
+        |- operationKey: restricts results to a specific operation key. Mandatory parameter.
+        |
+        |Returns:
+        |- Unit if the pending operation was successfully deleted, otherwise an error is raised.
+    """
+    )
+    def delete(
+        operationName: String,
+        synchronizer: Synchronizer,
+        operationKey: String,
+    ): Unit =
+      check(FeatureFlag.Repair) {
+        consoleEnvironment.run {
+          runner.adminCommand(
+            ParticipantAdminCommands.ParticipantRepairManagement
+              .DeletePendingOperation(operationName, synchronizer, operationKey)
+          )
+        }
+      }
+
+  }
 
   @Help.Summary("Change assignation of contracts from one synchronizer to another")
   @Help.Description(
@@ -145,6 +225,8 @@ class ParticipantRepairAdministration(
       |  to be forced, the new value can be passed in the map.
       |- skipInactive: (default true) whether to skip inactive contracts mentioned in the
       |  contractIds list
+      |- forceRepairWhenTopologyTransactionAtLedgerEnd: force flag to proceed even if a topology
+      |  transaction is at the ledger end. Defaults to false.
       """
   )
   def change_assignation(
@@ -153,6 +235,7 @@ class ParticipantRepairAdministration(
       targetSynchronizerAlias: SynchronizerAlias,
       reassignmentCounterOverride: Map[LfContractId, ReassignmentCounter] = Map.empty,
       skipInactive: Boolean = true,
+      forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean = false,
   ): Unit =
     check(FeatureFlag.Repair) {
       consoleEnvironment.run {
@@ -163,6 +246,8 @@ class ParticipantRepairAdministration(
               targetSynchronizerAlias = targetSynchronizerAlias,
               skipInactive = skipInactive,
               contracts = contractsIds.map(cid => (cid, reassignmentCounterOverride.get(cid))),
+              forceRepairWhenTopologyTransactionAtLedgerEnd =
+                forceRepairWhenTopologyTransactionAtLedgerEnd,
             )
         )
       }
@@ -295,6 +380,8 @@ class ParticipantRepairAdministration(
       |  package IDs to contracts upon ACS import.
       |- excludedStakeholders: When defined, any contract that has one or more of these
       |  parties as a stakeholder will not be added.
+      |- forceRepairWhenTopologyTransactionAtLedgerEnd: force flag to proceed even if a topology
+      |  transaction is at the ledger end. Defaults to false.
       """
   )
   def import_acs(
@@ -305,6 +392,7 @@ class ParticipantRepairAdministration(
       representativePackageIdOverride: RepresentativePackageIdOverride =
         RepresentativePackageIdOverride.NoOverride,
       excludedStakeholders: Set[PartyId] = Set.empty,
+      forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean = false,
   ): Unit =
     check(FeatureFlag.Repair) {
       consoleEnvironment.run {
@@ -316,6 +404,7 @@ class ParticipantRepairAdministration(
             representativePackageIdOverride,
             excludedStakeholders,
             synchronizerId,
+            forceRepairWhenTopologyTransactionAtLedgerEnd,
           )
         )
       }
@@ -356,6 +445,8 @@ class ParticipantRepairAdministration(
       |  representative package IDs to contracts upon ACS import.
       |- excludedStakeholders: When defined, any contract that has one or more of
       |  these parties as a stakeholder will not be added.
+      |- forceRepairWhenTopologyTransactionAtLedgerEnd: force flag to proceed even if a topology
+      |  transaction is at the ledger end. Defaults to false.
     """
   )
   def add(
@@ -367,7 +458,46 @@ class ParticipantRepairAdministration(
       representativePackageIdOverride: RepresentativePackageIdOverride =
         RepresentativePackageIdOverride.NoOverride,
       excludedStakeholders: Set[PartyId] = Set.empty,
-  ): Unit = ???
+      forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean = false,
+  ): Unit = {
+
+    val temporaryFile = File.newTemporaryFile(suffix = ".gz")
+    val outputStream = temporaryFile.newGzipOutputStream()
+    val resolvedWorkflowIdPrefix =
+      if (workflowIdPrefix.isEmpty) s"import-${UUID.randomUUID}" else workflowIdPrefix
+
+    ResourceUtil.withResource(outputStream) { outputStream =>
+      contracts
+        .traverse_ { repairContract =>
+          for {
+            lapiContract <- RepairContract.toLapiActiveContract(repairContract, synchronizerId)
+            activeContract = ActiveContract.create(lapiContract)(protocolVersion)
+            _ = activeContract.writeDelimitedTo(outputStream)
+          } yield outputStream.flush()
+        }
+        .valueOr(err =>
+          consoleEnvironment.raiseError(s"Unable to add contract data to stream: $err")
+        )
+    }
+
+    check(FeatureFlag.Repair) {
+      consoleEnvironment.run {
+        runner.adminCommand(
+          ParticipantAdminCommands.ParticipantRepairManagement.ImportAcs(
+            temporaryFile.toJava,
+            resolvedWorkflowIdPrefix,
+            contractImportMode,
+            representativePackageIdOverride,
+            excludedStakeholders,
+            synchronizerId,
+            forceRepairWhenTopologyTransactionAtLedgerEnd,
+          )
+        )
+      }
+    }
+
+    temporaryFile.delete(swallowIOExceptions = true)
+  }
 
   @Help.Summary("Purge the data of a deactivated synchronizer")
   @Help.Description(
@@ -463,12 +593,15 @@ class ParticipantRepairAdministration(
       |  synchronizer.
       |- source: The source synchronizer ID.
       |- target: Alias of the target synchronizer.
+      |- forceRepairWhenTopologyTransactionAtLedgerEnd: force flag to proceed even if a topology
+      |  transaction is at the ledger end. Defaults to false.
       """
   )
   def rollback_unassignment(
       reassignmentId: String,
       source: SynchronizerId,
       target: SynchronizerId,
+      forceRepairWhenTopologyTransactionAtLedgerEnd: Boolean = false,
   ): Unit =
     check(FeatureFlag.Repair) {
       consoleEnvironment.run {
@@ -478,6 +611,8 @@ class ParticipantRepairAdministration(
               reassignmentId = reassignmentId,
               source = source,
               target = target,
+              forceRepairWhenTopologyTransactionAtLedgerEnd =
+                forceRepairWhenTopologyTransactionAtLedgerEnd,
             )
         )
       }
@@ -517,5 +652,28 @@ class ParticipantRepairAdministration(
             )
         )
       }
+    }
+
+  @Help.Summary("""Delete a synchronizer configuration""")
+  @Help.Description(
+    """The synchronizer configuration to be deleted is uniquely specified by
+      |the physicalSynchronizerId.
+      |
+      |WARNING: This command should not be executed under normal operational circumstances.
+      |In rare occasions, it can be necessary to bring the synchronizer configuration into
+      |a consistent state by deleting a configuration (for example, after a failed LSU attempt
+      |with the wrong successor synchronizer id).
+      |
+      |Parameters:
+      |- physicalSynchronizerId: the physical synchronizer id of the synchronizer"""
+  )
+  def delete_synchronizer_config(physicalSynchronizerId: PhysicalSynchronizerId): Unit =
+    check(FeatureFlag.Repair) {
+      consoleEnvironment.run(
+        runner.adminCommand(
+          ParticipantAdminCommands.ParticipantRepairManagement
+            .DeleteSynchronizerConfig(physicalSynchronizerId)
+        )
+      )
     }
 }

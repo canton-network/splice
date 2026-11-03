@@ -8,6 +8,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.sequencer.api.v30
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.Member
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 
 /** A request to receive events from a given counter from a sequencer.
@@ -34,8 +35,8 @@ object SubscriptionRequest extends VersioningCompanion[SubscriptionRequest] {
   override val name: String = "SubscriptionRequestV2"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.SubscriptionRequest)(
-      supportedProtoVersion(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.SubscriptionRequest)(
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -48,11 +49,14 @@ object SubscriptionRequest extends VersioningCompanion[SubscriptionRequest] {
     SubscriptionRequest(member, timestamp)(protocolVersionRepresentativeFor(protocolVersion))
 
   def fromProtoV30(
-      subscriptionRequestP: v30.SubscriptionRequest
+      pvv: ProtocolVersionValidation,
+      subscriptionRequestP: v30.SubscriptionRequest,
   ): ParsingResult[SubscriptionRequest] = {
     val v30.SubscriptionRequest(memberP, timestampOP) = subscriptionRequestP
     for {
-      member <- Member.fromProtoPrimitive(memberP, "member")
+      member <- ProtoValidation.validateThen(memberP, "member", pvv)(
+        Member.fromProtoPrimitive
+      )
       timestamp <- timestampOP.traverse(CantonTimestamp.fromProtoPrimitive)
       rpv <- protocolVersionRepresentativeFor(ProtoVersion(30))
     } yield SubscriptionRequest(member, timestamp)(rpv)

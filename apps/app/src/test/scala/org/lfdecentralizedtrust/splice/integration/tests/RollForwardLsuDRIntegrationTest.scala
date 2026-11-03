@@ -2,7 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import better.files.*
 import cats.implicits.catsSyntaxOptionId
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
 import com.digitalasset.canton.admin.api.client.data
 import com.digitalasset.canton.concurrent.Threading
@@ -85,7 +85,7 @@ class RollForwardLsuDRIntegrationTest
   val trafficExportTimeFile = File.newTemporaryFile()
 
   // This needs to be long enough in the future that we can start Canton and initialize for SVs.
-  val maxSequencingTime = CantonTimestamp.now().plusSeconds(240)
+  val maxSequencingTime = CantonTimestamp.now().plusSeconds(300)
   // 5s chosen by fair dice roll
   val lowerBoundSequencingTimeExclusive = maxSequencingTime.plusSeconds(5)
   val upgradeTime = lowerBoundSequencingTimeExclusive
@@ -133,14 +133,18 @@ class RollForwardLsuDRIntegrationTest
                   config
                     .svApps(InstanceName.tryCreate(s"sv$sv"))
                     .focus(_.localSynchronizerNodes)
-                    .modify(c => c.copy(legacy = c.current.some))
+                    .modify(c =>
+                      c.copy(
+                        legacy = c.current.some
+                      )
+                    )
                     .focus(_.onboarding)
                     .modify(c =>
                       SvOnboardingConfig
                         .RollForwardLsu(
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
-                          ProtocolVersion.v35,
+                          ProtocolVersion.v37,
                           exportTimes = Some(
                             SvOnboardingConfig.RollForwardLsuTimestampConfig(
                               topologyExportTime = LsuRollForwardTimestamp.TimestampFromFile(
@@ -199,6 +203,8 @@ class RollForwardLsuDRIntegrationTest
       participants = false,
       enableBftSequencer = false,
       logSuffix = "roll-forward-lsu-before-dr",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
       extraSequencerConfig =
         Seq(s"parameters.lsu-repair.global-max-sequencing-time-exclusive=${maxSequencingTime}"),
       overrideSvDbsSuffix = Some("lsu_drbeforedr"),
@@ -257,6 +263,8 @@ class RollForwardLsuDRIntegrationTest
         participants = false,
         enableBftSequencer = true,
         logSuffix = "roll-forward-lsu-dr",
+        // LSU exports the sequencer and mediator keys
+        enableKeyDownload = true,
         extraSequencerConfig = Seq(
           s"parameters.lsu-repair.lsu-sequencing-bounds-override.lower-bound-sequencing-time-exclusive=${lowerBoundSequencingTimeExclusive}",
           s"parameters.lsu-repair.lsu-sequencing-bounds-override.upgrade-time=${upgradeTime}",
@@ -393,21 +401,15 @@ class RollForwardLsuDRIntegrationTest
             inside(sv1ScanLocalBackend.listDsoSequencers()) {
               case Seq(DomainSequencers(synchronizerId, sequencers)) =>
                 synchronizerId shouldBe decentralizedSynchronizerId
-                sequencers should have size 12
+                sequencers should have size 8
                 sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                   clue(s"check sequencers for $sv") {
-                    sequencers.size shouldBe 3
+                    sequencers.size shouldBe 2
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe 0
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe 0
                     }
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
-                      sequencer.migrationId shouldBe -1
-                    }
-                    forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial should be(empty)
-                      sequencer.migrationId shouldBe 0
+                      sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                     }
                   }
                 }

@@ -5,12 +5,12 @@ package com.digitalasset.canton.participant
 
 import cats.Eval
 import cats.data.EitherT
-import cats.implicits.toTraverseOps
+import cats.syntax.foldable.*
 import cats.syntax.option.*
+import cats.syntax.traverse.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.admin.participant.v30
 import com.digitalasset.canton.auth.CantonAdminTokenDispenser
-import com.digitalasset.canton.common.sequencer.grpc.SequencerInfoLoader
 import com.digitalasset.canton.concurrent.ExecutionContextIdlenessExecutorService
 import com.digitalasset.canton.config.AdminTokenConfig
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
@@ -22,38 +22,44 @@ import com.digitalasset.canton.crypto.{
   SyncCryptoApiParticipantProvider,
   SynchronizerCrypto,
 }
-import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.data.{CantonTimestamp, Offset}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.environment.*
 import com.digitalasset.canton.error.FatalError
 import com.digitalasset.canton.health.*
-import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, HasCloseContext}
+import com.digitalasset.canton.health.HealthComponent.AlwaysHealthyComponent
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, HasCloseContext, UnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.{CantonGrpcUtil, CantonMutableHandlerRegistry}
 import com.digitalasset.canton.participant.ParticipantNodeBootstrap.ParticipantServices
 import com.digitalasset.canton.participant.admin.*
 import com.digitalasset.canton.participant.admin.grpc.*
+import com.digitalasset.canton.participant.admin.party.acsreplication.AcsReplicator
+import com.digitalasset.canton.participant.admin.party.{PartyReplicationEndpoints, PartyReplicator}
+import com.digitalasset.canton.participant.commitment.*
 import com.digitalasset.canton.participant.config.*
-import com.digitalasset.canton.participant.health.admin.ParticipantStatus
-import com.digitalasset.canton.participant.ledger.api.{
-  AcsCommitmentPublicationPostProcessor,
-  LedgerApiIndexer,
-  LedgerApiIndexerConfig,
-  LedgerApiServer,
-  StartableStoppableLedgerApiDependentServices,
+import com.digitalasset.canton.participant.extension.{
+  ExtensionServiceExternalCallValidator,
+  ExtensionServiceManager,
 }
+import com.digitalasset.canton.participant.health.admin.ParticipantStatus
+import com.digitalasset.canton.participant.ledger.api.*
 import com.digitalasset.canton.participant.metrics.ParticipantMetrics
+import com.digitalasset.canton.participant.protocol.party.DefaultAcsReplicationContractHandlerFactory
 import com.digitalasset.canton.participant.protocol.submission.{
   CommandDeduplicatorImpl,
   InFlightSubmissionTracker,
 }
-import com.digitalasset.canton.participant.pruning.{AcsCommitmentProcessor, PruningProcessor}
+import com.digitalasset.canton.participant.protocol.validation.ExternalCallValidator
+import com.digitalasset.canton.participant.pruning.PruningProcessor
 import com.digitalasset.canton.participant.replica.ParticipantReplicaManager
 import com.digitalasset.canton.participant.scheduler.{
   ParticipantPruningScheduler,
   ParticipantPurgeStoresAfterLsuScheduler,
 }
 import com.digitalasset.canton.participant.store.*
+import com.digitalasset.canton.participant.store.AcsDigestStore.allCheckpointsFilter
 import com.digitalasset.canton.participant.store.memory.MutablePackageMetadataViewImpl
 import com.digitalasset.canton.participant.sync.*
 import com.digitalasset.canton.participant.sync.ConnectedSynchronizer.SubmissionReady
@@ -62,25 +68,39 @@ import com.digitalasset.canton.participant.synchronizer.grpc.GrpcSynchronizerReg
 import com.digitalasset.canton.participant.topology.*
 import com.digitalasset.canton.platform.apiserver.execution.CommandProgressTracker
 import com.digitalasset.canton.platform.apiserver.services.admin.PackageUpgradeValidator
-import com.digitalasset.canton.platform.apiserver.services.command.TrafficEnforcementBackend
+import com.digitalasset.canton.platform.apiserver.services.command.{
+  TrafficEnforcementBackend,
+  TrafficEnforcementBackendImpl,
+}
+import com.digitalasset.canton.platform.config.TrafficEnforcementServerConfig
 import com.digitalasset.canton.platform.store.LedgerApiContractStoreImpl
-import com.digitalasset.canton.platform.store.backend.ParameterStorageBackend
+import com.digitalasset.canton.platform.store.backend.LedgerEnd
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.resource.*
 import com.digitalasset.canton.scheduler.{Cron, CronWindowSchedule, Schedulers, SchedulersImpl}
-import com.digitalasset.canton.sequencing.client.{RecordingConfig, ReplayConfig, SequencerClient}
+import com.digitalasset.canton.sequencing.client.{RecordingConfig, ReplayConfig}
 import com.digitalasset.canton.store.IndexedStringStore
 import com.digitalasset.canton.store.packagemeta.PackageMetadata
+import com.digitalasset.canton.tea.TrafficEnforcementApp
 import com.digitalasset.canton.time.*
 import com.digitalasset.canton.time.admin.v30.SynchronizerTimeServiceGrpc
 import com.digitalasset.canton.topology.*
-import com.digitalasset.canton.topology.admin.grpc.PsidLookup
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreInitializationStatus.{
+  Initialized,
+  NotInitialized,
+}
+import com.digitalasset.canton.topology.admin.grpc.{PsidLookupAt, TopologyStoreInitializationStatus}
 import com.digitalasset.canton.topology.client.SynchronizerTopologyClient
 import com.digitalasset.canton.topology.store.TopologyStore
 import com.digitalasset.canton.topology.store.TopologyStoreId.{AuthorizedStore, SynchronizerStore}
 import com.digitalasset.canton.topology.transaction.HostingParticipant
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.{EitherTUtil, SingleUseCell}
+import com.digitalasset.canton.util.{
+  EitherTUtil,
+  FutureUnlessShutdownUtil,
+  MonadUtil,
+  SingleUseCell,
+}
 import com.digitalasset.canton.version.{
   ProtocolVersion,
   ProtocolVersionCompatibility,
@@ -94,7 +114,8 @@ import org.apache.pekko.actor.ActorSystem
 
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.atomic.AtomicReference
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
+import scala.util.Success
 
 class ParticipantNodeBootstrap(
     arguments: CantonNodeBootstrapCommonArguments[
@@ -132,15 +153,28 @@ class ParticipantNodeBootstrap(
       sys.error("mutablePackageMetadataView should be defined")
     )
 
-  override protected def sequencedTopologyStores: Seq[TopologyStore[SynchronizerStore]] =
+  override protected def sequencedTopologyStores: Seq[
+    TopologyStoreInitializationStatus[SynchronizerStore, TopologyStore]
+  ] =
     cantonSyncService.get.toList
-      .flatMap(_.syncPersistentStateManager.getAll.values)
-      .map(_.topologyStore)
+      .flatMap(sync => sync.syncPersistentStateManager.getAll.values)
+      .map(persistent =>
+        if (persistent.physical.connectivityStatusStore.isTopologyInitialized)
+          Initialized(persistent.topologyStore)
+        else
+          NotInitialized(persistent.topologyStore.storeId)
+      )
 
-  override protected def sequencedTopologyManagers: Seq[SynchronizerTopologyManager] =
-    sequencedTopologyStores.flatMap(store =>
-      cantonSyncService.get.toList.flatMap(_.lookupTopologyManager(store.storeId.psid))
-    )
+  override protected def sequencedTopologyManagers
+      : Seq[TopologyStoreInitializationStatus[SynchronizerStore, TopologyManager.Aux]] =
+    for {
+      sync <- cantonSyncService.get.toList
+      store <- sequencedTopologyStores
+      mgr <- store.traverse[SynchronizerStore, TopologyManager.Aux, Option](store =>
+        sync
+          .lookupTopologyManager(store.storeId.psid)
+      )
+    } yield mgr
 
   override protected def lookupTopologyClient(
       psid: PhysicalSynchronizerId
@@ -152,8 +186,18 @@ class ParticipantNodeBootstrap(
   ): Option[SynchronizerTimeTracker] =
     cantonSyncService.get.flatMap(_.lookupSynchronizerTimeTracker(psid).toOption)
 
-  override protected lazy val lookupActivePsid: PsidLookup =
-    synchronizerId => cantonSyncService.get.flatMap(_.activePsidForLsid(synchronizerId))
+  override protected val lookupActivePsid: PsidLookupAt = new PsidLookupAt {
+    override def activePsidFor(synchronizerId: SynchronizerId): Option[PhysicalSynchronizerId] =
+      cantonSyncService.get.flatMap(_.activePsidLookup.activePsidFor(synchronizerId))
+
+    override def activePsidAt(
+        synchronizerId: SynchronizerId,
+        timestamp: CantonTimestamp,
+    ): Either[String, PhysicalSynchronizerId] =
+      cantonSyncService.get
+        .toRight("No sync service found")
+        .flatMap(_.activePsidLookup.activePsidAt(synchronizerId, timestamp))
+  }
 
   override protected def customNodeStages(
       storage: Storage,
@@ -207,20 +251,19 @@ class ParticipantNodeBootstrap(
     )
     mutablePackageMetadataView.putIfAbsent(packageMetadataView).discard
 
-    def acsInspectionPerSynchronizer(): Map[SynchronizerId, AcsInspection] =
+    def acsInspectionPerSynchronizer: Map[SynchronizerId, AcsInspection] =
       cantonSyncService.get
         .map(_.syncPersistentStateManager.getAllLogical.view.mapValues(_.acsInspection).toMap)
         .getOrElse(Map.empty)
 
-    def reassignmentStore(): Map[SynchronizerId, ReassignmentStore] =
+    def reassignmentStore: Map[SynchronizerId, ReassignmentStore] =
       cantonSyncService.get
         .map(_.syncPersistentStateManager.getAllLogical.view.mapValues(_.reassignmentStore).toMap)
         .getOrElse(Map.empty)
 
-    def ledgerEnd(): FutureUnlessShutdown[Option[ParameterStorageBackend.LedgerEnd]] =
+    def ledgerEnd: Option[LedgerEnd] =
       cantonSyncService.get
-        .traverse(_.ledgerApiIndexer.asEval.value.ledgerApiStore.value.ledgerEnd)
-        .map(_.flatten)
+        .flatMap(_.ledgerApiIndexer.asEval.value.ledgerApiStore.ledgerEnd)
     val topologyManager = new AuthorizedTopologyManager(
       nodeId,
       clock,
@@ -264,7 +307,7 @@ class ParticipantNodeBootstrap(
         checkCannotDisablePartyWithActiveContracts(
           partyId,
           forceFlags,
-          () => acsInspectionPerSynchronizer(),
+          acsInspectionPerSynchronizer,
         )
 
       override def checkInsufficientSignatoryAssigningParticipantsForParty(
@@ -282,8 +325,8 @@ class ParticipantNodeBootstrap(
           nextThreshold,
           nextConfirmingParticipants,
           forceFlags,
-          () => reassignmentStore(),
-          () => ledgerEnd(),
+          reassignmentStore,
+          () => ledgerEnd,
         )
 
       override def checkInsufficientParticipantPermissionForSignatoryParty(
@@ -295,7 +338,7 @@ class ParticipantNodeBootstrap(
         checkInsufficientParticipantPermissionForSignatoryParty(
           party,
           forceFlags,
-          () => acsInspectionPerSynchronizer(),
+          acsInspectionPerSynchronizer,
         )
 
     }
@@ -345,36 +388,32 @@ class ParticipantNodeBootstrap(
           storage,
           clock,
           crypto.pureCrypto,
-          participantServices.participantTopologyDispatcher,
-          participantServices.cantonSyncService,
+          participantServices,
           adminTokenDispenser,
           recordSequencerInteractions,
           replaySequencerConfig,
           loggerFactory,
-          healthService.dependencies.map(_.toComponentStatus),
+          healthData =
+            // Node-level components are reported as-is; the raw per-synchronizer components are
+            // replaced by synchronizer-labeled statuses (see componentStatusesWith). The health
+            // service itself keeps the raw components.
+            connectedSynchronizersHealthRef.get.fold(
+              healthService.dependencies.map(_.toComponentStatus)
+            )(_.componentStatusesWith(healthService.dependencies)),
         )
         addCloseable(node)
         setInitialized(participantServices)
         Some(new RunningNode(bootstrapStageCallback, node))
       }
 
-    private def createPackageOps(manager: SyncPersistentStateManager): PackageOps = {
+    private def createPackageOps(
+        manager: SyncPersistentStateManager,
+        topologyLookup: TopologyLookup,
+    ): PackageOps = {
       val packageOps = new PackageOpsImpl(
         participantId = participantId,
         stateManager = manager,
-        topologyLookup = new TopologyLookup(
-          clock = clock,
-          topologyConfig = config.topology,
-          timeouts = timeouts,
-          futureSupervisor = futureSupervisor,
-          topologyManagerO = psid => cantonSyncService.get.flatMap(_.lookupTopologyManager(psid)),
-          psidLookup = lookupActivePsid,
-          topologyClientO = psid => cantonSyncService.get.flatMap(_.lookupTopologyClient(psid)),
-          syncPersistentStateO = psid =>
-            cantonSyncService.get.flatMap(_.syncPersistentStateManager.get(psid)),
-          loggerFactory = loggerFactory,
-        ),
-        initialProtocolVersion = ProtocolVersion.latest,
+        topologyLookup = topologyLookup,
         loggerFactory = ParticipantNodeBootstrap.this.loggerFactory,
         timeouts = timeouts,
         futureSupervisor = futureSupervisor,
@@ -455,6 +494,29 @@ class ParticipantNodeBootstrap(
 
         mutablePackageMetadataView = tryGetMutablePackageMetadataView()
 
+        offlineTopologyLookup = new OfflineTopologyLookupImpl(
+          clock = clock,
+          topologyConfig = config.topology,
+          timeouts = timeouts,
+          futureSupervisor = futureSupervisor,
+          psidLookup = lookupActivePsid,
+          topologyStoreO = psid =>
+            cantonSyncService.get
+              .flatMap(_.syncPersistentStateManager.get(psid))
+              .map(_.topologyStore),
+          staticSynchronizerParametersO = psid =>
+            cantonSyncService.get
+              .flatMap(_.syncPersistentStateManager.get(psid))
+              .map(_.staticSynchronizerParameters),
+          cleanSynchronizerRecordTime = lsid =>
+            persistentState
+              .map(_.ledgerApiStore)
+              .value
+              .cleanSynchronizerIndex(lsid)
+              .map(_.recordTime),
+          loggerFactory = loggerFactory,
+        )
+
         syncPersistentStateManager = new SyncPersistentStateManager(
           participantId,
           synchronizerAliasManager,
@@ -469,7 +531,7 @@ class ParticipantNodeBootstrap(
           clock,
           persistentState.map(_.ledgerApiStore),
           persistentState.map(_.contractStore),
-          arguments.metrics,
+          offlineTopologyLookup,
           futureSupervisor,
           loggerFactory,
         )
@@ -518,50 +580,58 @@ class ParticipantNodeBootstrap(
           else CommandProgressTracker.NoOp
 
         connectedSynchronizersLookupContainer = new ConnectedSynchronizersLookupContainer
-        sequentialPostProcessor = new AcsCommitmentPublicationPostProcessor(
+        sequentialPostProcessor = new AcsChangePublicationPostProcessor(
           connectedSynchronizersLookupContainer,
           loggerFactory,
         )
 
         ledgerApiIndexerContainer = new LifeCycleContainer[LedgerApiIndexer](
           stateName = "indexer",
-          create = () =>
-            FutureUnlessShutdown.outcomeF(
-              LedgerApiIndexer.initialize(
-                metrics = arguments.metrics.ledgerApiServer,
-                clock = clock,
-                commandProgressTracker = commandProgressTracker,
-                ledgerApiStore = persistentState.map(_.ledgerApiStore),
-                contractStore = persistentState.map(state =>
-                  LedgerApiContractStoreImpl(
-                    state.contractStore,
+          create = () => {
+            val indexer =
+              FutureUnlessShutdown.outcomeF(
+                LedgerApiIndexer.initialize(
+                  metrics = arguments.metrics.ledgerApiServer,
+                  clock = clock,
+                  commandProgressTracker = commandProgressTracker,
+                  ledgerApiStore = persistentState.value.ledgerApiStore,
+                  contractStore = LedgerApiContractStoreImpl(
+                    persistentState.value.contractStore,
                     loggerFactory,
                     metrics.ledgerApiServer,
-                  )
-                ),
-                ledgerApiIndexerConfig = LedgerApiIndexerConfig(
-                  storageConfig = config.storage,
-                  processingTimeout = parameters.processingTimeouts,
-                  serverConfig = config.ledgerApi,
-                  indexerConfig = config.parameters.ledgerApiServer.indexer,
-                  indexerHaConfig = ledgerApiServerBootstrapUtils.createHaConfig(config),
-                  ledgerParticipantId = participantId.toLf,
-                  onlyForTestingEnableInMemoryTransactionStore =
-                    arguments.testingConfig.enableInMemoryTransactionStoreForParticipants,
-                ),
-                reassignmentOffsetPersistence = ReassignmentStore.reassignmentOffsetPersistenceFor(
-                  syncPersistentStateManager
-                ),
-                postProcessor = inFlightSubmissionTracker
-                  .processPublications(_)(_)
-                  .failOnShutdownTo(
-                    // This will be thrown in the Indexer pekko-stream pipeline, and handled gracefully there
-                    new RuntimeException("Post processing aborted due to shutdown")
                   ),
-                sequentialPostProcessor = sequentialPostProcessor,
-                loggerFactory = loggerFactory,
+                  ledgerApiIndexerConfig = LedgerApiIndexerConfig(
+                    storageConfig = config.storage,
+                    processingTimeout = parameters.processingTimeouts,
+                    serverConfig = config.ledgerApi,
+                    indexerConfig = config.parameters.ledgerApiServer.indexer,
+                    indexerHaConfig = ledgerApiServerBootstrapUtils.createHaConfig(config),
+                    ledgerParticipantId = participantId.toLf,
+                    onlyForTestingEnableInMemoryTransactionStore =
+                      arguments.testingConfig.enableInMemoryTransactionStoreForParticipants,
+                  ),
+                  reassignmentOffsetPersistence =
+                    ReassignmentStore.reassignmentOffsetPersistenceFor(
+                      participantId,
+                      syncPersistentStateManager,
+                      config.parameters.batching,
+                    ),
+                  postProcessor = inFlightSubmissionTracker
+                    .processPublications(_)(_)
+                    .failOnShutdownTo(
+                      // This will be thrown in the Indexer pekko-stream pipeline, and handled gracefully there
+                      new RuntimeException("Post processing aborted due to shutdown")
+                    ),
+                  sequentialPostProcessor = sequentialPostProcessor,
+                  loggerFactory = loggerFactory,
+                )
               )
-            ),
+            indexer.onComplete {
+              case Success(UnlessShutdown.Outcome(idxr)) => ledgerApiIndexerHealth.set(idxr)
+              case _ => ()
+            }
+            indexer
+          },
           loggerFactory = loggerFactory,
         )
         _ <- EitherT.right {
@@ -576,6 +646,23 @@ class ParticipantNodeBootstrap(
 
         ephemeralState = ParticipantNodeEphemeralState(inFlightSubmissionTracker)
 
+        topologyLookup = new TopologyLookup(
+          clock = clock,
+          topologyConfig = config.topology,
+          timeouts = timeouts,
+          futureSupervisor = futureSupervisor,
+          topologyManagerO = psid => cantonSyncService.get.flatMap(_.lookupTopologyManager(psid)),
+          psidLookup = lookupActivePsid,
+          topologyClientO = psid => cantonSyncService.get.flatMap(_.lookupTopologyClient(psid)),
+          syncPersistentStateO = psid =>
+            cantonSyncService.get.flatMap(_.syncPersistentStateManager.get(psid)),
+          cleanSynchronizerRecordTime = lsid =>
+            ledgerApiIndexerContainer.asEval.value.ledgerApiStore
+              .cleanSynchronizerIndex(lsid)
+              .map(_.recordTime),
+          loggerFactory = loggerFactory,
+        )
+
         packageService = PackageService(
           clock = clock,
           engine = engine,
@@ -583,48 +670,81 @@ class ParticipantNodeBootstrap(
           enableStrictDarValidation = parameters.enableStrictDarValidation,
           loggerFactory = loggerFactory,
           metrics = arguments.metrics,
-          packageOps = createPackageOps(syncPersistentStateManager),
+          packageOps = createPackageOps(syncPersistentStateManager, topologyLookup),
           timeouts = parameters.processingTimeouts,
         )
 
-        sequencerInfoLoader = new SequencerInfoLoader(
-          participantId,
-          parameters.processingTimeouts,
-          config.sequencerClient.clientChannelParams(parameters.tracing.propagation),
-          ProtocolVersionCompatibility.supportedProtocols(parameters),
-          parameters.protocolConfig.minimumProtocolVersion,
-          dontWarnOnDeprecatedPV = parameters.protocolConfig.dontWarnOnDeprecatedPV,
-          loggerFactory,
+        teaTokenDispenserO = Option.when(config.trafficAccounting.enabled)(
+          new CantonAdminTokenDispenser(
+            tokenDuration = adminTokenConfig.adminTokenDuration.asJava,
+            randomOps = crypto.pureCrypto,
+          )
         )
 
-        trafficEnforcementBackendContainerO: Option[LifeCycleContainer[TrafficEnforcementBackend]] =
-          None
-        // stubbed in splice
-        // Option.when(config.trafficEnforcement.enabled)(
-        //   new LifeCycleContainer(
-        //     stateName = "traffic-enforcement-backend",
-        //     create = () =>
-        //       FutureUnlessShutdown.pure(
-        //         TrafficEnforcementBackend(
-        //           trafficEnforcementServerConfig =
-        //             config.trafficEnforcement.trafficEnforcementServer,
-        //           processingTimeout = timeouts,
-        //           loggerFactory = loggerFactory,
-        //         )
-        //       ),
-        //     loggerFactory = loggerFactory,
-        //   )
-        // )
+        // Traffic enforcement component containers
+        trafficEnforcementComponentContainersO = Option.when(config.trafficAccounting.enabled)(
+          config.trafficAccounting.trafficEnforcementServer match {
+            case internalServerConfig: TrafficEnforcementServerConfig.Internal =>
+              val trafficEnforcementAppContainer = new LifeCycleContainer(
+                stateName = "traffic-enforcement-app",
+                create = () =>
+                  FutureUnlessShutdown.pure(
+                    TrafficEnforcementApp(
+                      storage = storage,
+                      token = () => teaTokenDispenserO.map(_.getCurrentToken.secret),
+                      instanceName = name,
+                      ledgerApiPort = config.ledgerApi.clientConfig.port,
+                      config = internalServerConfig,
+                      // If a correlation is pruned before its completion arrives, TEA can't debit
+                      // the submission. We use the ledger's pruning floor to keep correlations for
+                      // at least the maximum deduplication duration (7 days by default).
+                      minimumPruningRetention =
+                        persistentState.value.settingsStore.settings.maxDeduplicationDuration
+                          .getOrElse(
+                            throw new IllegalStateException(
+                              "Max deduplication duration is not available"
+                            )
+                          )
+                          .toConfig,
+                      loggerFactory = loggerFactory,
+                      timeouts = timeouts,
+                      clock = clock,
+                      metrics = metrics.trafficEnforcement,
+                      onEventCommitted =
+                        arguments.testingConfig.trafficEnforcementProjectionEventCommitted,
+                    )
+                  ),
+                loggerFactory = loggerFactory,
+              )
+              val trafficEnforcementBackendContainer = new LifeCycleContainer(
+                stateName = "traffic-enforcement-backend",
+                create = () =>
+                  FutureUnlessShutdown.pure(
+                    TrafficEnforcementBackend(
+                      enforceCostOnSubmissions = config.trafficAccounting.enforceCostOnSubmissions,
+                      rejectMultiPartySubmissions =
+                        config.trafficAccounting.rejectMultiPartySubmissions,
+                      allowSubmissionsOnDegradation =
+                        config.trafficAccounting.allowSubmissionsOnDegradation,
+                      trafficEnforcementServerConfig =
+                        config.trafficAccounting.trafficEnforcementServer,
+                      instanceName = name,
+                      ledgerApiPort = config.ledgerApi.clientConfig.port,
+                      adminParty = participantId.adminParty.toLf,
+                      processingTimeout = timeouts,
+                      loggerFactory = loggerFactory,
+                      metrics = metrics.trafficEnforcement,
+                    )
+                  ),
+                loggerFactory = loggerFactory,
+              )
 
-        _ <- trafficEnforcementBackendContainerO.traverseTap { trafficEnforcementBackendContainer =>
-          // only initialize traffic enforcement backend if participant is becoming active
-          if (isActive) {
-            EitherT.right[String](trafficEnforcementBackendContainer.initializeNext())
-          } else {
-            logger.info("Traffic enforcement backend is not initialized due to inactive state")
-            EitherT.rightT[FutureUnlessShutdown, String](())
+              trafficEnforcementAppContainer -> trafficEnforcementBackendContainer
           }
-        }
+        )
+
+        (trafficEnforcementAppContainerO, trafficEnforcementBackendContainerO) =
+          trafficEnforcementComponentContainersO.unzip
 
         trafficEnforcementBackendO = trafficEnforcementBackendContainerO.map(_.asEval)
 
@@ -647,6 +767,7 @@ class ParticipantNodeBootstrap(
         )
 
         syncEphemeralStateFactory = new SyncEphemeralStateFactoryImpl(
+          parameters,
           exitOnFatalFailures = parameters.exitOnFatalFailures,
           parameters.processingTimeouts,
           loggerFactory,
@@ -665,6 +786,8 @@ class ParticipantNodeBootstrap(
           persistentState.map(_.settingsStore)
         )
 
+        acsDigestProcessorEnabled = parameters.acsCommitments.enableNewAcsCommitmentProcessor
+
         pruningProcessor = new PruningProcessor(
           persistentState,
           syncPersistentStateManager,
@@ -672,6 +795,9 @@ class ParticipantNodeBootstrap(
           arguments.metrics.pruning,
           exitOnFatalFailures = arguments.parameterConfig.exitOnFatalFailures,
           synchronizerConnectionConfigStore,
+          legacyAcsCommitmentProcessorDisabled =
+            parameters.acsCommitments.disableOldAcsCommitmentProcessor,
+          acsDigestProcessorEnabled = acsDigestProcessorEnabled,
           parameters.processingTimeouts,
           futureSupervisor,
           loggerFactory,
@@ -704,6 +830,7 @@ class ParticipantNodeBootstrap(
                 synchronizerConnectionConfigStore,
                 syncPersistentStateManager,
                 parameters.batchingConfig,
+                acsDigestProcessorEnabled = acsDigestProcessorEnabled,
                 timeouts,
                 loggerFactory,
               )
@@ -712,23 +839,48 @@ class ParticipantNodeBootstrap(
         }
 
         schedulers <-
-          EitherT
-            .liftF(
-              {
-                val schedulers =
-                  new SchedulersImpl(
-                    Map("pruning" -> pruningScheduler) ++
-                      purgeObsoleteTopologySchedulerO.map("obsoleteTopology" -> _).toList.toMap,
-                    arguments.loggerFactory,
-                  )
-                if (isActive) {
-                  schedulers.start().map(_ => schedulers)
-                } else {
-                  Future.successful(schedulers)
-                }
-              }
+          EitherT.liftF {
+            val schedulers = new SchedulersImpl(
+              Map("pruning" -> pruningScheduler) ++
+                purgeObsoleteTopologySchedulerO.map("obsoleteTopology" -> _).toList.toMap,
+              arguments.loggerFactory,
             )
-            .mapK(FutureUnlessShutdown.outcomeK)
+            if (isActive) {
+              schedulers.start().map(_ => schedulers)
+            } else {
+              FutureUnlessShutdown.pure(schedulers)
+            }
+          }
+
+        // Create extension service manager early so it can be shared with both CantonSyncService and LedgerApiServer
+        extensionServiceManagerO: Option[ExtensionServiceManager] =
+          Option.when(parameters.engine.extensions.nonEmpty) {
+            val manager = new ExtensionServiceManager(
+              extensionConfigs = parameters.engine.extensions,
+              loggerFactory = loggerFactory,
+              timeouts = timeouts,
+            )
+            logger.info(
+              s"Extension service manager initialized with ${parameters.engine.extensions.size} extension(s): " +
+                s"${parameters.engine.extensions.keys.mkString(", ")}"
+            )
+            manager
+          }
+
+        // Register before startup validation so failures close the manager's lifecycle context.
+        // The manager is shared by sync and the Ledger API; registering it before consumers keeps
+        // reverse close order closing consumers first.
+        _ = extensionServiceManagerO.foreach(addCloseable)
+
+        _ <- EitherT(
+          extensionServiceManagerO
+            .fold(FutureUnlessShutdown.pure[Either[String, Unit]](Right(())))(
+              _.initializeOnStartup()
+            )
+        )
+
+        externalCallValidator: ExternalCallValidator =
+          ExtensionServiceExternalCallValidator.create(extensionServiceManagerO)
 
         // Sync Service
         sync = CantonSyncService.create(
@@ -752,7 +904,6 @@ class ParticipantNodeBootstrap(
           parameters,
           pruningProcessor,
           arguments.metrics,
-          sequencerInfoLoader,
           arguments.futureSupervisor,
           loggerFactory,
           arguments.testingConfig,
@@ -760,6 +911,7 @@ class ParticipantNodeBootstrap(
           connectedSynchronizersLookupContainer,
           () => triggerDeclarativeChange(),
           trafficEnforcementBackendO,
+          externalCallValidator,
         )
 
         _ <-
@@ -771,14 +923,95 @@ class ParticipantNodeBootstrap(
           sync.setLsuStatusMetrics()
         }
 
-        _ = {
-          connectedSynchronizerHealth.set(sync.connectedSynchronizerHealth)
-          connectedSynchronizerEphemeralHealth.set(sync.ephemeralHealth)
-          connectedSynchronizerSequencerClientHealth.set(sync.sequencerClientHealth)
-          connectedSynchronizerSequencerConnectionPoolHealthRef.set(
-            sync.sequencerConnectionPoolHealth
+        _ = connectedSynchronizersHealthRef.set(Some(sync.connectedSynchronizersHealth))
+
+        ledgerApiIndexServiceContainer = new LifeCycleContainer[LedgerApiIndexService](
+          stateName = "ledger-api-index-service",
+          create = () =>
+            FutureUnlessShutdown.outcomeF(
+              LedgerApiIndexService.initialize(
+                config = arguments.config,
+                ledgerApiServerBootstrapUtils = ledgerApiServerBootstrapUtils,
+                ledgerApiIndexer = ledgerApiIndexerContainer.asEval.value,
+                loggerFactory = loggerFactory,
+                metrics = arguments.metrics.ledgerApiServer,
+                parameters = arguments.parameterConfig,
+                participantId = participantId.toLf,
+                syncService = sync,
+                tracerProvider = tracerProvider,
+                updateServiceConfig = arguments.config.ledgerApi.updateService,
+              )
+            ),
+          loggerFactory = loggerFactory,
+        )
+        _ <-
+          // Initialize the Ledger API Index Service only if the participant is active
+          if (sync.isActive())
+            EitherT.right[String](ledgerApiIndexServiceContainer.initializeNext())
+          else EitherT.right[String](FutureUnlessShutdown.unit)
+
+        acsReplicatorContainerO = config.parameters.alphaOnlinePartyReplicationSupport.map {
+          config =>
+            new LifeCycleContainer[AcsReplicator](
+              stateName = "acs-replicator",
+              create = () =>
+                FutureUnlessShutdown.pure(
+                  new AcsReplicator(
+                    participantId,
+                    sync,
+                    ledgerApiIndexServiceContainer.asEval.value.internalIndexService,
+                    clock,
+                    config,
+                    storage,
+                    new DefaultAcsReplicationContractHandlerFactory(
+                      sync.participantNodePersistentState,
+                      loggerFactory,
+                    ),
+                    futureSupervisor,
+                    parameters.exitOnFatalFailures,
+                    parameters.processingTimeouts,
+                    loggerFactory,
+                  )
+                ),
+              loggerFactory = loggerFactory,
+            )
+        }
+        _ <- acsReplicatorContainerO match {
+          // Initialize ACS replicator only if configured and the participant is active
+          case Some(acsReplicatorContainer) if sync.isActive() =>
+            EitherT.right[String](acsReplicatorContainer.initializeNext())
+          case _ => EitherT.right[String](FutureUnlessShutdown.unit)
+        }
+
+        partyReplicatorContainerO = for {
+          onPrConfig <- config.parameters.alphaOnlinePartyReplicationSupport
+          acsReplicatorContainer <- acsReplicatorContainerO
+        } yield {
+          new LifeCycleContainer[PartyReplicator](
+            stateName = "party-replicator",
+            create = () =>
+              FutureUnlessShutdown.pure(
+                new PartyReplicator(
+                  participantId,
+                  acsReplicatorContainer.asEval.value,
+                  sync,
+                  clock,
+                  onPrConfig,
+                  storage,
+                  futureSupervisor,
+                  parameters.exitOnFatalFailures,
+                  parameters.processingTimeouts,
+                  loggerFactory,
+                )
+              ),
+            loggerFactory = loggerFactory,
           )
-          connectedSynchronizerAcsCommitmentProcessorHealth.set(sync.acsCommitmentProcessorHealth)
+        }
+        _ <- partyReplicatorContainerO match {
+          // Initialize party replication only if configured and the participant is active
+          case Some(partyReplicatorContainer) if sync.isActive() =>
+            EitherT.right[String](partyReplicatorContainer.initializeNext())
+          case _ => EitherT.right[String](FutureUnlessShutdown.unit)
         }
 
         ledgerApiServerContainer = new LifeCycleContainer[LedgerApiServer](
@@ -786,25 +1019,34 @@ class ParticipantNodeBootstrap(
           create = () =>
             FutureUnlessShutdown.outcomeF(
               LedgerApiServer.initialize(
+                ledgerApiIndexService = ledgerApiIndexServiceContainer.asEval.value,
                 adminParty = participantId.adminParty.toLf,
                 adminTokenDispenser = adminTokenDispenser,
+                teaTokenDispenserO = teaTokenDispenserO,
                 commandProgressTracker = sync.commandProgressTracker,
                 config = arguments.config,
                 httpApiMetrics = arguments.metrics.httpApiServer,
                 ledgerApiServerBootstrapUtils = ledgerApiServerBootstrapUtils,
-                ledgerApiIndexer = ledgerApiIndexerContainer.asEval,
+                ledgerApiIndexer = ledgerApiIndexerContainer.asEval.value,
                 loggerFactory = loggerFactory,
                 metrics = arguments.metrics.ledgerApiServer,
-                name = name,
                 parameters = arguments.parameterConfig,
                 participantId = participantId.toLf,
-                participantNodePersistentState = persistentState,
-                sync = sync,
-                trafficEnforcementBackendO = trafficEnforcementBackendO,
+                participantNodePersistentState = persistentState.value,
+                syncService = sync,
+                partyReplicationEndpointsO = partyReplicatorContainerO.map(container =>
+                  PartyReplicationEndpoints(
+                    container.asEval.value,
+                    sync,
+                  )
+                ),
+                trafficEnforcementBackendO = trafficEnforcementBackendO.map(
+                  // TODO(i35199): Streamline participant bootstrapping without dynamic loading: we are running here the risk that LAPI Server exposes functionality earlier than a dependency is bootstrapped, which could cause internal errors.
+                  _.dynamic
+                ),
                 pruningConfig = parameters.stores,
-                tracerProvider = tracerProvider,
-                updateServiceConfig = arguments.config.ledgerApi.updateService,
                 warnOnJwtScopeUsage = arguments.testingConfig.warnOnJwtScopeUsage,
+                extensionServiceManagerO = extensionServiceManagerO,
               )
             ),
           loggerFactory = loggerFactory,
@@ -814,6 +1056,123 @@ class ParticipantNodeBootstrap(
           if (sync.isActive()) EitherT.right[String](ledgerApiServerContainer.initializeNext())
           else EitherT.right[String](FutureUnlessShutdown.unit)
 
+        acsDigestProcessorManagerO =
+          if (acsDigestProcessorEnabled) {
+            val container = new LifeCycleContainer[AcsCommitmentProcessorManager](
+              "ACS commitment processor manager",
+              create = () => {
+                val ledgerApiStore =
+                  ledgerApiIndexerContainer.asEval.value.ledgerApiStore
+
+                val digestProcessorFactory = new DigestProcessorFactoryImpl(
+                  participantId,
+                  syncPersistentStateManager.acsDigestStore,
+                  syncPersistentStateManager.acsCommitmentPeriodStore,
+                  new DigestProcessorTopologyLookupImpl(
+                    ledgerApiStore,
+                    sync,
+                    parameters.cachingConfigs,
+                    futureSupervisor,
+                    loggerFactory,
+                  ),
+                  ledgerApiIndexServiceContainer.asEval.value.internalIndexService,
+                  ledgerApiStore,
+                  ledgerApiStore.stringInterningView,
+                  parameters.acsCommitments,
+                  alias => metrics.connectedSynchronizerMetrics(alias, participantId).commitments,
+                  enableAdditionalConsistencyChecks = parameters.enableAdditionalConsistencyChecks,
+                  timeouts,
+                  loggerFactory,
+                )
+
+                val matcherFactory = new ReceivedAcsCommitmentMatcherFactoryImpl(
+                  syncPersistentStateManager.acsCommitmentPeriodStore,
+                  syncPersistentStateManager.acsDigestStore,
+                  ledgerApiIndexServiceContainer.asEval.value.internalIndexService,
+                  ledgerApiStore.stringInterningView,
+                  parameters.acsCommitments.matchingParallelism,
+                  alias => metrics.connectedSynchronizerMetrics(alias, participantId).commitments,
+                  loggerFactory,
+                )
+
+                val manager =
+                  new AcsCommitmentProcessorManager(
+                    digestProcessorFactory,
+                    matcherFactory,
+                    syncPersistentStateManager.aliasForSynchronizerId,
+                    alias => metrics.connectedSynchronizerMetrics(alias, participantId).commitments,
+                    parameters.exitOnFatalFailures,
+                    futureSupervisor,
+                    timeouts,
+                    loggerFactory,
+                  )
+
+                acsCommitmentProcessorPipelineHealth.set(manager.health)
+
+                manager.subscribeToSynchronizerConnections(sync)
+
+                // start digest processors for all known logical synchronizers
+                val startProcessorsF =
+                  MonadUtil.sequentialTraverse_(syncPersistentStateManager.getAllLogical.keys)(
+                    synchronizerId =>
+                      manager
+                        .getOrCreate(synchronizerId)
+                        .digestProcessorManager
+                        .reinitializeIfEmptyAndStartRunningDigestProcessor()
+                  )
+                FutureUnlessShutdownUtil.doNotAwaitUnlessShutdown(
+                  startProcessorsF,
+                  "Failed to start running digest processors for all known logical synchronizers",
+                )
+
+                FutureUnlessShutdown.pure(manager)
+              },
+              loggerFactory,
+            )
+            Some(container)
+          } else {
+            acsCommitmentProcessorPipelineHealth.set(
+              new AlwaysHealthyComponent(AcsCommitmentProcessorManager.healthName, logger)
+            )
+            None
+          }
+        // If the new pipeline does not run now, it could have run before restart.
+        // So we delete all digests to prevent problems later when the pipeline is re-enabled
+        // (e.g., the last checkpoint offset having already been pruned).
+        cleanDigestStore = !parameters.acsCommitments.enableNewAcsCommitmentProcessor
+        _ <- EitherT.right(MonadUtil.when(cleanDigestStore) {
+          MonadUtil
+            .sequentialTraverse_(syncPersistentStateManager.getAllLogical.values) { state =>
+              // Check whether there are any checkpoints to avoid calling the possibly blocking truncation
+              // only when there actually is something to be truncated.
+              state.acsDigestStore
+                .latestCheckpointUpTo(Offset.MaxValue, allCheckpointsFilter)
+                .flatMap {
+                  case None => FutureUnlessShutdown.unit
+                  case Some(_) => state.acsDigestStore.truncateAllBlocking()
+                }
+            }
+        })
+
+        _ = MonadUtil.when(sync.isActive())(
+          EitherT.right(acsDigestProcessorManagerO.traverse_(_.initializeNext()))
+        )
+
+        // Initialize the traffic enforcement components if traffic enforcement is enabled and if the participant is active
+        _ <- trafficEnforcementComponentContainersO.traverseTap {
+          case (trafficEnforcementAppContainer, trafficEnforcementBackendContainer) =>
+            // only start the traffic enforcement components if participant is becoming active
+            if (isActive) {
+              EitherT.right[String](for {
+                _ <- trafficEnforcementAppContainer.initializeNext()
+                // The traffic enforcement backend is initialized after the app to ensure the Ledger APIs requests can be served when started
+                _ <- trafficEnforcementBackendContainer.initializeNext()
+              } yield ())
+            } else {
+              logger.info("Traffic enforcement app is not started due to inactive state")
+              EitherT.rightT[FutureUnlessShutdown, String](())
+            }
+        }
       } yield {
         val ledgerApiDependentServices =
           new StartableStoppableLedgerApiDependentServices(
@@ -825,7 +1184,10 @@ class ParticipantNodeBootstrap(
             clock,
             adminServerRegistry,
             adminTokenDispenser,
-            storage,
+            partyReplicatorContainerO.map(_.asEval),
+            acsReplicatorContainerO.map(_.asEval),
+            ledgerApiIndexerContainer.asEval.map(_.ledgerApiStore),
+            ledgerApiIndexServiceContainer.asEval.map(_.internalIndexService),
             futureSupervisor,
             loggerFactory,
             tracerProvider,
@@ -846,7 +1208,6 @@ class ParticipantNodeBootstrap(
                   sync,
                   synchronizerAliasManager,
                   parameters.processingTimeouts,
-                  sequencerInfoLoader,
                   loggerFactory,
                 ),
                 executionContext,
@@ -860,6 +1221,7 @@ class ParticipantNodeBootstrap(
                 ips,
                 indexedStringStore,
                 synchronizerAliasManager,
+                parameters.processingTimeouts,
                 loggerFactory,
               ),
               executionContext,
@@ -893,6 +1255,8 @@ class ParticipantNodeBootstrap(
             v30.ParticipantRepairServiceGrpc.bindService(
               new GrpcParticipantRepairService(
                 sync,
+                acsDigestProcessorManagerO.map(_.asEval),
+                ledgerApiIndexServiceContainer.asEval.map(_.internalIndexService),
                 parameters,
                 loggerFactory,
               ),
@@ -919,12 +1283,20 @@ class ParticipantNodeBootstrap(
         addCloseable(indexedStringStore)
         addCloseable(topologyDispatcher)
         addCloseable(schedulers)
+        addCloseable(ledgerApiIndexServiceContainer.currentAutoCloseable())
+        partyReplicatorContainerO.foreach(repl => addCloseable(repl.currentAutoCloseable()))
+        acsReplicatorContainerO.foreach(repl => addCloseable(repl.currentAutoCloseable()))
         addCloseable(ledgerApiServerContainer.currentAutoCloseable())
+        acsDigestProcessorManagerO.foreach(mgr => addCloseable(mgr.currentAutoCloseable()))
         addCloseable(ledgerApiDependentServices)
         addCloseable(mutablePackageMetadataView)
-        trafficEnforcementBackendContainerO.foreach(trafficEnforcementBackendContainer =>
-          addCloseable(trafficEnforcementBackendContainer.currentAutoCloseable())
-        )
+        // Health components owned by the bootstrap, not closed by the health service.
+        addCloseable(acsCommitmentProcessorPipelineHealth)
+        trafficEnforcementComponentContainersO.foreach {
+          case (trafficEnforcementAppContainer, trafficEnforcementBackendContainer) =>
+            addCloseable(trafficEnforcementAppContainer.currentAutoCloseable())
+            addCloseable(trafficEnforcementBackendContainer.currentAutoCloseable())
+        }
 
         // return values
         ParticipantServices(
@@ -932,11 +1304,16 @@ class ParticipantNodeBootstrap(
           mutablePackageMetadataView = mutablePackageMetadataView,
           ledgerApiIndexerContainer = ledgerApiIndexerContainer,
           cantonSyncService = sync,
+          ledgerApiIndexServiceContainer = ledgerApiIndexServiceContainer,
           schedulers = schedulers,
+          acsReplicatorContainerO = acsReplicatorContainerO,
+          partyReplicatorContainerO = partyReplicatorContainerO,
           ledgerApiServerContainer = ledgerApiServerContainer,
           startableStoppableLedgerApiDependentServices = ledgerApiDependentServices,
           participantTopologyDispatcher = topologyDispatcher,
           trafficEnforcementBackendContainerO = trafficEnforcementBackendContainerO,
+          trafficEnforcementAppContainerO = trafficEnforcementAppContainerO,
+          acsCommitmentProcessorManagerO = acsDigestProcessorManagerO,
         )
       }
     }
@@ -948,10 +1325,8 @@ class ParticipantNodeBootstrap(
       storage: Storage
   ): (DependenciesHealthService, LivenessHealthService) = {
     val constantSoftDependencies = Seq(
-      connectedSynchronizerHealth,
-      connectedSynchronizerEphemeralHealth,
-      connectedSynchronizerSequencerClientHealth,
-      connectedSynchronizerAcsCommitmentProcessorHealth,
+      acsCommitmentProcessorPipelineHealth,
+      ledgerApiIndexerHealth,
     )
 
     val readiness = DependenciesHealthService(
@@ -963,7 +1338,7 @@ class ParticipantNodeBootstrap(
       // reaching the node
       softDependencies = Eval.always(
         constantSoftDependencies ++
-          connectedSynchronizerSequencerConnectionPoolHealthRef.get.apply()
+          connectedSynchronizersHealthRef.get.toList.flatMap(_.allHealthComponents)
       ),
     )
     val liveness = LivenessHealthService.alwaysAlive(logger, timeouts)
@@ -987,33 +1362,26 @@ class ParticipantNodeBootstrap(
     None
   )
 
-  lazy val connectedSynchronizerHealth: MutableHealthComponent = MutableHealthComponent(
-    loggerFactory,
-    ConnectedSynchronizer.healthName,
-    timeouts,
-  )
-  private lazy val connectedSynchronizerEphemeralHealth: MutableHealthComponent =
-    MutableHealthComponent(
-      loggerFactory,
-      SyncEphemeralState.healthName,
-      timeouts,
-    )
-  private lazy val connectedSynchronizerSequencerClientHealth: MutableHealthComponent =
-    MutableHealthComponent(
-      loggerFactory,
-      SequencerClient.healthName,
-      timeouts,
-    )
+  /** Health of all connected synchronizers, set once the sync service has been created. Used to
+    * report the health components of every connected synchronizer as soft dependencies of the
+    * node's health service.
+    */
+  private val connectedSynchronizersHealthRef =
+    new AtomicReference[Option[ConnectedSynchronizersHealth]](None)
 
-  private val connectedSynchronizerSequencerConnectionPoolHealthRef =
-    new AtomicReference[() => Seq[HealthQuasiComponent]](() => Seq.empty)
+  private lazy val ledgerApiIndexerHealth: MutableHealthComponent =
+    MutableHealthComponent(loggerFactory, LedgerApiIndexer.healthComponentName, timeouts)
 
-  private lazy val connectedSynchronizerAcsCommitmentProcessorHealth: MutableHealthComponent =
-    MutableHealthComponent(
-      loggerFactory,
-      AcsCommitmentProcessor.healthName,
-      timeouts,
-    )
+  private lazy val acsCommitmentProcessorPipelineHealth =
+    new MutableHealthQuasiComponent[HealthComponent](
+      loggerFactory = loggerFactory,
+      uninitializedName = AcsCommitmentProcessorManager.healthName,
+      timeouts = timeouts,
+      // This deviates from the default values, because ACS commitment components report error states
+      // as degradations and not as failures or fatal errors
+      initialHealthState = AcsCommitmentHealthState.NotInitialized.componentHealthState,
+      initialClosingState = AcsCommitmentHealthState.Stopped.componentHealthState,
+    ) with HealthComponent
 }
 
 object ParticipantNodeBootstrap {
@@ -1024,12 +1392,20 @@ object ParticipantNodeBootstrap {
       mutablePackageMetadataView: MutablePackageMetadataViewImpl,
       ledgerApiIndexerContainer: LifeCycleContainer[LedgerApiIndexer],
       // None if traffic enforcement is disabled
-      trafficEnforcementBackendContainerO: Option[LifeCycleContainer[TrafficEnforcementBackend]],
+      trafficEnforcementBackendContainerO: Option[
+        LifeCycleContainer[TrafficEnforcementBackendImpl]
+      ],
+      // None if traffic enforcement is disabled
+      trafficEnforcementAppContainerO: Option[LifeCycleContainer[TrafficEnforcementApp]],
       cantonSyncService: CantonSyncService,
+      ledgerApiIndexServiceContainer: LifeCycleContainer[LedgerApiIndexService],
       schedulers: Schedulers,
+      acsReplicatorContainerO: Option[LifeCycleContainer[AcsReplicator]],
+      partyReplicatorContainerO: Option[LifeCycleContainer[PartyReplicator]],
       ledgerApiServerContainer: LifeCycleContainer[LedgerApiServer],
       startableStoppableLedgerApiDependentServices: StartableStoppableLedgerApiDependentServices,
       participantTopologyDispatcher: ParticipantTopologyDispatcher,
+      acsCommitmentProcessorManagerO: Option[LifeCycleContainer[AcsCommitmentProcessorManager]],
   )
 }
 
@@ -1041,8 +1417,7 @@ class ParticipantNode(
     val storage: Storage,
     override protected val clock: Clock,
     val cryptoPureApi: CryptoPureApi,
-    identityPusher: ParticipantTopologyDispatcher,
-    private[canton] val sync: CantonSyncService,
+    private[canton] val participantServices: ParticipantServices,
     override val adminTokenDispenser: CantonAdminTokenDispenser,
     val recordSequencerInteractions: AtomicReference[Option[RecordingConfig]],
     val replaySequencerConfig: AtomicReference[Option[ReplayConfig]],
@@ -1055,6 +1430,8 @@ class ParticipantNode(
   override type Status = ParticipantStatus
 
   override def close(): Unit = () // closing is done in the bootstrap class
+
+  private[canton] def sync: CantonSyncService = participantServices.cantonSyncService
 
   def readySynchronizers: Map[PhysicalSynchronizerId, SubmissionReady] =
     sync.readySynchronizers.values.toMap
@@ -1071,7 +1448,7 @@ class ParticipantNode(
     val ports = Map("ledger" -> config.ledgerApi.port, "admin" -> config.adminApi.port) ++
       Option.when(config.httpLedgerApi.enabled)("json" -> config.httpLedgerApi.port)
     val synchronizers = readySynchronizers
-    val topologyQueues = identityPusher.queueStatus
+    val topologyQueues = participantServices.participantTopologyDispatcher.queueStatus
 
     ParticipantStatus(
       id.uid,

@@ -57,17 +57,16 @@ case class TypedSignedProtocolMessageContent[+M <: SignedProtocolMessageContent]
 }
 
 object TypedSignedProtocolMessageContent
-    extends VersioningCompanionContextMemoization[
-      TypedSignedProtocolMessageContent[SignedProtocolMessageContent],
-      ProtocolVersionValidation,
+    extends VersioningCompanionMemoization[
+      TypedSignedProtocolMessageContent[SignedProtocolMessageContent]
     ] {
   override def name: String = "TypedSignedProtocolMessageContent"
 
   override val versioningTable: VersioningTable = VersioningTable(
     ProtoVersion(30) -> VersionedProtoCodec(
-      ProtocolVersion.v34
+      ProtocolVersion.v36
     )(v30.TypedSignedProtocolMessageContent)(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -78,7 +77,7 @@ object TypedSignedProtocolMessageContent
     new TypedSignedProtocolMessageContent(content)(None)
 
   private def fromProtoV30(
-      expectedProtocolVersion: ProtocolVersionValidation,
+      pvv: ProtocolVersionValidation,
       proto: v30.TypedSignedProtocolMessageContent,
   )(
       bytes: ByteString
@@ -88,17 +87,20 @@ object TypedSignedProtocolMessageContent
     for {
       message <- (messageBytes match {
         case Sm.ConfirmationResponses(confirmationResponsesBytes) =>
-          ConfirmationResponses.fromByteString(expectedProtocolVersion, confirmationResponsesBytes)
+          ConfirmationResponses.fromByteString(
+            pvv,
+            confirmationResponsesBytes,
+          )
         case Sm.ConfirmationResult(confirmationResultMessageBytes) =>
           ConfirmationResultMessage.fromByteString(
-            expectedProtocolVersion,
+            pvv,
             confirmationResultMessageBytes,
           )
         case Sm.AcsCommitment(acsCommitmentBytes) =>
-          AcsCommitment.fromByteString(expectedProtocolVersion, acsCommitmentBytes)
+          LegacyAcsCommitment.fromByteString(pvv, acsCommitmentBytes)
         case Sm.SetTrafficPurchased(setTrafficPurchasedBytes) =>
           SetTrafficPurchasedMessage.fromByteString(
-            expectedProtocolVersion,
+            pvv,
             setTrafficPurchasedBytes,
           )
         case Sm.Empty =>

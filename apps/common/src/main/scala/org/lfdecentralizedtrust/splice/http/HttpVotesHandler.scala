@@ -15,7 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 trait HttpVotesHandler extends Spanning with NamedLogging {
 
-  protected val votesStore: ActiveVotesStore
+  protected val activeVotesStore: ActiveVotesStore
   protected val workflowId: String
   protected implicit val tracer: Tracer
 
@@ -25,21 +25,24 @@ trait HttpVotesHandler extends Spanning with NamedLogging {
   ): Future[definitions.ListDsoRulesVoteRequestsResponse] = {
     withSpan(s"$workflowId.listDsoRulesVoteRequests") { _ => _ =>
       for {
-        dsoRulesVoteRequests <- votesStore.listVoteRequests()
+        dsoRulesVoteRequests <- activeVotesStore.listVoteRequests()
       } yield definitions.ListDsoRulesVoteRequestsResponse(
         dsoRulesVoteRequests.map(_.toHttp).toVector
       )
     }
   }
 
-  def listVoteRequestsByTrackingCid(body: definitions.BatchListVotesByVoteRequestsRequest)(implicit
+  final def listVoteRequestsByTrackingCid(body: definitions.BatchListVotesByVoteRequestsRequest)(
+      implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[definitions.ListVoteRequestByTrackingCidResponse] = {
     withSpan(s"$workflowId.listVoteRequestsByTrackingCid") { _ => _ =>
+      val voteRequestContractIds =
+        HttpRequestLimits.maxSizeOrFail("vote_request_contract_ids", body.voteRequestContractIds)
       for {
-        dsoRulesVotes <- votesStore.listVoteRequestsByTrackingCid(
-          body.voteRequestContractIds.map(new splice.dsorules.VoteRequest.ContractId(_))
+        dsoRulesVotes <- activeVotesStore.listVoteRequestsByTrackingCid(
+          voteRequestContractIds.map(new splice.dsorules.VoteRequest.ContractId(_))
         )
       } yield definitions.ListVoteRequestByTrackingCidResponse(
         dsoRulesVotes.map(_.toHttp).toVector
@@ -52,7 +55,7 @@ trait HttpVotesHandler extends Spanning with NamedLogging {
       ec: ExecutionContext,
   ): Future[definitions.LookupDsoRulesVoteRequestResponse] = {
     withSpan(s"$workflowId.lookupDsoRulesVoteRequest") { _ => _ =>
-      votesStore
+      activeVotesStore
         .lookupVoteRequest(
           new splice.dsorules.VoteRequest.ContractId(voteRequestContractId)
         )

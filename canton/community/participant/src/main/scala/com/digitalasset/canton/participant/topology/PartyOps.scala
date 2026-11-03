@@ -5,15 +5,17 @@ package com.digitalasset.canton.participant.topology
 
 import cats.data.EitherT
 import cats.syntax.bifunctor.*
-import com.daml.nonempty.NonEmpty
+import cats.syntax.foldable.*
 import com.digitalasset.base.error.{ErrorCategory, ErrorCode, Explanation, Resolution}
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.error.*
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.ErrorLoggingContext
 import com.digitalasset.canton.participant.topology.ParticipantTopologyManagerError.{
   ExternalPartyAlreadyExists,
+  HostingStatePreventsPartyAllocation,
   IdentityManagerParentError,
 }
 import com.digitalasset.canton.topology.*
@@ -22,6 +24,7 @@ import com.digitalasset.canton.topology.TopologyManagerError.{
   InvalidTopologyMapping,
   ParticipantErrorGroup,
 }
+import com.digitalasset.canton.topology.transaction.HostingParticipant.HostingState
 import com.digitalasset.canton.topology.transaction.{
   HostingParticipant,
   ParticipantPermission,
@@ -29,6 +32,7 @@ import com.digitalasset.canton.topology.transaction.{
   TopologyChangeOp,
 }
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.concurrent.ExecutionContext
 
@@ -60,6 +64,11 @@ object PartyOps {
       uniqueByKey = storedTransactions
         .collectOfMapping[PartyToParticipant]
         .collectLatestByUniqueKey
+      _ <- EitherT.fromEither[FutureUnlessShutdown](
+        uniqueByKey.result.traverse_(existingPtpTx =>
+          checkOwnEntryCanHost(existingPtpTx.mapping, participantId)
+        )
+      )
       updateResult <- uniqueByKey.result match {
         case Seq() =>
           // no positive (i.e. REPLACE) transaction could mean:
@@ -100,12 +109,20 @@ object PartyOps {
                 partySigningKeysWithThreshold = None,
               )
             )
-            .bimap(
+            .biflatMap(
               err =>
-                ParticipantTopologyManagerError.IdentityManagerParentError(
-                  InvalidTopologyMapping.Reject(err)
+                EitherT.leftT[FutureUnlessShutdown, (Option[PositiveInt], PartyToParticipant)](
+                  ParticipantTopologyManagerError.IdentityManagerParentError(
+                    InvalidTopologyMapping.Reject(err)
+                  )
                 ),
-              ptp => (Some(existingPtpTx.serial.increment), ptp),
+              ptp =>
+                EitherT.fromEither[FutureUnlessShutdown](
+                  existingPtpTx.transaction
+                    .nextSerial(errorLoggingContext)
+                    .map[(Option[PositiveInt], PartyToParticipant)](next => (Some(next), ptp))
+                    .leftMap(ParticipantTopologyManagerError.IdentityManagerParentError(_))
+                ),
             )
 
         case multiple =>
@@ -135,6 +152,22 @@ object PartyOps {
           )
           .leftMap(IdentityManagerParentError(_): ParticipantTopologyManagerError)
     } yield ()
+
+  /** Allocating the party rewrites this participant's entry to Active. A Nominated or Freezing
+    * entry must move forward only through an explicit hosting state change, so allocation fails
+    * instead.
+    */
+  private def checkOwnEntryCanHost(
+      mapping: PartyToParticipant,
+      participantId: ParticipantId,
+  )(implicit
+      errorLoggingContext: ErrorLoggingContext
+  ): Either[ParticipantTopologyManagerError, Unit] =
+    mapping.participants.find(_.participantId == participantId).map(_.state) match {
+      case Some(state) if !state.canHost =>
+        Left(HostingStatePreventsPartyAllocation.Failure(mapping.partyId, state))
+      case _ => Right(())
+    }
 
   def allocateExternalParty(
       participantId: ParticipantId,
@@ -252,6 +285,30 @@ object ParticipantTopologyManagerError extends ParticipantErrorGroup {
         val loggingContext: ErrorLoggingContext
     ) extends CantonError.Impl(
           cause = s"Party $partyId already exists on synchronizer $synchronizerId"
+        )
+        with ParticipantTopologyManagerError
+  }
+
+  @Explanation(
+    """This error occurs when a party is allocated on a participant whose entry in the party's
+       hosting mapping is Nominated or Freezing. Allocating the party would rewrite the entry to
+       Active, but such an entry must move forward only through an explicit hosting state
+       change."""
+  )
+  @Resolution(
+    """Change this participant's hosting state for the party explicitly, or remove this
+       participant's entry from the party's hosting mapping."""
+  )
+  object HostingStatePreventsPartyAllocation
+      extends ErrorCode(
+        id = "HOSTING_STATE_PREVENTS_PARTY_ALLOCATION",
+        ErrorCategory.InvalidGivenCurrentSystemStateOther,
+      ) {
+    final case class Failure(partyId: PartyId, state: HostingState)(implicit
+        val loggingContext: ErrorLoggingContext
+    ) extends CantonError.Impl(
+          cause =
+            s"This participant's hosting state for party $partyId is $state. Allocating the party would rewrite it to Active."
         )
         with ParticipantTopologyManagerError
   }

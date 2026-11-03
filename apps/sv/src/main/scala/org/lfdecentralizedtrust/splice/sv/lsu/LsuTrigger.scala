@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
-import cats.implicits.{catsSyntaxOptionId, showInterpolator, toTraverseOps}
+import cats.implicits.{showInterpolator, toTraverseOps}
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -131,7 +131,7 @@ class LsuTrigger(
       )
       parameters <- initializer.initializeSynchronizer(
         state,
-        task.work.announcement.successorSynchronizerId,
+        task.work.announcement.successorSynchronizerId.tryAsPhysical,
         task.readyAt,
         Some(task.work.announcement.upgradeTime),
         ignorePsidCheck = false,
@@ -157,7 +157,7 @@ class LsuTrigger(
             _ <- participantAdminConnection
               .performManualLsu(
                 currentPsid,
-                task.work.announcement.successorSynchronizerId,
+                task.work.announcement.successorSynchronizerId.tryAsPhysical,
                 Some(task.work.announcement.upgradeTime),
                 Map(
                   successorSequencerId -> initializer.successorConnection
@@ -170,7 +170,7 @@ class LsuTrigger(
           Future.unit
         }
       _ <- reconciler.reconcileSynchronizerNodeConfigIfRequired(
-        localSynchronizerNodes.some,
+        localSynchronizerNodes,
         currentPsid.logical,
         OnboardedImmediately,
       )
@@ -214,14 +214,14 @@ class LsuTrigger(
               .lookupSequencerSuccessors(
                 announcement.successorSynchronizerId.logical,
                 sequencerId,
-                Some(announcement.successorSynchronizerId),
+                Some(announcement.successorSynchronizerId.tryAsPhysical),
                 Some(TopologyChangeOp.Replace),
               )
               .map(_.isEmpty)
             participantPsid <- participantAdminConnection
               .getPhysicalSynchronizerId(currentPsid.logical)
           } yield {
-            hasNoSuccessor && !hasBftSequencerConnections && participantPsid != announcement.successorSynchronizerId
+            hasNoSuccessor && !hasBftSequencerConnections && participantPsid.opaque != announcement.successorSynchronizerId
           }
         case None => Future.successful(false)
       }

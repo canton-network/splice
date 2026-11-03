@@ -4,19 +4,21 @@
 package com.digitalasset.canton.topology
 
 import cats.data.EitherT
-import cats.syntax.parallel.*
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.common.sequencer.RegisterTopologyTransactionHandle
 import com.digitalasset.canton.config.TopologyConfig
 import com.digitalasset.canton.crypto.SynchronizerCrypto
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{
   FlagCloseable,
   FutureUnlessShutdown,
   LifeCycle,
   RunOnClosing,
+  UnlessShutdown,
 }
 import com.digitalasset.canton.logging.NamedLogging
-import com.digitalasset.canton.logging.pretty.PrettyPrinting
+import com.digitalasset.canton.logging.pretty.PrettyPrintingFromCompanion
 import com.digitalasset.canton.protocol.messages.TopologyTransactionsBroadcast
 import com.digitalasset.canton.topology.store.{TopologyStore, TopologyStoreId}
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
@@ -27,6 +29,7 @@ import com.digitalasset.canton.version.ProtocolVersion
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.*
+import scala.util.control.NonFatal
 
 trait SynchronizerOutboxDispatchHelper extends NamedLogging {
   protected def psid: PhysicalSynchronizerId
@@ -39,17 +42,48 @@ trait SynchronizerOutboxDispatchHelper extends NamedLogging {
 
   protected def topologyConfig: TopologyConfig
 
-  protected def filterTransactions(
+  /** Reports locally submitted topology transactions that were sequenced but subsequently rejected
+    * during topology validation on the synchronizer. Observing a transaction in the target store
+    * does not imply that it was accepted, so without this check the submitting node has no
+    * indication that its own request had no effect.
+    */
+  protected def logRejectedTransactions(
       transactions: Seq[GenericSignedTopologyTransaction],
-      predicate: GenericSignedTopologyTransaction => FutureUnlessShutdown[Boolean],
+      targetStore: TopologyStore[TopologyStoreId.SynchronizerStore],
   )(implicit
-      executionContext: ExecutionContext
-  ): FutureUnlessShutdown[Seq[GenericSignedTopologyTransaction]] =
-    transactions.parFilterA(tx => predicate(tx))
+      traceContext: TraceContext,
+      executionContext: ExecutionContext,
+  ): FutureUnlessShutdown[Unit] =
+    targetStore
+      .findStoredByHashes(
+        CantonTimestamp.MaxValue,
+        transactions.map(_.hash).toSet,
+        includeRejected = true,
+      )
+      .map { storedByHash =>
+        transactions.foreach { tx =>
+          storedByHash
+            .get(tx.hash)
+            .flatMap(stored => stored.rejectionReason.map(stored -> _))
+            .foreach { case (stored, reason) =>
+              logger.info(
+                s"Topology transaction ${topologyTransaction(tx)} submitted by $memberId was sequenced at " +
+                  s"${stored.sequenced.value} but rejected by $psid during topology validation: ${reason.str}"
+              )
+            }
+        }
+      }
+      .recover { case NonFatal(exception) =>
+        logger.warn(
+          s"Unable to inspect sequenced topology transactions submitted by $memberId on $psid for rejection reasons",
+          exception,
+        )
+        UnlessShutdown.Outcome(())
+      }
 
   protected def topologyTransaction(
       tx: GenericSignedTopologyTransaction
-  ): PrettyPrinting = tx.transaction
+  ): PrettyPrintingFromCompanion = tx.transaction
 
   protected def onlyApplicable(
       transactions: Seq[GenericSignedTopologyTransaction]
@@ -89,13 +123,9 @@ trait SynchronizerOutboxDispatch extends NamedLogging with FlagCloseable {
   protected def notAlreadyPresent(
       transactions: Seq[GenericSignedTopologyTransaction]
   )(implicit
-      traceContext: TraceContext,
-      ec: ExecutionContext,
-  ): FutureUnlessShutdown[Seq[GenericSignedTopologyTransaction]] = {
-    val doesNotAlreadyExistPredicate = (tx: GenericSignedTopologyTransaction) =>
-      targetStore.providesAdditionalSignatures(tx)
-    filterTransactions(transactions, doesNotAlreadyExistPredicate)
-  }
+      traceContext: TraceContext
+  ): FutureUnlessShutdown[Seq[GenericSignedTopologyTransaction]] =
+    targetStore.filterProvidesAdditionalSignatures(transactions)
 
   protected def dispatch(
       synchronizerAlias: SynchronizerAlias,

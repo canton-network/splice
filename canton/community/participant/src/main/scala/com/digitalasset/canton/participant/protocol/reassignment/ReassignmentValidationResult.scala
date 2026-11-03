@@ -7,40 +7,63 @@ import cats.data.EitherT
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.data.ContractsReassignmentBatch
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.participant.protocol.conflictdetection.ActivenessResult
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.ErrorLoggingContext
+import com.digitalasset.canton.participant.protocol.conflictdetection.{ActivenessResult, CommitSet}
 import com.digitalasset.canton.participant.protocol.reassignment.ReassignmentValidationResult.{
   CommonValidationResult,
   ReassigningParticipantValidationResult,
 }
 import com.digitalasset.canton.participant.protocol.validation.AuthenticationError
-import com.digitalasset.canton.protocol.{ReassignmentId, RootHash}
+import com.digitalasset.canton.protocol.{ReassignmentId, RequestId, RootHash}
 import com.google.common.annotations.VisibleForTesting
 
 import scala.concurrent.ExecutionContext
 
-/** Represents the result of validating an unassignment or assignment request on a participant.
-  * hostedConfirmingReassigningParties: This is an empty set if the participant is not a reassigning
-  * participant. Otherwise, it represents the set of confirming parties currently hosted on this
-  * participant that have at least confirmation rights.
-  */
+/** Represents the result of validating an unassignment or assignment request on a participant. */
 private[reassignment] trait ReassignmentValidationResult {
   def reassignmentId: ReassignmentId
   def rootHash: RootHash
   def contracts: ContractsReassignmentBatch
-  def hostedConfirmingReassigningParties: Set[LfPartyId]
+
+  /** The set of confirming parties currently hosted on this participant that have at least
+    * confirmation rights.
+    */
+  def hostedConfirmingParties: Set[LfPartyId]
   def isReassigningParticipant: Boolean
   def commonValidationResult: CommonValidationResult
   def reassigningParticipantValidationResult: ReassigningParticipantValidationResult
   def activenessResultIsSuccessful: Boolean
+  protected def requestDescription: String
+
+  /** Reports a `SyncServiceAlarm` if the activeness check of this approved request failed, and
+    * crashes if `crashAfterFailedValidation` is set.
+    */
+  def alarmIfActivenessCheckFailed(requestId: RequestId, crashAfterFailedValidation: Boolean)(
+      implicit loggingContext: ErrorLoggingContext
+  ): Unit =
+    CommitSet.alarmIfActivenessCheckFailed(
+      activenessResultIsSuccessful,
+      commonValidationResult.activenessResult,
+      requestId,
+      requestDescription,
+      crashAfterFailedValidation,
+    )
 
   @VisibleForTesting
   def isSuccessful(implicit ec: ExecutionContext): FutureUnlessShutdown[Boolean] =
     for {
-      contractAuthenticationResult <- commonValidationResult.contractAuthenticationResultF.value
+      commonContractAuthenticationResult <-
+        commonValidationResult.contractAuthenticationResultF.value
+      reassignmentContractAuthenticationResult <-
+        reassigningParticipantValidationResult.contractAuthenticationResultF.value
     } yield activenessResultIsSuccessful &&
       commonValidationResult.participantSignatureVerificationResult.isEmpty &&
+      commonValidationResult.packageVettingResult.isEmpty &&
+      commonValidationResult.contractSerializationResult.isEmpty &&
       reassigningParticipantValidationResult.errors.isEmpty &&
-      contractAuthenticationResult.isRight &&
+      commonContractAuthenticationResult.isRight &&
+      reassignmentContractAuthenticationResult.isRight &&
       commonValidationResult.submitterCheckResult.isEmpty &&
       commonValidationResult.reassignmentIdResult.isEmpty &&
       commonValidationResult.multiSynchronizerFeatureFlagCheckResult.isEmpty
@@ -62,12 +85,24 @@ private[reassignment] object ReassignmentValidationResult {
     def participantSignatureVerificationResult: Option[AuthenticationError]
     def contractAuthenticationResultF
         : EitherT[FutureUnlessShutdown, ReassignmentValidationError, Unit]
+    def packageVettingResult: Option[ReassignmentValidationError]
+    def contractSerializationResult: Option[ReassignmentValidationError]
     def submitterCheckResult: Option[ReassignmentValidationError]
     def reassignmentIdResult: Option[ReassignmentValidationError]
     def multiSynchronizerFeatureFlagCheckResult: Option[ReassignmentValidationError]
   }
 
   private[reassignment] trait ReassigningParticipantValidationResult {
+    def contractAuthenticationResultF: EitherT[
+      FutureUnlessShutdown,
+      ReassignmentValidationError,
+      Unit,
+    ]
     def errors: Seq[ReassignmentValidationError]
+
+    /** Whether the [[errors]] lead to an abstain rather than a reject verdict. A reassigning
+      * participant validation result is entirely abstaining or entirely rejecting.
+      */
+    def isAbstain: Boolean = false
   }
 }

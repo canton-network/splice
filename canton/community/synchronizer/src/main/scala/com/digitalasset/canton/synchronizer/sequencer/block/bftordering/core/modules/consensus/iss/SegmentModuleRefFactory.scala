@@ -5,6 +5,7 @@ package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.mo
 
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.config.ProcessingTimeout
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.synchronizer.metrics.BftOrderingMetrics
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.crypto.CryptoProvider
@@ -18,6 +19,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   ConsensusSegment,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.{Env, ModuleName}
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.version.ProtocolVersion
 import io.opentelemetry.api.trace.Tracer
 
@@ -32,6 +34,7 @@ trait SegmentModuleRefFactory[E <: Env[E]] {
       cryptoProvider: CryptoProvider[E],
       latestCompletedEpochLastCommits: Seq[SignedMessage[Commit]],
       epochInProgress: EpochInProgress,
+      traceContext: TraceContext,
   )(
       segmentState: SegmentState,
       metricsAccumulator: EpochMetricsAccumulator,
@@ -43,6 +46,10 @@ final class SegmentModuleRefFactoryImpl[E <: Env[E]](
     epochStore: EpochStore[E],
     dependencies: ConsensusModuleDependencies[E],
     emptyBlockCreationTimeout: FiniteDuration,
+    consensusEnableFlushingSegment: Boolean,
+    consensusFlushingMinBlocks: Int,
+    windowSizeForRetransmissionOfCommitCertificates: Option[PositiveInt],
+    viewChangeTimeoutOverride: Option[FiniteDuration],
     loggerFactory: NamedLoggerFactory,
     timeouts: ProcessingTimeout,
     metrics: BftOrderingMetrics,
@@ -57,10 +64,12 @@ final class SegmentModuleRefFactoryImpl[E <: Env[E]](
       cryptoProvider: CryptoProvider[E],
       latestCompletedEpochLastCommits: Seq[SignedMessage[Commit]],
       epochInProgress: EpochInProgress,
+      traceContext: TraceContext,
   )(
       segmentState: SegmentState,
       metricsAccumulator: EpochMetricsAccumulator,
   ): E#ModuleRefT[ConsensusSegment.Message] = {
+    implicit val tc: TraceContext = traceContext
     val module =
       new IssSegmentModule[E](
         epoch,
@@ -75,9 +84,15 @@ final class SegmentModuleRefFactoryImpl[E <: Env[E]](
         dependencies.availability,
         dependencies.p2pNetworkOut,
         emptyBlockCreationTimeout,
+        consensusEnableFlushingSegment,
+        consensusFlushingMinBlocks,
+        windowSizeForRetransmissionOfCommitCertificates =
+          windowSizeForRetransmissionOfCommitCertificates,
+        viewChangeTimeoutOverride,
         metrics,
         timeouts,
         loggerFactory,
+        traceContext,
       )
     val moduleRef: E#ModuleRefT[ConsensusSegment.Message] =
       context.newModuleRef(
@@ -85,8 +100,8 @@ final class SegmentModuleRefFactoryImpl[E <: Env[E]](
           s"segment-module-${segmentState.epoch.info.number}-${segmentState.segment.slotNumbers.head1}"
         )
       )(moduleNameForMetrics = "segment-module")
-    context.setModule(moduleRef, module)
-    module.ready(moduleRef)
+    context.setModule(moduleRef, module)(traceContext)
+    module.ready(moduleRef)(traceContext)
     moduleRef
   }
 }

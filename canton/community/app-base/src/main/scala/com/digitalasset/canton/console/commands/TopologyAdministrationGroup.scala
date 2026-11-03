@@ -7,7 +7,6 @@ import cats.syntax.either.*
 import cats.syntax.functorFilter.*
 import cats.syntax.traverse.*
 import com.daml.nameof.NameOf.functionFullName
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.RpcError
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Init.GetIdResult
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Write.GenerateTransactions
@@ -18,9 +17,10 @@ import com.digitalasset.canton.admin.api.client.data.{
   TopologyQueueStatus,
   DynamicSynchronizerParameters as ConsoleDynamicSynchronizerParameters,
 }
-import com.digitalasset.canton.{config, networking}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.{ConsoleCommandTimeout, NonNegativeDuration}
+import com.digitalasset.canton.console.CommandErrors.GenericCommandError
+import com.digitalasset.canton.console.ConsoleEnvironment.Implicits.*
 import com.digitalasset.canton.console.{
   AdminCommandRunner,
   CommandErrors,
@@ -32,18 +32,19 @@ import com.digitalasset.canton.console.{
   Help,
   Helpful,
   InstanceReference,
+  MediatorReference,
+  ParticipantReference,
+  SequencerReference,
 }
-import com.digitalasset.canton.console.CommandErrors.GenericCommandError
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.CantonError
 import com.digitalasset.canton.grpc.{ByteStringStreamObserver, OutputFileStreamObserver}
 import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.protocol.SynchronizerLimits
 import com.digitalasset.canton.topology.*
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Authorized
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.*
-import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
+import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, BaseWriteRequest, TopologyStoreId}
 import com.digitalasset.canton.topology.admin.v30.{
   ExportTopologySnapshotResponse,
   ExportTopologySnapshotV2Response,
@@ -51,24 +52,29 @@ import com.digitalasset.canton.topology.admin.v30.{
   GenesisStateV2Response,
   SequencerLsuStateResponse,
 }
+import com.digitalasset.canton.topology.processing.{EffectiveTime, SequencedTime}
 import com.digitalasset.canton.topology.store.{
   StoredTopologyTransaction,
   StoredTopologyTransactions,
   TimeQuery,
 }
 import com.digitalasset.canton.topology.transaction.*
+import com.digitalasset.canton.topology.transaction.HostingParticipant.HostingState
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp.Replace
 import com.digitalasset.canton.topology.transaction.TopologyMapping.MappingHash
 import com.digitalasset.canton.topology.transaction.TopologyTransaction.TxHash
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.BinaryFileUtil
 import com.digitalasset.canton.util.ShowUtil.*
-import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation}
+import com.digitalasset.canton.util.{BinaryFileUtil, ResourceUtil}
+import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation, ReleaseVersion}
+import com.digitalasset.canton.{config, networking}
 import com.digitalasset.daml.lf.data.Ref.PackageId
+import com.digitalasset.nonempty.NonEmpty
 import com.google.protobuf.ByteString
 import io.grpc.{Context, Status}
 
+import java.io.{BufferedInputStream, ByteArrayOutputStream, FileInputStream, IOException}
 import java.net.URI
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
@@ -80,13 +86,14 @@ import scala.reflect.ClassTag
 import scala.util.control.NoStackTrace
 
 class TopologyAdministrationGroup(
-    instance: InstanceReference,
+    protected val instance: InstanceReference,
     topologyQueueStatus: => Option[TopologyQueueStatus],
     val consoleEnvironment: ConsoleEnvironment,
     val loggerFactory: NamedLoggerFactory,
 ) extends ConsoleCommandGroup
     with Helpful
-    with FeatureFlagFilter {
+    with FeatureFlagFilter
+    with AutoDetectSynchronizerHelper {
 
   protected val runner: AdminCommandRunner = instance
   import runner.*
@@ -97,6 +104,59 @@ class TopologyAdministrationGroup(
   /** run a topology change command */
   private[console] def runAdminCommand[T](grpcCommand: => GrpcAdminCommand[?, ?, T]): T =
     consoleEnvironment.run(adminCommand(grpcCommand))
+
+  private def resolveTargetProtocolVersion(synchronizerId: SynchronizerId): ProtocolVersion =
+    instance match {
+      case sequencer: SequencerReference => resolveSequencerProtocolVersion(sequencer)
+      case mediator: MediatorReference => resolveMediatorProtocolVersion(mediator)
+      case participant: ParticipantReference =>
+        resolveParticipantProtocolVersion(participant, synchronizerId)
+      case other =>
+        consoleEnvironment.raiseError(
+          s"Cannot determine protocol version for unsupported node type `${other.getClass.getSimpleName}`."
+        )
+    }
+
+  private def resolveSequencerProtocolVersion(sequencer: SequencerReference): ProtocolVersion =
+    sequencer.physical_synchronizer_id.protocolVersion
+
+  private def resolveMediatorProtocolVersion(mediator: MediatorReference): ProtocolVersion =
+    mediator.health.status.successOption
+      .map(_.protocolVersion)
+      .getOrElse(
+        consoleEnvironment.raiseError(
+          s"Cannot determine protocol version from mediator `${mediator.name}` health status."
+        )
+      )
+
+  /** Resolves the protocol version for a participant by taking the physical synchronizer id of the
+    * active connection for the given logical synchronizer id.
+    *
+    * Fails if the participant has no active connection for the logical synchronizer id, or if
+    * multiple active connections match.
+    */
+  private def resolveParticipantProtocolVersion(
+      participant: ParticipantReference,
+      synchronizerId: SynchronizerId,
+  ): ProtocolVersion = {
+    val matchingPhysicalSynchronizerIds = participant.synchronizers
+      .list_registered()
+      .flatMap { case (_, knownPsid, _) => knownPsid.toOption }
+      .filter(_.logical == synchronizerId)
+
+    matchingPhysicalSynchronizerIds match {
+      case Seq(physicalSynchronizerId) => physicalSynchronizerId.protocolVersion
+      case Seq() =>
+        consoleEnvironment.raiseError(
+          s"Synchronizer `$synchronizerId` is not registered on participant `${participant.name}`, cannot determine protocol version."
+        )
+      case many =>
+        consoleEnvironment.raiseError(
+          s"Found multiple registered physical synchronizers for `$synchronizerId` on participant `${participant.name}`: ${many
+              .mkString(", ")}."
+        )
+    }
+  }
 
   @Help.Summary("Initialize the node with a unique identifier")
   @Help.Description(
@@ -135,8 +195,8 @@ class TopologyAdministrationGroup(
         .flatMap(bytes =>
           SignedTopologyTransaction
             .fromByteString(
-              ProtocolVersionValidation.NoValidation,
-              ProtocolVersionValidation.NoValidation,
+              ProtocolVersionValidation.AlwaysValidation,
+              TopologyTransactionDeserializationContext(SynchronizerLimits.default),
               bytes,
             )
             .leftMap(_.message)
@@ -274,6 +334,40 @@ class TopologyAdministrationGroup(
         .result
         .map(_.transaction)
 
+    @Help.Summary("Generate identity topology transactions")
+    @Help.Description(
+      """Generate the identity topology transactions used to onboard a member to
+        |a synchronizer.  Note that the private key of the node's namespace must
+        |be accessible by the node for this to work.
+        |
+        |For backwards compatibility, the node will first look in the authorized
+        |store for these transactions with the requested protocol version.  This
+        |is only relevant for participant nodes: sequencer and mediator nodes no
+        |longer use the authorized store.
+        |
+        |Parameters:
+        |- protocolVersion: Desired protocol version for the topology transactions. Must
+        |  match the protocol version of the synchronizer the node wants to join.
+        |- temporaryStore: By default, a new temporary topology store will be created to
+        |  generate the topology transactions.  However, this is problematic if the root
+        |  key is not present on the node.  Therefore, one can pass in a temporary store
+        |  to use that is already seeded with both a signed root certificate, as well as
+        |  a namespace delegation to an intermediate key that is present on the node.
+        """
+    )
+    def generate_onboarding_transactions(
+        protocolVersion: ProtocolVersion,
+        temporaryStore: Option[TopologyStoreId.Temporary] = None,
+    ): Seq[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]] =
+      consoleEnvironment.run {
+        adminCommand(
+          TopologyAdminCommands.Read.GenerateOnboardingTopologyTransactions(
+            protocolVersion = protocolVersion,
+            temporaryStore = temporaryStore,
+          )
+        )
+      }.transactions
+
     @Help.Summary("Serializes node's topology identity transactions to a file")
     @Help.Description(
       "Transactions serialized this way should be loaded into another node with load_from_file"
@@ -295,13 +389,25 @@ class TopologyAdministrationGroup(
     @Help.Description(
       "Transactions serialized this way should be loaded into another node with load_from_file"
     )
-    def export_identity_transactionsV2(file: String): Unit = {
-      val bytes = instance.topology.transactions
-        .export_topology_snapshotV2(
-          filterMappings = Seq(NamespaceDelegation.code, OwnerToKeyMapping.code),
-          filterNamespace = instance.namespace.filterString,
-        )
-      writeToFile(file, bytes)
+    def export_identity_transactionsV2(
+        file: String,
+        protocolVersion: ProtocolVersion,
+    ): Unit = {
+      val out = new ByteArrayOutputStream()
+      instance.topology.transactions.generate_onboarding_transactions(protocolVersion).foreach {
+        tx =>
+          val stx = StoredTopologyTransaction(
+            sequenced = SequencedTime(SignedTopologyTransaction.InitialTopologySequencingTime),
+            validFrom = EffectiveTime(SignedTopologyTransaction.InitialTopologySequencingTime),
+            validUntil = None,
+            transaction = tx,
+            rejectionReason = None,
+          )
+          stx.writeDelimitedTo(protocolVersion, out).valueOr { err =>
+            consoleEnvironment.raiseError(err)
+          }
+      }
+      writeToFile(file, ByteString.copyFrom(out.toByteArray))
     }
 
     @Help.Summary("Loads topology transactions from a file into the specified topology store")
@@ -326,27 +432,52 @@ class TopologyAdministrationGroup(
           consoleEnvironment.commandTimeouts.unbounded
         ),
     ): Unit =
-      consoleEnvironment.run {
-        adminCommand(
-          TopologyAdminCommands.Write
-            .ImportTopologySnapshot(
-              topologyTransactions,
-              store,
-              synchronize,
-            )
-        )
+      TraceContext.withNewTraceContext("import_topology_snapshot") { implicit traceContext =>
+        consoleEnvironment.run {
+          adminCommand(
+            TopologyAdminCommands.Write
+              .ImportTopologySnapshot(
+                topologyTransactions,
+                store,
+                synchronize,
+              )
+          )
+        }
       }
 
     @Help.Summary("Loads topology transactions from a file into the specified topology store")
     @Help.Description("The file must contain data serialized by TopologyTransactions.")
-    def import_topology_snapshot_fromV2(file: String, store: TopologyStoreId): Unit =
-      BinaryFileUtil
-        .readByteStringFromFile(file)
-        .map(import_topology_snapshotV2(_, store))
+    def import_topology_snapshot_fromV2(file: String, store: TopologyStoreId): Unit = {
+      val topologyTransactions = Either
+        .catchOnly[IOException](new BufferedInputStream(new FileInputStream(file)))
         .valueOr { err =>
-          throw new IllegalArgumentException(s"import_topology_snapshot failed: $err")
+          throw new IllegalArgumentException(s"import_topology_snapshot failed: ${err.getMessage}")
         }
+      ResourceUtil.withResource(topologyTransactions) { inputStream =>
+        TraceContext.withNewTraceContext("import_topology_snapshot_fromV2") {
+          implicit traceContext =>
+            consoleEnvironment.run {
+              adminCommand(
+                TopologyAdminCommands.Write
+                  .ImportTopologySnapshotV2(
+                    inputStream,
+                    store,
+                    Some(consoleEnvironment.commandTimeouts.unbounded),
+                  )
+              )
+            }
+        }
+      }
+    }
 
+    @Help.Summary("Loads topology transactions into the specified topology store")
+    @Help.Description(
+      """The byte string must contain data serialized by TopologyTransactions.
+        |
+        |A byte string cannot exceed 2 GB. For larger topology snapshots, use
+        |import_topology_snapshot_fromV2, which streams the snapshot from a file.
+        """
+    )
     def import_topology_snapshotV2(
         topologyTransactions: ByteString,
         store: TopologyStoreId,
@@ -354,15 +485,17 @@ class TopologyAdministrationGroup(
           consoleEnvironment.commandTimeouts.unbounded
         ),
     ): Unit =
-      consoleEnvironment.run {
-        adminCommand(
-          TopologyAdminCommands.Write
-            .ImportTopologySnapshotV2(
-              topologyTransactions,
-              store,
-              synchronize,
-            )
-        )
+      TraceContext.withNewTraceContext("import_topology_snapshotV2") { implicit traceContext =>
+        consoleEnvironment.run {
+          adminCommand(
+            TopologyAdminCommands.Write
+              .ImportTopologySnapshotV2(
+                topologyTransactions.newInput(),
+                store,
+                synchronize,
+              )
+          )
+        }
       }
 
     def load(
@@ -391,7 +524,10 @@ class TopologyAdministrationGroup(
         ),
     ): Unit = {
       val transaction = SignedTopologyTransaction
-        .readFromTrustedFilePVV(file)
+        .readFromTrustedFile(
+          TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+          file,
+        )
         .valueOr { err =>
           consoleEnvironment.run(
             CommandErrors.GenericCommandError(s"Unable to read from `$file`: $err")
@@ -420,7 +556,10 @@ class TopologyAdministrationGroup(
     ): Unit = {
       val transactions = files.map { file =>
         SignedTopologyTransaction
-          .readFromTrustedFilePVV(file)
+          .readFromTrustedFile(
+            TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+            file,
+          )
           .valueOr { err =>
             consoleEnvironment.run(
               CommandErrors.GenericCommandError(s"Unable to read from `$file`: $err")
@@ -447,7 +586,10 @@ class TopologyAdministrationGroup(
         ),
     ): Unit = {
       val transactions = SignedTopologyTransactions
-        .readFromTrustedFile(ProtocolVersionValidation.NoValidation, file)
+        .readFromTrustedFile(
+          TopologyTransactionDeserializationContext(SynchronizerLimits.default),
+          file,
+        )
         .valueOr { err =>
           consoleEnvironment.run(
             CommandErrors.GenericCommandError(s"Unable to read from `$file`: $err")
@@ -464,13 +606,22 @@ class TopologyAdministrationGroup(
 
     def generate(
         proposals: Seq[GenerateTransactions.Proposal]
-    ): Seq[TopologyTransaction[TopologyChangeOp, TopologyMapping]] =
+    ): Seq[TopologyTransaction[TopologyChangeOp, TopologyMapping]] = {
+      val nodeStatus = instance.health.status
+
       consoleEnvironment.run {
         adminCommand(
           TopologyAdminCommands.Write
-            .GenerateTransactions(proposals)
+            .GenerateTransactions(
+              proposals = proposals,
+              baseRequest = BaseWriteRequest(
+                clientVersion = Some(ReleaseVersion.current)
+              ),
+              serverVersion = nodeStatus.releaseVersion,
+            )
         )
       }
+    }
 
     def sign(
         transactions: Seq[GenericSignedTopologyTransaction],
@@ -506,10 +657,15 @@ class TopologyAdministrationGroup(
         mustFullyAuthorize: Boolean = true,
         forceChanges: ForceFlags = ForceFlags.none,
         waitToBecomeEffective: Option[NonNegativeDuration] = None,
-    ): SignedTopologyTransaction[TopologyChangeOp, M] =
+    ): SignedTopologyTransaction[TopologyChangeOp, M] = {
+      val nodeStatus = instance.health.status
+
       consoleEnvironment.run {
         adminCommand(
           TopologyAdminCommands.Write.Propose(
+            BaseWriteRequest(
+              clientVersion = Some(ReleaseVersion.current)
+            ),
             mapping = mapping,
             signedBy = signedBy,
             store = store,
@@ -518,9 +674,11 @@ class TopologyAdministrationGroup(
             mustFullyAuthorize = mustFullyAuthorize,
             forceChanges = forceChanges,
             waitToBecomeEffective = waitToBecomeEffective,
+            serverVersion = nodeStatus.releaseVersion,
           )
         )
       }
+    }
 
     @Help.Summary("Authorize a transaction by its hash")
     def authorize[M <: TopologyMapping: ClassTag](
@@ -562,6 +720,7 @@ class TopologyAdministrationGroup(
         operation,
         filterSigningKey = filterAuthorizedKey.map(_.toProtoPrimitive).getOrElse(""),
         protocolVersion = None,
+        clientVersion = Some(ReleaseVersion.current),
       )
 
       // Use V1 only if the target node is on 3.4 (ListAllV2 doesn't exist there).
@@ -670,9 +829,27 @@ class TopologyAdministrationGroup(
         }
     }
 
+    private def excludedMappingCodes(
+        filterMappings: Seq[TopologyMapping.Code],
+        excludeMappings: Seq[TopologyMapping.Code],
+    ): Seq[String] = {
+      if (filterMappings.nonEmpty && excludeMappings.nonEmpty) {
+        consoleEnvironment.run(
+          CommandErrors
+            .GenericCommandError("Cannot specify both filterMappings and excludeMappings")
+        )
+      }
+      if (filterMappings.nonEmpty) {
+        TopologyMapping.Code.all.diff(filterMappings).map(_.code)
+      } else excludeMappings.map(_.code)
+    }
+
     @Help.Summary("Export topology snapshot")
     @Help.Description(
       """This command export the node's topology transactions as byte string.
+        |
+        |A byte string cannot exceed 2 GB. For larger topology snapshots, use
+        |export_topology_snapshot_to_file, which streams the snapshot to a file.
         |
         |Parameters:
         |- excludeMappings: A list of topology mapping codes to exclude from the export. If not
@@ -694,15 +871,7 @@ class TopologyAdministrationGroup(
         filterNamespace: String = "",
         timeout: NonNegativeDuration = timeouts.unbounded,
     ): ByteString = {
-      if (filterMappings.nonEmpty && excludeMappings.nonEmpty) {
-        consoleEnvironment.run(
-          CommandErrors
-            .GenericCommandError("Cannot specify both filterMappings and excludeMappings")
-        )
-      }
-      val excludeMappingsCodes = if (filterMappings.nonEmpty) {
-        TopologyMapping.Code.all.diff(filterMappings).map(_.code)
-      } else excludeMappings.map(_.code)
+      val excludeMappingsCodes = excludedMappingCodes(filterMappings, excludeMappings)
 
       consoleEnvironment
         .run {
@@ -730,6 +899,68 @@ class TopologyAdministrationGroup(
             responseObserver.resultBytes,
             timeout,
             s"Exporting the topology state from store $store",
+          )
+        }
+    }
+
+    @Help.Summary("Export topology snapshot to a file")
+    @Help.Description(
+      """This command streams the node's topology transactions to a file.
+        |
+        |Parameters:
+        |- outputFile: The file to write the topology transactions to.
+        |- excludeMappings: A list of topology mapping codes to exclude from the export. If not
+        |  provided, all mappings are included.
+        |- filterNamespace: The namespace to filter the transactions by.
+        |- protocolVersion: The protocol version used to serialize the topology transactions. If
+        |  not provided, the latest protocol version is used.
+        """
+    )
+    def export_topology_snapshot_to_file(
+        outputFile: String,
+        store: TopologyStoreId = TopologyStoreId.Authorized,
+        proposals: Boolean = false,
+        timeQuery: TimeQuery = TimeQuery.HeadState,
+        operation: Option[TopologyChangeOp] = None,
+        filterMappings: Seq[TopologyMapping.Code] = Nil,
+        excludeMappings: Seq[TopologyMapping.Code] = Nil,
+        filterAuthorizedKey: Option[Fingerprint] = None,
+        protocolVersion: Option[String] = None,
+        filterNamespace: String = "",
+        timeout: NonNegativeDuration = timeouts.unbounded,
+    ): Unit = {
+      val excludeMappingsCodes = excludedMappingCodes(filterMappings, excludeMappings)
+
+      consoleEnvironment
+        .run {
+          val file = better.files.File(outputFile)
+          val fileStreamObserver = new OutputFileStreamObserver[ExportTopologySnapshotV2Response](
+            file,
+            _.chunk,
+          )
+
+          def call: ConsoleCommandResult[Context.CancellableContext] =
+            adminCommand(
+              TopologyAdminCommands.Read.ExportTopologySnapshotV2(
+                fileStreamObserver,
+                BaseQuery(
+                  store,
+                  proposals,
+                  timeQuery,
+                  operation,
+                  filterSigningKey = filterAuthorizedKey.map(_.toProtoPrimitive).getOrElse(""),
+                  protocolVersion.map(ProtocolVersion.tryCreate),
+                ),
+                excludeMappings = excludeMappingsCodes,
+                filterNamespace = filterNamespace,
+              )
+            )
+          processResult(
+            call,
+            fileStreamObserver.result,
+            timeout,
+            s"Exporting the topology state from store $store to a file",
+            cleanupOnError = () => file.delete(),
           )
         }
     }
@@ -781,6 +1012,9 @@ class TopologyAdministrationGroup(
         |to initialize a sequencer for a major synchronizer upgrades. The `validFrom` and
         |`validUntil` are set to `SignedTopologyTransaction.InitialTopologySequencingTime`.
         |
+        |A byte string cannot exceed 2 GB. For larger genesis states, use export_genesis_state,
+        |which streams the genesis state to a file.
+        |
         |Parameters:
         |- filterSynchronizerStore: Must be specified if the genesis state is requested from a
         |  participant node.
@@ -809,6 +1043,53 @@ class TopologyAdministrationGroup(
       }
 
     @Help.Summary(
+      "Stream the genesis state for a sequencer (intended for performing a major synchronizer upgrade) to a file"
+    )
+    @Help.Description(
+      """Download the topology snapshot which includes the entire history of topology transactions
+        |to initialize a sequencer for a major synchronizer upgrades. The `validFrom` and
+        |`validUntil` are set to `SignedTopologyTransaction.InitialTopologySequencingTime`.
+        |
+        |Parameters:
+        |- outputFile: The file to write the genesis state to.
+        |- filterSynchronizerStore: Must be specified if the genesis state is requested from a
+        |  participant node.
+        |- timestamp: If not specified, the max effective time of the latest topology transaction
+        |  is used. Otherwise, the given timestamp is used.
+        """
+    )
+    def export_genesis_state(
+        outputFile: String,
+        filterSynchronizerStore: Option[TopologyStoreId.Synchronizer] = None,
+        timestamp: Option[CantonTimestamp] = None,
+        timeout: NonNegativeDuration = timeouts.unbounded,
+    ): Unit =
+      consoleEnvironment.run {
+        val file = better.files.File(outputFile)
+        val fileStreamObserver = new OutputFileStreamObserver[GenesisStateV2Response](
+          file,
+          _.chunk,
+        )
+
+        def call: ConsoleCommandResult[Context.CancellableContext] =
+          adminCommand(
+            TopologyAdminCommands.Read.GenesisStateV2(
+              fileStreamObserver,
+              synchronizerStore = filterSynchronizerStore,
+              timestamp = timestamp,
+            )
+          )
+
+        processResult(
+          call,
+          fileStreamObserver.result,
+          timeout,
+          "Downloading the genesis state to a file",
+          cleanupOnError = () => file.delete(),
+        )
+      }
+
+    @Help.Summary(
       "Stream the topology upgrade state for a sequencer (intended for logical synchronizer upgrade) to a file"
     )
     @Help.Description(
@@ -834,8 +1115,9 @@ class TopologyAdministrationGroup(
         timeout: NonNegativeDuration = timeouts.unbounded,
     ): Unit =
       consoleEnvironment.run {
+        val file = better.files.File(outputFile)
         val fileStreamObserver = new OutputFileStreamObserver[SequencerLsuStateResponse](
-          better.files.File(outputFile),
+          file,
           _.chunk,
         )
 
@@ -850,6 +1132,7 @@ class TopologyAdministrationGroup(
           fileStreamObserver.result,
           timeout,
           "Downloading the genesis state for logical upgrade to a file",
+          cleanupOnError = () => file.delete(),
         )
       }
 
@@ -918,9 +1201,7 @@ class TopologyAdministrationGroup(
 
     @Help.Summary(
       """Creates and returns proposals of topology transactions to bootstrap a synchronizer, specifically
-        |SynchronizerParametersState, SequencerSynchronizerState, and MediatorSynchronizerState.
-        |
-        |protocolVersion: protocol version of the synchronizer""".stripMargin
+        |SynchronizerParametersState, SequencerSynchronizerState, and MediatorSynchronizerState."""
     )
     def generate_genesis_topology(
         synchronizerId: PhysicalSynchronizerId,
@@ -960,6 +1241,7 @@ class TopologyAdministrationGroup(
                 .initialValues(
                   synchronizerId.protocolVersion
                 ),
+              protocolVersion = Some(synchronizerId.protocolVersion),
               signedBy = None,
               store = Some(store),
               synchronize = None,
@@ -1056,7 +1338,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterNamespace: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListDecentralizedNamespaceDefinitionResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListDecentralizedNamespaceDefinition(
@@ -1172,18 +1453,23 @@ class TopologyAdministrationGroup(
         ),
     ): SignedTopologyTransaction[TopologyChangeOp, DecentralizedNamespaceDefinition] = {
 
-      val command = TopologyAdminCommands.Write.Propose(
-        decentralizedNamespace,
-        signedBy = signedBy.toList,
-        serial = serial,
-        change = TopologyChangeOp.Replace,
-        mustFullyAuthorize = mustFullyAuthorize,
-        forceChanges = ForceFlags.none,
-        store = store,
-        waitToBecomeEffective = synchronize,
+      val nodeStatus = instance.health.status
+      runAdminCommand(
+        TopologyAdminCommands.Write.Propose(
+          baseRequest = BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
+          mapping = decentralizedNamespace,
+          signedBy = signedBy.toList,
+          serial = serial,
+          change = TopologyChangeOp.Replace,
+          mustFullyAuthorize = mustFullyAuthorize,
+          forceChanges = ForceFlags.none,
+          store = store,
+          waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
+        )
       )
-
-      runAdminCommand(command)
     }
   }
 
@@ -1243,9 +1529,13 @@ class TopologyAdministrationGroup(
           consoleEnvironment.commandTimeouts.bounded
         ),
         forceFlags: ForceFlags = ForceFlags.none,
-    ): SignedTopologyTransaction[TopologyChangeOp, NamespaceDelegation] =
+    ): SignedTopologyTransaction[TopologyChangeOp, NamespaceDelegation] = {
+      val nodeStatus = instance.health.status
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
+          BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
           NamespaceDelegation.create(namespace, targetKey, delegationRestriction),
           signedBy = signedBy,
           store = store,
@@ -1254,8 +1544,10 @@ class TopologyAdministrationGroup(
           mustFullyAuthorize = mustFullyAuthorize,
           forceChanges = forceFlags,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
+    }
 
     @Help.Summary("Revoke an existing namespace delegation")
     @Help.Description(
@@ -1297,7 +1589,8 @@ class TopologyAdministrationGroup(
         synchronize: Option[NonNegativeDuration] = Some(
           consoleEnvironment.commandTimeouts.bounded
         ),
-    ): SignedTopologyTransaction[TopologyChangeOp, NamespaceDelegation] =
+    ): SignedTopologyTransaction[TopologyChangeOp, NamespaceDelegation] = {
+      val nodeStatus = instance.health.status
       list(
         store,
         filterNamespace = namespace.toProtoPrimitive,
@@ -1306,6 +1599,9 @@ class TopologyAdministrationGroup(
         case Seq(nsd) =>
           runAdminCommand(
             TopologyAdminCommands.Write.Propose(
+              BaseWriteRequest(
+                clientVersion = Some(ReleaseVersion.current)
+              ),
               nsd.item,
               signedBy = signedBy,
               store = store,
@@ -1314,6 +1610,7 @@ class TopologyAdministrationGroup(
               mustFullyAuthorize = mustFullyAuthorize,
               forceChanges = forceChanges,
               waitToBecomeEffective = synchronize,
+              serverVersion = nodeStatus.releaseVersion,
             )
           )
 
@@ -1327,6 +1624,7 @@ class TopologyAdministrationGroup(
                 .map(_.item)}"
           )
       }
+    }
 
     def list(
         store: TopologyStoreId,
@@ -1336,7 +1634,6 @@ class TopologyAdministrationGroup(
         filterNamespace: String = "",
         filterSigningKey: String = "",
         filterTargetKey: Option[Fingerprint] = None,
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListNamespaceDelegationResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListNamespaceDelegation(
@@ -1369,7 +1666,6 @@ class TopologyAdministrationGroup(
         filterKeyOwnerType: Option[MemberCode] = None,
         filterKeyOwnerUid: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListOwnerToKeyMappingResult] =
       consoleEnvironment.run {
         adminCommand(
@@ -1381,6 +1677,7 @@ class TopologyAdministrationGroup(
               operation,
               filterSigningKey,
               protocolVersion = None,
+              clientVersion = Some(ReleaseVersion.current),
             ),
             filterKeyOwnerType,
             filterKeyOwnerUid,
@@ -1406,6 +1703,8 @@ class TopologyAdministrationGroup(
         |  propagated into the node.
         |- mustFullyAuthorize: Whether to only add the key if the member is in the position to
         |  authorize the change.
+        |- synchronizerId: Synchronizer to add the key to.  If omitted, this will
+        |  attempt to auto-detect a single configured and connected synchronizer.
         """
     )
     def add_key(
@@ -1418,15 +1717,20 @@ class TopologyAdministrationGroup(
         ),
         // configurable in case of a key under a decentralized namespace
         mustFullyAuthorize: Boolean = true,
-    ): Unit = update(
-      NonEmpty.mk(Seq, (key, purpose)),
-      keyOwner,
-      signedBy,
-      synchronize,
-      add = true,
-      mustFullyAuthorize = mustFullyAuthorize,
-      force = ForceFlags.none,
-    )
+        synchronizerId: Option[SynchronizerId] = None,
+    ): Unit =
+      update(
+        NonEmpty.mk(Seq, (key, purpose)),
+        keyOwner,
+        signedBy,
+        synchronize,
+        add = true,
+        synchronizerId = synchronizerId.getOrElse(
+          autodetectSynchronizer("add_key")
+        ),
+        mustFullyAuthorize = mustFullyAuthorize,
+        force = ForceFlags.none,
+      )
 
     @Help.Summary("Add a set of keys to an owner to key mapping")
     @Help.Description(
@@ -1445,6 +1749,8 @@ class TopologyAdministrationGroup(
         |  propagated into the node.
         |- mustFullyAuthorize: Whether to only add the key if the member is in the position to
         |  authorize the change.
+        |- synchronizerId: Synchronizer to add the keys to.  If omitted, this will
+        |  attempt to auto-detect a single configured and connected synchronizer.
         """
     )
     def add_keys(
@@ -1456,6 +1762,7 @@ class TopologyAdministrationGroup(
         ),
         // configurable in case of a key under a decentralized namespace
         mustFullyAuthorize: Boolean = true,
+        synchronizerId: Option[SynchronizerId] = None,
     ): Unit =
       update(
         NonEmpty
@@ -1465,6 +1772,9 @@ class TopologyAdministrationGroup(
         signedBy,
         synchronize,
         add = true,
+        synchronizerId = synchronizerId.getOrElse(
+          autodetectSynchronizer("add_keys")
+        ),
         mustFullyAuthorize = mustFullyAuthorize,
         force = ForceFlags.none,
       )
@@ -1488,6 +1798,8 @@ class TopologyAdministrationGroup(
         |- mustFullyAuthorize: Whether to only add the key if the member is in the position to
         |  authorize the change.
         |- force: Removing the last key is dangerous and must therefore be manually forced.
+        |- synchronizerId: The synchronizer from which to remove the key.  If omitted,
+        |  this will attempt to auto-detect a single configured and connected synchronizer.
         """
     )
     def remove_key(
@@ -1501,12 +1813,16 @@ class TopologyAdministrationGroup(
         // configurable in case of a key under a decentralized namespace
         mustFullyAuthorize: Boolean = true,
         force: ForceFlags = ForceFlags.none,
+        synchronizerId: Option[SynchronizerId] = None,
     ): Unit = update(
       NonEmpty.mk(Seq, (key, purpose)),
       keyOwner,
       signedBy,
       synchronize,
       add = false,
+      synchronizerId = synchronizerId.getOrElse(
+        autodetectSynchronizer("remove_key")
+      ),
       mustFullyAuthorize = mustFullyAuthorize,
       force = force,
     )
@@ -1523,6 +1839,9 @@ class TopologyAdministrationGroup(
         |- owner: The member that owns the owner to key mapping.
         |- currentKey: The current public key that will be rotated.
         |- newKey: The new public key that has been generated.
+        |- synchronizerId: The synchronizer on which to add and remove the keys.
+        |  If omitted, this will attempt to auto-detect a single configured and
+        |  connected synchronizer.
         """
     )
     def rotate_key(
@@ -1532,6 +1851,7 @@ class TopologyAdministrationGroup(
         synchronize: Option[config.NonNegativeDuration] = Some(
           consoleEnvironment.commandTimeouts.bounded
         ),
+        synchronizerId: Option[SynchronizerId] = None,
     ): Unit = {
       val keysInStore = instance.keys.secret.list().map(_.publicKey)
       require(
@@ -1541,14 +1861,18 @@ class TopologyAdministrationGroup(
       require(keysInStore.contains(newKey), "The new key must exist and pertain to this node")
       require(currentKey.purpose == newKey.purpose, "The rotated keys must have the same purpose")
 
+      val finalSynchronizerId = synchronizerId.getOrElse(
+        autodetectSynchronizer("rotate_key")
+      )
+
       def verifyKeyPresence(key: PublicKey, contains: Boolean): Unit =
         // retry until we observe the change in the respective store
         ConsoleMacros.utils.retry_until_true(
           instance.topology.owner_to_key_mappings
             .list(
-              filterKeyOwnerUid = instance.uid.toProtoPrimitive
+              filterKeyOwnerUid = instance.uid.toProtoPrimitive,
+              store = finalSynchronizerId,
             )
-            .filter(_.context.storeId != Authorized)
             .forall(_.item.keys.contains(key) == contains)
         )(consoleEnvironment)
 
@@ -1560,6 +1884,7 @@ class TopologyAdministrationGroup(
         member,
         signedBy = Seq.empty,
         add = true,
+        synchronizerId = finalSynchronizerId,
         synchronize = synchronize,
       )
 
@@ -1571,12 +1896,11 @@ class TopologyAdministrationGroup(
         member,
         signedBy = Seq.empty,
         add = false,
+        synchronizerId = finalSynchronizerId,
         synchronize = synchronize,
       )
 
       verifyKeyPresence(currentKey, contains = false)
-
-      // TODO(#24218): reduce the risk of using a new key that is not yet recognized by another node.
     }
 
     private def ensurePrivateKeyExists(fingerprint: Fingerprint, purpose: KeyPurpose): PublicKey =
@@ -1599,9 +1923,12 @@ class TopologyAdministrationGroup(
         signedBy: Seq[Fingerprint],
         synchronize: Option[config.NonNegativeDuration],
         add: Boolean,
+        synchronizerId: SynchronizerId,
         mustFullyAuthorize: Boolean = true,
         force: ForceFlags = ForceFlags.none,
     ): Unit = {
+
+      val nodeStatus = instance.health.status
 
       val publicKeys = keys.map { case (fingerprint, purpose) =>
         // Ensure the specified key has a private key in the vault and get the public key
@@ -1611,19 +1938,19 @@ class TopologyAdministrationGroup(
       // Look for an existing authorized OKM mapping.
       val maybePreviousState = expectAtMostOneResult(
         list(
-          store = Some(TopologyStoreId.Authorized),
+          store = synchronizerId,
           filterKeyOwnerUid = keyOwner.filterString,
           filterKeyOwnerType = Some(keyOwner.code),
         )
       ).map(res => (res.item, res.context.operation, res.context.serial))
 
-      val (proposedMapping, serial, ops) = if (add) {
+      val (proposedMapping, serialE, ops) = if (add) {
         // Add key to mapping with serial + 1 or create new mapping.
         maybePreviousState match {
           case None =>
             (
               OwnerToKeyMapping.create(keyOwner, publicKeys),
-              PositiveInt.one,
+              Right(PositiveInt.one),
               TopologyChangeOp.Replace,
             )
           case Some((_, TopologyChangeOp.Remove, previousSerial)) =>
@@ -1670,16 +1997,24 @@ class TopologyAdministrationGroup(
         }
       }
 
+      val serial = serialE.getOrElse(
+        consoleEnvironment.raiseError("OwnerToKeyMapping max serial reached")
+      )
+
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
+          BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
           mapping = proposedMapping,
           signedBy = signedBy,
-          store = TopologyStoreId.Authorized,
+          store = synchronizerId,
           change = ops,
           serial = Some(serial),
           mustFullyAuthorize = mustFullyAuthorize,
           forceChanges = force,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       ).discard
     }
@@ -1697,9 +2032,13 @@ class TopologyAdministrationGroup(
         // configurable in case of a key under a decentralized namespace
         mustFullyAuthorize: Boolean = true,
         force: ForceFlags = ForceFlags.none,
-    ): SignedTopologyTransaction[TopologyChangeOp, OwnerToKeyMapping] =
+    ): SignedTopologyTransaction[TopologyChangeOp, OwnerToKeyMapping] = {
+      val nodeStatus = instance.health.status
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
+          BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
           mapping = OwnerToKeyMapping.create(member, keys),
           signedBy = signedBy,
           store = store,
@@ -1708,8 +2047,10 @@ class TopologyAdministrationGroup(
           mustFullyAuthorize = mustFullyAuthorize,
           forceChanges = force,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
+    }
   }
 
   @Help.Summary("Manage party to key mappings")
@@ -1728,7 +2069,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterParty: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListPartyToKeyMappingResult] =
       consoleEnvironment.run {
         adminCommand(
@@ -1761,9 +2101,13 @@ class TopologyAdministrationGroup(
         // configurable in case of a key under a decentralized namespace
         mustFullyAuthorize: Boolean = true,
         force: ForceFlags = ForceFlags.none,
-    ): SignedTopologyTransaction[TopologyChangeOp, PartyToKeyMapping] =
+    ): SignedTopologyTransaction[TopologyChangeOp, PartyToKeyMapping] = {
+      val nodeStatus = instance.health.status
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
+          BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
           mapping = PartyToKeyMapping.create(partyId, threshold, signingKeys),
           signedBy = signedBy.toList,
           store = store,
@@ -1772,8 +2116,10 @@ class TopologyAdministrationGroup(
           mustFullyAuthorize = mustFullyAuthorize,
           forceChanges = force,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
+    }
   }
 
   @Help.Summary("Manage party to participant mappings")
@@ -1811,35 +2157,55 @@ class TopologyAdministrationGroup(
         removes: Seq[ParticipantId] = Nil,
         store: TopologyStoreId = TopologyStoreId.Authorized,
         serial: Option[PositiveInt] = None,
+        specifiedParticipantStates: Map[ParticipantId, HostingState],
+        requiresPartyToBeOnboarded: Boolean,
     ) = {
       val currentO = findCurrent(party, store)
-      val (existingPermissions, nextSerial, threshold, partySigningKeys) = currentO match {
-        case Some(current) if current.context.operation == TopologyChangeOp.Remove =>
-          (
-            // if the existing mapping was REMOVEd, we start from scratch
-            SeqMap.empty[ParticipantId, ParticipantPermission],
-            Some(current.context.serial.increment),
-            current.item.threshold,
-            None,
+      val (
+        existingPermissions,
+        nextSerial,
+        threshold,
+        partySigningKeys,
+        existingParticipantStates,
+      ) =
+        currentO match {
+          case Some(current) if current.context.operation == TopologyChangeOp.Remove =>
+            (
+              // if the existing mapping was REMOVEd, we start from scratch
+              SeqMap.empty[ParticipantId, ParticipantPermission],
+              Some(current.context.serial.increment),
+              current.item.threshold,
+              None,
+              SeqMap.empty[ParticipantId, HostingState],
+            )
+          case Some(current) =>
+            (
+              SeqMap.from(current.item.participants.map(p => p.participantId -> p.permission)),
+              Some(current.context.serial.increment),
+              current.item.threshold,
+              current.item.partySigningKeysWithThreshold,
+              SeqMap.from(current.item.participants.map(p => p.participantId -> p.state)),
+            )
+          case None =>
+            (
+              SeqMap.empty[ParticipantId, ParticipantPermission],
+              Some(Right(PositiveInt.one)),
+              PositiveInt.one,
+              None,
+              SeqMap.empty[ParticipantId, HostingState],
+            )
+        }
+      val newSerial =
+        if (serial.nonEmpty) serial
+        else
+          nextSerial.map(
+            _.getOrElse(
+              consoleEnvironment.raiseError("PartyToParticipant max serial reached")
+            )
           )
-        case Some(current) =>
-          (
-            SeqMap.from(current.item.participants.map(p => p.participantId -> p.permission)),
-            Some(current.context.serial.increment),
-            current.item.threshold,
-            current.item.partySigningKeysWithThreshold,
-          )
-        case None =>
-          (
-            SeqMap.empty[ParticipantId, ParticipantPermission],
-            Some(PositiveInt.one),
-            PositiveInt.one,
-            None,
-          )
-      }
-      val newSerial = if (serial.nonEmpty) serial else nextSerial
 
-      val newPermissions = new PartyToParticipantComputations(loggerFactory)
+      val computations = new PartyToParticipantComputations(loggerFactory)
+      val newPermissions = computations
         .computeNewPermissions(
           existingPermissions = existingPermissions,
           adds = adds,
@@ -1847,7 +2213,74 @@ class TopologyAdministrationGroup(
         )
         .valueOr(err => consoleEnvironment.raiseError(s"Unable to compute new permissions: $err"))
 
-      (existingPermissions, newPermissions, newSerial, threshold, partySigningKeys)
+      // On released protocol versions, a participant without a specified state becomes Active, or
+      // Onboarding if added with requiresPartyToBeOnboarded, as released. So it does on stores
+      // without a synchronizer, such as the authorized store, as their protocol version is unknown.
+      val keepsHostingStates =
+        store match {
+          case TopologyStoreId.Synchronizer(Right(psid)) =>
+            psid.protocolVersion >= ProtocolVersion.v37
+          case TopologyStoreId.Synchronizer(Left(sid)) =>
+            resolveTargetProtocolVersion(sid) >= ProtocolVersion.v37
+          case _ => false
+        }
+
+      val newParticipantStates =
+        if (keepsHostingStates)
+          computations
+            .computeNewParticipantStates(
+              existingStates = existingParticipantStates,
+              adds = adds.map { case (pid, _) => pid },
+              removes = removes,
+              specifiedStates = specifiedParticipantStates,
+              requiresPartyToBeOnboarded = requiresPartyToBeOnboarded,
+            )
+            .valueOr(err =>
+              consoleEnvironment.raiseError(s"Unable to compute new participant states: $err")
+            )
+        else specifiedParticipantStates
+
+      (
+        existingPermissions,
+        newPermissions,
+        newSerial,
+        threshold,
+        partySigningKeys,
+        existingParticipantStates,
+        newParticipantStates,
+      )
+    }
+
+    private[canton] def hostingParticipants(
+        newParticipants: Seq[(ParticipantId, ParticipantPermission)],
+        participantsRequiringPartyToBeOnboarded: Seq[ParticipantId],
+        participantStates: Map[ParticipantId, HostingState],
+    ): Seq[HostingParticipant] = {
+      val unknownParticipants = participantStates.keySet -- newParticipants.map(_._1)
+      if (unknownParticipants.nonEmpty)
+        consoleEnvironment.raiseError(
+          s"Hosting states specified for participants that do not host the party: ${unknownParticipants
+              .mkString(", ")}"
+        )
+      val conflictingParticipants = participantsRequiringPartyToBeOnboarded.filter(pid =>
+        participantStates.get(pid).exists(_ != HostingState.Onboarding)
+      )
+      if (conflictingParticipants.nonEmpty)
+        consoleEnvironment.raiseError(
+          s"Participants required to onboard the party have a hosting state other than Onboarding: ${conflictingParticipants
+              .mkString(", ")}"
+        )
+      newParticipants.map { case (pid, permission) =>
+        participantStates.get(pid) match {
+          case Some(state) => HostingParticipant(pid, permission, state)
+          case None =>
+            HostingParticipant(
+              pid,
+              permission,
+              onboarding = participantsRequiringPartyToBeOnboarded.contains(pid),
+            )
+        }
+      }
     }
 
     @Help.Summary("Change party to participant mapping")
@@ -1887,6 +2320,18 @@ class TopologyAdministrationGroup(
         |- requiresPartyToBeOnboarded: When set to true, indicate that the added participants need
         |  to first onboard the party independently from this call before the added participants
         |  fully host the party.
+        |- participantStates: The hosting state (Nominated, Freezing, Onboarding, Active) of each
+        |  participant that hosts the party after this change. A participant without an entry
+        |  keeps its current state if it is not in adds. A participant in adds without an entry
+        |  becomes Onboarding if requiresPartyToBeOnboarded is true and Active otherwise, which
+        |  clears an existing onboarding flag; a Nominated or Freezing participant keeps its state
+        |  instead, as moving it forward must be explicit. On protocol versions without Nominated
+        |  and Freezing, and for the authorized store, a participant without an entry is
+        |  Onboarding if it is in adds and requiresPartyToBeOnboarded is true, and Active
+        |  otherwise, even if it currently has another state. Nominated and Freezing participants
+        |  do not host the party, and while any participant is Freezing, the Canton protocol
+        |  treats the party as if it were not hosted on any participant on the synchronizer.
+        |  Nominated and Freezing are supported only in protocol version 37 and higher.
         """
     )
     def propose_delta(
@@ -1902,10 +2347,27 @@ class TopologyAdministrationGroup(
         store: TopologyStoreId = TopologyStoreId.Authorized,
         forceFlags: ForceFlags = ForceFlags.none,
         requiresPartyToBeOnboarded: Boolean = false,
+        participantStates: Map[ParticipantId, HostingState] = Map.empty,
     ): SignedTopologyTransaction[TopologyChangeOp, PartyToParticipant] = {
 
-      val (existingPermissions, newPermissions, newSerial, threshold, partySigningKeys) =
-        computeDelta(party, adds, removes, store, serial)
+      val (
+        existingPermissions,
+        newPermissions,
+        newSerial,
+        threshold,
+        partySigningKeys,
+        existingParticipantStates,
+        newParticipantStates,
+      ) =
+        computeDelta(
+          party,
+          adds,
+          removes,
+          store,
+          serial,
+          participantStates,
+          requiresPartyToBeOnboarded,
+        )
 
       if (newPermissions.nonEmpty) {
         // issue a REPLACE
@@ -1923,6 +2385,7 @@ class TopologyAdministrationGroup(
           participantsRequiringPartyToBeOnboarded =
             if (requiresPartyToBeOnboarded) adds.map(_._1) else Nil,
           partySigningKeys = partySigningKeys,
+          participantStates = newParticipantStates,
         )
       } else {
         // we would remove the last participant, therefore we issue a REMOVE
@@ -1939,6 +2402,7 @@ class TopologyAdministrationGroup(
           store = store,
           forceFlags = forceFlags,
           partySigningKeys = partySigningKeys,
+          participantStates = existingParticipantStates,
         )
 
       }
@@ -1988,6 +2452,13 @@ class TopologyAdministrationGroup(
       |  - "<synchronizer id>": The topology transaction will be directly submitted to the
       |  specified synchronizer without storing it locally first. This also means it will _not_
       |  be synchronized to other synchronizers automatically.
+      |- participantStates: The hosting state (Nominated, Freezing, Onboarding, Active) of each
+      |  participant in newParticipants. A participant without an entry is Onboarding if it is
+      |  in participantsRequiringPartyToBeOnboarded, and Active otherwise. Nominated and
+      |  Freezing participants do not host the party, and while any participant is Freezing,
+      |  the Canton protocol treats the party as if it were not hosted on any participant on
+      |  the synchronizer. Nominated and Freezing are supported only in
+      |  protocol version 37 and higher.
       """
     )
     def propose(
@@ -2005,19 +2476,22 @@ class TopologyAdministrationGroup(
         store: TopologyStoreId = TopologyStoreId.Authorized,
         forceFlags: ForceFlags = ForceFlags.none,
         participantsRequiringPartyToBeOnboarded: Seq[ParticipantId] = Nil,
+        participantStates: Map[ParticipantId, HostingState] = Map.empty,
     ): SignedTopologyTransaction[TopologyChangeOp, PartyToParticipant] = {
+      val nodeStatus = instance.health.status
       val command = TopologyAdminCommands.Write.Propose(
+        baseRequest = BaseWriteRequest(
+          clientVersion = Some(ReleaseVersion.current)
+        ),
         mapping = PartyToParticipant.create(
           partyId = party,
           threshold = threshold,
-          participants = newParticipants.map { case (pid, permission) =>
-            HostingParticipant(
-              pid,
-              permission,
-              onboarding = participantsRequiringPartyToBeOnboarded.contains(pid),
-            )
-          },
-          partySigningKeys,
+          participants = hostingParticipants(
+            newParticipants,
+            participantsRequiringPartyToBeOnboarded,
+            participantStates,
+          ),
+          partySigningKeysWithThreshold = partySigningKeys,
         ),
         signedBy = signedBy,
         serial = serial,
@@ -2026,6 +2500,7 @@ class TopologyAdministrationGroup(
         store = store,
         forceChanges = forceFlags,
         waitToBecomeEffective = synchronize,
+        serverVersion = nodeStatus.releaseVersion,
       )
 
       runAdminCommand(command)
@@ -2053,7 +2528,6 @@ class TopologyAdministrationGroup(
         |  participant.
         |- filterSigningKey: Filter for transactions that are authorized with a key that starts
         |  with the given filter string.
-        |- protocolVersion: This parameter has been deprecated and has no effect anymore.
         """
     )
     def list(
@@ -2064,7 +2538,6 @@ class TopologyAdministrationGroup(
         filterParty: String = "",
         filterParticipant: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListPartyToParticipantResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListPartyToParticipant(
@@ -2217,7 +2690,6 @@ class TopologyAdministrationGroup(
         |- filterParticipant: Filter for participants starting with the given filter string.
         |- filterSigningKey: Filter for transactions that are authorized with a key that starts
         |  with the given filter string.
-        |- protocolVersion: This parameter has been deprecated and has no effect anymore.
         """
     )
     def list_from_authorized(
@@ -2227,7 +2699,6 @@ class TopologyAdministrationGroup(
         filterParty: String = "",
         filterParticipant: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListPartyToParticipantResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListPartyToParticipant(
@@ -2265,7 +2736,6 @@ class TopologyAdministrationGroup(
         |- filterParticipant: Filter for participants starting with the given filter string.
         |- filterSigningKey: Filter for transactions that are authorized with a key that starts
         |  with the given filter string.
-        |- protocolVersion: This parameter has been deprecated and has no effect anymore.
         """
     )
     def list_from_all(
@@ -2275,7 +2745,6 @@ class TopologyAdministrationGroup(
         filterParty: String = "",
         filterParticipant: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListPartyToParticipantResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListPartyToParticipant(
@@ -2286,6 +2755,7 @@ class TopologyAdministrationGroup(
             operation,
             filterSigningKey,
             protocolVersion = None,
+            clientVersion = Some(ReleaseVersion.current),
           ),
           filterParty,
           filterParticipant,
@@ -2304,7 +2774,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterUid: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListSynchronizerTrustCertificateResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListSynchronizerTrustCertificate(
@@ -2315,6 +2784,7 @@ class TopologyAdministrationGroup(
             operation,
             filterSigningKey,
             protocolVersion = None,
+            clientVersion = Some(ReleaseVersion.current),
           ),
           filterUid,
         )
@@ -2372,11 +2842,15 @@ class TopologyAdministrationGroup(
         change: TopologyChangeOp = TopologyChangeOp.Replace,
         featureFlags: Seq[SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag] = Seq.empty,
     ): SignedTopologyTransaction[TopologyChangeOp, SynchronizerTrustCertificate] = {
+      val nodeStatus = instance.health.status
       val cmd = TopologyAdminCommands.Write.Propose(
+        baseRequest = BaseWriteRequest(
+          clientVersion = Some(ReleaseVersion.current)
+        ),
         mapping = SynchronizerTrustCertificate(
           participantId,
           synchronizerId,
-          featureFlags,
+          featureFlags.toSet,
         ),
         signedBy = Seq.empty,
         store = store.getOrElse(synchronizerId),
@@ -2384,6 +2858,7 @@ class TopologyAdministrationGroup(
         mustFullyAuthorize = mustFullyAuthorize,
         change = change,
         waitToBecomeEffective = synchronize,
+        serverVersion = nodeStatus.releaseVersion,
       )
       runAdminCommand(cmd)
     }
@@ -2437,7 +2912,11 @@ class TopologyAdministrationGroup(
         serial: Option[PositiveInt] = None,
         change: TopologyChangeOp = TopologyChangeOp.Replace,
     ): SignedTopologyTransaction[TopologyChangeOp, ParticipantSynchronizerPermission] = {
+      val nodeStatus = instance.health.status
       val cmd = TopologyAdminCommands.Write.Propose(
+        baseRequest = BaseWriteRequest(
+          clientVersion = Some(ReleaseVersion.current)
+        ),
         mapping = ParticipantSynchronizerPermission(
           synchronizerId = synchronizerId,
           participantId = participantId,
@@ -2451,6 +2930,7 @@ class TopologyAdministrationGroup(
         mustFullyAuthorize = mustFullyAuthorize,
         change = change,
         waitToBecomeEffective = synchronize,
+        serverVersion = nodeStatus.releaseVersion,
       )
 
       runAdminCommand(cmd)
@@ -2504,7 +2984,13 @@ class TopologyAdministrationGroup(
             item.limits,
             synchronize,
             store = store,
-            serial = Some(result.context.serial.increment),
+            serial = Some(
+              result.context.serial.increment.getOrElse(
+                consoleEnvironment.raiseError(
+                  "ParticipantSynchronizerPermissions max serial reached"
+                )
+              )
+            ),
             mustFullyAuthorize = mustFullyAuthorize,
             change = TopologyChangeOp.Remove,
           )
@@ -2521,7 +3007,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterUid: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListParticipantSynchronizerPermissionResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListParticipantSynchronizerPermission(
@@ -2587,7 +3072,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterUid: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListPartyHostingLimitsResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListPartyHostingLimits(
@@ -2598,6 +3082,7 @@ class TopologyAdministrationGroup(
             operation,
             filterSigningKey,
             protocolVersion = None,
+            clientVersion = Some(ReleaseVersion.current),
           ),
           filterUid,
         )
@@ -2617,18 +3102,24 @@ class TopologyAdministrationGroup(
         synchronize: Option[NonNegativeDuration] = Some(
           consoleEnvironment.commandTimeouts.bounded
         ),
-    ): SignedTopologyTransaction[TopologyChangeOp, PartyHostingLimits] =
+    ): SignedTopologyTransaction[TopologyChangeOp, PartyHostingLimits] = {
+      val nodeStatus = instance.health.status
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
-          PartyHostingLimits(synchronizerId, partyId),
+          baseRequest = BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
+          mapping = PartyHostingLimits(synchronizerId, partyId),
           signedBy = signedBy,
           store = store.getOrElse(synchronizerId),
           serial = serial,
           change = TopologyChangeOp.Replace,
           mustFullyAuthorize = mustFullyAuthorize,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
+    }
   }
 
   @Help.Summary("Manage package vettings")
@@ -2721,7 +3212,7 @@ class TopologyAdministrationGroup(
                 ) =>
               (serial.increment, adds)
             case None =>
-              (PositiveInt.one, adds)
+              (Right(PositiveInt.one), adds)
           }
 
           if (current0.exists(_.item.packages.toSet == newDiffPackageIds.toSet))
@@ -2733,7 +3224,11 @@ class TopologyAdministrationGroup(
               store,
               mustFullyAuthorize,
               synchronize,
-              Some(newSerial),
+              Some(
+                newSerial.getOrElse(
+                  consoleEnvironment.raiseError("VettedPackages max serial reached")
+                )
+              ),
               signedBy,
               force,
             )
@@ -2785,8 +3280,12 @@ class TopologyAdministrationGroup(
         force: ForceFlags = ForceFlags.none,
         operation: TopologyChangeOp = TopologyChangeOp.Replace,
     ): Unit = {
+      val nodeStatus = instance.health.status
 
       val command = TopologyAdminCommands.Write.Propose(
+        baseRequest = BaseWriteRequest(
+          clientVersion = Some(ReleaseVersion.current)
+        ),
         mapping = VettedPackages.create(
           participantId = participant,
           packages = packages,
@@ -2798,6 +3297,7 @@ class TopologyAdministrationGroup(
         store = store,
         forceChanges = force,
         waitToBecomeEffective = synchronize,
+        serverVersion = nodeStatus.releaseVersion,
       )
 
       runAdminCommand(command).discard
@@ -2817,7 +3317,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterParticipant: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListVettedPackagesResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListVettedPackages(
@@ -2828,6 +3327,7 @@ class TopologyAdministrationGroup(
             operation,
             filterSigningKey,
             protocolVersion = None,
+            clientVersion = Some(ReleaseVersion.current),
           ),
           filterParticipant,
         )
@@ -2853,7 +3353,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterSynchronizer: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
         group: Option[NonNegativeInt] = None,
     ): Seq[ListMediatorSynchronizerStateResult] = {
       def predicate(res: ListMediatorSynchronizerStateResult): Boolean =
@@ -2870,6 +3369,7 @@ class TopologyAdministrationGroup(
                 operation,
                 filterSigningKey,
                 protocolVersion = None,
+                clientVersion = Some(ReleaseVersion.current),
               ),
               filterSynchronizer,
             )
@@ -2951,7 +3451,7 @@ class TopologyAdministrationGroup(
             mds.observers.concat(observerAdds).diff(observerRemoves),
           )
         case None =>
-          (PositiveInt.one, PositiveInt.one, adds, observerAdds)
+          (Right(PositiveInt.one), PositiveInt.one, adds, observerAdds)
       }
 
       propose(
@@ -2964,7 +3464,11 @@ class TopologyAdministrationGroup(
         synchronize = synchronize,
         mustFullyAuthorize = mustFullyAuthorize,
         signedBy = signedBy,
-        serial = Some(serial),
+        serial = Some(
+          serial.getOrElse(
+            consoleEnvironment.raiseError("Mediator synchronizer state max serial reached")
+          )
+        ),
       ).discard
     }
 
@@ -3013,7 +3517,11 @@ class TopologyAdministrationGroup(
         signedBy: Option[Fingerprint] = None,
         serial: Option[PositiveInt] = None,
     ): SignedTopologyTransaction[TopologyChangeOp, MediatorSynchronizerState] = {
+      val nodeStatus = instance.health.status
       val command = TopologyAdminCommands.Write.Propose(
+        baseRequest = BaseWriteRequest(
+          clientVersion = Some(ReleaseVersion.current)
+        ),
         mapping = MediatorSynchronizerState
           .create(synchronizerId, group, threshold, active, observers),
         signedBy = signedBy.toList,
@@ -3023,6 +3531,7 @@ class TopologyAdministrationGroup(
         forceChanges = ForceFlags.none,
         store = store.getOrElse(synchronizerId),
         waitToBecomeEffective = synchronize,
+        serverVersion = nodeStatus.releaseVersion,
       )
 
       runAdminCommand(command)
@@ -3056,19 +3565,29 @@ class TopologyAdministrationGroup(
         mustFullyAuthorize: Boolean = false,
     ): SignedTopologyTransaction[TopologyChangeOp, MediatorSynchronizerState] = {
 
-      val mediatorStateResult = list(synchronizerId = Some(synchronizerId), group = Some(group))
+      val nodeStatus = instance.health.status
+
+      val mediatorStateResult = list(synchronizerId = synchronizerId, group = Some(group))
         .maxByOption(_.context.serial)
         .getOrElse(throw new IllegalArgumentException(s"Unknown mediator group $group"))
 
       val command = TopologyAdminCommands.Write.Propose(
+        baseRequest = BaseWriteRequest(
+          clientVersion = Some(ReleaseVersion.current)
+        ),
         mapping = mediatorStateResult.item,
         signedBy = Seq.empty,
-        serial = Some(mediatorStateResult.context.serial.increment),
+        serial = Some(
+          mediatorStateResult.context.serial.increment.getOrElse(
+            consoleEnvironment.raiseError("Mediator synchronizer state max serial reached")
+          )
+        ),
         change = TopologyChangeOp.Remove,
         mustFullyAuthorize = mustFullyAuthorize,
         forceChanges = ForceFlags.none,
         store = store.getOrElse(synchronizerId),
         waitToBecomeEffective = synchronize,
+        serverVersion = nodeStatus.releaseVersion,
       )
 
       runAdminCommand(command)
@@ -3085,7 +3604,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterSynchronizer: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListSequencerSynchronizerStateResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListSequencerSynchronizerState(
@@ -3096,6 +3614,7 @@ class TopologyAdministrationGroup(
             operation,
             filterSigningKey,
             protocolVersion = None,
+            clientVersion = Some(ReleaseVersion.current),
           ),
           filterSynchronizer,
         )
@@ -3143,21 +3662,31 @@ class TopologyAdministrationGroup(
         synchronize: Option[config.NonNegativeDuration] = Some(
           consoleEnvironment.commandTimeouts.unbounded
         ),
-    ): SignedTopologyTransaction[TopologyChangeOp, SequencerSynchronizerState] =
+    ): SignedTopologyTransaction[TopologyChangeOp, SequencerSynchronizerState] = {
+      val nodeStatus = instance.health.status
+
       consoleEnvironment.run {
-        adminCommand(
-          TopologyAdminCommands.Write.Propose(
-            mapping = SequencerSynchronizerState.create(synchronizerId, threshold, active, passive),
-            signedBy = signedBy.toList,
-            serial = serial,
-            change = TopologyChangeOp.Replace,
-            mustFullyAuthorize = mustFullyAuthorize,
-            forceChanges = ForceFlags.none,
-            store = store.getOrElse(synchronizerId),
-            waitToBecomeEffective = synchronize,
+        for {
+          result <- adminCommand(
+            TopologyAdminCommands.Write.Propose(
+              baseRequest = BaseWriteRequest(
+                clientVersion = Some(ReleaseVersion.current)
+              ),
+              mapping =
+                SequencerSynchronizerState.create(synchronizerId, threshold, active, passive),
+              signedBy = signedBy.toList,
+              serial = serial,
+              change = TopologyChangeOp.Replace,
+              mustFullyAuthorize = mustFullyAuthorize,
+              forceChanges = ForceFlags.none,
+              store = store.getOrElse(synchronizerId),
+              waitToBecomeEffective = synchronize,
+              serverVersion = nodeStatus.releaseVersion,
+            )
           )
-        )
+        } yield result
       }
+    }
   }
 
   @Help.Summary("Manage synchronizer parameters state")
@@ -3171,7 +3700,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterSynchronizer: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): Seq[ListSynchronizerParametersStateResult] = consoleEnvironment.run {
       adminCommand(
         TopologyAdminCommands.Read.ListSynchronizerParametersState(
@@ -3193,7 +3721,6 @@ class TopologyAdministrationGroup(
         store: TopologyStoreId,
         filterSynchronizer: String = "",
         filterSigningKey: String = "",
-        @deprecated("Has no effect anymore.", since = "3.5") protocolVersion: Option[String] = None,
     ): ConsoleDynamicSynchronizerParameters = consoleEnvironment.run {
       val commandResult = adminCommand(
         TopologyAdminCommands.Read.ListSynchronizerParametersState(
@@ -3260,6 +3787,9 @@ class TopologyAdministrationGroup(
         |  If None, the serial will be automatically selected by the node.
         |- synchronize: Synchronize timeout can be used to ensure that the state has been
         |  propagated into the node.
+         |- protocolVersion: Optional protocol version override for parameter conversion.
+         |  Leave as None for regular proposals. Set it during synchronizer bootstrap when
+         |  protocol version resolution from node state is not yet available.
         |- force: Must be set to true when performing a dangerous operation, such as increasing
         |  the preparationTimeRecordTimeTolerance.
         """
@@ -3275,25 +3805,37 @@ class TopologyAdministrationGroup(
           consoleEnvironment.commandTimeouts.bounded
         ),
         force: ForceFlags = ForceFlags.none,
+        protocolVersion: Option[ProtocolVersion] = None,
     ): SignedTopologyTransaction[TopologyChangeOp, SynchronizerParametersState] = { // TODO(#15815): Don't expose internal TopologyMapping and TopologyChangeOp classes
 
+      val nodeStatus = instance.health.status
+
+      val targetProtocolVersion =
+        protocolVersion.getOrElse(resolveTargetProtocolVersion(synchronizerId))
+
       val parametersInternal =
-        parameters.toInternal.valueOr(err =>
-          consoleEnvironment.raiseError(s"Cannot convert parameters to internal format: $err")
-        )
+        parameters
+          .toInternal(targetProtocolVersion)
+          .valueOr(err =>
+            consoleEnvironment.raiseError(s"Cannot convert parameters to internal format: $err")
+          )
 
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
-          SynchronizerParametersState(
+          baseRequest = BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
+          mapping = SynchronizerParametersState(
             synchronizerId,
             parametersInternal,
           ),
-          signedBy.toList,
+          signedBy = signedBy.toList,
           serial = serial,
           mustFullyAuthorize = mustFullyAuthorize,
           store = store.getOrElse(synchronizerId),
           forceChanges = force,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
     }
@@ -3312,6 +3854,9 @@ class TopologyAdministrationGroup(
         |- signedBy: The fingerprint of the key to be used to sign this proposal.
         |- synchronize: Synchronize timeout can be used to ensure that the state has been
         |  propagated into the node.
+         |- protocolVersion: Optional protocol version override for parameter conversion.
+         |  Leave as None for regular proposals. Set it during synchronizer bootstrap when
+         |  protocol version resolution from node state is not yet available.
         |- force: Must be set to true when performing a dangerous operation, such as increasing
         |  the preparationTimeRecordTimeTolerance.
         """
@@ -3344,7 +3889,11 @@ class TopologyAdministrationGroup(
           Some(synchronizerStore),
           mustFullyAuthorize,
           signedBy,
-          Some(previousParameters.context.serial.increment),
+          Some(
+            previousParameters.context.serial.increment.getOrElse(
+              consoleEnvironment.raiseError("SynchronizerParameters max serial reached")
+            )
+          ),
           synchronize,
           force,
         ).discard
@@ -3514,8 +4063,9 @@ class TopologyAdministrationGroup(
           // Use the clock instead of Threading.sleep to support sim clock based tests.
           val delayF = consoleEnvironment.environment.clock
             .scheduleAt(
-              _ => (),
-              startTs.plus(waitDuration),
+              action = _ => (),
+              taskName = s"${getClass.getName}: delay",
+              timestamp = startTs.plus(waitDuration),
             ) // avoid scheduleAfter, because that causes a race condition in integration tests
             .onShutdown(
               throw new IllegalStateException(
@@ -3559,7 +4109,6 @@ class TopologyAdministrationGroup(
         operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
         filterSynchronizer: String = "",
         filterSigningKey: String = "",
-        protocolVersion: Option[String] = None,
     ): Seq[ListSequencingParametersStateResult] =
       consoleEnvironment.run {
         adminCommand(
@@ -3570,7 +4119,7 @@ class TopologyAdministrationGroup(
               timeQuery,
               operation,
               filterSigningKey,
-              protocolVersion.map(ProtocolVersion.tryCreate),
+              protocolVersion = None,
             ),
             filterSynchronizer,
           )
@@ -3582,7 +4131,6 @@ class TopologyAdministrationGroup(
         store: TopologyStoreId,
         filterSynchronizer: String = "",
         filterSigningKey: String = "",
-        protocolVersion: Option[String] = None,
     ): Option[SequencingParameters] =
       consoleEnvironment.run {
         val commandResult = adminCommand(
@@ -3593,7 +4141,7 @@ class TopologyAdministrationGroup(
               TimeQuery.HeadState,
               Some(TopologyChangeOp.Replace),
               filterSigningKey,
-              protocolVersion.map(ProtocolVersion.tryCreate),
+              protocolVersion = None,
             ),
             filterSynchronizer,
           )
@@ -3660,24 +4208,33 @@ class TopologyAdministrationGroup(
           consoleEnvironment.commandTimeouts.bounded
         ),
         force: ForceFlags = ForceFlags.none,
+        protocolVersion: Option[ProtocolVersion] = None,
     ): SignedTopologyTransaction[TopologyChangeOp, SequencingParametersState] = { // TODO(#15815): Don't expose internal TopologyMapping and TopologyChangeOp classes
+
+      val nodeStatus = instance.health.status
+
+      val targetProtocolVersion =
+        protocolVersion.getOrElse(resolveTargetProtocolVersion(synchronizerId))
+
       val parametersInternal =
-        parameters.toInternal
-          .valueOr(err =>
-            consoleEnvironment.raiseError(s"Cannot convert parameters to internal format: $err")
-          )
+        parameters
+          .toInternal(targetProtocolVersion)
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
-          SequencingParametersState(
+          baseRequest = BaseWriteRequest(
+            clientVersion = Some(ReleaseVersion.current)
+          ),
+          mapping = SequencingParametersState(
             synchronizerId,
             parametersInternal,
           ),
-          signedBy.toList,
+          signedBy = signedBy.toList,
           serial = serial,
           mustFullyAuthorize = mustFullyAuthorize,
           store = store.getOrElse(synchronizerId),
           forceChanges = force,
           waitToBecomeEffective = synchronize,
+          serverVersion = nodeStatus.releaseVersion,
         )
       )
     }
@@ -3757,6 +4314,7 @@ class TopologyAdministrationGroup(
               operation,
               filterSigningKey,
               protocolVersion = None,
+              clientVersion = Some(ReleaseVersion.current),
             ),
             filterSynchronizer,
           )
@@ -3805,23 +4363,31 @@ class TopologyAdministrationGroup(
           ),
       ): SignedTopologyTransaction[TopologyChangeOp, LsuAnnouncement] = {
         val mapping = LsuAnnouncement(
-          successorPhysicalSynchronizerId,
+          successorPhysicalSynchronizerId.opaque,
           upgradeTime,
         )
 
+        val nodeStatus = instance.health.status
+
         consoleEnvironment.run {
-          adminCommand(
-            TopologyAdminCommands.Write.Propose(
-              mapping = mapping,
-              signedBy = signedBy.toList,
-              serial = serial,
-              change = TopologyChangeOp.Replace,
-              mustFullyAuthorize = mustFullyAuthorize,
-              forceChanges = ForceFlags.none,
-              store = store.getOrElse(successorPhysicalSynchronizerId.logical),
-              waitToBecomeEffective = synchronize,
+          for {
+            result <- adminCommand(
+              TopologyAdminCommands.Write.Propose(
+                baseRequest = BaseWriteRequest(
+                  clientVersion = Some(ReleaseVersion.current)
+                ),
+                mapping = mapping,
+                signedBy = signedBy.toList,
+                serial = serial,
+                change = TopologyChangeOp.Replace,
+                mustFullyAuthorize = mustFullyAuthorize,
+                forceChanges = ForceFlags.none,
+                store = store.getOrElse(successorPhysicalSynchronizerId.logical),
+                waitToBecomeEffective = synchronize,
+                serverVersion = nodeStatus.releaseVersion,
+              )
             )
-          )
+          } yield result
         }
       }
 
@@ -3867,13 +4433,18 @@ class TopologyAdministrationGroup(
           ),
       ): SignedTopologyTransaction[TopologyChangeOp, LsuAnnouncement] = {
         val mapping = LsuAnnouncement(
-          successorPhysicalSynchronizerId,
+          successorPhysicalSynchronizerId.opaque,
           upgradeTime,
         )
+
+        val nodeStatus = instance.health.status
 
         consoleEnvironment.run {
           adminCommand(
             TopologyAdminCommands.Write.Propose(
+              baseRequest = BaseWriteRequest(
+                clientVersion = Some(ReleaseVersion.current)
+              ),
               mapping = mapping,
               signedBy = signedBy.toList,
               serial = serial,
@@ -3882,6 +4453,7 @@ class TopologyAdministrationGroup(
               forceChanges = ForceFlags.none,
               store = store.getOrElse(successorPhysicalSynchronizerId.logical),
               waitToBecomeEffective = synchronize,
+              serverVersion = nodeStatus.releaseVersion,
             )
           )
         }
@@ -3936,16 +4508,21 @@ class TopologyAdministrationGroup(
           synchronize: Option[config.NonNegativeDuration] = Some(
             consoleEnvironment.commandTimeouts.unbounded
           ),
-      ): SignedTopologyTransaction[TopologyChangeOp, LsuSequencerConnectionSuccessor] =
+      ): SignedTopologyTransaction[TopologyChangeOp, LsuSequencerConnectionSuccessor] = {
+        val nodeStatus = instance.health.status
+
         consoleEnvironment.run {
           adminCommand(
             TopologyAdminCommands.Write.Propose(
+              baseRequest = BaseWriteRequest(
+                clientVersion = Some(ReleaseVersion.current)
+              ),
               mapping = networking.Endpoint
                 .fromUris(endpoints.toSeq)
                 .map { case (validatedEndpoints, useTls) =>
                   LsuSequencerConnectionSuccessor(
                     sequencerId,
-                    successorSynchronizerId,
+                    successorSynchronizerId.opaque,
                     GrpcConnection(
                       validatedEndpoints,
                       useTls,
@@ -3960,9 +4537,11 @@ class TopologyAdministrationGroup(
               forceChanges = ForceFlags.none,
               store = store.getOrElse(successorSynchronizerId.logical),
               waitToBecomeEffective = synchronize,
+              serverVersion = nodeStatus.releaseVersion,
             )
           )
         }
+      }
 
       def list(
           store: Option[TopologyStoreId] = None,
@@ -3982,6 +4561,7 @@ class TopologyAdministrationGroup(
               operation,
               filterSigningKey,
               protocolVersion = None,
+              clientVersion = Some(ReleaseVersion.current),
             ),
             filterSequencerId = filterSequencerId,
             filterSuccessorPhysicalSynchronizerId = filterSuccessorPhysicalSynchronizerId,

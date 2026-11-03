@@ -3,17 +3,21 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
   DevelopmentFundCoupon,
   LockedAmulet,
   RewardCouponV2,
+  SvRewardCoupon,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommandCounter
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock as governancelockCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.mintingdelegation as mintingDelegationCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
@@ -30,7 +34,6 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
-import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsInterfaceViewRowData
 
@@ -84,6 +87,15 @@ trait ExternalPartyWalletStore extends TransferInputStore with NamedLogging {
     )
   ]]
 
+  def listSortedSvRewardCoupons(
+      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[
+    Seq[
+      (Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)
+    ]
+  ]
+
   def listUnclaimedActivityRecords(
       limit: Limit = defaultLimit
   )(implicit tc: TraceContext): Future[Seq[
@@ -130,8 +142,9 @@ object ExternalPartyWalletStore {
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
       close: CloseContext,
-  ): ExternalPartyWalletStore = {
-    new DbExternalPartyWalletStore(
+      tc: TraceContext,
+  ): Future[ExternalPartyWalletStore] = {
+    DbExternalPartyWalletStore.create(
       key,
       storage,
       loggerFactory,
@@ -240,6 +253,27 @@ object ExternalPartyWalletStore {
           co.payload.user == externalParty &&
           co.payload.validator == externalParty
         }(ExternalPartyWalletAcsStoreRowData(_)),
+        mkFilter(SvRewardCoupon.COMPANION) { co =>
+          co.payload.dso == dso &&
+          co.payload.beneficiary == externalParty
+        }(ExternalPartyWalletAcsStoreRowData(_)),
+        mkFilter(governancelockCodegen.GovernanceLock.COMPANION)(
+          co => co.payload.dso == dso && co.payload.owner == externalParty,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          val (lockType, lockSubject) =
+            GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+          ExternalPartyWalletAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = GovernanceLockUtil
+              .getVestingLockSpecification(contract.payload)
+              .map(v => Timestamp.assertFromInstant(v.endTime)),
+            governanceLockType = Some(lockType.storeValue),
+            governanceLockSubject = Some(lockSubject),
+          )
+        },
       ),
     )
   }

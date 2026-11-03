@@ -3,10 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
 import org.lfdecentralizedtrust.splice.scan.store.ScanAppRewardsStore
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import io.grpc.Status
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -89,6 +89,16 @@ object DbScanAppRewardsStore {
       batchesCreatedCount: Long,
   )
 
+  /** Row counts deleted per table by `deleteRewardAccountingDataForRound`. */
+  final case class RewardAccountingPruneSummary(
+      activityPartyTotals: Long,
+      activityRoundTotals: Long,
+      rewardPartyTotals: Long,
+      rewardRoundTotals: Long,
+      batchHashes: Long,
+      rootHashes: Long,
+  )
+
   /** A SHA-256 hash stored as raw bytes, avoiding unnecessary Array[Byte] ↔
     * ByteString conversions at the DB boundary. Conversion to hex strings
     * for the HTTP layer is done via `toHex` / `fromHex`.
@@ -114,6 +124,14 @@ object DbScanAppRewardsStore {
   sealed trait BatchContents
   case class BatchOfBatches(childHashes: Seq[RewardHash]) extends BatchContents
   case class BatchOfMintingAllowances(allowances: Seq[MintingAllowance]) extends BatchContents
+
+  // Defensive cap on the hashes read for `lookupBatchByHash`. Actual limit is
+  // the RewardConfig.batchSize in effect when it was computed; Daml only
+  // requires batchSize > 0. The default is 100 (in DSO config), and
+  // Dev+Test+Mainnet still use this value at time of writing, so we assume 100x
+  // that as a practical upper limit. RewardComputationInputs.fromOpenMiningRound
+  // caps batchSize to this, so trees computed here never exceed it.
+  private[scan] val MaxChildBatches: Int = 10000
 }
 
 class DbScanAppRewardsStore(
@@ -128,8 +146,10 @@ class DbScanAppRewardsStore(
     with NamedLogging
     with FlagCloseable
     with HasCloseContext
-    with org.lfdecentralizedtrust.splice.store.db.AcsQueries {
+    with org.lfdecentralizedtrust.splice.store.db.AcsQueries
+    with LimitHelpers {
 
+  private implicit val dbProfile: DbStorage.Profile = storage.profile
   val profile: slick.jdbc.JdbcProfile = PostgresProfile
 
   override protected def timeouts = new ProcessingTimeout
@@ -529,10 +549,12 @@ class DbScanAppRewardsStore(
     * Returns BatchOfBatches (child hashes) for internal nodes,
     * or BatchOfMintingAllowances (party + amount) for leaf nodes.
     * Returns None if no batch with this hash exists for the round.
+    * Fails if the batch has more than `maxChildBatches` hashes or allowances.
     */
   def lookupBatchByHash(
       roundNumber: Long,
       batchHash: DbScanAppRewardsStore.RewardHash,
+      maxChildBatches: Int = DbScanAppRewardsStore.MaxChildBatches,
   )(implicit tc: TraceContext): Future[Option[DbScanAppRewardsStore.BatchContents]] =
     for {
       batchO <- findBatchByHash(roundNumber, batchHash)
@@ -540,10 +562,16 @@ class DbScanAppRewardsStore(
         case None =>
           Future.successful(Option.empty[DbScanAppRewardsStore.BatchContents])
         case Some((level, beginIncl, endExcl)) if level > 0 =>
-          getChildBatchHashes(roundNumber, level, beginIncl, endExcl)
+          getChildBatchHashes(
+            roundNumber,
+            level,
+            beginIncl,
+            endExcl,
+            HardLimit.tryCreate(maxChildBatches, maxChildBatches),
+          )
             .map(hashes => Some(DbScanAppRewardsStore.BatchOfBatches(hashes)))
         case Some((_, beginIncl, endExcl)) =>
-          getLeafAllowances(roundNumber, beginIncl, endExcl)
+          getLeafAllowances(roundNumber, beginIncl, endExcl, maxChildBatches)
             .map(allowances => Some(DbScanAppRewardsStore.BatchOfMintingAllowances(allowances)))
       })
     } yield result
@@ -570,9 +598,12 @@ class DbScanAppRewardsStore(
       parentLevel: Int,
       beginIncl: Int,
       endExcl: Int,
-  )(implicit tc: TraceContext): Future[Seq[DbScanAppRewardsStore.RewardHash]] =
-    runQuery(
-      sql"""select batch_hash
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[Seq[DbScanAppRewardsStore.RewardHash]] = {
+    val opName = "appRewards.lookupBatchByHash.children"
+    for {
+      hashes <- runQuery(
+        sql"""select batch_hash
             from #${Tables.appRewardBatchHashes}
             where history_id = $historyId
               and round_number = $roundNumber
@@ -580,9 +611,12 @@ class DbScanAppRewardsStore(
               and party_seq_num_begin_incl >= $beginIncl
               and party_seq_num_end_excl <= $endExcl
             order by party_seq_num_begin_incl
+            limit ${sqlLimit(limit)}
       """.as[Array[Byte]],
-      "appRewards.lookupBatchByHash.children",
-    ).map(_.map(DbScanAppRewardsStore.RewardHash(_)))
+        opName,
+      )
+    } yield applyLimitOrFail(opName, limit, hashes).map(DbScanAppRewardsStore.RewardHash(_))
+  }
 
   /** Retrieve minting allowances for a leaf batch range.
     *
@@ -596,20 +630,30 @@ class DbScanAppRewardsStore(
       roundNumber: Long,
       beginIncl: Int,
       endExcl: Int,
-  )(implicit tc: TraceContext): Future[Seq[DbScanAppRewardsStore.MintingAllowance]] =
-    runQuery(
-      sql"""select app_provider_party, total_app_reward_amount
+      maxAllowances: Int,
+  )(implicit tc: TraceContext): Future[Seq[DbScanAppRewardsStore.MintingAllowance]] = {
+    // The primary key admits at most one row per number in the range, and a
+    // leaf's range spans at most batchSize numbers
+    val rangeSize = (endExcl - beginIncl).max(1).min(maxAllowances)
+    val limit = HardLimit.tryCreate(rangeSize, rangeSize)
+    val opName = "appRewards.lookupBatchByHash.allowances"
+    for {
+      allowances <- runQuery(
+        sql"""select app_provider_party, total_app_reward_amount
             from #${Tables.appRewardPartyTotals}
             where history_id = $historyId
               and round_number = $roundNumber
               and app_provider_party_seq_num >= $beginIncl
               and app_provider_party_seq_num < $endExcl
             order by app_provider_party_seq_num
-      """.as[(String, BigDecimal)],
-      "appRewards.lookupBatchByHash.allowances",
-    ).map(_.map { case (provider, amount) =>
+            limit ${sqlLimit(limit)}
+        """.as[(String, BigDecimal)],
+        opName,
+      )
+    } yield applyLimitOrFail(opName, limit, allowances).map { case (provider, amount) =>
       DbScanAppRewardsStore.MintingAllowance(provider, amount)
-    })
+    }
+  }
 
   // -- Aggregation ------------------------------------------------------------
 
@@ -1022,6 +1066,49 @@ class DbScanAppRewardsStore(
             )
     """.asUpdate
 
+  /** Deletes all reward-accounting data for a single round across all six
+    * tables, in a single transaction.
+    */
+  def deleteRewardAccountingDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[DbScanAppRewardsStore.RewardAccountingPruneSummary] = {
+    import profile.api.jdbcActionExtensionMethods
+
+    runUpdate(
+      (for {
+        batchHashes <-
+          sql"""delete from #${Tables.appRewardBatchHashes}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rootHashes <-
+          sql"""delete from #${Tables.appRewardRootHashes}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rewardPartyTotals <-
+          sql"""delete from #${Tables.appRewardPartyTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rewardRoundTotals <-
+          sql"""delete from #${Tables.appRewardRoundTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        activityPartyTotals <-
+          sql"""delete from #${Tables.appActivityPartyTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        activityRoundTotals <-
+          sql"""delete from #${Tables.appActivityRoundTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+      } yield DbScanAppRewardsStore.RewardAccountingPruneSummary(
+        activityPartyTotals = activityPartyTotals.toLong,
+        activityRoundTotals = activityRoundTotals.toLong,
+        rewardPartyTotals = rewardPartyTotals.toLong,
+        rewardRoundTotals = rewardRoundTotals.toLong,
+        batchHashes = batchHashes.toLong,
+        rootHashes = rootHashes.toLong,
+      )).map { summary =>
+        logger.debug(s"Pruned reward accounting data for round $roundNumber: $summary")
+        summary
+      }.transactionally,
+      "appRewards.deleteRewardAccountingDataForRound",
+    )
+  }
+
   // -- Private helpers -------------------------------------------------------
 
   private def runQuery[T](
@@ -1041,6 +1128,6 @@ class DbScanAppRewardsStore(
       operationName: String,
   )(implicit tc: TraceContext): Future[T] =
     futureUnlessShutdownToFuture(
-      storage.queryAndUpdate(action, operationName)(implicitly, implicitly, _ => false)
+      storage.queryAndUpdate(action, operationName)
     )
 }

@@ -3,12 +3,15 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.digitalasset.canton.tracing.TraceContext
+
+import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
+
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
@@ -17,12 +20,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{
-  Limit,
-  LimitHelpers,
-  TcsStore,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsArchiveConfig,
   AcsQueries,
@@ -46,11 +44,66 @@ import scala.jdk.OptionConverters.*
 
 object DbScanRewardsReferenceStore {
 
+  /** Looks up the store ids, and creates the store. */
+  def create(
+      key: ScanRewardsReferenceStore.Key,
+      storage: DbStorage,
+      loggerFactory: NamedLoggerFactory,
+      retryProvider: RetryProvider,
+      migrationId: Long,
+      participantId: ParticipantId,
+      ingestionConfig: IngestionConfig,
+      defaultLimit: Limit,
+  )(implicit
+      ec: ExecutionContext,
+      templateJsonDecoder: TemplateJsonDecoder,
+      closeContext: CloseContext,
+      tc: TraceContext,
+  ): Future[DbScanRewardsReferenceStore] =
+    DbMultiDomainAcsStore
+      .lookupStoreIds(storage, acsStoreDescriptor(key, participantId), None)
+      .map { storeIds =>
+        new DbScanRewardsReferenceStore(
+          key = key,
+          storage = storage,
+          loggerFactory = loggerFactory,
+          retryProvider = retryProvider,
+          migrationId = migrationId,
+          participantId = participantId,
+          ingestionConfig = ingestionConfig,
+          storeIds,
+          defaultLimit = defaultLimit,
+        )
+      }
+
+  // Any change in the store descriptor will lead to previously deployed applications
+  // forgetting all persisted data once they upgrade to the new version.
+  // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+  // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+  // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+  // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+  // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+  // and notify the person coordinating the deployment.
+  def acsStoreDescriptor(
+      key: ScanRewardsReferenceStore.Key,
+      participantId: ParticipantId,
+  ): StoreDescriptor =
+    StoreDescriptor(
+      version = 3,
+      name = "DbScanRewardsReferenceStore",
+      party = key.dsoParty,
+      participant = participantId,
+      key = Map(
+        "dsoParty" -> key.dsoParty.toProtoPrimitive,
+        "synchronizerId" -> key.synchronizerId.toProtoPrimitive,
+      ),
+    )
+
   // same as `defaultAppActivityWeight` in the daml.
   val DefaultAppActivityWeight: BigDecimal = BigDecimal(1)
 }
 
-class DbScanRewardsReferenceStore(
+class DbScanRewardsReferenceStore private (
     override val key: ScanRewardsReferenceStore.Key,
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
@@ -58,6 +111,7 @@ class DbScanRewardsReferenceStore(
     migrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
+    storeIds: DbMultiDomainAcsStore.StoreIds,
     override val defaultLimit: Limit,
 )(implicit
     override protected val ec: ExecutionContext,
@@ -67,24 +121,8 @@ class DbScanRewardsReferenceStore(
       storage = storage,
       acsTableName = ScanRewardsReferenceTables.acsTableName,
       interfaceViewsTableNameOpt = None,
-      // Any change in the store descriptor will lead to previously deployed applications
-      // forgetting all persisted data once they upgrade to the new version.
-      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
-      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
-      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
-      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
-      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
-      // and notify the person coordinating the deployment.
-      acsStoreDescriptor = StoreDescriptor(
-        version = 3,
-        name = "DbScanRewardsReferenceStore",
-        party = key.dsoParty,
-        participant = participantId,
-        key = Map(
-          "dsoParty" -> key.dsoParty.toProtoPrimitive,
-          "synchronizerId" -> key.synchronizerId.toProtoPrimitive,
-        ),
-      ),
+      acsStoreDescriptor = DbScanRewardsReferenceStore.acsStoreDescriptor(key, participantId),
+      storeIds = storeIds,
       migrationId = migrationId,
       ingestionConfig = ingestionConfig,
       acsArchiveConfigOpt = Some(
@@ -108,7 +146,7 @@ class DbScanRewardsReferenceStore(
 
   override def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]
-  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, TimestampWithMigrationId]] = {
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]] = {
     tcsStore.getEarliestArchivedAt().flatMap {
       case None =>
         Future.successful(Map.empty)
@@ -130,10 +168,7 @@ class DbScanRewardsReferenceStore(
                 .flatMap { r =>
                   val opensAt = CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
                   Option.when(opensAt >= ingestionStart) {
-                    recordTime -> TimestampWithMigrationId(
-                      opensAt,
-                      r.contract.payload.round.number.toLong,
-                    )
+                    recordTime -> (r.contract.payload.round.number.toLong, opensAt)
                   }
                 }
             }.toMap
@@ -276,6 +311,74 @@ class DbScanRewardsReferenceStore(
           )
         }
       case _ => Future.successful(None)
+    }
+
+  override def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    waitUntilInitialized.flatMap { _ =>
+      val storeId = multiDomainAcsStore.acsStoreId
+      val migrationId = multiDomainAcsStore.domainMigrationId
+      val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+      futureUnlessShutdownToFuture(
+        storage.query(
+          sql"""select acs.archived_at
+                from #${ScanRewardsReferenceTables.archiveTableName} acs
+                where acs.store_id = $storeId
+                  and acs.migration_id = $migrationId
+                  and acs.package_name = ${pqn.packageName}
+                  and acs.template_id_qualified_name = ${pqn.qualifiedName}
+                  and acs.round = $roundNumber
+                limit 1
+           """.as[CantonTimestamp].headOption,
+          "lookupArchivedAtForOpenMiningRound",
+        )
+      )
+    }
+
+  override def lookupLowestPrunableArchivedRewardRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] =
+    waitUntilInitialized.flatMap { _ =>
+      val storeId = multiDomainAcsStore.acsStoreId
+      val migrationId = multiDomainAcsStore.domainMigrationId
+      // It is important to limit the query for the round to OpenMiningRound
+      // as we prune only the contracts <= OpenMiningRound's archived_at
+      // and the db will likely still have other contracts for this round
+      // even after the pruning.
+      val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+      futureUnlessShutdownToFuture(
+        storage.query(
+          sql"""select min(archived.round)
+                from #${ScanRewardsReferenceTables.archiveTableName} archived
+                where archived.store_id = $storeId and archived.migration_id = $migrationId
+                  and archived.package_name = ${pqn.packageName}
+                  and archived.template_id_qualified_name = ${pqn.qualifiedName}
+                  and not exists (
+                    select 1
+                    from #${ScanRewardsReferenceTables.acsTableName} active
+                    where active.store_id = archived.store_id
+                      and active.migration_id = archived.migration_id
+                      and active.round <= archived.round
+                  )
+           """.as[Option[Long]].head,
+          "lookupLowestPrunableArchivedRewardRound",
+        )
+      )
+    }
+
+  // Returns number of rows deleted
+  override def pruneArchivedUpToRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long] =
+    lookupArchivedAtForOpenMiningRound(roundNumber).flatMap {
+      case None =>
+        Future.failed(
+          new IllegalStateException(
+            s"Cannot prune archived data for round $roundNumber: its OpenMiningRound has not been observed as archived."
+          )
+        )
+      case Some(uptoInclusive) => tcsStore.pruneArchivedUpTo(uptoInclusive)
     }
 
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit

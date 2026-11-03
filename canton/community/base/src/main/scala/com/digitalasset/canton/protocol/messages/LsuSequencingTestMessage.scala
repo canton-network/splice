@@ -16,12 +16,13 @@ import com.digitalasset.canton.crypto.{
 }
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.protocol.messages.ProtocolMessage.ProtocolMessageContentCast
-import com.digitalasset.canton.protocol.{v30, v31}
+import com.digitalasset.canton.protocol.{v30, v32}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.serialization.{ProtoConverter, ProtocolVersionedMemoizedEvidence}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 import com.google.protobuf.ByteString
 
@@ -42,20 +43,15 @@ final case class LsuSequencingTestMessage(
   @transient override protected lazy val companionObj: LsuSequencingTestMessage.type =
     LsuSequencingTestMessage
 
-  override protected[messages] def toProtoSomeEnvelopeContentV30
-      : v30.EnvelopeContent.SomeEnvelopeContent =
-    v30.EnvelopeContent.SomeEnvelopeContent.LsuSequencingTestMessage(toProtoV30)
-
-  override protected[messages] def toProtoSomeEnvelopeContentV31
-      : v31.EnvelopeContent.SomeEnvelopeContent =
-    v31.EnvelopeContent.SomeEnvelopeContent.LsuSequencingTestMessage(toProtoV30)
+  override protected[messages] def toProtoSomeEnvelopeContentV32
+      : v32.EnvelopeContent.SomeEnvelopeContent =
+    v32.EnvelopeContent.SomeEnvelopeContent.LsuSequencingTestMessage(toProtoV30)
 
   def toProtoV30: v30.LsuSequencingTestMessage =
     v30.LsuSequencingTestMessage(content.toByteString, signature.toProtoV30.some)
 }
 
-object LsuSequencingTestMessage
-    extends VersioningCompanionContext[LsuSequencingTestMessage, ProtocolVersion] {
+object LsuSequencingTestMessage extends VersioningCompanion[LsuSequencingTestMessage] {
   override def name: String = "LsuSequencingTestMessage"
 
   implicit val acceptedTestingLsuSequencingMessageMessageCast
@@ -66,22 +62,25 @@ object LsuSequencingTestMessage
     }
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.LsuSequencingTestMessage
     )(
-      supportedProtoVersion(_)(fromProtoV30),
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
 
   private[messages] def fromProtoV30(
-      expectedProtocolVersion: ProtocolVersion,
+      pvv: ProtocolVersionValidation,
       message: v30.LsuSequencingTestMessage,
   ): ParsingResult[LsuSequencingTestMessage] = {
     val v30.LsuSequencingTestMessage(contentP, signatureP) = message
 
     for {
-      content <- LsuSequencingTestMessageContent.fromByteString(expectedProtocolVersion, contentP)
+      content <- LsuSequencingTestMessageContent.fromByteString(
+        pvv,
+        contentP,
+      )
       signature <- ProtoConverter.parseRequired(
         Signature.fromProtoV30,
         "signature",
@@ -139,10 +138,10 @@ object LsuSequencingTestMessageContent
   override def name: String = "LsuSequencingTestMessageContent"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.LsuSequencingTestMessageContent
     )(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -151,17 +150,23 @@ object LsuSequencingTestMessageContent
     LsuSequencingTestMessageContent(psid, sender)(None)
 
   private[messages] def fromProtoV30(
-      message: v30.LsuSequencingTestMessageContent
+      pvv: ProtocolVersionValidation,
+      message: v30.LsuSequencingTestMessageContent,
   )(
       bytes: ByteString
   ): ParsingResult[LsuSequencingTestMessageContent] = {
     val v30.LsuSequencingTestMessageContent(synchronizerP, senderP) = message
 
     for {
-      psid <- PhysicalSynchronizerId
-        .fromProtoPrimitive(synchronizerP, "physical_synchronizer_id")
+      psid <- ProtoValidation.validateThen(
+        synchronizerP,
+        "physical_synchronizer_id",
+        pvv,
+      )(PhysicalSynchronizerId.fromProtoPrimitive)
 
-      sender <- Member.fromProtoPrimitive(senderP, "sender")
+      sender <- ProtoValidation.validateThen(senderP, "sender", pvv)(
+        Member.fromProtoPrimitive
+      )
     } yield LsuSequencingTestMessageContent(psid, sender)(Some(bytes))
   }
 }

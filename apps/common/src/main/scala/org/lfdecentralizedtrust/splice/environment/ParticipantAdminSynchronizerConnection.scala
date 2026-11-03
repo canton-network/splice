@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.environment
 
 import cats.data.OptionT
 import com.digitalasset.canton.admin.api.client.commands.ParticipantAdminCommands
+import com.digitalasset.canton.admin.api.client.data.SynchronizerConnectionConfigAccess.*
 import com.digitalasset.canton.admin.api.client.data.{
   ListConnectedSynchronizersResult,
   RegisteredSynchronizer,
@@ -196,6 +197,13 @@ trait ParticipantAdminSynchronizerConnection {
         s"participant registered ${config.synchronizerAlias} with config $config",
         lookupRegisteredSynchronizer(config.synchronizerAlias, config.psid).map {
           case Some(_) if !overwriteExistingConnection => Right(())
+          // Canton rejects modifications of non-active connections and the connection will never become active again.
+          // Not hard-crashing as the connect might still work and reconciliation automation will eventually fix the config.
+          case Some(existing) if existing.status != data.RegisteredSynchronizer.Status.Active =>
+            logger.warn(
+              s"Connection for ${config.synchronizerAlias} with psid ${config.psid} is no longer active (status: ${existing.status}), skipping update of the connection config"
+            )
+            Right(())
           // We don't set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
           case Some(existingConfig)
               if ParticipantAdminConnection.dropSequencerId(
@@ -232,6 +240,7 @@ trait ParticipantAdminSynchronizerConnection {
         config,
         performHandshake = false,
         SequencerConnectionValidation.ThresholdActive,
+        onboardingTransactions = Seq.empty,
       )
     )
 

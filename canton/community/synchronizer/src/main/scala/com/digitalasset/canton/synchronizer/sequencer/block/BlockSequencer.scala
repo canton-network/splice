@@ -25,8 +25,10 @@ import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerSuccessor}
 import com.digitalasset.canton.error.{CantonBaseError, FatalError}
 import com.digitalasset.canton.health.HealthComponent
 import com.digitalasset.canton.lifecycle.*
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.ClientChannelParams
+import com.digitalasset.canton.protocol.SynchronizerLimits
 import com.digitalasset.canton.protocol.messages.{
   EncryptedViewMessage,
   LsuSequencingTestMessage,
@@ -82,7 +84,12 @@ import com.digitalasset.canton.synchronizer.sequencer.errors.SequencerError.{
   MissingSynchronizerPredecessor,
   SequencerPastUpgradeTime,
 }
-import com.digitalasset.canton.synchronizer.sequencer.store.{PayloadId, SequencerStore}
+import com.digitalasset.canton.synchronizer.sequencer.store.{
+  MemberLifeCycleStatus,
+  PayloadId,
+  SequencerMemberId,
+  SequencerStore,
+}
 import com.digitalasset.canton.synchronizer.sequencer.traffic.TimestampSelector.*
 import com.digitalasset.canton.synchronizer.sequencer.traffic.{
   LsuTrafficState,
@@ -90,6 +97,7 @@ import com.digitalasset.canton.synchronizer.sequencer.traffic.{
   SequencerRateLimitManager,
   SequencerTrafficStatus,
 }
+import com.digitalasset.canton.synchronizer.sequencing.traffic.TrafficPurchasedManager
 import com.digitalasset.canton.synchronizer.sequencing.traffic.store.TrafficPurchasedStore
 import com.digitalasset.canton.time.{Clock, SynchronizerTimeTracker}
 import com.digitalasset.canton.topology.*
@@ -103,6 +111,7 @@ import com.digitalasset.canton.tracing.{TraceContext, Traced}
 import com.digitalasset.canton.util.EitherTUtil.condUnitET
 import com.digitalasset.canton.util.FutureUnlessShutdownUtil.doNotAwaitUnlessShutdown
 import com.digitalasset.canton.util.retry.{AllExceptionRetryPolicy, Backoff, Pause}
+import com.digitalasset.canton.util.signalling.LocalEventSignaller
 import com.digitalasset.canton.util.{
   EitherTUtil,
   FutureUnlessShutdownUtil,
@@ -137,7 +146,6 @@ class BlockSequencer(
     store: SequencerBlockStore,
     dbSequencerStore: SequencerStore,
     blockSequencerConfig: BlockSequencerConfig,
-    producePostOrderingTopologyTicks: Boolean,
     trafficPurchasedStore: TrafficPurchasedStore,
     storage: Storage,
     futureSupervisor: FutureSupervisor,
@@ -159,7 +167,8 @@ class BlockSequencer(
       blockSequencerConfig.toDatabaseSequencerConfig,
       None,
       TotalNodeCountValues.SingleSequencerTotalNodeCount,
-      new LocalSequencerStateEventSignaller(
+      new LocalEventSignaller[SequencerMemberId, Unit](
+        "member",
         parameters.processingTimeouts,
         loggerFactory,
       ),
@@ -309,7 +318,6 @@ class BlockSequencer(
       blockRateLimitManager,
       drSequencingTimeUpperBound = parameters.drSequencingTimeUpperBound,
       getAnnouncedLsu = announcedLsu.get(),
-      producePostOrderingTopologyTicks = producePostOrderingTopologyTicks,
       consistencyChecks = parameters.enableAdditionalConsistencyChecks,
       parameters = blockProcessingParameters,
       metrics = metrics,
@@ -404,9 +412,7 @@ class BlockSequencer(
         // intermediate topology change is impossible here (will need to communicate with the BlockUpdateGenerator).
         // If topologyTimestamp happens to be ahead of current topology's timestamp we grab the latter
         // to prevent a deadlock.
-        val topologyTimestamp = cryptoApi.approximateTimestamp.min(
-          submission.topologyTimestamp.getOrElse(CantonTimestamp.MaxValue)
-        )
+        val topologyTimestamp = cryptoApi.approximateTimestamp
         for {
           snapshot <- EitherT.right(cryptoApi.snapshot(topologyTimestamp))
           synchronizerParameters <- EitherT(
@@ -529,7 +535,7 @@ class BlockSequencer(
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SequencerDeliverError, Unit] =
     submission
-      .aggregationId(cryptoApi.pureCrypto)
+      .aggregationId(cryptoApi.pureCrypto, protocolVersion)
       .leftMap { err =>
         AggregateSubmissionInvalidRule.apply(
           s"Failed to compute aggregation ID for submission with id ${submission.messageId}: $err"
@@ -541,10 +547,9 @@ class BlockSequencer(
             // We can check if the aggregation has already been delivered by looking at the head
             // state. If the delivered at is not yet cached (after a crash) we just allow the submission
             // to go through for simplicity.
-            protocolVersion < ProtocolVersion.v35 || // never reject for pv34
-              (protocolVersion == ProtocolVersion.v35 && // if pv35, only check if sender code is the set of codes
-                !parameters.enableRejectDeliveredAggregationsOnPv35
-                  .contains(submission.sender.code.threeLetterId.str)) ||
+            (protocolVersion == ProtocolVersion.v35 && // if pv35, only check if sender code is the set of codes
+              !parameters.enableRejectDeliveredAggregationsOnPv35
+                .contains(submission.sender.code.threeLetterId.str)) ||
               !stateManager.getProcessingHeadState.inFlightAggregations.byId
                 .get(aggregationId)
                 .exists(_.cachedDeliveredAt.exists(_.nonEmpty)),
@@ -590,7 +595,6 @@ class BlockSequencer(
       maxSequencingTime,
       _,
       _,
-      _,
     ) = submission
 
     val maybeDelayedProcessingMessage =
@@ -622,7 +626,6 @@ class BlockSequencer(
           _ <- rejectSubmissionsIfOverloaded(submission)
           _ <- validateMaxSequencingTime(submission)
           _ <- validateAggregationAlreadyDelivered(submission)
-          // TODO(#19476): Why we don't check group recipients here?
           approximateSnapshot <- EitherT.liftF(
             cryptoApi.currentSnapshotApproximation
           )
@@ -685,14 +688,19 @@ class BlockSequencer(
     logger.debug(s"Request for member ${req.member} to acknowledge timestamp ${req.timestamp}")
     for {
       _ <- EitherTUtil.toFutureUnlessShutdown(
-        rejectAcknowledgementIfOverloaded().leftMap(_.asGrpcError)
+        rejectAcknowledgementIfOverloaded().leftMap(_.toGrpcError)
       )
 
       waitForAcknowledgementF = stateManager.waitForAcknowledgementToComplete(
         req.member,
         req.timestamp,
       )
-      _ <- FutureUnlessShutdown.outcomeF(blockOrderer.acknowledge(signedAcknowledgeRequest))
+      _ <- EitherTUtil.toFutureUnlessShutdown(
+        blockOrderer
+          .acknowledge(signedAcknowledgeRequest)
+          .leftMap(_.toGrpcError)
+          .mapK(FutureUnlessShutdown.outcomeK)
+      )
       _ <- FutureUnlessShutdown.outcomeF(waitForAcknowledgementF)
     } yield ()
   }
@@ -780,7 +788,6 @@ class BlockSequencer(
           batch,
           trafficParams.readVsWriteScalingFactor,
           groupToMembers,
-          protocolVersion,
           trafficParams.baseEventCost,
         )
       } yield eventCost
@@ -791,11 +798,12 @@ class BlockSequencer(
     def buildEnvelopeTrafficSummary(
         eventCostDetails: EventCostCalculator.EventCostDetails,
         sequencingTimestamp: CantonTimestamp,
+        synchronizerLimits: SynchronizerLimits,
     ): Seq[EnvelopeTrafficSummary] =
       eventCostDetails.envelopes.toSeq
         .map { case (closedEnvelope, costDetails) =>
           val viewHashes = closedEnvelope
-            .toOpenEnvelope(cryptoApi.pureCrypto, protocolVersion)
+            .toOpenEnvelope(cryptoApi.pureCrypto, synchronizerLimits, protocolVersion)
             .map { openEnvelope =>
               openEnvelope.protocolMessage match {
                 // For encrypted view messages, extract the view hash
@@ -821,13 +829,17 @@ class BlockSequencer(
         batch: Batch[ClosedEnvelope],
         sequencingTimestamp: CantonTimestamp,
     ): EitherT[FutureUnlessShutdown, TrafficControlError, TrafficSummary] =
-      computeDetailedEventCostForBatch(batch, sequencingTimestamp).map { eventCostDetails =>
-        TrafficSummary(
-          sequencingTime = Some(sequencingTimestamp.toProtoTimestamp),
-          totalTrafficCost = eventCostDetails.eventCost.value,
-          envelopes = buildEnvelopeTrafficSummary(eventCostDetails, sequencingTimestamp),
-        )
-      }
+      for {
+        eventCostDetails <- computeDetailedEventCostForBatch(batch, sequencingTimestamp)
+      } yield TrafficSummary(
+        sequencingTime = Some(sequencingTimestamp.toProtoTimestamp),
+        totalTrafficCost = eventCostDetails.eventCost.value,
+        envelopes = buildEnvelopeTrafficSummary(
+          eventCostDetails,
+          sequencingTimestamp,
+          cryptoApi.ips.getSynchronizerLimits,
+        ),
+      )
 
     for {
       _ <- EitherTUtil.condUnitET[FutureUnlessShutdown](
@@ -1149,8 +1161,24 @@ class BlockSequencer(
           s"The provided serial value $serial is too low. Latest serial used by this member is $maxSerialO"
         ),
       )
+      registeredMemberO <- EitherT.liftF(dbSequencerStore.lookupMember(member))
+      // Traffic can only be pre-purchased for a member that is not yet registered from PV37 onwards:
+      // below that, an `Onboarding` member cannot be represented in the v30 sequencer snapshot and would
+      // be silently turned into a disabled member when onboarding a new sequencer.
+      _ <- EitherTUtil.condUnitET[FutureUnlessShutdown](
+        registeredMemberO.isDefined || TrafficPurchasedManager.isPrePurchaseSupported(
+          protocolVersion
+        ),
+        TrafficControlErrors.TrafficPurchasedRequestAsyncSendFailed
+          .Error(
+            s"""Traffic was purchased for a member that is not registered on the synchronizer, " +
+               |which is only supported from protocol version 37 onwards.""".stripMargin
+          ): TrafficControlError,
+      )
+      isActive = registeredMemberO.exists(_.status == MemberLifeCycleStatus.Active)
       _ <- trafficPurchasedSubmissionHandler.sendTrafficPurchasedRequest(
         member,
+        isActive,
         serial,
         totalTrafficPurchased,
         sequencerClient,
@@ -1294,7 +1322,7 @@ class BlockSequencer(
         }
 
       case Right(bootstrapInfo) =>
-        if (bootstrapInfo.psid != successorPsid) {
+        if (bootstrapInfo.psid.opaque != successorPsid) {
           logger.warn(
             s"Error when contacting successor: expecting psid to be $successorPsid but found ${bootstrapInfo.psid}"
           )
@@ -1661,7 +1689,6 @@ class BlockSequencer(
           messageId,
           Batch.closeEnvelopes(batch),
           maxSequencingTime = CantonTimestamp.MaxValue,
-          topologyTimestamp = None,
           aggregationRule = None,
           submissionCost = None, // sequencer is the sender
           SubmissionRequest.protocolVersionRepresentativeFor(protocolVersion),

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useForm } from '@tanstack/react-form';
+import { retryOnRateLimit } from '@canton-network/splice-common-frontend';
 import { z } from 'zod';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import { useMutation, UseMutationResult } from '@tanstack/react-query';
@@ -36,12 +37,13 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
   const { castVote } = useSvAdminClient();
   const yourVote = votes.find(vote => vote.sv === currentSvPartyId);
 
-  const castVoteMutation: UseMutationResult<void, string, CastVoteArgs> = useMutation({
+  const castVoteMutation: UseMutationResult<void, Error, CastVoteArgs> = useMutation({
     mutationKey: ['castVote', voteRequestContractId],
     mutationFn: async ({ accepted, url, reason }) => {
       return castVote(voteRequestContractId, accepted, url, reason);
     },
     onMutate: () => onSubmissionStart?.(),
+    retry: retryOnRateLimit,
   });
 
   const form = useForm({
@@ -125,7 +127,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     error={!field.state.meta.isValid}
                     helperText={field.state.meta.errors?.[0]}
                     placeholder={VOTE_REASON_PLACEHOLDER}
-                    inputProps={{ 'data-testid': 'your-vote-reason-input' }}
+                    slotProps={{ htmlInput: { 'data-testid': 'your-vote-reason-input' } }}
                     sx={proposalSummaryFieldSx}
                   />
                 </Box>
@@ -168,7 +170,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                       </span>
                     }
                     placeholder={VOTE_REASON_URL_PLACEHOLDER}
-                    inputProps={{ 'data-testid': 'your-vote-url-input' }}
+                    slotProps={{ htmlInput: { 'data-testid': 'your-vote-url-input' } }}
                     sx={singleLineFieldSx}
                   />
                 </Box>
@@ -191,7 +193,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
               }}
             >
               {isSubmitting ? (
-                <Typography color="text.secondary">Submitting...</Typography>
+                <Typography sx={{ color: 'text.secondary' }}>Submitting...</Typography>
               ) : (
                 <>
                   <Button

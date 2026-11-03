@@ -5,10 +5,14 @@ package com.digitalasset.canton.data
 
 import cats.data.EitherT
 import cats.syntax.foldable.*
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.sequencing.protocol.{
   MemberRecipient,
   Recipient,
@@ -17,6 +21,7 @@ import com.digitalasset.canton.sequencing.protocol.{
 }
 import com.digitalasset.canton.topology.client.PartyTopologySnapshotClient
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 
 import scala.concurrent.ExecutionContext
 
@@ -78,8 +83,12 @@ final case class Witnesses(unwrap: NonEmpty[Seq[Set[LfPartyId]]]) {
 }
 
 case object Witnesses {
-  final case class InvalidWitnesses(message: String) extends PrettyPrinting {
-    override protected def pretty: Pretty[InvalidWitnesses] = prettyOfClass(
+  final case class InvalidWitnesses(message: String) extends PrettyPrintingFromCompanion {
+    override def prettyCompanion: PrettyPrintingCompanion[InvalidWitnesses] = InvalidWitnesses
+  }
+
+  object InvalidWitnesses extends PrettyPrintingCompanion[InvalidWitnesses] {
+    override protected val pretty: Pretty[InvalidWitnesses] = prettyOfClass(
       unnamedParam(_.message.unquoted)
     )
   }

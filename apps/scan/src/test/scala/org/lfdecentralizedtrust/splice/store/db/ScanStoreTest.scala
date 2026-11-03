@@ -58,12 +58,14 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
   InitializeAcsAtLatestOffset,
   InitializeAcsAtOffset,
-  UpdateHistoryInitAtLatestPrunedOffset,
   ResumeAtOffset,
+  UpdateHistoryInitAtLatestPrunedOffset,
 }
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 abstract class ScanStoreTest
     extends StoreTestBase
@@ -118,7 +120,7 @@ abstract class ScanStoreTest
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
           result <- store.getTotalPurchasedMemberTraffic(
-            goodMember,
+            StoreMemberId(goodMember),
             dummyDomain,
           )
         } yield result shouldBe (1 to 3).sum.toLong
@@ -187,6 +189,144 @@ abstract class ScanStoreTest
           store
             .lookupFeaturedAppRight(userParty(1))
             .futureValue should be(expectedResult)
+        }
+      }
+    }
+
+    "listFeaturedAppRightsByProvider" should {
+
+      "return the FeaturedAppRights of the wanted provider in creation order, up to the limit" in {
+        val wanted = (1 to 3).map(_ => featuredAppRight(userParty(1)))
+        val unwanted = featuredAppRight(userParty(2))
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(wanted :+ unwanted)(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          all <- store.listFeaturedAppRightsByProvider(userParty(1), HardLimit.tryCreate(3))
+          page <- store.listFeaturedAppRightsByProvider(userParty(1), PageLimit.tryCreate(2))
+          hard <- loggerFactory.assertLogs(
+            store.listFeaturedAppRightsByProvider(userParty(1), HardLimit.tryCreate(2)),
+            _.warningMessage should include(
+              "Size of the result exceeded the limit in listFeaturedAppRightsByProvider"
+            ).and(include("Result size: 3. Limit: 2")),
+          )
+        } yield {
+          all.map(_.contract) shouldBe wanted
+          page.map(_.contract) shouldBe wanted.take(2)
+          hard.map(_.contract) shouldBe wanted.take(2)
+        }
+      }
+    }
+
+    testGovernanceLockIngestion(user1, dsoParty, userParty(2), () => mkStore())
+
+    "ingest GovernanceLockTransfers of the DSO and skip those of other parties" in {
+      val wanted = governanceLockTransfer(userParty(1), userParty(2), time(2).toInstant)
+      val unwanted =
+        governanceLockTransfer(userParty(1), userParty(2), time(2).toInstant, dso = userParty(3))
+      for {
+        store <- mkStore()
+        _ <- MonadUtil.sequentialTraverse(Seq(wanted, unwanted))(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        result <- store.multiDomainAcsStore.listContracts(
+          splice.governancelock.transfer.GovernanceLockTransfer.COMPANION
+        )
+      } yield {
+        result.map(_.contractId) shouldBe Seq(wanted.contractId)
+      }
+    }
+
+    "listGovernanceLocksByKey" should {
+      val owner = userParty(1)
+      val sv1 = new splice.governancelock.governancelockkind.GLK_SuperValidatorRightsOwner("sv1")
+      val vestingEndTime = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.MICROS)
+
+      def keyOf(
+          lock: Contract[?, splice.governancelock.GovernanceLock]
+      ): splice.governancelock.GovernanceLockKey =
+        new splice.governancelock.GovernanceLockKey(
+          lock.payload.dso,
+          lock.payload.owner,
+          lock.payload.specification,
+        )
+
+      def listByKey(store: ScanStore, key: splice.governancelock.GovernanceLockKey, limit: Int) =
+        store
+          .listGovernanceLocksByKey(key, PageLimit.tryCreate(limit))
+          .futureValue
+          .map(_.contract.contractId)
+
+      "return exactly the locks with the key, largest amount first" in {
+        val smallFull = governanceLock(owner, amount = BigDecimal(10), kind = sv1)
+        val largeFull = governanceLock(owner, amount = BigDecimal(40), kind = sv1)
+        val vesting =
+          governanceLock(owner, BigDecimal(20), kind = sv1, vestingEndTime = Some(vestingEndTime))
+        val vestingLaterEndTime = governanceLock(
+          owner,
+          BigDecimal(20),
+          kind = sv1,
+          vestingEndTime = Some(vestingEndTime.plusSeconds(1)),
+        )
+        val faLock = governanceLock(
+          owner,
+          BigDecimal(20),
+          kind = new splice.governancelock.governancelockkind.GLK_FeaturedApp(
+            userParty(2).toProtoPrimitive
+          ),
+        )
+        val others = Seq(
+          governanceLock(userParty(3), BigDecimal(20), kind = sv1),
+          governanceLock(
+            owner,
+            BigDecimal(20),
+            kind = new splice.governancelock.governancelockkind.GLK_SuperValidatorRightsOwner(
+              "sv2"
+            ),
+          ),
+          governanceLock(
+            owner,
+            BigDecimal(20),
+            kind = new splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp(
+              userParty(2).toProtoPrimitive
+            ),
+          ),
+          governanceLock(
+            owner,
+            BigDecimal(20),
+            kind = sv1,
+            vestingEndTime = Some(vestingEndTime),
+            vestingPeriod = new RelTime(2_000_000),
+          ),
+        )
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(smallFull, largeFull, vesting, vestingLaterEndTime, faLock) ++
+              others
+          )(dummyDomain.create(_)(store.multiDomainAcsStore))
+        } yield {
+          listByKey(store, keyOf(smallFull), 10) shouldBe
+            Seq(largeFull.contractId, smallFull.contractId)
+          listByKey(store, keyOf(vesting), 10) shouldBe Seq(vesting.contractId)
+          listByKey(store, keyOf(vestingLaterEndTime), 10) shouldBe
+            Seq(vestingLaterEndTime.contractId)
+          listByKey(store, keyOf(faLock), 10) shouldBe Seq(faLock.contractId)
+        }
+      }
+
+      "return at most limit locks, the largest ones" in {
+        val locks = Seq(10, 30, 20).map(amount =>
+          governanceLock(owner, amount = BigDecimal(amount), kind = sv1)
+        )
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(locks)(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+        } yield {
+          listByKey(store, keyOf(locks(0)), 2) shouldBe Seq(locks(1), locks(2)).map(_.contractId)
         }
       }
     }
@@ -1682,21 +1822,20 @@ class DbScanStoreTest
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)
 
-    val store = new DbScanStore(
-      key = ScanStore.Key(dsoParty),
-      storage,
-      loggerFactory,
-      RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      domainMigrationId,
-      participantId = mkParticipantId("ScanStoreTest"),
-      IngestionConfig(),
-      new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
-      defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-      acsStoreDescriptorUserVersion,
-      txLogStoreDescriptorUserVersion,
-    )(parallelExecutionContext, implicitly, implicitly)
-
     for {
+      store <- DbScanStore.create(
+        key = ScanStore.Key(dsoParty),
+        storage,
+        loggerFactory,
+        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
+        domainMigrationId,
+        participantId = mkParticipantId("ScanStoreTest"),
+        IngestionConfig(),
+        new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
+        defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+        acsStoreDescriptorUserVersion,
+        txLogStoreDescriptorUserVersion,
+      )(parallelExecutionContext, implicitly, implicitly, implicitly)
       initializeResult <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- initializeResult match {
         case ResumeAtOffset(_) | UpdateHistoryInitAtLatestPrunedOffset => Future.unit
@@ -1724,19 +1863,23 @@ class DbScanStoreTest
   override def mkUpdateHistory(
       migrationId: Long
   ): Future[UpdateHistory] = {
-    val updateHistory = new UpdateHistory(
-      storage.underlying, // not under test
-      migrationId,
-      "update_history_scan_store_test",
-      mkParticipantId("whatever"),
-      dsoParty,
-      BackfillingRequirement.BackfillingNotRequired,
-      loggerFactory,
-      enableissue12777Workaround = true,
-      enableImportUpdateBackfill = true,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
-    )
-    updateHistory.ingestionSink.initialize().map(_ => updateHistory)
+    for {
+      updateHistory <- UpdateHistory.create(
+        storage.underlying, // not under test
+        migrationId,
+        "update_history_scan_store_test",
+        StoreMemberId(mkParticipantId("whatever")),
+        dsoParty,
+        BackfillingRequirement.BackfillingNotRequired,
+        internedStringStore(storage),
+        analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
+        loggerFactory,
+        enableImportUpdateBackfill = true,
+        HistoryMetrics(NoOpMetricsFactory, migrationId),
+      )
+
+      _ <- updateHistory.ingestionSink.initialize()
+    } yield updateHistory
   }
 
   override protected def cleanDb(
@@ -1813,10 +1956,14 @@ class DbScanStoreTest
         result <- store.getValidatorLicenseByValidator(
           Vector(alice, bob)
         )
+        withDuplicates <- store.getValidatorLicenseByValidator(
+          Vector(alice, bob, alice, alice)
+        )
       } yield {
         result should contain(aliceValidatorLicense)
         result should contain(bobValidatorLicense)
         result should not contain charlesValidatorLicense
+        withDuplicates should contain theSameElementsAs result
       }
     }
   }

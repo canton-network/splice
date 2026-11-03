@@ -3,18 +3,19 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
+  CLUSTER_HOSTNAME,
   DecentralizedSynchronizerUpgradeConfig,
-  getDnsNames,
 } from '@canton-network/splice-pulumi-common';
 import { allSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
+import { sequencerP2pHosts } from '../sequencerP2pHosts';
 import { loadIPRanges } from './ipRanges';
 import { createIstioIpAllowPolicies, istioIngressSelector } from './policies';
 
 export function configureSequencerWhitelist(
   namespace: k8s.core.v1.Namespace
 ): pulumi.Output<pulumi.Resource[]>[] {
-  const dnsNames = [getDnsNames().cantonDnsName, getDnsNames().daDnsName];
+  const dnsNames = [CLUSTER_HOSTNAME];
   const migrations = DecentralizedSynchronizerUpgradeConfig.runningMigrations();
 
   const publicApiHosts = allSvsToDeployBasic.flatMap(sv =>
@@ -25,16 +26,7 @@ export function configureSequencerWhitelist(
       ])
     )
   );
-  const p2pHosts = allSvsToDeployBasic.flatMap(sv =>
-    migrations
-      .filter(migration => migration.sequencer.enableBftSequencer)
-      .flatMap(migration =>
-        dnsNames.flatMap(dns => [
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dns}`,
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dns}:*`,
-        ])
-      )
-  );
+  const p2pHosts = sequencerP2pHosts().flatMap(host => [host, `${host}:*`]);
 
   const policies = [
     createIstioIpAllowPolicies({

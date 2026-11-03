@@ -16,11 +16,13 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import TopologyAdminConnection.TopologySnapshot
 import TopologyAdminConnection.TopologyTransactionType.AllProposals
+import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingConfirmed
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
-import com.digitalasset.canton.topology.{ParticipantId, PartyId}
+import com.digitalasset.canton.crypto.Fingerprint
+import com.digitalasset.canton.topology.{Namespace, ParticipantId, PartyId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
@@ -32,7 +34,9 @@ import scala.concurrent.{ExecutionContext, Future}
 
 /** Authorized the hosting of the DSO party on a new participant.
   * For this to happen the following rules must be met:
-  * - There must exist an OnboardingConfirmed contract for the sv party having the same namespace as the participant
+  * - There must exist an SvOnboardingConfirmed contract whose svParticipantId is the participant
+  *   and whose sv party has the same namespace as the participant
+  * - No participant with the same namespace may already host the DSO party
   * - There must exist a proposal for the party hosting which is signed by at least 2 participants (candidate and sponsor).
   * This is done to ensure that the candidate is disconnected from the domain when the party is authorized.
   */
@@ -47,7 +51,7 @@ class SvOnboardingPartyToParticipantProposalTrigger(
 ) extends PollingParallelTaskExecutionTrigger[SvOnboardingPartyToParticipantProposalTrigger.Task]
     with SyncConnectionStalenessCheck {
 
-  import SvOnboardingPartyToParticipantProposalTrigger.Task
+  import SvOnboardingPartyToParticipantProposalTrigger.*
 
   private val svParty = dsoStore.key.svParty
   private val dsoParty: PartyId = dsoStore.key.dsoParty
@@ -57,10 +61,9 @@ class SvOnboardingPartyToParticipantProposalTrigger(
   ): Future[Seq[Task]] = {
     dsoStore
       .listSvOnboardingConfirmed()
-      .map(_.map(_.payload.svParty).map(PartyId.tryFromProtoPrimitive).map(_.uid.namespace))
-      .flatMap { confirmedOnboardingNamespacesThatCorrespondToParticipants =>
+      .flatMap { confirmedOnboardings =>
         // avoid listing all the proposals if no onboarding contract is present
-        if (confirmedOnboardingNamespacesThatCorrespondToParticipants.nonEmpty) {
+        if (confirmedOnboardings.nonEmpty) {
           for {
             dsoRules <- dsoStore.getDsoRules()
             currentlyHostingParticipants <- participantAdminConnection.getPartyToParticipant(
@@ -84,32 +87,14 @@ class SvOnboardingPartyToParticipantProposalTrigger(
                   .asRuntimeException()
               }
             }
-          } yield {
-            // It is crucial to wait for a proposal from both the candidate and the sponsor.
-            // The proposal by the sponsor is only created through the onboard/sv/party-migration/authorize
-            // which the candidate calls after having disconnected from the domain.
-            // Without this check, the transaction can become valid while the candidate is still connected
-            // which then results in all kinds of errors because it does not have an ACS import.
-            val proposalsSignedByCandidateAndSponsor =
-              dsoPartyHostingProposals.filter(_.base.signedBy.size >= 2)
-            val proposalsNotSignedBySv = proposalsSignedByCandidateAndSponsor
-              .filterNot(_.base.signedBy.contains(svParty.uid.namespace.fingerprint))
-            val newlyAddedParticipantIds = proposalsNotSignedBySv
-              .map(
-                _.mapping.participantIds.diff(currentlyHostingParticipants.mapping.participantIds)
-              )
-              .collect {
-                // for now we support onboarding just one participant at a time
-                case Seq(singleParticipant) => singleParticipant
-              }
-            newlyAddedParticipantIds
-              .filter(participantId =>
-                confirmedOnboardingNamespacesThatCorrespondToParticipants.contains(
-                  participantId.uid.namespace
-                )
-              )
-              .map(Task(currentlyHostingParticipants.base.serial, _))
-          }
+          } yield participantsToAuthorize(
+            svParty.uid.namespace,
+            confirmedOnboardings.map(_.payload),
+            currentlyHostingParticipants.mapping.participantIds,
+            dsoPartyHostingProposals.map(proposal =>
+              HostingProposal(proposal.base.signedBy, proposal.mapping.participantIds)
+            ),
+          ).map(Task(currentlyHostingParticipants.base.serial, _))
         } else Future.successful(Seq.empty)
       }
   }
@@ -153,6 +138,44 @@ class SvOnboardingPartyToParticipantProposalTrigger(
 }
 
 object SvOnboardingPartyToParticipantProposalTrigger {
+
+  final case class HostingProposal(
+      signedBy: Seq[Fingerprint],
+      participantIds: Seq[ParticipantId],
+  )
+
+  def participantsToAuthorize(
+      svNamespace: Namespace,
+      confirmedOnboardings: Seq[SvOnboardingConfirmed],
+      currentlyHostingParticipants: Seq[ParticipantId],
+      proposals: Seq[HostingProposal],
+  ): Seq[ParticipantId] = {
+    val confirmedOnboardingParticipants = confirmedOnboardings.flatMap { confirmed =>
+      val svPartyNamespace = PartyId.tryFromProtoPrimitive(confirmed.svParty).uid.namespace
+      ParticipantId
+        .fromProtoPrimitive(confirmed.svParticipantId, "svParticipantId")
+        .toOption
+        .filter(_.uid.namespace == svPartyNamespace)
+    }.toSet
+    val hostingNamespaces = currentlyHostingParticipants.map(_.uid.namespace).toSet
+    // It is crucial to wait for a proposal from both the candidate and the sponsor.
+    // The proposal by the sponsor is only created through the onboard/sv/party-migration/authorize
+    // which the candidate calls after having disconnected from the domain.
+    // Without this check, the transaction can become valid while the candidate is still connected
+    // which then results in all kinds of errors because it does not have an ACS import.
+    proposals
+      .filter(_.signedBy.size >= 2)
+      .filterNot(_.signedBy.contains(svNamespace.fingerprint))
+      .map(_.participantIds.diff(currentlyHostingParticipants))
+      .collect {
+        // for now we support onboarding just one participant at a time
+        case Seq(singleParticipant) => singleParticipant
+      }
+      .filter(confirmedOnboardingParticipants.contains)
+      // Only one participant per namespace may host the DSO party, so don't add a participant
+      // whose namespace already hosts it.
+      .filterNot(participantId => hostingNamespaces.contains(participantId.uid.namespace))
+  }
   final case class Task(
       serial: PositiveInt, // The serial of the last accepted topology transaction, proposals will have serial + 1
       participantId: ParticipantId,

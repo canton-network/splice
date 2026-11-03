@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.validator.config
 
 import cats.data.NonEmptyList
-import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.auth.AuthConfig
 import org.lfdecentralizedtrust.splice.config.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
@@ -18,7 +17,10 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
   WalletSweepConfig,
 }
 import com.digitalasset.canton.SynchronizerAlias
-import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelays
+import com.digitalasset.canton.admin.api.client.data.{
+  SequencerConnectionPoolDelays,
+  SubscriptionLivenessLimits,
+}
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
@@ -46,8 +48,6 @@ object ValidatorOnboardingConfig {
     config.copy(secret = hidden)
   }
 }
-
-final case class InitialInstalledApp(appUrl: Uri)
 
 final case class BuyExtraTrafficConfig(
     /** target throughput in bytes per second
@@ -179,6 +179,7 @@ case class ValidatorAppBackendConfig(
       ValidatorAppBackendConfig.DefaultSequencerRequestAmplificationPatience,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
     /** The configuration for sweeping funds periodically to other validator's wallet
       */
     walletSweep: Map[String, WalletSweepConfig] = Map.empty,
@@ -224,6 +225,9 @@ case class ValidatorAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
+    // Start automation for external parties that only have a p2p with embedded keys instead of a separate p2k mapping.
+    supportEmbeddedPartySigningKeys: Boolean = true,
+    allowedOrigins: Option[Seq[String]] = None,
 ) extends SpliceBackendConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
   override val nodeTypeName: String = "validator"

@@ -6,10 +6,11 @@ package com.digitalasset.canton.data
 import cats.syntax.either.*
 import com.digitalasset.canton.*
 import com.digitalasset.canton.crypto.*
-import com.digitalasset.canton.logging.pretty.Pretty
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrintingCompanion}
 import com.digitalasset.canton.protocol.v30
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.serialization.{ProtoConverter, ProtocolVersionedMemoizedEvidence}
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 import com.google.protobuf.ByteString
 
@@ -42,12 +43,8 @@ final case class ParticipantMetadata private (
 
   override val hashPurpose: HashPurpose = HashPurpose.ParticipantMetadata
 
-  override protected def pretty: Pretty[ParticipantMetadata] = prettyOfClass(
-    param("ledger time", _.ledgerTime),
-    param("preparation time", _.preparationTime),
-    paramIfDefined("workflow id", _.workflowIdO),
-    param("salt", _.salt),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[ParticipantMetadata] =
+    ParticipantMetadata
 
   @transient override protected lazy val companionObj: ParticipantMetadata.type =
     ParticipantMetadata
@@ -61,12 +58,20 @@ final case class ParticipantMetadata private (
 }
 
 object ParticipantMetadata
-    extends VersioningCompanionContextMemoization[ParticipantMetadata, HashOps] {
+    extends VersioningCompanionContextMemoization[ParticipantMetadata, HashOps]
+    with PrettyPrintingCompanion[ParticipantMetadata] {
   override val name: String = "ParticipantMetadata"
 
+  override protected val pretty: Pretty[ParticipantMetadata] = prettyOfClass(
+    param("ledger time", _.ledgerTime),
+    param("preparation time", _.preparationTime),
+    paramIfDefined("workflow id", _.workflowIdO),
+    param("salt", _.salt),
+  )
+
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.ParticipantMetadata)(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.ParticipantMetadata)(
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -84,20 +89,29 @@ object ParticipantMetadata
       None,
     )
 
-  private def fromProtoV30(hashOps: HashOps, metadataP: v30.ParticipantMetadata)(
+  private def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      hashOps: HashOps,
+      metadataP: v30.ParticipantMetadata,
+  )(
       bytes: ByteString
   ): ParsingResult[ParticipantMetadata] = {
     val v30.ParticipantMetadata(saltP, ledgerTimeP, preparationTimeP, workflowIdP) = metadataP
     for {
       let <- CantonTimestamp.fromProtoPrimitive(ledgerTimeP)
       preparationTime <- CantonTimestamp.fromProtoPrimitive(preparationTimeP)
-      workflowId <- workflowIdP match {
+      workflowIdStr <- ProtoValidation.validate(
+        workflowIdP,
+        "workflowId",
+        pvv,
+      )
+      workflowId <- workflowIdStr match {
         case "" => Right(None)
         case wf =>
           WorkflowId
             .fromProtoPrimitive(wf)
             .map(Some(_))
-            .leftMap(ProtoDeserializationError.ValueDeserializationError("workflowId", _))
+            .leftMap(ProtoDeserializationError.ValueDeserializationError(_, "workflowId"))
       }
       salt <- ProtoConverter
         .parseRequired(Salt.fromProtoV30, "salt", saltP)

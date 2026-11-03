@@ -14,6 +14,7 @@ import com.digitalasset.canton.crypto.{
   SyncCryptoError,
 }
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.serialization.ProtocolVersionedMemoizedEvidence
 import com.digitalasset.canton.synchronizer.metrics.BftOrderingMetrics
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.pekko.PekkoModuleSystem
@@ -33,7 +34,9 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   SignedMessage,
 }
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.DelayUtil
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
 class FixedKeysCryptoProvider(
@@ -41,6 +44,7 @@ class FixedKeysCryptoProvider(
     pubKeys: Map[BftNodeId, SigningPublicKey],
     cryptoApi: CryptoPureApi,
     metrics: BftOrderingMetrics,
+    delaySignMessageO: Any => Option[FiniteDuration],
 )(implicit executionContext: ExecutionContext)
     extends CryptoProvider[PekkoEnv] {
 
@@ -64,7 +68,11 @@ class FixedKeysCryptoProvider(
   )(implicit
       traceContext: TraceContext,
       metricsContext: MetricsContext,
-  ): PekkoModuleSystem.PekkoFutureUnlessShutdown[Either[SyncCryptoError, SignedMessage[MessageT]]] =
+  ): PekkoModuleSystem.PekkoFutureUnlessShutdown[
+    Either[SyncCryptoError, SignedMessage[MessageT]]
+  ] = {
+    def hash() = hashForMessage(message, message.from, authenticatedMessageType)
+
     PekkoFutureUnlessShutdown(
       "signMessage",
       () =>
@@ -73,7 +81,9 @@ class FixedKeysCryptoProvider(
             timeCrypto(
               metrics,
               FutureUnlessShutdown.outcomeF(
-                Future(hashForMessage(message, message.from, authenticatedMessageType))
+                delaySignMessageO(message).fold(Future(hash()))(delay =>
+                  DelayUtil.delay(delay).map(_ => hash())
+                )
               ),
               operationId = s"hash-$authenticatedMessageType",
             )
@@ -85,6 +95,7 @@ class FixedKeysCryptoProvider(
             )
         } yield signature.map(SignedMessage(message, _)),
     )
+  }
 
   override def verifySignature(
       hash: Hash,

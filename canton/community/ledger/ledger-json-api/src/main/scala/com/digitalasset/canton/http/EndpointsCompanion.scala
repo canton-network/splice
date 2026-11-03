@@ -3,6 +3,7 @@
 
 package com.digitalasset.canton.http
 
+import cats.Show
 import com.daml.logging.LoggingContextOf
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.base.error.utils.ErrorDetails.ErrorDetail
@@ -14,13 +15,12 @@ import com.digitalasset.canton.http.util.Logging.{
 import com.digitalasset.canton.ledger.service.Grpc.StatusEnvelope
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.tracing.NoTracing
-import com.google.rpc.{Code as GrpcCode, Status}
+import com.google.rpc.{Status, Code as GrpcCode}
 import io.circe.Json
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.server.RouteResult.Complete
 import org.apache.pekko.http.scaladsl.server.{RequestContext, Route}
 import org.apache.pekko.util.ByteString
-import scalaz.Show
 
 import scala.concurrent.Future
 import scala.util.control.NonFatal
@@ -57,7 +57,7 @@ object EndpointsCompanion extends NoTracing {
   final case class NotFound(message: String) extends Error
 
   object Error {
-    implicit val ShowInstance: Show[Error] = Show shows {
+    implicit val ShowInstance: Show[Error] = Show.show {
       case InvalidUserInput(e) => s"Endpoints.InvalidUserInput: ${e: String}"
       case ParticipantServerError(grpcStatus, description, _) =>
         s"Endpoints.ParticipantServerError: $grpcStatus: $description"

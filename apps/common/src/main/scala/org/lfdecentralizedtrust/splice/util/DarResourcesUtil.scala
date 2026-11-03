@@ -30,9 +30,6 @@ object DarResourcesUtil extends NamedLogging {
   def lookupPackageId(packageId: String): Option[DarResource] =
     pkgIdToDarResource.get(packageId)
 
-  def getDarResources(packageIds: Seq[String]): Seq[DarResource] =
-    packageIds.flatMap(lookupPackageId)
-
   def lookupPackageMetadata(name: PackageName, version: PackageVersion): Option[DarResource] =
     pkgMetadataToDarResource.get((name, version))
 
@@ -83,24 +80,28 @@ object DarResourcesUtil extends NamedLogging {
       enableUnsupportedDarsUnvetting: Boolean,
       latestPackagesOnly: Boolean,
       additionalPackageIdsToUnvet: Map[PackageName, Set[PackageVersion]],
-      packageConfigMap: Map[PackageName, PackageVersion],
+      // current package config followed by those of accepted vote requests not yet effective; a version stays vetted if any of them requires it
+      currentAndPendingPackageConfigs: Seq[Map[PackageName, PackageVersion]],
   )(implicit tc: TraceContext): Seq[DarResource] = {
     val allSupportedVersionsPackageIds =
       corePackageResources
         .flatMap { pkg =>
-          val versionFromAmuletRules = packageConfigMap.getOrElse(
-            pkg.latest.metadata.name,
-            pkg.latest.metadata.version,
-          )
-          getRequiredPackageVersions(
-            pkg.latest.metadata.name,
-            versionFromAmuletRules,
-            enableUnsupportedDarsUnvetting,
-            latestPackagesOnly,
-            additionalPackageIdsToUnvet,
-          )
+          currentAndPendingPackageConfigs.flatMap { packageConfigMap =>
+            val versionFromAmuletRules = packageConfigMap.getOrElse(
+              pkg.latest.metadata.name,
+              pkg.latest.metadata.version,
+            )
+            getRequiredPackageVersions(
+              pkg.latest.metadata.name,
+              versionFromAmuletRules,
+              enableUnsupportedDarsUnvetting,
+              latestPackagesOnly,
+              additionalPackageIdsToUnvet,
+            )
+          }
         }
         .map(_.packageId)
+        .toSet
     vettedPackageIds
       .filterNot(allSupportedVersionsPackageIds.contains(_))
       .flatMap(pkg => pkgIdToDarResource.get(pkg))

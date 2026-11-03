@@ -3,7 +3,11 @@
 
 package com.digitalasset.canton.participant.protocol
 
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.protocol.RequestId
 import com.digitalasset.canton.topology.ParticipantId
@@ -15,8 +19,8 @@ import java.util.concurrent.atomic.AtomicReference
   * computation and the engine itself. An instance of this class is created by the protocol
   * processor for each request and passed along during processing. When a condition determines that
   * the computation should be aborted, the component calls [[abort]]. The instance is also passed to
-  * the engine when performing a computation. During the execution of a `ResultInterruption`, the
-  * engine will call [[abortStatus]] to determine whether it should abort or continue.
+  * the engine when performing a computation. During a `Result.Need.Interruption`, the engine will
+  * call [[abortStatus]] to determine whether it should abort or continue.
   *
   * @param participantId
   *   the participant processing the associated request
@@ -63,19 +67,21 @@ final case class EngineController(
 }
 
 object EngineController {
-  final case class EngineAbortStatus(reasonO: Option[String]) extends PrettyPrinting {
+  final case class EngineAbortStatus(reasonO: Option[String]) extends PrettyPrintingFromCompanion {
     def isAborted: Boolean = reasonO.nonEmpty
 
-    override protected def pretty: Pretty[EngineAbortStatus] = prettyOfClass(
-      paramIfTrue("not aborted", _.reasonO.isEmpty),
-      paramIfDefined("aborted with reason", _.reasonO.map(_.unquoted)),
-    )
+    override def prettyCompanion: PrettyPrintingCompanion[EngineAbortStatus] = EngineAbortStatus
   }
 
-  object EngineAbortStatus {
+  object EngineAbortStatus extends PrettyPrintingCompanion[EngineAbortStatus] {
     def aborted(reason: String): EngineAbortStatus = EngineAbortStatus(Some(reason))
 
     def notAborted: EngineAbortStatus = EngineAbortStatus(None)
+
+    override protected val pretty: Pretty[EngineAbortStatus] = prettyOfClass(
+      paramIfTrue("not aborted", _.reasonO.isEmpty),
+      paramIfDefined("aborted with reason", _.reasonO.map(_.unquoted)),
+    )
   }
 
   type GetEngineAbortStatus = () => EngineAbortStatus

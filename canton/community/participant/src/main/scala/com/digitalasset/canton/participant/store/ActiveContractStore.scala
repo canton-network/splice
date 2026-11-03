@@ -10,8 +10,13 @@ import com.digitalasset.canton.config.CantonRequireTypes.String36
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.ErrorLoggingContext
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.participant.store.ActiveContractSnapshot.ActiveContractIdsChange
 import com.digitalasset.canton.participant.store.ActiveContractStore.ActivenessChangeDetail
 import com.digitalasset.canton.participant.util.{StateChange, TimeOfChange}
@@ -80,9 +85,6 @@ trait ActiveContractStore
     *   - [[ActiveContractStore.DoubleContractCreation]] if the contract is created a second time.
     *   - [[ActiveContractStore.SimultaneousActivation]] if the contract is assigned at the same
     *     time or has been created by a different request at the same time.
-    *   - [[ActiveContractStore.ChangeBeforeCreation]] for every change that occurs before the
-    *     creation timestamp. This is reported only if no
-    *     [[ActiveContractStore.DoubleContractCreation]] is reported.
     */
   def markContractsCreated(
       contracts: Seq[(LfContractId, ReassignmentCounter)],
@@ -149,8 +151,6 @@ trait ActiveContractStore
     *   - [[ActiveContractStore.DoubleContractArchival]] if the contract is archived a second time.
     *   - [[ActiveContractStore.SimultaneousDeactivation]] if the contract is unassigned at the same
     *     time or has been archived by a different request at the same time.
-    *   - [[ActiveContractStore.ChangeBeforeCreation]] if this archival is earlier than the latest
-    *     creation of the contract.
     */
   def archiveContracts(contractIds: Seq[LfContractId], toc: TimeOfChange)(implicit
       traceContext: TraceContext
@@ -223,8 +223,6 @@ trait ActiveContractStore
     *   irregularities are reported:
     *   - [[ActiveContractStore.SimultaneousActivation]] if an assignment from another synchronizer
     *     or a creation has been added with the same timestamp.
-    *   - [[ActiveContractStore.ChangeBeforeCreation]] if this timestamp is before the latest
-    *     creation of the contract.
     *   - [[ActiveContractStore.ReassignmentCounterShouldIncrease]] if the reassignment counter does
     *     not increase monotonically.
     */
@@ -253,8 +251,6 @@ trait ActiveContractStore
     *   are reported:
     *   - [[ActiveContractStore.SimultaneousDeactivation]] if an unassignment to another
     *     synchronizer or a creation has been added with the same timestamp.
-    *   - [[ActiveContractStore.ChangeBeforeCreation]] if this timestamp is before the latest
-    *     creation of the contract.
     *   - [[ActiveContractStore.ReassignmentCounterShouldIncrease]] if the reassignment counter does
     *     not increase monotonically.
     */
@@ -279,7 +275,7 @@ trait ActiveContractStore
     * The caller must ensure that the given timestamp is at most the one of the clean cursor in the
     * [[com.digitalasset.canton.participant.protocol.RequestJournal]]
     */
-  override protected[canton] def doPrune(
+  override protected def doPrune(
       beforeAndIncluding: CantonTimestamp,
       lastPruning: Option[CantonTimestamp],
   )(implicit
@@ -362,7 +358,10 @@ object ActiveContractStore {
     )
   }
 
-  sealed trait ActivenessChangeDetail extends Product with Serializable with PrettyPrinting {
+  sealed trait ActivenessChangeDetail
+      extends Product
+      with Serializable
+      with PrettyPrintingFromCompanion {
     def name: String36
 
     def reassignmentCounterO: Option[ReassignmentCounter]
@@ -411,7 +410,11 @@ object ActiveContractStore {
 
       override def isReassignment: Boolean = false
 
-      override protected def pretty: Pretty[Create.this.type] = prettyOfClass(
+      override def prettyCompanion: PrettyPrintingCompanion[Create] = Create
+    }
+
+    object Create extends PrettyPrintingCompanion[Create] {
+      override protected val pretty: Pretty[Create] = prettyOfClass(
         param("reassignment counter", _.reassignmentCounter)
       )
     }
@@ -426,7 +429,11 @@ object ActiveContractStore {
 
       override def isReassignment: Boolean = false
 
-      override protected def pretty: Pretty[Add.this.type] = prettyOfClass(
+      override def prettyCompanion: PrettyPrintingCompanion[Add] = Add
+    }
+
+    object Add extends PrettyPrintingCompanion[Add] {
+      override protected val pretty: Pretty[Add] = prettyOfClass(
         param("reassignment counter", _.reassignmentCounter)
       )
     }
@@ -446,7 +453,12 @@ object ActiveContractStore {
 
       override def isReassignment: Boolean = false
 
-      override protected def pretty: Pretty[Archive.this.type] = prettyOfObject[Archive.this.type]
+      override def prettyCompanion: PrettyPrintingCompanion[Archive.this.type] =
+        ArchivePrettyPrintingCompanion
+    }
+
+    private object ArchivePrettyPrintingCompanion extends PrettyPrintingCompanion[Archive.type] {
+      override protected val pretty: Pretty[Archive.type] = prettyOfObject[Archive.type]
     }
 
     case object Purge extends ActivenessChangeDetail {
@@ -461,7 +473,12 @@ object ActiveContractStore {
 
       override def isReassignment: Boolean = false
 
-      override protected def pretty: Pretty[Purge.this.type] = prettyOfObject[Purge.this.type]
+      override def prettyCompanion: PrettyPrintingCompanion[Purge.this.type] =
+        PurgePrettyPrintingCompanion
+    }
+
+    private object PurgePrettyPrintingCompanion extends PrettyPrintingCompanion[Purge.type] {
+      override protected val pretty: Pretty[Purge.type] = prettyOfObject[Purge.type]
     }
 
     final case class Assignment(
@@ -476,7 +493,11 @@ object ActiveContractStore {
 
       override def contractChange: ContractChange = ContractChange.Assigned
 
-      override protected def pretty: Pretty[Assignment.this.type] = prettyOfClass(
+      override def prettyCompanion: PrettyPrintingCompanion[Assignment] = Assignment
+    }
+
+    object Assignment extends PrettyPrintingCompanion[Assignment] {
+      override protected val pretty: Pretty[Assignment] = prettyOfClass(
         param("contract change", _.contractChange),
         param("reassignment counter", _.reassignmentCounter),
         param("remote synchronizer index", _.remoteSynchronizerIdx),
@@ -495,7 +516,11 @@ object ActiveContractStore {
 
       override def contractChange: ContractChange = ContractChange.Unassigned
 
-      override protected def pretty: Pretty[Unassignment.this.type] = prettyOfClass(
+      override def prettyCompanion: PrettyPrintingCompanion[Unassignment] = Unassignment
+    }
+
+    object Unassignment extends PrettyPrintingCompanion[Unassignment] {
+      override protected val pretty: Pretty[Unassignment] = prettyOfClass(
         param("contract change", _.contractChange),
         param("reassignment counter", _.reassignmentCounter),
         param("remote synchronizer index", _.remoteSynchronizerIdx),
@@ -613,16 +638,6 @@ object ActiveContractStore {
 
   }
 
-  /** The state of a contract is changed before its `creation`. */
-  // TODO(i31579): double-check if this can be removed
-  final case class ChangeBeforeCreation(
-      contractId: LfContractId,
-      creation: TimeOfChange,
-      change: TimeOfChange,
-  ) extends AcsWarning {
-    override def timeOfChanges: List[TimeOfChange] = List(creation, change)
-  }
-
   /** ReassignmentCounter should increase monotonically with the time of change. */
   final case class ReassignmentCounterShouldIncrease(
       contractId: LfContractId,
@@ -642,7 +657,11 @@ object ActiveContractStore {
   }
 
   /** Status of a contract in the ACS */
-  sealed trait Status extends Product with Serializable with PrettyPrinting with HasPrunable {
+  sealed trait Status
+      extends Product
+      with Serializable
+      with PrettyPrintingFromCompanion
+      with HasPrunable {
 
     /** Returns whether pruning may delete a contract in this state */
     override def prunable: Boolean
@@ -666,7 +685,11 @@ object ActiveContractStore {
   final case class Active(reassignmentCounter: ReassignmentCounter) extends Status {
     override def prunable: Boolean = false
 
-    override protected def pretty: Pretty[Active] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[Active] = Active
+  }
+
+  object Active extends PrettyPrintingCompanion[Active] {
+    override protected val pretty: Pretty[Active] = prettyOfClass(
       param("reassignment counter", _.reassignmentCounter)
     )
   }
@@ -674,13 +697,23 @@ object ActiveContractStore {
   /** The contract has been archived and it is not active. */
   case object Archived extends Status {
     override def prunable: Boolean = true
-    override protected def pretty: Pretty[Archived.type] = prettyOfObject[Archived.type]
+    override def prettyCompanion: PrettyPrintingCompanion[Archived.this.type] =
+      ArchivedPrettyPrintingCompanion
     // reassignment counter remains None, because we do not write it back to the ACS
+  }
+
+  private object ArchivedPrettyPrintingCompanion extends PrettyPrintingCompanion[Archived.type] {
+    override protected val pretty: Pretty[Archived.type] = prettyOfObject[Archived.type]
   }
 
   case object Purged extends Status {
     override def prunable: Boolean = true
-    override protected def pretty: Pretty[Purged.type] = prettyOfObject[Purged.type]
+    override def prettyCompanion: PrettyPrintingCompanion[Purged.this.type] =
+      PurgedPrettyPrintingCompanion
+  }
+
+  private object PurgedPrettyPrintingCompanion extends PrettyPrintingCompanion[Purged.type] {
+    override protected val pretty: Pretty[Purged.type] = prettyOfObject[Purged.type]
   }
 
   /** The contract has been unassigned to the given `targetSynchronizer` after it had resided on
@@ -700,7 +733,11 @@ object ActiveContractStore {
       reassignmentCounter: ReassignmentCounter,
   ) extends Status {
     override def prunable: Boolean = true
-    override protected def pretty: Pretty[ReassignedAway] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[ReassignedAway] = ReassignedAway
+  }
+
+  object ReassignedAway extends PrettyPrintingCompanion[ReassignedAway] {
+    override protected val pretty: Pretty[ReassignedAway] = prettyOfClass(
       unnamedParam(_.targetSynchronizer)
     )
   }
@@ -920,15 +957,17 @@ object ActiveContractSnapshot {
 
 }
 
-sealed trait ContractChange extends Product with Serializable with PrettyPrinting {
-  override protected def pretty: Pretty[ContractChange.this.type] = prettyOfObject[this.type]
+sealed trait ContractChange extends Product with Serializable with PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[ContractChange] = ContractChange
 }
-object ContractChange {
+object ContractChange extends PrettyPrintingCompanion[ContractChange] {
   case object Created extends ContractChange
   case object Archived extends ContractChange
   case object Purged extends ContractChange
   case object Unassigned extends ContractChange
   case object Assigned extends ContractChange
+
+  override protected val pretty: Pretty[ContractChange] = prettyOfObject[ContractChange]
 }
 
 /** Type of state change of a contract as returned by
@@ -936,8 +975,12 @@ object ContractChange {
   * [[com.digitalasset.canton.participant.store.ActiveContractSnapshot.ActiveContractIdsChange]]
   */
 final case class StateChangeType(change: ContractChange, reassignmentCounter: ReassignmentCounter)
-    extends PrettyPrinting {
-  override protected def pretty: Pretty[StateChangeType] =
+    extends PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[StateChangeType] = StateChangeType
+}
+
+object StateChangeType extends PrettyPrintingCompanion[StateChangeType] {
+  override protected val pretty: Pretty[StateChangeType] =
     prettyOfClass(
       param("operation", _.change),
       param("reassignment counter", _.reassignmentCounter),

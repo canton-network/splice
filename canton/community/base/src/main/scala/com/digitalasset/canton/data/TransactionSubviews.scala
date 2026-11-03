@@ -3,15 +3,21 @@
 
 package com.digitalasset.canton.data
 
+import cats.syntax.either.*
 import com.digitalasset.canton.crypto.HashOps
 import com.digitalasset.canton.data.MerkleTree.BlindingCommand
 import com.digitalasset.canton.data.ViewPosition.{MerklePathElement, MerkleSeqIndexFromRoot}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.protocol.{RootHash, ViewHash, v30}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
+import com.digitalasset.canton.protocol.{RootHash, TransactionProtocolLimits, ViewHash, v30}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
-import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.version.{DepthCounter, ProtocolVersion, ProtocolVersionValidation}
 import com.google.common.annotations.VisibleForTesting
+import com.google.protobuf.ByteString
 import monocle.Lens
 import monocle.macros.GenLens
 
@@ -23,7 +29,7 @@ import monocle.macros.GenLens
   */
 final case class TransactionSubviews private[data] (
     subviews: MerkleSeq[TransactionView]
-) extends PrettyPrinting {
+) extends PrettyPrintingFromCompanion {
   def toProtoV30: v30.MerkleSeq = subviews.toProtoV30
 
   lazy val unblindedElementsWithIndex: Seq[(TransactionView, MerklePathElement)] =
@@ -74,9 +80,8 @@ final case class TransactionSubviews private[data] (
   def mapUnblinded(f: TransactionView => TransactionView): TransactionSubviews =
     TransactionSubviews(subviews.mapM(f))
 
-  def pretty: Pretty[TransactionSubviews.this.type] = prettyOfClass(
-    unnamedParam(_.subviews)
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[TransactionSubviews] =
+    TransactionSubviews
 
   /** Return the view hashes of the contained subviews
     *
@@ -97,20 +102,40 @@ final case class TransactionSubviews private[data] (
     *   function to generate the error message
     */
   def assertAllUnblinded(makeMessage: RootHash => String): Unit =
-    blindedElements.headOption.foreach(hash => throw new IllegalStateException(makeMessage(hash)))
+    allUnblinded(makeMessage).valueOr(err => throw new IllegalStateException(err))
+
+  private[data] def allUnblinded(makeMessage: RootHash => String): Either[String, Unit] =
+    blindedElements.headOption.map(hash => makeMessage(hash)).toLeft(())
 
 }
 
-object TransactionSubviews {
+object TransactionSubviews extends PrettyPrintingCompanion[TransactionSubviews] {
+
+  override protected val pretty: Pretty[TransactionSubviews] = prettyOfClass(
+    unnamedParam(_.subviews)
+  )
+
   private[data] def fromProtoV30(
-      context: (HashOps, ProtocolVersion),
+      pvv: ProtocolVersionValidation,
+      context: TransactionSubviewsDeserializationContext,
+      depthCounter: DepthCounter,
       subviewsPO: Option[v30.MerkleSeq],
   ): ParsingResult[TransactionSubviews] = {
-    val (hashOps, expectedProtocolVersion) = context
+    val TransactionSubviewsDeserializationContext(hashOps, expectedProtocolVersion, limits) =
+      context
     for {
       subviewsP <- ProtoConverter.required("ViewNode.subviews", subviewsPO)
-      tvParser = TransactionView.fromByteString(expectedProtocolVersion, context) _
-      subviews <- MerkleSeq.fromProtoV30(((hashOps, tvParser), expectedProtocolVersion), subviewsP)
+      tvParser = (bytes: ByteString, tvDepth: DepthCounter) =>
+        TransactionView.fromByteString(
+          pvv,
+          TransactionViewDeserializationContext(hashOps, tvDepth, expectedProtocolVersion, limits),
+          bytes,
+        )
+      subviews <- MerkleSeq.fromProtoV30(
+        pvv,
+        (hashOps, tvParser, depthCounter),
+        subviewsP,
+      )
     } yield TransactionSubviews(subviews)
   }
 
@@ -138,7 +163,22 @@ object TransactionSubviews {
   @VisibleForTesting
   object Optics {
     val subviewsUnsafe: Lens[TransactionSubviews, MerkleSeq[TransactionView]] =
-      GenLens[TransactionSubviews](_.subviews)
+      GenLens.apply[TransactionSubviews](_.subviews)
   }
 
 }
+
+/** Context required to deserialize TransactionSubviews
+  *
+  * @param hashOps
+  *   hash operations
+  * @param pv
+  *   protocol version
+  * @param limits
+  *   protocol limits
+  */
+final case class TransactionSubviewsDeserializationContext(
+    hashOps: HashOps,
+    pv: ProtocolVersion,
+    limits: TransactionProtocolLimits,
+)

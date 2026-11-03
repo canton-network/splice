@@ -4,7 +4,11 @@
 package com.digitalasset.canton.participant.sync
 
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.config.{ProcessingTimeout, SessionEncryptionKeyCacheConfig}
+import com.digitalasset.canton.config.{
+  CacheConfigWithTimeout,
+  ProcessingTimeout,
+  SessionEncryptionKeyCacheConfig,
+}
 import com.digitalasset.canton.health.{
   AtomicHealthComponent,
   CloseableHealthComponent,
@@ -13,6 +17,7 @@ import com.digitalasset.canton.health.{
 import com.digitalasset.canton.lifecycle.{LifeCycle, PromiseUnlessShutdownFactory}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.admin.party.OnboardingClearanceScheduler
+import com.digitalasset.canton.participant.commitment.AcsCommitmentSender
 import com.digitalasset.canton.participant.event.RecordOrderPublisher
 import com.digitalasset.canton.participant.ledger.api.LedgerApiIndexer
 import com.digitalasset.canton.participant.metrics.ConnectedSynchronizerMetrics
@@ -52,6 +57,7 @@ class SyncEphemeralState(
     val recordOrderPublisher: RecordOrderPublisher,
     val timeTracker: SynchronizerTimeTracker,
     val inFlightSubmissionSynchronizerTracker: InFlightSubmissionSynchronizerTracker,
+    val acsCommitmentSender: AcsCommitmentSender,
     val onboardingClearanceScheduler: OnboardingClearanceScheduler,
     persistentState: SyncPersistentState,
     val ledgerApiIndexer: LedgerApiIndexer,
@@ -61,6 +67,7 @@ class SyncEphemeralState(
     metrics: ConnectedSynchronizerMetrics,
     exitOnFatalFailures: Boolean,
     sessionKeyCacheConfig: SessionEncryptionKeyCacheConfig,
+    transparencyCheckCacheConfig: CacheConfigWithTimeout,
     override val timeouts: ProcessingTimeout,
     val loggerFactory: NamedLoggerFactory,
     futureSupervisor: FutureSupervisor,
@@ -86,7 +93,7 @@ class SyncEphemeralState(
     new ReassignmentSynchronizer(loggerFactory, timeouts)
 
   val sessionKeyStore: SessionKeyStore =
-    SessionKeyStore(sessionKeyCacheConfig, timeouts, loggerFactory)
+    SessionKeyStore(sessionKeyCacheConfig, transparencyCheckCacheConfig, timeouts, loggerFactory)
 
   val requestJournal =
     new RequestJournal(
@@ -111,6 +118,7 @@ class SyncEphemeralState(
   val requestTracker: RequestTracker = {
     val conflictDetector = new ConflictDetector(
       persistentState.activeContractStore,
+      persistentState.partyReplicationIndexingStoreIfOnPREnabled,
       reassignmentCache,
       loggerFactory,
       persistentState.enableAdditionalConsistencyChecks,
@@ -158,6 +166,7 @@ class SyncEphemeralState(
       requestTracker,
       recordOrderPublisher,
       submissionTracker,
+      acsCommitmentSender,
       phase37Synchronizer,
       reassignmentCache,
       reassignmentSynchronizer,

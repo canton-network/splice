@@ -14,7 +14,7 @@ import {
 import { CREATE_PROPOSAL_FIELD_LABEL_SX } from '../../constants/createProposalLayout';
 import type { FormEvent } from 'react';
 import { useFieldContext } from '../../hooks/formContext';
-import { scrollableSelectFieldSx } from '../beta/identifierStyles';
+import { scrollableSelectFieldSx } from '../ui/identifierStyles';
 import { selectFieldSx } from '../../themes/fieldStyles';
 
 export type Option = { key: string; value: string };
@@ -61,7 +61,7 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
           renderValue={selected => {
             if (!selected) {
               return showPlaceholder ? (
-                <Typography component="span" color="text.secondary">
+                <Typography component="span" sx={{ color: 'text.secondary' }}>
                   {resolvedPlaceholder}
                 </Typography>
               ) : (

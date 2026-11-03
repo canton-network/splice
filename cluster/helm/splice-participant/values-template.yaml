@@ -4,6 +4,8 @@
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "canton-participant"
 enableHealthProbes: true
+# Enable the HTTP health endpoints (port 5071) and use them instead of the gRPC health service (port 5061) for the probes
+httpHealthProbes: true
 
 # Custom annotations and labels for deployed resources
 pod:
@@ -60,6 +62,14 @@ extraInitContainers: []
 
 # set to true to disable auth (this is highly insecure)
 disableAuth: false
+
+# Set to true to allow downloading the participant's private keys via its admin API.
+# Required for participant identities backups and dumps if the participant does not use KMS.
+enableKeyDownload: false
+# Set to true to serve the participant's repair service (canton.features.enable-repair-commands) on its admin API.
+# Required on SV participants, for Scan's ACS snapshot endpoint, and on validator participants while
+# they restore from an identities dump (migrateValidatorParty) or import an ACS.
+enableRepairCommands: false
 
 #auth:
 #  secretOverrides:

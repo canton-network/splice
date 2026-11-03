@@ -16,6 +16,7 @@ import com.digitalasset.canton.synchronizer.metrics.SequencerMetrics
 import com.digitalasset.canton.synchronizer.sequencer.HASequencerExclusiveStorageBuilder.ExclusiveStorage
 import com.digitalasset.canton.synchronizer.sequencer.HASequencerExclusiveStorageNotifier.FailoverNotification
 import com.digitalasset.canton.synchronizer.sequencer.config.SequencerNodeParameters
+import com.digitalasset.canton.synchronizer.sequencer.store.SequencerMemberId
 import com.digitalasset.canton.synchronizer.sequencer.time.{
   DisasterRecoverySequencingTimeUpperBound,
   LsuSequencingBounds,
@@ -26,6 +27,7 @@ import com.digitalasset.canton.topology.SequencerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.tracing.TraceContext.withNewTraceContext
 import com.digitalasset.canton.util.ErrorUtil
+import com.digitalasset.canton.util.signalling.{LocalEventSignaller, PollingEventSignaller}
 import com.digitalasset.canton.version.ProtocolVersion
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -91,14 +93,15 @@ class HADatabaseSequencerFactory(
     // of all writes locally.
     val eventSignaller =
       if (config.highAvailabilityEnabled)
-        new PollingEventSignaller(
+        new PollingEventSignaller[SequencerMemberId](
           config.reader.pollingInterval
             .getOrElse(SequencerReaderConfig.defaultPollingInterval)
             .toInternal,
           loggerFactory,
         )
       else
-        new LocalSequencerStateEventSignaller(
+        new LocalEventSignaller[SequencerMemberId, Unit](
+          "member",
           nodeParameters.processingTimeouts,
           loggerFactory,
         )
@@ -161,15 +164,13 @@ class HADatabaseSequencerFactory(
       logger.info(
         s"Database Sequencer exclusive storage becoming ${if (onActive) "active" else "passive"}"
       )
-      FutureUnlessShutdown.outcomeF(
-        pruningScheduler
-          .restart()
-          .map(_ =>
-            logger.info(
-              "Restarted database sequencer pruning scheduler to failover-adapted schedule"
-            )
+      pruningScheduler
+        .restart()
+        .map(_ =>
+          logger.info(
+            "Restarted database sequencer pruning scheduler to failover-adapted schedule"
           )
-      )
+        )
     }
 
 }

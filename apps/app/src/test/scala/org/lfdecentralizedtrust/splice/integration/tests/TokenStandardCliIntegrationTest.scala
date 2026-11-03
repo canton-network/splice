@@ -2,6 +2,8 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.javaapi.data.codegen.Choice
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands
+import com.digitalasset.canton.crypto.SigningPrivateKeyAccess.*
+import com.digitalasset.canton.crypto.SigningPublicKeyAccess.*
 import com.digitalasset.canton.crypto.{PrivateKey, SigningPrivateKey, SigningPublicKey}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -88,7 +90,7 @@ class TokenStandardCliIntegrationTest
       // Transfers from non-external parties are not supported by the CLI
       actAndCheck(
         "Transfer 2000.0 to Alice via Token Standard", {
-          executeTransferViaTokenStandard(
+          executeTransferViaTokenStandardV1(
             aliceValidatorBackend.participantClientWithAdminToken,
             RichPartyId.local(aliceValidatorBackend.getValidatorPartyId()),
             alicePartyId,
@@ -134,7 +136,7 @@ class TokenStandardCliIntegrationTest
               "-l",
               "http://localhost:6501", // not available in any config
               "-a",
-              aliceValidatorBackend.participantClientWithAdminToken.adminToken.value,
+              aliceValidatorBackend.participantClientWithAdminToken.ledgerApiToken.value,
               "-u",
               "dummyUser", // Doesn't actually matter what we put here as the admin token ignores the user.
               "--reason",
@@ -179,7 +181,7 @@ class TokenStandardCliIntegrationTest
               "-l",
               "http://localhost:6501", // not available in any config
               "-a",
-              aliceValidatorBackend.participantClientWithAdminToken.adminToken.value,
+              aliceValidatorBackend.participantClientWithAdminToken.ledgerApiToken.value,
               "-u",
               "dummyUser", // Doesn't actually matter what we put here as the admin token ignores the user.
             ),

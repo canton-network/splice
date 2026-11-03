@@ -4,17 +4,22 @@
 package com.digitalasset.canton.data
 
 import cats.syntax.either.*
-import cats.syntax.traverse.*
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.ProtoDeserializationError.InvariantViolation
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.ViewConfirmationParameters.InvalidViewConfirmationParameters
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.protocol.v30
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
+import com.digitalasset.canton.protocol.{TransactionProtocolLimits, v30}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.serialization.{ProtoConverter, ProtocolVersionedMemoizedEvidence}
 import com.digitalasset.canton.util.NoCopy
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
@@ -52,7 +57,7 @@ final case class ViewCommonData private (
   def toProtoV30: v30.ViewCommonData = {
     val informees = viewConfirmationParameters.informees.toSeq
     v30.ViewCommonData(
-      informees = informees,
+      informees = informees.map(_.toProtoUnvalidated),
       quorums = viewConfirmationParameters.quorums.map(
         _.tryToProtoV30(informees)
       ),
@@ -66,11 +71,9 @@ final case class ViewCommonData private (
 
   override val hashPurpose: HashPurpose = HashPurpose.ViewCommonData
 
-  override protected def pretty: Pretty[ViewCommonData] = prettyOfClass(
-    param("view confirmation parameters", _.viewConfirmationParameters),
-    param("salt", _.salt),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[ViewCommonData] = ViewCommonData
 
+  /** DO NOT USE IN PRODUCTION, as it does not necessarily check object invariants. */
   @VisibleForTesting
   def copy(
       viewConfirmationParameters: ViewConfirmationParameters = this.viewConfirmationParameters,
@@ -83,16 +86,34 @@ final case class ViewCommonData private (
     )
 }
 
+/** Context required to deserialize ViewCommonData
+  *
+  * @param hashOps
+  *   hashing operations
+  * @param transactionProtocolLimits
+  *   protocol limits
+  */
+final case class ViewCommonDataDeserializationContext(
+    hashOps: HashOps,
+    transactionProtocolLimits: TransactionProtocolLimits,
+)
+
 object ViewCommonData
     extends VersioningCompanionContextMemoization[
       ViewCommonData,
-      HashOps,
-    ] {
+      ViewCommonDataDeserializationContext,
+    ]
+    with PrettyPrintingCompanion[ViewCommonData] {
   override val name: String = "ViewCommonData"
 
+  override protected val pretty: Pretty[ViewCommonData] = prettyOfClass(
+    param("view confirmation parameters", _.viewConfirmationParameters),
+    param("salt", _.salt),
+  )
+
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.ViewCommonData)(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.ViewCommonData)(
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -129,17 +150,31 @@ object ViewCommonData
       .valueOr(err => throw err)
 
   private def fromProtoV30(
-      hashOps: HashOps,
+      pvv: ProtocolVersionValidation,
+      context: ViewCommonDataDeserializationContext,
       viewCommonDataP: v30.ViewCommonData,
-  )(bytes: ByteString): ParsingResult[ViewCommonData] =
+  )(bytes: ByteString): ParsingResult[ViewCommonData] = {
+    val ViewCommonDataDeserializationContext(hashOps, limits) = context
+
     for {
-      informees <- viewCommonDataP.informees.traverse(informee =>
-        ProtoConverter.parseLfPartyId(informee, "informees")
+      informees <- ProtoValidation.validateThen(
+        viewCommonDataP.informees,
+        "informees",
+        pvv,
+        ProtoValidation.MaxCollectionSize,
+      )(
+        ProtoConverter.parseLfPartyId
       )
       salt <- ProtoConverter
         .parseRequired(Salt.fromProtoV30, "salt", viewCommonDataP.salt)
         .leftMap(_.inField("salt"))
-      quorums <- viewCommonDataP.quorums.traverse(Quorum.fromProtoV30(_, informees))
+      quorums <- ProtoValidation
+        .validateLengthThen(
+          viewCommonDataP.quorums,
+          "quorums",
+          pvv,
+          ProtoValidation.MaxCollectionSize,
+        )((element, _) => Quorum.fromProtoV30(pvv, limits, element, informees))
       rpv <- protocolVersionRepresentativeFor(ProtoVersion(30))
       viewConfirmationParameters <- ViewConfirmationParameters.create(informees.toSet, quorums)
     } yield new ViewCommonData(viewConfirmationParameters, salt)(
@@ -147,6 +182,7 @@ object ViewCommonData
       rpv,
       Some(bytes),
     )
+  }
 
 }
 
@@ -162,18 +198,21 @@ object ViewCommonData
 final case class ViewConfirmationParameters private (
     informees: Set[LfPartyId],
     quorums: Seq[Quorum],
-) extends PrettyPrinting
+) extends PrettyPrintingFromCompanion
     with NoCopy {
 
-  override protected def pretty: Pretty[ViewConfirmationParameters] = prettyOfClass(
-    param("informees", _.informees),
-    param("quorums", _.quorums),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[ViewConfirmationParameters] =
+    ViewConfirmationParameters
 
   lazy val confirmers: Set[LfPartyId] = quorums.flatMap(_.confirmers.keys).toSet
 }
 
-object ViewConfirmationParameters {
+object ViewConfirmationParameters extends PrettyPrintingCompanion[ViewConfirmationParameters] {
+
+  override protected val pretty: Pretty[ViewConfirmationParameters] = prettyOfClass(
+    param("informees", _.informees),
+    param("quorums", _.quorums),
+  )
 
   /** Indicates an attempt to create an invalid [[ViewConfirmationParameters]]. */
   final case class InvalidViewConfirmationParameters(message: String)

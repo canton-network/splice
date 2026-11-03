@@ -12,6 +12,7 @@ function write_participant_config() {
     local base_port=$(( 5000 + ( $1 * 100 ) ))
 
     local health_port=$(( base_port + 61 ))
+    local http_health_port=$(( base_port + 71 ))
     local ledger_port=$(( base_port + 1 ))
     local admin_port=$(( base_port + 2 ))
     local http_ledger_port=$(( base_port + 3))
@@ -35,6 +36,11 @@ canton.participants.participant_$index = {
     monitoring.grpc-health-server {
         address = "0.0.0.0"
         port = $health_port
+    }
+
+    monitoring.http-health-server {
+        address = "0.0.0.0"
+        port = $http_health_port
     }
 
     storage {

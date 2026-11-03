@@ -4,6 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { retryOnRateLimit } from '@canton-network/splice-common-frontend';
 
 export interface PreviousSvRewardWeightResult {
   weight: string | undefined;
@@ -22,7 +23,7 @@ export function usePreviousSvRewardWeight(
       return rewardWeight ?? null;
     },
     enabled: !!svParty,
-    retry: false,
+    retry: retryOnRateLimit,
   });
 
   return { weight: query.data ?? undefined, isPending: !!svParty && query.isPending };

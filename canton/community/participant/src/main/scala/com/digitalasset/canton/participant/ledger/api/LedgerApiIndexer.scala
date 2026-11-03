@@ -3,16 +3,21 @@
 
 package com.digitalasset.canton.participant.ledger.api
 
-import cats.Eval
 import cats.data.EitherT
 import com.daml.ledger.resources.ResourceOwner
+import com.digitalasset.base.error.utils.DecodedCantonError
 import com.digitalasset.canton.LedgerParticipantId
 import com.digitalasset.canton.concurrent.{
   ExecutionContextIdlenessExecutorService,
   FutureSupervisor,
 }
 import com.digitalasset.canton.config.{NonNegativeDuration, ProcessingTimeout, StorageConfig}
-import com.digitalasset.canton.health.{HealthStatus, Healthy, ReportsHealth, Unhealthy}
+import com.digitalasset.canton.health.{
+  CloseableAtomicHealthComponent,
+  ComponentHealthState,
+  HealthStatus,
+  ReportsHealth,
+}
 import com.digitalasset.canton.ledger.participant.state.{RepairUpdate, Update}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.NoLogging.logger
@@ -20,17 +25,11 @@ import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.metrics.LedgerApiServerMetrics
 import com.digitalasset.canton.participant.config.LedgerApiServerConfig
 import com.digitalasset.canton.platform.apiserver.execution.CommandProgressTracker
-import com.digitalasset.canton.platform.indexer.ha.HaConfig
+import com.digitalasset.canton.platform.indexer.*
+import com.digitalasset.canton.platform.indexer.ha.{HaConfig, PollingCheckException}
 import com.digitalasset.canton.platform.indexer.parallel.{
   PostPublishData,
   ReassignmentOffsetPersistence,
-}
-import com.digitalasset.canton.platform.indexer.{
-  IndexerConfig,
-  IndexerParams,
-  IndexerQueueProxy,
-  IndexerState,
-  JdbcIndexer,
 }
 import com.digitalasset.canton.platform.store.cache.OnlyForTestingTransactionInMemoryStore
 import com.digitalasset.canton.platform.store.{DbSupport, LedgerApiContractStore}
@@ -43,7 +42,6 @@ import com.digitalasset.canton.platform.{
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.PekkoUtil
 import com.digitalasset.canton.util.PekkoUtil.{
   Commit,
   FutureQueue,
@@ -52,27 +50,46 @@ import com.digitalasset.canton.util.PekkoUtil.{
   RecoveringQueueMetrics,
   ShutdownInProgress,
 }
+import com.digitalasset.canton.util.{Mutex, PekkoUtil, StateChangedCallback}
+import io.grpc.StatusRuntimeException
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
 
 import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.{Duration, DurationInt}
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Success
 
 class LedgerApiIndexer(
     val indexerHealth: ReportsHealth,
     val enqueue: Update => FutureUnlessShutdown[Unit],
     val inMemoryState: InMemoryState,
-    val ledgerApiStore: Eval[LedgerApiStore],
-    val contractStore: Eval[LedgerApiContractStore],
+    val ledgerApiStore: LedgerApiStore,
+    val contractStore: LedgerApiContractStore,
     val loggerFactory: NamedLoggerFactory,
     val timeouts: ProcessingTimeout,
     indexerState: IndexerState,
     val onlyForTestingTransactionInMemoryStore: Option[OnlyForTestingTransactionInMemoryStore],
-) extends ResourceCloseable {
+) extends ResourceCloseable
+    with CloseableAtomicHealthComponent {
+
+  override def name: String = LedgerApiIndexer.healthComponentName
+
+  override protected def initialHealthState: ComponentHealthState =
+    ComponentHealthState.NotInitializedState
+
+  private val healthUpdateLock = Mutex()
+
+  indexerState.replaceHealthStateChangedCallback { () =>
+    healthUpdateLock.exclusive {
+      reportHealthState(indexerState.componentHealthState)(
+        TraceContext.empty
+      )
+    }
+  }
+  reportHealthState(indexerState.componentHealthState)(
+    TraceContext.empty
+  )
 
   def withRepairIndexer(
       repairOperation: FutureQueue[RepairUpdate] => EitherT[Future, String, Unit]
@@ -114,12 +131,22 @@ object LedgerApiIndexer {
       s"Indexer initialization did not finished in $WarnDelay. Initialization still in progress."
   }
 
+  val healthComponentName: String = "ledger api indexer"
+
+  private val defaultLogLevelIsInfo: Throwable => Boolean = {
+    case s: StatusRuntimeException =>
+      DecodedCantonError.fromStatusRuntimeException(s).exists(_.isRetryable)
+    // PollingChecker errors will be rethrown on initialization, so there is no urgency to log them on WARN
+    case _: PollingCheckException => true
+    case _ => false
+  }
+
   def initialize(
       metrics: LedgerApiServerMetrics,
       clock: Clock,
       commandProgressTracker: CommandProgressTracker,
-      ledgerApiStore: Eval[LedgerApiStore],
-      contractStore: Eval[LedgerApiContractStore],
+      ledgerApiStore: LedgerApiStore,
+      contractStore: LedgerApiContractStore,
       ledgerApiIndexerConfig: LedgerApiIndexerConfig,
       reassignmentOffsetPersistence: ReassignmentOffsetPersistence,
       postProcessor: (Seq[PostPublishData], TraceContext) => Future[Unit],
@@ -149,14 +176,13 @@ object LedgerApiIndexer {
             tracer,
             loggerFactory,
           )(
-            ledgerApiStore.value.ledgerEndCache,
-            ledgerApiStore.value.stringInterningView,
+            ledgerApiStore.ledgerEndCache,
+            ledgerApiStore.stringInterningView,
           )
           .afterReleased(initializationLogger.info("Ledger API Indexer stopped."))
-      healthStatusRef = new AtomicReference[HealthStatus](Unhealthy)
       indexerCreateFunction <- new JdbcIndexer.Factory(
         ledgerApiIndexerConfig.ledgerParticipantId,
-        DbSupport.ParticipantDataSourceConfig(ledgerApiStore.value.ledgerApiStorage.jdbcUrl),
+        DbSupport.ParticipantDataSourceConfig(ledgerApiStore.ledgerApiStorage.jdbcUrl),
         ledgerApiIndexerConfig.indexerConfig,
         metrics,
         inMemoryState,
@@ -175,24 +201,13 @@ object LedgerApiIndexer {
           postgres = ledgerApiIndexerConfig.indexerConfig.postgresDataSource,
         ),
         ledgerApiIndexerConfig.indexerHaConfig,
-        Some(ledgerApiStore.value.ledgerApiDbSupport.dbDispatcher),
+        Some(ledgerApiStore.ledgerApiDbSupport.dbDispatcher),
         clock,
         reassignmentOffsetPersistence,
         postProcessor,
         sequentialPostProcessor,
-        contractStore.value,
-      ).initialized().map { indexer => (params: IndexerParams) =>
-        val result = indexer(params)
-        result.flatMap(identity).onComplete {
-          case Success(indexer) =>
-            healthStatusRef.set(Healthy)
-            indexer.futureQueue.done.onComplete(_ => healthStatusRef.set(Unhealthy))
-
-          case _ =>
-            healthStatusRef.set(Unhealthy)
-        }
-        result
-      }
+        contractStore,
+      ).initialized()
       normalIndexerCreateFunction =
         (commit: Commit) =>
           (shutdownRequested: ShutdownInProgress) =>
@@ -210,7 +225,7 @@ object LedgerApiIndexer {
           indexerCreateFunction(
             IndexerParams(repairMode = true, commit = _ => (), shutdownRequested = () => false)
           ).flatMap(identity)
-      recoveringQueueFactory = () => {
+      recoveringQueueFactory = (healthStatusHandler: StateChangedCallback) => {
         new RecoveringFutureQueueImpl[Update](
           maxBlockedOffer = ledgerApiIndexerConfig.indexerConfig.queueMaxBlockedOffer,
           bufferSize = ledgerApiIndexerConfig.indexerConfig.queueBufferSize,
@@ -227,11 +242,14 @@ object LedgerApiIndexer {
           uncommittedWarnTreshold =
             ledgerApiIndexerConfig.indexerConfig.queueUncommittedWarnThreshold,
           recoveringQueueMetrics = RecoveringQueueMetrics(
-            blockedMeter = metrics.indexer.indexerQueueBlocked,
-            bufferedMeter = metrics.indexer.indexerQueueBuffered,
-            uncommittedMeter = metrics.indexer.indexerQueueUncommitted,
+            blockedGauge = metrics.indexer.indexerQueueBlocked,
+            bufferedGauge = metrics.indexer.indexerQueueBuffered,
+            uncommittedGauge = metrics.indexer.indexerQueueUncommitted,
           ),
           consumerFactory = normalIndexerCreateFunction,
+          consumerName = "indexer",
+          healthStateChanged = healthStatusHandler,
+          defaultLogLevelIsInfo = defaultLogLevelIsInfo,
         )
       }
       _ = initializationLogger.debug("Waiting for the indexer to initialize the database.")
@@ -265,7 +283,8 @@ object LedgerApiIndexer {
       initializationLogger.info("Ledger API Indexer started, initializing recoverable indexing.")
 
       new LedgerApiIndexer(
-        indexerHealth = () => healthStatusRef.get(),
+        indexerHealth = () =>
+          HealthStatus.fromComponentHealthState(indexerState.componentHealthState),
         enqueue = event => {
           commandProgressTracker.indexingStarts(event)
           IndexerQueueProxy(indexerState.withStateUnlessShutdown)

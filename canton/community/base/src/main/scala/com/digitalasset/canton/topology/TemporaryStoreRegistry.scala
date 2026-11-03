@@ -56,6 +56,7 @@ class TemporaryStoreRegistry(
       topologyCacheAggregatorConfig,
       topologyConfig,
       store,
+      TopologyManager.PV(protocolVersion),
       timeouts,
       futureSupervisor,
       loggerFactoryWithStore,
@@ -81,5 +82,5 @@ class TemporaryStoreRegistry(
   def stores(): Seq[TopologyStore[TemporaryStore]] = managers().map(_.store)
 
   override protected def onClosed(): Unit =
-    LifeCycle.close(registeredStores.values.toList*)(logger)
+    LifeCycle.close(registeredStores.values)(logger)
 }

@@ -5,9 +5,14 @@ package com.digitalasset.canton.protocol
 
 import cats.syntax.either.*
 import com.digitalasset.canton.ProtoDeserializationError.{ContractDeserializationError, OtherError}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.google.common.annotations.VisibleForTesting
+import com.google.protobuf.ByteString
 import monocle.Lens
 import monocle.macros.GenLens
 
@@ -23,11 +28,8 @@ final case class CreatedContract private (
     contract: NewContractInstance,
     consumedInCore: Boolean,
     rolledBack: Boolean,
-) extends PrettyPrinting {
+) extends PrettyPrintingFromCompanion {
 
-  // Note that on behalf of rolledBack contracts we still send the SerializableContract along with the contract instance
-  // mainly to support DAMLe.reinterpret on behalf of a top-level CreateActionDescription under a rollback node because
-  // we need the contract instance to construct the LfCreateCommand.
   def toProtoV30: v30.CreatedContract =
     v30.CreatedContract(
       contract = contract.encoded,
@@ -35,15 +37,24 @@ final case class CreatedContract private (
       rolledBack = rolledBack,
     )
 
-  override protected def pretty: Pretty[CreatedContract] = prettyOfClass(
+  def toProtoV31: v31.CreatedContract =
+    v31.CreatedContract(
+      contract = contract.encoded,
+      consumedInCore = consumedInCore,
+    )
+
+  override def prettyCompanion: PrettyPrintingCompanion[CreatedContract] = CreatedContract
+
+}
+
+object CreatedContract extends PrettyPrintingCompanion[CreatedContract] {
+
+  override protected val pretty: Pretty[CreatedContract] = prettyOfClass(
     unnamedParam(_.contract),
     paramIfTrue("consumed in core", _.consumedInCore),
     paramIfTrue("rolled back", _.rolledBack),
   )
 
-}
-
-object CreatedContract {
   def create(
       contract: NewContractInstance,
       consumedInCore: Boolean,
@@ -68,9 +79,20 @@ object CreatedContract {
   def fromProtoV30(
       createdContractP: v30.CreatedContract
   ): ParsingResult[CreatedContract] = {
-    val v30.CreatedContract(contractP, consumedInCore, rolledBack) =
-      createdContractP
+    val v30.CreatedContract(contractP, consumedInCore, rolledBack) = createdContractP
+    fromProto(contractP)(consumedInCore, rolledBack)
+  }
 
+  def fromProtoV31(
+      createdContractP: v31.CreatedContract
+  ): ParsingResult[CreatedContract] = {
+    val v31.CreatedContract(contractP, consumedInCore) = createdContractP
+    fromProto(contractP)(consumedInCore, rolledBack = false)
+  }
+
+  private def fromProto(
+      contractP: ByteString
+  )(consumedInCore: Boolean, rolledBack: Boolean): ParsingResult[CreatedContract] =
     for {
       contract <- ContractInstance
         .decodeCreated(contractP)
@@ -81,13 +103,12 @@ object CreatedContract {
         rolledBack = rolledBack,
       ).leftMap(OtherError.apply)
     } yield createdContract
-  }
 
   /** DO NOT USE IN PRODUCTION, as it does not necessarily check object invariants. */
   @VisibleForTesting
   object Optics {
     val contractUnsafe: Lens[CreatedContract, NewContractInstance] =
-      GenLens[CreatedContract](_.contract)
+      GenLens.apply[CreatedContract](_.contract)
   }
 }
 

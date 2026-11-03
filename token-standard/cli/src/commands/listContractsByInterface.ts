@@ -18,10 +18,10 @@ export async function listContractsByInterface(
     const ledgerClient = createLedgerApiClient(opts);
     const ledgerEnd = await ledgerClient.getV2StateLedgerEnd();
     const responses = await ledgerClient.postV2StateActiveContracts({
-      filter: {
+      eventFormat: {
         filtersByParty: filtersByParty(partyId, [interfaceId], false),
+        verbose: false,
       },
-      verbose: false,
       activeAtOffset: ledgerEnd.offset!,
     });
     const prettyContracts = responses.map((response) =>

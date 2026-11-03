@@ -4,8 +4,6 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, test } from 'vitest';
 import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
-import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import App from '../../App';
 import { navigateToGovernancePage } from '../helpers';
 import {
@@ -129,7 +127,9 @@ describe('Governance Page', () => {
     await navigateToGovernancePage(user);
 
     const badge = screen.getByTestId('inflight-proposals-section-badge-count');
-    expect(badge).toHaveTextContent('');
+    await waitFor(() =>
+      expect(badge.querySelector('.MuiBadge-badge')).toHaveClass('MuiBadge-invisible')
+    );
   });
 
   test('vote history details show the actual effective time for closed votes without targetEffectiveAt', async () => {
@@ -141,10 +141,8 @@ describe('Governance Page', () => {
 
     // The first DsoRules vote result simulates an old-model accepted vote:
     // no targetEffectiveAt on the request, actual effective time on the outcome.
-    const closedVote = voteResultsDsoRules.dso_rules_vote_results[0];
-    const effectiveAt =
-      closedVote.outcome.tag === 'VRO_Accepted' ? closedVote.outcome.value.effectiveAt : undefined;
-    const expectedEffectiveAt = dayjs(effectiveAt).format(dateTimeFormatISO);
+    // outcome.value.effectiveAt = '2024-10-01T22:10:01.253341Z', rendered at UTC+2 (TZ pinned in vitest.global-setup.ts).
+    const expectedEffectiveAt = '2024-10-02 00:10 (UTC+02:00)';
 
     const rows = screen.getAllByTestId('vote-history-row');
     const targetRow = rows.find(

@@ -584,10 +584,16 @@ template WalletAppInstall
     nonconsuming choice WalletAppInstall_FeaturedAppRights_SelfGrant : WalletAppInstall_FeaturedAppRights_SelfGrantResult
       with
         amuletRulesCid : ContractId AmuletRules
+        activityWeight : Optional Decimal
+        appKind : Optional FeaturedAppKind
+        opsParties : Optional [Party]
       controller validatorParty
-      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
+      do require "opsParties has at most 10 entries" (optional 0 length opsParties <= 10)
+         result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
            provider = endUserParty
-           activityWeight = None
+           activityWeight
+           appKind
+           opsParties
          return WalletAppInstall_FeaturedAppRights_SelfGrantResult with
            featuredAppRight = result.featuredAppRightCid
 

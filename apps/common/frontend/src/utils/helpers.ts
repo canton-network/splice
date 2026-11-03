@@ -69,7 +69,18 @@ export const isUnauthorizedError = (error: Error): boolean => {
   return err.code === 401 || err.status === 401;
 };
 
+export const isRateLimitedError = (error: Error): boolean => {
+  const err = error as { code?: unknown; status?: unknown };
+  return err.code === 429 || err.status === 429;
+};
+
+const RATE_LIMIT_RETRY_CAP = 5;
+
+export const retryOnRateLimit = (failureCount: number, error: Error): boolean =>
+  isRateLimitedError(error) && failureCount < RATE_LIMIT_RETRY_CAP;
+
 export const retryQuery = (failureCount: number, error: Error): boolean => {
   if (isUnauthorizedError(error)) return false;
+  if (isRateLimitedError(error)) return failureCount < RATE_LIMIT_RETRY_CAP;
   return failureCount < 3;
 };

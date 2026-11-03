@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import org.lfdecentralizedtrust.splice.util.AmuletConfigSchedule
 import com.digitalasset.canton.admin.api.client.data.DynamicSynchronizerParameters as ConsoleDynamicSynchronizerParameters
+import com.digitalasset.canton.admin.api.client.data.DynamicSynchronizerParametersAccess.*
 import com.digitalasset.canton.time.{PositiveFiniteDuration, PositiveSeconds}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -113,7 +114,7 @@ class ReconcileDynamicSynchronizerParametersTrigger(
     val currentParameters = currentState.mapping.parameters
     if (currentParameters.mediatorDeduplicationTimeout < requiredMinMediatorDeduplicationTimeout) {
       logger.info(
-        s"Current mediator deduplication timeout is ${currentParameters.mediatorDeduplicationTimeout}, to change to preparationTimeRecordTimeTolerance $config.preparationTimeRecordTimeTolerance it must be at least $requiredMinMediatorDeduplicationTimeout"
+        s"Current mediator deduplication timeout is ${currentParameters.mediatorDeduplicationTimeout}, to change to preparationTimeRecordTimeTolerance ${config.preparationTimeRecordTimeTolerance} it must be at least $requiredMinMediatorDeduplicationTimeout"
       )
       None
     } else {
@@ -133,7 +134,7 @@ class ReconcileDynamicSynchronizerParametersTrigger(
         Some(internalPreparationTimeRecordTimeTolerance)
       } else {
         logger.info(
-          s"preparationTimeRecordTimeTolerance can only be changed to $config.preparationTimeRecordTimeTolerance at $minSafeChangePoint, current domain time is $domainTime"
+          s"preparationTimeRecordTimeTolerance can only be changed to ${config.preparationTimeRecordTimeTolerance} at $minSafeChangePoint, current domain time is $domainTime"
         )
         None
       }

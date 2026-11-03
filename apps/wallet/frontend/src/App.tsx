@@ -4,6 +4,7 @@ import * as React from 'react';
 import {
   AuthProvider,
   ErrorRouterPage,
+  QueryDevtools,
   retryQuery,
   retrySynchronizerError,
   theme,
@@ -11,7 +12,6 @@ import {
 } from '@canton-network/splice-common-frontend';
 import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import {
@@ -43,47 +43,47 @@ import Delegations from './routes/delegations';
 import DevelopmentFund from './routes/developmentFund';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
-const App: React.FC = () => {
+const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
   const config = useWalletConfig();
   const refetchInterval = useConfigPollInterval();
-
-  const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
-    const config = useWalletConfig();
-    const navigate = useNavigate();
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          refetchInterval,
-          structuralSharing: replaceEqualDeep,
-          retry: retryQuery,
-        },
-        mutations: {
-          retry: retrySynchronizerError,
-          // Exponential backoff up to a maximum of 30 seconds
-          retryDelay: attemptIndex => Math.min(1000 * 1.5 ** attemptIndex, 30000),
-        },
+  const navigate = useNavigate();
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchInterval,
+        structuralSharing: replaceEqualDeep,
+        retry: retryQuery,
       },
-    });
+      mutations: {
+        retry: retrySynchronizerError,
+        // Exponential backoff up to a maximum of 30 seconds
+        retryDelay: attemptIndex => Math.min(1000 * 1.5 ** attemptIndex, 30000),
+      },
+    },
+  });
 
-    return (
-      <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <AuthProvider authConf={config.auth} redirect={(path: string) => navigate(path)}>
-          <QueryClientProvider client={queryClient}>
-            <ReactQueryDevtools initialIsOpen={false} />
-            <UserProvider authConf={config.auth} testAuthConf={config.testAuth}>
-              <ValidatorClientProvider url={config.services.validator.url}>
-                <WalletClientProvider url={config.services.validator.url}>
-                  <ValidatorScanProxyClientProvider validatorUrl={config.services.validator.url}>
-                    <CurrentUserProvider>{children}</CurrentUserProvider>
-                  </ValidatorScanProxyClientProvider>
-                </WalletClientProvider>
-              </ValidatorClientProvider>
-            </UserProvider>
-          </QueryClientProvider>
-        </AuthProvider>
-      </LocalizationProvider>
-    );
-  };
+  return (
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <AuthProvider authConf={config.auth} redirect={(path: string) => navigate(path)}>
+        <QueryClientProvider client={queryClient}>
+          <QueryDevtools />
+          <UserProvider authConf={config.auth} testAuthConf={config.testAuth}>
+            <ValidatorClientProvider url={config.services.validator.url}>
+              <WalletClientProvider url={config.services.validator.url}>
+                <ValidatorScanProxyClientProvider validatorUrl={config.services.validator.url}>
+                  <CurrentUserProvider>{children}</CurrentUserProvider>
+                </ValidatorScanProxyClientProvider>
+              </WalletClientProvider>
+            </ValidatorClientProvider>
+          </UserProvider>
+        </QueryClientProvider>
+      </AuthProvider>
+    </LocalizationProvider>
+  );
+};
+
+const App: React.FC = () => {
+  const config = useWalletConfig();
   const router = createBrowserRouter(
     createRoutesFromElements(
       <Route

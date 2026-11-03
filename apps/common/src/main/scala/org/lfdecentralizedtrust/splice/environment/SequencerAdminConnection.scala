@@ -7,6 +7,7 @@ import better.files.File
 import cats.implicits.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.grpc.adapter.client.pekko.ClientAdapter
+import com.digitalasset.canton.admin.api.client.commands.AdminCommandAccess.*
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
   PruningSchedulerCommands,
@@ -32,11 +33,14 @@ import com.digitalasset.canton.sequencing.protocol
 import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{Member, NodeIdentity, PhysicalSynchronizerId, SequencerId}
-import com.digitalasset.canton.topology.admin.v30.{
-  GenesisStateV2Response,
-  SequencerLsuStateResponse,
+import com.digitalasset.canton.topology.{
+  Member,
+  NodeIdentity,
+  PhysicalSynchronizerId,
+  SequencerId,
+  SynchronizerId,
 }
+import com.digitalasset.canton.topology.admin.v30.SequencerLsuStateResponse
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
 import com.digitalasset.canton.topology.transaction.SequencerSynchronizerState
@@ -62,6 +66,7 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
 }
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 
+import java.io.SequenceInputStream
 import java.nio.file.{Files, Path}
 import java.util.{Base64, Collections}
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
@@ -114,20 +119,6 @@ class SequencerAdminConnection(
   def getSequencerId(implicit traceContext: TraceContext): Future[SequencerId] =
     getId().map(SequencerId(_))
 
-  def getGenesisState(timestamp: CantonTimestamp)(implicit
-      traceContext: TraceContext
-  ): Future[Seq[ByteString]] = {
-    val responseObserver = new SeqAccumulatingObserver[GenesisStateV2Response]()
-    runCmd(
-      TopologyAdminCommands.Read
-        .GenesisStateV2(
-          timestamp = Some(timestamp),
-          synchronizerStore = None,
-          observer = responseObserver,
-        )
-    ).flatMap(_ => responseObserver.resultFuture.map(_.map(_.chunk)))
-  }
-
   def getLsuState(file: File, ts: Option[CantonTimestamp])(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
@@ -156,6 +147,7 @@ class SequencerAdminConnection(
       topologySnapshot: Path,
       staticSynchronizerParameters: StaticSynchronizerParameters,
       ignorePsidCheck: Boolean,
+      synchronizerId: SynchronizerId,
   )(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
@@ -165,6 +157,8 @@ class SequencerAdminConnection(
         inputStream,
         staticSynchronizerParameters,
         ignorePsidCheck,
+        synchronizerId,
+        serverVersion = None,
       )
     ).andThen(_ => inputStream.close())
   }
@@ -187,12 +181,11 @@ class SequencerAdminConnection(
 
   def getOnboardingState(sequencerIdOrTimestamp: Either[SequencerId, CantonTimestamp])(implicit
       traceContext: TraceContext
-  ): Future[ByteString] = {
-    val responseObserver =
-      new ByteStringStreamObserver[OnboardingStateV2Response](_.onboardingStateForSequencer)
+  ): Future[Seq[ByteString]] = {
+    val responseObserver = new SeqAccumulatingObserver[OnboardingStateV2Response]
     runCmd(
       SequencerAdminCommands.OnboardingStateV2(responseObserver, sequencerIdOrTimestamp)
-    ).flatMap(_ => responseObserver.resultBytes)
+    ).flatMap(_ => responseObserver.resultFuture.map(_.map(_.onboardingStateForSequencer)))
   }
 
   /** Streams onboarding state from the gRPC admin service directly to a bucket without writing to memory
@@ -257,6 +250,7 @@ class SequencerAdminConnection(
                 ConfigFactory.parseMap(
                   Map[String, AnyRef](
                     "provider" -> "service-account",
+                    "scopes" -> scopes,
                     "service-account" ->
                       Map[String, AnyRef](
                         "private-key" -> Base64.getEncoder.encodeToString(
@@ -264,7 +258,6 @@ class SequencerAdminConnection(
                         ),
                         "client-email" -> x.getClientEmail,
                         "project-id" -> bucketConfig.projectId,
-                        "scopes" -> scopes,
                       ).asJava,
                   ).asJava
                 )
@@ -324,31 +317,19 @@ class SequencerAdminConnection(
     topologySnapshot.result.foreach(_.writeDelimitedTo(domainParameters.protocolVersion, builder))
     runCmd(
       SequencerAdminCommands.InitializeFromGenesisStateV2(
-        Seq(builder.toByteString),
+        builder.toByteString.newInput,
         domainParameters,
+        serverVersion = None,
       )
     )
   }
 
-  /** This is used for initializing the sequencer after hard domain migrations.
-    */
-  def initializeFromGenesisState(
-      genesisState: Seq[ByteString],
-      domainParameters: StaticSynchronizerParameters,
-  )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
-    runCmd(
-      SequencerAdminCommands.InitializeFromGenesisStateV2(
-        genesisState,
-        domainParameters,
-      )
-    )
-
   def initializeFromOnboardingState(
-      onboardingState: ByteString
+      onboardingState: Seq[ByteString]
   )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
     runCmd(
       SequencerAdminCommands.InitializeFromOnboardingStateV2(
-        onboardingState
+        new SequenceInputStream(onboardingState.iterator.map(_.newInput()).asJavaEnumeration)
       )
     )
 
@@ -554,7 +535,11 @@ object SequencerAdminConnection {
     def extraTrafficConsumed: NonNegativeLong = state.extraTrafficConsumed
     def extraTrafficLimit: NonNegativeLong =
       state.extraTrafficPurchased
-    def nextSerial: PositiveInt = state.serial.fold(PositiveInt.one)(_.increment)
+    def nextSerial: PositiveInt = state.serial.fold(PositiveInt.one)(
+      _.increment.valueOr(err =>
+        throw new IllegalStateException(s"Failed to increment serial: $err")
+      )
+    )
 
     override def pretty: Pretty[TrafficState] = prettyOfClass(
       param("member", _.member),

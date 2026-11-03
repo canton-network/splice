@@ -10,6 +10,7 @@ import com.digitalasset.canton.concurrent.DirectExecutionContext
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.health.HealthComponent.AlwaysHealthyComponent
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{
   FutureUnlessShutdown,
   HasRunOnClosing,
@@ -17,10 +18,14 @@ import com.digitalasset.canton.lifecycle.{
   UnlessShutdown,
 }
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
-import com.digitalasset.canton.sequencing.SequencedEventHandler
+import com.digitalasset.canton.sequencing.MaybeCompressedSequencedEventHandler
 import com.digitalasset.canton.sequencing.client.SendAsyncClientError.SendAsyncClientResponseError
 import com.digitalasset.canton.sequencing.client.pool.Connection.ConnectionConfig
 import com.digitalasset.canton.sequencing.client.pool.InternalSequencerConnection.{
@@ -77,7 +82,7 @@ class DirectSequencerConnection(
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContextExecutor)
     extends SequencerConnectionWithPekkoSubscribe
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
 
   override def name: String = config.name
 
@@ -122,18 +127,6 @@ class DirectSequencerConnection(
       }
       .leftMap(_.toString)
 
-  override def downloadTopologyStateForInit(
-      request: TopologyStateForInitRequest,
-      timeout: Duration,
-  )(implicit
-      traceContext: TraceContext
-  ): EitherT[FutureUnlessShutdown, String, TopologyStateForInitResponse] =
-    ErrorUtil.internalError(
-      new UnsupportedOperationException(
-        s"$functionFullName is not implemented for DirectSequencerConnection"
-      )
-    )
-
   override def logout()(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Status, Unit] =
@@ -147,14 +140,14 @@ class DirectSequencerConnection(
 
   override def subscribe[E](
       request: SubscriptionRequest,
-      handler: SequencedEventHandler[E],
+      handler: MaybeCompressedSequencedEventHandler[E],
       timeout: Duration,
   )(implicit
       traceContext: TraceContext
   ): Either[String, SequencerSubscription[E]] = ???
 
-  override protected def pretty: Pretty[DirectSequencerConnection] =
-    prettyOfClass(param("name", _.name.singleQuoted))
+  override def prettyCompanion: PrettyPrintingCompanion[DirectSequencerConnection] =
+    DirectSequencerConnection
 
   override def attributes: ConnectionAttributes =
     ConnectionAttributes(synchronizerId, sequencerId, staticParameters)
@@ -231,11 +224,30 @@ class DirectSequencerConnection(
     // unlikely there will be any errors with this direct transport implementation
     SubscriptionErrorRetryPolicyPekko.never
 
+  override def streamTopologyStateForInit(request: TopologyStateForInitRequest, timeout: Duration)(
+      implicit traceContext: TraceContext
+  ): Either[String, Source[TopologyStateForInitResponse, NotUsed]] =
+    ErrorUtil.internalError(
+      new UnsupportedOperationException(
+        s"$functionFullName is not implemented for DirectSequencerConnection"
+      )
+    )
 }
 
-object DirectSequencerConnection {
-  sealed trait SubscriptionError extends Product with Serializable with PrettyPrinting {
-    override protected def pretty: Pretty[SubscriptionError.this.type] = adHocPrettyInstance
+object DirectSequencerConnection extends PrettyPrintingCompanion[DirectSequencerConnection] {
+
+  override protected val pretty: Pretty[DirectSequencerConnection] =
+    prettyOfClass(param("name", _.name.singleQuoted))
+
+  sealed trait SubscriptionError
+      extends Product
+      with Serializable
+      with PrettyPrintingFromCompanion {
+    override def prettyCompanion: PrettyPrintingCompanion[SubscriptionError] = SubscriptionError
+  }
+
+  object SubscriptionError extends PrettyPrintingCompanion[SubscriptionError] {
+    override protected val pretty: Pretty[SubscriptionError] = adHocPrettyInstance
   }
   final case class SubscriptionCreationError(error: CreateSubscriptionError)
       extends SubscriptionError

@@ -15,6 +15,7 @@ import org.apache.commons.io.FileUtils
 import org.openqa.selenium.bidi.Event
 import org.openqa.selenium.bidi.log.{Log, LogEntry, LogLevel}
 import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxDriverLogLevel, FirefoxOptions}
+import org.openqa.selenium.interactions.Actions
 import org.openqa.selenium.{
   By,
   JavascriptExecutor,
@@ -393,8 +394,9 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       timeUntilSuccess: FiniteDuration = 20.seconds,
       maxPollInterval: FiniteDuration = 100.millis,
       retryOnTestFailuresOnly: Boolean = true,
+      logElapsed: Option[String] = None,
   )(testCode: => T): T =
-    super.eventually(timeUntilSuccess, maxPollInterval, retryOnTestFailuresOnly) {
+    super.eventually(timeUntilSuccess, maxPollInterval, retryOnTestFailuresOnly, logElapsed) {
       try {
         testCode
       } catch {
@@ -559,7 +561,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     }
   }
 
-  private def assertAuth0LoginFormVisible()(implicit
+  protected def assertAuth0LoginFormVisible()(implicit
       webDriver: WebDriverType
   ) = {
     find(tagName("h1")) should not be None
@@ -670,6 +672,16 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       _ => assertAuth0LoginFormVisible(),
     )
 
+    submitAuth0LoginForm(username, password, assertCompleted)
+  }
+
+  protected def submitAuth0LoginForm(
+      username: String,
+      password: String,
+      assertCompleted: () => org.scalatest.Assertion,
+  )(implicit
+      webDriver: WebDriverType
+  ) = {
     val (_, needsAuthorization) = silentActAndCheck(
       "Auth0 login: Fill out and submit login form", {
         emailField(id("username")).value = username
@@ -700,8 +712,135 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     }
   }
 
+  // The wallet gateway and portfolio UIs are Lit web components, each rendering into its own shadow
+  // root. Selenium's lookups only see the light DOM, and `getShadowRoot` descends one level at a
+  // time, so these helpers search all shadow roots at once via JS. Splice's own UIs don't need this.
+  protected object ShadowDom {
+    def findDeep(
+        selector: String,
+        withText: Option[String] = None,
+        visibleOnly: Boolean = true,
+    )(implicit
+        webDriver: WebDriverType
+    ): Option[WebElement] = {
+      val script =
+        """
+        const selector = arguments[0];
+        const text = arguments[1];
+        const visibleOnly = arguments[2];
+        // checkVisibility is false for content the page keeps in the DOM but does not render yet (e.g. unslotted)
+        const matches = (el) =>
+          (text === null || (el.textContent || '').trim().includes(text)) &&
+          (!visibleOnly || el.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+        const visit = (root) => {
+          for (const el of root.querySelectorAll(selector)) {
+            if (matches(el)) return el;
+          }
+          for (const el of root.querySelectorAll('*')) {
+            if (el.shadowRoot) {
+              const found = visit(el.shadowRoot);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        return visit(document);
+        """
+      Option(webDriver.executeScript(script, selector, withText.orNull, Boolean.box(visibleOnly)))
+        .map(_.asInstanceOf[WebElement])
+    }
+
+    def eventuallyFindDeep(
+        selector: String,
+        withText: Option[String] = None,
+        timeUntilSuccess: FiniteDuration = 20.seconds,
+    )(implicit webDriver: WebDriverType): WebElement =
+      eventually(timeUntilSuccess) {
+        findDeep(selector, withText).valueOrFail(
+          s"No element matching '$selector'${withText.fold("")(t => s" with text '$t'")} found in the page or its shadow roots"
+        )
+      }
+
+    def clickDeep(
+        selector: String,
+        withText: Option[String] = None,
+        timeUntilSuccess: FiniteDuration = 20.seconds,
+    )(implicit webDriver: WebDriverType): Unit =
+      eventually(timeUntilSuccess) {
+        val element = findDeep(selector, withText).valueOrFail(
+          s"No visible element matching '$selector'${withText.fold("")(t => s" with text '$t'")} to click"
+        )
+        element.isDisplayed shouldBe true withClue "element to click is displayed"
+        webDriver.executeScript(
+          "arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();",
+          element,
+        )
+      }
+
+    // Looks the element up on every attempt, so a re-render between find and set is retried
+    def setDeep(
+        selector: String,
+        value: String,
+        timeUntilSuccess: FiniteDuration = 20.seconds,
+    )(implicit webDriver: WebDriverType): Unit =
+      eventually(timeUntilSuccess) {
+        val element = findDeep(selector).valueOrFail(
+          s"No visible element matching '$selector' to set a value on"
+        )
+        setDeepValue(element, value)
+      }
+
+    def setDeepValue(element: WebElement, value: String)(implicit
+        webDriver: WebDriverType
+    ): Unit =
+      webDriver.executeScript(
+        """
+        arguments[0].focus();
+        arguments[0].value = arguments[1];
+        arguments[0].dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        arguments[0].dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        """,
+        element,
+        value,
+      )
+
+    def selectDeepByVisibleText(select: WebElement, text: String)(implicit
+        webDriver: WebDriverType
+    ): Unit = {
+      val options = new org.openqa.selenium.support.ui.Select(select).getOptions.asScala
+      val option = options
+        .find(_.getText.trim == text)
+        .valueOrFail(s"option '$text' in ${options.map(_.getText.trim).mkString("[", ", ", "]")}")
+      setDeepValue(select, option.getAttribute("value"))
+    }
+  }
+
+  protected def waitForNewWindow(
+      before: Set[String],
+      timeUntilSuccess: FiniteDuration = 20.seconds,
+  )(implicit
+      webDriver: WebDriverType
+  ): String =
+    eventually(timeUntilSuccess) {
+      (windowHandles -- before).toSeq match {
+        case Seq(handle) => handle
+        case Seq() => fail("No new window was opened")
+        case handles => fail(s"Expected exactly one new window, found ${handles.size}")
+      }
+    }
+
+  protected def inWindow[T](handle: String)(f: => T)(implicit webDriver: WebDriverType): T = {
+    val previous = webDriver.getWindowHandle
+    webDriver.switchTo().window(handle)
+    try f
+    finally if (windowHandles.contains(previous)) webDriver.switchTo().window(previous)
+  }
+
+  protected def sendKeysChunked(element: WebElement, text: String, chunkSize: Int = 16): Unit =
+    text.grouped(chunkSize).foreach(chunk => element.sendKeys(chunk))
+
   protected def setAnsField(textField: TextField, input: String, expectedPartyId: String) = {
-    textField.underlying.sendKeys(input)
+    sendKeysChunked(textField.underlying, input)
     // We need to wait for the query against the ans service to finish.
     waitForAnsField(textField, expectedPartyId)
   }
@@ -773,25 +912,18 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       webDriver: WebDriverType
   ): Assertion = {
     clue(s"$party selects the date $dateTime") {
-      val dateTimePicker = webDriver.findElement(By.id(pickerId))
+      val hiddenInput = webDriver.findElement(By.id(pickerId))
       eventually() {
-        webDriver.executeScript("arguments[0].scrollIntoView({block: 'center'});", dateTimePicker)
-        dateTimePicker.clear()
-        dateTimePicker.click()
-        // Typing in the "filler" characters can mess up the input badly
-        // Note: this breaks on Feb 29th because the date library validates that the day
-        // of the month is valid for the year you enter and because the year is entered
-        // one digit at a time that fails and it resets it to Feb 28th. Luckily,
-        // this does not happen very often …
-        dateTimePicker.sendKeys(dateTime.replaceAll("[^0-9APM]", ""))
-        eventually()(
-          dateTimePicker.getAttribute("value").toLowerCase shouldBe dateTime.toLowerCase
+        webDriver.executeScript("arguments[0].scrollIntoView({block: 'center'});", hiddenInput)
+        focusAndTypeDateTime(hiddenInput, dateTime)
+        eventually(5.seconds)(
+          hiddenInput.getAttribute("value").toLowerCase shouldBe dateTime.toLowerCase
         )
       }
     }
   }
 
-  /** Sets date/time without using Selenium's clear/click (which can fail with "could not be
+  /** Sets date/time without using Selenium's click (which can fail with "could not be
     * scrolled into view" for elements in scrollable layouts). Use only when the standard
     * setDateTime fails for a specific picker; other tests must continue using setDateTime.
     */
@@ -799,13 +931,10 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       webDriver: WebDriverType
   ): Assertion = {
     clue(s"Selecting the date $dateTime (no-scroll path)") {
-      val dateTimePicker = webDriver.findElement(By.id(pickerId))
-      val digitsAndAmPm = dateTime.replaceAll("[^0-9APMapm]", "")
+      val hiddenInput = webDriver.findElement(By.id(pickerId))
       eventually() {
-        webDriver.executeScript("arguments[0].focus(); arguments[0].click();", dateTimePicker)
-        dateTimePicker.sendKeys(Keys.chord(Keys.CONTROL, "a"))
-        dateTimePicker.sendKeys(digitsAndAmPm)
-        val actual = dateTimePicker.getAttribute("value").toLowerCase
+        focusAndTypeDateTime(hiddenInput, dateTime)
+        val actual = hiddenInput.getAttribute("value").toLowerCase
         val expected = dateTime.toLowerCase
         // MUI picker may display "a"/"p" instead of "am"/"pm"; normalize for comparison
         val normalizeAmPm =
@@ -813,6 +942,17 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
         eventually()(normalizeAmPm(actual) shouldBe normalizeAmPm(expected))
       }
     }
+  }
+
+  private def focusAndTypeDateTime(hiddenInput: WebElement, dateTime: String)(implicit
+      webDriver: WebDriverType
+  ): Unit = {
+    val firstSection = hiddenInput.findElement(By.xpath("./..//*[@role='spinbutton']"))
+    webDriver.executeScript("arguments[0].focus();", firstSection)
+    new Actions(webDriver)
+      .sendKeys(Keys.chord(Keys.CONTROL, "a"))
+      .sendKeys(dateTime.replaceAll("[^0-9APMapm]", ""))
+      .perform()
   }
 }
 
@@ -846,6 +986,8 @@ object FrontendIntegrationTest {
           case "url" => {
             url = input.read[String](classOf[String])
           }
+          // fields we don't use, e.g. userContext, which newer Firefox versions send
+          case _ => input.skipValue()
         }
       }
       input.endObject()

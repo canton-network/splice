@@ -6,17 +6,22 @@ package com.digitalasset.canton.admin.api.client.data
 import cats.syntax.either.*
 import cats.syntax.foldable.*
 import cats.{Id, Monad}
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.console.ConsoleEnvironment
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.sequencing.{
   SequencerConnectionPoolDelays as SequencerConnectionPoolDelaysInternal,
   SequencerConnectionValidation as SequencerConnectionValidationInternal,
   SequencerConnections as SequencerConnectionsInternal,
   SubmissionRequestAmplification as SubmissionRequestAmplificationInternal,
+  SubscriptionLivenessLimits as SubscriptionLivenessLimitsInternal,
 }
 import com.digitalasset.canton.{SequencerAlias, config}
+import com.digitalasset.nonempty.NonEmpty
 import com.google.protobuf.ByteString
 import io.scalaland.chimney.Transformer
 import io.scalaland.chimney.dsl.*
@@ -29,7 +34,8 @@ final case class SequencerConnections(
     sequencerLivenessMargin: NonNegativeInt,
     submissionRequestAmplification: SubmissionRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
-) extends PrettyPrinting {
+    subscriptionLivenessLimits: SubscriptionLivenessLimits,
+) extends PrettyPrintingFromCompanion {
   require(
     aliasToConnection.sizeIs >= sequencerTrustThreshold.unwrap,
     s"sequencerTrustThreshold cannot be greater than number of sequencer connections. Found threshold of $sequencerTrustThreshold and ${aliasToConnection.size} sequencer connections",
@@ -110,14 +116,8 @@ final case class SequencerConnections(
   def withLivenessMargin(sequencerLivenessMargin: NonNegativeInt): SequencerConnections =
     this.copy(sequencerLivenessMargin = sequencerLivenessMargin)
 
-  override protected def pretty: Pretty[SequencerConnections] =
-    prettyOfClass(
-      param("connections", _.aliasToConnection.forgetNE),
-      param("sequencer trust threshold", _.sequencerTrustThreshold),
-      param("sequencer liveness margin", _.sequencerLivenessMargin),
-      param("submission request amplification", _.submissionRequestAmplification),
-      param("sequencer connection pool delays", _.sequencerConnectionPoolDelays),
-    )
+  override def prettyCompanion: PrettyPrintingCompanion[SequencerConnections] =
+    SequencerConnections
 
   private[canton] def toInternal: SequencerConnectionsInternal =
     SequencerConnectionsInternal
@@ -127,11 +127,22 @@ final case class SequencerConnections(
         sequencerLivenessMargin,
         submissionRequestAmplification.toInternal,
         sequencerConnectionPoolDelays.toInternal,
+        subscriptionLivenessLimits.toInternal,
       )
       .valueOr(err => throw new IllegalArgumentException(s"Invariants not respected: $err"))
 }
 
-object SequencerConnections {
+object SequencerConnections extends PrettyPrintingCompanion[SequencerConnections] {
+  override protected val pretty: Pretty[SequencerConnections] =
+    prettyOfClass(
+      param("connections", _.aliasToConnection.forgetNE),
+      param("sequencer trust threshold", _.sequencerTrustThreshold),
+      param("sequencer liveness margin", _.sequencerLivenessMargin),
+      param("submission request amplification", _.submissionRequestAmplification),
+      param("sequencer connection pool delays", _.sequencerConnectionPoolDelays),
+      param("subscription liveness limits", _.subscriptionLivenessLimits),
+    )
+
   implicit private[data] def sequencerConnectionsToInternalTransformer
       : Transformer[SequencerConnections, SequencerConnectionsInternal] = _.toInternal
 
@@ -147,6 +158,7 @@ object SequencerConnections {
       sequencerLivenessMargin = NonNegativeInt.zero,
       submissionRequestAmplification = SubmissionRequestAmplification.NoAmplification,
       sequencerConnectionPoolDelays = SequencerConnectionPoolDelays.default,
+      subscriptionLivenessLimits = SubscriptionLivenessLimits.default,
     )
 
   def many(
@@ -155,6 +167,7 @@ object SequencerConnections {
       sequencerLivenessMargin: NonNegativeInt,
       submissionRequestAmplification: SubmissionRequestAmplification,
       sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+      subscriptionLivenessLimits: SubscriptionLivenessLimits,
   ): Either[String, SequencerConnections] = {
     val repeatedAliases = connections.groupBy(_.sequencerAlias).filter { case (_, connections) =>
       connections.lengthCompare(1) > 0
@@ -173,6 +186,7 @@ object SequencerConnections {
             sequencerLivenessMargin,
             submissionRequestAmplification,
             sequencerConnectionPoolDelays,
+            subscriptionLivenessLimits,
           )
         )
         .leftMap(_.getMessage)
@@ -185,6 +199,7 @@ object SequencerConnections {
       sequencerLivenessMargin: NonNegativeInt,
       submissionRequestAmplification: SubmissionRequestAmplification,
       sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+      subscriptionLivenessLimits: SubscriptionLivenessLimits,
   ): Either[String, SequencerConnections] =
     for {
       connectionsNE <- NonEmpty.from(connections).toRight("connections should not be empty")
@@ -194,6 +209,7 @@ object SequencerConnections {
         sequencerLivenessMargin,
         submissionRequestAmplification,
         sequencerConnectionPoolDelays,
+        subscriptionLivenessLimits,
       )
     } yield result
 
@@ -201,8 +217,11 @@ object SequencerConnections {
       connections: Seq[SequencerConnection],
       sequencerTrustThreshold: PositiveInt,
       sequencerLivenessMargin: NonNegativeInt,
-      submissionRequestAmplification: SubmissionRequestAmplification,
-      sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+      submissionRequestAmplification: SubmissionRequestAmplification =
+        SubmissionRequestAmplification.NoAmplification,
+      sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
+        SequencerConnectionPoolDelays.default,
+      subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
   )(implicit consoleEnvironment: ConsoleEnvironment): SequencerConnections =
     many(
       connections,
@@ -210,6 +229,7 @@ object SequencerConnections {
       sequencerLivenessMargin,
       submissionRequestAmplification,
       sequencerConnectionPoolDelays,
+      subscriptionLivenessLimits,
     ).valueOr(consoleEnvironment.raiseError)
 
   private[canton] def fromInternal(internal: SequencerConnectionsInternal): SequencerConnections =
@@ -222,6 +242,7 @@ object SequencerConnections {
         internal.sequencerLivenessMargin,
         SubmissionRequestAmplification.fromInternal(internal.submissionRequestAmplification),
         SequencerConnectionPoolDelays.fromInternal(internal.sequencerConnectionPoolDelays),
+        SubscriptionLivenessLimits.fromInternal(internal.subscriptionLivenessLimits),
       )
       .valueOr(err =>
         throw new IllegalStateException(
@@ -262,19 +283,23 @@ final case class SubmissionRequestAmplification(
     patience: config.NonNegativeFiniteDuration,
     confirmationResponseFactorO: Option[PositiveInt] = None,
     confirmationResponsePatienceO: Option[config.NonNegativeFiniteDuration] = None,
-) extends PrettyPrinting {
-  override protected def pretty: Pretty[SubmissionRequestAmplification] = prettyOfClass(
+) extends PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[SubmissionRequestAmplification] =
+    SubmissionRequestAmplification
+
+  private[canton] def toInternal: SubmissionRequestAmplificationInternal =
+    this.transformInto[SubmissionRequestAmplificationInternal]
+}
+
+object SubmissionRequestAmplification
+    extends PrettyPrintingCompanion[SubmissionRequestAmplification] {
+  override protected val pretty: Pretty[SubmissionRequestAmplification] = prettyOfClass(
     param("factor", _.factor),
     param("patience", _.patience),
     paramIfDefined("confirmationResponseFactor", _.confirmationResponseFactorO),
     paramIfDefined("confirmationResponsePatience", _.confirmationResponsePatienceO),
   )
 
-  def toInternal: SubmissionRequestAmplificationInternal =
-    this.transformInto[SubmissionRequestAmplificationInternal]
-}
-
-object SubmissionRequestAmplification {
   val NoAmplification: SubmissionRequestAmplification =
     SubmissionRequestAmplificationInternal.NoAmplification
       .transformInto[SubmissionRequestAmplification]
@@ -302,19 +327,28 @@ final case class SequencerConnectionPoolDelays(
     maxRestartDelay: config.NonNegativeFiniteDuration,
     warnValidationDelay: config.NonNegativeFiniteDuration,
     subscriptionRequestDelay: config.NonNegativeFiniteDuration,
-) extends PrettyPrinting {
-  override protected def pretty: Pretty[SequencerConnectionPoolDelays] = prettyOfClass(
+) extends PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[SequencerConnectionPoolDelays] =
+    SequencerConnectionPoolDelays
+
+  def withWarnValidationDelay(
+      delay: config.NonNegativeFiniteDuration
+  ): SequencerConnectionPoolDelays =
+    copy(warnValidationDelay = delay)
+
+  private[canton] def toInternal: SequencerConnectionPoolDelaysInternal =
+    this.transformInto[SequencerConnectionPoolDelaysInternal]
+}
+
+object SequencerConnectionPoolDelays
+    extends PrettyPrintingCompanion[SequencerConnectionPoolDelays] {
+  override protected val pretty: Pretty[SequencerConnectionPoolDelays] = prettyOfClass(
     param("minRestartDelay", _.minRestartDelay),
     param("maxRestartDelay", _.maxRestartDelay),
     param("warnValidationDelay", _.warnValidationDelay),
     param("subscriptionRequestDelay", _.subscriptionRequestDelay),
   )
 
-  def toInternal: SequencerConnectionPoolDelaysInternal =
-    this.transformInto[SequencerConnectionPoolDelaysInternal]
-}
-
-object SequencerConnectionPoolDelays {
   val default: SequencerConnectionPoolDelays =
     SequencerConnectionPoolDelaysInternal.default.transformInto[SequencerConnectionPoolDelays]
 
@@ -322,4 +356,43 @@ object SequencerConnectionPoolDelays {
       internal: SequencerConnectionPoolDelaysInternal
   ): SequencerConnectionPoolDelays =
     internal.transformInto[SequencerConnectionPoolDelays]
+}
+
+/** Configuration to determine subscription liveness. Both limits must be exceeded for a
+  * subscription to be considered silent.
+  *
+  * @param maxTimestampDelta
+  *   Maximum difference between the latest aggregated event and the latest event provided by a
+  *   subscription.
+  * @param maxOrdinalDelta
+  *   Maximum difference between the ordinal of the latest aggregated event and the ordinal of the
+  *   latest event provided by a subscription.
+  *
+  * Setting both [[maxTimestampDelta]] and [[maxOrdinalDelta]] to 0 disables the silent subscription
+  * detection.
+  */
+final case class SubscriptionLivenessLimits(
+    maxTimestampDelta: config.NonNegativeFiniteDuration,
+    maxOrdinalDelta: NonNegativeInt,
+) extends PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[SubscriptionLivenessLimits] =
+    SubscriptionLivenessLimits
+
+  private[canton] def toInternal: SubscriptionLivenessLimitsInternal =
+    this.transformInto[SubscriptionLivenessLimitsInternal]
+}
+
+object SubscriptionLivenessLimits extends PrettyPrintingCompanion[SubscriptionLivenessLimits] {
+  override protected val pretty: Pretty[SubscriptionLivenessLimits] = prettyOfClass(
+    param("maxTimestampDelta", _.maxTimestampDelta),
+    param("maxOrdinalDelta", _.maxOrdinalDelta),
+  )
+
+  val default: SubscriptionLivenessLimits =
+    SubscriptionLivenessLimitsInternal.default.transformInto[SubscriptionLivenessLimits]
+
+  private[canton] def fromInternal(
+      internal: SubscriptionLivenessLimitsInternal
+  ): SubscriptionLivenessLimits =
+    internal.transformInto[SubscriptionLivenessLimits]
 }

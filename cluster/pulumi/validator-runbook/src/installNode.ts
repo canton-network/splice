@@ -44,7 +44,11 @@ import {
   CnChartVersion,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
-import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
+import {
+  checkValidatorKeyDownloadForPeriodicBackups,
+  installParticipant,
+  installWalletGateway,
+} from '@canton-network/splice-pulumi-common-validator';
 import {
   installPasswordWithParent,
   SplicePostgres,
@@ -69,15 +73,13 @@ const validatorVersion: CnChartVersion = validatorConfig.version
   : activeVersion;
 
 export async function installNode(auth0Client: Auth0Client): Promise<void> {
-  console.error(
+  await pulumi.log.info(
     validatorVersion.type === 'local'
       ? 'Using locally built charts by default'
       : `Using charts from the ghcr by default, version ${validatorVersion.version}`
   );
 
   const xns = exactNamespace(validatorConfig.namespace, true);
-
-  auth0Client.reuseNamespaceConfig('validator', xns.logicalName);
 
   const { participantBootstrapDumpSecret, backupConfigSecret, backupConfig } =
     await setupBootstrapping({
@@ -125,6 +127,9 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
         nameServiceDomain: ansDomainPrefix,
       },
       withSvIngress: false,
+      ingress: {
+        walletGateway: validatorConfig.walletGateway.enabled,
+      },
     },
     validatorVersion,
     { dependsOn: ingressImagePullDeps.concat([validator]) }
@@ -186,6 +191,13 @@ async function installValidator(
     supportsValidatorRunbookReset,
     validatorVersion
   );
+  checkValidatorKeyDownloadForPeriodicBackups(validatorName, validatorConfig, backupConfig);
+  if (validatorConfig.migrateParty && !validatorConfig.participant.enableRepairCommands) {
+    throw new Error(
+      `${validatorName}: migrating the validator party requires importing its ACS through the participant's repair service. ` +
+        'Set `participant.enableRepairCommands: true` for this node in config.yaml.'
+    );
+  }
   const participantAddress = (
     await installParticipant(
       validatorConfig,
@@ -320,6 +332,17 @@ async function installValidator(
   );
   if (validatorConfig?.partyAllocator.enable) {
     installPartyAllocator(xns, validatorConfig.partyAllocator, [validatorChart]);
+  }
+  if (validatorConfig.walletGateway.enabled) {
+    await installWalletGateway(
+      auth0Client,
+      xns,
+      validatorConfig.walletGateway,
+      participantAddress,
+      postgres,
+      validatorConfig.logging.level,
+      [validatorChart]
+    );
   }
   return validatorChart;
 }

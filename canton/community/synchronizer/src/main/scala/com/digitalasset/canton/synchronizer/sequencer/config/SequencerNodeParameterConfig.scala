@@ -29,9 +29,12 @@ final case class AsyncWriterConfig(
 
 /** Various parameters for non-standard sequencer settings
   *
-  * @param alphaVersionSupport
-  *   if true, then dev version will be turned on, but we will brick this sequencer node if it is
+  * @param devVersionSupport
+  *   if true, then support for the dev protocol version is enabled and the dev database schemas are
+  *   applied, which does not provide data continuity guarantees and must not be used in production
   *   used for production.
+  * @param alphaVersionSupport
+  *   if true, then support for alpha protocol versions will be turned on.
   * @param dontWarnOnDeprecatedPV
   *   if true, then this sequencer will not emit a warning when configured to use protocol version
   *   2.0.0.
@@ -65,8 +68,12 @@ final case class AsyncWriterConfig(
   * @param enablePrevalidation
   *   If true (as of 3.6), we will use pre-validation to move the signature validation into a
   *   separate parallel stage instead of the sequential step.
+  * @param enableAsyncSequencerLogging
+  *   If true, then we will use the async logging with outcomes (but potentially out of order log
+  *   messages)
   */
 final case class SequencerNodeParameterConfig(
+    override val devVersionSupport: Boolean = false,
     override val alphaVersionSupport: Boolean = false,
     override val betaVersionSupport: Boolean = false,
     override val dontWarnOnDeprecatedPV: Boolean = false,
@@ -77,8 +84,6 @@ final case class SequencerNodeParameterConfig(
     unsafeSequencerChannelSupport: Boolean = false,
     asyncWriter: AsyncWriterConfig = AsyncWriterConfig(),
     timeAdvancingTopology: TimeAdvancingTopologyConfig = TimeAdvancingTopologyConfig(),
-    // TODO(#30769) remove this flag once the feature is complete
-    producePostOrderingTopologyTicks: Boolean = true,
     lsuRepair: LsuRepair = LsuRepair(),
     lsu: SequencerLsuConfig = SequencerLsuConfig(),
     delayRequestsBeforeLsuTrafficInit: Boolean = false,
@@ -86,6 +91,7 @@ final case class SequencerNodeParameterConfig(
     disableSubmissionChecksForTesting: Boolean = false,
     disableReleaseVersionHandshakeCheck: Boolean = false,
     enablePrevalidation: Boolean = true,
+    enableAsyncSequencerLogging: Boolean = true,
 ) extends ProtocolConfig
     with LocalNodeParametersConfig
 

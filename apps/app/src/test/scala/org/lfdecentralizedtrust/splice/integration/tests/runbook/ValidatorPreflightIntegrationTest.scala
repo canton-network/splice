@@ -1,6 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.networking.Endpoint
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -51,6 +51,7 @@ abstract class ValidatorPreflightIntegrationTestBase
   protected val validatorAuth0Audience: String
   protected val validatorWalletUser: String
   protected lazy val includeSplitwellTests = true
+  protected def keyDownloadEnabled: Boolean = true
 
   protected lazy val walletUiUrl =
     s"https://wallet.${validatorName}.${sys.env("NETWORK_APPS_ADDRESS")}/"
@@ -442,10 +443,23 @@ abstract class ValidatorPreflightIntegrationTestBase
     }
   }
 
-  "can dump participant identities of validator" in { _ =>
-    if (isAuth0) {
-      eventuallySucceeds() {
-        validatorClient.dumpParticipantIdentities()
+  if (keyDownloadEnabled) {
+    "can dump participant identities of validator" in { _ =>
+      if (isAuth0) {
+        eventuallySucceeds() {
+          validatorClient.dumpParticipantIdentities()
+        }
+      }
+    }
+  } else {
+    "cannot dump participant identities of validator, as key downloads are disabled" in { _ =>
+      if (isAuth0) {
+        assertThrowsAndLogsCommandFailures(
+          validatorClient.dumpParticipantIdentities(),
+          _.errorMessage should (include("400 Bad Request") and include(
+            "key downloads are disabled"
+          )),
+        )
       }
     }
   }
@@ -464,19 +478,12 @@ abstract class ValidatorPreflightIntegrationTestBase
           env.environment.clock.now.toInstant.isAfter(connection.availableAfter.plusSeconds(60))
         }
 
-        val availableConnections = if (connections.forall(_.serial.isEmpty)) {
-          val latestMigrationId = connections.map(_.migrationId).max
-          connections.filter(connection =>
-            connection.migrationId == latestMigrationId &&
-              connection.url != "" &&
-              isAvailable(connection)
-          )
-        } else {
-          connections.filter(connection =>
-            connection.serial.contains(migrationId) &&
-              isAvailable(connection)
-          )
-        }
+        val latestSerial = connections.map(_.serial).max
+        val availableConnections = connections.filter(connection =>
+          connection.serial == latestSerial &&
+            connection.url != "" &&
+            isAvailable(connection)
+        )
         val (expectedSequencerConnections, _) =
           Endpoint
             .fromUris(NonEmpty.from(availableConnections.map(conn => new URI(conn.url))).value)
@@ -576,32 +583,6 @@ abstract class ValidatorPreflightIntegrationTestBase
     copyPartyId()
   }
 
-  private def onboardUserAfterLogin()(implicit webDriver: WebDriverType) = {
-    // After login, the UI fetches the user onboarding status from the validator.
-    // If the user is already onboarded, the party ID is displayed
-    // If the user is not onboarded, the onboard button is displayed
-    eventually() {
-      (find(id("onboard-button")).isDefined || find(className("party-id")).isDefined) shouldBe true
-    }
-
-    if (find(id("onboard-button")).isDefined) {
-      // TODO(DACH-NY/canton-network-internal#485): This is a workaround to bypass slowness of wallet user onboarding
-      actAndCheck(timeUntilSuccess = 2.minute)(
-        "Onboard wallet user", {
-          eventuallyClickOn(id("onboard-button"))
-        },
-      )(
-        "Party ID is displayed after onboarding finishes",
-        _ => {
-          find(className("party-id")) should not be None
-        },
-      )
-    } else {
-      logger.debug("User is already onboarded")
-      find(className("party-id")) should not be None
-    }
-  }
-
   private def copyPartyId()(implicit webDriver: WebDriverType): String = {
     clue(s"Copying party ID") {
       find(className("party-id")).fold(throw new Error("Party ID display expected, but not found"))(
@@ -632,10 +613,12 @@ class RunbookValidatorPreflightIntegrationTest extends ValidatorPreflightIntegra
         val synchronizerNodeConfig =
           nodeState.state.synchronizerNodes.asScala.values.headOption.value
         val svSequencerUrl = synchronizerNodeConfig.physicalSynchronizers.toScala
-          .flatMap(_.asScala.get(migrationId).flatMap(_.sequencer.map(_.url).toScala))
-          .getOrElse(
-            synchronizerNodeConfig.sequencer.toScala.value.url
+          .flatMap(
+            _.asScala.toSeq
+              .maxByOption(_._1.longValue())
+              .flatMap(_._2.sequencer.map(_.url).toScala)
           )
+          .value
         val (svSequencerEndpoint, _) = Endpoint
           .fromUris(
             NonEmpty.from(Seq(new URI(svSequencerUrl))).value
@@ -658,6 +641,8 @@ class Validator1PreflightIntegrationTest extends ValidatorPreflightIntegrationTe
   override protected val isDevNet = true
   override protected val auth0 = auth0UtilFromEnvVars("dev")
   override protected val validatorName = "validator1"
+  // Key downloads are usually disabled for validator1 on testing clusters
+  override protected def keyDownloadEnabled = false
   override protected val validatorAuth0Secret =
     sys.env("SPLICE_OAUTH_DEV_CLIENT_ID_VALIDATOR1")
   override protected val validatorAuth0Audience = sys.env("OIDC_AUTHORITY_VALIDATOR_AUDIENCE")

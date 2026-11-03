@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.canton.LfPackageId
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
@@ -18,6 +19,19 @@ trait PackageUnvettingUtil extends TestCommon {
       .futureValue
       .flatMap(_.mapping.packages)
       .map(_.packageId)
+  }
+
+  protected def getVettedPackagesValidFrom(
+      participantAdminConnection: ParticipantAdminConnection,
+      synchronizerId: SynchronizerId,
+  ): Map[LfPackageId, Option[CantonTimestamp]] = {
+    val participantId = participantAdminConnection.getParticipantId().futureValue
+    participantAdminConnection
+      .listVettedPackages(participantId, synchronizerId, AuthorizedState)
+      .futureValue
+      .flatMap(_.mapping.packages)
+      .map(p => p.packageId -> p.validFromInclusive)
+      .toMap
   }
 
 }

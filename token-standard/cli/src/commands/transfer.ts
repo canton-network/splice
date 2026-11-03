@@ -55,10 +55,10 @@ export async function transfer(
 
     const ledgerEndOffset = await ledgerClient.getV2StateLedgerEnd();
     const senderHoldings = await ledgerClient.postV2StateActiveContracts({
-      filter: {
+      eventFormat: {
         filtersByParty: filtersByParty(sender, [HoldingInterfaceV1], false),
+        verbose: false,
       },
-      verbose: false,
       activeAtOffset: ledgerEndOffset.offset!,
     });
     if (senderHoldings.length === 0) {

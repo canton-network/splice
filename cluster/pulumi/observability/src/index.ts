@@ -4,7 +4,8 @@ import * as k8s from '@pulumi/kubernetes';
 import { ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 import { clusterIsResetPeriodically, enableAlerts } from './alertings';
-import { monitoringConfig } from './config';
+import { installCloudArmorRejectionsMetrics } from './cloudArmorMetrics';
+import { cloudArmorConfig, monitoringConfig } from './config';
 import {
   getNotificationChannel,
   installCloudSQLMaintenanceUpdateAlerts,
@@ -14,6 +15,8 @@ import {
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
+  installSequencerParticipantRegistrationAlert,
+  installTopologyKeyMonitorAlerts,
 } from './gcpAlerts';
 import { istioMonitoring } from './istio';
 import { configureObservability } from './observability';
@@ -41,10 +44,15 @@ const namespace: ExactNamespace = {
 };
 const observability = configureObservability(namespace);
 istioMonitoring(namespace, [observability]);
+// Used by the Cloud Armor dashboard and Grafana alerts.
+if (cloudArmorConfig.enabled && cloudArmorConfig.logging.enabled) {
+  installCloudArmorRejectionsMetrics();
+}
 if (enableAlerts && !clusterIsResetPeriodically) {
   const notificationChannel = getNotificationChannel();
   if (notificationChannel) {
     installGcpLoggingAlerts(notificationChannel);
+    installTopologyKeyMonitorAlerts(notificationChannel);
     installClusterMaintenanceUpdateAlerts(notificationChannel);
     if (monitoringConfig.alerting.alerts.cloudSql.maintenance) {
       installCloudSQLMaintenanceUpdateAlerts(notificationChannel);
@@ -54,6 +62,9 @@ if (enableAlerts && !clusterIsResetPeriodically) {
     }
     installGcpQuotaAlerts(notificationChannel, monitoringConfig.alerting.alerts.gcpQuotas);
     installCloudSqlTxIdUtilizationAlert(notificationChannel);
+    if (monitoringConfig.alerting.alerts.sequencerParticipantRegistration.enabled) {
+      installSequencerParticipantRegistrationAlert(notificationChannel);
+    }
     installNatAlerts(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
   }
 }

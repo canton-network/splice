@@ -17,6 +17,11 @@ import com.digitalasset.canton.console.{
 }
 import com.digitalasset.canton.integration.bootstrap.NetworkTopologyDescription.MediatorSequencersConfiguration
 import com.digitalasset.canton.integration.{EnvironmentDefinition, TestConsoleEnvironment}
+import com.digitalasset.canton.topology.transaction.{
+  SignedTopologyTransaction,
+  TopologyChangeOp,
+  TopologyMapping,
+}
 import com.digitalasset.canton.topology.{
   MediatorId,
   ParticipantId,
@@ -25,6 +30,7 @@ import com.digitalasset.canton.topology.{
 }
 import com.digitalasset.canton.{SynchronizerAlias, protocol}
 import monocle.syntax.all.*
+import org.scalatest.EitherValues
 
 /** Bootstraps synchronizers given topology descriptions and stores information in
   * [[com.digitalasset.canton.integration.EnvironmentTestHelpers.initializedSynchronizers]].
@@ -33,7 +39,7 @@ import monocle.syntax.all.*
   */
 class NetworkBootstrapper(networks: NetworkTopologyDescription*)(implicit
     env: TestConsoleEnvironment
-) {
+) extends EitherValues {
   def bootstrap(): Unit = {
     // Start all local nodes needed for bootstrap
     (networks.flatMap(_.synchronizerOwners) ++
@@ -67,8 +73,9 @@ class NetworkBootstrapper(networks: NetworkTopologyDescription*)(implicit
       synchronizerOwners = desc.synchronizerOwners,
       synchronizerThreshold = desc.synchronizerThreshold,
       staticSynchronizerParameters = desc.staticSynchronizerParameters,
-      mediatorRequestAmplification = SubmissionRequestAmplification.NoAmplification,
+      mediatorRequestAmplification = desc.mediatorRequestAmplification,
       mediatorThreshold = desc.mediatorThreshold,
+      identityTransactions = desc.identityTransactions,
     )
 
     val synchronizerAlias = SynchronizerAlias.tryCreate(desc.synchronizerName)
@@ -76,7 +83,7 @@ class NetworkBootstrapper(networks: NetworkTopologyDescription*)(implicit
       synchronizerAlias,
       InitializedSynchronizer(
         synchronizerId,
-        desc.staticSynchronizerParameters.toInternal,
+        desc.staticSynchronizerParameters.toInternal.value,
         synchronizerOwners = desc.synchronizerOwners.toSet,
       ),
     )
@@ -103,6 +110,9 @@ final case class NetworkTopologyDescription(
     mediatorRequestAmplification: SubmissionRequestAmplification,
     overrideMediatorToSequencers: Option[Map[MediatorReference, MediatorSequencersConfiguration]],
     mediatorThreshold: PositiveInt,
+    identityTransactions: Option[
+      Seq[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]]
+    ],
 ) {
   def withTopologyChangeDelay(
       topologyChangeDelay: NonNegativeFiniteDuration
@@ -127,9 +137,10 @@ object NetworkTopologyDescription {
       ] = None,
       overrideStaticSynchronizerParameters: Option[StaticSynchronizerParameters] = None,
       mediatorThreshold: PositiveInt = PositiveInt.one,
-  )(implicit
-      env: TestConsoleEnvironment
-  ): NetworkTopologyDescription =
+      identityTransactions: Option[
+        Seq[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]]
+      ] = None,
+  )(implicit env: TestConsoleEnvironment): NetworkTopologyDescription =
     NetworkTopologyDescription(
       synchronizerName = synchronizerAlias.unwrap,
       synchronizerOwners,
@@ -142,6 +153,7 @@ object NetworkTopologyDescription {
       mediatorRequestAmplification,
       overrideMediatorToSequencers,
       mediatorThreshold,
+      identityTransactions,
     )
 
   def createWithStaticSynchronizerParameters(
@@ -151,6 +163,9 @@ object NetworkTopologyDescription {
       sequencers: Seq[SequencerReference],
       mediators: Seq[MediatorReference],
       staticSynchronizerParameters: StaticSynchronizerParameters,
+      identityTransactions: Option[
+        Seq[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]]
+      ] = None,
   ): NetworkTopologyDescription =
     NetworkTopologyDescription(
       synchronizerName = synchronizerAlias.unwrap,
@@ -162,6 +177,7 @@ object NetworkTopologyDescription {
       SubmissionRequestAmplification.NoAmplification,
       None,
       PositiveInt.one,
+      identityTransactions,
     )
 
   /** Defines how mediators connect to the sequencers */

@@ -15,11 +15,12 @@ import { useFieldContext } from '../../hooks/formContext';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { datePickerFieldSx } from '../../themes/fieldStyles';
 import { DATE_TIME_PLACEHOLDER } from '../../utils/constants';
+import { dataTestId } from '../../utils/dataAttributes';
 
 export interface DateFieldProps {
   title?: string;
   description?: string;
-  minDate?: Dayjs;
+  minDate?: Dayjs | null;
   id: string;
 }
 
@@ -47,11 +48,10 @@ export const DateField: React.FC<DateFieldProps> = props => {
         <DesktopDateTimePicker
           value={dateValue}
           format={dateTimeFormatISO}
-          minDateTime={minDate || dayjs()}
+          minDateTime={minDate === null ? undefined : (minDate ?? dayjs())}
           ampm={false}
           onClose={() => field.handleBlur()}
           onChange={newDate => field.handleChange(newDate?.format(dateTimeFormatISO)!)}
-          enableAccessibleFieldDOMStructure={false}
           slots={{
             openPickerIcon: KeyboardArrowDown,
           }}
@@ -64,9 +64,11 @@ export const DateField: React.FC<DateFieldProps> = props => {
               helperText: field.state.meta.errors?.[0],
               onBlur: field.handleBlur,
               sx: datePickerFieldSx,
-              inputProps: {
-                'data-testid': `${id}-field`,
-                placeholder: DATE_TIME_PLACEHOLDER,
+              slotProps: {
+                htmlInput: {
+                  ...dataTestId(`${id}-field`),
+                  placeholder: DATE_TIME_PLACEHOLDER,
+                },
               },
             },
             openPickerButton: {

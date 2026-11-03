@@ -72,11 +72,12 @@ import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-com
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
+import { scanRateLimitEnvVars } from '../../common/src/ratelimit/spliceRateLimits';
 import { SvAppConfig, ValidatorAppConfig } from './config';
 import { installPostgres } from './postgres';
 
 if (!isDevNet) {
-  console.error('Launching in non-devnet mode');
+  void pulumi.log.info('Launching in non-devnet mode');
 }
 
 type BootstrapCliConfig = {
@@ -100,13 +101,13 @@ export async function installNode(
   validatorAppConfig: ValidatorAppConfig,
   resolveValidator1PartyId?: () => Promise<string>
 ): Promise<void> {
-  console.error(
+  await pulumi.log.info(
     activeVersion.type === 'local'
       ? 'Using locally built charts by default'
       : `Using charts from the ghcr by default, version ${activeVersion.version}`
   );
-  console.error(`CLUSTER_BASENAME: ${CLUSTER_BASENAME}`);
-  console.error(`Installing SV node in namespace: ${svNamespaceStr}`);
+  await pulumi.log.info(`CLUSTER_BASENAME: ${CLUSTER_BASENAME}`);
+  await pulumi.log.info(`Installing SV node in namespace: ${svNamespaceStr}`);
 
   const xns = exactNamespace(svNamespaceStr, true);
 
@@ -420,9 +421,9 @@ async function installSvAndValidator(
       enable: true,
     },
     ...synchronizerValues,
-    additionalEnvVars: (defaultScanValues.additionalEnvVars || []).concat([
-      envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app'),
-    ]),
+    additionalEnvVars: (defaultScanValues.additionalEnvVars || [])
+      .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
+      .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
     pvc: persistentHeapDumpsPvc(),
   };

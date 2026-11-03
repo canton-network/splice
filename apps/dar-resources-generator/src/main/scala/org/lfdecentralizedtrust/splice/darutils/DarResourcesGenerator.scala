@@ -16,7 +16,7 @@ import scala.util.Using
 
 object DarResourcesGenerator {
 
-  // TODO(tech-debt): consider moving this to a dedicated config file if it bugs us here
+  // TODO(DACH-NY/canton-network-internal#7639): consider moving this to a dedicated config file if it bugs us here
   private val minimumInitializations: Map[String, String] = Map(
     "splice-amulet" -> "0.1.19",
     "splice-amulet-name-service" -> "0.1.20",
@@ -257,7 +257,7 @@ object DarResourcesGenerator {
 
   private def renderDarResource(suffix: String, dar: DarEntry): Seq[String] =
     Seq(
-      s"val ${camel(dar.packageName)}_${suffix} = DarResource(",
+      s"lazy val ${camel(dar.packageName)}_${suffix} = DarResource(",
       s"   \"${dar.path}\",",
       s"   \"${dar.packageId}\",",
       s"   PackageMetadata(PackageName.assertFromString(\"${dar.metadata.name}\"), PackageVersion.assertFromString(\"${dar.metadata.version}\"), None),",

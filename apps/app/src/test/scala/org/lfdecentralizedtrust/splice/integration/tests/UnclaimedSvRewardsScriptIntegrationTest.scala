@@ -8,6 +8,7 @@ import java.time.temporal.ChronoUnit
 import scala.collection.mutable
 import scala.sys.process.ProcessLogger
 import scala.util.control.NonFatal
+import scala.concurrent.duration.DurationInt
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -105,15 +106,16 @@ class UnclaimedSvRewardsScriptIntegrationTest
       // Expire
       ///////////
 
-      actAndCheck(
+      actAndCheck(timeUntilSuccess = 80.seconds)(
         "Resume expired trigger", {
           expireRewardCouponsTrigger.resume()
         },
       )(
         "Coupons for round 0,1,2 get expired",
         _ => {
-          sv1WalletClient
-            .listSvRewardCoupons() should have size (svRewardCouponsCount - svRewardCouponsExpiredCount) withClue "sv1 SvRewardCoupons"
+          val remaining = sv1WalletClient.listSvRewardCoupons()
+          forEvery(remaining)(c => c.payload.round.number.longValue() should be > 2L)
+          remaining should have size (svRewardCouponsCount - svRewardCouponsExpiredCount) withClue "sv1 SvRewardCoupons"
           // Pause trigger once we have some coupons expired
           expireRewardCouponsTrigger.pause().futureValue
         },

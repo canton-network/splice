@@ -7,7 +7,8 @@ import cats.Eval
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.crypto.{CryptoPureApi, SynchronizerCrypto}
 import com.digitalasset.canton.data.SynchronizerPredecessor
-import com.digitalasset.canton.lifecycle.LifeCycle
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, LifeCycle, PromiseUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.ParticipantNodeParameters
 import com.digitalasset.canton.participant.ledger.api.LedgerApiStore
@@ -20,13 +21,16 @@ import com.digitalasset.canton.participant.store.memory.{
   InMemoryLogicalSyncPersistentState,
   InMemoryPhysicalSyncPersistentState,
 }
+import com.digitalasset.canton.participant.topology.OfflineTopologyLookup
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.resource.{DbStorage, MemoryStorage, Storage}
 import com.digitalasset.canton.store.*
 import com.digitalasset.canton.topology.store.TopologyStore
 import com.digitalasset.canton.topology.store.TopologyStoreId.SynchronizerStore
-import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
+import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId, SynchronizerId}
+import com.digitalasset.canton.tracing.TraceContext
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.ExecutionContext
 
 /** The participant-relevant state and components of a synchronizer that is independent of the
@@ -47,6 +51,10 @@ class SyncPersistentState(
   override def activeContractStore: ActiveContractStore = logical.activeContractStore
   override def acsInspection: AcsInspection = logical.acsInspection
   override def acsCommitmentStore: AcsCommitmentStore = logical.acsCommitmentStore
+  override def acsDigestStore: AcsDigestStore = logical.acsDigestStore
+  override def acsCommitmentPeriodStore: AcsCommitmentPeriodStore = logical.acsCommitmentPeriodStore
+  override def acsCommitmentSenderWatermarkStore: AcsCommitmentSenderWatermarkStore =
+    logical.acsCommitmentSenderWatermarkStore
   override def reassignmentStore: ReassignmentStore = logical.reassignmentStore
   override def pendingOnboardingClearanceStore: PendingOnboardingClearanceStore =
     logical.pendingOnboardingClearanceStore
@@ -68,6 +76,9 @@ class SyncPersistentState(
   override def isMemory: Boolean = physical.isMemory
   override def topologyStore: TopologyStore[SynchronizerStore] = physical.topologyStore
 
+  protected def doInitialize()(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
+    physical.initialize()
+
   override def close(): Unit =
     LifeCycle.close(
       logical,
@@ -88,6 +99,9 @@ trait LogicalSyncPersistentState extends NamedLogging with AutoCloseable {
   def activeContractStore: ActiveContractStore
   def acsInspection: AcsInspection
   def acsCommitmentStore: AcsCommitmentStore
+  def acsDigestStore: AcsDigestStore
+  def acsCommitmentPeriodStore: AcsCommitmentPeriodStore
+  def acsCommitmentSenderWatermarkStore: AcsCommitmentSenderWatermarkStore
   def reassignmentStore: ReassignmentStore
   def pendingOnboardingClearanceStore: PendingOnboardingClearanceStore
 
@@ -114,6 +128,25 @@ trait PhysicalSyncPersistentState extends NamedLogging with AutoCloseable {
 
   def topologyStore: TopologyStore[SynchronizerStore]
 
+  // Promise to ensure that the store gets initialized at most once.
+  private val initializedPromise: AtomicReference[Option[PromiseUnlessShutdown[Unit]]] =
+    new AtomicReference(None)
+
+  final def initialize()(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] = {
+    val p = PromiseUnlessShutdown.unsupervised[Unit]()
+    val setPromise = initializedPromise.updateAndGet(_.orElse(Some(p)))
+    setPromise match {
+      case Some(set) if set != p =>
+        // if the promise, that was just set, isn't the one we attempted to set, then some other call to initialized
+        // was executed first and this call has to rely on the other call's outcome
+        set.futureUS
+      case _ =>
+        p.completeWithUS(doInitialize()).futureUS
+    }
+  }
+
+  protected def doInitialize()(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit]
+
   lazy val psid: PhysicalSynchronizerId = physicalSynchronizerIdx.psid
 }
 
@@ -126,6 +159,8 @@ object LogicalSyncPersistentState {
       acsCounterParticipantConfigStore: AcsCounterParticipantConfigStore,
       ledgerApiStore: Eval[LedgerApiStore],
       contractStore: Eval[ContractStore],
+      participantId: ParticipantId,
+      offlineTopologyLookup: OfflineTopologyLookup,
       loggerFactory: NamedLoggerFactory,
       futureSupervisor: FutureSupervisor,
   )(implicit ec: ExecutionContext): LogicalSyncPersistentState =
@@ -138,7 +173,10 @@ object LogicalSyncPersistentState {
           contractStore.value,
           acsCounterParticipantConfigStore,
           ledgerApiStore,
+          participantId,
+          offlineTopologyLookup,
           loggerFactory,
+          futureSupervisor,
         )
       case db: DbStorage =>
         new DbLogicalSyncPersistentState(
@@ -149,6 +187,8 @@ object LogicalSyncPersistentState {
           acsCounterParticipantConfigStore,
           contractStore.value,
           ledgerApiStore,
+          participantId,
+          offlineTopologyLookup,
           loggerFactory,
           futureSupervisor,
         )
@@ -167,10 +207,13 @@ object PhysicalSyncPersistentState {
       predecessor: Option[SynchronizerPredecessor],
       loggerFactory: NamedLoggerFactory,
       futureSupervisor: FutureSupervisor,
-  )(implicit ec: ExecutionContext): PhysicalSyncPersistentState =
+  )(implicit
+      traceContext: TraceContext,
+      ec: ExecutionContext,
+  ): FutureUnlessShutdown[PhysicalSyncPersistentState] =
     storage match {
       case _: MemoryStorage =>
-        new InMemoryPhysicalSyncPersistentState(
+        val state = new InMemoryPhysicalSyncPersistentState(
           crypto,
           physicalSynchronizerIdx,
           staticSynchronizerParameters,
@@ -179,8 +222,9 @@ object PhysicalSyncPersistentState {
           parameters.processingTimeouts,
           futureSupervisor,
         )
+        FutureUnlessShutdown.pure(state)
       case db: DbStorage =>
-        new DbPhysicalSyncPersistentState(
+        val state = new DbPhysicalSyncPersistentState(
           physicalSynchronizerIdx,
           indexedTopologyStoreId,
           staticSynchronizerParameters,
@@ -191,6 +235,8 @@ object PhysicalSyncPersistentState {
           loggerFactory,
           futureSupervisor,
         )
+
+        state.initialize().map(_ => state)
     }
 
 }

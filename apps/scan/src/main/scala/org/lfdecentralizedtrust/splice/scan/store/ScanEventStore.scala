@@ -84,14 +84,14 @@ class ScanEventStore(
       isAllowed = ScanEventStore.allowF(afterO, currentMigrationId, currentCap)
       cappedVerdicts = verdictsAll.filter(v => isAllowed(v.migrationId, v.recordTime))
       // Fetch views only for filtered verdicts
-      verdictsWithViews <- Future.traverse(cappedVerdicts)(v =>
-        verdictStore.listTransactionViews(v.rowId).map(views => v -> views)
+      viewsByVerdictRowId <- verdictStore.listTransactionViewsByVerdictRowIds(
+        cappedVerdicts.map(_.rowId)
       )
     } yield {
       val verdictEntries: Iterator[(TimestampWithMigrationId, Verdict)] =
-        verdictsWithViews.iterator.map { case (v, views) =>
+        cappedVerdicts.iterator.map { v =>
           val k = TimestampWithMigrationId(v.recordTime, v.migrationId)
-          k -> (v -> views)
+          k -> (v -> viewsByVerdictRowId.getOrElse(v.rowId, Seq.empty))
         }
 
       val filteredUpdates =
@@ -121,6 +121,15 @@ class ScanEventStore(
         .toSeq
     }
   }
+
+  def getLatestEventRecordTime(
+      currentMigrationId: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    resolveCurrentMigrationCap(
+      verdictStore.lastIngestedRecordTime,
+      updateHistory.lastIngestedRecordTime,
+      currentMigrationId,
+    ).map(ts => if (ts == CantonTimestamp.MinValue) None else Some(ts))
 
   def getAppActivityRecords(verdictRowIds: Seq[Long])(implicit
       tc: TraceContext

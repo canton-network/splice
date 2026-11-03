@@ -1,0 +1,30 @@
+{
+  "damlJs": {
+    "directory": "common/frontend/daml.js",
+    "aliases": {
+      "ans": "splice-amulet-name-service-0.1.26",
+      "splice-amulet": "splice-amulet-0.1.25",
+      "splice-dso-governance": "splice-dso-governance-0.1.31",
+      "splice-validator-lifecycle": "splice-validator-lifecycle-0.1.10",
+      "splice-wallet": "splice-wallet-0.1.26",
+      "splice-wallet-payments": "splice-wallet-payments-0.1.25",
+      "splitwell": "splitwell-0.1.26",
+      "splice-api-token-allocation": "splice-api-token-allocation-v1-1.0.0",
+      "splice-api-token-allocation-v2": "splice-api-token-allocation-v2-1.0.0",
+      "splice-api-token-allocation-request": "splice-api-token-allocation-request-v1-1.0.0",
+      "splice-api-token-allocation-request-v2": "splice-api-token-allocation-request-v2-1.0.0",
+      "splice-api-token-metadata": "splice-api-token-metadata-v1-1.0.0"
+    }
+  },
+  "openApiClients": [
+    "scan/openapi-ts-client",
+    "splitwell/openapi-ts-client",
+    "sv/openapi-ts-client",
+    "validator/openapi-ts-client",
+    "validator/external-openapi-ts-client",
+    "validator/scan-proxy-openapi-ts-client",
+    "wallet/openapi-ts-client",
+    "wallet/external-openapi-ts-client",
+    "../token-standard/splice-api-token-metadata-v1/openapi-ts-client"
+  ]
+}

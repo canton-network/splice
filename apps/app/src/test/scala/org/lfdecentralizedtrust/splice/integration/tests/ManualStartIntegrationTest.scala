@@ -1,7 +1,8 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.data.PruningSchedule
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{FullClientConfig, PositiveDurationSeconds}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
@@ -15,6 +16,7 @@ import com.digitalasset.canton.topology.{
   SequencerId,
   UniqueIdentifier,
 }
+import org.lfdecentralizedtrust.splice.auth.{AuthTokenSourceStatic, AuthUtil}
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, PruningConfig, SpliceBackendConfig}
 import org.lfdecentralizedtrust.splice.console.AppBackendReference
 import org.lfdecentralizedtrust.splice.environment.*
@@ -422,11 +424,12 @@ class ManualStartIntegrationTest
     import env.executionContext
     val loggerFactoryWithKey = loggerFactory.append("participant", name)
     new ParticipantAdminConnection(
-      FullClientConfig(port = config.participantClient.adminApi.port),
+      FullClientConfig(port = config.participantClient.adminApi.clientConfig.port),
       env.environment.config.monitoring.logging.api,
       loggerFactoryWithKey,
       grpcClientMetrics,
       retryProvider,
+      tokenProvider = AuthTokenSourceStatic(AuthUtil.CantonAdminApi.participantAdminApiTestToken),
     )
   }
 }

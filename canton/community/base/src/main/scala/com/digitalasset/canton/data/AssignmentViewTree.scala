@@ -5,26 +5,31 @@ package com.digitalasset.canton.data
 
 import cats.syntax.either.*
 import cats.syntax.functor.*
-import cats.syntax.traverse.*
-import com.digitalasset.canton.ProtoDeserializationError.{
-  ContractDeserializationError,
-  InvariantViolation,
-  OtherError,
-}
-import com.digitalasset.canton.ReassignmentCounter
-import com.digitalasset.canton.crypto.*
-import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.ProtoDeserializationError.{InvariantViolation, OtherError}
+import com.digitalasset.canton.crypto.{CryptoPureApi, HashOps, HashPurpose, Salt, Signature}
 import com.digitalasset.canton.data.MerkleTree.RevealSubtree
 import com.digitalasset.canton.data.ReassignmentRef.ReassignmentIdRef
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrintingCompanion}
 import com.digitalasset.canton.protocol.messages.AssignmentMediatorMessage
-import com.digitalasset.canton.protocol.{v30, *}
+import com.digitalasset.canton.protocol.{ReassignmentId, RootHash, Stakeholders, ViewHash, v30, v31}
 import com.digitalasset.canton.sequencing.protocol.MediatorGroupRecipient
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
-import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId, UniqueIdentifier}
+import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId}
 import com.digitalasset.canton.util.ReassignmentTag.{Source, Target}
-import com.digitalasset.canton.version.*
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
+import com.digitalasset.canton.validation.{ProtoUnvalidatedSeq, ProtoValidation}
+import com.digitalasset.canton.version.{
+  HasProtocolVersionedWrapper,
+  HasToByteString,
+  ProtoVersion,
+  ProtocolVersion,
+  ProtocolVersionValidation,
+  RepresentativeProtocolVersion,
+  VersionedProtoCodec,
+  VersioningCompanionContext,
+  VersioningCompanionContextMemoization,
+}
 import com.google.protobuf.ByteString
 
 import java.util.UUID
@@ -74,26 +79,28 @@ final case class AssignmentViewTree(
       AssignmentMediatorMessage.protocolVersionRepresentativeFor(protocolVersion)
     )
 
-  override protected def pretty: Pretty[AssignmentViewTree] = prettyOfClass(
-    param("common data", _.commonData),
-    param("view", _.view),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[AssignmentViewTree] = AssignmentViewTree
 
   @transient override protected lazy val companionObj: AssignmentViewTree.type =
     AssignmentViewTree
 }
 
 object AssignmentViewTree
-    extends VersioningCompanionContextTaggedPVValidation2[
+    extends VersioningCompanionContext[
       AssignmentViewTree,
-      Target,
-      HashOps,
-    ] {
+      (HashOps, Target[ProtocolVersionValidation]),
+    ]
+    with PrettyPrintingCompanion[AssignmentViewTree] {
+
+  override protected val pretty: Pretty[AssignmentViewTree] = prettyOfClass(
+    param("common data", _.commonData),
+    param("view", _.view),
+  )
 
   override val name: String = "AssignmentViewTree"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.ReassignmentViewTree)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.ReassignmentViewTree)(
       supportedProtoVersion(_)((context, proto) => fromProtoV30(context)(proto)),
       _.toProtoV30,
     )
@@ -110,15 +117,15 @@ object AssignmentViewTree
       hashOps,
     )
 
-  def fromProtoV30(context: (HashOps, Target[ProtocolVersion]))(
+  def fromProtoV30(context: (HashOps, Target[ProtocolVersionValidation]))(
       assignmentViewTreeP: v30.ReassignmentViewTree
   ): ParsingResult[AssignmentViewTree] = {
-    val (hashOps, expectedProtocolVersion) = context
+    val (hashOps, targetPVV) = context
     for {
       rpv <- protocolVersionRepresentativeFor(ProtoVersion(30))
       res <- GenReassignmentViewTree.fromProtoV30(
-        AssignmentCommonData.fromByteString(expectedProtocolVersion.unwrap, hashOps),
-        AssignmentView.fromByteString(expectedProtocolVersion.unwrap, hashOps),
+        AssignmentCommonData.fromByteString(targetPVV.unwrap, hashOps, _),
+        AssignmentView.fromByteString(targetPVV.unwrap, hashOps, _),
       )((commonData, view) => AssignmentViewTree(commonData, view)(rpv, hashOps))(
         assignmentViewTreeP
       )
@@ -179,7 +186,8 @@ final case class AssignmentCommonData private (
       stakeholders = Some(stakeholders.toProtoV30),
       uuid = ProtoConverter.UuidConverter.toProtoPrimitive(uuid),
       submitterMetadata = Some(submitterMetadata.toProtoV30),
-      reassigningParticipantUids = reassigningParticipants.map(_.uid.toProtoPrimitive).toSeq,
+      reassigningParticipantUids =
+        reassigningParticipants.map(_.uid.toProtoPrimitive.toProtoUnvalidated).toSeq,
       unassignmentTs = Some(unassignmentTs.toProtoTimestamp),
     )
 
@@ -188,7 +196,16 @@ final case class AssignmentCommonData private (
 
   override def hashPurpose: HashPurpose = HashPurpose.AssignmentCommonData
 
-  override protected def pretty: Pretty[AssignmentCommonData] = prettyOfClass(
+  override def prettyCompanion: PrettyPrintingCompanion[AssignmentCommonData] =
+    AssignmentCommonData
+}
+
+object AssignmentCommonData
+    extends VersioningCompanionContextMemoization[AssignmentCommonData, HashOps]
+    with PrettyPrintingCompanion[AssignmentCommonData] {
+  override val name: String = "AssignmentCommonData"
+
+  override protected val pretty: Pretty[AssignmentCommonData] = prettyOfClass(
     param("submitter metadata", _.submitterMetadata),
     param("target synchronizer id", _.targetSynchronizerId),
     param("target mediator group", _.targetMediatorGroup),
@@ -197,15 +214,10 @@ final case class AssignmentCommonData private (
     param("uuid", _.uuid),
     param("salt", _.salt),
   )
-}
-
-object AssignmentCommonData
-    extends VersioningCompanionContextMemoization[AssignmentCommonData, HashOps] {
-  override val name: String = "AssignmentCommonData"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.AssignmentCommonData)(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.AssignmentCommonData)(
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -233,6 +245,7 @@ object AssignmentCommonData
   )(hashOps, None)
 
   private[this] def fromProtoV30(
+      pvv: ProtocolVersionValidation,
       hashOps: HashOps,
       assignmentCommonDataP: v30.AssignmentCommonData,
   )(
@@ -252,31 +265,45 @@ object AssignmentCommonData
 
     for {
       salt <- ProtoConverter.parseRequired(Salt.fromProtoV30, "salt", saltP)
-      sourceSynchronizerId <- PhysicalSynchronizerId
-        .fromProtoPrimitive(sourceSynchronizerP, "source_physical_synchronizer_id")
+      sourceSynchronizerId <- ProtoValidation
+        .validateThen(
+          sourceSynchronizerP,
+          "source_physical_synchronizer_id",
+          pvv,
+        )(PhysicalSynchronizerId.fromProtoPrimitive)
         .map(Source(_))
-      targetSynchronizerId <- PhysicalSynchronizerId
-        .fromProtoPrimitive(targetSynchronizerP, "target_physical_synchronizer_id")
+      targetSynchronizerId <- ProtoValidation
+        .validateThen(
+          targetSynchronizerP,
+          "target_physical_synchronizer_id",
+          pvv,
+        )(PhysicalSynchronizerId.fromProtoPrimitive)
         .map(Target(_))
       targetMediatorGroup <- ProtoConverter.parseNonNegativeInt(
         "target_mediator_group",
         targetMediatorGroupP,
       )
       stakeholders <- ProtoConverter.parseRequired(
-        Stakeholders.fromProtoV30,
+        Stakeholders.fromProtoV30(pvv, _),
         "stakeholders",
         stakeholdersP,
       )
-      uuid <- ProtoConverter.UuidConverter.fromProtoPrimitive(uuidP)
+      uuid <- ProtoValidation.validateThen(uuidP, "uuid", pvv)(
+        ProtoConverter.UuidConverter.fromProtoPrimitive
+      )
       submitterMetadata <- ProtoConverter
         .required("submitter_metadata", submitterMetadataPO)
-        .flatMap(ReassignmentSubmitterMetadata.fromProtoV30)
+        .flatMap(ReassignmentSubmitterMetadata.fromProtoV30(pvv, _))
 
-      reassigningParticipants <- reassigningParticipantsP.traverse(uid =>
-        UniqueIdentifier
-          .fromProtoPrimitive(uid, "reassigning_participant_uids")
-          .map(ParticipantId(_))
-      )
+      reassigningParticipants <- ProtoValidation
+        .validateThen(
+          reassigningParticipantsP,
+          "reassigning_participant_uids",
+          pvv,
+          ProtoValidation.MaxCollectionSize,
+        )(
+          ParticipantId.fromProtoPrimitiveUid
+        )
       unassignmentTs <- ProtoConverter.parseRequired(
         CantonTimestamp.fromProtoTimestamp,
         "unassignment_ts",
@@ -327,16 +354,26 @@ final case class AssignmentView private (
   protected def toProtoV30: v30.AssignmentView =
     v30.AssignmentView(
       salt = Some(salt.toProtoV30),
-      contracts = contracts.contracts.map { case reassign =>
-        v30.ActiveContract(
-          reassign.contract.encoded,
-          reassign.counter.toProtoPrimitive,
-        )
-      },
+      contracts = contracts.contracts.map(_.toProtoV30),
       reassignmentId = Some(reassignmentId.toProtoV30),
     )
 
-  override protected def pretty: Pretty[AssignmentView] = prettyOfClass(
+  protected def toProtoV31: v31.AssignmentView =
+    v31.AssignmentView(
+      salt = Some(salt.toProtoV30),
+      contracts = contracts.contracts.map(_.toProtoV31),
+      reassignmentId = Some(reassignmentId.toProtoV30),
+    )
+
+  override def prettyCompanion: PrettyPrintingCompanion[AssignmentView] = AssignmentView
+}
+
+object AssignmentView
+    extends VersioningCompanionContextMemoization[AssignmentView, HashOps]
+    with PrettyPrintingCompanion[AssignmentView] {
+  override val name: String = "AssignmentView"
+
+  override protected val pretty: Pretty[AssignmentView] = prettyOfClass(
     param("reassignment id", _.reassignmentId),
     param(
       "contract ids and counters",
@@ -344,16 +381,16 @@ final case class AssignmentView private (
     ), // do not log contract details because it contains confidential data
     param("salt", _.salt),
   )
-}
-
-object AssignmentView extends VersioningCompanionContextMemoization[AssignmentView, HashOps] {
-  override val name: String = "AssignmentView"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.AssignmentView)(
-      supportedProtoVersionMemoized(_)(fromProtoV30),
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.AssignmentView)(
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV30),
       _.toProtoV30,
-    )
+    ),
+    ProtoVersion(31) -> VersionedProtoCodec(ProtocolVersion.v37)(v31.AssignmentView)(
+      supportedProtoVersionMemoizedPVV(_)(fromProtoV31),
+      _.toProtoV31,
+    ),
   )
 
   def create(hashOps: HashOps)(
@@ -371,45 +408,75 @@ object AssignmentView extends VersioningCompanionContextMemoization[AssignmentVi
     )
     .leftMap(_.getMessage)
 
-  private[this] def fromProtoV30(hashOps: HashOps, assignmentViewP: v30.AssignmentView)(
+  private[this] def fromProto[P](
+      pvv: ProtocolVersionValidation,
+      hashOps: HashOps,
+      protoVersion: ProtoVersion,
+      saltP: Option[com.digitalasset.canton.crypto.v30.Salt],
+      contractsP: ProtoUnvalidatedSeq[P],
+      reassignmentIdP: Option[v30.ReassignmentId],
+      parseContract: P => ParsingResult[ContractReassignment],
+  )(
       bytes: ByteString
-  ): ParsingResult[AssignmentView] = {
-    val v30.AssignmentView(
-      saltP,
-      contractsP,
-      reassignmentIdP,
-    ) =
-      assignmentViewP
+  ): ParsingResult[AssignmentView] =
     for {
       salt <- ProtoConverter.parseRequired(Salt.fromProtoV30, "salt", saltP)
       reassignmentId <- ProtoConverter
-        .parseRequired(ReassignmentId.fromProtoV30, "reassignment_id", reassignmentIdP)
-      contracts <- contractsP
-        .traverse { case v30.ActiveContract(contractP, reassignmentCounterP) =>
-          ContractInstance
-            .decodeWithCreatedAt(contractP)
-            .leftMap(err => ContractDeserializationError(err))
-            .map(c =>
-              (
-                c,
-                Source(c.templateId.packageId),
-                Target(c.templateId.packageId),
-                ReassignmentCounter(reassignmentCounterP),
-              )
-            )
+        .parseRequired(
+          ReassignmentId.fromProtoV30(pvv, _),
+          "reassignment_id",
+          reassignmentIdP,
+        )
+      contracts <- ProtoValidation
+        .validateLengthThen(contractsP, "contracts", pvv, ProtoValidation.MaxCollectionSize) {
+          case (contractP, _) => parseContract(contractP)
         }
         .flatMap(
           ContractsReassignmentBatch
             .create(_)
             .leftMap(err => InvariantViolation(Some("contracts"), err.toString))
         )
-      rpv <- protocolVersionRepresentativeFor(ProtoVersion(30))
+      rpv <- protocolVersionRepresentativeFor(protoVersion)
     } yield AssignmentView(
       salt,
       reassignmentId,
       contracts,
     )(hashOps, rpv, Some(bytes))
-  }
+
+  private[this] def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      hashOps: HashOps,
+      assignmentViewP: v30.AssignmentView,
+  )(
+      bytes: ByteString
+  ): ParsingResult[AssignmentView] =
+    fromProto(
+      pvv,
+      hashOps,
+      ProtoVersion(30),
+      assignmentViewP.salt,
+      assignmentViewP.contracts,
+      assignmentViewP.reassignmentId,
+      ContractReassignment.fromProtoV30,
+    )(bytes)
+
+  private[this] def fromProtoV31(
+      pvv: ProtocolVersionValidation,
+      hashOps: HashOps,
+      assignmentViewP: v31.AssignmentView,
+  )(
+      bytes: ByteString
+  ): ParsingResult[AssignmentView] =
+    fromProto(
+      pvv,
+      hashOps,
+      ProtoVersion(31),
+      assignmentViewP.salt,
+      assignmentViewP.contracts,
+      assignmentViewP.reassignmentId,
+      ContractReassignment.fromProtoV31(pvv),
+    )(bytes)
+
 }
 
 /** A fully unblinded [[AssignmentViewTree]]
@@ -419,8 +486,7 @@ object AssignmentView extends VersioningCompanionContextMemoization[AssignmentVi
   */
 final case class FullAssignmentTree(tree: AssignmentViewTree)
     extends FullReassignmentViewTree
-    with HasToByteString
-    with PrettyPrinting {
+    with HasToByteString {
   require(tree.isFullyUnblinded, "an assignment request must be fully unblinded")
 
   protected[this] val commonData: AssignmentCommonData = tree.commonData.tryUnwrap
@@ -462,18 +528,25 @@ final case class FullAssignmentTree(tree: AssignmentViewTree)
 
   override def rootHash: RootHash = tree.rootHash
 
-  override protected def pretty: Pretty[FullAssignmentTree] = prettyOfClass(unnamedParam(_.tree))
+  override def prettyCompanion: PrettyPrintingCompanion[FullAssignmentTree] = FullAssignmentTree
 
   override def toByteString: ByteString = tree.toByteString
 }
 
-object FullAssignmentTree {
+object FullAssignmentTree extends PrettyPrintingCompanion[FullAssignmentTree] {
+
+  override protected val pretty: Pretty[FullAssignmentTree] = prettyOfClass(unnamedParam(_.tree))
+
   def fromByteString(
       crypto: CryptoPureApi,
-      targetProtocolVersion: Target[ProtocolVersion],
+      targetPVV: Target[ProtocolVersionValidation],
   )(bytes: ByteString): ParsingResult[FullAssignmentTree] =
     for {
-      tree <- AssignmentViewTree.fromByteString(crypto, targetProtocolVersion)(bytes)
+      tree <- AssignmentViewTree.fromByteString(
+        targetPVV.value,
+        (crypto, targetPVV),
+        bytes,
+      )
       _ <- Either.cond(
         tree.isFullyUnblinded,
         (),

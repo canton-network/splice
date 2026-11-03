@@ -10,9 +10,7 @@ import {
   unitToCurrency,
 } from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
-import differenceInMilliseconds from 'date-fns/differenceInMilliseconds';
-import intlFormat from 'date-fns/intlFormat';
-import parseISO from 'date-fns/parseISO';
+import { differenceInMilliseconds, intlFormat, parseISO } from 'date-fns';
 
 import {
   Box,
@@ -48,8 +46,8 @@ const Subscriptions: React.FC = () => {
     subscriptionQuery.data === undefined || amuletPriceQuery.data === undefined;
 
   return (
-    <Stack marginY={10} spacing={2}>
-      <Typography variant="h6" fontWeight="bold">
+    <Stack spacing={2} sx={{ marginY: 10 }}>
+      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
         Your Subscriptions
       </Typography>
       {isLoading ? (
@@ -167,12 +165,14 @@ const Price: React.FC<PriceProps> = ({ payData, amuletPrice }) => {
   return (
     <Stack>
       <Box
-        display="flex"
-        flexDirection="row"
-        justifyContent="flex-end"
-        alignItems="baseline"
-        gap={1}
         className="sub-price"
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'baseline',
+          gap: 1,
+        }}
       >
         <Typography variant="h6">
           <AmountDisplay amount={amount} currency={currency} />

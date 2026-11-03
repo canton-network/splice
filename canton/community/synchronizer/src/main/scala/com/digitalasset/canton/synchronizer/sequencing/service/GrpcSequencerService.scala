@@ -16,6 +16,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.String73
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, NonNegativeNumeric, PositiveInt}
 import com.digitalasset.canton.config.{PositiveFiniteDuration, ProcessingTimeout}
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.UnlessShutdown.Outcome
 import com.digitalasset.canton.lifecycle.{
   FlagCloseable,
@@ -70,7 +71,8 @@ import com.digitalasset.canton.util.{
   MaxBytesToDecompress,
   RateLimiter,
 }
-import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.validation.ProtoValidation
+import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation}
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
 import com.google.common.annotations.VisibleForTesting
 import io.grpc.Status
@@ -148,6 +150,7 @@ object GrpcSequencerService {
       topologyClient: SynchronizerTopologyClient,
       overrideMaxRequestSize: Option[NonNegativeInt],
       parameters: SequencerParameters,
+      logEventDetails: Boolean,
       protocolVersion: ProtocolVersion,
       topologyStateForInitializationService: TopologyStateForInitializationService,
       loggerFactory: NamedLoggerFactory,
@@ -178,6 +181,7 @@ object GrpcSequencerService {
       topologyClient,
       overrideMaxRequestSize,
       parameters,
+      logEventDetails = logEventDetails,
       topologyStateForInitializationService,
       protocolVersion,
       acknowledgementsConflateWindow = acknowledgementsConflateWindow,
@@ -210,6 +214,7 @@ class GrpcSequencerService(
     topologyClient: SynchronizerTopologyClient,
     overrideMaxRequestSize: Option[NonNegativeInt],
     parameters: SequencerParameters,
+    logEventDetails: Boolean,
     topologyStateForInitializationService: TopologyStateForInitializationService,
     protocolVersion: ProtocolVersion,
     maxItemsInTopologyResponse: PositiveInt = PositiveInt.tryCreate(100),
@@ -225,6 +230,8 @@ class GrpcSequencerService(
       topologyClient,
       loggerFactory,
     )
+
+  private val pvv = ProtocolVersionValidation(protocolVersion)
 
   override protected val timeouts: ProcessingTimeout = parameters.processingTimeouts
 
@@ -266,13 +273,28 @@ class GrpcSequencerService(
             .fromByteString(protocolVersion, requestP.signedSubmissionRequest)
             .leftMap(requestDeserializationError(_, maxRequestSize))
         )
+        _ = if (logEventDetails) {
+          // escape hatch to log the content of the submission request for debugging purposes.
+          // decoding can then be performed using
+          // SubmissionRequest.fromByteString(PV, DecompressionPolicy.forProtocolVersion(...))(ByteString.copyFrom(Base64.getDecoder.decode(str)))
+          logger.info(
+            s"Received sendAsync from $senderFromMetadata with payload ${java.util.Base64.getEncoder
+                .encodeToString(signedContent.content.bytes.toByteArray)}"
+          )
+        }
         signedSubmissionRequest <- EitherT.fromEither[FutureUnlessShutdown](
           signedContent
             .deserializeContent(
               SubmissionRequest
                 .fromByteString(
                   protocolVersion,
-                  MaxBytesToDecompress(maxRequestSize.value),
+                  SubmissionRequestDeserializationContext(
+                    DecompressionPolicy.forProtocolVersion(
+                      protocolVersion,
+                      MaxBytesToDecompress(maxRequestSize.value),
+                    ),
+                    topologyClient.getSynchronizerLimits,
+                  ),
                 )
             )
             .leftMap(requestDeserializationError(_, maxRequestSize))
@@ -372,8 +394,16 @@ class GrpcSequencerService(
 
         _ = {
           val envelopesCount = request.batch.envelopesCount
+          val recipientsSummary = request.batch.allRecipients
+            .groupBy {
+              case MemberRecipient(member) => member.code.threeLetterId.unwrap
+              case group: GroupRecipient => group.code.threeLetterId.unwrap
+            }
+            .toSeq
+            .map { case (code, recipients) => s"$code=${recipients.size}" }
+            .mkString(", ")
           logger.info(
-            s"'$sender' sends request with id '$messageId' of size $requestSize bytes with $envelopesCount envelopes."
+            s"'$sender' sends request with id '$messageId' of size $requestSize bytes with $envelopesCount envelopes to $recipientsSummary."
           )
         }
 
@@ -413,7 +443,11 @@ class GrpcSequencerService(
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SequencerDeliverError, Unit] =
     InFlightAggregationHandler
-      .senderIsAuthorizedAndAggregationRuleIsWellFormed(sender, aggregationRule, snapshot)
+      .senderIsAuthorizedAndAggregationRuleIsWellFormed(
+        sender,
+        aggregationRule,
+        snapshot,
+      )
       .leftMap(message => invalid(messageId.toProtoPrimitive, sender)(message))
 
   private def invalid(messageIdP: String, sender: Member)(
@@ -542,7 +576,7 @@ class GrpcSequencerService(
       // via manual control flow.
       val sink = ServerAdapter.toSink(
         observer,
-        throwable => SequencerErrors.Internal(throwable.getMessage).asGrpcError,
+        throwable => SequencerErrors.Internal(throwable.getMessage).toGrpcError,
       )
       // We use a queue with backpressure to feed new elements to the grpc sink.
       // `completion` is from the sink and gets completed when the client cancels or an error happens.
@@ -551,35 +585,52 @@ class GrpcSequencerService(
 
       // The observer handle wraps the queue and properly backpressures when calling onNext
       val observerHandle = new GrpcObserverHandle[T] {
-        override def onError(t: Throwable): Unit = queue.fail(t)
+        // With OverflowStrategy.backpressure, Pekko's QueueSource does not complete a pending `offer`
+        // on `fail`, and on `complete` only once downstream pulls again. If the client stopped reading,
+        // the offer would hang forever, blocking the DirectSequencerSubscription from closing.
+        // This promise releases such pending offers as soon as the handle is closed.
+        private val closedP = PromiseUnlessShutdown.unsupervised[QueueOfferResult]()
 
-        override def onCompleted(): Unit = queue.complete()
+        // It completes with AbortedDueToShutdown rather than failing with the `onError` cause `t`
+        // on purpose: the cause is the reason for closing the stream (e.g. token expiry), which is
+        // already delivered to the client via `queue.fail` and recorded as the subscription's
+        // close signal. It is not a failure to publish the event.
+        override def onError(t: Throwable): Unit = {
+          closedP.shutdown_()
+          queue.fail(t)
+        }
+
+        override def onCompleted(): Unit = {
+          closedP.shutdown_()
+          queue.complete()
+        }
 
         override def onNext(elem: T): FutureUnlessShutdown[Unit] =
-          if (!isClosing)
-            FutureUnlessShutdown
-              .outcomeF(queue.offer(elem))
-              .recover { case ex: StreamDetachedException =>
-                // This happens, if the stream/queue was already fully stopped but the GrpcManagedSubscription still
-                // tries to offer another element.
-                logger.info(
-                  "Internal stream was closed but the managed subscription still tried to send a subscription response to the subscriber.",
-                  ex,
+          if (!isClosing && !isCancelled)
+            FutureUnlessShutdown(
+              Future.firstCompletedOf(
+                Seq(FutureUnlessShutdown.outcomeF(queue.offer(elem)).unwrap, closedP.future)
+              )
+            ).recover { case ex: StreamDetachedException =>
+              // This happens, if the stream/queue was already fully stopped but the GrpcManagedSubscription still
+              // tries to offer another element.
+              logger.info(
+                "Internal stream was closed but the managed subscription still tried to send a subscription response to the subscriber.",
+                ex,
+              )
+              UnlessShutdown.AbortedDueToShutdown
+            }.flatMap {
+              case QueueOfferResult.Enqueued => FutureUnlessShutdown.unit
+              case QueueOfferResult.Failure(ex) =>
+                FutureUnlessShutdown.failed(ex)
+              case QueueOfferResult.Dropped =>
+                ErrorUtil.invalidStateAsyncShutdown(
+                  "enqueueing a message was dropped, even though the queue was configured to backpressure"
                 )
-                UnlessShutdown.AbortedDueToShutdown
-              }
-              .flatMap {
-                case QueueOfferResult.Enqueued => FutureUnlessShutdown.unit
-                case QueueOfferResult.Failure(ex) =>
-                  FutureUnlessShutdown.failed(ex)
-                case QueueOfferResult.Dropped =>
-                  ErrorUtil.invalidStateAsyncShutdown(
-                    "enqueueing a message was dropped, even though the queue was configured to backpressure"
-                  )
-                case QueueOfferResult.QueueClosed =>
-                  // the closure of the queue should be propagated via the normal normal pekko stream mechanism
-                  FutureUnlessShutdown.unit
-              }
+              case QueueOfferResult.QueueClosed =>
+                // the closure of the queue should be propagated via the normal pekko stream mechanism
+                FutureUnlessShutdown.unit
+            }
           else FutureUnlessShutdown.abortedDueToShutdown
 
         override def isCancelled: Boolean = observer.isCancelled
@@ -587,7 +638,7 @@ class GrpcSequencerService(
       val resultE = for {
         subscriptionRequest <-
           SubscriptionRequest
-            .fromProtoV30(request)
+            .fromProtoV30(ProtocolVersionValidation.PV(protocolVersion), request)
             .left
             .map(err => invalidRequest(err.toString))
         SubscriptionRequest(member, timestamp) = subscriptionRequest
@@ -606,9 +657,13 @@ class GrpcSequencerService(
         PromiseUnlessShutdown.unsupervised[Either[Status, GrpcManagedSubscription[?]]]()
       completion.onComplete {
         case Failure(ex) =>
-        // the logging and handling of the subscription error is handled elsewhere
+          // Immediately fail the queue so pending queue.offer calls unblock
+          observerHandle.onError(ex)
+        // The logging and handling of the subscription error is handled elsewhere
         case Success(()) =>
           logger.info(s"Subscription cancelled by client ${request.member}.")
+          // Immediately complete the queue so pending queue.offer calls return QueueClosed
+          queue.complete()
           // Instead upon cancellation, we close the subscription once/if it has been successfully created.
           createSubscriptionP.future.onComplete {
             case Success(Outcome(Right(subscription))) =>
@@ -616,6 +671,7 @@ class GrpcSequencerService(
             case _ => ()
           }
       }
+      val alreadyHandledStatus = Status.ABORTED.withDescription("ALREADY_HANDLED_BY_FATAL_CLOSE")
 
       // Note: we do the first part of the subscription creation above in the same thread,
       // so that we can use the GRPC interceptor injected context to grab the authentication token.
@@ -639,7 +695,7 @@ class GrpcSequencerService(
             Status.UNAVAILABLE.withDescription("Subscription pool is closed.")
           }
 
-        // additional check on the topology snapshot to ensure member is still active.
+        // Additional check on the topology snapshot to ensure member is still active.
         // Mitigates the following race condition:
         // 1. Unwrapping of resultET revealed a valid token. This token was revoked, but its revocation
         // through invalidateAndExpire completes after the check, but before the subscription creation
@@ -655,14 +711,19 @@ class GrpcSequencerService(
             logger.debug(
               s"Member $member was revoked during subscription creation. Closing the subscription."
             )
-            subscription.close()
-            Status.PERMISSION_DENIED.withDescription("Member access was revoked.")
+            import com.digitalasset.canton.sequencing.client.transports.ServerSubscriptionCloseReason
+            // Close the subscription with onError with a PERMISSION_DENIED exception
+            subscription.fatalClose(
+              ServerSubscriptionCloseReason.PermissionDenied("Member access was revoked.")
+            )
+            alreadyHandledStatus
           },
         )
       } yield subscription
       createSubscriptionP.completeWith(resultET.mapK(FutureUnlessShutdown.outcomeK).value.unwrap)
       FutureUtil.doNotAwait(
-        resultET.fold(err => observer.onError(err.asException()), _ => ()),
+        // If the result contains an error, e.g., if the member's token was revoked during subscription creation, fail the Pekko queue
+        resultET.fold(err => queue.fail(err.asException()), _ => ()),
         failureMessage = s"Failed to establish subscription for ${request.member}",
       )
     }
@@ -787,9 +848,11 @@ class GrpcSequencerService(
 
     withServerCallStreamObserver(responseObserver) { observer =>
       TopologyStateForInitRequest
-        .fromProtoV30(requestP) match {
+        .fromProtoV30(ProtocolVersionValidation.PV(protocolVersion), requestP) match {
         case Left(parsingError) =>
-          responseObserver.onError(ProtoDeserializationFailure.Wrap(parsingError).asGrpcError)
+          // OK to call .onError here directly on the stream observer, because Pekko has not been handed the observer yet
+          // and there is no potential race condition
+          observer.onError(ProtoDeserializationFailure.Wrap(parsingError).asGrpcError)
         case Right(request) =>
           val streamCompletionF = topologyStateForInitializationService
             .initialSnapshot(request.member)
@@ -801,7 +864,7 @@ class GrpcSequencerService(
             )
             .runWith(
               ServerAdapter
-                .toSink(observer, t => SequencerErrors.Internal(t.getMessage).asGrpcError)
+                .toSink(observer, t => SequencerErrors.Internal(t.getMessage).toGrpcError)
             )
 
           FutureUtil.doNotAwait(
@@ -845,7 +908,13 @@ class GrpcSequencerService(
     val currentMember = authenticationCheck.lookupCurrentMember()
     val result = for {
       member <- CantonGrpcUtil
-        .wrapErrUS(Member.fromProtoPrimitive(request.member, "member"))
+        .wrapErrUS(
+          ProtoValidation.validateThen(
+            request.member,
+            "member",
+            pvv,
+          )(Member.fromProtoPrimitive)
+        )
         .leftMap(_.asGrpcError)
       timestamp <- CantonGrpcUtil
         .wrapErrUS(CantonTimestamp.fromProtoPrimitive(request.timestamp))
@@ -892,7 +961,7 @@ class GrpcSequencerService(
     EitherTUtil.toFuture(
       EitherT(
         TopologyStateForInitRequest
-          .fromProtoV30(requestP)
+          .fromProtoV30(ProtocolVersionValidation.PV(protocolVersion), requestP)
           .leftMap(x => ProtoDeserializationFailure.Wrap(x).asGrpcError)
           .traverse { request =>
             topologyStateForInitializationService

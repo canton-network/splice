@@ -73,7 +73,10 @@ final case class EnvironmentDefinition(
     ) {
 
   def withManualStart: EnvironmentDefinition =
-    copy(baseConfig = baseConfig.focus(_.parameters.manualStart).replace(true))
+    setManualStart(true)
+
+  def setManualStart(manualStart: Boolean): EnvironmentDefinition =
+    copy(baseConfig = baseConfig.focus(_.parameters.manualStart).replace(manualStart))
 
   /** Enable traffic control on all configured synchronizers
     * @param syncSynchronizerOwnersTime
@@ -265,6 +268,18 @@ object EnvironmentDefinition extends LazyLogging {
       synchronizerThreshold = PositiveInt.one,
       sequencers = Seq(sequencer1),
       mediators = Seq(mediator1),
+    )
+  }
+
+  def S1M2(implicit env: TestConsoleEnvironment): NetworkTopologyDescription = {
+    import env.*
+    NetworkTopologyDescription(
+      daName,
+      synchronizerOwners = Seq[InstanceReference](sequencer1, mediator1),
+      synchronizerThreshold = PositiveInt.one,
+      sequencers = Seq(sequencer1),
+      mediators = Seq(mediator1, mediator2),
+      mediatorThreshold = PositiveInt.two,
     )
   }
 
@@ -460,6 +475,13 @@ object EnvironmentDefinition extends LazyLogging {
       new NetworkBootstrapper(S2M1())
     }
 
+  /**   - 0 participants
+    *   - 2 sequencers
+    *   - 2 mediators
+    */
+  lazy val P0S2M2_Manual: EnvironmentDefinition =
+    P0S2M2_Config.withManualStart
+
   lazy val P0S2M2_Config: EnvironmentDefinition =
     buildBaseEnvironmentDefinition(
       numParticipants = 0,
@@ -470,6 +492,12 @@ object EnvironmentDefinition extends LazyLogging {
   lazy val P1S1M1_Config = buildBaseEnvironmentDefinition(
     numParticipants = 1,
     numSequencers = 1,
+    numMediators = 1,
+  )
+
+  lazy val P1S4M1_Config: EnvironmentDefinition = buildBaseEnvironmentDefinition(
+    numParticipants = 1,
+    numSequencers = 4,
     numMediators = 1,
   )
 
@@ -685,6 +713,42 @@ object EnvironmentDefinition extends LazyLogging {
       NetworkBootstrapper(S1M1_S1M1)
     }
 
+  /**   - 1 participant '''not''' connected to any synchronizer
+    *   - 2 synchronizers with 1 sequencer and 1 mediator each, with the static synchronizer
+    *     parameters given per synchronizer name
+    */
+  def P1_S1M1_S1M1_WithStaticParameters(
+      staticSynchronizerParametersMap: Map[String, StaticSynchronizerParameters]
+  ): EnvironmentDefinition =
+    P1S2M2_Config
+      .setStaticSynchronizerParameters(staticSynchronizerParametersMap)
+      .withNetworkBootstrap { implicit env =>
+        import env.*
+
+        def paramsOrDefaults(alias: SynchronizerAlias): StaticSynchronizerParameters =
+          staticSynchronizerParametersMap
+            .getOrElse(alias.unwrap, defaultStaticSynchronizerParameters)
+
+        new NetworkBootstrapper(
+          NetworkTopologyDescription.createWithStaticSynchronizerParameters(
+            daName,
+            synchronizerOwners = Seq(sequencer1),
+            synchronizerThreshold = PositiveInt.one,
+            sequencers = Seq(sequencer1),
+            mediators = Seq(mediator1),
+            staticSynchronizerParameters = paramsOrDefaults(daName),
+          ),
+          NetworkTopologyDescription.createWithStaticSynchronizerParameters(
+            acmeName,
+            synchronizerOwners = Seq(sequencer2),
+            synchronizerThreshold = PositiveInt.one,
+            sequencers = Seq(sequencer2),
+            mediators = Seq(mediator2),
+            staticSynchronizerParameters = paramsOrDefaults(acmeName),
+          ),
+        )
+      }
+
   /**   - 1 participants '''not''' connected to any synchronizer
     *   - 3 synchronizers with 1 sequencer and 1 mediator each
     */
@@ -692,6 +756,50 @@ object EnvironmentDefinition extends LazyLogging {
     P1S3M3_Config.withNetworkBootstrap { implicit env =>
       NetworkBootstrapper(S1M1_S1M1_S1M1)
     }
+
+  /**   - 1 participant '''not''' connected to any synchronizer
+    *   - 3 synchronizers with 1 sequencer and 1 mediator each, with the static synchronizer
+    *     parameters given per synchronizer name
+    */
+  def P1_S1M1_S1M1_S1M1_WithStaticParameters(
+      staticSynchronizerParametersMap: Map[String, StaticSynchronizerParameters]
+  ): EnvironmentDefinition =
+    P1S3M3_Config
+      .setStaticSynchronizerParameters(staticSynchronizerParametersMap)
+      .withNetworkBootstrap { implicit env =>
+        import env.*
+
+        def paramsOrDefaults(alias: SynchronizerAlias): StaticSynchronizerParameters =
+          staticSynchronizerParametersMap
+            .getOrElse(alias.unwrap, defaultStaticSynchronizerParameters)
+
+        new NetworkBootstrapper(
+          NetworkTopologyDescription.createWithStaticSynchronizerParameters(
+            daName,
+            synchronizerOwners = Seq(sequencer1),
+            synchronizerThreshold = PositiveInt.one,
+            sequencers = Seq(sequencer1),
+            mediators = Seq(mediator1),
+            staticSynchronizerParameters = paramsOrDefaults(daName),
+          ),
+          NetworkTopologyDescription.createWithStaticSynchronizerParameters(
+            acmeName,
+            synchronizerOwners = Seq(sequencer2),
+            synchronizerThreshold = PositiveInt.one,
+            sequencers = Seq(sequencer2),
+            mediators = Seq(mediator2),
+            staticSynchronizerParameters = paramsOrDefaults(acmeName),
+          ),
+          NetworkTopologyDescription.createWithStaticSynchronizerParameters(
+            repairSynchronizerName,
+            synchronizerOwners = Seq(sequencer3),
+            synchronizerThreshold = PositiveInt.one,
+            sequencers = Seq(sequencer3),
+            mediators = Seq(mediator3),
+            staticSynchronizerParameters = paramsOrDefaults(repairSynchronizerName),
+          ),
+        )
+      }
 
   /**   - 2 participants '''not''' connected to any synchronizer
     *   - 3 synchronizers with 1 sequencer and 1 mediator each

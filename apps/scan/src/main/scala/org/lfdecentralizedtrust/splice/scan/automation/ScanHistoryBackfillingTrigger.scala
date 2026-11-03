@@ -220,6 +220,11 @@ class ScanHistoryBackfillingTrigger(
         )
         result <-
           if (updates.isEmpty) {
+            logger.info(
+              "No updates found while looking for the founding or joining transaction. " +
+                "The likely cause is that this node is still processing the initial ACS import, " +
+                "in which case the backfilling should resume once the ACS is ingested."
+            )
             Future.successful(TaskNoop)
           } else {
             initializeBackfillingFromUpdates(updates)

@@ -3,23 +3,25 @@
 
 package com.digitalasset.canton.protocol
 
-import cats.syntax.traverse.*
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
+import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 import com.digitalasset.canton.{LfPartyId, ProtoDeserializationError}
 import com.google.common.annotations.VisibleForTesting
 
 // Invariant: signatories is a subset of all
 final case class Stakeholders private (all: Set[LfPartyId], signatories: Set[LfPartyId])
-    extends HasVersionedWrapper[Stakeholders]
-    with PrettyPrinting {
+    extends PrettyPrintingFromCompanion {
 
   val nonConfirming: Set[LfPartyId] = all -- signatories
-
-  override protected def companionObj: HasVersionedMessageCompanionCommon[Stakeholders] =
-    Stakeholders
 
   {
     val nonStakeholderSignatories = signatories -- all
@@ -29,25 +31,19 @@ final case class Stakeholders private (all: Set[LfPartyId], signatories: Set[LfP
       )
   }
 
-  override protected def pretty: Pretty[Stakeholders.this.type] = prettyOfClass(
-    param("all", _.all.toSeq.sorted),
-    param("signatories", _.signatories.toSeq.sorted),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[Stakeholders] = Stakeholders
 
   def toProtoV30: v30.Stakeholders = v30.Stakeholders(
-    all = all.toSeq,
-    signatories = signatories.toSeq,
+    all = all.toSeq.map(_.toProtoUnvalidated),
+    signatories = signatories.toSeq.map(_.toProtoUnvalidated),
   )
 }
 
-object Stakeholders extends HasVersionedMessageCompanion[Stakeholders] {
-  override def name: String = "Stakeholders"
-  val supportedProtoVersions: SupportedProtoVersions = SupportedProtoVersions(
-    ProtoVersion(30) -> ProtoCodec(
-      ProtocolVersion.v34,
-      supportedProtoVersion(v30.Stakeholders)(fromProtoV30),
-      _.toProtoV30,
-    )
+object Stakeholders extends PrettyPrintingCompanion[Stakeholders] {
+
+  override protected val pretty: Pretty[Stakeholders] = prettyOfClass(
+    param("all", _.all.toSeq.sorted),
+    param("signatories", _.signatories.toSeq.sorted),
   )
 
   def apply(metadata: ContractMetadata): Stakeholders =
@@ -66,13 +62,25 @@ object Stakeholders extends HasVersionedMessageCompanion[Stakeholders] {
   ): Stakeholders =
     Stakeholders(all = signatories.union(observers), signatories = signatories)
 
-  def fromProtoV30(stakeholdersP: v30.Stakeholders): ParsingResult[Stakeholders] =
+  def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      stakeholdersP: v30.Stakeholders,
+  ): ParsingResult[Stakeholders] =
     for {
-      stakeholders <- stakeholdersP.all
-        .traverse(ProtoConverter.parseLfPartyId(_, "stakeholders"))
+      stakeholders <- ProtoValidation
+        .validateThen(stakeholdersP.all, "stakeholders", pvv, ProtoValidation.MaxCollectionSize)(
+          ProtoConverter.parseLfPartyId
+        )
         .map(_.toSet)
-      signatories <- stakeholdersP.signatories
-        .traverse(ProtoConverter.parseLfPartyId(_, "signatories"))
+      signatories <- ProtoValidation
+        .validateThen(
+          stakeholdersP.signatories,
+          "signatories",
+          pvv,
+          ProtoValidation.MaxCollectionSize,
+        )(
+          ProtoConverter.parseLfPartyId
+        )
         .map(_.toSet)
 
       nonStakeholderSignatories = signatories -- stakeholders

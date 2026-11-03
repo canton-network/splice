@@ -17,7 +17,12 @@ import com.digitalasset.canton.crypto.SyncCryptoError.KeyNotAvailable
 import com.digitalasset.canton.crypto.{HashPurpose, SyncCryptoApi, SyncCryptoClient}
 import com.digitalasset.canton.data.{CantonTimestamp, LogicalUpgradeTime, SynchronizerSuccessor}
 import com.digitalasset.canton.lifecycle.*
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.sequencing.client.SequencedEventValidator.TopologyTimestampVerificationError
 import com.digitalasset.canton.sequencing.client.SequencerSubscriptionError.SequencedEventError
@@ -39,10 +44,11 @@ import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.topology.processing.EffectiveTime
 import com.digitalasset.canton.topology.{MediatorId, Member, ParticipantId, SequencerId}
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
+import com.digitalasset.canton.util.ErrorUtil
 import com.digitalasset.canton.util.PekkoUtil.WithKillSwitch
 import com.digitalasset.canton.util.PekkoUtil.syntax.*
 import com.digitalasset.canton.util.ShowUtil.*
-import com.digitalasset.canton.util.{BatchN, EitherTUtil, ErrorUtil}
+import com.digitalasset.canton.util.signalling.{EventSignaller, NotificationSignal}
 import com.digitalasset.canton.version.ProtocolVersion
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.*
@@ -106,7 +112,7 @@ class SequencerReader(
     config: SequencerReaderConfig,
     store: SequencerStore,
     syncCryptoApi: SyncCryptoClient[SyncCryptoApi],
-    eventSignaller: EventSignaller,
+    eventSignaller: EventSignaller[SequencerMemberId, Unit],
     topologyClientMember: Member,
     lsuSequencingBounds: Option[LsuSequencingBounds],
     metrics: SequencerMetrics,
@@ -166,11 +172,11 @@ class SequencerReader(
           CreateSubscriptionError.UnknownMember(member),
         )
         .leftWiden[CreateSubscriptionError]
-      // check they haven't been disabled
-      _ <- EitherTUtil.condUnitET[FutureUnlessShutdown](
-        registeredMember.enabled,
-        CreateSubscriptionError.MemberDisabled(member): CreateSubscriptionError,
-      )
+      // check that the member is active. Active members always have a registration timestamp.
+      memberRegisteredFrom <- EitherT.fromEither[FutureUnlessShutdown](registeredMember match {
+        case RegisteredMember.Active(_, registeredAt) => Right(registeredAt)
+        case _ => Left(CreateSubscriptionError.MemberNotActive(member): CreateSubscriptionError)
+      })
 
       _ = logger.debug(
         s"Topology processor at: ${syncCryptoApi.approximateTimestamp}"
@@ -180,7 +186,6 @@ class SequencerReader(
       _ = logger.debug(
         s"Current safe watermark is $safeWatermarkTimestampO"
       )
-      memberRegisteredFrom = registeredMember.registeredFrom
       _ = logger.debug(s"Member $member was registered at $memberRegisteredFrom")
 
       // It can happen that a member switching between sequencers runs into a sequencer that is catching up.
@@ -344,9 +349,9 @@ class SequencerReader(
         traceContext: TraceContext
     ): Source[(PreviousEventTimestamp, Sequenced[IdOrPayload]), NotUsed] =
       eventSignaller
-        .readSignalsForMember(member, registeredMember.memberId)
+        .readSignals(registeredMember.memberId, member.toString)
         // always trigger a read upon subscription
-        .prepend(Source.single(ReadSignal))
+        .prepend(Source.single(NotificationSignal.unit))
         .via(
           FetchLatestEventsFlow[
             (PreviousEventTimestamp, Sequenced[IdOrPayload]),
@@ -438,65 +443,16 @@ class SequencerReader(
     ] = {
       val (previousTimestamp, unvalidatedEvent) = sequenced
 
-      def validateTopologyTimestamp(
-          topologyTimestamp: CantonTimestamp,
-          sequencingTimestamp: CantonTimestamp,
-          eventTraceContext: TraceContext,
-      ): FutureUnlessShutdown[
-        (TopologyClientTimestampAfter, ValidatedSnapshotWithEvent[IdOrPayload])
-      ] = {
-        implicit val traceContext: TraceContext = eventTraceContext
-        // The topology timestamp will end up as the timestamp of topology on the signed event.
-        // So we validate it accordingly.
-        SequencedEventValidator
-          .validateTopologyTimestamp(
-            syncCryptoApi,
-            topologyTimestamp,
-            sequencingTimestamp,
-            topologyClientTimestampBefore,
-            // This warning should never be triggered.
-            warnIfApproximate = true,
-            _.sequencerTopologyTimestampTolerance,
-          )
-          .value
-          .map { snapshotOrError =>
-            val topologyClientTimestampAfter = snapshotOrError.fold(
-              _ => topologyClientTimestampBefore,
-              _ =>
-                latestTopologyClientTimestampAfter(topologyClientTimestampBefore, unvalidatedEvent),
-            )
-
-            topologyClientTimestampAfter -> ValidatedSnapshotWithEvent(
-              topologyClientTimestampBefore,
-              Some(snapshotOrError.leftMap(topologyTimestamp -> _)),
-              previousTimestamp,
-              unvalidatedEvent,
-            )
-          }
-      }
-
-      unvalidatedEvent.event.topologyTimestampO match {
-        // Deliver and receipt events with a topologyTimestamp must be validated
-        case Some(topologyTimestamp) =>
-          validateTopologyTimestamp(
-            topologyTimestamp,
-            unvalidatedEvent.timestamp,
-            unvalidatedEvent.event.traceContext,
-          )
-        // Errors; delivers and receipts with no topologyTimestamp specified bypass validation
-        case None =>
-          val after =
-            latestTopologyClientTimestampAfter(topologyClientTimestampBefore, unvalidatedEvent)
-          FutureUnlessShutdown.pure(
-            after -> ValidatedSnapshotWithEvent(
-              topologyClientTimestampBefore,
-              None,
-              previousTimestamp,
-              unvalidatedEvent,
-            )
-          )
-
-      }
+      val after =
+        latestTopologyClientTimestampAfter(topologyClientTimestampBefore, unvalidatedEvent)
+      FutureUnlessShutdown.pure(
+        after -> ValidatedSnapshotWithEvent(
+          topologyClientTimestampBefore,
+          None,
+          previousTimestamp,
+          unvalidatedEvent,
+        )
+      )
     }
 
     def generateEvent(
@@ -506,7 +462,7 @@ class SequencerReader(
       import snapshotWithEvent.{previousTimestamp, topologyClientTimestampBefore, unvalidatedEvent}
 
       def validationSuccess(
-          eventF: FutureUnlessShutdown[SequencedEvent[ClosedEnvelope]],
+          eventF: FutureUnlessShutdown[DecompressedSequencedEvent[ClosedEnvelope]],
           signingSnapshot: Option[SyncCryptoApi],
       ): FutureUnlessShutdown[UnsignedEventData] = {
         val topologyClientTimestampAfter =
@@ -597,7 +553,6 @@ class SequencerReader(
               None,
               emptyBatch,
               None,
-              None,
             )
           }
 
@@ -621,10 +576,9 @@ class SequencerReader(
         traceContext: TraceContext
     ): Flow[WithKillSwitch[ValidatedSnapshotWithEvent[IdOrPayload]], UnsignedEventData, NotUsed] =
       Flow[WithKillSwitch[ValidatedSnapshotWithEvent[IdOrPayload]]]
-        .batchN(
-          config.payloadBatchSize,
-          config.payloadFetchParallelism,
-          BatchN.MaximizeBatchSize,
+        .batchNForMaxBatchSize(
+          maxBatchSize = config.payloadBatchSize,
+          maxBatchCount = config.payloadFetchParallelism,
         )
         .mapAsyncAndDrainUS(config.payloadFetchParallelism) { snapshotsWithEvent =>
           // fetch payloads in bulk
@@ -645,7 +599,7 @@ class SequencerReader(
                       ),
                     )
                   case payload: BytesPayload =>
-                    payload.decodeBatchAndTrim(protocolVersion, member)
+                    payload.decodeBatchAndTrim(member)
                 })
               )
             }
@@ -680,7 +634,6 @@ class SequencerReader(
           .injectKillSwitch(identity)
           .via(fetchPayloadsForEventsBatch())
 
-      // TODO(#23857): With validated events here we will persist their validation status for re-use by other subscriptions.
       eventsSource
         .viaMat(KillSwitches.single) { case (killSwitch, _) =>
           (killSwitch, FutureUnlessShutdown.pure(Done))
@@ -732,7 +685,7 @@ class SequencerReader(
       }
 
     private def signEvent(
-        event: SequencedEvent[ClosedEnvelope],
+        event: DecompressedSequencedEvent[ClosedEnvelope],
         topologySnapshot: SyncCryptoApi,
     )(implicit traceContext: TraceContext): EitherT[
       FutureUnlessShutdown,
@@ -788,7 +741,7 @@ class SequencerReader(
         ], // None for until the first topology event, otherwise contains the latest topology event timestamp
     )(implicit
         traceContext: TraceContext
-    ): FutureUnlessShutdown[SequencedEvent[ClosedEnvelope]] = {
+    ): FutureUnlessShutdown[DecompressedSequencedEvent[ClosedEnvelope]] = {
       val timestamp = event.timestamp
       val sequencedEventF = event.event match {
         case DeliverStoreEvent(
@@ -796,7 +749,6 @@ class SequencerReader(
               messageId,
               _recipients,
               batch,
-              topologyTimestampO,
               _traceContext,
               trafficReceiptO,
             ) =>
@@ -840,13 +792,12 @@ class SequencerReader(
               case (groupRecipient, groupMembers) if groupMembers.contains(member) => groupRecipient
             }.toSet
             val filteredBatch = Batch.filterClosedEnvelopesFor(batch, member, memberGroupRecipients)
-            Deliver.create[ClosedEnvelope](
+            Deliver.create[Batch[ClosedEnvelope]](
               previousTimestamp,
               timestamp,
               psid,
               messageIdO,
               filteredBatch,
-              topologyTimestampO,
               // deliver events should only retain the traffic state for the sender's subscription
               trafficReceiptForNonSequencerSender(sender, trafficReceiptO),
             )
@@ -855,18 +806,16 @@ class SequencerReader(
         case ReceiptStoreEvent(
               sender,
               messageId,
-              topologyTimestampO,
               _traceContext,
               trafficReceiptO,
             ) =>
           FutureUnlessShutdown.pure(
-            Deliver.create[ClosedUncompressedEnvelope](
+            Deliver.create[Batch[ClosedUncompressedEnvelope]](
               previousTimestamp,
               timestamp,
               psid,
               Some(messageId),
               emptyBatch,
-              topologyTimestampO,
               trafficReceiptForNonSequencerSender(sender, trafficReceiptO),
             )
           )
@@ -903,13 +852,12 @@ class SequencerReader(
           logger.info(
             "Delivering an empty event instead of the original, because it was sequenced at or after the upgrade time."
           )
-          Deliver.create[ClosedEnvelope](
+          Deliver.create[Batch[ClosedEnvelope]](
             previousTimestamp,
             timestamp,
             psid,
             None,
             emptyBatch,
-            None,
             None,
           )
         }
@@ -932,7 +880,7 @@ object SequencerReader {
       latestTopologyClientRecipientTimestamp: Option[CantonTimestamp],
       lastBatchWasFull: Boolean = false,
       nextPreviousEventTimestamp: Option[CantonTimestamp] = None,
-  ) extends PrettyPrinting {
+  ) extends PrettyPrintingFromCompanion {
 
     def changeString(previous: ReadState): Option[String] = {
       def build[T](a: T, b: T, name: String): Option[String] =
@@ -976,7 +924,12 @@ object SequencerReader {
       result
     }
 
-    override protected def pretty: Pretty[ReadState] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[ReadState] = ReadState
+  }
+
+  private[SequencerReader] object ReadState extends PrettyPrintingCompanion[ReadState] {
+
+    override protected val pretty: Pretty[ReadState] = prettyOfClass(
       param("member", _.member),
       param("memberId", _.memberId),
       param("memberRegisteredFrom", _.memberRegisteredFrom),
@@ -988,7 +941,7 @@ object SequencerReader {
   }
 
   private[SequencerReader] final case class UnsignedEventData(
-      event: SequencedEvent[ClosedEnvelope],
+      event: DecompressedSequencedEvent[ClosedEnvelope],
       signingSnapshotO: Option[SyncCryptoApi],
       previousTopologyClientTimestamp: Option[CantonTimestamp],
       latestTopologyClientTimestamp: Option[CantonTimestamp],

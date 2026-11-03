@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // ensure the config is loaded and the ENV is overriden
 import * as k8s from '@pulumi/kubernetes';
+import * as pulumi from '@pulumi/pulumi';
 import { config } from '@canton-network/splice-pulumi-common';
 import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
+import { local } from '@pulumi/command';
 
 import { configureSweet } from '../sweet';
 import { configureAuth0 } from './auth0';
@@ -21,6 +23,7 @@ import { configureIstio, istioVersion } from './istio';
 import { deployGCPodReaper } from './maintenance';
 import { configureNetwork } from './network';
 import { configureReloader } from './reloader';
+import { sequencerP2pHosts } from './sequencerP2pHosts';
 import { configureStorage } from './storage';
 
 const network = configureNetwork(clusterBasename, clusterBaseDomain);
@@ -35,6 +38,13 @@ const cloudArmorSecurityPolicy = configureCloudArmorPolicy(
 );
 const useGKEL7Gateway = infraConfig.gkeGateway.proxyForIstioHttp;
 
+const gkeGatewayTeardown = !useGKEL7Gateway
+  ? new local.Command('cn-gke-l7-gateway-teardown', {
+      create: pulumi.interpolate`kubectl delete gateway cn-gke-l7-gateway -n ${network.ingressNs.ns.metadata.name} --ignore-not-found --wait=true`,
+      triggers: [useGKEL7Gateway],
+    })
+  : undefined;
+
 if (!useGKEL7Gateway && cloudArmorSecurityPolicy) {
   throw new Error(
     'Cloud Armor requires infra.gkeGateway.proxyForIstioHttp to be enabled to take effect'
@@ -45,7 +55,8 @@ const istio = configureIstio(
   network.ingressNs,
   ingressIp,
   network.cometbftIngressIp.address,
-  useGKEL7Gateway
+  useGKEL7Gateway,
+  gkeGatewayTeardown ? [gkeGatewayTeardown] : []
 );
 
 if (useGKEL7Gateway) {
@@ -57,6 +68,11 @@ if (useGKEL7Gateway) {
     serviceTarget: { port: 80 },
     tlsSecretName: `cn-${clusterBasename}net-tls`,
     securityPolicy: cloudArmorSecurityPolicy,
+    backendLogging: cloudArmorConfig.logging,
+    // The sequencer BFT P2P API is mutually authenticated gRPC between known peers, so
+    // Cloud Armor adds no protection there while billing every P2P request. Route it to
+    // a backend service without a security policy attached.
+    cloudArmorExemptHostnames: sequencerP2pHosts(),
     istioResource: istio.istioResource,
   });
 }

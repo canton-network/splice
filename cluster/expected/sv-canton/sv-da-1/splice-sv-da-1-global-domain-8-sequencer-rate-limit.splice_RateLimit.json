@@ -1,0 +1,24 @@
+{
+  "custom": false,
+  "id": "",
+  "inputs": {
+    "appLabel": "global-domain-8-sequencer",
+    "globalLimits": {
+      "fillInterval": "60s",
+      "maxTokens": 200000,
+      "tokensPerFill": 200000
+    },
+    "globalPerIpLimits": {
+      "fillInterval": "60s",
+      "maxTokens": 10000,
+      "tokensPerFill": 10000
+    },
+    "inboundPort": 5008,
+    "namespace": "sv-da-1",
+    "protocol": "grpc",
+    "xffNumTrustedHops": 2
+  },
+  "name": "splice-sv-da-1-global-domain-8-sequencer-rate-limit",
+  "provider": "",
+  "type": "splice:RateLimit"
+}

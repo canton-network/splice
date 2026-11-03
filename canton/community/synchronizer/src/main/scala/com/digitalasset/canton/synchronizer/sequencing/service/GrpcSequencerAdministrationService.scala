@@ -7,7 +7,6 @@ import cats.data.EitherT
 import cats.syntax.bifunctor.*
 import cats.syntax.either.*
 import cats.syntax.foldable.*
-import cats.syntax.functor.*
 import cats.syntax.traverse.*
 import com.digitalasset.base.error.RpcError
 import com.digitalasset.canton.ProtoDeserializationError
@@ -15,31 +14,14 @@ import com.digitalasset.canton.ProtoDeserializationError.FieldNotSet
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.environment.CantonNodeParameters
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.*
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.protocol.v30.TrafficState
 import com.digitalasset.canton.sequencer.admin.v30
-import com.digitalasset.canton.sequencer.admin.v30.{
-  GenerateAuthenticationTokenRequest,
-  GenerateAuthenticationTokenResponse,
-  GetLsuTrafficControlStateRequest,
-  GetLsuTrafficControlStateResponse,
-  GetThroughputCapRequest,
-  GetThroughputCapResponse,
-  OnboardingStateResponse,
-  OnboardingStateV2Request,
-  OnboardingStateV2Response,
-  PerformLsuSequencingTestRequest,
-  PerformLsuSequencingTestResponse,
-  SetLsuTrafficControlStateRequest,
-  SetLsuTrafficControlStateResponse,
-  SetThroughputCapRequest,
-  SetThroughputCapResponse,
-  SetTrafficPurchasedRequest,
-  SetTrafficPurchasedResponse,
-}
+import com.digitalasset.canton.sequencer.admin.v30.*
 import com.digitalasset.canton.sequencing.client.SequencerClientSend
 import com.digitalasset.canton.sequencing.protocol.{MediatorGroupRecipient, SubmissionRequestType}
 import com.digitalasset.canton.sequencing.traffic.TrafficControlErrors.TrafficControlError
@@ -47,7 +29,6 @@ import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.synchronizer.sequencer.BlockSequencerConfig.IndividualThroughputCapConfig
 import com.digitalasset.canton.synchronizer.sequencer.traffic.{LsuTrafficState, TimestampSelector}
 import com.digitalasset.canton.synchronizer.sequencer.{
-  OnboardingStateForSequencer,
   OnboardingStateForSequencerV2,
   Sequencer,
   SequencerSnapshot,
@@ -57,8 +38,8 @@ import com.digitalasset.canton.time.{NonNegativeFiniteDuration, SynchronizerTime
 import com.digitalasset.canton.topology.client.SynchronizerTopologyClient
 import com.digitalasset.canton.topology.processing.{EffectiveTime, SequencedTime}
 import com.digitalasset.canton.topology.store.StoredTopologyTransaction.GenericStoredTopologyTransaction
+import com.digitalasset.canton.topology.store.TopologyStore
 import com.digitalasset.canton.topology.store.TopologyStoreId.SynchronizerStore
-import com.digitalasset.canton.topology.store.{StoredTopologyTransactions, TopologyStore}
 import com.digitalasset.canton.topology.transaction.SequencerSynchronizerState
 import com.digitalasset.canton.topology.{
   Member,
@@ -67,6 +48,7 @@ import com.digitalasset.canton.topology.{
   UniqueIdentifier,
 }
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
+import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.{EitherTUtil, GrpcStreamingUtils}
 import com.digitalasset.canton.version.ProtoVersion
 import com.google.protobuf.timestamp.Timestamp
@@ -129,10 +111,17 @@ class GrpcSequencerAdministrationService(
       request: v30.PruningStatusRequest
   ): Future[v30.PruningStatusResponse] = {
     implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    sequencer.pruningStatus
-      .map(_.toProtoV30)
-      .map(status => v30.PruningStatusResponse(Some(status)))
-      .asGrpcResponse
+    val result = for {
+      status <- EitherT.right[RpcError](sequencer.pruningStatus)
+      // The v30 encoding cannot represent members without a registration timestamp, so they are omitted.
+      // This does not affect pruning, as these members have no events.
+      statusP <- wrapErrUS(
+        status.withoutUnregisteredMembers.toProtoV30
+          .leftMap(ProtoDeserializationError.ValueConversionError("status", _))
+      )
+    } yield v30.PruningStatusResponse(Some(statusP))
+
+    mapErrNewEUS(result)
   }
 
   override def trafficControlState(
@@ -191,6 +180,9 @@ class GrpcSequencerAdministrationService(
     }
   }
 
+  private def snapshotFailure(reason: String): v30.SnapshotResponse =
+    v30.SnapshotResponse(v30.SnapshotResponse.Value.Failure(v30.SnapshotResponse.Failure(reason)))
+
   override def snapshot(request: v30.SnapshotRequest): Future[v30.SnapshotResponse] = {
     implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
     val result = (for {
@@ -201,52 +193,22 @@ class GrpcSequencerAdministrationService(
       result <- sequencer.snapshot(timestamp).leftMap(_.toCantonRpcError)
     } yield result)
       .fold[v30.SnapshotResponse](
-        error =>
-          v30.SnapshotResponse(
-            v30.SnapshotResponse.Value.Failure(v30.SnapshotResponse.Failure(error.cause))
-          ),
+        error => snapshotFailure(error.cause),
+        // Serializing the snapshot can fail if it contains a member that the protocol version's
+        //  snapshot encoding cannot represent, see SequencerMemberStatus.toProtoV30.
         result =>
-          v30.SnapshotResponse(
-            v30.SnapshotResponse.Value.VersionedSuccess(
-              v30.SnapshotResponse.VersionedSuccess(result.toByteString)
-            )
+          result.toByteString.fold(
+            snapshotFailure,
+            bytes =>
+              v30.SnapshotResponse(
+                v30.SnapshotResponse.Value.VersionedSuccess(
+                  v30.SnapshotResponse.VersionedSuccess(bytes)
+                )
+              ),
           ),
       )
 
-    shutdownAsGrpcError(result)
-  }
-
-  override def onboardingState(
-      request: v30.OnboardingStateRequest,
-      responseObserver: StreamObserver[OnboardingStateResponse],
-  ): Unit = {
-    implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    GrpcStreamingUtils.streamToClient(
-      (out: OutputStream) => {
-        val res =
-          for {
-            memberOrTimestamp <- memberOrTimestamp(
-              request.request.sequencerUid,
-              request.request.timestamp,
-            )
-            seqSnapshotAndSource <- onboardingStateSource(memberOrTimestamp)
-            (sequencerSnapshot, snapshotSource) = seqSnapshotAndSource
-            storedTransactions <- EitherT
-              .right[RpcError](snapshotSource.runWith(Sink.seq))
-              .mapK(FutureUnlessShutdown.outcomeK)
-          } yield {
-            val onboardingState = OnboardingStateForSequencer(
-              StoredTopologyTransactions(storedTransactions),
-              staticSynchronizerParameters,
-              sequencerSnapshot,
-            )
-            onboardingState.toByteString.writeTo(out)
-          }
-        mapErrNewEUS(res)
-      },
-      responseObserver,
-      byteString => OnboardingStateResponse(byteString),
-    )
+    result.asGrpcFuture
   }
 
   override def onboardingStateV2(
@@ -256,6 +218,15 @@ class GrpcSequencerAdministrationService(
     implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
     GrpcStreamingUtils.streamToClient(
       (out: OutputStream) => {
+        def writeState(
+            state: OnboardingStateForSequencerV2
+        ): EitherT[FutureUnlessShutdown, RpcError, Unit] =
+          wrapErrUS(
+            state
+              .writeDelimitedTo(out)
+              .leftMap(ProtoDeserializationError.ValueConversionError("onboarding_state", _))
+          )
+
         val res = for {
           memberOrTimestamp <- memberOrTimestamp(
             request.request.sequencerUid,
@@ -270,23 +241,19 @@ class GrpcSequencerAdministrationService(
             Some(sequencerSnapshot),
             staticSynchronizerParameters.protocolVersion,
           )
-          _ = nonTopologyOnboardingState.writeDelimitedTo(out)
+          _ <- writeState(nonTopologyOnboardingState)
           _ <- EitherT
             .right[RpcError](
               snapshotSource.runWith(
                 Sink.foreachAsync(1)(stored =>
                   mapErrNewEUS(
-                    wrapErrUS(
+                    writeState(
                       OnboardingStateForSequencerV2(
                         Some(stored),
                         None,
                         None,
                         staticSynchronizerParameters.protocolVersion,
                       )
-                        .writeDelimitedTo(out)
-                        .leftMap(
-                          ProtoDeserializationError.ValueConversionError("onboarding_state", _)
-                        )
                     )
                   )
                 )
@@ -298,6 +265,7 @@ class GrpcSequencerAdministrationService(
       },
       responseObserver,
       byteString => OnboardingStateV2Response(byteString),
+      parameters.processingTimeouts.adminStreamOpenBound.duration,
     )
   }
 
@@ -426,7 +394,7 @@ class GrpcSequencerAdministrationService(
             new StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription(err.toString))
           )
       )
-      _ <- sequencer.disableMember(member).leftMap(_.asGrpcError)
+      _ <- sequencer.disableMember(member).leftMap(_.toGrpcError)
     } yield v30.DisableMemberResponse()
 
     result.asGrpcResponse

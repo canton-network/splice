@@ -5,10 +5,16 @@ package com.digitalasset.canton.participant.event
 
 import com.digitalasset.canton.RepairCounter
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.data.CantonTimestamp.{getResultOptionTimestamp, getResultTimestamp}
 import com.digitalasset.canton.ledger.participant.state.SynchronizerIndex
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.participant.util.TimeOfChange
 import com.digitalasset.canton.topology.processing.EffectiveTime
+import slick.jdbc.GetResult
 
 /** Canton-internal record time
   * @param timestamp
@@ -21,11 +27,9 @@ import com.digitalasset.canton.topology.processing.EffectiveTime
   *   - Requests (regular as well as repair requests) use the repair counter as `tieBreaker`.
   *   - Empty ACS changes (ticks, received ACS commitments, time proofs) use `Long.MinValue`
   */
-final case class RecordTime(timestamp: CantonTimestamp, tieBreaker: Long) extends PrettyPrinting {
-  override lazy val pretty: Pretty[RecordTime] = prettyOfClass(
-    param("timestamp", _.timestamp),
-    param("tieBreaker", _.tieBreaker),
-  )
+final case class RecordTime(timestamp: CantonTimestamp, tieBreaker: Long)
+    extends PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[RecordTime] = RecordTime
 
   /** Note that there is no guarantee that this will result in a time of change with an existing
     * repair counter.
@@ -34,13 +38,27 @@ final case class RecordTime(timestamp: CantonTimestamp, tieBreaker: Long) extend
     TimeOfChange.negativeCounterToNone(timestamp, RepairCounter(tieBreaker))
 }
 
-object RecordTime {
+object RecordTime extends PrettyPrintingCompanion[RecordTime] {
   val lowestTiebreaker: Long = Long.MinValue
+  val highestTiebreaker: Long = Long.MaxValue
 
   val MinValue: RecordTime = RecordTime(CantonTimestamp.MinValue, lowestTiebreaker)
+  val MaxValue: RecordTime = RecordTime(CantonTimestamp.MaxValue, highestTiebreaker)
 
   implicit val recordTimeOrdering: Ordering[RecordTime] =
     Ordering.by(rt => (rt.timestamp -> rt.tieBreaker))
+
+  implicit val getResultRecordTime: GetResult[RecordTime] = GetResult { pr =>
+    val timestamp = getResultTimestamp(pr)
+    val tieBreaker = pr.nextLong()
+    RecordTime(timestamp, tieBreaker)
+  }
+
+  implicit val getRecordTimeO: GetResult[Option[RecordTime]] = GetResult { pr =>
+    val tsO = getResultOptionTimestamp(pr)
+    val tieBreakerO = pr.nextLongOption()
+    tsO.map(ts => RecordTime(ts, tieBreakerO.getOrElse(0)))
+  }
 
   def fromTimeOfChange(toc: TimeOfChange): RecordTime =
     TimeOfChange.withMinAsNoneRepairCounter(toc) { case (ts, rc) =>
@@ -52,4 +70,9 @@ object RecordTime {
 
   def apply(timestamp: EffectiveTime, tieBreaker: Long): RecordTime =
     RecordTime(timestamp.value, tieBreaker)
+
+  override protected val pretty: Pretty[RecordTime] = prettyOfClass(
+    param("timestamp", _.timestamp),
+    param("tieBreaker", _.tieBreaker),
+  )
 }

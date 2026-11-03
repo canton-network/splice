@@ -40,6 +40,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   DsoInfo,
+  DsoInfoV1,
   FactoryChoiceWithDisclosures,
   PackageQualifiedName,
   SpliceUtil,
@@ -89,6 +90,18 @@ abstract class ScanAppReference(
   def getDsoInfo(): DsoInfo = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetDsoInfo(List()))
+    }
+  }
+
+  def getDsoInfoV1(): DsoInfoV1 = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetDsoInfoV1(List()))
+    }
+  }
+
+  def getSvInfo(): HttpScanAppClient.SvInfo = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetSvInfo(List()))
     }
   }
 
@@ -240,12 +253,19 @@ abstract class ScanAppReference(
   @Help.Summary(
     "List the latest open mining round and all issuing mining rounds."
   )
-  def getOpenAndIssuingMiningRounds(): (
+  def getOpenAndIssuingMiningRounds(
+      cachedOpenRounds: Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]] = Seq(),
+      cachedIssuingRounds: Seq[
+        ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]
+      ] = Seq(),
+  ): (
       Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]],
       Seq[ContractWithState[IssuingMiningRound.ContractId, IssuingMiningRound]],
   ) = {
     val result = consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetSortedOpenAndIssuingMiningRounds(Seq(), Seq()))
+      httpCommand(
+        HttpScanAppClient.GetSortedOpenAndIssuingMiningRounds(cachedOpenRounds, cachedIssuingRounds)
+      )
     }
     (
       result._1.sortBy(_.payload.round.number),
@@ -399,56 +419,6 @@ abstract class ScanAppReference(
       )
     }
 
-  def getAcsSnapshotAt(
-      at: CantonTimestamp,
-      migrationId: Long,
-      recordTimeMatch: Option[definitions.AcsRequest.RecordTimeMatch] = Some(
-        definitions.AcsRequest.RecordTimeMatch.Exact
-      ),
-      after: Option[Long] = None,
-      pageSize: Int = 100,
-      partyIds: Option[Vector[PartyId]] = None,
-      templates: Option[Vector[PackageQualifiedName]] = None,
-  ) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAcsSnapshotAt(
-          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          migrationId,
-          recordTimeMatch,
-          after,
-          pageSize,
-          partyIds,
-          templates,
-        )
-      )
-    }
-
-  def getAcsSnapshotAtV1(
-      at: CantonTimestamp,
-      migrationId: Long,
-      recordTimeMatch: Option[definitions.AcsRequest.RecordTimeMatch] = Some(
-        definitions.AcsRequest.RecordTimeMatch.Exact
-      ),
-      after: Option[Long] = None,
-      pageSize: Int = 100,
-      partyIds: Option[Vector[PartyId]] = None,
-      templates: Option[Vector[PackageQualifiedName]] = None,
-  ) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAcsSnapshotAtV1(
-          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          migrationId,
-          recordTimeMatch,
-          after,
-          pageSize,
-          partyIds,
-          templates,
-        )
-      )
-    }
-
   def getAcsSnapshotAtV2(
       at: CantonTimestamp,
       migrationId: Long,
@@ -474,42 +444,19 @@ abstract class ScanAppReference(
       )
     }
 
-  def getHoldingsStateAt(
+  def getHoldingsStateAtV2(
       at: CantonTimestamp,
       migrationId: Long,
       partyIds: Vector[PartyId],
-      recordTimeMatch: Option[definitions.HoldingsStateRequest.RecordTimeMatch] = Some(
-        definitions.HoldingsStateRequest.RecordTimeMatch.Exact
+      recordTimeMatch: Option[definitions.HoldingsStateRequestV2.RecordTimeMatch] = Some(
+        definitions.HoldingsStateRequestV2.RecordTimeMatch.Exact
       ),
-      after: Option[Long] = None,
+      after: Option[String] = None,
       pageSize: Int = 100,
   ) =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetHoldingsStateAt(
-          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
-          migrationId,
-          partyIds,
-          recordTimeMatch,
-          after,
-          pageSize,
-        )
-      )
-    }
-
-  def getHoldingsStateAtV1(
-      at: CantonTimestamp,
-      migrationId: Long,
-      partyIds: Vector[PartyId],
-      recordTimeMatch: Option[definitions.HoldingsStateRequest.RecordTimeMatch] = Some(
-        definitions.HoldingsStateRequest.RecordTimeMatch.Exact
-      ),
-      after: Option[Long] = None,
-      pageSize: Int = 100,
-  ) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetHoldingsStateAtV1(
+        HttpScanAppClient.GetHoldingsStateAtV2(
           at.toInstant.atOffset(java.time.ZoneOffset.UTC),
           migrationId,
           partyIds,
@@ -625,6 +572,11 @@ abstract class ScanAppReference(
       )
     }
   }
+
+  def getLatestEventRecordTime(): Option[definitions.EventLatestRecordTimeResponse] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetLatestEventRecordTime())
+    }
 
   def getEventById(
       updateId: String,
@@ -842,6 +794,17 @@ abstract class ScanAppReference(
     latestVoteRequest.payload.trackingCid.toScala.getOrElse(latestVoteRequest.contractId)
   }
 
+  @Help.Summary("List vote requests with the given contract IDs")
+  def listVoteRequestsByTrackingCid(
+      trackingCids: Seq[VoteRequest.ContractId]
+  ): Seq[Contract[VoteRequest.ContractId, VoteRequest]] = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.ListVoteRequestsByTrackingCid(trackingCids)
+      )
+    }
+  }
+
   @Help.Summary("Lookup vote request")
   def lookupVoteRequest(
       trackingCid: VoteRequest.ContractId
@@ -889,29 +852,32 @@ abstract class ScanAppReference(
   }
 
   @Help.Summary("List all objects in bulk storage for an ACS snapshot")
-  def getBulkAcsSnapshot(
-      timestamp: CantonTimestamp
+  def listBulkAcsSnapshotObjects(
+      timestamp: CantonTimestamp,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ): definitions.ListBulkAcsSnapshotObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkAcsSnapshot(timestamp)
+        HttpScanAppClient.ListBulkAcsSnapshotObjects(timestamp, damlValueEncoding)
       )
     }
 
   @Help.Summary("List all objects in bulk storage with updates between given timestamps")
-  def getBulkUpdateHistory(
+  def listBulkUpdateHistoryObjects(
       startTimestamp: CantonTimestamp,
       endTimestamp: CantonTimestamp,
       nextPageToken: Option[String],
       limit: Int,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ): definitions.ListBulkUpdateHistoryObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkUpdateHistory(
+        HttpScanAppClient.ListBulkUpdateHistoryObjects(
           startTimestamp,
           endTimestamp,
           nextPageToken,
           limit,
+          damlValueEncoding,
         )
       )
     }

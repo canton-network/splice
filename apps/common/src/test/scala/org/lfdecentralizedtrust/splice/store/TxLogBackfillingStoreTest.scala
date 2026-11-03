@@ -7,6 +7,7 @@ import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, 
 import com.digitalasset.canton.HasActorSystem
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -19,6 +20,7 @@ import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection.IM
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.DestinationHistory
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement.NeedsBackfilling
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.AcsRowData.HasIndexColumns
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
@@ -554,18 +556,22 @@ class TxLogBackfillingStoreTest
       migrationId: Long,
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.BackfillingNotRequired,
   ): UpdateHistory = {
-    new UpdateHistory(
-      storage,
-      migrationId,
-      "TxLogBackfillingStoreTest",
-      participantId,
-      party,
-      backfillingRequired,
-      loggerFactory,
-      enableissue12777Workaround = true,
-      enableImportUpdateBackfill = true,
-      HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
-    )
+    UpdateHistory
+      .create(
+        storage,
+        migrationId,
+        "TxLogBackfillingStoreTest",
+        StoreMemberId(participantId),
+        party,
+        backfillingRequired,
+        internedStringStore(storage),
+        analyzableTimeWindowDuration =
+          NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+        loggerFactory,
+        enableImportUpdateBackfill = true,
+        HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+      )
+      .futureValue
   }
 
   def mkStoreWithAcsRowDataF[R <: AcsRowData](
@@ -582,21 +588,23 @@ class TxLogBackfillingStoreTest
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)
 
-    new DbMultiDomainAcsStore(
-      storage,
-      acsTableName,
-      txLogTableName,
-      None,
-      storeDescriptor(acsId, participantId),
-      txLogId.map(storeDescriptor(_, participantId)),
-      loggerFactory,
-      filter,
-      testTxLogConfig,
-      migrationId,
-      RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      IngestionConfig(),
-      defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-    )
+    DbMultiDomainAcsStore
+      .create(
+        storage,
+        acsTableName,
+        txLogTableName,
+        None,
+        storeDescriptor(acsId, participantId),
+        txLogId.map(storeDescriptor(_, participantId)),
+        loggerFactory,
+        filter,
+        testTxLogConfig,
+        migrationId,
+        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
+        IngestionConfig(),
+        defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+      )
+      .futureValue
   }
 
   override protected def cleanDb(

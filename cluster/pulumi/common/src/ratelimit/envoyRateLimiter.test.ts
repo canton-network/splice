@@ -11,7 +11,10 @@ import {
   buildRateLimitActions,
   buildRateLimitFilters,
   buildTypedPerFilterConfig,
+  buildXffNumTrustedHopsPatch,
+  directIngressXffNumTrustedHops,
   extractPathPrefixes,
+  gkeL7GatewayNumTrustedProxies,
   globalPerIpRateLimitFilterName,
   globalPerIpRateLimitStatPrefix,
   globalRateLimitFilterName,
@@ -301,9 +304,11 @@ test('the per-endpoint filters are omitted when nothing is configured for them',
 
 test('buildHttpFilterPatches keeps the filter order by pinning the insertion point to the router', () => {
   const filters = buildRateLimitFilters(globalLimits, globalPerIpLimits, singleEndpointRateLimits);
-  const patches = buildHttpFilterPatches(filters) as {
+  const patches = buildHttpFilterPatches(filters, 5008) as {
     applyTo: string;
-    match: { listener: { filterChain: { filter: { subFilter?: { name: string } } } } };
+    match: {
+      listener: { portNumber: number; filterChain: { filter: { subFilter?: { name: string } } } };
+    };
     patch: { operation: string; value: { name: string; typed_config: { value: unknown } } };
   }[];
 
@@ -317,11 +322,43 @@ test('buildHttpFilterPatches keeps the filter order by pinning the insertion poi
     expect(patch.match.listener.filterChain.filter.subFilter).toEqual({
       name: 'envoy.filters.http.router',
     });
+    // only the port carrying the externally reachable API is rate limited; the workload's other
+    // inbound listeners (e.g. the sequencer's admin and peer-to-peer ports, which istio also
+    // treats as HTTP) must keep their filter chain untouched
+    expect(patch.match.listener.portNumber).toEqual(5008);
   });
   expect(patches.map(patch => patch.patch.value.name)).toEqual(filters.map(filter => filter.name));
   // the filters are configured per route, the chain only declares them with their stat prefix
   expect(patches[0].patch.value.typed_config.value).toEqual({
     stat_prefix: perEndpointPerIpRateLimitStatPrefix,
+  });
+});
+
+test('buildXffNumTrustedHopsPatch keys the per-IP buckets on the client behind extra proxies', () => {
+  const patch = buildXffNumTrustedHopsPatch(5008, gkeL7GatewayNumTrustedProxies) as {
+    applyTo: string;
+    match: {
+      context: string;
+      listener: { portNumber: number; filterChain: { filter: { name: string } } };
+    };
+    patch: { operation: string; value: { typed_config: Record<string, unknown> } };
+  };
+
+  expect(patch.applyTo).toEqual('NETWORK_FILTER');
+  expect(patch.match.context).toEqual('SIDECAR_INBOUND');
+  // like the http filter patches, only the externally reachable port is patched
+  expect(patch.match.listener.portNumber).toEqual(5008);
+  expect(patch.match.listener.filterChain.filter.name).toEqual(
+    'envoy.filters.network.http_connection_manager'
+  );
+  // merged into the connection manager istio generates, which must keep all its other settings
+  expect(patch.patch.operation).toEqual('MERGE');
+  // istiod merges the typed config into the one it generated and panics on a descriptor mismatch,
+  // dropping every listener patch, so this must be the concrete type and not a TypedStruct
+  expect(patch.patch.value.typed_config).toEqual({
+    '@type':
+      'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
+    xff_num_trusted_hops: gkeL7GatewayNumTrustedProxies,
   });
 });
 
@@ -679,4 +716,26 @@ test('validateTokenBuckets rejects intervals that envoy would NACK', () => {
       },
     })
   ).toThrow("perIpLimits override 'single-validator'");
+});
+
+test('gRPC rejections are reported as RESOURCE_EXHAUSTED, HTTP ones as 429', () => {
+  const filters = buildRateLimitFilters(globalLimits, globalPerIpLimits, singleEndpointRateLimits);
+
+  // envoy answers a rate limited gRPC call with HTTP 200 and a gRPC status, so the rejection is
+  // only recognizable (by the client and in the access logs) via that status
+  const grpcConfig = buildTypedPerFilterConfig(filters, 'grpc');
+  filters.forEach(filter => {
+    expect(
+      (grpcConfig[filter.name] as Record<string, unknown>).rate_limited_as_resource_exhausted
+    ).toEqual(true);
+  });
+
+  // HTTP requests are rejected with 429, the default UNAVAILABLE/RESOURCE_EXHAUSTED distinction
+  // does not apply
+  const httpConfig = buildTypedPerFilterConfig(filters);
+  filters.forEach(filter => {
+    expect(
+      (httpConfig[filter.name] as Record<string, unknown>).rate_limited_as_resource_exhausted
+    ).toEqual(false);
+  });
 });

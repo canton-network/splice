@@ -5,21 +5,27 @@ package com.digitalasset.canton.topology
 
 import cats.kernel.Order
 import cats.syntax.either.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.ProtoDeserializationError.{FieldNotSet, ValueConversionError}
 import com.digitalasset.canton.config.CantonRequireTypes.{String255, String3, String300}
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
+import com.digitalasset.canton.config.RequireTypes.{InvariantViolation, NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.crypto.Fingerprint
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.data.SynchronizerSuccessor
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.resource.ToDbPrimitive
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.store.db.DbDeserializationException
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
+import com.digitalasset.canton.topology.PhysicalSynchronizerId.primaryDelimiter
 import com.digitalasset.canton.topology.admin.v30 as adminProtoV30
 import com.digitalasset.canton.topology.admin.v30.Synchronizer.Kind
 import com.digitalasset.canton.version.{HashingSchemeVersion, ProtocolVersion}
 import com.digitalasset.canton.{LedgerParticipantId, LfPartyId, ProtoDeserializationError}
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 import io.circe.Encoder
 import slick.jdbc.{GetResult, PositionedParameters, SetParameter}
@@ -31,13 +37,17 @@ sealed trait Identity
     extends HasUniqueIdentifier
     with Product
     with Serializable
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
   def toProtoPrimitive: String = uid.toProtoPrimitive
 
   /** returns the string representation used in console filters (maps to the uid) */
   def filterString: String = uid.toProtoPrimitive
 
-  override protected def pretty: Pretty[this.type] = prettyOfParam(_.uid)
+  override def prettyCompanion: PrettyPrintingCompanion[this.type] = Identity
+}
+
+object Identity extends PrettyPrintingCompanion[Identity] {
+  override protected val pretty: Pretty[Identity] = prettyOfParam(_.uid)
 }
 
 sealed trait NodeIdentity extends Identity {
@@ -87,13 +97,15 @@ sealed trait Member extends Identity with Product with Serializable {
       s"${code.threeLetterId.unwrap}${UniqueIdentifier.delimiter}${uid.toProtoPrimitive}"
     )
 
-  override protected def pretty: Pretty[Member] =
+  override def prettyCompanion: PrettyPrintingCompanion[Member] = Member
+}
+
+object Member extends PrettyPrintingCompanion[Member] {
+
+  override protected val pretty: Pretty[Member] =
     prettyOfString(inst =>
       inst.code.threeLetterId.unwrap + UniqueIdentifier.delimiter + inst.uid.show
     )
-}
-
-object Member {
 
   def fromProtoPrimitive_(member: String): Either[String, Member] = {
     // The first three letters of the string identify the type of member
@@ -151,7 +163,7 @@ object Member {
 
 sealed trait Synchronizer
     extends HasUniqueIdentifier
-    with PrettyPrinting
+    with PrettyPrintingFromCompanion
     with Product
     with Serializable {
 
@@ -182,11 +194,15 @@ object Synchronizer {
     proto.kind match {
       case Kind.Empty => FieldNotSet("kind").asLeft
       case Kind.Id(lsidP) => SynchronizerId.fromProtoPrimitive(lsidP, "id")
-      case Kind.PhysicalId(psidP) => PhysicalSynchronizerId.fromProtoPrimitive(psidP, "physical_id")
+      case Kind.PhysicalId(psidP) =>
+        OpaquePhysicalSynchronizerId
+          .fromProtoPrimitive(psidP, "physical_id")
+          .flatMap(_.parseAsPhysical.leftMap(err => ValueConversionError("physical_id", err)))
     }
 
   /** Parses a string protobuf field to either a logical or physical synchronizer ID. Fails if the
     * string can't be parsed to either.
+    *
     * @param value
     *   value to parse
     * @param fieldName
@@ -199,9 +215,20 @@ object Synchronizer {
     SynchronizerId
       .fromProtoPrimitive(value, fieldName)
       .orElse(
-        PhysicalSynchronizerId
+        OpaquePhysicalSynchronizerId
           .fromProtoPrimitive(value, fieldName)
+          .flatMap(_.parseAsPhysical.leftMap(err => ValueConversionError(fieldName, err)))
       )
+
+  implicit val getResultSynchronizer: GetResult[Synchronizer] = GetResult { r =>
+    val str = r.nextString()
+    fromLogicalOrPhysicalString(str, "synchronizer_id").valueOr(err =>
+      throw new DbDeserializationException(err.message)
+    )
+  }
+
+  implicit val setParameterSynchronizer: SetParameter[Synchronizer] = (v: Synchronizer, pp) =>
+    pp >> v.toProtoPrimitive
 }
 
 final case class SynchronizerId(uid: UniqueIdentifier) extends Synchronizer with Identity {
@@ -246,6 +273,113 @@ object SynchronizerId {
     UniqueIdentifier.fromProtoPrimitive_(str).map(SynchronizerId(_)).leftMap(_.message)
 }
 
+/** An opaque representation of [[PhysicalSynchronizerId]] that does not parse or validate its
+  * [[com.digitalasset.canton.version.ProtocolVersion]]. Intended use: for LSUs, nodes that didn't
+  * yet upgrade to the latest minor may not be aware of a new PV. They should be able to parse and
+  * process the `LsuAnnouncement`, `LsuSequencerConnectionSuccessor` topology mappings. From the
+  * successor connection configuration creation on, a [[PhysicalSynchronizerId]] should be used as
+  * the node is expected to know how to connect the successor with its PV.
+  */
+final case class OpaquePhysicalSynchronizerId(
+    logical: SynchronizerId,
+    serial: NonNegativeInt,
+    protocolVersionNumber: Int,
+) extends PrettyPrintingFromCompanion {
+  val protocolVersionString: String = protocolVersionNumber match {
+    case Int.MaxValue => "dev"
+    case _ => protocolVersionNumber.toString
+  }
+  def suffix: String = s"$protocolVersionString${PhysicalSynchronizerId.secondaryDelimiter}$serial"
+  def uid: UniqueIdentifier = logical.uid
+
+  def toLengthLimitedString: String300 =
+    String300.tryCreate(
+      s"${logical.toLengthLimitedString}${PhysicalSynchronizerId.primaryDelimiter}$suffix"
+    )
+
+  def toProtoPrimitive: String = toLengthLimitedString.unwrap
+
+  def parseAsPhysical: Either[String, PhysicalSynchronizerId] =
+    ProtocolVersion
+      .create(protocolVersionString, allowDeleted = true)
+      .map(protocolVersion => PhysicalSynchronizerId(logical, serial, protocolVersion))
+
+  def tryAsPhysical: PhysicalSynchronizerId =
+    ProtocolVersion
+      .fromProtoPrimitive(protocolVersionNumber, allowDeleted = true)
+      .fold(
+        err =>
+          throw new IllegalArgumentException(s"Cannot convert to physical synchronizer id: $err"),
+        protocolVersion => PhysicalSynchronizerId(logical, serial, protocolVersion),
+      )
+
+  override def prettyCompanion: PrettyPrintingCompanion[OpaquePhysicalSynchronizerId] =
+    OpaquePhysicalSynchronizerId
+}
+
+object OpaquePhysicalSynchronizerId extends PrettyPrintingCompanion[OpaquePhysicalSynchronizerId] {
+
+  def apply(
+      logical: SynchronizerId,
+      serial: NonNegativeInt,
+      protocolVersionNumber: Int,
+  ): OpaquePhysicalSynchronizerId =
+    new OpaquePhysicalSynchronizerId(logical, serial, protocolVersionNumber)
+
+  implicit val aPhysicalSynchronizerIdOrdering: Ordering[OpaquePhysicalSynchronizerId] =
+    Ordering.by(psid =>
+      (psid.logical.toLengthLimitedString.unwrap, psid.serial, psid.protocolVersionNumber)
+    )
+
+  def fromString(raw: String): Either[String, OpaquePhysicalSynchronizerId] = {
+    val elements = raw.split(primaryDelimiter)
+    val elementsCount = elements.sizeIs
+
+    if (elementsCount == 3) {
+      for {
+        lsid <- SynchronizerId.fromString(elements.take(2).mkString(primaryDelimiter))
+        suffix = elements(2)
+        suffixComponents = suffix.split("-")
+        _ <- Either.cond(
+          suffixComponents.sizeIs == 2,
+          (),
+          s"Cannot parse $suffix as a physical synchronizer id suffix",
+        )
+        pv <- suffixComponents(0) match {
+          case "dev" => Right(Int.MaxValue)
+          case _ =>
+            suffixComponents(0).toIntOption.toRight(
+              s"Cannot parse ${suffixComponents(0)} to an int"
+            )
+        }
+        serialInt <- suffixComponents(1).toIntOption.toRight(
+          s"Cannot parse ${suffixComponents(1)} to an int"
+        )
+        serial <- NonNegativeInt.create(serialInt).leftMap(_.message)
+      } yield OpaquePhysicalSynchronizerId(lsid, serial, pv)
+    } else
+      Left(s"Unable to parse `$raw` as physical synchronizer id")
+  }
+
+  def fromProtoPrimitive(
+      proto: String,
+      field: String,
+  ): ParsingResult[OpaquePhysicalSynchronizerId] =
+    fromString(proto).leftMap(ValueConversionError(field, _))
+
+  def tryFromString(raw: String): OpaquePhysicalSynchronizerId =
+    fromString(raw).valueOr(err => throw new IllegalArgumentException(err))
+
+  override protected val pretty: Pretty[OpaquePhysicalSynchronizerId] =
+    prettyOfString(id =>
+      id.logical.show ++ PhysicalSynchronizerId.primaryDelimiter ++ id.protocolVersionString.show ++
+        PhysicalSynchronizerId.secondaryDelimiter ++ id.serial.show
+    )
+
+  def unparseablePSIdMessage(successor: SynchronizerSuccessor, err: String): String =
+    s"Successor synchronizer ${successor.psid} is not supported by this node's binary. Please upgrade Canton before ${successor.upgradeTime} to ensure continuous operation: $err"
+}
+
 final case class PhysicalSynchronizerId(
     logical: SynchronizerId,
     serial: NonNegativeInt,
@@ -254,33 +388,34 @@ final case class PhysicalSynchronizerId(
   def suffix: String = s"$protocolVersion${PhysicalSynchronizerId.secondaryDelimiter}$serial"
   def uid: UniqueIdentifier = logical.uid
 
-  def toLengthLimitedString: String300 =
-    String300.tryCreate(
-      s"${logical.toLengthLimitedString}${PhysicalSynchronizerId.primaryDelimiter}$suffix"
-    )
+  def toLengthLimitedString: String300 = opaque.toLengthLimitedString
 
   /** Synchronizer identifier to use for the computation of the external signing hash
     */
-  def forExternalTransactionHashing: Synchronizer =
-    if (protocolVersion <= ProtocolVersion.v34) logical
-    // TODO(i30737): From PV35, we use the physical synchronizer ID to maintain deduplication guarantees during LSU.
-    // This will likely be revised when the mediator transaction data is migrated during LSUs
-    else this
+  // TODO(i30737): Change again to logical once mediator state is transferred
+  def forExternalTransactionHashing: Synchronizer = this
 
   override def toProtoPrimitive: String = toLengthLimitedString.unwrap
 
-  override protected def pretty: Pretty[PhysicalSynchronizerId] =
-    prettyOfString(_ =>
-      logical.show ++ PhysicalSynchronizerId.primaryDelimiter ++ protocolVersion.show ++
-        PhysicalSynchronizerId.secondaryDelimiter ++ serial.show
-    )
+  override def prettyCompanion: PrettyPrintingCompanion[PhysicalSynchronizerId] =
+    PhysicalSynchronizerId
 
-  def incrementSerial: PhysicalSynchronizerId = this.copy(serial = serial.increment.toNonNegative)
+  def incrementSerial: Either[InvariantViolation, PhysicalSynchronizerId] =
+    serial.increment.map(next => this.copy(serial = next.toNonNegative))
+
+  val opaque: OpaquePhysicalSynchronizerId =
+    OpaquePhysicalSynchronizerId(logical, serial, protocolVersion.v)
 }
 
-object PhysicalSynchronizerId {
-  private val primaryDelimiter: String = "::" // Between lsid and suffix
-  private val secondaryDelimiter: String = "-" // Between components of the suffix
+object PhysicalSynchronizerId extends PrettyPrintingCompanion[PhysicalSynchronizerId] {
+  private[topology] val primaryDelimiter: String = "::" // Between lsid and suffix
+  private[topology] val secondaryDelimiter: String = "-" // Between components of the suffix
+
+  override protected val pretty: Pretty[PhysicalSynchronizerId] =
+    prettyOfString(id =>
+      id.logical.show ++ PhysicalSynchronizerId.primaryDelimiter ++ id.protocolVersion.show ++
+        PhysicalSynchronizerId.secondaryDelimiter ++ id.serial.show
+    )
 
   def apply(
       synchronizerId: SynchronizerId,
@@ -297,43 +432,28 @@ object PhysicalSynchronizerId {
       (psid.logical.toLengthLimitedString.unwrap, psid.serial, psid.protocolVersion)
     )
 
-  def fromString(raw: String): Either[String, PhysicalSynchronizerId] = {
-    val elements = raw.split(primaryDelimiter)
-    val elementsCount = elements.sizeIs
-
-    if (elementsCount == 3) {
-      for {
-        lsid <- SynchronizerId.fromString(elements.take(2).mkString(primaryDelimiter))
-        suffix = elements(2)
-        suffixComponents = suffix.split("-")
-        _ <- Either.cond(
-          suffixComponents.sizeIs == 2,
-          (),
-          s"Cannot parse $suffix as a physical synchronizer id suffix",
-        )
-        pv <- ProtocolVersion.create(suffixComponents(0))
-        serialInt <- suffixComponents(1).toIntOption.toRight(
-          s"Cannot parse ${suffixComponents(1)} to an int"
-        )
-        serial <- NonNegativeInt.create(serialInt).leftMap(_.message)
-      } yield PhysicalSynchronizerId(lsid, serial, pv)
-    } else
-      Left(s"Unable to parse `$raw` as physical synchronizer id")
-  }
-
   def fromProtoPrimitive(proto: String, field: String): ParsingResult[PhysicalSynchronizerId] =
-    fromString(proto).leftMap(ValueConversionError(field, _))
+    OpaquePhysicalSynchronizerId
+      .fromString(proto)
+      .flatMap(_.parseAsPhysical)
+      .leftMap(ValueConversionError(field, _))
+
+  def fromString(raw: String): Either[String, PhysicalSynchronizerId] =
+    OpaquePhysicalSynchronizerId.fromString(raw).flatMap(_.parseAsPhysical)
 
   def tryFromString(raw: String): PhysicalSynchronizerId =
-    fromString(raw).valueOr(err => throw new IllegalArgumentException(err))
+    OpaquePhysicalSynchronizerId
+      .fromString(raw)
+      .flatMap(_.parseAsPhysical)
+      .valueOr(err => throw new IllegalArgumentException(err))
 
   implicit val getResultSynchronizerId: GetResult[PhysicalSynchronizerId] = GetResult { r =>
-    tryFromString(r.nextString())
+    OpaquePhysicalSynchronizerId.tryFromString(r.nextString()).tryAsPhysical
   }
 
   implicit val getResultSynchronizerIdO: GetResult[Option[PhysicalSynchronizerId]] =
     GetResult { r =>
-      r.nextStringOption().map(tryFromString)
+      r.nextStringOption().map(OpaquePhysicalSynchronizerId.tryFromString(_).tryAsPhysical)
     }
 
   implicit val setParameterSynchronizerId: SetParameter[PhysicalSynchronizerId] =
@@ -363,9 +483,6 @@ object ParticipantId {
   def apply(identifier: String, namespace: Namespace): ParticipantId =
     ParticipantId(UniqueIdentifier.tryCreate(identifier, namespace))
 
-  def apply(uid: UniqueIdentifier): ParticipantId =
-    new ParticipantId(uid)
-
   /** create a participant from a string
     *
     * used in testing
@@ -390,12 +507,19 @@ object ParticipantId {
       case y =>
         Left(
           ProtoDeserializationError
-            .ValueDeserializationError(fieldName, s"Value $y is not of type `ParticipantId`")
+            .ValueDeserializationError(s"Value $y is not of type `ParticipantId`", fieldName)
         )
     }
 
   def tryFromProtoPrimitive(str: String): ParticipantId =
     fromProtoPrimitive(str, "").valueOr(err => throw new IllegalArgumentException(err.message))
+
+  /** Parse a participant from a bare unique identifier (no `PAR::` member prefix). */
+  def fromProtoPrimitiveUid(
+      uid: String,
+      fieldName: String,
+  ): ParsingResult[ParticipantId] =
+    UniqueIdentifier.fromProtoPrimitive(uid, fieldName).map(ParticipantId(_))
 
   // Instances for slick (db) queries
   implicit val getResultParticipantId: GetResult[ParticipantId] =
@@ -502,7 +626,7 @@ object PartyId {
   */
 final case class MediatorGroup(
     index: MediatorGroupIndex,
-    active: Seq[MediatorId],
+    active: NonEmpty[Seq[MediatorId]],
     passive: Seq[MediatorId],
     threshold: PositiveInt,
 ) {
@@ -530,6 +654,9 @@ object MediatorId {
   def tryCreate(identifier: String, namespace: Namespace): MediatorId =
     MediatorId(UniqueIdentifier.tryCreate(identifier, namespace))
 
+  def fromProtoPrimitiveUid(mediatorUid: String, fieldName: String): ParsingResult[MediatorId] =
+    UniqueIdentifier.fromProtoPrimitive(mediatorUid, fieldName).map(MediatorId(_))
+
   def fromProtoPrimitive(
       mediatorId: String,
       fieldName: String,
@@ -538,7 +665,7 @@ object MediatorId {
     case _ =>
       Left(
         ProtoDeserializationError
-          .ValueDeserializationError(fieldName, s"Value `$mediatorId` is not of type MediatorId")
+          .ValueDeserializationError(s"Value `$mediatorId` is not of type MediatorId", fieldName)
       )
   }
 
@@ -550,7 +677,7 @@ object MediatorId {
   * tolerate up to `min(threshold - 1, (active.size - 1)/3)` malicious active sequencers.
   */
 final case class SequencerGroup(
-    active: Seq[SequencerId],
+    active: NonEmpty[Seq[SequencerId]],
     passive: Seq[SequencerId],
     threshold: PositiveInt,
 )
@@ -573,6 +700,9 @@ object SequencerId {
   def tryCreate(identifier: String, namespace: Namespace): SequencerId =
     SequencerId(UniqueIdentifier.tryCreate(identifier, namespace))
 
+  def fromProtoPrimitiveUid(sequencerUid: String, fieldName: String): ParsingResult[SequencerId] =
+    UniqueIdentifier.fromProtoPrimitive(sequencerUid, fieldName).map(SequencerId(_))
+
   def fromProtoPrimitive(
       proto: String,
       fieldName: String,
@@ -582,7 +712,7 @@ object SequencerId {
       case y =>
         Left(
           ProtoDeserializationError
-            .ValueDeserializationError(fieldName, s"Value $y is not of type `SequencerId`")
+            .ValueDeserializationError(s"Value $y is not of type `SequencerId`", fieldName)
         )
     }
 }

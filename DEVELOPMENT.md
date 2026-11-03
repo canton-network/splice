@@ -260,10 +260,10 @@ Note that the entire command must be quoted in this case, especially if it has s
 - `scalafixAll`: invoke scalafix across all configurations where scalafix is enabled.
     `scalafix` is a linting and rewrite tool. This may run for a long time as it needs to do a full compile.
 - `format`: apply `scalafmt` to format source files
-- `formatFix`: apply `scalafmt`, `sbt scalafixAll`, and `sbt apps-frontends/npmFix` to format source files
-- `lint`: lint-check. Does not apply any fixes. Checks enforcement of `scalafmt`, `buf`, `scalafix`, `apps-frontends/npmLint`, and `shellcheck` rules
+- `formatFix`: apply `scalafmt`, `scalafixAll`, the npm `fix` scripts (frontends, pulumi, load-tester), and copyright headers
+- `lint`: run the static checks: `scalafmt`, `scalafix`, the npm `lint` scripts, `shellcheck`, copyright headers, `dars.lock`, illegal Daml references, and `syncpack`. Note that the `scalafixAll` step applies fixes instead of only checking
 - `damlBuild`: create `.dar` files for all Daml projects
-- `bundle`: create a release bundle in `apps/app/target/release/<version>`. The release binary is loaded into your PATH automatically via `direnv`. Simply run `amulet` to call it.
+- `bundle`: create a release bundle in `apps/app/target/release/splice-node`. The release binary is loaded into your PATH automatically via `direnv`. Simply run `splice-node` to call it.
 - `checkErrors`: check test log for errors and fail if there is one. Note that if you haven't deleted your local log file in a long time, this may find very old errors.
 - `updateTestConfigForParallelRuns`: Updates the test configuration files that drive how tests are executed in parallel in CI. You need to run this when you add a new unit or integration test, and commit the changes to the test-*.log files that it saves, otherwise the static checks will fail in CI.
 Test:
@@ -351,7 +351,7 @@ If the auto-bumper can't help (e.g. you want a minor/major bump), fall back to t
 1. Bump the version inside the `daml.yaml` file inside the updated module, and in all modules that (recursively) depend on it.
 2. Run `sbt damlBuild; sbt damlDarsLockFileUpdate` to compile the `.dar` files.
 3. Run `sbt updateDarResources` to update DarResources.
-4. Manually update `apps/package.json` to update the versions of the daml packages that were updated in step 1.
+4. Manually update `apps/generated-packages.json` to update the versions of the daml packages that were updated in step 1.
 5. Run `sbt npmInstall ; sbt compile`
 
 ## Daml Version Guards in Integration Tests
@@ -403,6 +403,8 @@ with the other splice maintainers.
 
 To bump the minimum version, go to `apps/dar-resources-generator/.../DarResourcesGenerator.scala`,
 edit the `minimumInitialization` map and run `sbt updateDarResources`.
+If you bump the minimum splitwell version, also bump `minDarVersion` in
+`cluster/pulumi/common-validator/src/splitwellDars.ts` and run `make update-expected`.
 After doing that you can trigger CI. All the
 version checks from from `PackageVersionSupport` will warn for checks
 that are now redundant because the version they are testing against is

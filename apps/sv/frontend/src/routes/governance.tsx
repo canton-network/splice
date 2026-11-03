@@ -10,12 +10,10 @@ import {
 import { ProposalListingSection } from '../components/governance/ProposalListingSection';
 import ProposalSearch from '../components/governance/ProposalSearch';
 import { Loading, useVotesHooks } from '@canton-network/splice-common-frontend';
-import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
-import dayjs from 'dayjs';
 import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { useSvConfig } from '../utils';
-import { PageHeader } from '../components/beta';
+import { PageHeader } from '../components/ui';
 import {
   actionTagToTitle,
   buildVoteHistoryData,
@@ -42,6 +40,7 @@ export const Governance: React.FC = () => {
 
   const votesHooks = useVotesHooks();
   const dsoInfosQuery = votesHooks.useDsoInfos();
+  const svInfoQuery = votesHooks.useSvInfo();
   const listVoteRequestsQuery = votesHooks.useListDsoRulesVoteRequests();
   const voteResultsInfiniteQuery = useInfiniteVoteRequestResults();
   const voteResultsCountQuery = useVoteRequestResultsCount();
@@ -51,7 +50,7 @@ export const Governance: React.FC = () => {
     : [];
   const votesQuery = votesHooks.useListVotes(voteRequestIds);
 
-  const svPartyId = dsoInfosQuery.data?.svPartyId;
+  const svPartyId = svInfoQuery.data?.svPartyId;
   const votingThreshold = dsoInfosQuery.data?.votingThreshold;
   const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
   const alreadyVotedRequestIds: Set<ContractId<VoteRequest>> = useMemo(() => {
@@ -84,8 +83,8 @@ export const Governance: React.FC = () => {
             getGovernanceActionTag(vr.payload.action) as SupportedActionTag
           ],
         description: vr.payload.reason.body,
-        votingCloses: dayjs(vr.payload.voteBefore).format(dateTimeFormatISO),
-        createdAt: dayjs(vr.createdAt).format(dateTimeFormatISO),
+        votingCloses: vr.payload.voteBefore,
+        createdAt: vr.createdAt,
         requester: getRequesterPartyId(vr.payload.requester, svs),
       })) as ActionRequiredData[];
   }, [voteRequests, alreadyVotedRequestIds, amuletName, svs]);
@@ -98,9 +97,7 @@ export const Governance: React.FC = () => {
     return voteRequests
       .filter(v => alreadyVotedRequestIds.has(v.payload.trackingCid || v.contractId))
       .map(v => {
-        const effectiveAt = v.payload.targetEffectiveAt
-          ? dayjs(v.payload.targetEffectiveAt).format(dateTimeFormatISO)
-          : 'Threshold';
+        const effectiveAt = v.payload.targetEffectiveAt ? v.payload.targetEffectiveAt : 'Threshold';
         const votes = v.payload.votes.entriesArray().map(e => e[1]);
 
         return {
@@ -110,7 +107,7 @@ export const Governance: React.FC = () => {
               getGovernanceActionTag(v.payload.action) as SupportedActionTag
             ],
           description: v.payload.reason.body,
-          votingThresholdDeadline: dayjs(v.payload.voteBefore).format(dateTimeFormatISO),
+          votingThresholdDeadline: v.payload.voteBefore,
           voteTakesEffect: effectiveAt,
           yourVote: computeYourVote(votes, svPartyId),
           status: 'In Progress',
@@ -290,23 +287,19 @@ export const Governance: React.FC = () => {
 };
 
 const EmptyStateSection: React.FC = () => (
-  <Stack mt={11} alignItems="center" gap="14px">
+  <Stack sx={{ mt: 11, alignItems: 'center', gap: '14px' }}>
     <InfoOutlined color="secondary" fontSize="large" />
-    <Typography fontSize={20} fontWeight="bold" mt={1}>
-      No data to show
-    </Typography>
-    <Typography fontSize={16}>
+    <Typography sx={{ fontSize: 20, fontWeight: 'bold', mt: 1 }}>No data to show</Typography>
+    <Typography sx={{ fontSize: 16 }}>
       This page will automatically update once there are in-flight proposals
     </Typography>
   </Stack>
 );
 
 const ErrorStateSection: React.FC = () => (
-  <Stack mt={11} alignItems="center" gap="14px">
+  <Stack sx={{ mt: 11, alignItems: 'center', gap: '14px' }}>
     <WarningAmberOutlined color="warning" fontSize="large" />
-    <Typography fontSize={20} fontWeight="bold" mt={1}>
-      Something went wrong
-    </Typography>
-    <Typography fontSize={16}>Please try to reload this page or contact support</Typography>
+    <Typography sx={{ fontSize: 20, fontWeight: 'bold', mt: 1 }}>Something went wrong</Typography>
+    <Typography sx={{ fontSize: 16 }}>Please try to reload this page or contact support</Typography>
   </Stack>
 );

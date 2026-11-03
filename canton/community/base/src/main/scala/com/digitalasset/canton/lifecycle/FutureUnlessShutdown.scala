@@ -29,7 +29,7 @@ object FutureUnlessShutdown {
   /** Close the type abstraction of [[FutureUnlessShutdown]] */
   def apply[A](x: Future[UnlessShutdown[A]]): FutureUnlessShutdown[A] = {
     type K[T[_]] = Id[T[A]]
-    FutureUnlessShutdownImpl.Instance.subst[K](x)
+    FutureUnlessShutdownImpl.FutureUnlessShutdownInstance.subst[K](x)
   }
 
   /** Immediately report [[UnlessShutdown.AbortedDueToShutdown]] */
@@ -115,8 +115,9 @@ object FutureUnlessShutdown {
 
   def never: FutureUnlessShutdown[Nothing] = FutureUnlessShutdown(Future.never)
 
-  /** Transforms a future from [[FutureUnlessShutdownImpl.Ops.failOnShutdownToAbortException]] back
-    * to [[FutureUnlessShutdown]].
+  /** Transforms a future from
+    * [[FutureUnlessShutdownImpl.FutureUnlessShutdownOps.failOnShutdownToAbortException]] back to
+    * [[FutureUnlessShutdown]].
     */
   def recoverFromAbortException[V](f: Future[V])(implicit
       ec: ExecutionContext
@@ -175,7 +176,7 @@ sealed abstract class FutureUnlessShutdownImpl {
 }
 
 object FutureUnlessShutdownImpl {
-  val Instance: FutureUnlessShutdownImpl = new FutureUnlessShutdownImpl {
+  val FutureUnlessShutdownInstance: FutureUnlessShutdownImpl = new FutureUnlessShutdownImpl {
     override type FutureUnlessShutdown[+A] = Future[UnlessShutdown[A]]
 
     override private[lifecycle] def subst[F[_[_]]](
@@ -187,12 +188,13 @@ object FutureUnlessShutdownImpl {
   }
 
   /** Extension methods for [[FutureUnlessShutdown]] */
-  implicit final class Ops[+A](private val self: FutureUnlessShutdown[A]) extends AnyVal {
+  implicit final class FutureUnlessShutdownOps[+A](private val self: FutureUnlessShutdown[A])
+      extends AnyVal {
 
     /** Open the type abstraction */
     def unwrap: Future[UnlessShutdown[A]] = {
       type K[T[_]] = Id[T[A]]
-      Instance.unsubst[K](self)
+      FutureUnlessShutdownInstance.unsubst[K](self)
     }
 
     /** Analog to [[scala.concurrent.Future]].`transform` */
@@ -227,7 +229,7 @@ object FutureUnlessShutdownImpl {
         f: Try[UnlessShutdown[A]] => FutureUnlessShutdown[B]
     )(implicit ec: ExecutionContext): FutureUnlessShutdown[B] = {
       type K[F[_]] = Try[UnlessShutdown[A]] => F[B]
-      FutureUnlessShutdown(unwrap.transformWith(Instance.unsubst[K](f)))
+      FutureUnlessShutdown(unwrap.transformWith(FutureUnlessShutdownInstance.unsubst[K](f)))
     }
 
     /** Similar to [[transformWith]], but more interchangeable with normal
@@ -285,12 +287,8 @@ object FutureUnlessShutdownImpl {
     ): Future[A] =
       CantonGrpcUtil.shutdownAsGrpcError(self)
 
-    /** consider using [[failOnShutdownToAbortException]] unless you need a specific exception. */
     def failOnShutdownTo(t: => Throwable)(implicit ec: ExecutionContext): Future[A] =
-      unwrap.flatMap {
-        case UnlessShutdown.Outcome(result) => Future.successful(result)
-        case UnlessShutdown.AbortedDueToShutdown => Future.failed(t)
-      }
+      onShutdown(throw t)
 
     def isCompleted: Boolean =
       unwrap.isCompleted
@@ -385,14 +383,14 @@ object FutureUnlessShutdownImpl {
   implicit def catsStdInstFutureUnlessShutdown(implicit
       ec: ExecutionContext
   ): MonadThrow[FutureUnlessShutdown] =
-    Instance.subst[MonadThrow](monadFutureUnlessShutdownOpened)
+    FutureUnlessShutdownInstance.subst[MonadThrow](monadFutureUnlessShutdownOpened)
 
   implicit def monoidFutureUnlessShutdown[A](implicit
       M: Monoid[A],
       ec: ExecutionContext,
   ): Monoid[FutureUnlessShutdown[A]] = {
     type K[T[_]] = Monoid[T[A]]
-    Instance.subst[K](Monoid[Future[UnlessShutdown[A]]])
+    FutureUnlessShutdownInstance.subst[K](Monoid[Future[UnlessShutdown[A]]])
   }
 
   private def parallelApplicativeFutureUnlessShutdownOpened(implicit
@@ -412,7 +410,7 @@ object FutureUnlessShutdownImpl {
   def parallelApplicativeFutureUnlessShutdown(implicit
       ec: ExecutionContext
   ): Applicative[FutureUnlessShutdown] =
-    Instance.subst[Applicative](parallelApplicativeFutureUnlessShutdownOpened)
+    FutureUnlessShutdownInstance.subst[Applicative](parallelApplicativeFutureUnlessShutdownOpened)
 
   private def parallelInstanceFutureUnlessShutdownOpened(implicit
       ec: ExecutionContext
@@ -433,7 +431,7 @@ object FutureUnlessShutdownImpl {
   implicit def parallelInstanceFutureUnlessShutdown(implicit
       ec: ExecutionContext
   ): Parallel[FutureUnlessShutdown] =
-    Instance.subst[Parallel](parallelInstanceFutureUnlessShutdownOpened)
+    FutureUnlessShutdownInstance.subst[Parallel](parallelInstanceFutureUnlessShutdownOpened)
 
   class FutureUnlessShutdownThereafter(implicit ec: ExecutionContext)
       extends ThereafterAsync[FutureUnlessShutdown] {
@@ -492,6 +490,14 @@ object FutureUnlessShutdownImpl {
   implicit class EitherTOnShutdownSyntax[A, B](
       private val eitherT: EitherT[FutureUnlessShutdown, A, B]
   ) extends AnyVal {
+
+    /** Converts [[com.digitalasset.canton.lifecycle.UnlessShutdown.AbortedDueToShutdown]]s into an
+      * internal exception so that shutdowns can tunnel through APIs that expect a plain
+      * [[scala.concurrent.Future]] Must be used together with
+      * [[com.digitalasset.canton.lifecycle.FutureUnlessShutdown.recoverFromAbortException]] to turn
+      * the internal exception back into
+      * [[com.digitalasset.canton.lifecycle.UnlessShutdown.AbortedDueToShutdown]].
+      */
     def failOnShutdownToAbortException[C >: A, D >: B](action: String)(implicit
         ec: ExecutionContext
     ): EitherT[Future, C, D] =

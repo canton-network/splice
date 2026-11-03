@@ -31,11 +31,21 @@ private[bftordering] object P2PMetrics {
   def emitSendStats(
       metrics: BftOrderingMetrics,
       message: BftOrderingMessageBody,
+      droppedAsUnauthenticated: Boolean = false,
   )(implicit
       mc: MetricsContext
   ): Unit = {
     metrics.p2p.send.sentBytes.mark(message.serializedSize.toLong)
     metrics.p2p.send.sentMessages.mark(1L)
+    metrics.p2p.send.messageSize.update(message.serializedSize.toLong)
+    if (droppedAsUnauthenticated) {
+      metrics.p2p.send.sendsDropped.inc()(
+        mc.withExtraLabels(
+          metrics.p2p.send.failure.labels.reason.Key ->
+            metrics.p2p.send.failure.labels.reason.values.Unauthenticated
+        )
+      )
+    }
   }
 
   def sendMetricsContext(
@@ -76,6 +86,7 @@ private[bftordering] object P2PMetrics {
   ): Unit = {
     metrics.p2p.receive.receivedBytes.mark(size)
     metrics.p2p.receive.receivedMessages.mark(1L)
+    metrics.p2p.receive.messageSize.update(size)
   }
 
   def receiveMetricsContext(

@@ -1,0 +1,52 @@
+# The WAF signatures we evaluate, grouped into as few rules as the Cloud Armor
+# expression length limits allow, since every rule consumes a priority slot and is
+# evaluated separately.
+- name: waf-sqli-sessionfixation-generic
+  description: 'WAF: SQL injection, session fixation and generic attacks'
+  signatures:
+    - name: sqli-v422-stable
+      sensitivity: 1
+      optOutRuleIds:
+        ['942100', '942190', '942240', '942270', '942290', '942320', '942350', '942500', '942560']
+    - name: sessionfixation-v422-stable
+      sensitivity: 1
+    - name: generic-v422-stable
+      optOutRuleIds: ['934150', '934170']
+- name: waf-xss-lfi-rce
+  description: 'WAF: XSS, local file inclusion and remote code execution'
+  signatures:
+    - name: xss-v422-stable
+      sensitivity: 1
+      optOutRuleIds:
+        - '941100'
+        - '941190'
+        - '941200'
+        - '941210'
+        - '941220'
+        - '941230'
+        - '941240'
+        - '941250'
+        - '941260'
+        - '941270'
+        - '941280'
+        - '941290'
+        - '941300'
+    - name: lfi-v422-stable
+      sensitivity: 1
+      optOutRuleIds: ['930110']
+    - name: rce-v422-stable
+      sensitivity: 1
+      optOutRuleIds: ['932120', '932125', '932140', '932370', '932380']
+- name: waf-protocolattack-java-cve-nodejs
+  description: 'WAF: protocol attacks, Java attacks, CVE canary and Node.js injection'
+  signatures:
+    - name: protocolattack-v422-stable
+      sensitivity: 1
+      optOutRuleIds: ['921110', '921150']
+    - name: java-v422-stable
+      sensitivity: 1
+    # cve-canary and nodejs have no v422 rule set, so they stay on the v33 generation
+    - name: cve-canary
+      sensitivity: 1
+    - name: nodejs-v33-stable
+      sensitivity: 1

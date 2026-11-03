@@ -16,7 +16,10 @@ import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
+import com.digitalasset.canton.synchronizer.sequencer.{
+  SequencerMemberStatus,
+  SequencerPruningStatus,
+}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.topology.Member
@@ -98,7 +101,6 @@ class SequencerPruningTrigger(
       // just wallclock so doesn't work properly with backup/restore and similar stuff.
       // Therefore we just use the last ingested update as an approximation of the latest time.
       // TODO(DACH-NY/cn-test-failures#8065) Remove once Canton transfers safe pruning timestamps on LSU.
-      status <- sequencerAdminConnection.getSequencerPruningStatus()
       highestRecordTimeO <- scanConnection
         .getMigrationInfo(migrationId)
         .map(_.flatMap(_.recordTimeRange.get(synchronizerId.logical).map(_.max)))
@@ -111,7 +113,6 @@ class SequencerPruningTrigger(
             dsoRulesActiveSequencerConfig = rulesAndState.lookupActiveSequencerIdConfigFor(
               rulesAndState.dsoRules.domain,
               clock.now.toInstant,
-              migrationId,
             )
             _ <- dsoRulesActiveSequencerConfig.fold {
               logger.debug(
@@ -179,7 +180,9 @@ class SequencerPruningTrigger(
             err => {
               val lastAcknowledged =
                 statusAfterDisabling.members
-                  .map(m => m.member.toProtoPrimitive -> m.safePruningTimestamp)
+                  .collect { case m: SequencerMemberStatus.Active =>
+                    m.member.toProtoPrimitive -> m.safePruningTimestamp
+                  }
               val message = s"failed to prune with sequencer pruning status: $lastAcknowledged"
               if (context.retryProvider.isClosing)
                 logger.info(message)
@@ -206,7 +209,9 @@ class SequencerPruningTrigger(
       timestamp: CantonTimestamp,
   ): Seq[SequencerPruningTrigger.LaggingMember] = {
     val memberToSafePruningTimestamp: Map[Member, CantonTimestamp] =
-      status.members.view.map(m => m.member -> m.safePruningTimestamp).toMap
+      status.members.view.collect { case m: SequencerMemberStatus.Active =>
+        m.member -> m.safePruningTimestamp
+      }.toMap
     status
       .clientsPreventingPruning(timestamp)
       .members
