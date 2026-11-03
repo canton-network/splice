@@ -156,3 +156,4 @@ rautenrieth-da/fix-10732-wallet-metrics-outcome-label (b43adb1676). Command: clo
 Lessons: started lessons/2026-W45.md on user request (weekly rotation, max 10 min read); lessons from items 2 (Z) and 3 (AC).
 Lessons rewritten generic on user request (no issues, PRs or test names, no blame). Sources: W45 lesson 1 from
 item 2 (family Z, 11128), lesson 2 from item 3 (family AC, 10732).
+User on lessons: W45 lesson 1 is the target style; lesson 2 of lower value, keep for now, prune at the end of the week if over the cap.
