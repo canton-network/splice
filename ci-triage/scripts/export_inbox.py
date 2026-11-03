@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Export the Status = Inbox issues of the cn-test-failures board, with bodies and comments, one JSON object per line.
+"""Export the open Status = Inbox issues of the cn-test-failures board, with bodies and comments, one JSON object
+per line.
 
 Runs on the host (needs a gh token with the project scope, SSO-authorized for the organization). Usage, from the
 repo root:
   direnv exec . ci-triage/scripts/export_inbox.py
+Closed issues are skipped, whatever their Status.
 Writes ci-triage/export/inbox.jsonl unless --out is given.
 """
 import argparse
@@ -13,25 +15,16 @@ import subprocess
 from collections.abc import Iterator
 from typing import Any
 
-QUERY = """
+# Pass 1 pages through the whole board (thousands of closed items), so it fetches only what selects an item.
+ITEMS_QUERY = """
 query($org: String!, $number: Int!, $endCursor: String) {
   organization(login: $org) {
     projectV2(number: $number) {
-      items(first: 50, after: $endCursor) {
+      items(first: 100, after: $endCursor) {
         pageInfo { hasNextPage endCursor }
         nodes {
           status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
-          content {
-            ... on Issue {
-              number title url state createdAt
-              repository { nameWithOwner }
-              author { login }
-              assignees(first: 10) { nodes { login } }
-              labels(first: 20) { nodes { name } }
-              body
-              comments(first: 100) { totalCount nodes { author { login } createdAt body } }
-            }
-          }
+          content { ... on Issue { id state repository { nameWithOwner } } }
         }
       }
     }
@@ -39,15 +32,37 @@ query($org: String!, $number: Int!, $endCursor: String) {
 }
 """
 
+# Pass 2 fetches bodies and comments for the selected issues only.
+ISSUES_QUERY = """
+query($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on Issue {
+      number title url state createdAt
+      author { login }
+      assignees(first: 10) { nodes { login } }
+      labels(first: 20) { nodes { name } }
+      body
+      comments(first: 100) { totalCount nodes { author { login } createdAt body } }
+    }
+  }
+}
+"""
+
+ISSUES_BATCH = 20
+
+
+def graphql(query: str, variables: dict[str, Any]) -> Any:
+    req = json.dumps({"query": query, "variables": variables})
+    out = subprocess.run(["gh", "api", "graphql", "--input", "-"], input=req, capture_output=True, text=True,
+                         check=True).stdout
+    return json.loads(out)["data"]
+
 
 def pages(org: str, number: int) -> Iterator[list[Any]]:
     cursor = None
     while True:
-        cmd = ["gh", "api", "graphql", "-f", f"query={QUERY}", "-f", f"org={org}", "-F", f"number={number}"]
-        if cursor:
-            cmd += ["-f", f"endCursor={cursor}"]
-        data = json.loads(subprocess.run(cmd, capture_output=True, text=True, check=True).stdout)
-        project = data["data"]["organization"]["projectV2"]
+        data = graphql(ITEMS_QUERY, {"org": org, "number": number, "endCursor": cursor})
+        project = data["organization"]["projectV2"]
         if project is None:
             raise SystemExit(f"project {org}/{number} not readable: check the token's project scope and SSO grant")
         items = project["items"]
@@ -67,7 +82,7 @@ def main() -> None:
     args = ap.parse_args()
     out = pathlib.Path(args.out)
 
-    rows: list[dict[str, Any]] = []
+    ids: list[str] = []
     seen = 0
     for nodes in pages(args.org, args.project):
         for n in nodes:
@@ -77,6 +92,13 @@ def main() -> None:
                 continue
             if (c.get("repository") or {}).get("nameWithOwner") != args.repo:
                 continue
+            if c.get("state") != "OPEN":
+                continue
+            ids.append(c["id"])
+
+    rows: list[dict[str, Any]] = []
+    for i in range(0, len(ids), ISSUES_BATCH):
+        for c in graphql(ISSUES_QUERY, {"ids": ids[i:i + ISSUES_BATCH]})["nodes"]:
             rows.append({
                 "number": c["number"],
                 "title": c["title"],
@@ -96,7 +118,7 @@ def main() -> None:
     with open(out, "w") as f:
         for r in sorted(rows, key=lambda r: r["number"]):
             f.write(json.dumps(r) + "\n")
-    print(f"{len(rows)} {args.status} issues of {seen} board items -> {out}")
+    print(f"{len(rows)} open {args.status} issues of {seen} board items -> {out}")
 
 
 if __name__ == "__main__":

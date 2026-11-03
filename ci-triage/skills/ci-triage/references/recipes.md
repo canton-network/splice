@@ -129,7 +129,7 @@ Needed with either source (`ghx` cannot read Projects v2). Ask the user to run, 
 ```
 direnv exec . ci-triage/scripts/export_inbox.py
 ```
-Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl` (Status = Inbox items of project 48,
+Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl` (open Status = Inbox issues of project 48,
 with bodies and comments; `commentCount` shows when more than the 100 exported comments exist).
 
 Reading the exports in the sandbox (one issue, or a text search for the duplicate check):
