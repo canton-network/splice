@@ -27,7 +27,8 @@ export const FlywayMigrationToWaitForSchema = z
 
 export type FlywayMigrationToWaitFor = z.infer<typeof FlywayMigrationToWaitForSchema>;
 
-// V074__string_interning.sql creates interned_strings; earlier migrations don't have it
+// V074__string_interning.sql creates interned_strings; earlier
+// migrations don't have it
 const internedStringsFlywayVersion = 74;
 
 export function flywayMigrationVersion(migration: string): number {
@@ -38,7 +39,8 @@ export function flywayMigrationVersion(migration: string): number {
   return parseInt(match[1], 10);
 }
 
-// whether the scan DB is guaranteed to have interned_strings once `migration` has been applied
+// whether the scan DB is guaranteed to have interned_strings once
+// `migration` has been applied
 export function migrationIncludesInternedStrings(migration: FlywayMigrationToWaitFor): boolean {
   return flywayMigrationVersion(migration) >= internedStringsFlywayVersion;
 }

@@ -96,7 +96,6 @@ const alwaysReplicatedTables: ReplicatedTables = {
   },
 };
 
-// the string-interning dictionary for the `*_interned` columns of update_history_*
 const internedStringsTable: ReplicatedTables = {
   interned_strings: {
     primaryKey: 'id',
@@ -105,8 +104,9 @@ const internedStringsTable: ReplicatedTables = {
   },
 };
 
-// Tables that exist once `flywayMigrationToWaitFor` has been applied, so the publication,
-// both Datastreams and the scheduled queries always agree on the replicated tables.
+// Tables that exist once `flywayMigrationToWaitFor` has been applied,
+// so the publication, both Datastreams and the scheduled queries always
+// agree on the replicated tables.
 function replicatedTablesFor(flywayMigrationToWaitFor: FlywayMigrationToWaitFor): ReplicatedTables {
   return {
     ...alwaysReplicatedTables,
@@ -251,7 +251,8 @@ function installDatastream(
         },
         destinationConnectionProfile: destination.name,
       },
-      // Tables added to the stream later (e.g. interned_strings) must be backfilled manually.
+      // tables added to the stream later (e.g. interned_strings) must
+      // be backfilled manually
       backfillNone: {},
       labels: {
         cluster: CLUSTER_BASENAME,
