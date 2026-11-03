@@ -218,3 +218,5 @@ Item 5 (11160): artifact re-downloaded (lost in the rebuild). Correction to the 
 12:29:27.680 holds requests enqueued at 27.667/27.672, not the one from 09.478; the decisive lines are the insert
 block retry chain (11.392 to 27.539) and block 6840 at 27.587 delivering the broadcast; empty blocks kept being
 processed in the gap. Fix is production code (validator app), so no automatic branch. Body file comments/11160.md.
+
+Item 5: user flagged the #8192 link: a bare #N in a cn-test-failures comment links to the cn-test-failures issue N, and the commit under test needs no reference. Removed from comments/11160.md; rule added to issue-comment.md. Applies to later items: the old batch comment for 10891 (item 11) cites splice PRs #8017 and #8148 bare.

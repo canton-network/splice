@@ -14,6 +14,10 @@ Shape (Markdown, short paragraphs; a few sentences each):
 6. Not checked: what was not verified and where the missing evidence lives; when it is worth chasing. If the
    evidence is in a system the user can read (GCP logs: recipe 13), hand them the link before writing this.
 
+References: a bare `#N` in a cn-test-failures comment links to cn-test-failures issue N. Write `#N` only for
+cn-test-failures issues; a splice PR or commit is `canton-network/splice#N` or a sha, and only when the reader needs it
+(not to name the commit under test, which the issue already shows).
+
 Leave out what the reader can see on the issue itself (links, the job list) and the triage process (which recipes
 ran, what was grepped). Duplicate-close comments stay one or two sentences: parent, and the one fact that makes it
 the same failure.
