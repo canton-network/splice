@@ -131,7 +131,7 @@ export async function installCantonComponents(
             bftSequencerPostgres: bftSequencerPostgres,
             setCoreDbNames: svConfig.isCoreSv,
           },
-        configuredCantonBftPeerUrls,
+          configuredCantonBftPeerUrls,
           version,
           imagePullServiceAccountName,
           opts
