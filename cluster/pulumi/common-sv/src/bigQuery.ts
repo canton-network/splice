@@ -25,7 +25,10 @@ import {
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
 
-import type { FlywayMigrationToWaitFor } from './bigQueryFlywayMigration';
+import {
+  type FlywayMigrationToWaitFor,
+  migrationIncludesInternedStrings,
+} from './bigQueryFlywayMigration';
 import { ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
@@ -63,7 +66,9 @@ interface ReplicatedTableConfig {
   timeType: 'micros' | 'datastream_metadata';
 }
 
-const replicatedTables: Record<string, ReplicatedTableConfig> = {
+type ReplicatedTables = Record<string, ReplicatedTableConfig>;
+
+const alwaysReplicatedTables: ReplicatedTables = {
   update_history_creates: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
@@ -91,7 +96,23 @@ const replicatedTables: Record<string, ReplicatedTableConfig> = {
   },
 };
 
-const tablesToReplicate = Object.keys(replicatedTables);
+// the string-interning dictionary for the `*_interned` columns of update_history_*
+const internedStringsTable: ReplicatedTables = {
+  interned_strings: {
+    primaryKey: 'id',
+    datePartitionColumn: 'source_timestamp',
+    timeType: 'datastream_metadata',
+  },
+};
+
+// Tables that exist once `flywayMigrationToWaitFor` has been applied, so the publication,
+// both Datastreams and the scheduled queries always agree on the replicated tables.
+function replicatedTablesFor(flywayMigrationToWaitFor: FlywayMigrationToWaitFor): ReplicatedTables {
+  return {
+    ...alwaysReplicatedTables,
+    ...(migrationIncludesInternedStrings(flywayMigrationToWaitFor) ? internedStringsTable : {}),
+  };
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -192,7 +213,8 @@ function installDatastream(
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource,
-  desiredState: 'RUNNING' | 'PAUSED'
+  desiredState: 'RUNNING' | 'PAUSED',
+  tablesToReplicate: string[]
 ): gcp.datastream.Stream {
   const streamName = `${namespace.logicalName}-scan-update-history`;
   const schemaName = scanAppDatabaseName(namespace);
@@ -229,7 +251,12 @@ function installDatastream(
         },
         destinationConnectionProfile: destination.name,
       },
-      backfillAll: {},
+      // TODO (#7553) s11: confirm backfill is really none on all legacy environments now, with
+      //   gcloud datastream streams describe <cluster's legacy stream, e.g. sv-1-scan-update-history> \
+      //     --location=<CLOUDSDK_COMPUTE_REGION> --format="yaml(backfillNone, backfillAll)"
+      // `backfillNone: {}` means none; if `backfillAll` is shown, it is still automatic.
+      // Tables added to the stream later (e.g. interned_strings) must be backfilled manually.
+      backfillNone: {},
       labels: {
         cluster: CLUSTER_BASENAME,
         datastream_id: 'legacy',
@@ -246,7 +273,8 @@ function installDatastream_stag_prod(
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource,
-  desiredState: 'RUNNING' | 'PAUSED'
+  desiredState: 'RUNNING' | 'PAUSED',
+  tablesToReplicate: string[]
 ): gcp.datastream.Stream {
   const streamName = `${CLUSTER_BASENAME}-${namespace.logicalName}-stag-production-datastream`;
   const schemaName = scanAppDatabaseName(namespace);
@@ -411,7 +439,8 @@ function installHourlyScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   prodDataset: gcp.bigquery.Dataset,
-  context: ScheduledQueryContext
+  context: ScheduledQueryContext,
+  replicatedTables: ReplicatedTables
 ) {
   const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
@@ -487,7 +516,8 @@ function installDailyPurgeScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   context: ScheduledQueryContext,
-  retentionPeriodSeconds: number
+  retentionPeriodSeconds: number,
+  replicatedTables: ReplicatedTables
 ) {
   const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
@@ -726,6 +756,7 @@ function createPublicationAndReplicationSlots(
   replicatorUser: gcp.sql.User,
   scan: InstalledHelmChart | undefined,
   flywayMigrationToWaitFor: FlywayMigrationToWaitFor,
+  tablesToReplicate: string[],
   enableLegacy: boolean,
   enableStagProd: boolean
 ): {
@@ -872,6 +903,9 @@ export async function configureScanBigQuery({
     }
   })();
 
+  const replicatedTables = replicatedTablesFor(flywayMigrationToWaitFor);
+  const tablesToReplicate = Object.keys(replicatedTables);
+
   const passwordSecret = installReplicatorPassword(namespace);
   const slots = createPublicationAndReplicationSlots(
     namespace,
@@ -879,6 +913,7 @@ export async function configureScanBigQuery({
     createPostgresReplicatorUser(namespace, databaseInstance, passwordSecret),
     scanChart,
     flywayMigrationToWaitFor,
+    tablesToReplicate,
     enableLegacyDatastream,
     enableStagProdDatastream
   );
@@ -913,7 +948,8 @@ export async function configureScanBigQuery({
       legacyDestinationProfile,
       legacyDataset,
       slots.slot1,
-      legacyDesiredState
+      legacyDesiredState,
+      tablesToReplicate
     );
   }
 
@@ -933,15 +969,23 @@ export async function configureScanBigQuery({
       stagingDestinationProfile,
       stagingDataset,
       slots.slot2,
-      stagProdDesiredState
+      stagProdDesiredState,
+      tablesToReplicate
     );
     const scheduledQueryContext = installBqScheduledQueryContext();
-    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, scheduledQueryContext);
+    installHourlyScheduledQueries(
+      namespace,
+      stagingDataset,
+      prodDataset,
+      scheduledQueryContext,
+      replicatedTables
+    );
     installDailyPurgeScheduledQueries(
       namespace,
       stagingDataset,
       scheduledQueryContext,
-      retentionPeriodSeconds
+      retentionPeriodSeconds,
+      replicatedTables
     );
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,

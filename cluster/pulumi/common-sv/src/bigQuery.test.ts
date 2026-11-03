@@ -132,6 +132,52 @@ describe('configureScanBigQuery', () => {
       }
     }
   );
+
+  test.each([
+    ['V068__app_activity_record_meta.sql', false],
+    ['V074__string_interning.sql', true],
+  ] as const)('waiting for %s replicates interned_strings: %s', async (migration, replicated) => {
+    const resources = await installBigQuery(true, true, migration);
+
+    const commands = resources.filter(command.local.Command.isInstance);
+    const scripts = await Promise.all(
+      commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
+    );
+    expect(scripts).toHaveLength(4);
+    for (const script of scripts) {
+      expect(/--tables-to-replicate-joined="[^"]*\binterned_strings\b/.test(script ?? '')).toBe(
+        replicated
+      );
+    }
+
+    const streams = resources.filter(gcp.datastream.Stream.isInstance);
+    expect(streams).toHaveLength(2);
+    for (const stream of streams) {
+      const sourceConfig = await outputValue(stream.sourceConfig);
+      const tables = (
+        sourceConfig.postgresqlSourceConfig?.includeObjects?.postgresqlSchemas ?? []
+      ).flatMap(schema => (schema.postgresqlTables ?? []).map(t => t.table));
+      expect(tables).toContain('update_history_creates');
+      expect(tables.includes('interned_strings')).toBe(replicated);
+    }
+
+    const routineIds = await Promise.all(
+      resources.filter(gcp.bigquery.Routine.isInstance).map(r => outputValue(r.routineId))
+    );
+    expect(routineIds).toContain('sp_append_update_history_creates');
+    expect(routineIds.includes('sp_append_interned_strings')).toBe(replicated);
+    expect(routineIds.includes('sp_purge_old_records_interned_strings')).toBe(replicated);
+  });
+
+  test('neither Datastream backfills automatically', async () => {
+    const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
+    const streams = resources.filter(gcp.datastream.Stream.isInstance);
+    expect(streams).toHaveLength(2);
+    for (const stream of streams) {
+      expect(await outputValue(stream.backfillAll)).toBeUndefined();
+      expect(await outputValue(stream.backfillNone)).toEqual({});
+    }
+  });
 });
 
 describe('flywayMigrationToWaitFor', () => {
@@ -152,6 +198,15 @@ describe('flywayMigrationToWaitFor', () => {
   ])('rejects %s', async migration => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
+  });
+
+  test('only migrations from V074 on include interned_strings', async () => {
+    const { flywayMigrationVersion, migrationIncludesInternedStrings } =
+      await import('./bigQueryFlywayMigration');
+    expect(flywayMigrationVersion('V074__string_interning.sql')).toBe(74);
+    expect(() => flywayMigrationVersion('R__repeatable.sql')).toThrow(/R__repeatable\.sql/);
+    expect(migrationIncludesInternedStrings('V068__app_activity_record_meta.sql')).toBe(false);
+    expect(migrationIncludesInternedStrings('V074__string_interning.sql')).toBe(true);
   });
 
   test('checkFlywayMigrationsExist names the missing migrations', async () => {
