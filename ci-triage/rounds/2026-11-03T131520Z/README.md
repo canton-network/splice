@@ -55,7 +55,10 @@ TBAR round totals, login helper, circuit breaker, Postgres first connection).
   (assertRewardCalcs waits for all rounds), AE (FrontendLoginUtil.loginOnceConfirmedToBeAtUrl), AF
   (CircuitBreakersConfig.never in ScanNewNetworkBackfilling), AG (connectionTimeout 15000 in storage-postgres.conf).
 
-## Hand-over
+## Hand-over (batch, superseded)
+
+Printed on 2026-11-03 as one block; the user asked to go through the items one by one instead, so none of
+these ran. Kept for reference; each item in the step-mode queue below hands out its own commands.
 
 Live state: no `ghx` or token for cn-test-failures, so only the export (13:11 and 13:14) was checked; all targets
 were open and in Inbox then. Commands to run from the `~/splice` root (triage branch checked out there, direnv
@@ -97,3 +100,31 @@ Log requests (save under `~/claude-splice/ci-triage/export/<ref>/`):
   Devnet Backup Status), 10479 (run 38997942871, job 117294527070, Purge Unused Databases).
 
 Not handed out: 11146 (blackduck vulnerability with Status Inbox; not part of this triage).
+
+## Mode switch 2026-11-03: step mode
+
+User feedback: the batch hand-over was too much at once; the user wants to understand the cause and resolution of
+every issue and resolve each before the next. From here the round runs in step mode (skill ci-triage-inbox step 5).
+Command convention for this user: run from the `~/splice` root with direnv loaded, so no `direnv exec .` prefix.
+
+| # | Refs | Class | Signature | Family | State |
+|---|---|---|---|---|---|
+| 1 | 11152, 11153, 11154 | new | Deploy CIMain trigger: cluster test invoker HTTP 500, 3 attempts | J | open |
+| 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | open |
+| 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | open |
+| 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | open |
+| 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | open |
+| 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | open |
+| 7 | 11163 (parent 10907) | new | sv2 ImportPartyAcs refused, last event is a topology offset | U | open |
+| 8 | 11141 | new | first Postgres connection > 5 s at shard start | AG | open |
+| 9 | 11147 | new | sim-clock jump timeouts trip the sv2 circuit breaker | AF | open |
+| 10 | 11155 (parent 10438) | new | Locked connection was lost at Canton startup | G | open |
+| 11 | 10891 (parent 10921) | done | PeriodicTopologySnapshot missing scopes on a PR branch without #8148 | V | open |
+| 12 | 11140 | done | BftScanConnection refresh WARN after the suppression ended | AB | open |
+| 13 | 10495 | done | offboarded sv4 mediator in-flight send rejected | G | open |
+| 14 | 10496 | done | docs job npm ci hangs | J | open |
+| 15 | 11104 | done | LsuIntegrationTest sv4 faucet trigger ERROR during catch-up | AA | open |
+| 16 | 11105 | done | Canton 3.7.0 ACS updates stream abrupt termination | note 2026-11-02 | open |
+
+Listed once, not presented: waiting 10728, 10893, 10917, 10918, 10919; needs-log 10479, 10680, 11106, 11117,
+11137, 11142, 11145, 11151 (requests at the end of the queue); out of scope 11146.

@@ -6,7 +6,8 @@ Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Cont
 triage branch `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02), which has the earlier README, handover and
 onboarding.
 
-Current round: `rounds/2026-11-03T131520Z/` (inbox export 2026-11-03 13:14, 35 items).
+Current round: `rounds/2026-11-03T131520Z/` (inbox export 2026-11-03 13:14, 35 items), step mode; queue and
+per-item state in its README.
 Previous round `rounds/2026-11-02T153358Z-singles/`: its commands did not run (export 2026-11-03).
 
 Taken over from the previous triage branch:
@@ -24,7 +25,7 @@ canton-network-internal and CircleCI logs only as user downloads. Board: host on
 
 ## Inbox 2026-11-03 13:14 (35 items, board export)
 
-Round `rounds/2026-11-03T131520Z/`; its hand-over commands are not confirmed as run. Next action per item:
+Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. Target action per item:
 
 | Class | Refs | Next action |
 |---|---|---|

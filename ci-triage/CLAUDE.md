@@ -7,7 +7,8 @@ It holds the triage of failed CI jobs filed in `DACH-NY/cn-test-failures`.
 Skills (not discovered from here; install once per sandbox with
 `ln -s $PWD/ci-triage/skills/* ~/.claude/skills/`):
 - `ci-triage`: triage one issue into an evidence packet.
-- `ci-triage-inbox`: work through the board's inbox: fetch, group, triage the groups in parallel, hand over.
+- `ci-triage-inbox`: work through the board's inbox: fetch, classify, group; then batch mode (all groups in parallel, one
+  hand-over) or step mode (one item at a time with the user, resolved before the next).
 
 ref = a cn-test-failures issue number.
 
