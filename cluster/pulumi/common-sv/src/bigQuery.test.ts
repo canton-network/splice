@@ -118,40 +118,119 @@ describe('configureScanBigQuery', () => {
     });
   });
 
-  test.each(['V068__app_activity_record_meta.sql', 'V081__partition_update_history.sql'] as const)(
-    'both publication and slot commands wait for %s',
-    async migration => {
-      const resources = await installBigQuery(true, true, migration);
-      const commands = resources.filter(command.local.Command.isInstance);
-      const scripts = await Promise.all(
-        commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
+  test.each([
+    'V068__app_activity_record_meta.sql',
+    'V074__string_interning.sql',
+    'V081__partition_update_history.sql',
+  ] as const)('both publication and slot commands wait for %s', async migration => {
+    const resources = await installBigQuery(true, true, migration);
+    const commands = resources.filter(command.local.Command.isInstance);
+    const scripts = await Promise.all(
+      commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
+    );
+    expect(scripts).toHaveLength(4);
+    for (const script of scripts) {
+      expect(script).toContain(`--flyway-migration-to-wait-for="${migration}"`);
+    }
+  });
+
+  test.each([
+    ['V068__app_activity_record_meta.sql', false],
+    ['V074__string_interning.sql', true],
+    ['V081__partition_update_history.sql', true],
+  ] as const)('waiting for %s replicates interned_strings: %s', async (migration, replicated) => {
+    const resources = await installBigQuery(true, true, migration);
+
+    const commands = resources.filter(command.local.Command.isInstance);
+    const scripts = await Promise.all(
+      commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
+    );
+    expect(scripts).toHaveLength(4);
+    for (const script of scripts) {
+      expect(/--tables-to-replicate-joined="[^"]*\binterned_strings\b/.test(script ?? '')).toBe(
+        replicated
       );
-      expect(scripts).toHaveLength(4);
-      for (const script of scripts) {
-        expect(script).toContain(`--flyway-migration-to-wait-for="${migration}"`);
+    }
+
+    const streams = resources.filter(gcp.datastream.Stream.isInstance);
+    expect(streams).toHaveLength(2);
+    for (const stream of streams) {
+      const sourceConfig = await outputValue(stream.sourceConfig);
+      const tables = (
+        sourceConfig.postgresqlSourceConfig?.includeObjects?.postgresqlSchemas ?? []
+      ).flatMap(schema => (schema.postgresqlTables ?? []).map(t => t.table));
+      expect(tables).toContain('update_history_creates');
+      expect(tables.includes('interned_strings')).toBe(replicated);
+    }
+
+    const routineIds = await Promise.all(
+      resources.filter(gcp.bigquery.Routine.isInstance).map(r => outputValue(r.routineId))
+    );
+    expect(routineIds).toContain('sp_append_update_history_creates');
+    expect(routineIds.includes('sp_append_interned_strings')).toBe(replicated);
+    expect(routineIds.includes('sp_purge_old_records_interned_strings')).toBe(replicated);
+  });
+
+  test('interned_strings is appended by new key, the other tables by watermark', async () => {
+    const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
+    const bodies = new Map<string, string>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      const routineId = await outputValue(routine.routineId);
+      if (routineId.startsWith('sp_append_')) {
+        bodies.set(routineId, await outputValue(routine.definitionBody));
       }
     }
-  );
+    expect(bodies.size).toBe(6);
+    for (const [routineId, body] of bodies) {
+      expect(body).not.toContain('{{');
+      const byNewKey = routineId === 'sp_append_interned_strings';
+      expect(body.includes('max_closed_timestamp')).toBe(!byNewKey);
+      expect(body.includes('WHERE prod.id = staging.id')).toBe(byNewKey);
+    }
+  });
+
+  test('neither Datastream backfills automatically', async () => {
+    const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
+    const streams = resources.filter(gcp.datastream.Stream.isInstance);
+    expect(streams).toHaveLength(2);
+    for (const stream of streams) {
+      expect(await outputValue(stream.backfillAll)).toBeUndefined();
+      expect(await outputValue(stream.backfillNone)).toEqual({});
+    }
+  });
 });
 
 describe('flywayMigrationToWaitFor', () => {
-  test('waits for V068 by default and allows V078', async () => {
+  test('waits for V068 by default and allows V074 and V081', async () => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
     );
-    expect(FlywayMigrationToWaitForSchema.parse('V081__partition_update_history.sql')).toBe(
-      'V081__partition_update_history.sql'
-    );
+    for (const migration of [
+      'V074__string_interning.sql',
+      'V081__partition_update_history.sql',
+    ] as const) {
+      expect(FlywayMigrationToWaitForSchema.parse(migration)).toBe(migration);
+    }
   });
 
-  test.each(['V077__verdict_add_round_number.sql', 'V081__partition_update_history'])(
-    'rejects %s',
-    async migration => {
-      const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
-      expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
-    }
-  );
+  test.each([
+    'V077__verdict_add_round_number.sql',
+    'V074__string_interning',
+    'V081__partition_update_history',
+  ])('rejects %s', async migration => {
+    const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
+    expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
+  });
+
+  test('only migrations from V074 on include interned_strings', async () => {
+    const { flywayMigrationVersion, migrationIncludesInternedStrings } =
+      await import('./bigQueryFlywayMigration');
+    expect(flywayMigrationVersion('V074__string_interning.sql')).toBe(74);
+    expect(() => flywayMigrationVersion('R__repeatable.sql')).toThrow(/R__repeatable\.sql/);
+    expect(migrationIncludesInternedStrings('V068__app_activity_record_meta.sql')).toBe(false);
+    expect(migrationIncludesInternedStrings('V074__string_interning.sql')).toBe(true);
+  });
 
   test('checkFlywayMigrationsExist names the missing migrations', async () => {
     const { checkFlywayMigrationsExist } = await import('./bigQueryFlywayMigration');
@@ -161,9 +240,9 @@ describe('flywayMigrationToWaitFor', () => {
       expect(() =>
         checkFlywayMigrationsExist(dir, [
           'V068__app_activity_record_meta.sql',
-          'V081__partition_update_history.sql',
+          'V074__string_interning.sql',
         ])
-      ).toThrow(/: V081__partition_update_history\.sql$/);
+      ).toThrow(/: V074__string_interning\.sql$/);
     } finally {
       fs.rmSync(dir, { recursive: true });
     }

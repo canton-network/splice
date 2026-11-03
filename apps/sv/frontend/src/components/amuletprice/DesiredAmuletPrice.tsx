@@ -7,6 +7,7 @@ import {
   PartyId,
   AmuletPriceVote,
   DsoInfo,
+  parseBigNumber,
 } from '@canton-network/splice-common-frontend';
 import { useMutation, UseQueryResult, UseMutationResult } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
@@ -50,11 +51,11 @@ const DesiredAmuletPrice: React.FC<DesiredAmuletPriceProps> = ({ canEditVote }) 
 
   const [isReadyToEdit, setIsReadyToEdit] = useState<boolean>(false);
   const [curPriceText, setCurPriceText] = useState<string>('0');
-  const isInvalidPrice = BigNumber(curPriceText).lte(0.0);
+  const isInvalidPrice = parseBigNumber(curPriceText).lte(0.0);
 
   const updateDesiredAmuletPriceMutation = useMutation({
     mutationFn: () => {
-      return updateDesiredAmuletPrice(BigNumber(curPriceText));
+      return updateDesiredAmuletPrice(parseBigNumber(curPriceText));
     },
     onSettled: async () => {
       setIsReadyToEdit(false);
@@ -104,7 +105,7 @@ const DesiredAmuletPrice: React.FC<DesiredAmuletPriceProps> = ({ canEditVote }) 
         />
       )}
 
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Desired {amuletName} Prices of Other Super Validators
       </Typography>
       <TableContainer>
@@ -175,7 +176,7 @@ const EditDesiredPriceSection: React.FC<EditDesiredPriceSectionProps> = ({
 
   return (
     <>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         {`Your Desired ${amuletName} Price`}
       </Typography>
       {isReadyToEdit ? (

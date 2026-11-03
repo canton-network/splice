@@ -78,7 +78,7 @@ export const ConfirmPayment: React.FC = () => {
 
   return (
     <Container maxWidth="sm">
-      <Stack alignItems="center" paddingTop={4} spacing={4}>
+      <Stack spacing={4} sx={{ alignItems: 'center', paddingTop: 4 }}>
         {recipientInfo}
         <PaymentDescription description={appPaymentRequest.payload.description} />
         <TotalPaymentContainer
@@ -177,13 +177,18 @@ const SingleRecipientInfo: React.FC<SingleRecipientInfoProps> = ({
   provider,
 }) => {
   return (
-    <Stack alignItems="center" spacing={1}>
+    <Stack spacing={1} sx={{ alignItems: 'center' }}>
       <SendPaymentIcon />
       <Typography variant="h5" className="payment-amount">
         Send <AmountDisplay amount={BigNumber(amount.amount)} currency={amount.unit} /> to{' '}
       </Typography>
-      <BftAnsEntry partyId={receiver} variant="h5" fontWeight="bold" className="payment-receiver" />
-      <Stack direction="row" alignItems="center" spacing={1}>
+      <BftAnsEntry
+        partyId={receiver}
+        variant="h5"
+        sx={{ fontWeight: 'bold' }}
+        className="payment-receiver"
+      />
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Typography variant="body2">via</Typography>{' '}
         <BftAnsEntry partyId={provider} variant="body2" className="payment-provider" />
       </Stack>
@@ -205,12 +210,12 @@ const MultiRecipientsInfo: React.FC<MultipleRecipientsInfoProps> = ({
   provider,
 }) => {
   return (
-    <Stack alignItems="center" spacing={1}>
+    <Stack spacing={1} sx={{ alignItems: 'center' }}>
       <SendPaymentIcon />
       <Typography variant="h5" className="payment-amount">
         Send {currencyForAllReceivers} to multiple recipients
       </Typography>
-      <Stack direction="row" alignItems="center" spacing={1}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Typography variant="body2">via</Typography>{' '}
         <BftAnsEntry partyId={provider} variant="body2" className="payment-provider" />
       </Stack>
@@ -252,7 +257,7 @@ interface PaymentDescriptionProps {
 }
 const PaymentDescription: React.FC<PaymentDescriptionProps> = ({ description }) => {
   return (
-    <Stack alignItems="center">
+    <Stack sx={{ alignItems: 'center' }}>
       <Typography variant="body1">Description:</Typography>
       <Typography variant="body1" className="payment-description">
         &quot;{description}&quot;
@@ -280,10 +285,10 @@ const TotalPaymentContainer: React.FC<PaymentContainerProps> = ({
 
   return (
     <Container>
-      <Box bgcolor="colors.neutral.20" border={1} borderColor="colors.neutral.30">
-        <Stack alignItems="center" spacing={4} marginY={4}>
+      <Box sx={{ bgcolor: 'colors.neutral.20', border: 1, borderColor: 'colors.neutral.30' }}>
+        <Stack spacing={4} sx={{ alignItems: 'center', marginY: 4 }}>
           <Typography variant="body1">{"You'll pay:"}</Typography>
-          <Stack alignItems="center">
+          <Stack sx={{ alignItems: 'center' }}>
             <Typography variant="h5" className="payment-total-amulet">
               <AmountDisplay amount={totalAmulet} currency={'AmuletUnit'} />
             </Typography>

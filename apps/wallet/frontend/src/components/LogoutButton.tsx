@@ -11,9 +11,9 @@ export const LogoutButton: React.FC = () => {
   const { logout } = useUserState();
   return (
     <Button id="logout-button" onClick={logout} color="inherit">
-      <Stack direction="row" alignItems="center">
+      <Stack direction="row" sx={{ alignItems: 'center' }}>
         <Logout />
-        <Link color="inherit" textTransform="none">
+        <Link color="inherit" sx={{ textTransform: 'none' }}>
           Logout
         </Link>
       </Stack>

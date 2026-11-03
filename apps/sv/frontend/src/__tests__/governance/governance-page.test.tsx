@@ -127,7 +127,9 @@ describe('Governance Page', () => {
     await navigateToGovernancePage(user);
 
     const badge = screen.getByTestId('inflight-proposals-section-badge-count');
-    expect(badge).toHaveTextContent('');
+    await waitFor(() =>
+      expect(badge.querySelector('.MuiBadge-badge')).toHaveClass('MuiBadge-invisible')
+    );
   });
 
   test('vote history details show the actual effective time for closed votes without targetEffectiveAt', async () => {
