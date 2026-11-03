@@ -837,7 +837,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
   }
 
   protected def setAnsField(textField: TextField, input: String, expectedPartyId: String) = {
-    textField.underlying.sendKeys(input)
+    input.grouped(16).foreach(chunk => textField.underlying.sendKeys(chunk))
     // We need to wait for the query against the ans service to finish.
     waitForAnsField(textField, expectedPartyId)
   }
