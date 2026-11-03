@@ -145,9 +145,12 @@ A new recipe that needs a loop, pagination or JSON handling becomes a script her
 
 Commands handed to the user (issue comments, closes, retitles) must work in bash, zsh and fish alike: plain `gh`
 calls, every argument in single quotes, and no single quote or backslash inside an argument (fish treats `\\` and
-`\'` as escapes inside single quotes, bash and zsh do not; rephrase: "the log of sv1", not "sv1's log"). Newlines
-inside a quoted argument are fine in all three shells: write comment bodies as readable Markdown, with paragraphs
-and fenced code blocks for log lines. A body that must contain a single quote or backslash (verbatim log lines)
-goes into a file instead, `<round dir>/comments/<ref>.md` (committed, so the user has it after fetching the branch),
-used with `gh issue comment <ref> -R DACH-NY/cn-test-failures --body-file <path>` or `close_duplicates.py
---comment-file <path>`; always print the full body in chat as well, so the user reviews it there. Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.
+`\'` as escapes inside single quotes, bash and zsh do not; rephrase: "the log of sv1", not "sv1's log"). Outside the
+quotes: no variables, `$`, backticks, heredocs or `&&` chains.
+
+Comment bodies go into a body file, `<round dir>/comments/<ref>.md` (committed, so the user has it after fetching the
+branch), posted with `gh issue comment <ref> -R DACH-NY/cn-test-failures --body-file <path>` or `close_duplicates.py
+--comment-file <path>`. Only a single-line comment of plain text (no Markdown, backticks, quotes, backslashes or `$`)
+may be passed inline with `--body` or `--comment`; a multi-line body, a code block or a log line always goes into a
+file. Write bodies as readable Markdown, with paragraphs and fenced code blocks for log lines. Always print the full
+body in chat as well, so the user reviews it there.

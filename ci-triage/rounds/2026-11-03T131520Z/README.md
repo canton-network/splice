@@ -204,3 +204,5 @@ Item 4 (11144): fix branch rautenrieth-da/fix-11144-tbar-wait-all-rounds (bd47fe
 assertRewardCalcs waits in its eventually for totals and root hash of every round 0..10. Local checks: scalafmtOnly
 on the file and Test/compile pass (fatal warnings on); formatFix and lint OOM-killed 4 times (sandbox 16 GB), not run.
 Presented with comment, retitle, set_status Triaged.
+
+User 2026-11-03: every comment body goes into a body file (comments/<ref>.md); only single-line plain-text comments inline. CLAUDE.md, issue-comment.md and ci-triage step 8 updated. Item 4 comment moved to comments/11144.md.

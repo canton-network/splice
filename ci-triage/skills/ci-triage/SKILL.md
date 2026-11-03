@@ -62,11 +62,12 @@ edits to shared files.
    - Not a duplicate: a comment with the findings and the suggested fix, optionally a retitle to
      `<Suite or job>: <cause>` while the title still starts with `GHA Run` or `Pipeline`, and
      `direnv exec . ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
-   - Duplicate: `direnv exec . ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'`, one line
+   - Duplicate: `direnv exec . ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'` (a
+     single line of plain text; anything longer `--comment-file <round dir>/comments/<parent>-dups.md`), one line
      per parent with all its duplicates (closing moves them to `Closed`). When the parent is open and recurs often, a short recurrence comment on it.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change
      unless the user chooses `Infrequent / no repro`.
-   Write every comment in the shape of `references/issue-comment.md` (self-contained for a senior engineer, no
+   Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
    packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
 9. Fix. Create the branch without asking when all of these hold: the root cause is established with evidence, the
    fix touches only test code or test configuration (`src/test/`, test resources, test scripts; no production code,

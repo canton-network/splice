@@ -17,15 +17,21 @@ Leave out what the reader can see on the issue itself (links, the job list) and 
 ran, what was grepped). Duplicate-close comments stay one or two sentences: parent, and the one fact that makes it
 the same failure.
 
-Quoting rules: `ci-triage/CLAUDE.md`, Commands for the user (single quotes around the body; no single quote or
-backslash inside; newlines are fine). A body that needs a single quote or backslash, e.g. a verbatim log line,
-goes into `<round dir>/comments/<ref>.md` and is posted with `--body-file`; never edit a log line to fit the quoting. When printing a command whose body contains ``` fences in chat, wrap the
-whole command in a `~~~` fence so the inner fences render as part of it.
+Body files: `ci-triage/CLAUDE.md`, Commands for the user. Every comment except a single line of plain text goes
+into `<round dir>/comments/<ref>.md` and is posted with `--body-file` (or `close_duplicates.py --comment-file`);
+never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
+content in a `~~~` fence (so inner ``` fences render as part of it).
 
 ## Example (11152, accepted by the user on 2026-11-03)
 
+```
+gh issue comment 11152 -R DACH-NY/cn-test-failures --body-file ci-triage/rounds/2026-11-03T131520Z/comments/11152.md
+```
+
+Body (an earlier draft of that file):
+
 ~~~
-gh issue comment 11152 -R DACH-NY/cn-test-failures --body 'Infra one-off, no splice change needed.
+Infra one-off, no splice change needed.
 
 Deploy CIMain run 41610142697 (main 8fd9921238) failed in step Trigger cluster test on attempts 1 to 3 (this issue, #11153, #11154; each attempt logs the issue it filed). The step POSTs to the cluster test invoker (`CLUSTER_TEST_INVOKER_URL`), which answered every request from 09:20:12 to 09:40:29 UTC with:
 
@@ -44,5 +50,5 @@ Attempt 4 with the same sha succeeded:
 
 All later Deploy CIMain runs passed on the first attempt, so the commit is not involved.
 
-Not checked: why the invoker raised. Its logs are in GCP project da-cn-ci (2026-11-03 09:20 to 09:40 UTC); worth a look only if it recurs.'
+Not checked: why the invoker raised. Its logs are in GCP project da-cn-ci (2026-11-03 09:20 to 09:40 UTC); worth a look only if it recurs.
 ~~~
