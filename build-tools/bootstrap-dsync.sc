@@ -262,11 +262,25 @@ val maxTraffic = NonNegativeLong.tryCreate(Long.MaxValue)
 // Base traffic is zero, so every participant needs purchased traffic to be able to submit anything.
 // We always use serial 1: on reruns the sequencers ignore the update as outdated, which is fine
 // since the balance is already max.
+// The update is delivered as soon as a threshold of sequencers submitted it, and further submissions
+// of it are then refused, so only the 2 sequencers required by the threshold set above submit it.
+// Resubmitting within the same submission window would be refused for the same reason, so we skip
+// participants that already have a traffic balance. The sequencers only report the traffic state of
+// members that are known in the topology, so this only works once the participant has connected.
 participants.foreach { participant =>
-  println(s"Setting traffic balance of ${participant.name} to max...")
-  sequencers.foreach(
-    _.traffic_control.set_traffic_balance(participant.id, PositiveInt.one, maxTraffic)
-  )
+  val hasTrafficBalance = sequencers.head.traffic_control
+    .traffic_state_of_members(Seq(participant.id))
+    .trafficStates
+    .get(participant.id)
+    .exists(_.serial.isDefined)
+  if (hasTrafficBalance) {
+    println(s"${participant.name} already has a traffic balance, skipping")
+  } else {
+    println(s"Setting traffic balance of ${participant.name} to max...")
+    sequencers
+      .take(2)
+      .foreach(_.traffic_control.set_traffic_balance(participant.id, PositiveInt.one, maxTraffic))
+  }
 }
 
 // Every participant connects to the sequencer in its own namespace.
