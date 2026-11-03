@@ -140,4 +140,4 @@ inside a quoted argument are fine in all three shells: write comment bodies as r
 and fenced code blocks for log lines. A body that must contain a single quote or backslash (verbatim log lines)
 goes into a file instead, `<round dir>/comments/<ref>.md` (committed, so the user has it after fetching the branch),
 used with `gh issue comment <ref> -R DACH-NY/cn-test-failures --body-file <path>` or `close_duplicates.py
---comment-file <path>`; show the body in chat as well. Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.
+--comment-file <path>`; always print the full body in chat as well, so the user reviews it there. Outside the quotes: no variables, `$`, backticks, heredocs or `&&` chains.

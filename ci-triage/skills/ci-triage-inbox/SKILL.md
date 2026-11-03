@@ -114,7 +114,8 @@ sees it too). Waiting, assigned and needs-log items are listed once, not present
   4. Resolution: duplicate of, family (existing or new), the fix (file, change, owner) and the target Status.
   5. Its commands only (comment, close as duplicate, retitle, Status), in one `~~~` fenced block, after re-checking
      the live state of its refs (step 7, first bullet). Comments follow
-     `ci-triage/skills/ci-triage/references/issue-comment.md`.
+     `ci-triage/skills/ci-triage/references/issue-comment.md`. Print the full body of every comment in chat for
+     review, also when it is posted from a body file and also when it is unchanged from an earlier message.
 - Stop and wait. The user may ask, disagree, ask for a fix branch, edit the commands, skip, or report that the
   commands ran. Do not present the next item before the user says so.
 - Resolve: apply the user's corrections to the packet, merge this item (step 6, for its rows only), record its
