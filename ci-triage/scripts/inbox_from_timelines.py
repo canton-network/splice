@@ -5,7 +5,8 @@ The sandbox token cannot read Projects v2, but the REST issue timeline shows `ad
 `project_v2_item_status_changed` events with their actor. An open issue whose status was only ever changed by
 github-project-automation[bot] (or never) still has the default status, Inbox.
 
-Runs in the sandbox through ghx (see ci-triage/CLAUDE.md). Usage, from the repo root:
+Runs in the sandbox through ghx or gh api, whichever reads cn-test-failures (see ci-triage/CLAUDE.md, Access).
+Usage, from the repo root:
   ci-triage/scripts/inbox_from_timelines.py [--min-number N] [--triage-dir DIR] [--json OUT]
   --min-number   ignore older issues (old bulk-filed items are archived but still match the heuristic)
   --triage-dir   ci-triage/ dir; issues mentioned in any file there are flagged as already triaged
@@ -14,6 +15,7 @@ import argparse
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -21,8 +23,11 @@ from typing import Any
 REPO = "/repos/DACH-NY/cn-test-failures"
 
 
+VIA = ["ghx"]
+
+
 def get(path: str) -> Any:
-    out = subprocess.run(["ghx", path], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run([*VIA, path], capture_output=True, text=True, check=True).stdout
     return json.loads(out)
 
 
@@ -61,7 +66,10 @@ def main() -> None:
     ap.add_argument("--min-number", type=int, default=0)
     ap.add_argument("--triage-dir")
     ap.add_argument("--json")
+    ap.add_argument("--via", choices=["ghx", "gh"], default="ghx" if shutil.which("ghx") else "gh",
+                    help="ghx (credential router) or gh (gh api with the sandbox token); default ghx if installed")
     args = ap.parse_args()
+    VIA[:] = ["ghx"] if args.via == "ghx" else ["gh", "api"]
 
     issues = [i for i in open_issues() if i["number"] >= args.min_number]
     with ThreadPoolExecutor(8) as ex:

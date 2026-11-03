@@ -8,8 +8,8 @@ description: Triage one DACH-NY/cn-test-failures issue (auto-filed for a failed 
 Context, access to private data and conventions: `ci-triage/CLAUDE.md` on the triage branch. Read it first; if the
 triage branch is not checked out, ask the user which one is current before writing anything.
 
-Input: one ref. Read its body and comments from the source chosen in CLAUDE.md. If neither source has it, stop and
-ask the user to fix access or rerun the export.
+Input: one ref. Read its body and comments with the method `probe_access.py` reports for cn-test-failures issues
+(CLAUDE.md, Access). If no method has it, stop and ask the user to fix access or rerun the export.
 
 Output: a packet `ci-triage/evidence/<ref>-<slug>.md`, its row in `ci-triage/evidence/INDEX.tsv`, a duplicate verdict,
 issue commands for the user, and optionally a fix branch. Everything you write must be reproducible by someone else:
@@ -37,11 +37,12 @@ edits to shared files.
      `(ignore this line in check-sbt-output.sh)`; the real problems are the `@timestamp` lines WITHOUT it.
    - `*** FAILED ***` = assertion or command failure: take the failing clue and stack head.
    - no report, job cancelled or exit without summary = evidence loss (JVM exit, timeout); say so.
-   CircleCI and canton-network-internal Actions: work from the logs the user saved in `export/<ref>/`; if there are
-   none, name the exact job and step to download and stop.
+   canton-network-internal Actions: recipes 1 and 3 through the method chosen for that capability; without one, the
+   logs the user saved in `export/<ref>/`. CircleCI: always the user's download in `export/<ref>/`. If the needed
+   logs are not reachable either way, name the exact job and step to download and stop.
 3. Duplicate check BEFORE deep analysis: compare the flagged line and the shard's suite list against
    `ci-triage/known-families.md`, `ci-triage/evidence/INDEX.tsv` and recent issues (title, body, comments; recipe 11
-   with `ghx`, else the recipe 9 export). A match still needs the confirming grep listed in the family. Say
+   with `ghx` or `gh api`, else the recipe 9 export). A match still needs the confirming grep listed in the family. Say
    "duplicate of X" only after that grep. If X is closed as fixed, check that the run's sha contains the fix
    (step 6); if it does, this is a regression, not a duplicate.
 4. Establish what runs: canton pin from `nix/canton-sources.json` at the run's sha, never from `canton/`.

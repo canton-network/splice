@@ -22,18 +22,22 @@ Nothing in a round directory is executed by an agent; commands in it are for the
 
 ## 1. Fetch
 
-- Read `ci-triage/STATE.md` first: the current round (if one is still open, read its directory and continue it
+- Run `ci-triage/scripts/probe_access.py` and tell the user which method you use per capability (CLAUDE.md,
+  Access); ask once for a better method where the round needs one, and continue with the workaround otherwise.
+- Read `ci-triage/STATE.md`: the current round (if one is still open, read its directory and continue it
   instead of starting over), items left open on purpose, open owner questions.
 - Otherwise create the round directory now and name it in `STATE.md`.
 - The inbox: ask the user for a fresh recipe 10 export and read `/run/sandbox/source/ci-triage/export/inbox.jsonl`.
-  Without the user but with `ghx`, use the timeline heuristic, and say that the list is inferred:
+  Without the user but with read access to cn-test-failures issues (`ghx` or `gh api`), use the timeline
+  heuristic, and say that the list is inferred:
   ```
   ci-triage/scripts/inbox_from_timelines.py --min-number <oldest open item of the last round> --triage-dir ci-triage --json log/inbox-heuristic.json
   ```
   It lists open issues whose board Status only the automation bot ever changed (= still Inbox), flagged `T` when the
   number already appears in `ci-triage/**.md`; it reads only the first 100 timeline events per issue, and old
   bulk-filed items match too, hence `--min-number`.
-- Recent issues for the duplicate checks: recipe 9 export (about two weeks back), or recipe 11 with `ghx`.
+- Recent issues for the duplicate checks: recipe 11 (`ghx` or `gh api`), else the recipe 9 export (about two
+  weeks back).
 - State the export time and the item count before going on.
 
 ## 2. Classify every inbox item
@@ -44,7 +48,7 @@ One table, one row per item, exactly one class each:
 |---|---|---|
 | done | has a row in `evidence/INDEX.tsv` or a root-cause comment, and no newer failure | check the comment against the packet or the family's confirming grep; propose the Status (`Triaged`, or close as duplicate); no new packet |
 | waiting | STATE.md lists it as open on purpose (owner question, fix PR pending, umbrella) | leave it; mention it |
-| needs-log | the evidence is only in CircleCI or canton-network-internal Actions | name the exact job id and step for the user to save to `export/<ref>/`; one request for all of them |
+| needs-log | the evidence is only where no available method reaches (CircleCI always; canton-network-internal Actions without `ghx` or a token for it) | name the exact job id and step for the user to save to `export/<ref>/`; one request for all of them |
 | assigned | assigned to a person with an active discussion | skip unless asked; mention it |
 | new | everything else | group (step 3) |
 
@@ -92,7 +96,7 @@ reconciled in step 5.
 
 ## 6. Hand over
 
-- Re-check the live state of every target first (`ghx`, or a fresh recipe 9 export) and drop what is already done;
+- Re-check the live state of every target first (recipe 11, or a fresh recipe 9 export) and drop what is already done;
   say "already done: ..." for those.
 - Write the hand-over into the round directory and commit it, then print it: the verdict table (ref, class or
   verdict, parent, action), what needs an owner, then one fenced block with every command in this order: comments, `close_duplicates.py` lines (one per parent, all its

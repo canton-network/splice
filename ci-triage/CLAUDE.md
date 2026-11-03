@@ -51,25 +51,46 @@ The board is project 48 (`DACH-NY/projects/48`). Its `Status` field:
 
 ## Access
 
-- `canton-network/splice`: public, including GHA logs and artifacts; use `gh api`.
-- `cn-test-failures`, `canton-network-internal`: private. Read them through `ghx` or the user's exports (below).
-- CircleCI and canton-network-internal Actions logs: no access; the user saves them to `export/<ref>/` on the host.
-- Project 48: never from the sandbox. The user's host `gh` reads and changes it (token with `project` scope,
-  SSO-authorized for DACH-NY; "Resource protected by organization SAML enforcement" means the SSO grant is missing).
+Policy: the triage may read cn-test-failures (issues), canton-network-internal (contents, Actions, pull requests),
+DACH-NY/canton (contents) and splice (public). It never writes: issue changes, closes and the board (project 48)
+are commands the user runs on the host (recipes 10 and 12, `scripts/close_duplicates.py`). Fine-grained tokens
+cannot grant a single project, so the board is only ever read and changed from the user's host `gh` (token with
+`project` scope, SSO-authorized for DACH-NY; "Resource protected by organization SAML enforcement" means the SSO
+grant is missing).
 
-Pick the source for private data once per session and say which one you use:
-```
-command -v ghx && ghx /repos/DACH-NY/cn-test-failures | jq -r .full_name
-```
-- Prints `DACH-NY/cn-test-failures`: use `ghx` (recipe 11). It is a curl wrapper around the host-side credential
-  router `gh-cred-router` (README there has the setup): path only, curl options, pipe to `jq`, page with
-  `page=N`; no `--jq`, no `--paginate`; only `/repos/{owner}/{repo}/...` is routed. If it fails, check
-  `curl -s -o /dev/null -w '%{http_code}\n' http://host.docker.internal:18555/api/repos/DACH-NY/canton`:
-  `401` router up (run the router's sandbox setup), `500`/`connection refused` router not running,
-  `403 Approval required for localhost:18555` sandbox network policy missing. Tell the user.
-- Otherwise: the user's exports. The sandbox runs in clone mode, so the user writes to `ci-triage/export/` in the
-  host repo and you read `/run/sandbox/source/ci-triage/export/`. Recipe 9 exports recent issues, recipe 10 the
-  inbox; ask for a rerun when an issue you need is missing or newer than the export.
+Not every user has every token, and an sbx sandbox injects a single GitHub token that cannot express per-repo
+permissions. So pick the method per capability, best first:
+
+1. `ghx`: curl wrapper around the host-side credential router `gh-cred-router`, which holds one token per repo
+   and checks every request against per-repo rules. Covers everything above if the router config allows it.
+2. `gh api` with the sandbox's own token. Usually covers one of the private repos at most; the recommended single
+   token is cn-test-failures Issues read, because every triage needs the tracker and canton-network-internal is
+   only needed for the rarer infra issues.
+3. Workarounds: exports the user runs on the host (recipes 9, 10), logs the user saves to `export/<ref>/`, files
+   the user pastes; for Canton source the public mirror and release jars (recipe 6). CircleCI logs are always a
+   user download.
+
+At the start of a session run `ci-triage/scripts/probe_access.py`. It prints the router state and, per
+capability, which method works; tell the user which method you use for what. When the task needs a capability that only a
+workaround covers, tell the user once what would fix it, then continue with the workaround if they cannot:
+- router answers `401` but `ghx` is missing: run `/run/sandbox/source/gh-cred-router/sandbox-setup.sh DACH-NY`
+  (installs `ghx`; needs the client key at `/run/sandbox/source/.git/gh-cred-router-key`);
+- `403 Approval required for localhost:18555`: the user approves or adds `sbx policy allow network localhost:18555`;
+- `500` or `connection refused`: the user starts the router (`python3 -m gh_cred_router serve`, router README);
+- router up but a capability refused (`not allowed by route`): the user adds it to the router config, e.g. for
+  canton-network-internal `"allow": ["read-code"], "rules": [{"method": "GET", "path": "/actions/**"},
+  {"method": "GET", "path": "/pulls/**"}]`;
+- missing token: fine-grained, resource owner DACH-NY, only the repos needed, Metadata read plus: cn-test-failures
+  Issues read; canton-network-internal Contents, Actions and Pull requests read; canton Contents read. Org approval
+  can take days.
+
+Using `ghx` and `gh api` the same way: both take a `/repos/...` path, so recipes call `$R <path> | jq ...` with
+`R=ghx` or `R='gh api'`. `ghx` takes curl options, not `gh api` flags: no `--jq`, no `--paginate` (page with
+`page=N`), only `/repos/{owner}/{repo}/...` is routed (`/graphql`, `/search` are rejected).
+
+Exports: the sandbox runs in clone mode, so the user runs the export scripts in the host repo, they write to
+`ci-triage/export/`, and you read `/run/sandbox/source/ci-triage/export/`. Ask for a rerun when an issue you need
+is missing or newer than the export.
 
 ## Conventions (these override defaults)
 
@@ -103,7 +124,8 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | `export_inbox.py` | host | Status = Inbox items of project 48 (recipe 10) |
 | `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |
 | `close_duplicates.py <parent> <ref>... --comment '<text>'` | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
-| `inbox_from_timelines.py` | sandbox, `ghx` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
+| `probe_access.py` | sandbox | which method reads which private data (CLAUDE.md, Access) |
+| `inbox_from_timelines.py` | sandbox, `ghx` or `gh api` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
 
 A new recipe that needs a loop, pagination or JSON handling becomes a script here, not a pasted block.
 
