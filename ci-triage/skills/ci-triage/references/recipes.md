@@ -119,6 +119,11 @@ direnv exec . sbt --batch formatFix
 direnv exec . sbt --batch Test/compile lint updateTestConfigForParallelRuns updateDarResources   # separate args: one quoted string fails to parse (CI word-splits its cmd)
 git status --short          # must be empty apart from build logs; commit formatFix changes, test-*.log, DarResources
 ```
+In the sbx sandbox (15 GB, SSH origin unreachable): lint's DarLockChecker fetches `release-line-*` from `origin` and
+fails with `git fetch origin release-line-<x> failed (exit 128)`; fetch it over HTTPS first (`git fetch --no-tags
+https://github.com/canton-network/splice.git release-line-<x>:refs/remotes/origin/release-line-<x>`). The `.envrc`
+heap (`-Xmx16G`) gets formatFix OOM-killed (exit 137); run both sbt calls inside
+`direnv exec . bash -c 'export SBT_OPTS="${SBT_OPTS/-Xmx16G/-Xmx10G}"; sbt --batch ...'`.
 
 ## 9. Export recent issues on the host
 
