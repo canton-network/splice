@@ -64,9 +64,12 @@ object Dependencies {
   // Applied to all projects as dependencyOverrides, so only these modules move and their parents stay as they are.
   // The older versions come from Canton's direct dependencies in CantonDependencies.scala (postgresql 42.7.3),
   // from libraries already on their latest release (scala-compiler 2.13.18 -> jline, httpclient5 5.6.4 -> httpcore5),
-  // or from several libraries at once (jackson-databind: auth0, flyway, json4s and logstash).
+  // or from several libraries at once (jackson-databind: auth0, flyway, json4s and logstash; okhttp 4: auth0 and sttp,
+  // next to okhttp-jvm 5 from OpenTelemetry).
   // Remove an entry once the build resolves that version without it.
   lazy val pinnedTransitiveVersions: Seq[ModuleID] = Seq(
+    "com.squareup.okhttp3" % "okhttp" % "5.5.0",
+    "com.squareup.okhttp3" % "logging-interceptor" % "5.5.0",
     "com.fasterxml.jackson.core" % "jackson-databind" % jackson_version,
     "com.fasterxml.jackson.core" % "jackson-annotations" % "2.22",
     "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % jackson_version,

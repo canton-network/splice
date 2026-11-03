@@ -2079,6 +2079,7 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
     case PathList("ch", "qos", "logback", _*) => MergeStrategy.first
     case PathList("META-INF", "okhttp.kotlin_module") => MergeStrategy.first
     case PathList("META-INF", "okio.kotlin_module") => MergeStrategy.last
+    case PathList("META-INF", "kotlin-project-structure-metadata.json") => MergeStrategy.discard
     case PathList(
           "META-INF",
           "org",
