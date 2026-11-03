@@ -73,6 +73,26 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  // RegisteredSynchronizer (splice-amulet) and the votes to register, update and archive it
+  // (splice-dso-governance) ship in the same bump. Vetting this splice-dso-governance version
+  // implies vetting the splice-amulet version it depends on, so one check covers both.
+  def supportsDedicatedSynchronizers(
+      parties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      Seq(
+        PackageIdResolver.Package.SpliceDsoGovernance -> parties
+      ),
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_32,
+      ignoreRedundantCheck = false,
+    )
+  }
+
   /** Whether DsoRules_SetSynchronizerNodeConfig takes the node states of the other SVs to check
     * that an SV does not claim the sequencer or mediator id of another SV.
     */
