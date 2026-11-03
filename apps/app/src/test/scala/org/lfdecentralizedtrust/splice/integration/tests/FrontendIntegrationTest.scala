@@ -836,8 +836,11 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     finally if (windowHandles.contains(previous)) webDriver.switchTo().window(previous)
   }
 
+  protected def sendKeysChunked(element: WebElement, text: String, chunkSize: Int = 16): Unit =
+    text.grouped(chunkSize).foreach(chunk => element.sendKeys(chunk))
+
   protected def setAnsField(textField: TextField, input: String, expectedPartyId: String) = {
-    textField.underlying.sendKeys(input)
+    sendKeysChunked(textField.underlying, input)
     // We need to wait for the query against the ans service to finish.
     waitForAnsField(textField, expectedPartyId)
   }

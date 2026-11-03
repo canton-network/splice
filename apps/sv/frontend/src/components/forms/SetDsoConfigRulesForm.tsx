@@ -13,7 +13,7 @@ import {
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { Alert, Box, Typography } from '@mui/material';
 import dayjs from 'dayjs';
-import { useMemo, useState } from 'react';
+import { JSX, useMemo, useState } from 'react';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useListDsoRulesVoteRequests } from '../../hooks';
 import { useAppForm } from '../../hooks/form';
