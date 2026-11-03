@@ -171,3 +171,31 @@ No test-side fix: the step is the generic `onboardWalletUser` helper used by eve
 
 Not verified: why the 40001 storm started at 12:29:09 (beyond the sim-time advance burst); whether 10139 and 10197
 (family L parents, older than the export) are still open.
+
+## 7. Postgres log of the window (added 2026-11-04)
+
+The user exported the Postgres service container log from GCP (recipe 13: project da-cn-splice, pod
+`self-hosted-k8s-large-runner-6kw5s-workflow`, container `postgres`, 12:29:05 to 12:29:30, filter on `could not
+serialize`, `Reason code`, `STATEMENT`, `deadlock`) to `ci-triage/export/downloaded-logs-20261104-001129.json`.
+```
+python3 -I -c '<group entries by "%m [%p] KIND:" prefix; count DETAIL reasons; failures per 10 ms bucket; buckets at the globalSequencerSv1 retry times>' downloaded-logs-20261104-001129.json
+```
+```
+658 entries, 94 failures, all of them:
+  ERROR:  could not serialize access due to read/write dependencies among transactions
+  DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+  STATEMENT:  insert into blocks (id, request, uuid) values ((select coalesce(max(id) + 1, 0) from blocks) , $1, $2) on conflict (uuid) do nothing
+no other ERROR in the filtered window; 8 backend pids
+failures per 10 ms bucket -> buckets: 1: 32, 2: 16, 3: 10
+Sv1 retry times -> failures in the same 10 ms: 11.39 2, 12.07 2, 12.93 1, 14.11 3, 14.91 3, 15.00 1 (14.999), 15.84 3, 16.34 1, 16.97 3, 18.82 3, 21.16 3
+```
+Every Canton-side `insert block` failure of globalSequencerSv1 has a Postgres failure within 1 ms. Postgres aborts
+inserts that are the pivot of an rw-dependency cycle at write time: each insert reads `max(id)` (the index range
+every other insert writes into), so when several inserts overlap, all but one are pivots and several are aborted at
+the same instant (26 of 58 collision moments aborted 2 or 3 of the 4 writers). Sv1's later retries all fell into
+moments where 3 inserts aborted together. The pids rotate (connection pool), so a pid cannot be mapped to a
+sequencer; bind values (`$1`, `$2`) and application names are not logged.
+
+Not verified: why Sv1's retries kept landing in 3-writer collisions while its backoff grew (the other writers retry
+after short backoffs and also insert request-free batches several times per second, so a long-waiting writer meets
+a crowded moment on most attempts; not proven).

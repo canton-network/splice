@@ -230,3 +230,5 @@ Item 5: user asked why 40001. Jar 3.7.1: insert block = insert into blocks with 
 Live check 2026-11-03 (gh api): PR 8211 merged 21:56:57, closed 11128 (completed); PR 8215 merged 21:20:20, closed 10732 (completed). 11143 closed duplicate. 11144 open, retitled, 1 comment (PR 8221 open). 11160 open, no comment yet. Board Status not readable from the sandbox.
 
 Item 5: user asked why tests do not fail more often. Data (whole shard): 40001 routine, 99 percent of retry chains < 0.5 s, max 4 consecutive losses except Sv1 (8); failure ratio rises through the shard independent of load; 12:29 load not unusual. Reference driver: integration tests (4 writers) plus single-writer compose/localnet; Helm deployments use cometbft/cantonbft. Comments 11160 and 10139 updated (no sim-clock causation).
+
+Item 5: GCP Postgres log (user export downloaded-logs-20261104-001129.json): 94 failures 12:29:05-28, all pivot during write on insert into blocks; 2-3 of 4 writers aborted at the same instant in 26 of 58 collisions; Sv1 retries match within 1 ms. Packet section 7; recipe 13 target confirmed (da-cn-splice).
