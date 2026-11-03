@@ -115,11 +115,11 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 | 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | resolved |
 | 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | presented |
 | 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | open |
-| 7 | 11163 (parent 10907) | new | sv2 ImportPartyAcs refused, last event is a topology offset | U | open |
+| 7 | 11163 (parent 10907) | new | sv2 ImportPartyAcs refused, last event is a topology offset | U | resolved |
 | 8 | 11141 | new | first Postgres connection > 5 s at shard start | AG | open |
 | 9 | 11147 | new | sim-clock jump timeouts trip the sv2 circuit breaker | AF | open |
-| 10 | 11155 (parent 10438) | new | Locked connection was lost at Canton startup | G | open |
-| 11 | 10891 (parent 10921) | done | PeriodicTopologySnapshot missing scopes on a PR branch without #8148 | V | open |
+| 10 | 11155 (parent 10438) | new | Locked connection was lost at Canton startup | G | resolved |
+| 11 | 10891 (parent 10921) | done | PeriodicTopologySnapshot missing scopes on a PR branch without #8148 | V | resolved |
 | 12 | 11140 | done | BftScanConnection refresh WARN after the suppression ended | AB | open |
 | 13 | 10495 | done | offboarded sv4 mediator in-flight send rejected | G | open |
 | 14 | 10496 | done | docs job npm ci hangs | J | open |
@@ -255,3 +255,5 @@ User: pause for today; only close inbox items that are duplicates. Live issue li
   11174 (backup_status_cluster, cni), 11175 (static_tests), 11170, 11171 (needs-log).
 
 User: duplicate-close comments must not say Duplicate of #N (close --duplicate-of links the parent already). Rule in issue-comment.md; the five close commands of the duplicate check reissued without it.
+
+Duplicate check: all five closed by the user 2026-11-03 23:49-23:54 (state_reason duplicate): 11169, 11176, 11163, 11155, 10891. 11169, 11176, 11163 still have the Duplicate of #N prefix (posted before the rule change). Items 7, 10, 11 resolved. Next session: step-mode queue from item 6 (11161), then the untriaged new items listed above.
