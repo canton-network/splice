@@ -500,7 +500,8 @@ State as recorded in the family section, not rechecked against the tracker on 20
   DomainIngestionService marks `success` on the first poll and a silent `noop` 24-36 s later; `metrics.get` needs one
   series. Test bug.
 - Parent 10732 (run 40672823965); dup 11143 (run 41481391794).
-- Fix (test, not written): add `"outcome" -> "success"` to the label map at WalletMetricsTest.scala:133-136.
+- Fix (test): `"outcome" -> "success"` in the label map at WalletMetricsTest.scala:133-136, branch
+  `rautenrieth-da/fix-10732-wallet-metrics-outcome-label` (2026-11-03).
 
 ## AD. TrafficBasedRewards test reads round totals before the parallel backlog computation committed them
 - Signature (test failure): `RewardAccountingActivityTotalsUndetermined(...) Round <n> should have totals
