@@ -84,6 +84,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def mintingTrafficBased: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 
+  // TODO(#7837): make this work with amulet_0_1_25
   private val packagesNewerThanPinned =
     Seq(
       DarResources.amulet -> DarResources.amulet_0_1_24,
@@ -109,9 +110,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           backend.participantClient.upload_dar_unless_exists(tokenStandardTestDarPath)
         }
       })
-      // Test with older amulet version (before the 104 amendement is
-      // effective), to confirm we have no regression.
-      // Once the amulet_0_1_25 is effective on mainnet this test can be safely removed.
+      // TODO(#7837): make this work with amulet_0_1_25
       .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(c =>
           c.copy(initialPackageConfig =
