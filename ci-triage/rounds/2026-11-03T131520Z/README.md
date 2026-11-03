@@ -112,8 +112,8 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 | 1 | 11152, 11153, 11154 | new | Deploy CIMain trigger: cluster test invoker HTTP 500, 3 attempts | J | resolved |
 | 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | resolved |
 | 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | resolved |
-| 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | presented |
-| 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | open |
+| 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | resolved |
+| 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | presented |
 | 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | open |
 | 7 | 11163 (parent 10907) | new | sv2 ImportPartyAcs refused, last event is a topology offset | U | open |
 | 8 | 11141 | new | first Postgres connection > 5 s at shard start | AG | open |
@@ -210,3 +210,11 @@ User 2026-11-03: every comment body goes into a body file (comments/<ref>.md); o
 Item 4: user asked why the new eventually repeats the checks of the block below it; fix redone as the user chose: block 1 (wait for round 10) deleted, the per-round read block wrapped in eventually(). Amended to 9f4b991cbd (replaces bd47fecde5); scalafmtOnly and Test/compile pass. Body file updated.
 
 Item 4: user opened PR 8221. User: issue comments never reference the fix PR or branch (the PR links the issue with Fixes); describe the fix in one sentence. Body file and issue-comment.md updated; applies to all later items.
+
+Item 4: comment posted (user, 2026-11-03); retitle and set_status not confirmed. PR 8221 waits for review. Lesson
+not yet answered. Resolved.
+
+Item 5 (11160): artifact re-downloaded (lost in the rebuild). Correction to the packet: the Created batch at
+12:29:27.680 holds requests enqueued at 27.667/27.672, not the one from 09.478; the decisive lines are the insert
+block retry chain (11.392 to 27.539) and block 6840 at 27.587 delivering the broadcast; empty blocks kept being
+processed in the gap. Fix is production code (validator app), so no automatic branch. Body file comments/11160.md.
