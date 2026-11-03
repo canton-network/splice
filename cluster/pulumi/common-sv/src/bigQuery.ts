@@ -251,10 +251,6 @@ function installDatastream(
         },
         destinationConnectionProfile: destination.name,
       },
-      // TODO (#7553) s11: confirm backfill is really none on all legacy environments now, with
-      //   gcloud datastream streams describe <cluster's legacy stream, e.g. sv-1-scan-update-history> \
-      //     --location=<CLOUDSDK_COMPUTE_REGION> --format="yaml(backfillNone, backfillAll)"
-      // `backfillNone: {}` means none; if `backfillAll` is shown, it is still automatic.
       // Tables added to the stream later (e.g. interned_strings) must be backfilled manually.
       backfillNone: {},
       labels: {
