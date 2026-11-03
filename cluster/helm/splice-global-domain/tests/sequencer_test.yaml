@@ -270,7 +270,7 @@ tests:
             secretName: custom-pg-secret
             databaseName: custom_bft_db
             user: custom-user
-            initImageName: "postgres:14"
+            initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
     documentSelector:
       path: kind
       value: Deployment
@@ -306,7 +306,7 @@ tests:
           path: spec.template.spec.initContainers[1]
           content:
             name: pg-init-bft-driver
-            image: postgres:14
+            image: postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
             env:
               - name: PGPASSWORD
                 valueFrom:
@@ -318,7 +318,7 @@ tests:
     set:
       imageRepo: "secure-registry.example.com"
       sequencer.cometbft.imageName: "custom-cometbft-sequencer"
-      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:18-primary"
     documentSelector:
       path: kind
       value: Deployment
@@ -328,15 +328,15 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-cometbft-sequencer:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-primary"
+          value: "secure-registry.example.com/postgres:18-primary"
 
   - it: "allows setting standard sequencer image and initImages for non-cometbft driver"
     set:
       sequencer.driver.type: "cantonbft"
       imageRepo: "secure-registry.example.com"
       sequencer.imageName: "custom-standard-sequencer"
-      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
-      sequencer.driver.persistence.initImageName: "secure-registry.example.com/postgres:14-driver"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:18-primary"
+      sequencer.driver.persistence.initImageName: "secure-registry.example.com/postgres:18-driver"
       sequencer.driver.persistence.host: "dummy-host"
       sequencer.driver.persistence.databaseName: "dummy_db"
     documentSelector:
@@ -348,10 +348,10 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-standard-sequencer:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-primary"
+          value: "secure-registry.example.com/postgres:18-primary"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].image
-          value: "secure-registry.example.com/postgres:14-driver"
+          value: "secure-registry.example.com/postgres:18-driver"
 
   - it: "allows overriding sequencer base database password with raw strings"
     set:
