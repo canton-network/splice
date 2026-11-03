@@ -74,3 +74,7 @@
 
     - **Behavior change** When auth is disabled, setting `allowedOrigins` in the `splice-validator` Helm chart is mandatory.
       The Docker Compose validator deployment sets it automatically.
+
+  - Docker images
+
+    - Upgrade base image to 1.0.19
