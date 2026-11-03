@@ -155,11 +155,11 @@ trait BaseLedgerApiAdministration extends NoTracing with StreamingCommandHelper 
   implicit protected[canton] lazy val executionContext: ExecutionContext =
     consoleEnvironment.environment.executionContext
 
-  implicit val consoleEnvironment: ConsoleEnvironment
+  implicit protected val consoleEnvironment: ConsoleEnvironment
 
   protected val name: String
 
-  private[canton] lazy val userId: String = ledgerApiToken
+  private[canton] lazy val userId: String = token
     .flatMap(encodedToken => JwtDecoder.decode(Jwt(encodedToken)).toOption)
     .flatMap(decodedToken => AuthServiceJWTCodec.readFromString(decodedToken.payload).toOption)
     .map {
@@ -196,7 +196,7 @@ trait BaseLedgerApiAdministration extends NoTracing with StreamingCommandHelper 
       optTimeout: Option[config.NonNegativeDuration],
   ): Tx
 
-  def timeouts: ConsoleCommandTimeout = consoleEnvironment.commandTimeouts
+  private def timeouts: ConsoleCommandTimeout = consoleEnvironment.commandTimeouts
 
   protected def defaultLimit: PositiveInt =
     consoleEnvironment.environment.config.parameters.console.defaultLimit
@@ -3976,7 +3976,7 @@ trait BaseLedgerApiAdministration extends NoTracing with StreamingCommandHelper 
 trait LedgerApiAdministration extends BaseLedgerApiAdministration {
   this: LedgerApiCommandRunner & AdminCommandRunner & NamedLogging & FeatureFlagFilter =>
 
-  implicit val consoleEnvironment: ConsoleEnvironment
+  implicit protected val consoleEnvironment: ConsoleEnvironment
   protected val name: String
 
   import com.digitalasset.canton.util.ShowUtil.*

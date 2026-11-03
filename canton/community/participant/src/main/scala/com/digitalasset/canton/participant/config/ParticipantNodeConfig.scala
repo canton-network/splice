@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** Base for all participant configs - both local and remote */
-trait BaseParticipantConfig extends NodeConfig with Product with Serializable {
+sealed trait BaseParticipantConfig extends NodeConfig with Product with Serializable {
   def clientLedgerApi: ClientConfig
 }
 
@@ -151,17 +151,13 @@ final case class ParticipantFeaturesConfig(
   *   defined when the remote participant exposes a JSON API endpoint that the console should
   *   access, and left as None otherwise
   * @param token
-  *   optional bearer token to use on the ledger-api and the admin-api if jwt authorization is
-  *   enabled
-  * @param adminApiToken
-  *   if defined replaces `token` in admin-api calls
+  *   optional bearer token to use on the ledger-api if jwt authorization is enabled
   */
 final case class RemoteParticipantConfig(
     adminApi: FullClientConfig,
     ledgerApi: FullClientConfig,
     ledgerJsonApi: Option[JsonClientConfig] = None,
     token: Option[String] = None,
-    adminApiToken: Option[String] = None,
     httpHealth: Option[HttpHealthServerConfig] = None,
 ) extends BaseParticipantConfig {
   override def clientAdminApi: ClientConfig = adminApi
