@@ -52,16 +52,21 @@ runs:
     - name: Collect cache hits
       id: cache_hits
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        CLASSES_HIT: ${{ steps.classes.outputs.cache_hit }}
+        SBT_HIT: ${{ steps.sbt.outputs.cache_hit }}
+        NODE_MODULES_HIT: ${{ steps.frontend_node_modules.outputs.cache_hit }}
+        DAML_HIT: ${{ steps.daml.outputs.cache_hit }}
+      run: |
         # Collect cache hits into a json struct.
         # Note that when there's a complete miss rather than a hit on an alternative key,
         # the output from the cache/restore action is empty and not false,
         # so we need to guard against that.
 
-        classes=${{ steps.classes.outputs.cache_hit }}
-        sbt=${{ steps.sbt.outputs.cache_hit }}
-        node_modules=${{ steps.frontend_node_modules.outputs.cache_hit }}
-        daml=${{ steps.daml.outputs.cache_hit }}
+        classes="$CLASSES_HIT"
+        sbt="$SBT_HIT"
+        node_modules="$NODE_MODULES_HIT"
+        daml="$DAML_HIT"
         echo "cache_hits={ \
           \"classes\": ${classes:-false}, \
           \"sbt\": ${sbt:-false}, \

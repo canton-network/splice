@@ -15,11 +15,15 @@ runs:
     - name: Check if static only
       id: check
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        GH_TOKEN: ${{ inputs.gh_token }}
+        PR_URL: ${{ github.event.pull_request.url }}
+      run: |
         set -eou pipefail
         last_commit_msg=$(git log -1 --pretty=%B)
           echo "Last commit message: $last_commit_msg"
-        if [[ "${{ github.event_name }}" == "pull_request"* ]]; then
+        if [[ "$EVENT_NAME" == "pull_request"* ]]; then
           # We query through the API here instead of relying on github.event.pull_request.labels
           # as the latter is fixed when the job starts which for `env_hold` jobs
           # is _before_ the approval already e.g. when an external contributor
@@ -29,10 +33,10 @@ runs:
           # bodies (breaking jq) and dies once jq exits (curl error 23).
           pr_json="$RUNNER_TEMP/pr.json"
           curl -sSL --fail-with-body -o "$pr_json" \
-               -H "Authorization: Bearer ${{ inputs.gh_token }}" \
+               -H "Authorization: Bearer $GH_TOKEN" \
                --retry 10 --retry-delay 10 --retry-all-errors \
                -H "Accept: application/vnd.github.v3+json" \
-               "${{ github.event.pull_request.url }}" \
+               "$PR_URL" \
             || { echo "PR fetch failed; last response body:"; cat "$pr_json"; exit 1; }
           pr_labels=$(jq '.labels' "$pr_json")
           echo "Pull request labels: $pr_labels"

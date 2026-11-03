@@ -156,9 +156,11 @@ runs:
     - name: Export Daml package versions output
       id: daml_package_versions
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        DAML_BASE_VERSION: ${{ inputs.daml_base_version }}
+      run: |
         # We can't export from within run so we do it here.
-        if [[ "${{ inputs.daml_base_version }}" != "" ]]; then
+        if [[ "$DAML_BASE_VERSION" != "" ]]; then
           echo "initial_package_versions='$(cat initial_package_config)'" >> "$GITHUB_OUTPUT"
         fi
 
@@ -176,7 +178,9 @@ runs:
     - name: Set RUN_SPLITTED_TESTS_CMD
       id: list_tests
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        RUNNER_INDEX: ${{ inputs.runner_index }}
+      run: |
         tags=""
         if [ -f scala_test_tags ]
         then
@@ -189,7 +193,7 @@ runs:
         # `testOnly` without test names runs every test, so an empty batch must skip sbt instead
         count=$(wc -w < /tmp/tests)
         if [[ "$count" == "0" ]]; then
-          echo "No tests assigned to runner ${{ inputs.runner_index }}, skipping the test run"
+          echo "No tests assigned to runner $RUNNER_INDEX, skipping the test run"
         fi
         echo "test_count=$count" >> "$GITHUB_OUTPUT"
 
@@ -233,12 +237,15 @@ runs:
 
     - name: Wait for Canton to be ready
       shell: bash
-      run: | # zizmor: ignore[template-injection]
-        if [[ "${{ inputs.with_canton }}" == "false" ]]; then
+      env:
+        WITH_CANTON: ${{ inputs.with_canton }}
+        START_CANTON_OPTIONS: ${{ inputs.start_canton_options }}
+      run: |
+        if [[ "$WITH_CANTON" == "false" ]]; then
           echo "This job does not require Canton"
           exit 0
         fi
-        start_canton_options="${{ inputs.start_canton_options }}"
+        start_canton_options="$START_CANTON_OPTIONS"
         if [[ "$start_canton_options" == *"-w"* ]]; then
           ./wait-for-canton.sh -w
         elif [[ "$start_canton_options" == *"-s"* ]]; then

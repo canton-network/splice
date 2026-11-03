@@ -56,10 +56,12 @@ runs:
     - name: Collect test reports
       if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        SPLICE_ROOT: ${{ inputs.splice_root }}
+      run: |
         sudo mkdir -p /cache/test-reports
         sudo chown $(whoami):$(whoami) "/cache/test-reports"
-        for report in $(find ${{ inputs.splice_root }} -path "*/target/test-reports/TEST-*.xml")
+        for report in $(find "$SPLICE_ROOT" -path "*/target/test-reports/TEST-*.xml")
         do
           header=$(grep -m1 -oE '<testsuite [^>]*>' "$report" || true)
           if [[ "$header" == *' failures="0"'* && "$header" == *' errors="0"'* && "$header" != *' tests="0"'* ]]; then

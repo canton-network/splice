@@ -49,33 +49,39 @@ runs:
     - name: Check if include commit message tag matches and skip
       if: ${{ inputs.skip_if_commit_tag != '' }}
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        SKIP_TAG: ${{ inputs.skip_if_commit_tag }}
+      run: |
         last_commit_msg=$(git log -1 --pretty=%B)
-        if [[ $last_commit_msg =~ "[${{ inputs.skip_if_commit_tag }}]" ]]; then
-          echo "Commit message ($last_commit_msg) includes tag (${{ inputs.skip_if_commit_tag }}), skipping"
+        if [[ $last_commit_msg =~ "[$SKIP_TAG]" ]]; then
+          echo "Commit message ($last_commit_msg) includes tag ($SKIP_TAG), skipping"
           echo "skip=true" >> "$GITHUB_ENV"
         else
-          echo "Commit message ($last_commit_msg) does not include tag (${{ inputs.skip_if_commit_tag }}), running"
+          echo "Commit message ($last_commit_msg) does not include tag ($SKIP_TAG), running"
         fi
     - name: Check if include commit message tag matches
       if: ${{ inputs.run_if_commit_tag != '' }}
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        RUN_TAG: ${{ inputs.run_if_commit_tag }}
+      run: |
         last_commit_msg=$(git log -1 --pretty=%B)
-        if [[ $last_commit_msg =~ "[${{ inputs.run_if_commit_tag }}]" ]]; then
-          echo "Commit message ($last_commit_msg) includes tag (${{ inputs.run_if_commit_tag }}), running"
+        if [[ $last_commit_msg =~ "[$RUN_TAG]" ]]; then
+          echo "Commit message ($last_commit_msg) includes tag ($RUN_TAG), running"
         else
-          echo "Commit message ($last_commit_msg) does not include tag (${{ inputs.run_if_commit_tag }}), skipping"
+          echo "Commit message ($last_commit_msg) does not include tag ($RUN_TAG), skipping"
           echo "skip=true" >> "$GITHUB_ENV"
         fi
 
     - name: Check if skip files changed
       if: ${{ inputs.skip_if_files_changed != '' }}
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        SKIP_FILES: ${{ inputs.skip_if_files_changed }}
+      run: |
         latest_release=$(cat "LATEST_RELEASE")
         base=$(git rev-parse origin/release-line-"${latest_release}")
-        changed=$(git diff --name-only $base -- ${{ inputs.skip_if_files_changed }})
+        changed=$(git diff --name-only $base -- $SKIP_FILES)
         if [ -n "$changed" ]; then
           echo "Lock files changed ($changed), skipping"
           echo "skip=true" >> "$GITHUB_ENV"
@@ -88,7 +94,9 @@ runs:
     - name: Generate runner indices
       id: generate_index_list
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        PARALLELISM: ${{ inputs.parallelism }}
+      run: |
         last_commit_msg=$(git log -1 --pretty=%B)
         echo "Last commit message: $last_commit_msg"
         if [[ "${skip}" == "true" ]]; then
@@ -96,7 +104,7 @@ runs:
           echo "json=[]" >> "$GITHUB_OUTPUT"
         else
           echo "Not skipping, generating indices"
-          MAX_INDEX=$((${{ inputs.parallelism }}-1))
+          MAX_INDEX=$((PARALLELISM-1))
           INDEX_LIST=$(seq 0 ${MAX_INDEX})
           INDEX_JSON=$(jq --null-input --compact-output '. |= [inputs]' <<< "${INDEX_LIST}")
           echo "json=${INDEX_JSON}" >> "$GITHUB_OUTPUT"

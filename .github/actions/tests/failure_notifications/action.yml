@@ -40,9 +40,11 @@ runs:
         FAILURE_NOTIFICATIONS_TOKEN: ${{ steps.auth.outputs.id_token }}
         FAILURE_NOTIFICATIONS_URL: ${{ inputs.notifications_url }}
         NOTIFICATION_SLACK_CHANNEL: ${{ inputs.slack_channel }}
+        GITHUB_REPO: ${{ github.repository }}
+        JOB_SUBNAME: ${{ inputs.job_subname }}
       shell: bash
-      run: | # zizmor: ignore[template-injection]
-        if [[ "${{ github.repository }}" == "DACH-NY/canton-network-internal" ]]; then
+      run: |
+        if [[ "$GITHUB_REPO" == "DACH-NY/canton-network-internal" ]]; then
           # on the internal repository, source the Nix environment and envrc
           source "$NIX_ENV_SOURCE"
           source "$ENVRC_SOURCE"
@@ -51,4 +53,4 @@ runs:
           echo "Not a self-hosted runner. Installing required Python packages..."
           python3 -m pip install GitPython requests
         fi
-        ${GITHUB_ACTION_PATH}/../../scripts/notification-scripts/failure_notification.py --job_subname "${{ inputs.job_subname }}"
+        ${GITHUB_ACTION_PATH}/../../scripts/notification-scripts/failure_notification.py --job_subname "$JOB_SUBNAME"

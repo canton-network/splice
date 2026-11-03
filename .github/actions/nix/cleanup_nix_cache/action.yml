@@ -23,10 +23,12 @@ runs:
   steps:
     - name: Prune nix cache directories
       shell: bash
-      run: | # zizmor: ignore[template-injection]
+      env:
+        MAX_AGE_DAYS: ${{ inputs.max_age_days }}
+      run: |
         set -euxo pipefail
 
-        max_age="${{ inputs.max_age_days }}"
+        max_age="$MAX_AGE_DAYS"
 
         echo "Pruning nix cache directories older than ${max_age} days"
 
