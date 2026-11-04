@@ -253,7 +253,7 @@ echo 'Importing into CloudSQL'
 # rest with HTTP 409. The legacy and stag-prod publications run this
 # script concurrently against the same instance, and a flag change may
 # be restarting it, so retry the import until the instance is free.
-IMPORT_ATTEMPTS=40
+IMPORT_ATTEMPTS=36 # with the 15s retries, about 9 minutes
 IMPORT_RETRY_SECONDS=15
 for ((attempt = 1; ; attempt++)); do
   if import_output=$(gcloud sql import sql "$POSTGRES_INSTANCE_NAME" "$GCS_URI" \
