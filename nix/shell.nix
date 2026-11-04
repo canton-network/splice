@@ -46,7 +46,7 @@ let
     openjdk21
     pigz
     popeye
-    postgresql_14
+    postgresql_18
     pre-commit
     procps
     protobuf_25
