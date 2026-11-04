@@ -13,7 +13,7 @@
 
   - Governance locks
 
-    - **Behavior change** The `cip-127/*` entries (e.g. `cip-127/lock-kind` and `cip-127/lock-status`) are no longer
+    - The `cip-127/*` metadata entries (e.g. `cip-127/lock-kind` and `cip-127/lock-status`), which were created by accident in the metadta, are no longer
       written to the metadata of governance lock transfer instructions and of lock transfer and substitution proposals.
       They were published by accident. Read the lock information from the `cip-127/memo:` memo in the reason
       (`splice.lfdecentralizedtrust.org/reason`) instead.
