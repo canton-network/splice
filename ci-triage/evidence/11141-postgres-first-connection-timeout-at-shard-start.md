@@ -247,3 +247,4 @@ UTC 14:33 0.032, 14:34 0.158, 14:35 0.361, 14:36 0.290, 14:37 0.382, 14:38 0.720
 The stall minute (14:39) is at 0.62, below the later peak. The postgres container of the same pod is not in the
 export; with a job limit of 8 cores (JVM availableProcessors 8) the job used about 5 of the node's about 9 cores.
 Node allocatable cores (user): 31; so about 9 of 31 in use, the node was not saturated. Open: postgres container limit utilization.
+Limit utilization by container (user): only `job` has a series, so the postgres service container has no CPU limit. Remaining explanation: sub-minute throttling of `job` (8 cores) during the startup burst; not provable with 1 min metrics.
