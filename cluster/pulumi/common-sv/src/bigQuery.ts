@@ -835,6 +835,14 @@ function createPublicationAndReplicationSlots(
 
   const commonDependencies = [scan, databaseInstance, replicatorUser];
 
+  // Skip dropping the publications and slots when the whole SV goes,
+  // as on `cncluster reset`: the database goes with them, and dropping
+  // them only races its deletion. Keyed on the namespace, not the
+  // database instance: an external instance is only a lookup, which
+  // also goes when the bigQuery config is removed, and then the slots
+  // on the live database must be dropped or they retain WAL forever.
+  const deletedWith = namespace.ns;
+
   // ---------------------------------------------------------------------------
   // 2. Base Arguments Split (Matches Stored Deployment Ordering & Formatting)
   // ---------------------------------------------------------------------------
@@ -890,6 +898,7 @@ function createPublicationAndReplicationSlots(
       {
         dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
         deleteBeforeReplace: true,
+        deletedWith,
       }
     );
   }
@@ -915,6 +924,7 @@ function createPublicationAndReplicationSlots(
       {
         dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
         deleteBeforeReplace: true,
+        deletedWith,
       }
     );
   }
