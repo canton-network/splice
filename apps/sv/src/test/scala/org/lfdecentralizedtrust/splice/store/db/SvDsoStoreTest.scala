@@ -22,7 +22,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.CometBftConfigLimits
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
+import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.{
+  MemberTraffic,
+  RegisteredSynchronizer,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
   DsoDecentralizedSynchronizerConfig,
   SynchronizerNodeConfigLimits,
@@ -518,6 +521,58 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
+
+    "RegisteredSynchronizer" should {
+      def lookup(store: SvDsoStore, cid: RegisteredSynchronizer.ContractId) =
+        store.multiDomainAcsStore.lookupContractById(RegisteredSynchronizer.COMPANION)(cid)
+
+      "be found by contract id" in {
+        val wanted = registeredSynchronizer(userParty(1), "dedicated::1220aa")
+        val other = registeredSynchronizer(userParty(2), "dedicated::1220bb")
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(other)(store.multiDomainAcsStore)
+          result <- lookup(store, wanted.contractId)
+        } yield result.map(_.contract) should be(Some(wanted))
+      }
+
+      // An update or archive vote archives the registration it names, which leaves any other
+      // vote naming it stale.
+      "not be found by contract id once archived" in {
+        val registration = registeredSynchronizer(userParty(1), "dedicated::1220aa")
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(registration)(store.multiDomainAcsStore)
+          _ <- dummyDomain.archive(registration)(store.multiDomainAcsStore)
+          result <- lookup(store, registration.contractId)
+        } yield result should be(None)
+      }
+
+      // The ledger does not prevent two registrations of one synchronizer id, so the SV UI lists
+      // them all and rejects a proposal to register an id that has one.
+      "list the active registrations of a synchronizer id, in contract-id order" in {
+        val lower = registeredSynchronizer(userParty(1), "dedicated::1220aa")
+        val higher = registeredSynchronizer(userParty(2), "dedicated::1220aa")
+        val archived = registeredSynchronizer(userParty(3), "dedicated::1220aa")
+        val other = registeredSynchronizer(userParty(4), "dedicated::1220bb")
+        lower.contractId.contractId should be < higher.contractId.contractId
+        for {
+          store <- mkStore()
+          // Ingest `lower` second so insertion order and contract-id order disagree.
+          _ <- dummyDomain.create(higher)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(lower)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(archived)(store.multiDomainAcsStore)
+          _ <- dummyDomain.archive(archived)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(other)(store.multiDomainAcsStore)
+          listed <- store.listSynchronizerRegistrations("dedicated::1220aa")
+          missing <- store.listSynchronizerRegistrations("dedicated::1220zz")
+        } yield {
+          listed.map(_.contract) should be(Seq(lower, higher))
+          missing should be(empty)
+        }
+      }
+    }
 
     "lookupFeaturedAppRightWithOffset with several rights for the provider" should {
       "return the newest one, breaking ties by contract id" in {
@@ -2656,6 +2711,75 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
     }
 
+    "listPaymasterTrafficContracts" should {
+
+      "list the paymaster contracts of a dedicated synchronizer" in {
+        val member = ParticipantId("member", Namespace(Fingerprint.tryFromString(s"dummy")))
+        val goodContracts = (1 to 3).map(n => paymasterTraffic(dummy2Domain, n.toLong))
+        val badContracts = (4 to 6).map(n => paymasterTraffic(dummyDomain, n.toLong)) ++
+          (7 to 9).map(n => memberTraffic(member, dummy2Domain, n.toLong))
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            goodContracts ++ badContracts
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listPaymasterTrafficContracts(
+            dummy2Domain,
+            PageLimit.tryCreate(100),
+          )
+        } yield result should contain theSameElementsAs goodContracts
+      }
+
+      "skip a contract with an invalid synchronizer id" in {
+        val invalidContract = memberTrafficContract("", "not-a-synchronizer-id", 1L, 0L)
+        val goodContract = paymasterTraffic(dummy2Domain, 2L)
+        for {
+          store <- mkStore()
+          // ingesting the invalid contract must not fail, so the good one is ingested after it
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(invalidContract, goodContract)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listPaymasterTrafficContracts(
+            dummy2Domain,
+            PageLimit.tryCreate(100),
+          )
+        } yield result should contain theSameElementsAs Seq(goodContract)
+      }
+
+      "include the paymaster contracts at migration id 0 on a later migration" in {
+        val member = ParticipantId("member", Namespace(Fingerprint.tryFromString(s"dummy")))
+        val laterMigrationId = domainMigrationId + 1
+        val paymasterContract = paymasterTraffic(dummy2Domain, 1L)
+        val oldMemberContract = memberTraffic(member, dummyDomain, 2L)
+        val memberContract = memberTraffic(member, dummyDomain, 3L, laterMigrationId)
+        for {
+          store <- mkStore(laterMigrationId)
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(paymasterContract, oldMemberContract, memberContract)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          paymasterResult <- store.listPaymasterTrafficContracts(
+            dummy2Domain,
+            PageLimit.tryCreate(100),
+          )
+          memberResult <- store.listMemberTrafficContracts(
+            StoreMemberId(member),
+            dummyDomain,
+            PageLimit.tryCreate(100),
+          )
+        } yield {
+          paymasterResult should contain theSameElementsAs Seq(paymasterContract)
+          memberResult should contain theSameElementsAs Seq(memberContract)
+        }
+      }
+
+    }
+
     "getTotalPurchasedMemberTraffic" should {
 
       "return the sum over all traffic contracts for the member" in {
@@ -2883,16 +3007,47 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )
   }
 
+  private def registeredSynchronizer(paymaster: PartyId, synchronizerId: String) =
+    contract(
+      RegisteredSynchronizer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new RegisteredSynchronizer.ContractId(nextCid()),
+      new RegisteredSynchronizer(
+        dsoParty.toProtoPrimitive,
+        synchronizerId,
+        paymaster.toProtoPrimitive,
+        java.math.BigDecimal.ONE.setScale(10),
+        java.math.BigDecimal.ONE.setScale(10),
+      ),
+    )
+
+  private def paymasterTraffic(
+      synchronizerId: SynchronizerId,
+      totalPurchased: Long,
+  ) = memberTrafficContract("", synchronizerId.toProtoPrimitive, totalPurchased, 0L)
+
   private def memberTraffic(
       member: Member,
       synchronizerId: SynchronizerId,
       totalPurchased: Long,
+      migrationId: Long = domainMigrationId,
+  ) = memberTrafficContract(
+    member.toProtoPrimitive,
+    synchronizerId.toProtoPrimitive,
+    totalPurchased,
+    migrationId,
+  )
+
+  private def memberTrafficContract(
+      memberId: String,
+      synchronizerId: String,
+      totalPurchased: Long,
+      migrationId: Long,
   ) = {
     val template = new MemberTraffic(
       dsoParty.toProtoPrimitive,
-      member.toProtoPrimitive,
-      synchronizerId.toProtoPrimitive,
-      domainMigrationId,
+      memberId,
+      synchronizerId,
+      migrationId,
       totalPurchased,
       1,
       numeric(1.0),
@@ -3057,6 +3212,8 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
   protected def mkStore(): Future[SvDsoStore]
 
+  protected def mkStore(migrationId: Long): Future[SvDsoStore]
+
   lazy val acsOffset = nextOffset()
   lazy val domain = dummyDomain.toProtoPrimitive
   lazy val storeSvParty = providerParty(42)
@@ -3069,7 +3226,9 @@ class DbSvDsoStoreTest
     with AcsJdbcTypes
     with AcsTables {
 
-  override protected def mkStore(): Future[DbSvDsoStore] = {
+  override protected def mkStore(): Future[DbSvDsoStore] = mkStore(domainMigrationId)
+
+  override protected def mkStore(migrationId: Long): Future[DbSvDsoStore] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
         DarResources.amulet.all ++
@@ -3085,7 +3244,7 @@ class DbSvDsoStoreTest
         storage,
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-        domainMigrationId,
+        migrationId,
         synchronizerId = dummyDomain,
         participantId = mkParticipantId("SvDsoStoreTest"),
         IngestionConfig(),

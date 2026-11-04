@@ -43,6 +43,8 @@ import org.lfdecentralizedtrust.splice.automation.{AutomationService, DomainTime
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_RegisterSynchronizer
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection.INITIAL_ROUND_USER_METADATA_KEY
@@ -903,11 +905,16 @@ object SvApp {
       "Splice.DsoRules",
       "ActionRequiringConfirmation",
     )(action)
-    FeaturedAppRightValidator
-      .validateFeaturedAppRightAction(
-        decodedAction,
-        dsoStoreWithIngestion.store,
-      )
+    val validated: Future[Either[String, Unit]] =
+      validateVoteRequestAction(decodedAction) match {
+        case Left(reason) => Future.successful(Left(reason))
+        case Right(()) =>
+          FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            decodedAction,
+            dsoStoreWithIngestion.store,
+          )
+      }
+    validated
       .flatMap {
         case Left(err) => Future.successful(Left(err))
         case Right(()) =>
@@ -960,6 +967,21 @@ object SvApp {
             }
       }
   }
+
+  def validateVoteRequestAction(action: ActionRequiringConfirmation): Either[String, Unit] =
+    action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          // Daml does not check the synchronizer id. A malformed one can't name a real synchronizer,
+          // and the SV and Scan stores can't index its paymaster's traffic, so it's never merged.
+          case register: SRARC_RegisterSynchronizer =>
+            SynchronizerId
+              .fromString(register.dsoRules_RegisterSynchronizerValue.synchronizerId)
+              .bimap(err => s"Invalid synchronizer id: $err", _ => ())
+          case _ => Right(())
+        }
+      case _ => Right(())
+    }
 
   def archiveDryRunRewardAccountingContracts(
       rounds: Seq[Long],
