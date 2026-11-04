@@ -1782,7 +1782,10 @@ function subcmd_participant_console() {
                 cncluster participant_console sv-1 7
 
               Example: opening multi-participant-24 console
-                cncluster participant_console multi-validator 7 multi-participant-24 7"
+                cncluster participant_console multi-validator 7 multi-participant-24 7
+
+              Set CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead
+              of opening a console."
     fi
 
     app_container="$app"
@@ -1849,11 +1852,19 @@ function subcmd_participant_console() {
     kubectl port-forward -n "$namespace" "$participant_pod" 11001:5"${participant_number}"01 11002:5"${participant_number}"02 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-participant.conf"
+    if [ "${CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-participant.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-participant.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 subcommand_whitelist[sequencer_console]='Open a Canton console against a single sequencer running in the target namespace'
@@ -1865,7 +1876,8 @@ function subcmd_sequencer_console() {
     domain=${2:-0}
 
     if [ -z "${namespace}" ]; then
-        _error "Usage: $SCRIPTNAME sequencer_console <namespace-name> [<migration_id>]"
+        _error "Usage: $SCRIPTNAME sequencer_console <namespace-name> [<migration_id>]
+              Set CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead of opening a console."
     fi
 
     app="global-domain-sequencer"
@@ -1884,11 +1896,19 @@ function subcmd_sequencer_console() {
     kubectl port-forward -n "$namespace" "$sequencer_pod" 11001:5008 11002:5009 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-sequencer.conf"
+    if [ "${CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-sequencer.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-sequencer.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 subcommand_whitelist[mediator_console]='Open a Canton console against a single mediator running in the target namespace'
@@ -1900,7 +1920,8 @@ function subcmd_mediator_console() {
     domain=${2:-0}
 
     if [ -z "${namespace}" ]; then
-        _error "Usage: $SCRIPTNAME mediator_console <namespace-name>"
+        _error "Usage: $SCRIPTNAME mediator_console <namespace-name>
+              Set CONSOLE_SCRIPT=<file.sc> to run that script non-interactively instead of opening a console."
     fi
 
     app="global-domain-mediator"
@@ -1919,11 +1940,19 @@ function subcmd_mediator_console() {
     kubectl port-forward -n "$namespace" "$mediator_pod" 11001:5007 &
     port_forwarding_pid=$!
 
-    _info "Starting Canton console..."
-    canton -v -c "$SPLICE_ROOT/build-tools/local-mediator.conf"
+    if [ "${CONSOLE_SCRIPT-}" ]; then
+      _info "Running Canton script '$CONSOLE_SCRIPT'..."
+      canton_exit=0
+      canton run "$CONSOLE_SCRIPT" -c "$SPLICE_ROOT/build-tools/local-mediator.conf" || canton_exit=$?
+    else
+      _info "Starting Canton console..."
+      canton -v -c "$SPLICE_ROOT/build-tools/local-mediator.conf"
+    fi
 
     _info "Stopping port forwarding."
     kill $port_forwarding_pid
+    wait $port_forwarding_pid 2>/dev/null || true
+    return "${canton_exit:-0}"
 }
 
 function _get_single_pod() {
