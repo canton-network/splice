@@ -380,6 +380,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   06:00 status stale (11117) and 04:00 backup failed ~07:10 (11118, dup), recovered by 11-01. Not the 18:00 gap of
   10915. Cause (slow first backup vs failing serial-7 component) needs the GHA logs; expect the same at each net's LSU.
   Map cni GHA run ids to times via splice run ids (`gh api repos/canton-network/splice/actions/runs/N`, ~5.2 M ids/h).
+- GitHub incidents: CircleCI `Checkout submodule` or git clone failing with `Permission denied (publickey)` or
+  `Repository not found` for canton-foundation/configs(-private) or splice. Parent 10213 (2026-09-23, Github flake);
+  earlier 8599 (configs.git), 6800 (bump_splice configs-private), and clone failures 9748 9756 8611 8936 10224.
+  Search closed issues for `configs-private` and check githubstatus.com/history. 2026-11-04 10:06: 11184 11185
+  (bump_splice, deploy_ciperiodic_upgrade_workflow, cni cbc7cca0f8) during the GitHub incident `Incident with Pull
+  Requests, Git Operations and Issues`, 09:49-11:50 UTC.
 - ciperiodic deploy_upgrade (10677, 10736; 10:00 runs since 10-27): base = latest release (0.9.x submodule), then
   upgrade to main. Not family N. First runs after cni #7703 (synchronizerMigration.active added on the branch). Needs
   the CircleCI step output.
