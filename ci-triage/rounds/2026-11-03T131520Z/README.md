@@ -331,3 +331,10 @@ deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next
 11168: PR 8241 (user). 8238 wording unchanged (accepted, no CI re-run). Next: 11173.
 
 11173: family AI (new letter for 9752 lineage): TopupMemberTrafficTrigger of aliceValidator resubmitted while in flight, 19 SUBMISSION_ALREADY_IN_FLIGHT 17:01:20.567-17:01:38.536, breaker tripped 17:01:38.537. Third occurrence (9752, 10300). SequencerPruning in the same shard disabled only its own external participant (no AH).
+
+## 2026-11-04: Devnet backup_status_cluster (11145 11174 11190)
+
+18:10 on 11-02, 11-03, 11-04: the 18:00 race of 10915, now daily (since the Devnet LSU to serial 7, unconfirmed).
+No backup_cluster failure since 11118 and no status failure at other hours, so backups complete: not urgent, noise
+only. Close the three as dups of 10915, recurrence comment on 10915 (unowned), owner needed (krzysztofczyz-da).
+Confirmation, optional: stale list of run 41884202686, duration of the 11-04 16:00 Devnet Backup run.
