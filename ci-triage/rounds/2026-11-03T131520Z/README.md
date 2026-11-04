@@ -305,3 +305,5 @@ deployments, frequent flakes, rest. First pass (job log only, no deep analysis):
 Priority 1 (Y): user asked why each test needs the tag. Traffic: needs #8012 (0.1.25) - tag correct. Coupon: needs active == latest amulet version, not 0.1.25 (wrong-vetting log lines 0 in nightly 11178 vs 3 in main 11144); proposed NoDamlCompatibilityCheck instead; the 10930 comment of 10-30 (likely needs 0_1_25) needs a correction.
 
 Priority 1 (Y): user agreed. Branch amended to 67d433fb33 (coupon suite NoDamlCompatibilityCheck). Correction comment comments/10930.md.
+
+Priority 1 (Y): PR 8228 (user) fixes 10930 only (Fixes line). User: 10930 is the single parent; close 11178 and the traffic failures (10933, 11180, 11181) as dups of 10930; retitle 10930 to cover both tests. Commands handed out.
