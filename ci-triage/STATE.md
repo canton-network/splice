@@ -40,6 +40,9 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 
 ## Open fix branches
 
+2026-11-04: `rautenrieth-da/fix-10930-mainnet-daml-test-tags` (67d433fb33, off main b5e6a1ba55): family Y, coupon suite
+NoDamlCompatibilityCheck, traffic test cases SpliceAmulet_0_1_25 (fixes 10930, 10933); scalafmt and Test/compile pass; no PR yet.
+
 2026-11-04: `rautenrieth-da/fix-11161-login-helper-timeout` (72d55afdc9, off main 7307892450): family AE, login attempts
 in FrontendLoginUtil.loginOnceConfirmedToBeAtUrl get 15 s instead of 5 s; scalafmt and Test/compile pass; no PR yet.
 
