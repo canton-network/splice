@@ -16,7 +16,7 @@ create index idx_credentialrecord_lookup on credential_claim (
 );
 ```
 
-That column order matches the result order: `record_time` descending, `contract_id` ascending. The first row in a duplicate group is the last-write-wins record.
+That column order matches the result order: `record_time` descending, `contract_id` ascending. When `effectiveOnly` is set and the query specifies `property`, `issuer`, `holder`, and `subject`, the first row is the last-write-wins record. Otherwise the client takes, in each duplicate group, the first row whose validity period has started and has not ended.
 
 
 #### On deterministic responses when reading from multiple registry services
