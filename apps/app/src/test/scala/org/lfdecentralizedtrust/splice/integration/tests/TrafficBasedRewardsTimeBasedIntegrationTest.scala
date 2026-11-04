@@ -23,9 +23,7 @@ import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletA
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
-import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
-import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
@@ -62,7 +60,7 @@ import scala.util.Random
 //
 // DvP settlement from TokenStandardTest is used here just to confirm distribution of rewards
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -84,19 +82,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def mintingTrafficBased: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 
-  // TODO(#7837): make this work with amulet_0_1_25
-  private val packagesNewerThanPinned =
-    Seq(
-      DarResources.amulet -> DarResources.amulet_0_1_24,
-      DarResources.amuletNameService -> DarResources.amuletNameService_0_1_25,
-      DarResources.dsoGovernance -> DarResources.dsoGovernance_0_1_30,
-      DarResources.wallet -> DarResources.wallet_0_1_25,
-      DarResources.walletPayments -> DarResources.walletPayments_0_1_24,
-    ).flatMap { case (pkg, pinned) =>
-      pkg.all.filter(_.metadata.version > pinned.metadata.version)
-    }.groupBy(_.metadata.name)
-      .map { case (name, resources) => name -> resources.map(_.metadata.version).toSet }
-
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
@@ -110,36 +95,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           backend.participantClient.upload_dar_unless_exists(tokenStandardTestDarPath)
         }
       })
-      // TODO(#7837): make this work with amulet_0_1_25
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(c =>
-          c.copy(initialPackageConfig =
-            InitialPackageConfig(
-              amuletVersion = DarResources.amulet_0_1_24.metadata.version.toString,
-              amuletNameServiceVersion =
-                DarResources.amuletNameService_0_1_25.metadata.version.toString,
-              dsoGovernanceVersion = DarResources.dsoGovernance_0_1_30.metadata.version.toString,
-              validatorLifecycleVersion =
-                DarResources.validatorLifecycle_0_1_9.metadata.version.toString,
-              walletVersion = DarResources.wallet_0_1_25.metadata.version.toString,
-              walletPaymentsVersion = DarResources.walletPayments_0_1_24.metadata.version.toString,
-            )
-          )
-        )(config)
-      )
-      .withNoVettedPackages(implicit env =>
-        env.validators.local.map(_.participantClient) ++ env.svs.local.map(_.participantClient)
-      )
-      .addConfigTransform((_, config) =>
-        config.copy(
-          validatorApps = config.validatorApps.map { case (name, validator) =>
-            name -> validator.copy(additionalPackagesToUnvet = packagesNewerThanPinned)
-          },
-          svApps = config.svApps.map { case (name, sv) =>
-            name -> sv.copy(additionalPackagesToUnvet = packagesNewerThanPinned)
-          },
-        )
-      )
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
@@ -152,6 +107,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             ),
             appRewardCouponThreshold =
               TrafficBasedRewardsTimeBasedIntegrationTestBase.appRewardCouponThreshold,
+            // Set to the CIP-104 defaults to exercise the daml plumbing end-to-end.
+            extraFeaturedAssetActivityWeight = Some(BigDecimal("0.2")),
+            maxExtraFeaturedAssetActivityWeightPerAsset = Some(BigDecimal("0.1")),
+            dsoAppActivityWeight = Some(BigDecimal("0.1")),
           )
         )(config)
       )
