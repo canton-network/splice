@@ -12,3 +12,5 @@ auth:
 enableHealthProbes: true
 # Required for SVs: Scan serves ACS snapshots for validator recovery through the participant's repair service.
 enableRepairCommands: true
+# Replace YOUR_SV_NAME with the name you provided for your SV identity
+nodeIdentifier: YOUR_SV_NAME

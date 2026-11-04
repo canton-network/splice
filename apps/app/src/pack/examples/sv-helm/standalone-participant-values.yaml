@@ -12,3 +12,6 @@ persistence:
 
 # Enable only if needed, e.g., while restoring the validator from an identities dump or importing an ACS.
 enableRepairCommands: false
+# Replace YOUR_VALIDATOR_NODE_NAME with the name you provided for your validator identity.
+# Must match the nodeIdentifier in your standalone-validator-values.yaml.
+nodeIdentifier: "YOUR_VALIDATOR_NODE_NAME"

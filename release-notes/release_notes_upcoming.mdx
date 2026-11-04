@@ -11,6 +11,11 @@
     - `synchronizer-topology.num-parties` metric now includes also parties not hosted on any participant. This also fixes an issue where those were deducted from the metric on update,
       but then inconsistently added back in an app restart.
 
+  - Helm Charts
+
+      - `splice-participant`: `nodeIdentifier` is now a required value. Canton initializes the participant's identity itself,
+        so it must be given the node identifier that the controlling SV or validator app expects.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,

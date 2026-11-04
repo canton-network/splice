@@ -590,11 +590,3 @@ tests:
       - equal:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='CANTON_PARTICIPANT_IDENTIFIER')].value
           value: Digital-Asset-2
-
-  - it: "omits the node identifier when not provided"
-    documentSelector:
-      path: kind
-      value: Deployment
-    asserts:
-      - notExists:
-          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='CANTON_PARTICIPANT_IDENTIFIER')].value

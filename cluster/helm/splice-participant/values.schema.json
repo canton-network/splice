@@ -6,10 +6,14 @@
     "imageRepo",
     "participantAdminUserNameFrom",
     "persistence",
-    "imageName"
+    "imageName",
+    "nodeIdentifier"
   ],
   "properties": {
-    "nodeIdentifier": { "type": "string" },
+    "nodeIdentifier": {
+      "type": "string",
+      "minLength": 1
+    },
     "securityContexts": {
       "type": ["object"],
       "properties": {
