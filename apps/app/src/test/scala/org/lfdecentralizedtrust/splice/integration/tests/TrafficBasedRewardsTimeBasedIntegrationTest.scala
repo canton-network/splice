@@ -354,6 +354,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       event.update shouldBe defined
       assertTrafficSummary(event, "updateId0")
       assertNoAppActivity(event, "updateId0")
+      assertSubmittingAppProvider(event, "updateId0", None)
     }
 
     // We don't see activity for updateId1, even though venue was granted FAP
@@ -368,20 +369,20 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId3") {
       val event = fetchEvent(updateId3, "updateId3")
       assertTrafficSummary(event, "updateId3")
-      // Round 6 opened before the weight change, so alice still has the default weight.
-      assertAppActivity(event, "updateId3", Set(venueParty, aliceParty), expectedRound = 6)
+      // CIP-104 FA-submitted path: venue is the submitting app, so the whole
+      // burn is attributed to venue alone — alice's FAK_Basic FAR as a
+      // confirmer no longer adds her to appActivityRecords. (The
+      // submittingAppProvider field is pinned once per FA party: here for
+      // venue, below in the aliceCreateId clue for alice.)
+      assertAppActivity(event, "updateId3", Set(venueParty), expectedRound = 6)
+      assertSubmittingAppProvider(event, "updateId3", Some(venueParty))
     }
 
     clue("updateId4") {
       val event = fetchEvent(updateId4, "updateId4")
       assertTrafficSummary(event, "updateId4")
-      // From round 7 onwards we see aliceActivityWeight
-      assertAppActivity(
-        event,
-        "updateId4",
-        Set(aliceParty, venueParty),
-        expectedRound = 7,
-      )
+      // See updateId3.
+      assertAppActivity(event, "updateId4", Set(venueParty), expectedRound = 7)
     }
 
     clue("Alice-submitted create TransferInstruction has app activity for alice") {
@@ -394,6 +395,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         Set(aliceParty),
         expectedRound = 7,
       )
+      assertSubmittingAppProvider(event, "aliceCreateId", Some(aliceParty))
     }
 
     clue("SV-submitted expire TransferInstruction creates no app activity for alice") {
@@ -406,25 +408,16 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId5") {
       val event = fetchEvent(updateId5, "updateId5")
       assertTrafficSummary(event, "updateId5")
-      // Round 9: one DvP — venue has activity but will be below the coupon threshold;
-      // alice's additional transfers push her above it.
-      assertAppActivity(
-        event,
-        "updateId5",
-        Set(aliceParty, venueParty),
-        expectedRound = 9,
-      )
+      // See updateId3. (Alice's own transfers in round 9 are separate updates
+      // and contribute to the round-level roll-up below.)
+      assertAppActivity(event, "updateId5", Set(venueParty), expectedRound = 9)
     }
 
     clue("updateId6") {
       val event = fetchEvent(updateId6, "updateId6")
       assertTrafficSummary(event, "updateId6")
-      assertAppActivity(
-        event,
-        "updateId6",
-        Set(aliceParty, venueParty),
-        expectedRound = 10,
-      )
+      // See updateId3.
+      assertAppActivity(event, "updateId6", Set(venueParty), expectedRound = 10)
     }
 
     clue("updateId7") {
@@ -494,7 +487,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         logger.info(s"Round $round minting: $amounts")(TraceContext.empty)
       }
 
-      // Rounds 6, 7, 10: both alice and venue did DvP trades.
+      // Rounds 6, 7, 10: each settleTrade produces three submissions — alice
+      // and bob allocate (alice earns via FA-submitted path for her own
+      // allocation and as the FA confirmer on bob's), then venue settles
+      // (venue earns via FA-submitted path).
       Seq(6L, 7L, 10L).foreach { round =>
         providersFor(round) shouldBe Seq(aliceParty, venueParty)
           .map(_.toProtoPrimitive)
@@ -701,6 +697,15 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       }
     }
   }
+
+  private def assertSubmittingAppProvider(
+      event: definitions.EventHistoryItem,
+      cluePrefix: String,
+      expected: Option[PartyId],
+  ): Unit =
+    withClue(s"$cluePrefix submitting app provider") {
+      event.submittingAppProvider.map(_.value) shouldBe expected.map(_.toProtoPrimitive)
+    }
 
   private def updateFeaturedAppRightWeight(
       party: PartyId,
