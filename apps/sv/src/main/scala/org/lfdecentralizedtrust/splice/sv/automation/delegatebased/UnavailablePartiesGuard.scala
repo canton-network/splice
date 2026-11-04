@@ -34,11 +34,12 @@ trait UnavailablePartiesGuard extends NamedLogging {
   protected def submitBatchWithSplitting[C](
       contracts: Seq[C],
       parties: C => Set[PartyId],
+      ignoreParties: Boolean = true,
   )(submit: Seq[C] => Future[Unit])(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[TaskOutcome] =
-    if (!svConfig.parameters.enabledFeatures.enableVettingFailureBatchSplitting) {
+    if (!ignoreParties || !svConfig.parameters.enabledFeatures.enableVettingFailureBatchSplitting) {
       submit(contracts)
         .map(_ => TaskSuccess(s"submitted batch of ${contracts.size} contracts"))
         .flatMap(recoverUnavailableParties(contracts.flatMap(parties).toSet))

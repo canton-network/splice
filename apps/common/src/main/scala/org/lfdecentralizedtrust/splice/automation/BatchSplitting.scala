@@ -3,11 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.automation
 
+import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
+import io.grpc.StatusRuntimeException
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
 
@@ -132,7 +134,11 @@ class BatchSplitting(
             val involvedParties = current.flatMap(partiesOf).toSet -- protectedParties
             unavailablePartiesStore
               .removeParties(involvedParties.toSeq)
-              .flatMap(_ =>
+              .flatMap { restored =>
+                if (restored.nonEmpty)
+                  logger.info(
+                    s"Submission succeeded, recovered ${restored.size} unavailable parties: $restored"
+                  )
                 processSplitBatches(
                   rest,
                   partiesOf,
@@ -141,7 +147,7 @@ class BatchSplitting(
                   ignoredParties,
                   result.addSubmitted(current.size),
                 )
-              )
+              }
           // On Failure:
           //  - if the mediator named the unresponsive parties, ignore exactly those: the whole
           //    batch is rejected up-front, so splitting would neither help nor identify anyone.
@@ -167,7 +173,7 @@ class BatchSplitting(
                   result.addIgnored(toIgnore, failedContracts = current.size - remaining.size),
                 )
               )
-          case Failure(reason) if current.size > 1 =>
+          case Failure(reason @ VettingFailure()) if current.size > 1 =>
             val (left, right) = current.splitAt(current.size / 2)
             logger.info(
               s"Splitting batch of ${current.size} contracts into ${left.size} and ${right.size} after failure: $reason"
@@ -181,7 +187,7 @@ class BatchSplitting(
               ignoredParties,
               result.addSplit(),
             )
-          case Failure(reason) =>
+          case Failure(reason @ VettingFailure()) =>
             val involvedParties = current.headOption.fold(Set.empty[PartyId])(partiesOf)
             logger.info(
               s"Isolated failure to a single contract with parties $involvedParties: $reason"
@@ -208,6 +214,9 @@ class BatchSplitting(
                 result.addIgnored(toIgnore, failedContracts = 1),
               )
             } yield result
+          // Not a vetting failure (e.g. contention): fail the task so it is retried as a whole.
+          case Failure(reason) =>
+            Future.failed(reason)
         }
       }
   }
@@ -235,6 +244,20 @@ object BatchSplitting {
   /** Matches failures for which the mediator reported the parties that did not respond. */
   private object UnresponsivePartiesFailure {
     def unapply(t: Throwable): Option[Set[PartyId]] = UnresponsiveParties.fromThrowable(t)
+  }
+
+  private object VettingFailure {
+    private val vettingErrorIds =
+      Set("PACKAGE_NOT_VETTED_BY_RECIPIENTS", "NO_SYNCHRONIZER_FOR_SUBMISSION")
+
+    def unapply(t: Throwable): Boolean = t match {
+      case ex: StatusRuntimeException =>
+        ErrorDetails.from(ex).exists {
+          case ErrorDetails.ErrorInfoDetail(errorCodeId, _) => vettingErrorIds.contains(errorCodeId)
+          case _ => false
+        }
+      case _ => false
+    }
   }
 
   /** Ignoring the given parties only pays off if it actually removes contracts from the batch,

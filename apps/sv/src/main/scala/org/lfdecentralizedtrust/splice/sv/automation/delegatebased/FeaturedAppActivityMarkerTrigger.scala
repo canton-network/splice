@@ -239,6 +239,7 @@ class FeaturedAppActivityMarkerTrigger(
       outcome <- submitBatchWithSplitting(
         task.markers,
         (m: Marker) => getStakeholders(m.payload).toSet,
+        ignoreParties = false,
       ) { markers =>
         val batchStakeholders = getInformeesFromContracts(markers) + store.key.dsoParty
         val update = dsoRules.exercise(
