@@ -142,6 +142,7 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | `probe_access.py` | sandbox | which method reads which private data (CLAUDE.md, Access) |
 | `inbox_from_timelines.py` | sandbox, `ghx` or `gh api` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
 | `gcp_logs.py --project <p> --start <t> --end <t> --filter <q>` | sandbox | Logs Explorer URL and `gcloud logging read` command for the user (recipe 13) |
+| `github_incidents.py <UTC time>...` | sandbox | GitHub status incidents overlapping the times (last 50, about 2 months) |
 | `ref_seq_contention.py <canton .clog.gz>` | sandbox | family L: reference driver `insert block` failures, retry chains, delays over 1 s, per minute |
 
 A new recipe that needs a loop, pagination or JSON handling becomes a script here, not a pasted block.

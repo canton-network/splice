@@ -46,7 +46,8 @@ edits to shared files.
    "duplicate of X" only after that grep. Also search closed issues for the most distinctive string of the failure (a repo, file or
    error name; `gh api -X GET search/issues -f q='repo:DACH-NY/cn-test-failures is:issue "<string>"'`): the
    exports and `known-families.md` miss older and hand-closed issues. For git, SSH, clone or API failures against
-   GitHub, check https://www.githubstatus.com/history for an incident covering the failure time. If X is closed as fixed, check that the run's sha contains the fix
+   GitHub, check for a GitHub incident covering the failure time: `ci-triage/scripts/github_incidents.py <UTC time>`
+   (www.githubstatus.com; older than about 2 months only on https://www.githubstatus.com/history). If X is closed as fixed, check that the run's sha contains the fix
    (step 6); if it does, this is a regression, not a duplicate.
 4. Establish what runs: canton pin from `nix/canton-sources.json` at the run's sha, never from `canton/`.
    For Canton behaviour cite the jar (`references/recipes.md` section 6), and state the version next to every
