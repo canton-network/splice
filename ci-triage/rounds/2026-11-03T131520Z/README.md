@@ -274,3 +274,5 @@ self-hosted-k8s-large-runner-8mrj7, 14:32:18-14:43:22): nothing in the stall win
 spread (write 269 s, sync 1.6 s at 14:41:52). Vite bundling 14:38:15-21. Runner-wide slowdown (Canton log thin at
 14:39:29), source not in the logs. Fix option: `storage.parameters.connection-timeout = 15s` in _shared.storage
 (covers apps and Canton nodes; Hikari connectionTimeout via StorageConfig). Presented; branch offered, not created.
+
+Item 8: user checked GKE metrics: node CPU 3 -> 9 cores in the window, neighbours < 0.05 cores; node pool replaced since. Slowdown = the job's own startup burst. Comment and packet updated.

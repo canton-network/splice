@@ -227,3 +227,14 @@ Fix options (not written):
 No ignore pattern: a createDatabase failure at any other time is real signal.
 Not verified: the Postgres-side cause (CPU, IO or connection backlog); whether 15 s would have covered sv2 (5.8 s) and
 the stall here (yes by the timestamps, not tested); the exact Canton config path for the Canton node storage.
+
+## 4. Postgres log and node metrics (added 2026-11-04)
+
+Postgres log (GCP export `downloaded-logs-20261104-103714.json`, pod self-hosted-k8s-large-runner-8mrj7-workflow,
+container postgres, 14:32:18 to 14:43:22): no ERROR, restart or connection-limit message in 14:39:20-14:39:35; a
+time-based checkpoint 14:37:22.769 to 14:41:53.698 (`write=269.303 s, sync=1.571 s, total=270.929 s; sync
+files=19786`). Node `gke-cn-splicenet-cn-apps-node-pool-3--eb220c51-m4q7` (us-central1-c; node pool since replaced).
+User, from Metrics Explorer: node CPU usage rose from about 3 to 9 cores in the window; other pods on the node (small
+runners) below 0.05 cores. So the slowdown is the job's own startup burst (8 apps in the test JVM, which sees 8
+processors, plus Canton and the Vite dev servers), not a neighbour. Not checked: pod CPU limit utilization, node
+allocatable cores.
