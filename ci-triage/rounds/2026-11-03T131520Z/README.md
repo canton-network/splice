@@ -113,8 +113,8 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 | 2 | 11128, 11138, 11139, 11158 | done + new | ScanPartyMonitorScript verdict held back by the /v0/events cap | Z | resolved |
 | 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | resolved |
 | 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | resolved |
-| 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | presented |
-| 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | open |
+| 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | resolved |
+| 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | presented |
 | 7 | 11163 (parent 10907) | new | sv2 ImportPartyAcs refused, last event is a topology offset | U | resolved |
 | 8 | 11141 | new | first Postgres connection > 5 s at shard start | AG | open |
 | 9 | 11147 | new | sim-clock jump timeouts trip the sv2 circuit breaker | AF | open |
@@ -257,3 +257,12 @@ User: pause for today; only close inbox items that are duplicates. Live issue li
 User: duplicate-close comments must not say Duplicate of #N (close --duplicate-of links the parent already). Rule in issue-comment.md; the five close commands of the duplicate check reissued without it.
 
 Duplicate check: all five closed by the user 2026-11-03 23:49-23:54 (state_reason duplicate): 11169, 11176, 11163, 11155, 10891. 11169, 11176, 11163 still have the Duplicate of #N prefix (posted before the rule change). Items 7, 10, 11 resolved. Next session: step-mode queue from item 6 (11161), then the untriaged new items listed above.
+
+## Resumed 2026-11-04
+
+- 11160: user commented, waits for DACH-NY/canton#37633 (driver storage ignores node timeouts). Item 5 resolved.
+- 11144 closed by PR 8221 (merged 06:18). PRs merged 2026-11-02 to 04: 8211, 8215, 8221.
+- New issues since the last check: 11177, 11178, 11180, 11181 (run 41776986892: simtime (0), simtime (3),
+  wall-clock-time (8), (9)), 11179 (auth0_user_cleanup), 11182 (docker-canton-simtime (0)); not yet classified.
+- Item 6 (11161, AE): fix branch rautenrieth-da/fix-11161-login-helper-wait-for-page off main 7307892450;
+  body file comments/11161.md.

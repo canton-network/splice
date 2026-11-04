@@ -42,7 +42,7 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 
 2026-11-03 (merged 21:56, closed 11128): `rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx` (0c380008f0, off main 8dacec5c10):
 family Z test fix, a tap after the private offer; PR canton-network/splice#8211 (auto-merge), opened 2026-11-03.
-2026-11-03: `rautenrieth-da/fix-11144-tbar-wait-all-rounds` (9f4b991cbd, off main 934f543eb4): family AD, assertRewardCalcs
+2026-11-03 (merged 2026-11-04 06:18, closed 11144): `rautenrieth-da/fix-11144-tbar-wait-all-rounds` (9f4b991cbd, off main 934f543eb4): family AD, assertRewardCalcs
 retries the per-round reads; PR canton-network/splice#8221, opened 2026-11-03.
 2026-11-03 (merged 21:20, closed 10732): `rautenrieth-da/fix-10732-wallet-metrics-outcome-label` (b43adb1676, off main 8dacec5c10): family AC, PR 8215,
 WalletMetricsTest looks up trigger.completed with outcome success; static_tests passed.
@@ -54,6 +54,8 @@ Pushed to canton-network/splice without a PR, none compiled against current main
 `ray/fix-topology-init-limit` (10140 closed, likely obsolete), `ray/fix-fail-fast-init` (no proving test).
 
 ## Open owner questions
+
+2026-11-04: 11160 (family L) waits for DACH-NY/canton#37633 (reference driver storage ignores the node timeouts); comment on 11160 says so.
 
 2026-11-03: Z test fix (stephencompall-DA, 5 hits); U join import retry (owner unknown, 3 hits); 11160 validator
 onboarding wait (owner unknown); test fixes for AC, AD, AE, AF, AG described in their packets, no branch.
