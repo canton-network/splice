@@ -15,10 +15,19 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight_Update
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_UpdateFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight_Update,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_GrantFeaturedAppRight,
+  DsoRules_UpdateFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_GrantFeaturedAppRight,
+  SRARC_UpdateFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -251,6 +260,17 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           val (aliceCreateId, svExpireId) =
             aliceCreateAndSvExpireInstruction(aliceParty, bobParty)
 
+          // Kind swap: cancel venue's FAK_Basic FAR and re-grant as
+          // FAK_ASSETMOVING. Done here (not just before round 10 opens) so
+          // the voting flow has multiple rounds to complete — otherwise the
+          // new FAR is not visible at round 10's open time
+          // (lookupFeaturedAppPartiesAsOf is as-of round open time).
+          swapFeaturedAppRightKind(
+            splitwellWalletClient,
+            venueParty,
+            FeaturedAppKind.FAK_ASSETMOVING,
+          )
+
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(8)
 
@@ -273,14 +293,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             )
             bobWalletClient.acceptTransferOffer(offerCid)
           }
-
-          actAndCheck(
-            "Cancel venue's featured app right",
-            retryCommandSubmission(splitwellWalletClient.cancelFeaturedAppRight()),
-          )(
-            "Wait for right cancellation to be ingested",
-            _ => sv1ScanBackend.lookupFeaturedAppRight(venueParty) shouldBe None,
-          )
 
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(10)
@@ -423,14 +435,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId7") {
       val event = fetchEvent(updateId7, "updateId7")
       assertTrafficSummary(event, "updateId7")
-      // Round 11: venue's FAP was cancelled in round 9, so only alice is a
-      // featured-app provider here.
-      assertAppActivity(
-        event,
-        "updateId7",
-        Set(aliceParty),
-        expectedRound = 11,
-      )
+      // Round 11: venue is FAK_ASSETMOVING (set at end of round 7), so venue
+      // remains the FA submitter of the DvP and takes the full burn on the
+      // FA-submitted path.
+      assertAppActivity(event, "updateId7", Set(venueParty), expectedRound = 11)
     }
 
     assertRewardCalcs(aliceParty, venueParty)
@@ -737,6 +745,55 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         }
       }
     }
+  }
+
+  private def grantFeaturedAppRightWithKind(
+      party: PartyId,
+      kind: FeaturedAppKind,
+      opsParties: Seq[PartyId] = Seq.empty,
+      weight: BigDecimal = BigDecimal(1),
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val opsPartiesArg =
+      if (opsParties.isEmpty) java.util.Optional.empty[java.util.List[String]]()
+      else
+        java.util.Optional.of(
+          java.util.List.copyOf(opsParties.map(_.toProtoPrimitive).asJava)
+        )
+    val action = new ARC_DsoRules(
+      new SRARC_GrantFeaturedAppRight(
+        new DsoRules_GrantFeaturedAppRight(
+          party.toProtoPrimitive,
+          java.util.Optional.of(weight.bigDecimal),
+          java.util.Optional.of(kind),
+          opsPartiesArg,
+        )
+      )
+    )
+    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
+    clue(s"Wait for $party FA right to be ingested with kind=$kind weight=$weight") {
+      eventually() {
+        val right = sv1ScanBackend.lookupFeaturedAppRight(party).value
+        right.payload.appKind.toScala shouldBe Some(kind)
+        right.payload.activityWeight.toScala
+          .map(BigDecimal(_))
+          .getOrElse(BigDecimal(1)) shouldBe weight
+      }
+    }
+  }
+
+  private def swapFeaturedAppRightKind(
+      client: WalletAppClientReference,
+      party: PartyId,
+      newKind: FeaturedAppKind,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    actAndCheck(
+      s"Cancel $party's featured app right",
+      retryCommandSubmission(client.cancelFeaturedAppRight()),
+    )(
+      "Wait for right cancellation to be ingested",
+      _ => sv1ScanBackend.lookupFeaturedAppRight(party) shouldBe None,
+    )
+    grantFeaturedAppRightWithKind(party, newKind)
   }
 
   private def assertZeroTotals(
