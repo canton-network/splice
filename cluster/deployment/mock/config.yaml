@@ -1,5 +1,6 @@
 !include(../../configs/shared/base.yaml)
 validator1:
+  disableAuth: true
   kms:
     type: gcp
     locationId: us-central1

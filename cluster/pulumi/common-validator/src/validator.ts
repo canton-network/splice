@@ -6,6 +6,7 @@ import {
   Auth0Client,
   BootstrappingDumpConfig,
   CLUSTER_BASENAME,
+  CLUSTER_HOSTNAME,
   CnChartVersion,
   CnInput,
   config,
@@ -239,6 +240,12 @@ export async function installValidatorApp(
       deduplicationDuration: config.deduplicationDuration,
       maxVettingDelay: networkWideConfig?.maxVettingDelay,
       disableAuth: baseConfig.disableAuth || false,
+      allowedOrigins: baseConfig.disableAuth
+        ? [
+            `https://wallet.${baseConfig.xns.logicalName}.${CLUSTER_HOSTNAME}`,
+            `https://ans.${baseConfig.xns.logicalName}.${CLUSTER_HOSTNAME}`,
+          ]
+        : undefined,
       logLevel: config.logLevel,
       apiRequestLogLevel: config.apiRequestLogLevel,
       logAsyncFlush: config.logAsync,

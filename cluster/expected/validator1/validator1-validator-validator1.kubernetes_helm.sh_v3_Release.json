@@ -42,6 +42,10 @@
             }
           }
         },
+        "allowedOrigins": [
+          "https://wallet.validator1.mock.global.canton.network.digitalasset.com",
+          "https://ans.validator1.mock.global.canton.network.digitalasset.com"
+        ],
         "appDars": [
           "splice-node/dars/splitwell-0.1.20.dar",
           "splice-node/dars/splitwell-0.1.21.dar",
@@ -49,10 +53,6 @@
           "splice-node/dars/splitwell-0.1.23.dar",
           "splice-node/dars/splitwell-0.1.24.dar"
         ],
-        "auth": {
-          "audience": "https://canton.network.global",
-          "jwksUrl": "https://canton-network-dev.us.auth0.com/.well-known/jwks.json"
-        },
         "cluster": {
           "dnsName": "mock.global.canton.network.digitalasset.com",
           "fixedTokens": false,
@@ -60,7 +60,7 @@
           "name": "cn-mocknet"
         },
         "contactPoint": "sv-support@digitalasset.com",
-        "disableAuth": false,
+        "disableAuth": true,
         "enablePostgresMetrics": true,
         "failOnAppVersionMismatch": true,
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
@@ -133,7 +133,7 @@
         "useSequencerConnectionsFromScan": true,
         "validatorPartyHint": "digitalasset-validator1-1",
         "validatorWalletUsers": [
-          "auth0|63e3d75ff4114d87a2c1e4f5"
+          "administrator"
         ]
       }
     },
