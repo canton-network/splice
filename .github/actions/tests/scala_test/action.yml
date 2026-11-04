@@ -95,7 +95,6 @@ runs:
   using: "composite"
   steps:
     # Missing GitHub secrets resolve to "", which otherwise only surfaces as confusing test failures much later.
-    # Values are passed via env (not interpolated into the script) so they never end up in the step script on disk.
     - name: Check required secrets are set
       shell: bash
       env:
@@ -124,7 +123,7 @@ runs:
           check COMPOSE_PASSWORD compose_validator_web_ui_password
         fi
         if (( ${#missing[@]} > 0 )); then
-          echo "::error::Empty secret inputs: ${missing[*]}. Check that the GitHub secrets the calling workflow passes in (e.g. *_V2) exist in this repository."
+          echo "::error::Empty secret inputs: ${missing[*]}. Check that the GitHub secrets that the calling workflow passes (still) exist. You might need to rebase your target branch/fork to the latest upstream main."
           exit 1
         fi
 
