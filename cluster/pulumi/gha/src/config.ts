@@ -16,6 +16,18 @@ const GhaConfigSchema = z.object({
     // this is a https://github.com/actions/actions-runner-controller version
     runnerScaleSetVersion: z.string(),
     workPvcSize: z.string().default('20Gi'),
+    // Each repo gets one copy of every Actions secret per suffix, named `<SECRET_NAME><suffix>`.
+    // Lets us rename secrets so that stale branches, which reference the old names, get empty values.
+    secretSuffixes: z
+      .array(z.string().regex(/^[A-Z0-9_]*$/))
+      .nonempty()
+      .refine(s => new Set(s).size === s.length, 'secretSuffixes must be unique')
+      .default(['']),
+    // Commit that fork PR heads must contain before fork CI can be approved (see pr_non_contributors.yml).
+    forkPrRequiredCommit: z
+      .string()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
     runnerSpecs: z
       .array(
         z.object({
