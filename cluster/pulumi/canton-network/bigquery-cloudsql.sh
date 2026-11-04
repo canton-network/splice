@@ -249,7 +249,24 @@ echo 'Uploading SQL to temporary bucket'
 gcloud storage cp "$TMP_SQL_FILE" "$GCS_URI"
 
 echo 'Importing into CloudSQL'
-gcloud sql import sql "$POSTGRES_INSTANCE_NAME" "$GCS_URI" \
-  --database="$SCAN_APP_DATABASE_NAME" \
-  --user="$POSTGRES_USER_NAME" \
-  --quiet
+# CloudSQL runs one operation per instance at a time and rejects the
+# rest with HTTP 409. The legacy and stag-prod publications run this
+# script concurrently against the same instance, and a flag change may
+# be restarting it, so retry the import until the instance is free.
+IMPORT_ATTEMPTS=40
+IMPORT_RETRY_SECONDS=15
+for ((attempt = 1; ; attempt++)); do
+  if import_output=$(gcloud sql import sql "$POSTGRES_INSTANCE_NAME" "$GCS_URI" \
+    --database="$SCAN_APP_DATABASE_NAME" \
+    --user="$POSTGRES_USER_NAME" \
+    --quiet 2>&1); then
+    echo "$import_output"
+    break
+  fi
+  echo "$import_output" >&2
+  if [[ $import_output != *'HTTPError 409'* ]] || ((attempt >= IMPORT_ATTEMPTS)); then
+    exit 1
+  fi
+  echo "Another operation is running on $POSTGRES_INSTANCE_NAME; retrying in ${IMPORT_RETRY_SECONDS}s (attempt $attempt of $IMPORT_ATTEMPTS)"
+  sleep "$IMPORT_RETRY_SECONDS"
+done
