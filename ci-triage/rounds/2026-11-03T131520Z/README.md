@@ -114,9 +114,9 @@ Command convention for this user: run from the `~/splice` root with direnv loade
 | 3 | 11143 (parent 10732) | new | WalletMetricsTest trigger.completed matches success + noop series | AC | resolved |
 | 4 | 11144 | new | TBAR round totals read before the parallel backlog committed | AD | resolved |
 | 5 | 11160 | new | onboarding gives up during a global sequencer 40001 stall (0.10.0) | L | resolved |
-| 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | presented |
+| 6 | 11161 | new | wallet login helper misses the logged-in state on a slow load | AE | resolved |
 | 7 | 11163 (parent 10907) | new | sv2 ImportPartyAcs refused, last event is a topology offset | U | resolved |
-| 8 | 11141 | new | first Postgres connection > 5 s at shard start | AG | open |
+| 8 | 11141 | new | first Postgres connection > 5 s at shard start | AG | presented |
 | 9 | 11147 | new | sim-clock jump timeouts trip the sv2 circuit breaker | AF | open |
 | 10 | 11155 (parent 10438) | new | Locked connection was lost at Canton startup | G | resolved |
 | 11 | 10891 (parent 10921) | done | PeriodicTopologySnapshot missing scopes on a PR branch without #8148 | V | resolved |
@@ -266,3 +266,11 @@ Duplicate check: all five closed by the user 2026-11-03 23:49-23:54 (state_reaso
   wall-clock-time (8), (9)), 11179 (auth0_user_cleanup), 11182 (docker-canton-simtime (0)); not yet classified.
 - Item 6 (11161, AE): fix branch rautenrieth-da/fix-11161-login-helper-timeout off main 7307892450;
   body file comments/11161.md.
+
+Item 6: PR 8227 (user, 2026-11-04). Duplicate check: none open (11172 fails later in the helper, FrontendLoginUtil.scala:61,
+after the login click; 11177-11183 are not frontend jobs).
+Item 8 (11141, AG): Postgres log from GCP (user export downloaded-logs-20261104-103714.json, runner
+self-hosted-k8s-large-runner-8mrj7, 14:32:18-14:43:22): nothing in the stall window; checkpoint 14:37:22-14:41:53
+spread (write 269 s, sync 1.6 s at 14:41:52). Vite bundling 14:38:15-21. Runner-wide slowdown (Canton log thin at
+14:39:29), source not in the logs. Fix option: `storage.parameters.connection-timeout = 15s` in _shared.storage
+(covers apps and Canton nodes; Hikari connectionTimeout via StorageConfig). Presented; branch offered, not created.
