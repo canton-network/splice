@@ -248,11 +248,23 @@ esac
 echo 'Uploading SQL to temporary bucket'
 gcloud storage cp "$TMP_SQL_FILE" "$GCS_URI"
 
+# Whether the instance still exists; if we can't tell, assume it does.
+instance_exists() {
+  local names
+  names=$(gcloud sql instances list --filter="name=$POSTGRES_INSTANCE_NAME" \
+    --format='value(name)') || return 0
+  grep -qFx "$POSTGRES_INSTANCE_NAME" <<<"$names"
+}
+
 echo 'Importing into CloudSQL'
 # CloudSQL runs one operation per instance at a time and rejects the
 # rest with HTTP 409. The legacy and stag-prod publications run this
 # script concurrently against the same instance, and a flag change may
 # be restarting it, so retry the import until the instance is free.
+#
+# When the whole SV is torn down, as on `cncluster reset`, the instance
+# is deleted concurrently, taking the publication and slot with it; a
+# delete then succeeds once the instance is gone.
 IMPORT_ATTEMPTS=36 # with the 15s retries, about 9 minutes
 IMPORT_RETRY_SECONDS=15
 for ((attempt = 1; ; attempt++)); do
@@ -264,6 +276,10 @@ for ((attempt = 1; ; attempt++)); do
     break
   fi
   echo "$import_output" >&2
+  if [[ $SUBCOMMAND == delete-pub-rep-slot ]] && ! instance_exists; then
+    echo "$POSTGRES_INSTANCE_NAME no longer exists, nor its publication and slot"
+    exit 0
+  fi
   if [[ $import_output != *'HTTPError 409'* ]] || ((attempt >= IMPORT_ATTEMPTS)); then
     exit 1
   fi

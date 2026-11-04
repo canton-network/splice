@@ -835,12 +835,6 @@ function createPublicationAndReplicationSlots(
 
   const commonDependencies = [scan, databaseInstance, replicatorUser];
 
-  // Skip dropping the publications and slots when the whole SV goes,
-  // as on `cncluster reset`: the more obvious `databaseInstance` would
-  // not work, because it can just be a reference, "deleted" without
-  // the real DB being deleted
-  const deletedWith = namespace.ns;
-
   // ---------------------------------------------------------------------------
   // 2. Base Arguments Split (Matches Stored Deployment Ordering & Formatting)
   // ---------------------------------------------------------------------------
@@ -896,7 +890,6 @@ function createPublicationAndReplicationSlots(
       {
         dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
         deleteBeforeReplace: true,
-        deletedWith,
       }
     );
   }
@@ -922,7 +915,6 @@ function createPublicationAndReplicationSlots(
       {
         dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
         deleteBeforeReplace: true,
-        deletedWith,
       }
     );
   }
