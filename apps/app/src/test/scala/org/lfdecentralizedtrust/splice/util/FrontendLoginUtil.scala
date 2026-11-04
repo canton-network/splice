@@ -39,7 +39,9 @@ trait FrontendLoginUtil extends WithAuth0Support { self: FrontendTestCommon =>
   protected def loginOnceConfirmedToBeAtUrl(
       ledgerApiUser: String
   )(implicit webDriver: WebDriver) = {
-    eventually(timeUntilSuccess = 5.seconds) {
+    // Each attempt checks for the logout button only once, and pages served by the vite dev server
+    // often take 3-5 seconds to render, so allow enough attempts for a slowly loading page.
+    eventually(timeUntilSuccess = 15.seconds) {
       if (find(id("logout-button")).isDefined) {
         eventuallyClickOn(id("logout-button"))
       }
