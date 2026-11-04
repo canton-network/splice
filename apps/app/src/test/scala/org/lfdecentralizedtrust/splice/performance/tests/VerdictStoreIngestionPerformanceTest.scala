@@ -217,9 +217,11 @@ class VerdictStoreIngestionPerformanceTest(
         }
       })
       .map { _ =>
-        def ratePerSec(count: Long): BigDecimal =
+        def ratePerSec(count: Long): BigDecimal = {
           if (totalTimeNs > 0) BigDecimal(count) * BigDecimal(1000000000L) / totalTimeNs
           else BigDecimal(0)
+        }
+        // metrics will be exported to the json file and prometheous in the next steps
         println(
           f"Process-level metrics: CPU time=${totalCpuNs / 1e6}%.2f ms, peak heap=$maxHeapBytes bytes, batches=$totalBatches"
         )
