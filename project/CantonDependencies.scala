@@ -61,8 +61,6 @@ object CantonDependencies {
   lazy val ammonite = "com.lihaoyi" % "ammonite" % ammonite_version cross CrossVersion.full
   lazy val pprint = "com.lihaoyi" %% "pprint" % pprint_version
 
-  lazy val hikaricp = "com.zaxxer" % "HikariCP" % "3.2.0"
-  lazy val h2 = "com.h2database" % "h2" % "2.1.210"
   lazy val postgres = "org.postgresql" % "postgresql" % "42.7.3"
   private val flyway_version = "12.0.2"
   lazy val flyway = "org.flywaydb" % "flyway-core" % flyway_version
@@ -216,7 +214,6 @@ object CantonDependencies {
   lazy val circe_generic = "io.circe" %% "circe-generic" % circe_version
   lazy val circe_generic_extras = "io.circe" %% "circe-generic-extras" % circe_version
 
-  lazy val guava = "com.google.guava" % "guava" % "33.3.0-jre"
   lazy val tink = "com.google.crypto.tink" % "tink" % "1.12.0" excludeAll (
     ExclusionRule(organization = "com.google.guava", name = "guava-jdk5"),
     ExclusionRule(organization = "com.amazonaws", name = "aws-java-sdk-kms")
@@ -249,9 +246,6 @@ object CantonDependencies {
   lazy val testcontainers = "org.testcontainers" % "testcontainers" % testcontainers_version
   lazy val testcontainers_postgresql =
     "org.testcontainers" % "testcontainers-postgresql" % testcontainers_version
-
-  lazy val sttp_version = "3.11.0"
-  lazy val sttp = "com.softwaremill.sttp.client3" %% "core" % sttp_version
 
   lazy val tapir_version = "1.11.7"
   lazy val tapir_json_circe = "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % tapir_version
