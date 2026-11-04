@@ -10,11 +10,35 @@ concurrency:
 
 
 jobs:
+  # Fork CI runs the fork's local actions (.github/actions/*).
+  # We refuse forks that are too far behind, to avoid triggering old bugs in the action definitions.
+  # Override the cutoff commit via the FORK_PR_REQUIRED_COMMIT repository variable.
+  check_fork_base:
+    name: "Check fork contains required fixes"
+    runs-on: ubuntu-24.04
+    if: github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    permissions:
+      contents: read
+    steps:
+      - name: Check that the PR head contains the required commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REQUIRED: ${{ vars.FORK_PR_REQUIRED_COMMIT || '8847ce5241db960e9437778a79c26325d0b6567c' }}
+        run: |
+          status=$(gh api "repos/$REPO/compare/$REQUIRED...$HEAD_SHA?per_page=1" -q .status) || status="compare failed"
+          if [[ "$status" != ahead && "$status" != identical ]]; then
+            echo "::error::This PR does not contain commit $REQUIRED (status: $status). Please rebase onto the latest (upstream) main."
+            exit 1
+          fi
+
   env_hold:
     name: "Approve CI for Forks"
     environment: ci-forks
     runs-on: ubuntu-24.04
     if: github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    needs: check_fork_base
     steps:
       - name: Wait for environment approval for runs from forks
         run: exit 0
