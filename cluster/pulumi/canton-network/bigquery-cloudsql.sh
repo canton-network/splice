@@ -181,6 +181,11 @@ case "$SUBCOMMAND" in
               migration_complete := FALSE;
           END;
 
+          -- No history row yet: the migration hasn't been applied
+          IF migration_complete IS NULL THEN
+            migration_complete := FALSE;
+          END IF;
+
           IF NOT migration_complete THEN
             RAISE NOTICE 'Waiting for flyway migration (attempt %/%), sleeping 10s...', attempt + 1, max_attempts;
             PERFORM pg_sleep(10);
