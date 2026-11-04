@@ -311,3 +311,5 @@ Priority 1 (Y): PR 8228 (user) fixes 10930 only (Fixes line). User: 10930 is the
 Priority 2 (deploy_sv_reonboard): cause from the user (CircleCI output): Helm fail added by splice #8137, Pulumi never sets allowedOrigins for validator1 with disableAuth. Parent 11106, dups 11137 11142 11151 11171 11183, assign OriolMunoz-da, Triaged. comments/11106.md.
 
 deploy_sv_reonboard: export_circleci.py output (user) for 11106, 11137, 11183: validator1 fails at validator.yaml:324:12 allowedOrigins in every visible attempt (step output capped at 400034 chars). SV stacks also time out on Helm release readiness (context canceled) in some attempts, recovering on retry (11137 last attempt: validator1 only). Comment updated.
+
+deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next: 11184 (bump_splice) + 11185 (deploy_ciperiodic_upgrade_workflow): Checkout submodule, SSH key denied for canton-foundation/configs(-private), cni cbc7cca0f8, 10:06:58; not recurred. Parent 11184, dup 11185, Infrequent. comments/11184.md.
