@@ -323,3 +323,5 @@ deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next
 11165 (AH): user asked why the participants did not acknowledge. They did, every 60 s; alice's 12:56:30 ack was ordered only at 12:56:48.68 (sv2 BFT sequencer joining), the 45 s conflation window (put on completion) dropped the 12:57:30 ack, so the recorded ack 12:56:29 < pruning point 12:57:34. Healthy acks can be > 2 min old; test retention 120 s. Fix branch rautenrieth-da/fix-11165-sequencer-pruning-retention (d7faa64557): retention 300 s, wait 8 min. Comment, family AH and lesson 3 updated.
 
 11165: user asked for a smaller bump. Disabled when recorded ack < now - retention (alice at age 120.8 s). Worst healthy age with one dropped ack ~ 120 + clean-ts lag (<=5 s) + ordering delay (~18 s) = ~145 s; two drops need > 75 s ordering. Branch amended to 29019699a0: retention 180 s, wait 5 min; check passes.
+
+11165: PR 8238 (user, 2026-11-04). Next: 11168.

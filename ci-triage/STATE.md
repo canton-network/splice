@@ -41,7 +41,7 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 ## Open fix branches
 
 2026-11-04: `rautenrieth-da/fix-11165-sequencer-pruning-retention` (29019699a0, off main 4ab8bd88e8): family AH,
-SequencerPruningIntegrationTest retention 120 s -> 180 s, wait 3 -> 5 min; no PR yet.
+SequencerPruningIntegrationTest retention 120 s -> 180 s, wait 3 -> 5 min; PR 8238.
 
 2026-11-04: `rautenrieth-da/fix-10930-mainnet-daml-test-tags` (67d433fb33, off main b5e6a1ba55): family Y, PR 8228, coupon suite
 NoDamlCompatibilityCheck, traffic test cases SpliceAmulet_0_1_25 (fixes 10930, 10933); scalafmt and Test/compile pass; no PR yet.
