@@ -315,3 +315,5 @@ deploy_sv_reonboard: export_circleci.py output (user) for 11106, 11137, 11183: v
 deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next: 11184 (bump_splice) + 11185 (deploy_ciperiodic_upgrade_workflow): Checkout submodule, SSH key denied for canton-foundation/configs(-private), cni cbc7cca0f8, 10:06:58; not recurred. Parent 11184, dup 11185, Infrequent. comments/11184.md.
 
 11184 11185: user found the closed precedent 10213 (search configs-private) and the GitHub incident 2026-11-04 09:49-11:50 UTC (Pull Requests, Git Operations and Issues). Closing both as dups of 10213 instead of the comment in comments/11184.md. Skill step 3 and family J updated (closed-issue search, githubstatus). githubstatus.com needs a sandbox network approval.
+
+11177: dup of 10907 (U, 4th hit), close only; user: no recurrence comment (duplicates are linked). Note: API shows 10907 without assignee (julientinguely-da unassigned 2026-11-04 09:46). Skill: recurrence comment only without assignee/owner discussion.
