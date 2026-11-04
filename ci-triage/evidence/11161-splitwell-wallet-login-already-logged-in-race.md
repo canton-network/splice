@@ -204,3 +204,22 @@ button.
 
 Not verified: whether react-router 8 or the Vite dev server makes the load slower than before. Passing runs upload no
 browser logs, so there is no baseline. The fix is not compiled or run.
+
+## 5. Wallet page loads are slow in general (added 2026-11-04)
+
+Same suite, run 41721296163 (11176, artifact logs-frontend-wall-clock-time-1): time from each `WebDriver:Navigate`
+to the next `browsingContext.domContentLoaded`, all browser logs of the shard.
+```
+python3 -I -c '<pair WebDriver:Navigate with the next domContentLoaded per browser log; group by port>'
+```
+```
+http://localhost:3000        n= 20 median=3.11s p90=3.60s max=4.71s
+http://localhost:3001        n=  3 median=2.98s p90=3.30s max=3.30s
+http://localhost:3100        n=  1 median=4.14s p90=4.14s max=4.14s
+http://localhost:3400        n=  3 median=0.79s p90=1.21s max=1.21s
+http://localhost:3401        n=  3 median=0.48s p90=1.21s max=1.21s
+http://localhost:3402        n=  2 median=1.42s p90=1.42s max=1.42s
+```
+The frontends run `vite --force` (dev server, unbundled ES modules, React development build: about 81000
+`console.timeStamp` profiling entries in bob's browser log). A 3 to 4 s wallet load is the norm, so the helper's 5 s
+budget is only just above it. Not measured: module counts, network timings (not in the browser log), runner CPU.
