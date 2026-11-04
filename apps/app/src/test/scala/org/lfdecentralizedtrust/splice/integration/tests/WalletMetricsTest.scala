@@ -133,6 +133,7 @@ class WalletMetricsTest
                 Map(
                   "trigger_name" -> triggerName,
                   "party" -> aliceUserParty.toString,
+                  "outcome" -> "success",
                 ),
               )
               .select[MetricValue.LongPoint]

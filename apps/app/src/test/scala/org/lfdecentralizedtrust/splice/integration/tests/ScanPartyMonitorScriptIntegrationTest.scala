@@ -256,14 +256,16 @@ class ScanPartyMonitorScriptIntegrationTest
         )
         val privateMatches = mutable.ListBuffer.empty[Json]
         actAndCheck(
-          "Alice offers bob a transfer, which the DSO party does not see",
-          aliceWalletClient.createTransferOffer(
-            bobParty,
-            2.0,
-            "private offer",
-            CantonTimestamp.now().plus(Duration.ofMinutes(10)),
-            UUID.randomUUID.toString,
-          ),
+          "Alice offers bob a transfer, which the DSO party does not see, followed by a DSO-visible tap", {
+            aliceWalletClient.createTransferOffer(
+              bobParty,
+              2.0,
+              "private offer",
+              CantonTimestamp.now().plus(Duration.ofMinutes(10)),
+              UUID.randomUUID.toString,
+            )
+            aliceValidatorWalletClient.tap(1.0)
+          },
         )(
           "The script reports alice confirming the private transaction",
           _ => {

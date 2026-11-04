@@ -476,6 +476,12 @@ pulumiStacks:
 validators:
   validator-runbook:
     postgresPvcSize: '200Gi'
+    sweep:
+      fromParty: "mock-5::5555555555555555555555555555555555555555555555555555555555555555555"
+      toParty: "mock-6::6666666666666666666666666666666666666666666666666666666666666666666"
+      maxBalance: 10
+      minBalance: 1
+      useTransferPreapproval: true
     partyAllocator:
       enable: true
       maxParties: 1234

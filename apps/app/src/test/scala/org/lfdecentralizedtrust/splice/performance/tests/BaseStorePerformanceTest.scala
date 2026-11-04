@@ -1,10 +1,11 @@
 package org.lfdecentralizedtrust.splice.performance.tests
 
 import cats.data.NonEmptyList
-import com.daml.metrics.api.noop.NoOpMetricsFactory
-import com.daml.metrics.api.{HistogramInventory, MetricName, MetricsContext}
+import com.daml.metrics.api.MetricHandle.Timer
+import com.daml.metrics.api.testing.InMemoryMetricsFactory
+import com.daml.metrics.api.{HistogramInventory, MetricInfo, MetricName, MetricsContext}
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
+import com.digitalasset.canton.config.{ProcessingTimeout, QueryCostMonitoringConfig, StorageConfig}
 import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.metrics.{DbStorageHistograms, DbStorageMetrics}
@@ -43,6 +44,14 @@ object BaseStorePerformanceTest {
     */
   private val PerfMainLockCounter: DbLockCounter = DbLockCounter(108)
   private val PerfPoolLockCounter: DbLockCounter = DbLockCounter(109)
+
+  /** Extracts the connection-pool name ("general" or "write")
+    */
+  def poolOf(timerName: String): String = {
+    val parts = timerName.split('.')
+    val idx = parts.indexOf("executor")
+    if (idx > 0) parts(idx - 1) else timerName
+  }
 }
 
 /** Shared base class for store ingestion and read performance tests.
@@ -67,6 +76,54 @@ abstract class BaseStorePerformanceTest(
   type Store <: HasIngestionSink
   protected def mkStore(storage: DbStorage): Future[Store]
 
+  /** Metrics factory wired into the storage's [[DbStorageMetrics]].
+    *  The DB executor `exectime` timer is recorded and can be read back to measure DB time.
+    */
+  protected val dbMetricsFactory: NanoInMemoryMetricsFactory = new NanoInMemoryMetricsFactory
+
+  /** Monotonic sequence number of DB query samples recorded so far.
+    *
+    * Windows are defined by time only. The per-callsite breakdown can separate it only if it is unique,
+    * so run measured operations sequentially.
+    */
+  protected def dbExecSeq: Long = dbMetricsFactory.currentSeq
+
+  /** Stats for all DB `exectime` samples recorded since `afterSeq`
+    */
+  protected def dbExecWindow(afterSeq: Long): DbExecWindow = windowFor(afterSeq, "exectime")
+
+  /** Stats for all DB `waittime` samples recorded since `afterSeq`
+    */
+  protected def dbWaitWindow(afterSeq: Long): DbExecWindow = windowFor(afterSeq, "waittime")
+
+  /** Stats for all DB samples whose timer name ends with `suffix`, recorded since `afterSeq`
+    *
+    * E.g. with afterSeq = 1042
+    * {{{
+    *   seq   timer                       callsite
+    *   1043  general.executor.waittime   UpdateHistory.queryCreateEvents
+    *   1044  general.executor.exectime   UpdateHistory.queryCreateEvents
+    *   1045  general.executor.waittime   UpdateHistory.queryExerciseEvents
+    *   1046  general.executor.exectime   UpdateHistory.queryExerciseEvents
+    * }}}
+    *
+    * `windowFor(1042, "exectime")` keeps 1044 and 1046
+    * `windowFor(1042, "waittime")` keeps 1043 and 1045
+    */
+  private def windowFor(afterSeq: Long, suffix: String): DbExecWindow = {
+    val window = dbMetricsFactory.windowSamples(afterSeq, _.endsWith(suffix))
+    DbExecWindow(
+      count = window.size.toLong,
+      totalNanos = window.map(_.nanos).sum,
+      maxNanos = window.map(_.nanos).maxOption.getOrElse(0L),
+      breakdown = window
+        .groupBy(s => s"${BaseStorePerformanceTest.poolOf(s.timerName)} ${s.callsite}")
+        .view
+        .mapValues(ss => (ss.size.toLong, ss.map(_.nanos).sum))
+        .toMap,
+    )
+  }
+
   /** A short name for this test, used as the metrics file name and Pushgateway label. */
   protected def testName: String = this.getClass.getSimpleName.stripSuffix("$")
 
@@ -78,10 +135,15 @@ abstract class BaseStorePerformanceTest(
     */
   protected def instanceLockEnabled: Boolean = true
 
+  /** Optional Canton query-cost monitoring config.
+    * When set (`Some`), Canton tags every query's metrics context with the real caller stack frame
+    */
+  protected def logQueryCost: Option[QueryCostMonitoringConfig] = None
+
   protected def initializeStorage(): DbStorage = {
     val metrics = new DbStorageMetrics(
       new DbStorageHistograms(MetricName("store", "perftest"))(new HistogramInventory),
-      NoOpMetricsFactory,
+      dbMetricsFactory,
     )(MetricsContext())
     // Build storage through the production factory so the perf suite exercises DbStorageMulti
     // (write-connection pool holding an exclusive advisory lock) exactly as the apps do, rather
@@ -98,7 +160,7 @@ abstract class BaseStorePerformanceTest(
       ) { storageFactory =>
         storageFactory.tryCreate(
           connectionPoolForParticipant = false,
-          None,
+          logQueryCost,
           new WallClock(timeouts, loggerFactory),
           None,
           metrics,
@@ -278,6 +340,72 @@ abstract class BaseStorePerformanceTest(
     } catch {
       case e: Exception =>
         println(s"Failed to write metrics file for $effectiveName: ${e.getMessage}")
+    }
+  }
+}
+
+final case class DbExecWindow(
+    count: Long,
+    totalNanos: Long,
+    maxNanos: Long,
+    breakdown: Map[String, (Long, Long)],
+)
+
+/** A recorded query execution. `callsite` is the `query` label set by the query cost tracker. */
+final case class DbQuerySample(timerName: String, callsite: String, nanos: Long, seq: Long)
+
+/** InMemoryMetricsFactory uses milliseconds. So we extend it to a NanoInMemoryMetricsFactory
+  * that uses nanoseconds for higher precision
+  */
+class NanoInMemoryMetricsFactory extends InMemoryMetricsFactory {
+  import java.util.concurrent.atomic.AtomicLong
+
+  private val samples = new java.util.concurrent.ConcurrentLinkedQueue[DbQuerySample]()
+  private val seqGen = new AtomicLong(0)
+  private val timers = scala.collection.concurrent.TrieMap[MetricName, NanoTimer]()
+
+  override def timer(info: MetricInfo)(implicit context: MetricsContext): Timer =
+    timers.getOrElseUpdate(info.name, new NanoTimer(info))
+
+  /** current highest sample sequence number. */
+  def currentSeq: Long = seqGen.get()
+
+  /** All samples recorded after `afterSeq` whose timer name matches `nameFilter`, in order. */
+  def windowSamples(afterSeq: Long, nameFilter: String => Boolean): Seq[DbQuerySample] = {
+    import scala.jdk.CollectionConverters.*
+    samples.iterator().asScala.filter(s => s.seq > afterSeq && nameFilter(s.timerName)).toSeq
+  }
+
+  private def record(timerName: String, callsite: String, nanos: Long): Unit = {
+    val _ = samples.add(DbQuerySample(timerName, callsite, nanos, seqGen.incrementAndGet()))
+  }
+
+  /** A [[Timer]] that appends each recorded sample (with its `query` callsite label) at the nanosecond precision.
+    */
+  private final class NanoTimer(override val info: MetricInfo) extends Timer {
+    private val name = info.name.toString
+    private def callsiteOf(context: MetricsContext): String =
+      context.labels.getOrElse("query", "<none>")
+
+    override def update(duration: Long, unit: java.util.concurrent.TimeUnit)(implicit
+        context: MetricsContext
+    ): Unit = record(name, callsiteOf(context), unit.toNanos(duration))
+
+    override def update(duration: java.time.Duration)(implicit context: MetricsContext): Unit =
+      record(name, callsiteOf(context), duration.toNanos)
+
+    override def time[T](call: => T)(implicit context: MetricsContext): T = {
+      val start = System.nanoTime()
+      try call
+      finally record(name, callsiteOf(context), System.nanoTime() - start)
+    }
+
+    override def startAsync()(implicit context: MetricsContext): Timer.TimerHandle = {
+      val start = System.nanoTime()
+      new Timer.TimerHandle {
+        override def stop()(implicit stopContext: MetricsContext): Unit =
+          record(name, callsiteOf(context.merge(stopContext)), System.nanoTime() - start)
+      }
     }
   }
 }

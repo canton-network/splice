@@ -71,7 +71,7 @@ export const TextField: React.FC<TextFieldProps> = props => {
           field.handleChange(e.target.value);
           onChange?.(e.target.value);
         }}
-        inputProps={{ 'data-testid': id }}
+        slotProps={{ htmlInput: { 'data-testid': id } }}
         id={id}
         sx={
           scrollableIdentifier
