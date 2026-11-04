@@ -177,13 +177,7 @@ class SummarizingMiningRoundTrigger(
         context.clock.now,
       )
       appRewardCoupons <- optTotals match {
-        case Some(totals) =>
-          Future.successful(
-            AppRewardCouponsSum(
-              featured = BigDecimal(totals.totalAppRewardFromAppActivity),
-              unfeatured = BigDecimal(0),
-            )
-          )
+        case Some(totals) => Future.successful(appRewardCouponsFromScanTotals(totals))
         case None => store.sumAppRewardCouponsOnDomain(round, domain)
       }
       validatorRewardCoupons <- store.sumValidatorRewardCouponsOnDomain(
@@ -285,6 +279,14 @@ object SummarizingMiningRoundTrigger {
   sealed trait ScanTotalsNotComputed extends RuntimeException
   private[confirmation] case object OwnScanTotalsNotYetComputed extends ScanTotalsNotComputed
   private[confirmation] case object BftScanTotalsNotYetComputed extends ScanTotalsNotComputed
+
+  private[confirmation] def appRewardCouponsFromScanTotals(
+      totals: definitions.RewardAccountingActivityTotalsOk
+  ): AppRewardCouponsSum =
+    AppRewardCouponsSum(
+      featured = BigDecimal(totals.totalAppRewardFromAppActivity),
+      unfeatured = BigDecimal(0),
+    )
 
   final case class RoundRewards(
       round: Long,
