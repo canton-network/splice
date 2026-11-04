@@ -301,3 +301,5 @@ deployments, frequent flakes, rest. First pass (job log only, no deep analysis):
 | 4 rest | 11175 | static_tests setup: 3 fetches of release-line-0.10.0 failed (15 min) | J infra one-off | comment, Infrequent |
 | done | 10495 10496 11104 11105 11140 11147 | verdicts from earlier rounds (queue items 9, 12-16) | G, J, AA, -, AB, AF | hand out commands |
 | waiting | 10893 10917 10918 10919 | as before | | none |
+
+Priority 1 (Y): user asked why each test needs the tag. Traffic: needs #8012 (0.1.25) - tag correct. Coupon: needs active == latest amulet version, not 0.1.25 (wrong-vetting log lines 0 in nightly 11178 vs 3 in main 11144); proposed NoDamlCompatibilityCheck instead; the 10930 comment of 10-30 (likely needs 0_1_25) needs a correction.

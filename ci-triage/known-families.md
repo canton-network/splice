@@ -484,6 +484,21 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - 2026-11-02: both fail every mainnet-Daml nightly (3 nights, 9 dups). Traffic test fails in TokenStandardTransfer and
   TokenStandardV2Transfer shards; confirm with the transfer POST to `splice_traffic-manager` 30-40 ms before
   `UNKNOWN_INFORMEES`. Coupon: count `ProcessRewardsTrigger batchType=`; only BatchOfMintingAllowances = 10930.
+- 2026-11-04 correction (11178, 11180, 11181; analysis on main b5e6a1ba55):
+  - Traffic (10933): genuinely needs splice-amulet 0.1.25. #8012 added `trafficPurchaseReceiver`
+    (`splice_traffic-manager::1220...abcd`, not hosted anywhere) to ExternalPartyAmuletRules: a V1 or V2 transfer to it
+    burns the amount and creates MemberTraffic. With 0.1.24 it is an ordinary transfer to an unknown party, hence
+    UNKNOWN_INFORMEES 40 ms after the POST. Fix: tag the one test case in TokenStandardTransferIntegrationTest and
+    TokenStandardV2TransferIntegrationTest with SpliceAmulet_0_1_25.
+  - Coupon (10930): does NOT need 0.1.25; #7627 only adapted a config constructor in the test. The batch-type count is
+    no evidence (BatchOfMintingAllowances and BatchOfBatches are the only types). ProcessRewardsTrigger hides a
+    provider's RewardCouponV2 (providerIsObserver = false) only if the provider has not vetted the ACTIVE amulet
+    version; the test makes Alice unvetted by unvetting `DarResources.amulet.latest`. In the nightly the active
+    version is MainNet's (0.1.24, still vetted by Alice), so her coupon is visible and line 206
+    `aliceCoupons.filterNot(_.payload.providerIsObserver) should not be empty` fails. Confirm: `Providers with wrong
+    vetting state for batch` lines: 0 in the nightly (11178), 3 in a passing main run (11144). The test assumes
+    active == latest, so a version tag only hides it until MainNet reaches 0.1.25; right tag: NoDamlCompatibilityCheck
+    (or unvet the active version in the test).
 
 ## Z. ScanPartyMonitorScriptIntegrationTest: private verdict held back by the /v0/events cap (test flake, #8107)
 - Signature: `The script reports alice confirming the private transaction ... List() did not contain element
