@@ -628,9 +628,13 @@ State as recorded in the family section, not rechecked against the tracker on 20
   `INVALID_PRESCRIBED_SYNCHRONIZER_ID` for new parties (do not confuse with family L).
 - Confirm: `zcat canton.clog.gz | grep -a 'Disabling member at the sequencer'` lists members other than the test's
   stopped external participant.
-- Mechanism: the test resumes SequencerPruningTrigger (retention 120 s) on the shared Canton; idle participants of the
-  shard whose last acknowledgement is older than the pruning point are force-disabled with the stopped one; disabling
-  is permanent. Test passes, later suites fail.
+- Mechanism: the test resumes SequencerPruningTrigger (retention 120 s) on the shared Canton; members whose recorded
+  acknowledgement is older than the pruning point are force-disabled with the stopped one; disabling is permanent.
+  Healthy participants acknowledge every 60 s, but the sequencer drops an acknowledgement within the conflation window
+  (SequencerNodeConfig.acknowledgementsConflateWindow, default 45 s in 3.7.1, started when the previous acknowledgement
+  completes in GrpcSequencerService), so one ordering delay (11165: 18 s while sv2's BFT sequencer joined) makes the
+  recorded ack > 2 min old. Test passes, later suites fail.
 - 11165 (2026-11-03, main 6a32b00e92, wall-clock-time (6), run 41637223316): disabled 12:58:29.802, last acks
   12:55:30, pruning point 12:57:34; 3 UnclaimedActivityRecord cases and the next suite failed at setup.
-- Fix: own Canton instance or CI job for the pruning test (owner: suggested martinflorian-da, splice#3062).
+- Fix: retention well above 2 min (e.g. 300 s) in the test, or own Canton instance (owner: suggested martinflorian-da,
+  splice#3062).
