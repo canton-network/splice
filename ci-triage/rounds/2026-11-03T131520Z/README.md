@@ -325,3 +325,5 @@ deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next
 11165: user asked for a smaller bump. Disabled when recorded ack < now - retention (alice at age 120.8 s). Worst healthy age with one dropped ack ~ 120 + clean-ts lag (<=5 s) + ordering delay (~18 s) = ~145 s; two drops need > 75 s ordering. Branch amended to 29019699a0: retention 180 s, wait 5 min; check passes.
 
 11165: PR 8238 (user, 2026-11-04). Next: 11168.
+
+11168: same race as 7864 (closed, fixed by splice#5176 for the second test case only). Vote request created with record expiry now+5 s at 15:37:48.15; createVoteRequest took 5 s; CloseVoteRequestTrigger at 15:37:53.74 hit 'UnclaimedActivityRecord expires after current time'. Fix branch rautenrieth-da/fix-11168-unallocated-record-expiry (5d775de976): 5 s -> 10 s. comments/11168.md.

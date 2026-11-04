@@ -40,6 +40,9 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 
 ## Open fix branches
 
+2026-11-04: `rautenrieth-da/fix-11168-unallocated-record-expiry` (5d775de976, off main 4ab8bd88e8):
+UnclaimedActivityRecordIntegrationTest first test case expiry 5 s -> 10 s (as #5176 did for the second); no PR yet.
+
 2026-11-04: `rautenrieth-da/fix-11165-sequencer-pruning-retention` (29019699a0, off main 4ab8bd88e8): family AH,
 SequencerPruningIntegrationTest retention 120 s -> 180 s, wait 3 -> 5 min; PR 8238.
 
