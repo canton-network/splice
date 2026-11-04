@@ -129,6 +129,7 @@
             "maxBalanceUSD": 10,
             "minBalanceUSD": 1,
             "receiver": "mock-6::6666666666666666666666666666666666666666666666666666666666666666666",
+            "useTokenStandardTransfer": false,
             "useTransferPreapproval": true
           }
         }

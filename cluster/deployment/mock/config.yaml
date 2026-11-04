@@ -483,6 +483,7 @@ validators:
       maxBalance: 10
       minBalance: 1
       useTransferPreapproval: true
+      useTokenStandardTransfer: false
     partyAllocator:
       enable: true
       maxParties: 1234

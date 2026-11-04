@@ -168,6 +168,7 @@ export async function installValidatorApp(
       minBalanceUSD: config.sweep.minBalance,
       receiver: config.sweep.toParty,
       useTransferPreapproval: config.sweep.useTransferPreapproval,
+      useTokenStandardTransfer: config.sweep.useTokenStandardTransfer,
     },
   };
 

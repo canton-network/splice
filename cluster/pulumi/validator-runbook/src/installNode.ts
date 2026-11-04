@@ -268,6 +268,7 @@ async function installValidator(
         minBalanceUSD: validatorConfig.sweep.minBalance,
         receiver: validatorConfig.sweep.toParty,
         useTransferPreapproval: validatorConfig.sweep.useTransferPreapproval,
+        useTokenStandardTransfer: validatorConfig.sweep.useTokenStandardTransfer,
       },
     },
     ...(participantBootstrapDumpSecret ? { nodeIdentifier: newParticipantIdentifier } : {}),
