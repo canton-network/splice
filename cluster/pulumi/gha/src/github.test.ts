@@ -110,7 +110,7 @@ test('secret suffixes create identical copies under suffixed names', async () =>
     const original = byName.get(secretName)!;
     const copy = byName.get(`${secretName}_V2`)!;
     expect(original.name).toBe(resourceName);
-    expect(copy.name).toBe(`${resourceName}-suffix-_V2`);
+    expect(copy.name).toBe(`${resourceName}-_V2`);
     expect(original.value).toBeTruthy();
     expect(copy.value).toEqual(original.value);
     expect(copy.repository).toBe('splice');

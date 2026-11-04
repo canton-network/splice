@@ -19,7 +19,7 @@ function createActionsSecrets(
 ): void {
   for (const suffix of ghaConfig.secretSuffixes) {
     new github.ActionsSecret(
-      suffix === '' ? `${resourceName}-${repo}` : `${resourceName}-${repo}-suffix-${suffix}`,
+      suffix === '' ? `${resourceName}-${repo}` : `${resourceName}-${repo}-${suffix}`,
       {
         repository: repo,
         secretName: `${githubSecretName}${suffix}`,
