@@ -236,5 +236,5 @@ time-based checkpoint 14:37:22.769 to 14:41:53.698 (`write=269.303 s, sync=1.571
 files=19786`). Node `gke-cn-splicenet-cn-apps-node-pool-3--eb220c51-m4q7` (us-central1-c; node pool since replaced).
 User, from Metrics Explorer: node CPU usage rose from about 3 to 9 cores in the window; other pods on the node (small
 runners) below 0.05 cores. So the slowdown is the job's own startup burst (8 apps in the test JVM, which sees 8
-processors, plus Canton and the Vite dev servers), not a neighbour. Not checked: pod CPU limit utilization, node
-allocatable cores.
+processors, plus Canton and the Vite dev servers), not a neighbour. Pod CPU limit utilization (1 min) peaked at 0.945,
+never 1; sub-minute CFS throttling not visible (no cAdvisor throttling metrics). Node allocatable cores not checked.
