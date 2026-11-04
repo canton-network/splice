@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const flywayMigrationsToWaitFor = [
   'V068__app_activity_record_meta.sql',
-  'V081__partition_update_history.sql',
+  'V082__partition_update_history.sql',
 ] as const;
 
 export function checkFlywayMigrationsExist(dir: string, migrations: readonly string[]): void {

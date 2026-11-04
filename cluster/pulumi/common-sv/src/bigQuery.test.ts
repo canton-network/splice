@@ -118,7 +118,7 @@ describe('configureScanBigQuery', () => {
     });
   });
 
-  test.each(['V068__app_activity_record_meta.sql', 'V081__partition_update_history.sql'] as const)(
+  test.each(['V068__app_activity_record_meta.sql', 'V082__partition_update_history.sql'] as const)(
     'both publication and slot commands wait for %s',
     async migration => {
       const resources = await installBigQuery(true, true, migration);
@@ -140,12 +140,12 @@ describe('flywayMigrationToWaitFor', () => {
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
     );
-    expect(FlywayMigrationToWaitForSchema.parse('V081__partition_update_history.sql')).toBe(
-      'V081__partition_update_history.sql'
+    expect(FlywayMigrationToWaitForSchema.parse('V082__partition_update_history.sql')).toBe(
+      'V082__partition_update_history.sql'
     );
   });
 
-  test.each(['V077__verdict_add_round_number.sql', 'V081__partition_update_history'])(
+  test.each(['V077__verdict_add_round_number.sql', 'V082__partition_update_history'])(
     'rejects %s',
     async migration => {
       const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
@@ -161,9 +161,9 @@ describe('flywayMigrationToWaitFor', () => {
       expect(() =>
         checkFlywayMigrationsExist(dir, [
           'V068__app_activity_record_meta.sql',
-          'V081__partition_update_history.sql',
+          'V082__partition_update_history.sql',
         ])
-      ).toThrow(/: V081__partition_update_history\.sql$/);
+      ).toThrow(/: V082__partition_update_history\.sql$/);
     } finally {
       fs.rmSync(dir, { recursive: true });
     }
