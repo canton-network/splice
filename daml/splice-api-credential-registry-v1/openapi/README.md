@@ -1,32 +1,22 @@
 
 ### Implementation note
 
-We expect Scan to maintain the following indices.
-We expect Scan to use them in the following priority order:
+Scan keeps one index for the lookup API. The only query is an exact `property`, then optional `issuer`, `holder`, and `subject` in that order. There is no property-prefix lookup.
+
+`issuer` and `holder` are fields of the credential record. `property` and `subject` are fields of a claim, so the index is over claim rows. An unset subject means the holder.
 
 ```
--- Used when holder is specified.
-create index idx_credentialrecord_holder ON CredentialRecord(holder, property, issuer, record_time);
-
--- Used when a property prefix is specified.
-create index idx_credentialrecord_issuer ON CredentialRecord(property, issuer, record_time);
-
--- Used when issuer is specified.
-create index idx_credentialrecord_issuer ON CredentialRecord(issuer, record_time);
-
--- Used when no filters are specified.
-create index idx_credentialrecord_recordtime ON CredentialRecord(record_time);
+create index idx_credentialrecord_lookup on credential_claim (
+  property,
+  issuer,
+  holder,
+  coalesce(subject, holder),
+  record_time desc,
+  contract_id asc
+);
 ```
 
-The queries are constructed such that pagination follows the index order.
-They use a deterministic paging order based on the index columns, where `record_time` and
-`contract_id` are used as tie breakers.
-An ascending order for record_time is chosen to implement first write wins
-semantics, which is preferred as it incentivizes archiving older records.
-
-The fallback order can be used to page through all records in the order in which
-they were created; and it can also be used to tail the table to ingest all records as
-they are created.
+That column order matches the result order: `record_time` descending, `contract_id` ascending. The first row in a duplicate group is the last-write-wins record.
 
 
 #### On deterministic responses when reading from multiple registry services
@@ -37,5 +27,4 @@ deterministic responses:
 
 - Determine a record_time cutoff based on discretizing record time
   and choosing the end of a previous time slice to query up to.
-
 
