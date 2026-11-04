@@ -61,7 +61,8 @@ class RollForwardLsuDRIntegrationTest
   override protected lazy val runTokenStandardCliSanityCheck = false
 
   override def dbsSuffix = "lsu_dr"
-  override def usesDbs = super.usesDbs ++ super.usesDbs.map(_ + "beforedr")
+  private def beforeDrDbsSuffix = "lsu_drbeforedr"
+  override def usesDbs = super.usesDbs ++ svDbs(beforeDrDbsSuffix)
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(5, Minutes)))
 
@@ -206,7 +207,7 @@ class RollForwardLsuDRIntegrationTest
       enableKeyDownload = true,
       extraSequencerConfig =
         Seq(s"parameters.lsu-repair.global-max-sequencing-time-exclusive=${maxSequencingTime}"),
-      overrideSvDbsSuffix = Some("lsu_drbeforedr"),
+      overrideSvDbsSuffix = Some(beforeDrDbsSuffix),
     )() {
       val allNodes = Seq[AppBackendReference](
         sv1ScanBackend,

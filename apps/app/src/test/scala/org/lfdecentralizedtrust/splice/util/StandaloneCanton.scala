@@ -16,16 +16,19 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
     Seq(
       s"participant_extra_$dbsSuffix",
       s"participant_second_extra_$dbsSuffix",
-    ) ++
-      (1 to 4).flatMap(index =>
-        Seq(
-          s"participant_sv${index}_${dbsSuffix}",
-          s"sequencer_sv${index}_${dbsSuffix}",
-          s"sequencer_sv${index}_${dbsSuffix}_bft",
-          s"mediator_sv${index}_${dbsSuffix}",
-        )
-      )
+    ) ++ svDbs(dbsSuffix)
   }
+
+  // The SV node DBs used by withCantonSvNodes with the given suffix, see overrideSvDbsSuffix
+  def svDbs(suffix: String): Seq[String] =
+    (1 to 4).flatMap(index =>
+      Seq(
+        s"participant_sv${index}_${suffix}",
+        s"sequencer_sv${index}_${suffix}",
+        s"sequencer_sv${index}_${suffix}_bft",
+        s"mediator_sv${index}_${suffix}",
+      )
+    )
 
   def withCantonSvNodes[A](
       adminUsersFromSvBackends: (
