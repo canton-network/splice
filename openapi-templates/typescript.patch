@@ -37,3 +37,20 @@ diff -ru typescript/model/model.mustache new/model/model.mustache
 -{{/models}}
 \ No newline at end of file
 +{{/models}}
+
+diff -ru typescript/tsconfig.mustache new/tsconfig.mustache
+--- typescript/tsconfig.mustache	2026-11-04 19:43:40.425034000 +0000
++++ new/tsconfig.mustache	2026-11-04 19:43:40.370462836 +0000
+@@ -7,9 +7,10 @@
+     "esModuleInterop": true,
+     {{/supportsES6}}
+     {{^supportsES6}}
+-    "target": "es5",
++    "target": "es6",
+     {{/supportsES6}}
+-    "moduleResolution": "node",
++    "module": "nodenext",
++    "moduleResolution": "nodenext",
+     "declaration": true,
+ 
+     /* Additional Checks */
