@@ -44,7 +44,7 @@
         },
         "allowedOrigins": [
           "https://wallet.validator1.mock.global.canton.network.digitalasset.com",
-          "https://ans.validator1.mock.global.canton.network.digitalasset.com"
+          "https://cns.validator1.mock.global.canton.network.digitalasset.com"
         ],
         "appDars": [
           "splice-node/dars/splitwell-0.1.20.dar",
