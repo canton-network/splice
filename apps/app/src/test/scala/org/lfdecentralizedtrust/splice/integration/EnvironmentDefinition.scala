@@ -69,10 +69,8 @@ case class EnvironmentDefinition(
 
   override def loggerFactory: SuppressingLogger = SuppressingLogger(getClass)
   override val configTransforms: Seq[SpliceConfig => SpliceConfig] = {
-    // add the BFT sequencers config transform to the front if enabled to ensure that it modifies the ports before any other transforms updates the ports
-    if (ConfigTransforms.IsTheCantonSequencerBFTEnabled)
-      ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
-    else configTransformsWithContext(context)
+    // add the BFT sequencers config transform to the front to ensure that it modifies the ports before any other transforms updates the ports
+    ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
   }
   def updateTestingConfig(
       update: TestingConfigInternal => TestingConfigInternal
