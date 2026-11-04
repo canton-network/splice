@@ -200,8 +200,8 @@ proposeBySigningSequencers("Turning on traffic management")(
             maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(
               10
             ), // Doesn't really matter, since the base rate is zero.
-            readVsWriteScalingFactor = PositiveInt.tryCreate(200),
-            setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(5),
+            readVsWriteScalingFactor = PositiveInt.tryCreate(4),
+            setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(2),
             enforceRateLimiting = true,
             baseEventCost = NonNegativeLong.zero,
             freeConfirmationResponses = true,
