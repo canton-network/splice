@@ -94,6 +94,40 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Missing GitHub secrets resolve to "", which otherwise only surfaces as confusing test failures much later.
+    # Values are passed via env (not interpolated into the script) so they never end up in the step script on disk.
+    - name: Check required secrets are set
+      shell: bash
+      env:
+        WITH_GCP_CREDS: ${{ inputs.with_gcp_creds }}
+        WITH_AUTH0_CREDS: ${{ inputs.is_frontend_test == 'true' || inputs.with_frontend_creds == 'true' }}
+        WITH_COMPOSE_CREDS: ${{ inputs.with_frontend_creds }}
+        GCP_KMS_CREDS: ${{ inputs.gcp_kms_creds }}
+        GCP_DATA_EXPORT_CREDS: ${{ inputs.gcp_data_export_creds }}
+        AUTH0_CLIENT_ID: ${{ inputs.auth0_management_api_client_id }}
+        AUTH0_CLIENT_SECRET: ${{ inputs.auth0_management_api_client_secret }}
+        AUTH0_AUDIENCE: ${{ inputs.auth0_validator_audience }}
+        COMPOSE_PASSWORD: ${{ inputs.compose_validator_web_ui_password }}
+      run: |
+        missing=()
+        check() { [[ -n "${!1}" ]] || missing+=("$2"); }
+        if [[ "$WITH_GCP_CREDS" == "true" ]]; then
+          check GCP_KMS_CREDS gcp_kms_creds
+          check GCP_DATA_EXPORT_CREDS gcp_data_export_creds
+        fi
+        if [[ "$WITH_AUTH0_CREDS" == "true" ]]; then
+          check AUTH0_CLIENT_ID auth0_management_api_client_id
+          check AUTH0_CLIENT_SECRET auth0_management_api_client_secret
+          check AUTH0_AUDIENCE auth0_validator_audience
+        fi
+        if [[ "$WITH_COMPOSE_CREDS" == "true" ]]; then
+          check COMPOSE_PASSWORD compose_validator_web_ui_password
+        fi
+        if (( ${#missing[@]} > 0 )); then
+          echo "::error::Empty secret inputs: ${missing[*]}. Check that the GitHub secrets the calling workflow passes in (e.g. *_V2) exist in this repository."
+          exit 1
+        fi
+
     - name: Setup
       uses: ./.github/actions/tests/common_test_setup
       with:
