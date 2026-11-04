@@ -40,6 +40,9 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 
 ## Open fix branches
 
+2026-11-04: `rautenrieth-da/fix-11161-login-helper-timeout` (72d55afdc9, off main 7307892450): family AE, login attempts
+in FrontendLoginUtil.loginOnceConfirmedToBeAtUrl get 15 s instead of 5 s; scalafmt and Test/compile pass; no PR yet.
+
 2026-11-03 (merged 21:56, closed 11128): `rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx` (0c380008f0, off main 8dacec5c10):
 family Z test fix, a tap after the private offer; PR canton-network/splice#8211 (auto-merge), opened 2026-11-03.
 2026-11-03 (merged 2026-11-04 06:18, closed 11144): `rautenrieth-da/fix-11144-tbar-wait-all-rounds` (9f4b991cbd, off main 934f543eb4): family AD, assertRewardCalcs

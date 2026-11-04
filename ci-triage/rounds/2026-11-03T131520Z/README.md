@@ -264,5 +264,5 @@ Duplicate check: all five closed by the user 2026-11-03 23:49-23:54 (state_reaso
 - 11144 closed by PR 8221 (merged 06:18). PRs merged 2026-11-02 to 04: 8211, 8215, 8221.
 - New issues since the last check: 11177, 11178, 11180, 11181 (run 41776986892: simtime (0), simtime (3),
   wall-clock-time (8), (9)), 11179 (auth0_user_cleanup), 11182 (docker-canton-simtime (0)); not yet classified.
-- Item 6 (11161, AE): fix branch rautenrieth-da/fix-11161-login-helper-wait-for-page off main 7307892450;
+- Item 6 (11161, AE): fix branch rautenrieth-da/fix-11161-login-helper-timeout off main 7307892450;
   body file comments/11161.md.
