@@ -351,7 +351,7 @@ class SvOffboardingIntegrationTest
 
             clue("check sequencer offboarded from p2p connections") {
               sv3Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
-                .listCurrentPeerEndpoints()
+                .listConfiguredPeerEndpoints()
                 .futureValue
                 .size shouldBe 2
             }
