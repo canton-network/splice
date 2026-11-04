@@ -4,20 +4,7 @@ BEGIN
   DECLARE max_available_timestamp TIMESTAMP;
   DECLARE max_closed_timestamp TIMESTAMP;
 
-  -- 1. Check if production table exists; if not, create shell table
-  IF NOT EXISTS (
-    SELECT 1 
-    FROM {{prodInfoSchema}}
-    WHERE table_name = '{{tableName}}'
-  ) THEN
-    CREATE TABLE {{prodTable}}
-    PARTITION BY record_date AS 
-    SELECT 
-      *, 
-      {{recordDateExpr}} AS record_date
-    FROM {{stagingTable}} AS staging
-    WHERE 1 = 0;
-  END IF;
+  {{createProdTable}}
 
   -- 2. Create central watermark tracking table using INT64 (microseconds)
   CREATE TABLE IF NOT EXISTS {{watermarksTable}} (
