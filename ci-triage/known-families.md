@@ -47,6 +47,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (related 10475) | open, test fix proposed |
 | AG | first Postgres connection > 5 s at shard start, createDatabase retry WARN | 10739, 11141 | open, test config fix proposed |
 | AH | SequencerPruningIntegrationTest disables the shared participants at the global sequencer | 11165 | open, owner suggested martinflorian-da |
+| AI | SUBMISSION_ALREADY_IN_FLIGHT trips the validator circuit breaker | 9752 (dups 10300, 11173) | closed 9752, fix cni#2785 status unknown |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -638,3 +639,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   12:55:30, pruning point 12:57:34; 3 UnclaimedActivityRecord cases and the next suite failed at setup.
 - Fix: retention above the worst healthy ack age (about 145 s with one dropped ack; 180 s) in the test, or own Canton instance (owner: suggested martinflorian-da,
   splice#3062).
+
+## AI. SUBMISSION_ALREADY_IN_FLIGHT counted as failures by the circuit breaker (checkErrors)
+- Signature (log check only, canton_network_test.clog): WARN `Circuit breaker high-priority-connection tripped after 20
+  failures` with stack `ABORTED: SUBMISSION_ALREADY_IN_FLIGHT`, usually on a validator's TopupMemberTrafficTrigger.
+- Confirm: the 20 failures before the trip are `SUBMISSION_ALREADY_IN_FLIGHT` for the same trigger's resubmissions
+  while its first submission is in flight (count by logger and span-name).
+- Parent 9752 (2026-08-24, closed after 2 weeks without recurrence; fix referenced as cni#2785, not readable here);
+  10300 (2026-10-07, dup); 11173 (2026-11-03, DistributedDomainIntegrationTest, aliceValidator, 19 rejections
+  17:01:20.567-17:01:38.536, wall-clock-time (3) run 41674340437). Different from 10611 (P2P connectivity).
