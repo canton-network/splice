@@ -636,5 +636,5 @@ State as recorded in the family section, not rechecked against the tracker on 20
   recorded ack > 2 min old. Test passes, later suites fail.
 - 11165 (2026-11-03, main 6a32b00e92, wall-clock-time (6), run 41637223316): disabled 12:58:29.802, last acks
   12:55:30, pruning point 12:57:34; 3 UnclaimedActivityRecord cases and the next suite failed at setup.
-- Fix: retention well above 2 min (e.g. 300 s) in the test, or own Canton instance (owner: suggested martinflorian-da,
+- Fix: retention above the worst healthy ack age (about 145 s with one dropped ack; 180 s) in the test, or own Canton instance (owner: suggested martinflorian-da,
   splice#3062).
