@@ -1053,6 +1053,7 @@ class DbScanRewardsReferenceStoreTest
       //   t=300: round5 created (opensAt=400)
       //   t=375: round4 archived
       //   t=400: round6 created (opensAt=500)
+      //   t=500: round7 created (opensAt=600)
       val round3 =
         openMiningRound(dsoParty, round = 3, amuletPrice = 1.0, opensAt = ts(100).toInstant)
           .copy(createdAt = ts(75).toInstant)
@@ -1088,6 +1089,21 @@ class DbScanRewardsReferenceStoreTest
             )
           ),
         ).copy(createdAt = ts(400).toInstant)
+      // round7 sets only dsoAppActivityWeight, the defaults are used for the other two
+      val round7 =
+        openMiningRound(
+          dsoParty,
+          round = 7,
+          amuletPrice = 3.0,
+          opensAt = ts(600).toInstant,
+          rewardConfig = Optional.of(
+            rewardConfig(
+              extraFeaturedAssetActivityWeight = None,
+              maxExtraFeaturedAssetActivityWeightPerAsset = None,
+              dsoAppActivityWeight = Some("0.5"),
+            )
+          ),
+        ).copy(createdAt = ts(500).toInstant)
       val round5Info = ScanRewardsReferenceStore.ActiveRoundInfo(
         5L,
         ts(400),
@@ -1111,6 +1127,7 @@ class DbScanRewardsReferenceStoreTest
         _ <- sync1.create(round5, recordTime = ts(300).toInstant)(store.multiDomainAcsStore)
         _ <- sync1.archive(round4, recordTime = ts(375).toInstant)(store.multiDomainAcsStore)
         _ <- sync1.create(round6, recordTime = ts(400).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(round7, recordTime = ts(500).toInstant)(store.multiDomainAcsStore)
         // Advance record time past all query points to unblock waitUntilRecordTimeReached
         _ <- store.multiDomainAcsStore.testIngestionSink.ingestUpdateBatch(
           NonEmptyList.of(
@@ -1130,6 +1147,8 @@ class DbScanRewardsReferenceStoreTest
         )
         _ <- sync1.archive(round5, recordTime = ts(650).toInstant)(store.multiDomainAcsStore)
         afterRound5Archived <- store.lookupActiveOpenMiningRounds(Seq(ts(650)))
+        _ <- sync1.archive(round6, recordTime = ts(700).toInstant)(store.multiDomainAcsStore)
+        afterRound6Archived <- store.lookupActiveOpenMiningRounds(Seq(ts(700)))
       } yield {
         result.get(ts(30)) shouldBe None // before earliest archived_at
         result.get(ts(150)) shouldBe None // before earliest archived_at
@@ -1150,6 +1169,17 @@ class DbScanRewardsReferenceStoreTest
               extraFeaturedAssetActivityWeight = BigDecimal("0.2"),
               maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.1"),
               dsoAppActivityWeight = BigDecimal("0.1"),
+            ),
+          )
+        )
+        afterRound6Archived shouldBe Map(
+          ts(700) -> ScanRewardsReferenceStore.ActiveRoundInfo(
+            7L,
+            ts(600),
+            AssetActivityParams(
+              extraFeaturedAssetActivityWeight = BigDecimal("0.2"),
+              maxExtraFeaturedAssetActivityWeightPerAsset = BigDecimal("0.1"),
+              dsoAppActivityWeight = BigDecimal("0.5"),
             ),
           )
         )
