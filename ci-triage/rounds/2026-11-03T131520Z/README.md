@@ -309,3 +309,5 @@ Priority 1 (Y): user agreed. Branch amended to 67d433fb33 (coupon suite NoDamlCo
 Priority 1 (Y): PR 8228 (user) fixes 10930 only (Fixes line). User: 10930 is the single parent; close 11178 and the traffic failures (10933, 11180, 11181) as dups of 10930; retitle 10930 to cover both tests. Commands handed out.
 
 Priority 2 (deploy_sv_reonboard): cause from the user (CircleCI output): Helm fail added by splice #8137, Pulumi never sets allowedOrigins for validator1 with disableAuth. Parent 11106, dups 11137 11142 11151 11171 11183, assign OriolMunoz-da, Triaged. comments/11106.md.
+
+deploy_sv_reonboard: export_circleci.py output (user) for 11106, 11137, 11183: validator1 fails at validator.yaml:324:12 allowedOrigins in every visible attempt (step output capped at 400034 chars). SV stacks also time out on Helm release readiness (context canceled) in some attempts, recovering on retry (11137 last attempt: validator1 only). Comment updated.
