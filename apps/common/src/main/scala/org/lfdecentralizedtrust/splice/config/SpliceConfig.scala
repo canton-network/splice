@@ -90,7 +90,8 @@ final case class EnabledFeaturesConfig(
     enableValidatorDarsUnvetting: Boolean = true,
     ignorePartyIdWithIgnoredAmulet: Boolean = true,
     naiveUnresponsivePartiesAutoIgnore: Boolean = true,
-    enablePersistedUnavailableParties: Boolean = false,
+    enablePersistedUnavailableParties: Boolean = true,
+    enableVettingFailureBatchSplitting: Boolean = true,
 )
 
 final case class SpliceCachingConfigs(
