@@ -327,3 +327,5 @@ deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next
 11165: PR 8238 (user, 2026-11-04). Next: 11168.
 
 11168: same race as 7864 (closed, fixed by splice#5176 for the second test case only). Vote request created with record expiry now+5 s at 15:37:48.15; createVoteRequest took 5 s; CloseVoteRequestTrigger at 15:37:53.74 hit 'UnclaimedActivityRecord expires after current time'. Fix branch rautenrieth-da/fix-11168-unallocated-record-expiry (5d775de976): 5 s -> 10 s. comments/11168.md.
+
+11168: PR 8241 (user). 8238 wording unchanged (accepted, no CI re-run). Next: 11173.
