@@ -238,3 +238,11 @@ User, from Metrics Explorer: node CPU usage rose from about 3 to 9 cores in the 
 runners) below 0.05 cores. So the slowdown is the job's own startup burst (8 apps in the test JVM, which sees 8
 processors, plus Canton and the Vite dev servers), not a neighbour. Pod CPU limit utilization (1 min) peaked at 0.945,
 never 1; sub-minute CFS throttling not visible (no cAdvisor throttling metrics). Node allocatable cores not checked.
+
+Chart export `Kubernetes_Container_-_CPU_limit_utilization.csv` (container `job` of the workflow pod, CET = UTC+1):
+```
+UTC 14:33 0.032, 14:34 0.158, 14:35 0.361, 14:36 0.290, 14:37 0.382, 14:38 0.720, 14:39 0.616, 14:40 0.577,
+14:41 0.401, 14:42 0.673, 14:43 0.945, 14:44 0.782, 14:45 0.597
+```
+The stall minute (14:39) is at 0.62, below the later peak. The postgres container of the same pod is not in the
+export; with a job limit of 8 cores (JVM availableProcessors 8) the job used about 5 of the node's about 9 cores.
