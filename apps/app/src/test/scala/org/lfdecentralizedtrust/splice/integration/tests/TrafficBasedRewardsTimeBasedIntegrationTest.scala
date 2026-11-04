@@ -15,19 +15,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  FeaturedAppKind,
-  FeaturedAppRight_Update,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  DsoRules_GrantFeaturedAppRight,
-  DsoRules_UpdateFeaturedAppRight,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
-  SRARC_GrantFeaturedAppRight,
-  SRARC_UpdateFeaturedAppRight,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -81,9 +72,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     with TokenStandardTest {
 
   protected def rewardConfigMode: TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode
-
-  // Applicable for rounds >= 7
-  private val aliceActivityWeight = BigDecimal("2.2")
 
   private def dryRunEnabled: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
@@ -235,8 +223,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(5)
-
-          updateFeaturedAppRightWeight(aliceParty, aliceActivityWeight)
 
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
@@ -735,38 +721,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     }
     withClue(s"$cluePrefix each asset activity weight should be positive") {
       records.foreach(_.weight should be > 0L)
-    }
-  }
-
-  private def updateFeaturedAppRightWeight(
-      party: PartyId,
-      newWeight: BigDecimal,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val rightCid = clue(s"Look up featured app right for $party") {
-      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
-    }
-    val action = new ARC_DsoRules(
-      new SRARC_UpdateFeaturedAppRight(
-        new DsoRules_UpdateFeaturedAppRight(
-          rightCid,
-          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
-        )
-      )
-    )
-    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
-    clue(s"Wait for $party featured app right weight to be $newWeight") {
-      eventually() {
-        val weight = sv1ScanBackend
-          .lookupFeaturedAppRight(party)
-          .value
-          .payload
-          .activityWeight
-          .toScala
-          .map(BigDecimal(_))
-        withClue(s"activity weight for $party: ") {
-          weight.getOrElse(BigDecimal(1)).compare(newWeight) shouldBe 0
-        }
-      }
     }
   }
 
