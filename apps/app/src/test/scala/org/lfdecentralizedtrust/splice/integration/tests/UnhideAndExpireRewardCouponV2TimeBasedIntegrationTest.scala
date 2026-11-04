@@ -8,6 +8,7 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageVersion}
+
 import java.time.Duration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
@@ -16,7 +17,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv
   RewardCoupon_AssignBeneficiaries,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.sv.config.{
+  InitialRewardConfig,
+  UnavailablePartiesBackoffParameters,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -59,6 +63,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     with TimeTestUtil {
 
   private val rewardCouponTtl = Duration.ofHours(2)
+  private val unavailablePartiesIgnoreDuration = Duration.ofMinutes(1)
 
   // Version where V2 was introduced, or the current minimum initialization version if higher
   private val minV2AmuletVersion =
@@ -139,7 +144,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           svConfig.copy(
             packageVettingCache = svConfig.packageVettingCache.copy(
               ttl = NonNegativeFiniteDuration.ofMillis(1)
-            )
+            ),
+            unavailablePartiesBackoffParameters = UnavailablePartiesBackoffParameters(
+              baseIgnoreDuration = NonNegativeFiniteDuration.ofMinutes(1),
+              maxIgnoreDuration = NonNegativeFiniteDuration.ofMinutes(1),
+            ),
           )
         )(config)
       )
@@ -458,8 +467,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       )
 
       actAndCheck(
-        "Re-vet Alice",
-        revetV2AmuletOnAlice(aliceParticipantId, aliceParty),
+        "Re-vet Alice", {
+          revetV2AmuletOnAlice(aliceParticipantId, aliceParty)
+          // Alice stays ignored until her backoff window elapses
+          advanceTime(unavailablePartiesIgnoreDuration.plusSeconds(1))
+        },
       )(
         "ExpireRewardCouponV2Trigger archives once Alice is re-vetted",
         _ => {
