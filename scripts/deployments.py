@@ -34,7 +34,7 @@ from datetime import datetime, timezone, timedelta
 PROJECT_SLUG = "github/DACH-NY/canton-network-internal"
 
 # how many days back to look
-DAYS_BACK = 3
+DAYS_BACK = 7
 
 # only workflows whose name matches this regex are shown (one lane each)
 WORKFLOW_NAME_REGEX = r"deploy_.*"
