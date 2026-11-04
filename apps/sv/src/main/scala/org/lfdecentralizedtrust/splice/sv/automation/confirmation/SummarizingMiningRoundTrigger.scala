@@ -178,14 +178,11 @@ class SummarizingMiningRoundTrigger(
       )
       appRewardCoupons <- optTotals match {
         case Some(totals) =>
-          // The total featured app rewards (in CC) is the sum of the minting
-          // allowance and the thresholded amount reported by Scan.
-          val appRewardsInCc =
-            (BigDecimal(totals.totalAppRewardMintingAllowance) +
-              BigDecimal(totals.totalAppRewardThresholded))
-              .setScale(10, BigDecimal.RoundingMode.HALF_EVEN)
           Future.successful(
-            AppRewardCouponsSum(featured = appRewardsInCc, unfeatured = BigDecimal(0))
+            AppRewardCouponsSum(
+              featured = BigDecimal(totals.totalAppRewardFromAppActivity),
+              unfeatured = BigDecimal(0),
+            )
           )
         case None => store.sumAppRewardCouponsOnDomain(round, domain)
       }
