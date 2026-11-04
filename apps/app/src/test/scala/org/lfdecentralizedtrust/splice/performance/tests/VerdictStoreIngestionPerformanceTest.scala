@@ -70,7 +70,6 @@ class VerdictStoreIngestionPerformanceTest(
   override protected val tablesToSanityCheck: Seq[String] =
     Seq("scan_verdict_store", "scan_verdict_transaction_view_store")
 
-
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
     implicit val initTc: TraceContext = TraceContext.empty
     UpdateHistory
