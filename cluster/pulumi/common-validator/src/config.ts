@@ -104,6 +104,7 @@ export const SweepConfigSchema = z.object({
   maxBalance: z.number(),
   minBalance: z.number(),
   useTransferPreapproval: z.boolean().optional(),
+  useTokenStandardTransfer: z.boolean().optional(),
 });
 
 export const ValidatorNodeConfigSchema = z.object({

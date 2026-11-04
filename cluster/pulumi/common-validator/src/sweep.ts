@@ -6,4 +6,5 @@ export type SweepConfig = {
   maxBalance: number;
   minBalance: number;
   useTransferPreapproval?: boolean;
+  useTokenStandardTransfer?: boolean;
 };
