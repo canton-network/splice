@@ -5,6 +5,7 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
 import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 
 import io.circe.Json
@@ -43,6 +44,8 @@ abstract class StoreReadPerformanceTest(
       loggerFactory,
       ingestionConfig,
     ) {
+
+  override type Store <: HasIngestionSink
 
   protected def readOperations(
       store: Store,

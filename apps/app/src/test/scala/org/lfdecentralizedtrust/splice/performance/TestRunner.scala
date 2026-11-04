@@ -5,12 +5,13 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.performance.tests.{
+  BaseStorePerformanceTest,
   ScanStoreIngestionPerformanceTest,
-  StoreIngestionPerformanceTest,
   StoreReadPerformanceTest,
   SvDsoStoreIngestionPerformanceTest,
   UpdateHistoryIngestionPerformanceTest,
   UpdateHistoryReadPerformanceTest,
+  VerdictStoreIngestionPerformanceTest,
 }
 
 import java.nio.file.Path
@@ -29,7 +30,7 @@ class TestRunner(testNames: String, configPath: Path, updateHistoryDumpPath: Pat
   def run(): Unit = {
     val config: Config = ConfigFactory.parseFile(configPath.toFile).resolve()
 
-    val ingestionTests: Map[String, () => StoreIngestionPerformanceTest] = Map(
+    val ingestionTests: Map[String, () => BaseStorePerformanceTest] = Map(
       "DbSvDsoStore" -> (() =>
         SvDsoStoreIngestionPerformanceTest.tryCreate(updateHistoryDumpPath, config, loggerFactory)
       ),
@@ -43,6 +44,10 @@ class TestRunner(testNames: String, configPath: Path, updateHistoryDumpPath: Pat
           config,
           loggerFactory,
         )
+      ),
+      // Note: expects an events dump (from `download-scan-events`), not an update-history dump.
+      "VerdictStore" -> (() =>
+        VerdictStoreIngestionPerformanceTest.tryCreate(updateHistoryDumpPath, config, loggerFactory)
       ),
     )
 
