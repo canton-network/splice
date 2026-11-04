@@ -772,24 +772,24 @@ class DbVotesStoreTest
       storage.underlying.queryAndUpdate(
         DBIO
           .seq(
-            sqlu"""insert into update_history_transactions
+            sqlu"""insert into update_history_transactions_legacy
                    (history_id, update_id, record_time, participant_offset, domain_id, migration_id,
                     effective_at, root_event_ids)
                  select $historyId, v.update_id, v.record_time, '0', v.synchronizer_id, $domainMigrationId,
                         v.record_time, array['#0']
                  from votes_store_results v
                  where v.update_id = $updateId
-                   and not exists (select 1 from update_history_transactions t
+                   and not exists (select 1 from update_history_transactions_legacy t
                                    where t.history_id = $historyId and t.update_id = $updateId)
                  limit 1""",
-            sqlu"""insert into update_history_exercises
+            sqlu"""insert into update_history_exercises_legacy
                    (history_id, event_id, update_row_id, child_event_ids, choice, package_name, template_id_package_id,
                     template_id_module_name, template_id_entity_name, contract_id, consuming, argument, result, acting_parties,
                     record_time, update_id, domain_id, migration_id)
                  select $historyId, '#' || $updateId || ':' || $nodeId, t.row_id, array[]::text[], $choice, 'splice-dso-governance', 'pkg',
                         'Splice.DsoRules', 'DsoRules', $contractId, false, '{}'::jsonb, '{}'::jsonb, array[]::text[],
                         t.record_time, t.update_id, t.domain_id, t.migration_id
-                 from update_history_transactions t
+                 from update_history_transactions_legacy t
                  where t.history_id = $historyId and t.update_id = $updateId""",
           )
           .map(_ => ()),
@@ -805,7 +805,11 @@ class DbVotesStoreTest
     val script = scala.io.Source
       .fromResource("db/migration/canton-network/postgres/stable/V081__votes_store_contract_id.sql")
       .mkString
-    val update = script.substring(script.indexOf("update votes_store_results"))
+    val update = script
+      .substring(script.indexOf("update votes_store_results"))
+      // These tables are renamed to 'XXX_legacy' after the 'partition_update_history' migration,
+      // which happens after the one we're trying to run here, so we rename the tables.
+      .replaceAll("\\b(update_history_(transactions|exercises))\\b", "$1_legacy")
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(sqlu"#$update".map(_ => ()), "test.runMigration")
     )
