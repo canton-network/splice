@@ -121,8 +121,6 @@ object CantonDependencies {
   lazy val canton_wartremover_annotations =
     "com.daml" %% "wartremover-annotations" % canton_library_version
 
-  lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
-  lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
   lazy val canton_transcode_json = "com.daml" % "transcode-codec-json_3" % canton_library_version
   lazy val canton_transcode_proto_scala =
     "com.daml" % "transcode-codec-proto-scala_3" % canton_library_version
@@ -234,13 +232,8 @@ object CantonDependencies {
 
   lazy val cats = "org.typelevel" %% "cats-core" % "2.9.0"
   lazy val cats_law = "org.typelevel" %% "cats-laws" % "2.9.0"
-  lazy val cats_scalacheck = "io.chrisdavenport" %% "cats-scalacheck" % "0.3.2"
 
   lazy val chimney = "io.scalaland" %% "chimney" % "1.4.0"
-
-  lazy val magnolia = "com.softwaremill.magnolia1_2" %% "magnolia" % "1.1.3"
-  lazy val magnolify_shared = "com.spotify" % "magnolify-shared_2.13" % "0.6.2"
-  lazy val magnolify_scalacheck = "com.spotify" % "magnolify-scalacheck_2.13" % "0.6.2"
 
   lazy val circe_core = "io.circe" %% "circe-core" % circe_version
   lazy val circe_generic = "io.circe" %% "circe-generic" % circe_version
@@ -287,8 +280,6 @@ object CantonDependencies {
 
   lazy val sttp_version = "3.11.0"
   lazy val sttp = "com.softwaremill.sttp.client3" %% "core" % sttp_version
-  lazy val sttp_okhttp = "com.softwaremill.sttp.client3" %% "okhttp-backend" % sttp_version
-  lazy val sttp_circe = "com.softwaremill.sttp.client3" %% "circe" % sttp_version
 
   lazy val tapir_version = "1.11.7"
   lazy val tapir_json_circe = "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % tapir_version
