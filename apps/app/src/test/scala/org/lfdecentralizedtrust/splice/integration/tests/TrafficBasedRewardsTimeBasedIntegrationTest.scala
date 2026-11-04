@@ -260,16 +260,17 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           val (aliceCreateId, svExpireId) =
             aliceCreateAndSvExpireInstruction(aliceParty, bobParty)
 
-          // Kind swap: cancel venue's FAK_Basic FAR and re-grant as
-          // FAK_ASSETMOVING. Done here (not just before round 10 opens) so
-          // the voting flow has multiple rounds to complete — otherwise the
-          // new FAR is not visible at round 10's open time
-          // (lookupFeaturedAppPartiesAsOf is as-of round open time).
+          // Kind swap: cancel venue's and alice's FAK_Basic FARs, re-grant as
+          // FAK_ASSETMOVING and FAK_ASSET respectively. Done here (not just
+          // before round 10 opens) so the voting flow has multiple rounds to
+          // complete — otherwise the new FARs are not visible at round 10's
+          // open time (lookupFeaturedAppPartiesAsOf is as-of round open time).
           swapFeaturedAppRightKind(
             splitwellWalletClient,
             venueParty,
             FeaturedAppKind.FAK_ASSETMOVING,
           )
+          swapFeaturedAppRightKind(aliceWalletClient, aliceParty, FeaturedAppKind.FAK_ASSET)
 
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(8)
@@ -430,15 +431,21 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertTrafficSummary(event, "updateId6")
       // See updateId3.
       assertAppActivity(event, "updateId6", Set(venueParty), expectedRound = 10)
+      // Venue is now FAK_ASSETMOVING and alice is FAK_Asset. Asset-activity
+      // records attribute (a) alice directly (as a FAK_Asset confirmer) and
+      // (b) DSO's dsoAppActivityWeight contribution — but DSO's share is
+      // credited to the submitting app (venue), not to DSO itself.
+      assertAssetActivity(event, "updateId6", Set(aliceParty, venueParty))
     }
 
     clue("updateId7") {
       val event = fetchEvent(updateId7, "updateId7")
       assertTrafficSummary(event, "updateId7")
-      // Round 11: venue is FAK_ASSETMOVING (set at end of round 7), so venue
-      // remains the FA submitter of the DvP and takes the full burn on the
-      // FA-submitted path.
+      // Round 11: venue is still FAK_ASSETMOVING (set at end of round 7);
+      // see updateId3 for the FA-submitted attribution rule.
       assertAppActivity(event, "updateId7", Set(venueParty), expectedRound = 11)
+      // See updateId6 for the asset-side attribution shape.
+      assertAssetActivity(event, "updateId7", Set(aliceParty, venueParty))
     }
 
     assertRewardCalcs(aliceParty, venueParty)
@@ -714,6 +721,22 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     withClue(s"$cluePrefix submitting app provider") {
       event.submittingAppProvider.map(_.value) shouldBe expected.map(_.toProtoPrimitive)
     }
+
+  private def assertAssetActivity(
+      event: definitions.EventHistoryItem,
+      cluePrefix: String,
+      expectedProviders: Set[PartyId],
+  ): Unit = {
+    val records = event.assetActivityRecords
+      .map(_.value)
+      .getOrElse(fail(s"$cluePrefix: event has no assetActivityRecords"))
+    withClue(s"$cluePrefix asset activity provider parties") {
+      records.map(_.party).toSet shouldBe expectedProviders.map(_.toProtoPrimitive)
+    }
+    withClue(s"$cluePrefix each asset activity weight should be positive") {
+      records.foreach(_.weight should be > 0L)
+    }
+  }
 
   private def updateFeaturedAppRightWeight(
       party: PartyId,
