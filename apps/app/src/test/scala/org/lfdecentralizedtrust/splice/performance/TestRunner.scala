@@ -45,7 +45,7 @@ class TestRunner(testNames: String, configPath: Path, updateHistoryDumpPath: Pat
           loggerFactory,
         )
       ),
-      // Note: expects an events dump (from `download-scan-events`), not an update-history dump.
+      // expects an events dump
       "VerdictStore" -> (() =>
         VerdictStoreIngestionPerformanceTest.tryCreate(updateHistoryDumpPath, config, loggerFactory)
       ),
