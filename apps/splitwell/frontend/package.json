@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@canton-network/splice-common-test-handlers": "^0.1.0",
     "@canton-network/splice-common-test-utils": "^0.1.0",
     "@canton-network/splice-common-test-vite-utils": "^0.1.0",
     "@tanstack/eslint-plugin-query": "5.104.5",
