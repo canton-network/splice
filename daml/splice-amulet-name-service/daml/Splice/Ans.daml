@@ -13,17 +13,6 @@ import Splice.Wallet.Payment
 import Splice.Wallet.Subscriptions
 import Splice.Util
 
-import Splice.Api.Token.MetadataV1 (emptyMetadata)
-import Splice.Api.Token.TransferInstructionV1 qualified as TransferV1
-import Splice.Api.Token.TransferInstructionV2 qualified as TransferV2
-import Splice.TokenStandard.Utils (
-  publicFetchDefaultImpl,
-  transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl,
-  transferFactoryV2_transferDefaultImplUsingV1,
-  )
-
-import Splice.Ans.CredentialExpiry (extendCredentialExpiry)
-
 data AnsRules_RequestEntryResult = AnsRules_RequestEntryResult
   with
     entryCid : ContractId AnsEntryContext
@@ -85,30 +74,6 @@ template AnsRules
   where
     signatory dso
     ensure validAnsConfig config
-
-    -- Credential expiry. A positive amount burns CC. A zero amount with no
-    -- holdings applies only the free period. The body is the v1 choice; v2
-    -- downcasts into it and passes its actors. The sender pays. V2 actors
-    -- must also include the holder or the issuer. V1 passes only the sender.
-    interface instance TransferV1.TransferFactory for AnsRules where
-      view = TransferV1.TransferFactoryView with
-        admin = dso
-        meta = emptyMetadata
-
-      transferFactory_publicFetchImpl = publicFetchDefaultImpl this
-      transferFactory_transferImpl _self arg =
-        extendCredentialExpiry dso [arg.transfer.sender] arg
-
-    interface instance TransferV2.TransferFactory for AnsRules where
-      view = TransferV2.TransferFactoryView with
-        admin = dso
-        meta = emptyMetadata
-
-      transferFactory_publicFetchImpl = publicFetchDefaultImpl this
-      -- Sender only. The receiver is the unhosted expiry sentinel.
-      transferFactory_transferExtraObservers = transferFactoryV2_privateAsset_transferExtraObserversDefaultImpl
-      transferFactory_transferImpl =
-        transferFactoryV2_transferDefaultImplUsingV1 $ extendCredentialExpiry dso
 
     -- Request a ans entry, to be paid and renewed via subscription payments.
     -- The SubscriptionRequest is accepted (or rejected) via the user's wallet by offering the initial payment.
