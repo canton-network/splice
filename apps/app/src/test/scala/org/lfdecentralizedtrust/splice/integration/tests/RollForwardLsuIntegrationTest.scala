@@ -233,7 +233,6 @@ class RollForwardLsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "roll-forward-lsu",
       // LSU exports the sequencer and mediator keys
       enableKeyDownload = true,
