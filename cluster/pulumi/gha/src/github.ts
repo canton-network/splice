@@ -2,10 +2,33 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
 import * as github from '@pulumi/github';
+import * as pulumi from '@pulumi/pulumi';
 import { DockerConfig } from '@canton-network/splice-pulumi-common/src/dockerConfig';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 
 import { ghaConfig } from './config';
+
+// One GitHub secret per configured suffix, all with the same value.
+// The empty suffix keeps the original resource names so existing secrets are not replaced.
+function createActionsSecrets(
+  resourceName: string,
+  githubSecretName: string,
+  value: pulumi.Input<string>,
+  repo: string,
+  provider: github.Provider
+): void {
+  for (const suffix of ghaConfig.secretSuffixes) {
+    new github.ActionsSecret(
+      suffix === '' ? `${resourceName}-${repo}` : `${resourceName}-${repo}-${suffix}`,
+      {
+        repository: repo,
+        secretName: `${githubSecretName}${suffix}`,
+        value,
+      },
+      { provider }
+    );
+  }
+}
 
 function copySecretToGithubActionsSecret(
   secretName: string,
@@ -14,15 +37,7 @@ function copySecretToGithubActionsSecret(
   provider: github.Provider
 ): void {
   const secret = getSecretVersionOutput({ secret: secretName });
-  new github.ActionsSecret(
-    `${secretName}-${repo}`,
-    {
-      repository: repo,
-      secretName: githubSecretName,
-      value: secret.secretData,
-    },
-    { provider }
-  );
+  createActionsSecrets(secretName, githubSecretName, secret.secretData, repo, provider);
 }
 
 function createSaKeySecret(
@@ -35,14 +50,12 @@ function createSaKeySecret(
     serviceAccountId: `${saName}@da-cn-splice.iam.gserviceaccount.com`,
     privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE',
   });
-  new github.ActionsSecret(
-    `${saName}-key-secret-${repo}`,
-    {
-      repository: repo,
-      secretName: githubSecretName,
-      value: dataExportTestsKey.privateKey.apply(k => Buffer.from(k, 'base64').toString('utf-8')),
-    },
-    { provider: provider }
+  createActionsSecrets(
+    `${saName}-key-secret`,
+    githubSecretName,
+    dataExportTestsKey.privateKey.apply(k => Buffer.from(k, 'base64').toString('utf-8')),
+    repo,
+    provider
   );
 }
 
@@ -52,24 +65,32 @@ export function installGithubRepo(repo: string): void {
   });
 
   const auth0TestsManagementApi = getSecretVersionOutput({ secret: 'auth0-tests-management-api' });
-  new github.ActionsSecret(
-    `auth0-tests-management-api-client-id-${repo}`,
-    {
-      repository: repo,
-      secretName: 'AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID',
-      value: auth0TestsManagementApi.apply(api => JSON.parse(api.secretData).clientId),
-    },
-    { provider: orgProvider }
+  createActionsSecrets(
+    'auth0-tests-management-api-client-id',
+    'AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID',
+    auth0TestsManagementApi.apply(api => JSON.parse(api.secretData).clientId),
+    repo,
+    orgProvider
   );
-  new github.ActionsSecret(
-    `auth0-tests-management-api-client-secret-${repo}`,
-    {
-      repository: repo,
-      secretName: 'AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET',
-      value: auth0TestsManagementApi.apply(api => JSON.parse(api.secretData).secret),
-    },
-    { provider: orgProvider }
+  createActionsSecrets(
+    'auth0-tests-management-api-client-secret',
+    'AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET',
+    auth0TestsManagementApi.apply(api => JSON.parse(api.secretData).secret),
+    repo,
+    orgProvider
   );
+
+  if (ghaConfig.forkPrRequiredCommit) {
+    new github.ActionsVariable(
+      `fork-pr-required-commit-${repo}`,
+      {
+        repository: repo,
+        variableName: 'FORK_PR_REQUIRED_COMMIT',
+        value: ghaConfig.forkPrRequiredCommit,
+      },
+      { provider: orgProvider }
+    );
+  }
 
   copySecretToGithubActionsSecret(
     'auth0-validator-audience',
