@@ -35,14 +35,9 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Verdict ingestion metrics: the common ingestion metrics (items = verdicts, events = transaction views)
-  * plus the app activity records ingested alongside the verdicts.
+/** Ingests real verdicts (+ traffic summaries) downloaded from Scan's `/v0/events`
+  * into the verdict store, measuring the `insertVerdictAndTransactionViews` write path.
   */
-final case class VerdictIngestionPerfMetrics(
-    base: StoreIngestionPerfMetrics,
-    totalAppActivityRecords: Long,
-)
-
 class VerdictStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
@@ -57,16 +52,20 @@ class VerdictStoreIngestionPerformanceTest(
       storageConfig,
       timeouts,
       loggerFactory,
-      ingestionConfig,
     ) {
 
   override type Store = DbScanVerdictStore
 
-  /** A verdict from the event dump together with its optional traffic summary, app activity records
+  /** A verdict from the dump together with its optional traffic summary, app activity records
     * and the round number resolved for the verdict row.
     *
-    * a round is only exposed via `app_activity_records`.
-    * when app_activity_records is missing, we use the last-seen round.
+    * The `/v0/events` payload only exposes a round via `app_activity_records`, which is absent
+    * for verdicts that had a round but produced no activity record (no featured-app traffic).
+    * Production still stores a round for those verdicts (it keys the round on the verdict, not on
+    * whether a record was produced). Since rounds are monotonic in record-time order, we
+    * reconstruct `resolvedRound` by carrying the last-seen round forward; this matches the stored
+    * value for adjacent verdicts in the same open round and keeps the batch monotonic, satisfying
+    * `insertVerdictAndTransactionViewsDBIO`'s ordering invariant.
     */
   private case class LoadedVerdict(
       verdict: httpDefs.EventHistoryVerdict,
@@ -77,6 +76,9 @@ class VerdictStoreIngestionPerformanceTest(
 
   override protected val tablesToSanityCheck: Seq[String] =
     Seq("scan_verdict_store", "scan_verdict_transaction_view_store")
+
+  // Held so run() can initialize the underlying update-history schema.
+  private var updateHistoryRef: Option[UpdateHistory] = None
 
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
     implicit val initTc: TraceContext = TraceContext.empty
@@ -100,8 +102,8 @@ class VerdictStoreIngestionPerformanceTest(
         enableImportUpdateBackfill = false,
         metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
       )
-      .flatMap(updateHistory => updateHistory.ingestionSink.initialize().map(_ => updateHistory))
       .map { updateHistory =>
+        updateHistoryRef = Some(updateHistory)
         val appActivityStore = new DbAppActivityRecordStore(
           storage,
           updateHistory,
@@ -121,23 +123,43 @@ class VerdictStoreIngestionPerformanceTest(
     TraceContext.withNewTraceContext(this.getClass.getName) { implicit tc =>
       for {
         store <- mkStore(storage)
+        updateHistory = updateHistoryRef.getOrElse(
+          throw new IllegalStateException("UpdateHistory was not initialized by mkStore")
+        )
+        _ <- updateHistory.ingestionSink.initialize()
         _ <- sanityCheckTables(storage)(count =>
-          Option.when(count != 0)(
-            s"Expected table to be empty before ingestion, but found $count rows."
-          )
+          Option.when(count != 0)(s"Expected table to be empty before ingestion, but found $count rows.")
         )
         verdicts = loadVerdictsFromDump()
         metrics <- ingestWithMetrics(store, verdicts)
         _ <- sanityCheckTables(storage)(count =>
-          Option.when(count == 0)(
-            "Expected table to be non-empty after ingestion, but no rows were inserted."
-          )
+          Option.when(count == 0)("Expected table to be non-empty after ingestion, but no rows were inserted.")
         )
-        _ = writeIngestionMetrics(metrics, success = true)
+        _ = writeIngestionMetrics(metrics, success = true, names = verdictStoreMetricNames)
       } yield ()
     }
   }
 
+  /** Verdict-store specific metric labels, so the reported series read as verdicts / transaction
+    * views instead of the generic "updates" / "events" used by the update-history ingestion tests.
+    */
+  private val verdictStoreMetricNames: IngestionMetricNames = IngestionMetricNames(
+    avgPrimaryTimeName = "avg_verdict_time_ns",
+    avgPrimaryTimeDesc = "Average nanoseconds per ingested verdict",
+    totalPrimaryName = "total_verdicts",
+    totalPrimaryDesc = "Total number of verdicts written to scan_verdict_store",
+    primaryRateName = "verdicts_per_sec",
+    primaryRateDesc = "Ingested verdicts per second",
+    totalSecondaryName = "total_transaction_views",
+    totalSecondaryDesc =
+      "Total number of transaction views written to scan_verdict_transaction_view_store",
+    secondaryRateName = "transaction_views_per_sec",
+    secondaryRateDesc = "Ingested transaction views per second",
+  )
+
+  /** Load verdicts (with their optional traffic summary and app activity records) from the
+    * `/v0/events` dump, resolving each verdict's round by carrying the last-seen round forward.
+    */
   private def loadVerdictsFromDump(): Seq[LoadedVerdict] = {
     val dump = (for {
       json <- io.circe.parser.parse(Files.readString(eventsDumpPath))
@@ -148,7 +170,8 @@ class VerdictStoreIngestionPerformanceTest(
           s"Failed to parse the events from $eventsDumpPath. It should have the structure of EventHistoryResponse."
         )
       )
-    // carrying the last-seen round forward gives a non-decreasing round sequence
+    // The dump is ordered by (migration_id, record_time) ascending and rounds are monotonic in
+    // that order, so carrying the last-seen round forward yields a non-decreasing round sequence.
     var lastRound: Option[Long] = None
     dump.events.toSeq.flatMap { item =>
       item.verdict.map { v =>
@@ -163,11 +186,14 @@ class VerdictStoreIngestionPerformanceTest(
   private def ingestWithMetrics(
       store: DbScanVerdictStore,
       verdicts: Seq[LoadedVerdict],
-  )(implicit tc: TraceContext): Future[VerdictIngestionPerfMetrics] = {
+  )(implicit tc: TraceContext): Future[StoreIngestionPerfMetrics] = {
     var totalTimeNs = BigDecimal(0)
+    var totalItems = 0L
+    var totalEvents = 0L
     var totalBatches = 0L
     var totalCpuNs = BigDecimal(0)
     var maxHeapBytes = BigDecimal(0)
+    // Per-entity counters so we can report verdict / transaction-view / app-activity-record rates.
     var totalVerdicts = 0L
     var totalTransactionViews = 0L
     var totalAppActivityRecords = 0L
@@ -180,7 +206,8 @@ class VerdictStoreIngestionPerformanceTest(
       .runWith(Sink.foreachAsync(parallelism = 1) { case (batch, index) =>
         logger.info(s"Ingesting batch $index of ${batch.length} verdicts")
         val items = batch.map(lv => toVerdictRow(lv.verdict, lv.trafficSummary, lv.resolvedRound))
-        // App activity records, keyed by the verdict's record time
+        // App activity records, keyed by the verdict's record time (the store resolves the
+        // placeholder verdictRowId to the real row_id during insertion, exactly like production).
         val appActivityRecords = batch.flatMap { lv =>
           lv.appActivityRecords.map { aar =>
             parseTimestamp(lv.verdict.recordTime) -> DbAppActivityRecordStore.AppActivityRecordT(
@@ -192,11 +219,15 @@ class VerdictStoreIngestionPerformanceTest(
           }
         }
         val hasTrafficSummaries = batch.exists(_.trafficSummary.isDefined)
+        // Approximate the round boundaries production obtains via open-mining-round lookups:
+        // the earliest round seen in the batch, and no archival info from the dump.
         val firstActiveRoundO = appActivityRecords.map(_._2.roundNumber).minOption
         // prod passes the last archived round, which adds a per-batch meta-row update
         // the dump lacks it, so we approximate it to keep that update in the batch
         val lastArchivedRoundO = batch.flatMap(_.resolvedRound).maxOption.map(_ - 1)
+        // Count transaction views as the per-item "work" proxy.
         val batchEventCount = batch.map(_.verdict.transactionViews.views.size.toLong).sum
+        // One AppActivityRecordT == one row in app_activity_record_store.
         val batchAppActivityCount = appActivityRecords.size.toLong
         val wallBefore = System.nanoTime()
         val cpuBefore = getProcessCpuTimeNs
@@ -216,90 +247,46 @@ class VerdictStoreIngestionPerformanceTest(
           totalTimeNs += duration
           totalCpuNs += math.max(getProcessCpuTimeNs - cpuBefore, 0L)
           maxHeapBytes = maxHeapBytes.max(getHeapUsedBytes)
+          totalItems += batch.length
+          totalEvents += batchEventCount
           totalBatches += 1
           totalVerdicts += batch.length.toLong
           totalTransactionViews += batchEventCount
           totalAppActivityRecords += batchAppActivityCount
           val msg =
-            f"Ingested batch $index (${batch.length} verdicts, $batchEventCount views, $batchAppActivityCount app-activity-records) in $duration ns, total $totalVerdicts verdicts in $totalTimeNs ns"
+            f"Ingested batch $index (${batch.length} verdicts, $batchEventCount views, $batchAppActivityCount app-activity-records) in $duration ns, total $totalItems verdicts in $totalTimeNs ns"
           logger.info(msg)
           println(s"${this.getClass.getName}: $msg")
         }
       })
       .map { _ =>
-        // verdicts are the ingested items, transaction views are the ingested events
-        val base = StoreIngestionPerfMetrics(
-          totalItems = totalVerdicts,
-          totalEvents = totalTransactionViews,
-          totalBatches = totalBatches,
-          totalTimeNs = totalTimeNs,
-          processCpuTimeNs = totalCpuNs,
-          peakHeapBytes = maxHeapBytes,
-        )
+        def ratePerSec(count: Long): BigDecimal =
+          if (totalTimeNs > 0) BigDecimal(count) * BigDecimal(1000000000L) / totalTimeNs
+          else BigDecimal(0)
         println(
-          f"Process-level metrics: CPU time=${totalCpuNs / 1e6}%.2f ms, peak heap=$maxHeapBytes bytes, batches=$totalBatches"
+          f"Process-level metrics: CPU time=${totalCpuNs / 1e6}%.2f ms, peak heap=$maxHeapBytes bytes"
         )
         println(
           f"Ingestion counts: verdicts=$totalVerdicts, transaction-views=$totalTransactionViews, app-activity-records=$totalAppActivityRecords (in $totalTimeNs ns)"
         )
         println(
-          f"Ingestion rates (per sec): verdicts=${base.updatesPerSec}%.2f, " +
-            f"transaction-views=${base.eventsPerSec}%.2f, " +
-            f"app-activity-records=${base.ratePerSec(totalAppActivityRecords)}%.2f"
+          f"Ingestion rates (per sec): verdicts=${ratePerSec(totalVerdicts)}%.2f, " +
+            f"transaction-views=${ratePerSec(totalTransactionViews)}%.2f, " +
+            f"app-activity-records=${ratePerSec(totalAppActivityRecords)}%.2f"
         )
-        VerdictIngestionPerfMetrics(base, totalAppActivityRecords)
+        StoreIngestionPerfMetrics(
+          totalItems = totalItems,
+          totalEvents = totalEvents,
+          totalBatches = totalBatches,
+          totalTimeNs = totalTimeNs,
+          processCpuTimeNs = totalCpuNs,
+          peakHeapBytes = maxHeapBytes,
+          totalAppActivityRecords = totalAppActivityRecords,
+        )
       }
   }
 
-  private def writeIngestionMetrics(
-      metrics: VerdictIngestionPerfMetrics,
-      success: Boolean,
-  ): Unit = {
-    import StoreIngestionPerfMetrics.metric
-    val extra = Seq(
-      metric(
-        "total_verdicts",
-        "Total number of verdicts ingested",
-        BigDecimal(metrics.base.totalItems),
-      ),
-      metric(
-        "verdicts_per_sec",
-        "Ingested verdicts per second",
-        metrics.base.updatesPerSec,
-      ),
-      metric(
-        "total_transaction_views",
-        "Total number of transaction views ingested across all verdicts",
-        BigDecimal(metrics.base.totalEvents),
-      ),
-      metric(
-        "transaction_views_per_sec",
-        "Ingested transaction views per second",
-        metrics.base.eventsPerSec,
-      ),
-      metric(
-        "total_app_activity_records",
-        "Total number of app activity records ingested alongside verdicts",
-        BigDecimal(metrics.totalAppActivityRecords),
-      ),
-      metric(
-        "app_activity_records_per_sec",
-        "Ingested app activity records per second",
-        metrics.base.ratePerSec(metrics.totalAppActivityRecords),
-      ),
-    )
-    writeMetricsFile(
-      StoreIngestionPerfMetrics.toMetricsJson(
-        metrics.base,
-        success,
-        extra,
-        includeUpdateCounts = false,
-      ),
-      StoreIngestionPerfMetrics.MetricsDir,
-      "Ingestion",
-    )
-  }
-
+  /** Map a `/v0/events` verdict to the store's row + transaction views. */
   private def toVerdictRow(
       v: httpDefs.EventHistoryVerdict,
       trafficSummaryO: Option[httpDefs.EventHistoryTrafficSummary],
@@ -397,3 +384,4 @@ object VerdictStoreIngestionPerformanceTest {
       )
   }
 }
+
