@@ -136,6 +136,7 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | `export_issues.py --since <date>` | host | recent issues with comments (recipe 9) |
 | `export_inbox.py` | host | open Status = Inbox issues of project 48 (recipe 10) |
 | `export_circleci.py <ref> <job url or number>... [--all-steps]` | host, `CIRCLECI_TOKEN` | failed step output of CircleCI jobs to `export/<ref>/` |
+| `deployment_runs.py [--days N] [--workflow <regex>] [--excerpts]` | host, `CIRCLECI_TOKEN` | CircleCI workflow runs (passed too) as JSON lines to `export/circleci-runs-<date>.jsonl`; failed jobs with step excerpt, issue URL, splice commit |
 | `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |
 | `close_duplicates.py <parent> <ref>... --comment '<text>'` (or `--comment-file <path>`) | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
 | `probe_access.py` | sandbox | which method reads which private data (CLAUDE.md, Access) |
