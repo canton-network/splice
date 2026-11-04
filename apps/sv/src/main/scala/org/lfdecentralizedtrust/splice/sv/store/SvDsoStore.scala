@@ -1104,6 +1104,26 @@ trait SvDsoStore
   ] =
     lookupFeaturedAppRightWithOffset(providerPartyId).map(_.value)
 
+  /** Every active registration of a dedicated synchronizer id, ordered by contract id.
+    * Usually one, but the ledger does not prevent duplicates. There are only a few
+    * registrations, so they are filtered here rather than through an index column.
+    */
+  final def listSynchronizerRegistrations(
+      synchronizerId: String,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[ContractWithState[
+    splice.decentralizedsynchronizer.RegisteredSynchronizer.ContractId,
+    splice.decentralizedsynchronizer.RegisteredSynchronizer,
+  ]]] =
+    for {
+      registrations <- multiDomainAcsStore.listContracts(
+        splice.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION,
+        limit,
+      )
+    } yield registrations
+      .filter(_.payload.synchronizerId == synchronizerId)
+      .sortBy(_.contractId.contractId)
+
   def getDsoTransferContextForRound(round: Round)(implicit
       tc: TraceContext
   ): Future[Option[AppTransferContext]] =
@@ -1549,6 +1569,12 @@ object SvDsoStore {
           totalTrafficPurchased = Some(contract.payload.totalPurchased),
         )
       },
+      mkFilter(splice.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsDedicatedSynchronizers(Seq(dsoParty), now)(tc)
+        },
+      )(DsoAcsStoreRowData(_)),
       mkFilter(splice.ans.AnsRules.COMPANION)(co => co.payload.dso == dso)(DsoAcsStoreRowData(_)),
       mkFilter(splice.ans.AnsEntry.COMPANION)(co => co.payload.dso == dso) { contract =>
         DsoAcsStoreRowData(

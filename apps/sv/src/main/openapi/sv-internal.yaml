@@ -607,6 +607,53 @@ paths:
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
 
+  /v0/admin/sv/synchronizers/{synchronizer_id}/registrations:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_operator
+      operationId: "listSynchronizerRegistrations"
+      description: |
+        List the active registrations of a dedicated synchronizer, ordered by contract id, so the
+        SV UI can reject a proposal to register an id that is already registered and resolve the
+        registration an update or archive proposal targets. Usually one; the ledger does not
+        prevent duplicates. Empty when the synchronizer id is not registered.
+      parameters:
+        - name: "synchronizer_id"
+          in: "path"
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSynchronizerRegistrationsResponse"
+
+  /v0/admin/sv/synchronizers/registrations/by-contract-id/{contract_id}:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_operator
+      operationId: "lookupSynchronizerRegistrationByContractId"
+      description: |
+        Look up an active synchronizer registration by contract id, so the SV UI can show what an
+        update or archive vote targets and flag a vote whose registration is no longer active.
+        Empty when the registration was archived.
+      parameters:
+        - name: "contract_id"
+          in: "path"
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupSynchronizerRegistrationByContractIdResponse"
+
   /v0/admin/feature-support:
     get:
       tags: [ sv ]
@@ -1116,6 +1163,28 @@ components:
           type: array
           items:
             $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
+
+    ListSynchronizerRegistrationsResponse:
+      description: |
+        The active `Splice.DecentralizedSynchronizer:RegisteredSynchronizer` contracts for a
+        synchronizer id, ordered by contract id.
+      type: object
+      required:
+        - registrations
+      properties:
+        registrations:
+          type: array
+          items:
+            $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
+
+    LookupSynchronizerRegistrationByContractIdResponse:
+      description: |
+        An active `Splice.DecentralizedSynchronizer:RegisteredSynchronizer` contract looked up by
+        contract ID, if it exists.
+      type: object
+      properties:
+        registration:
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
 
     ArchiveDryRunRewardAccountingContractsRequest:
       type: object

@@ -605,6 +605,49 @@ class HttpSvOperatorHandler(
     }
   }
 
+  /** Intended use: the SV app UI, to reject a duplicate registration and to pick the
+    * registration an update or archive proposal targets. The DSO party signs every
+    * registration, so the SV app's own DSO store holds them.
+    */
+  override def listSynchronizerRegistrations(
+      respond: r0.ListSynchronizerRegistrationsResponse.type
+  )(synchronizerId: String)(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.ListSynchronizerRegistrationsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.listSynchronizerRegistrations") { _ => _ =>
+      for {
+        registrations <- dsoStore.listSynchronizerRegistrations(synchronizerId)
+      } yield respond.OK(
+        definitions.ListSynchronizerRegistrationsResponse(
+          registrations.map(_.contract.toHttp).toVector
+        )
+      )
+    }
+  }
+
+  /** Intended use: the SV app UI, to show what an update or archive vote targets and to flag
+    * a vote whose registration is no longer active.
+    */
+  override def lookupSynchronizerRegistrationByContractId(
+      respond: r0.LookupSynchronizerRegistrationByContractIdResponse.type
+  )(contractId: String)(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.LookupSynchronizerRegistrationByContractIdResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.lookupSynchronizerRegistrationByContractId") { _ => _ =>
+      for {
+        registration <- dsoStore.multiDomainAcsStore.lookupContractById(
+          spliceCodegen.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION
+        )(new spliceCodegen.decentralizedsynchronizer.RegisteredSynchronizer.ContractId(contractId))
+      } yield respond.OK(
+        definitions.LookupSynchronizerRegistrationByContractIdResponse(
+          registration.map(_.contract.toHttp)
+        )
+      )
+    }
+  }
+
   override def getCometBftNodeDebugDump(
       respond: r0.GetCometBftNodeDebugDumpResponse.type
   )()(extracted: ActAsKnownUserRequest): Future[

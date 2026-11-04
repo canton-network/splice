@@ -21,7 +21,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.CometBftConfigLimits
-import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
+import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.{
+  MemberTraffic,
+  RegisteredSynchronizer,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
   DsoDecentralizedSynchronizerConfig,
   SynchronizerNodeConfigLimits,
@@ -511,6 +514,58 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
+
+    "RegisteredSynchronizer" should {
+      def lookup(store: SvDsoStore, cid: RegisteredSynchronizer.ContractId) =
+        store.multiDomainAcsStore.lookupContractById(RegisteredSynchronizer.COMPANION)(cid)
+
+      "be found by contract id" in {
+        val wanted = registeredSynchronizer(userParty(1), "dedicated::1220aa")
+        val other = registeredSynchronizer(userParty(2), "dedicated::1220bb")
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(other)(store.multiDomainAcsStore)
+          result <- lookup(store, wanted.contractId)
+        } yield result.map(_.contract) should be(Some(wanted))
+      }
+
+      // An update or archive vote archives the registration it names, which leaves any other
+      // vote naming it stale.
+      "not be found by contract id once archived" in {
+        val registration = registeredSynchronizer(userParty(1), "dedicated::1220aa")
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(registration)(store.multiDomainAcsStore)
+          _ <- dummyDomain.archive(registration)(store.multiDomainAcsStore)
+          result <- lookup(store, registration.contractId)
+        } yield result should be(None)
+      }
+
+      // The ledger does not prevent two registrations of one synchronizer id, so the SV UI lists
+      // them all and rejects a proposal to register an id that has one.
+      "list the active registrations of a synchronizer id, in contract-id order" in {
+        val lower = registeredSynchronizer(userParty(1), "dedicated::1220aa")
+        val higher = registeredSynchronizer(userParty(2), "dedicated::1220aa")
+        val archived = registeredSynchronizer(userParty(3), "dedicated::1220aa")
+        val other = registeredSynchronizer(userParty(4), "dedicated::1220bb")
+        lower.contractId.contractId should be < higher.contractId.contractId
+        for {
+          store <- mkStore()
+          // Ingest `lower` second so insertion order and contract-id order disagree.
+          _ <- dummyDomain.create(higher)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(lower)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(archived)(store.multiDomainAcsStore)
+          _ <- dummyDomain.archive(archived)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(other)(store.multiDomainAcsStore)
+          listed <- store.listSynchronizerRegistrations("dedicated::1220aa")
+          missing <- store.listSynchronizerRegistrations("dedicated::1220zz")
+        } yield {
+          listed.map(_.contract) should be(Seq(lower, higher))
+          missing should be(empty)
+        }
+      }
+    }
 
     "getOpenMiningRoundTriple" should {
 
@@ -2492,6 +2547,19 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       template,
     )
   }
+
+  private def registeredSynchronizer(paymaster: PartyId, synchronizerId: String) =
+    contract(
+      RegisteredSynchronizer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new RegisteredSynchronizer.ContractId(nextCid()),
+      new RegisteredSynchronizer(
+        dsoParty.toProtoPrimitive,
+        synchronizerId,
+        paymaster.toProtoPrimitive,
+        java.math.BigDecimal.ONE.setScale(10),
+        java.math.BigDecimal.ONE.setScale(10),
+      ),
+    )
 
   private def memberTraffic(
       member: Member,

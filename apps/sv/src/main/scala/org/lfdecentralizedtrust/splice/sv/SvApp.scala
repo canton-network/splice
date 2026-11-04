@@ -43,6 +43,8 @@ import org.lfdecentralizedtrust.splice.automation.{AutomationService, DomainTime
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_RegisterSynchronizer
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection.INITIAL_ROUND_USER_METADATA_KEY
@@ -921,54 +923,73 @@ object SvApp {
       "Splice.DsoRules",
       "ActionRequiringConfirmation",
     )(action)
-    dsoStoreWithIngestion.store
-      .lookupVoteRequestByThisSvAndActionWithOffset(decodedAction)
-      .flatMap {
-        case QueryResult(_, Some(vote)) =>
-          Future.successful(
-            Left(s"This vote request has already been created ${vote.contractId}.")
-          )
-        case QueryResult(offset, None) =>
-          for {
-            res <- retryProvider.retryForClientCalls(
-              "createVoteRequest",
-              "createVoteRequest",
+    validateVoteRequestAction(decodedAction) match {
+      case Left(reason) => Future.successful(Left(reason))
+      case Right(()) =>
+        dsoStoreWithIngestion.store
+          .lookupVoteRequestByThisSvAndActionWithOffset(decodedAction)
+          .flatMap {
+            case QueryResult(_, Some(vote)) =>
+              Future.successful(
+                Left(s"This vote request has already been created ${vote.contractId}.")
+              )
+            case QueryResult(offset, None) =>
               for {
-                dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
-                reason = new Reason(reasonUrl, reasonDescription)
-                request = new DsoRules_RequestVote(
-                  requester,
-                  decodedAction,
-                  reason,
-                  java.util.Optional.of(decodedExpiration),
-                  effectiveTime,
+                res <- retryProvider.retryForClientCalls(
+                  "createVoteRequest",
+                  "createVoteRequest",
+                  for {
+                    dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+                    reason = new Reason(reasonUrl, reasonDescription)
+                    request = new DsoRules_RequestVote(
+                      requester,
+                      decodedAction,
+                      reason,
+                      java.util.Optional.of(decodedExpiration),
+                      effectiveTime,
+                    )
+                    cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
+                    res <- dsoStoreWithIngestion
+                      .connection(SpliceLedgerConnectionPriority.Low)
+                      .submit(
+                        actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
+                        readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
+                        cmd,
+                      )
+                      .withDedup(
+                        commandId = SpliceLedgerConnection.CommandId(
+                          "org.lfdecentralizedtrust.splice.sv.requestVote",
+                          Seq(
+                            dsoStoreWithIngestion.store.key.dsoParty,
+                            dsoStoreWithIngestion.store.key.svParty,
+                          ),
+                          action.toString,
+                        ),
+                        deduplicationOffset = offset,
+                      )
+                      .yieldResult()
+                  } yield res,
+                  logger,
                 )
-                cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
-                res <- dsoStoreWithIngestion
-                  .connection(SpliceLedgerConnectionPriority.Low)
-                  .submit(
-                    actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
-                    readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
-                    cmd,
-                  )
-                  .withDedup(
-                    commandId = SpliceLedgerConnection.CommandId(
-                      "org.lfdecentralizedtrust.splice.sv.requestVote",
-                      Seq(
-                        dsoStoreWithIngestion.store.key.dsoParty,
-                        dsoStoreWithIngestion.store.key.svParty,
-                      ),
-                      action.toString,
-                    ),
-                    deduplicationOffset = offset,
-                  )
-                  .yieldResult()
-              } yield res,
-              logger,
-            )
-          } yield Right(res.exerciseResult.voteRequest)
-      }
+              } yield Right(res.exerciseResult.voteRequest)
+          }
+    }
   }
+
+  def validateVoteRequestAction(action: ActionRequiringConfirmation): Either[String, Unit] =
+    action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          // Daml does not check the synchronizer id, but a malformed one breaks the SV and Scan
+          // ingestion of the registration once its paymaster pays for traffic.
+          case register: SRARC_RegisterSynchronizer =>
+            SynchronizerId
+              .fromString(register.dsoRules_RegisterSynchronizerValue.synchronizerId)
+              .bimap(err => s"Invalid synchronizer id: $err", _ => ())
+          case _ => Right(())
+        }
+      case _ => Right(())
+    }
 
   def archiveDryRunRewardAccountingContracts(
       rounds: Seq[Long],
