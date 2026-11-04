@@ -73,8 +73,6 @@ abstract class BaseStorePerformanceTest(
 
   protected implicit val closeContext: CloseContext = CloseContext(this)
 
-  // Store type to ingest into. Subclasses that use the ingestion sink refine this
-  // to a `HasIngestionSink`.
   type Store
   protected def mkStore(storage: DbStorage): Future[Store]
 

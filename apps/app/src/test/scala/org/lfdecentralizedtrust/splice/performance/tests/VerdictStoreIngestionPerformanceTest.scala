@@ -70,7 +70,6 @@ class VerdictStoreIngestionPerformanceTest(
   override protected val tablesToSanityCheck: Seq[String] =
     Seq("scan_verdict_store", "scan_verdict_transaction_view_store")
 
-  private var updateHistoryRef: Option[UpdateHistory] = None
 
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
     implicit val initTc: TraceContext = TraceContext.empty
@@ -94,8 +93,8 @@ class VerdictStoreIngestionPerformanceTest(
         enableImportUpdateBackfill = false,
         metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
       )
+      .flatMap(updateHistory => updateHistory.ingestionSink.initialize().map(_ => updateHistory))
       .map { updateHistory =>
-        updateHistoryRef = Some(updateHistory)
         val appActivityStore = new DbAppActivityRecordStore(
           storage,
           updateHistory,
@@ -115,10 +114,6 @@ class VerdictStoreIngestionPerformanceTest(
     TraceContext.withNewTraceContext(this.getClass.getName) { implicit tc =>
       for {
         store <- mkStore(storage)
-        updateHistory = updateHistoryRef.getOrElse(
-          throw new IllegalStateException("UpdateHistory was not initialized by mkStore")
-        )
-        _ <- updateHistory.ingestionSink.initialize()
         _ <- sanityCheckTables(storage)(count =>
           Option.when(count != 0)(
             s"Expected table to be empty before ingestion, but found $count rows."
