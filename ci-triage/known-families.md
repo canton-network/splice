@@ -370,6 +370,11 @@ State as recorded in the family section, not rechecked against the tracker on 20
   After #8125, deploy_sv_reonboard still fails intermittently (11106 10-30 16:00, 11137 11-02 08:00; 5 runs between
   passed): not 10844, check the deployed splice commit with `ghx .../commits/<parent of the build-branch commit>`
   ("Set Splice commit to: ...") and `git merge-base --is-ancestor b4fc190853`. Cause needs the CircleCI step output.
+  2026-11-04: cause found (user, CircleCI output): `allowedOrigins must be set when disableAuth is true`, the Helm
+  check added by splice #8137 (86eb7829db, merged 2026-10-30 09:28 UTC) in splice-validator/templates/validator.yaml;
+  Pulumi passes disableAuth for validator1 but never allowedOrigins, and no cluster/expected fixture has
+  disableAuth: true. Parent 11106 (dups 11137 11142 11151 11171 11183), assigned OriolMunoz-da. Open: the 10-31 and
+  11-01 runs reportedly passed with #8137 on main.
 - Devnet LSU (cni #7836/#7837, 10-30 20:28: synchronizerMigration.active.id 6 -> 7): both backup workflows read
   `.synchronizerMigration.active.id`, so the next run backs up and checks the new serial. First night after it:
   06:00 status stale (11117) and 04:00 backup failed ~07:10 (11118, dup), recovered by 11-01. Not the 18:00 gap of

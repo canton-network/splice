@@ -307,3 +307,5 @@ Priority 1 (Y): user asked why each test needs the tag. Traffic: needs #8012 (0.
 Priority 1 (Y): user agreed. Branch amended to 67d433fb33 (coupon suite NoDamlCompatibilityCheck). Correction comment comments/10930.md.
 
 Priority 1 (Y): PR 8228 (user) fixes 10930 only (Fixes line). User: 10930 is the single parent; close 11178 and the traffic failures (10933, 11180, 11181) as dups of 10930; retitle 10930 to cover both tests. Commands handed out.
+
+Priority 2 (deploy_sv_reonboard): cause from the user (CircleCI output): Helm fail added by splice #8137, Pulumi never sets allowedOrigins for validator1 with disableAuth. Parent 11106, dups 11137 11142 11151 11171 11183, assign OriolMunoz-da, Triaged. comments/11106.md.
