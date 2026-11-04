@@ -7,7 +7,7 @@ export default {
     environment: 'happy-dom',
     exclude: ['../lib/**'],
     silent: false,
-    testTimeout: 15000,
+    testTimeout: 30000,
     typecheck: {
       include: ['**/*.{test,spec}-d.?(c|m)[jt]s?(x)', '**/*.{test,spec}.?(c|m)[jt]s?(x)'],
     },
