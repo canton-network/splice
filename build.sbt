@@ -19,10 +19,8 @@ BuildCommon.sbtSettings
 lazy val `canton-community-app` = BuildCommon.`canton-community-app`
 lazy val `canton-community-app-base` = BuildCommon.`canton-community-app-base`
 lazy val `canton-community-base` = BuildCommon.`canton-community-base`
-lazy val `canton-community-common` = BuildCommon.`canton-community-common`
 lazy val `canton-community-synchronizer` = BuildCommon.`canton-community-synchronizer`
 lazy val `canton-community-participant` = BuildCommon.`canton-community-participant`
-lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
@@ -125,7 +123,6 @@ lazy val root: Project = (project in file("."))
     `splice-test-token-v2-test-daml`,
     `build-tools-dar-lock-checker`,
     `canton-community-base`,
-    `canton-community-common`,
     `canton-community-integration-testing`,
     `canton-community-testing`,
     `canton-wartremover-extension`,
@@ -1195,10 +1192,13 @@ lazy val `lf-value-json` =
 lazy val `canton-fork-community-common-test` =
   project
     .in(file("canton-fork/community-common-test"))
-    .dependsOn(`canton-community-common`, `canton-community-testing`)
+    .dependsOn(`canton-community-testing`)
     .settings(
       scalacOptions --= JvmRulesPlugin.scalacOptionsToDisableForTests,
-      libraryDependencies += CantonDependencies.pekko_stream_testkit,
+      libraryDependencies ++= Seq(
+        CantonDependencies.canton_community_common,
+        CantonDependencies.pekko_stream_testkit,
+      ),
       Headers.ApacheDAHeaderSettings,
     )
 
@@ -1211,8 +1211,11 @@ lazy val `canton-fork-base` =
 lazy val `canton-fork-common` =
   project
     .in(file("canton-fork/common"))
-    .dependsOn(`canton-community-common`)
-    .settings(Headers.ApacheDAHeaderSettings)
+    .dependsOn(`canton-community-base`)
+    .settings(
+      libraryDependencies += CantonDependencies.canton_community_common,
+      Headers.ApacheDAHeaderSettings,
+    )
 
 lazy val `canton-fork-testing` =
   project
@@ -1236,7 +1239,6 @@ lazy val `apps-common` =
   project
     .in(file("apps/common"))
     .dependsOn(
-      `canton-community-common`,
       `canton-community-app`,
       `canton-fork-app-base`,
       `canton-fork-base`,

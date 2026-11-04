@@ -102,6 +102,12 @@ object CantonDependencies {
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
   lazy val canton_base_errors = "com.daml" %% "base-errors" % canton_library_version
   lazy val canton_base_validation = "com.daml" %% "base-validation" % canton_library_version
+  lazy val canton_community_admin_api =
+    "com.daml" %% "community-admin-api" % canton_library_version
+  // We build `community-base` from our own copy in `canton/`, so keep the published one out of the classpath
+  lazy val canton_community_common =
+    ("com.daml" %% "community-common" % canton_library_version)
+      .excludeAll(ExclusionRule("com.daml", s"community-base_$scala_version_short"))
   lazy val canton_observability_metrics =
     "com.daml" %% "observability-metrics" % canton_library_version
   lazy val canton_contextualized_logging =
