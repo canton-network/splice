@@ -35,8 +35,8 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Ingests real verdicts (+ traffic summaries) downloaded from Scan's `/v0/events`
-  * into the verdict store, measuring the `insertVerdictAndTransactionViews` write path.
+/** Ingests verdicts, transaction views and app activity records downloaded from Scan's `/v0/events`,
+  * measuring the `insertVerdictsWithAppActivityRecords` write path.
   */
 class VerdictStoreIngestionPerformanceTest(
     dsoParty: PartyId,
@@ -56,16 +56,11 @@ class VerdictStoreIngestionPerformanceTest(
 
   override type Store = DbScanVerdictStore
 
-  /** A verdict from the dump together with its optional traffic summary, app activity records
-    * and the round number resolved for the verdict row.
+  /** A verdict from the dump, with its optional traffic summary and app activity records.
     *
-    * The `/v0/events` payload only exposes a round via `app_activity_records`, which is absent
-    * for verdicts that had a round but produced no activity record (no featured-app traffic).
-    * Production still stores a round for those verdicts (it keys the round on the verdict, not on
-    * whether a record was produced). Since rounds are monotonic in record-time order, we
-    * reconstruct `resolvedRound` by carrying the last-seen round forward; this matches the stored
-    * value for adjacent verdicts in the same open round and keeps the batch monotonic, satisfying
-    * `insertVerdictAndTransactionViewsDBIO`'s ordering invariant.
+    * The dump only has a round when there are app activity records. For verdicts without one,
+    * `resolvedRound` reuses the last round seen. This keeps rounds from decreasing within a batch,
+    * which `insertVerdictsWithAppActivityRecords` requires.
     */
   private case class LoadedVerdict(
       verdict: httpDefs.EventHistoryVerdict,
@@ -128,20 +123,23 @@ class VerdictStoreIngestionPerformanceTest(
         )
         _ <- updateHistory.ingestionSink.initialize()
         _ <- sanityCheckTables(storage)(count =>
-          Option.when(count != 0)(s"Expected table to be empty before ingestion, but found $count rows.")
+          Option.when(count != 0)(
+            s"Expected table to be empty before ingestion, but found $count rows."
+          )
         )
         verdicts = loadVerdictsFromDump()
         metrics <- ingestWithMetrics(store, verdicts)
         _ <- sanityCheckTables(storage)(count =>
-          Option.when(count == 0)("Expected table to be non-empty after ingestion, but no rows were inserted.")
+          Option.when(count == 0)(
+            "Expected table to be non-empty after ingestion, but no rows were inserted."
+          )
         )
         _ = writeIngestionMetrics(metrics, success = true, names = verdictStoreMetricNames)
       } yield ()
     }
   }
 
-  /** Verdict-store specific metric labels, so the reported series read as verdicts / transaction
-    * views instead of the generic "updates" / "events" used by the update-history ingestion tests.
+  /** Verdict-store specific metric labels
     */
   private val verdictStoreMetricNames: IngestionMetricNames = IngestionMetricNames(
     avgPrimaryTimeName = "avg_verdict_time_ns",
@@ -157,9 +155,6 @@ class VerdictStoreIngestionPerformanceTest(
     secondaryRateDesc = "Ingested transaction views per second",
   )
 
-  /** Load verdicts (with their optional traffic summary and app activity records) from the
-    * `/v0/events` dump, resolving each verdict's round by carrying the last-seen round forward.
-    */
   private def loadVerdictsFromDump(): Seq[LoadedVerdict] = {
     val dump = (for {
       json <- io.circe.parser.parse(Files.readString(eventsDumpPath))
@@ -170,8 +165,7 @@ class VerdictStoreIngestionPerformanceTest(
           s"Failed to parse the events from $eventsDumpPath. It should have the structure of EventHistoryResponse."
         )
       )
-    // The dump is ordered by (migration_id, record_time) ascending and rounds are monotonic in
-    // that order, so carrying the last-seen round forward yields a non-decreasing round sequence.
+    // carrying the last-seen round forward yields a non-decreasing round sequence
     var lastRound: Option[Long] = None
     dump.events.toSeq.flatMap { item =>
       item.verdict.map { v =>
@@ -193,7 +187,6 @@ class VerdictStoreIngestionPerformanceTest(
     var totalBatches = 0L
     var totalCpuNs = BigDecimal(0)
     var maxHeapBytes = BigDecimal(0)
-    // Per-entity counters so we can report verdict / transaction-view / app-activity-record rates.
     var totalVerdicts = 0L
     var totalTransactionViews = 0L
     var totalAppActivityRecords = 0L
@@ -384,4 +377,3 @@ object VerdictStoreIngestionPerformanceTest {
       )
   }
 }
-
