@@ -408,7 +408,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       val event = fetchEvent(updateId5, "updateId5")
       assertTrafficSummary(event, "updateId5")
       // See updateId3. (Alice's own transfers in round 9 are separate updates
-      // and contribute to the round-level roll-up below.)
+      // and contribute to assertRewardCalcs below.)
       assertAppActivity(event, "updateId5", Set(venueParty), expectedRound = 9)
     }
 
@@ -513,6 +513,24 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       providersFor(9L) shouldBe Set(aliceParty.toProtoPrimitive) withClue
         "Round 9: venue is below reward threshold so only alice should be rewarded"
 
+    }
+
+    clue("Round 8 scan totals: TBAR v1.1 reward-accounting fields are all zero") {
+      val t = totalsByRound(8L)
+      t.totalAssetActivityWeight shouldBe 0L
+      BigDecimal(t.totalAppRewardFromAppActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.totalAppRewardFromAssetActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAppActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAssetActivity) shouldBe BigDecimal(0)
+    }
+
+    clue("Round 10 scan totals: TBAR v1.1 reward-accounting fields are all non-zero") {
+      val t = totalsByRound(10L)
+      t.totalAssetActivityWeight should be > 0L
+      BigDecimal(t.totalAppRewardFromAppActivity) should be > BigDecimal(0)
+      BigDecimal(t.totalAppRewardFromAssetActivity) should be > BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAppActivity) should be > BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAssetActivity) should be > BigDecimal(0)
     }
 
     // The remaining assertions cover the handling of V2 contracts created on ledger.
