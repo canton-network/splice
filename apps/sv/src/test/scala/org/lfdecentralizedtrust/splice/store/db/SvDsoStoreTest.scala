@@ -85,6 +85,8 @@ import scala.util.Random
 
 abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
+  def ops(ps: PartyId*): Option[Seq[PartyId]] = Some(ps.toSeq)
+
   "SvDsoStore" should {
 
     def offsetFreeLookupTest[TCid <: ContractId[T], T, C <: Contract.Has[TCid, T]](
@@ -515,27 +517,30 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
 
-    "findConflictingParties" should {
-      def ops(ps: PartyId*): Option[Seq[PartyId]] = Some(ps.toSeq)
-
-      "return empty when the proposed set is empty" in {
+    "findFeaturedAppRightsForParties" should {
+      "return empty when the query set is empty" in {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq.empty, None)
+          result <- store.findFeaturedAppRightsForParties(Seq.empty)
         } yield result shouldBe empty
       }
 
-      "return the parties that overlap with another right" in {
+      "return the right whose opsParties overlap the query set" in {
+        val cid = nextCid()
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = ops(userParty(1), userParty(2)))
+            featuredAppRight(
+              providerParty(1),
+              contractId = cid,
+              opsParties = ops(userParty(1), userParty(2)),
+            )
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq(userParty(2), userParty(3)), None)
-        } yield result.map(_.party).toSet shouldBe Set(userParty(2))
+          result <- store.findFeaturedAppRightsForParties(Seq(userParty(2), userParty(3)))
+        } yield result.map(_.contractId.contractId).toSet shouldBe Set(cid)
       }
 
       "return empty when there is no overlap" in {
@@ -544,25 +549,11 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq(userParty(3)), None)
+          result <- store.findFeaturedAppRightsForParties(Seq(userParty(3)))
         } yield result shouldBe empty
       }
 
-      "exclude the amended right itself" in {
-        val cid = nextCid()
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
-          )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(
-            Seq(userParty(1)),
-            Some(new splice.amulet.FeaturedAppRight.ContractId(cid)),
-          )
-        } yield result shouldBe empty
-      }
-
-      "report a party once per right it appears on" in {
+      "return every right a party appears on" in {
         val cid1 = nextCid()
         val cid2 = nextCid()
         for {
@@ -573,11 +564,8 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(2), contractId = cid2, opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq(userParty(1)), None)
-        } yield {
-          result.map(_.party) shouldBe Seq(userParty(1), userParty(1))
-          result.map(_.rightCid.contractId).toSet shouldBe Set(cid1, cid2)
-        }
+          result <- store.findFeaturedAppRightsForParties(Seq(userParty(1)))
+        } yield result.map(_.contractId.contractId).toSet shouldBe Set(cid1, cid2)
       }
 
       "ignore rights with None or empty opsParties" in {
@@ -589,18 +577,19 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           _ <- dummyDomain.create(
             featuredAppRight(providerParty(2), opsParties = Some(Seq.empty))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq(userParty(1)), None)
+          result <- store.findFeaturedAppRightsForParties(Seq(userParty(1)))
         } yield result shouldBe empty
       }
 
-      "return a provider that overlaps with the proposed set" in {
+      "return a right whose provider overlaps the query set" in {
+        val cid = nextCid()
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+            featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
-          result <- store.findConflictingParties(Seq(providerParty(1)), None)
-        } yield result.map(_.party).toSet shouldBe Set(providerParty(1))
+          result <- store.findFeaturedAppRightsForParties(Seq(providerParty(1)))
+        } yield result.map(_.contractId.contractId).toSet shouldBe Set(cid)
       }
     }
 
@@ -668,19 +657,27 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         )
 
       "reject a grant when the provider already has a right" in {
+        val cid = nextCid()
         for {
           store <- mkStore()
-          _ <- dummyDomain.create(featuredAppRight(providerParty(1)))(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(featuredAppRight(providerParty(1), contractId = cid))(
+            store.multiDomainAcsStore
+          )
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             grantAction(providerParty(1), Seq(userParty(1))),
             store,
           )
-        } yield result.isLeft shouldBe true
+        } yield result shouldBe Left(
+          s"provider already has a FeaturedAppRight with contractId: $cid"
+        )
       }
 
       "accept a clean grant with no conflicts" in {
         for {
           store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             grantAction(providerParty(2), Seq(userParty(5))),
             store,
@@ -692,7 +689,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             grantAction(providerParty(2), Seq(userParty(1))),
@@ -718,7 +715,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             grantAction(userParty(1), Seq(userParty(5))),
@@ -734,7 +731,9 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             grantAction(providerParty(2), Seq(userParty(1), userParty(1))),
             store,
           )
-        } yield result shouldBe Left("duplicate opsParties in request")
+        } yield result shouldBe Left(
+          s"duplicate exist in opsParties, in the config update request for provider: ${providerParty(2)}"
+        )
       }
 
       "reject a grant where the provider is its own opsParty" in {
@@ -744,7 +743,9 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             grantAction(providerParty(2), Seq(providerParty(2))),
             store,
           )
-        } yield result shouldBe Left("provider cannot be its own opsParty")
+        } yield result shouldBe Left(
+          s"provider specified in opsParties, in the config update request for provider: ${providerParty(2)}"
+        )
       }
 
       "reject an amend when no right exists for the provider" in {
@@ -761,10 +762,10 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(2), opsParties = Some(Seq(userParty(2))))
+            featuredAppRight(providerParty(2), opsParties = ops(userParty(2)))
           )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             amendAction(providerParty(1), Seq(userParty(1)), Seq(userParty(2))),
@@ -777,7 +778,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             amendAction(providerParty(1), Seq(userParty(1)), Seq(userParty(1))),
@@ -786,19 +787,19 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         } yield result shouldBe Right(())
       }
 
-      "reject an amend whose additionalUpdates conflict with another right" in {
+      "reject an amend whose additional updates conflict with another right" in {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(2), opsParties = Some(Seq(userParty(2))))
+            featuredAppRight(providerParty(2), opsParties = ops(userParty(2)))
           )(store.multiDomainAcsStore)
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(3), opsParties = Some(Seq(userParty(3))))
+            featuredAppRight(providerParty(3), opsParties = ops(userParty(3)))
           )(store.multiDomainAcsStore)
-          // primary (provider1) keeps [u1]; additionalUpdates moves provider2 to [u3],
+          // primary (provider1) keeps [u1]; the additional update moves provider2 to [u3],
           // which collides with provider3's existing [u3].
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             amendActionMulti(
@@ -810,14 +811,14 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         } yield result.isLeft shouldBe true
       }
 
-      "accept an amend whose primary and additionalUpdates are all conflict-free" in {
+      "accept an amend whose primary and additional updates are all conflict-free" in {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(1), opsParties = Some(Seq(userParty(1))))
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
           )(store.multiDomainAcsStore)
           _ <- dummyDomain.create(
-            featuredAppRight(providerParty(2), opsParties = Some(Seq(userParty(2))))
+            featuredAppRight(providerParty(2), opsParties = ops(userParty(2)))
           )(store.multiDomainAcsStore)
           result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
             amendActionMulti(

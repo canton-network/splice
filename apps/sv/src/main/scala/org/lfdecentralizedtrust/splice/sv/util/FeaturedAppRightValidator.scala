@@ -42,9 +42,12 @@ object FeaturedAppRightValidator {
             val proposed =
               SvUtil.optionalJavaListToSeq(value.opsParties).map(PartyId.tryFromProtoPrimitive)
             store.lookupFeaturedAppRight(providerPartyId).flatMap {
-              case Some(_) =>
-                Future
-                  .successful(Left(s"provider ${value.provider} already has a FeaturedAppRight"))
+              case Some(existing) =>
+                Future.successful(
+                  Left(
+                    s"provider already has a FeaturedAppRight with contractId: ${existing.contractId.contractId}"
+                  )
+                )
               case None => checkOpsParties(store, providerPartyId, proposed, None)
             }
 
@@ -78,7 +81,7 @@ object FeaturedAppRightValidator {
     val providerPartyId = PartyId.tryFromProtoPrimitive(providerRaw)
     store.lookupFeaturedAppRight(providerPartyId).flatMap {
       case None =>
-        Future.successful(Left(s"no FeaturedAppRight for provider $providerRaw to amend"))
+        Future.successful(Left(s"no FeaturedAppRight found for provider: $providerRaw"))
       case Some(current) =>
         val baseParties = SvUtil
           .optionalJavaListToSeq(update.baseConfig.opsParties)
@@ -101,31 +104,52 @@ object FeaturedAppRightValidator {
       store: SvDsoStore,
       provider: PartyId,
       proposedOpsParties: Seq[PartyId],
-      // the currentContractCid is excluded in the db check
+      // the currentContractCid is excluded client-side below
       currentContractCid: Option[FeaturedAppRight.ContractId],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Either[String, Unit]] =
     if (proposedOpsParties.distinct.sizeIs != proposedOpsParties.size)
-      Future.successful(Left("duplicate opsParties in request"))
+      Future.successful(
+        Left(s"duplicate exist in opsParties, in the config update request for provider: $provider")
+      )
     else if (proposedOpsParties.contains(provider))
-      Future.successful(Left("provider cannot be its own opsParty"))
-    else
-      store
-        .findConflictingParties((provider +: proposedOpsParties).distinct, currentContractCid)
-        .map {
+      Future.successful(
+        Left(
+          s"provider specified in opsParties, in the config update request for provider: $provider"
+        )
+      )
+    else {
+      val appParties = (provider +: proposedOpsParties).distinct
+      val querySet = appParties.toSet
+      store.findFeaturedAppRightsForParties(appParties).map { rights =>
+        // The DB returns every right overlapping the query set; drop the right being amended, then
+        // map each remaining overlap back to the proposed party and the right it collides with.
+        val conflicts = rights
+          .filterNot(r => currentContractCid.contains(r.contractId))
+          .flatMap { r =>
+            val rightParties =
+              PartyId.tryFromProtoPrimitive(r.payload.provider) +:
+                SvUtil
+                  .optionalJavaListToSeq(r.payload.opsParties)
+                  .map(PartyId.tryFromProtoPrimitive)
+            rightParties.filter(querySet.contains).map(p => (p, r.contractId))
+          }
+        conflicts match {
           case Nil => Right(())
-          case conflicts =>
-            val rendered = conflicts
-              .map(c => s"${c.party} (on right ${c.rightCid.contractId})")
+          case cs =>
+            val rendered = cs
+              .map { case (party, cid) => s"$party (on right ${cid.contractId})" }
               .mkString(", ")
             Left(s"parties already in use: $rendered")
         }
+      }
+    }
 
   // Decides the opsParties an amend ends up with: if the proposed list matches the base the amend was built from,
   // the amend didn't touch opsParties, so keep the ones currently on the right; otherwise take the proposed list.
   // (This mirrors DAML's patch behavior.)
   //
   // Known limitation: we treat "no opsParties" (None) and "empty list" ([]) as the same, but DAML treats them as different.
-  // This only matters for an amend that clears opsParties to empty, where we may reject a vote-request we didn't strictly need to.
+  // This only matters for an amend that turns opsParties from None to empty list, which is not expected in a real world config update request.
   // We never miss a real conflict, the error only ever goes the safe way, so we accept this rare case rather than add code to tell None and [] apart.
   def resolveOps(
       baseParties: Seq[PartyId],

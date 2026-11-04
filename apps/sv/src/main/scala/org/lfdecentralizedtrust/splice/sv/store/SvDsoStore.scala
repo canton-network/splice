@@ -1249,10 +1249,10 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
-  def findConflictingParties(
-      proposed: Seq[PartyId],
-      excludeRightCid: Option[FeaturedAppRight.ContractId],
-  )(implicit tc: TraceContext): Future[Seq[SvDsoStore.ConflictingParty]]
+  def findFeaturedAppRightsForParties(
+      appParties: Seq[PartyId],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 }
 
 object SvDsoStore {
@@ -1796,10 +1796,6 @@ object SvDsoStore {
       batch: Seq[T],
   )
 
-  case class ConflictingParty(
-      party: PartyId,
-      rightCid: FeaturedAppRight.ContractId,
-  )
 }
 
 case class ExpiredRewardCouponsBatch(
