@@ -21,7 +21,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.SummarizingMini
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ActionRequiringConfirmation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_MiningRound_StartIssuing
-import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerConnection, SpliceMetrics}
+import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
+  SpliceLedgerConnection,
+  SpliceMetrics,
+}
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetRewardAccountingActivityTotalsResponse.members.{
   RewardAccountingActivityTotalsCannotProvide,
@@ -52,6 +56,7 @@ class SummarizingMiningRoundTrigger(
     connection: SpliceLedgerConnection,
     scanConnectionF: () => Future[ScanConnection],
     bftScanConnectionF: () => Future[BftScanConnection],
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -161,20 +166,29 @@ class SummarizingMiningRoundTrigger(
     val faucetCapIsZero = issuanceConfig.optValidatorFaucetCap.toScala
       .exists(_.compareTo(java.math.BigDecimal.ZERO) <= 0)
     for {
-      appRewardCoupons <-
-        if (useTrafficBasedAppRewards(payload)) {
-          fetchRewardAccountingTotals(round).map { totals =>
-            // The total featured app rewards (in CC) is the sum of the minting
-            // allowance and the thresholded amount reported by Scan.
-            val appRewardsInCc =
-              (BigDecimal(totals.totalAppRewardMintingAllowance) +
-                BigDecimal(totals.totalAppRewardThresholded))
-                .setScale(10, BigDecimal.RoundingMode.HALF_EVEN)
+      optTotals <-
+        if (useTrafficBasedAppRewards(payload))
+          fetchRewardAccountingTotals(round).map(Some(_))
+        else Future.successful(None)
+      // Opt fields on OpenMiningRoundSummary were introduced in amulet 0.1.25;
+      // populating them with Some(_) on older packages fails serialization.
+      summarySupport <- packageVersionSupport.supportsTbarV11Summary(
+        Seq(dsoParty),
+        context.clock.now,
+      )
+      appRewardCoupons <- optTotals match {
+        case Some(totals) =>
+          // The total featured app rewards (in CC) is the sum of the minting
+          // allowance and the thresholded amount reported by Scan.
+          val appRewardsInCc =
+            (BigDecimal(totals.totalAppRewardMintingAllowance) +
+              BigDecimal(totals.totalAppRewardThresholded))
+              .setScale(10, BigDecimal.RoundingMode.HALF_EVEN)
+          Future.successful(
             AppRewardCouponsSum(featured = appRewardsInCc, unfeatured = BigDecimal(0))
-          }
-        } else {
-          store.sumAppRewardCouponsOnDomain(round, domain)
-        }
+          )
+        case None => store.sumAppRewardCouponsOnDomain(round, domain)
+      }
       validatorRewardCoupons <- store.sumValidatorRewardCouponsOnDomain(
         round,
         domain,
@@ -190,6 +204,7 @@ class SummarizingMiningRoundTrigger(
         domain,
       )
     } yield {
+      val summaryTotals = if (summarySupport.supported) optTotals else None
       RoundRewards(
         round = round,
         featuredAppRewardCoupons = appRewardCoupons.featured,
@@ -198,6 +213,13 @@ class SummarizingMiningRoundTrigger(
         validatorLivenessActivityRecords =
           validatorFaucetCoupons + validatorLivenessActivityRecords,
         svRewardCouponsWeightSum = svRewardCouponsWeightSum,
+        optIssuancePerFeaturedAppRewardCoupon =
+          summaryTotals.map(t => BigDecimal(t.issuancePerFeaturedAppActivity)),
+        optUnclaimedAppRewards = summaryTotals.map(t => BigDecimal(t.totalAppRewardUnclaimed)),
+        optTotalFeaturedAssetRewardCoupons =
+          summaryTotals.map(t => BigDecimal(t.totalAppRewardFromAssetActivity)),
+        optIssuancePerFeaturedAssetRewardCoupon =
+          summaryTotals.map(t => BigDecimal(t.issuancePerFeaturedAssetActivity)),
       )
     }
   }
@@ -274,6 +296,10 @@ object SummarizingMiningRoundTrigger {
       validatorRewardCoupons: BigDecimal,
       validatorLivenessActivityRecords: Long,
       svRewardCouponsWeightSum: Long,
+      optIssuancePerFeaturedAppRewardCoupon: Option[BigDecimal],
+      optUnclaimedAppRewards: Option[BigDecimal],
+      optTotalFeaturedAssetRewardCoupons: Option[BigDecimal],
+      optIssuancePerFeaturedAssetRewardCoupon: Option[BigDecimal],
   ) extends PrettyPrinting {
     lazy val summary: splice.issuance.OpenMiningRoundSummary =
       new splice.issuance.OpenMiningRoundSummary(
@@ -282,11 +308,10 @@ object SummarizingMiningRoundTrigger {
         unfeaturedAppRewardCoupons.bigDecimal,
         svRewardCouponsWeightSum,
         Optional.of(validatorLivenessActivityRecords),
-        // TODO(#7837): wire these values up with the reward computation
-        Optional.empty(), // optIssuancePerFeaturedAppRewardCoupon
-        Optional.empty(), // optUnclaimedAppRewards
-        Optional.empty(), // optTotalFeaturedAssetRewardCoupons (CIP-0104)
-        Optional.empty(), // optIssuancePerFeaturedAssetRewardCoupon (CIP-0104)
+        optIssuancePerFeaturedAppRewardCoupon.map(_.bigDecimal).toJava,
+        optUnclaimedAppRewards.map(_.bigDecimal).toJava,
+        optTotalFeaturedAssetRewardCoupons.map(_.bigDecimal).toJava,
+        optIssuancePerFeaturedAssetRewardCoupon.map(_.bigDecimal).toJava,
       )
 
     override def pretty: Pretty[this.type] =
