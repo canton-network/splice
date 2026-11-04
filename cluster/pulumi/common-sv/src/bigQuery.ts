@@ -27,6 +27,10 @@ import {
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
 
+import {
+  type FlywayMigrationToWaitFor,
+  migrationIncludesInternedStrings,
+} from './bigQueryFlywayMigration';
 import { ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
@@ -54,47 +58,83 @@ const publicationName = 'update_history_datastream_pub';
 const replicationSlotNameStagProd = 'update_history_datastream_stag_prod_r_slot';
 const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
 
-const flywayMigrationToWaitFor = 'V068__app_activity_record_meta.sql';
-
 // ============================================================================
 // SINGLE SOURCE OF TRUTH: REPLICATED TABLE CONFIGURATION
 // ============================================================================
-// what tables from Scan to replicate to BigQuery
+
+// How the hourly scheduled query appends staging rows to production:
+// - 'watermark': rows up to an hour before the newest staging row,
+//   past a watermark (hourly_append.sql); for tables written
+//   continuously
+// - 'newKeys': every row whose single-column primaryKey isn't in
+//   production yet (append_new_keys.sql); for insert-only tables
+//   written in bursts, whose last hour the watermark would leave in
+//   staging until the next burst
+type AppendMode = 'watermark' | 'newKeys';
+
 interface ReplicatedTableConfig {
   primaryKey: string;
   datePartitionColumn: string;
   timeType: 'micros' | 'datastream_metadata';
+  appendMode: AppendMode;
 }
 
-const replicatedTables: Record<string, ReplicatedTableConfig> = {
+type ReplicatedTables = Record<string, ReplicatedTableConfig>;
+
+const alwaysReplicatedTables: ReplicatedTables = {
   update_history_creates: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
+    appendMode: 'watermark',
   },
   update_history_exercises: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
+    appendMode: 'watermark',
   },
   scan_verdict_store: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
+    appendMode: 'watermark',
   },
   scan_verdict_transaction_view_store: {
     primaryKey: 'verdict_row_id, view_id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
+    appendMode: 'watermark',
   },
   app_activity_record_store: {
     primaryKey: 'verdict_row_id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
+    appendMode: 'watermark',
   },
 };
 
-const tablesToReplicate = Object.keys(replicatedTables);
+const internedStringsTable: ReplicatedTables = {
+  interned_strings: {
+    primaryKey: 'id',
+    datePartitionColumn: 'source_timestamp',
+    timeType: 'datastream_metadata',
+    // new strings arrive in bursts, e.g. on package upgrades, and
+    // are never changed
+    appendMode: 'newKeys',
+  },
+};
+
+// What tables from Scan to replicate to BigQuery. All should exist once
+// `flywayMigrationToWaitFor` has been applied, so the publication, both
+// Datastreams and the scheduled queries always agree on the replicated
+// tables.
+function replicatedTablesFor(flywayMigrationToWaitFor: FlywayMigrationToWaitFor): ReplicatedTables {
+  return {
+    ...alwaysReplicatedTables,
+    ...(migrationIncludesInternedStrings(flywayMigrationToWaitFor) ? internedStringsTable : {}),
+  };
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -195,7 +235,8 @@ function installDatastream(
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource,
-  desiredState: 'RUNNING' | 'PAUSED'
+  desiredState: 'RUNNING' | 'PAUSED',
+  tablesToReplicate: string[]
 ): gcp.datastream.Stream {
   const streamName = `${namespace.logicalName}-scan-update-history`;
   const schemaName = scanAppDatabaseName(namespace);
@@ -232,7 +273,9 @@ function installDatastream(
         },
         destinationConnectionProfile: destination.name,
       },
-      backfillAll: {},
+      // tables added to the stream later (e.g. interned_strings) must
+      // be backfilled manually
+      backfillNone: {},
       labels: {
         cluster: CLUSTER_BASENAME,
         datastream_id: 'legacy',
@@ -249,7 +292,8 @@ function installDatastream_stag_prod(
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource,
-  desiredState: 'RUNNING' | 'PAUSED'
+  desiredState: 'RUNNING' | 'PAUSED',
+  tablesToReplicate: string[]
 ): gcp.datastream.Stream {
   const streamName = `${CLUSTER_BASENAME}-${namespace.logicalName}-stag-production-datastream`;
   const schemaName = scanAppDatabaseName(namespace);
@@ -408,19 +452,58 @@ function installBqScheduledQueryContext(): ScheduledQueryContext {
 // HOURLY DEDUPLICATION & SCHEDULED QUERIES
 // ============================================================================
 
-const rawSqlTemplate = fs.readFileSync(path.join(__dirname, 'hourly_append.sql'), 'utf8');
+function readSql(fileName: string): string {
+  return fs.readFileSync(path.join(__dirname, fileName), 'utf8');
+}
+
+const appendSqlTemplates: Record<AppendMode, string> = {
+  watermark: readSql('hourly_append.sql'),
+  newKeys: readSql('append_new_keys.sql'),
+};
+
+// expanded into both append templates as {{createProdTable}}
+const createProdTableSqlTemplate = readSql('create_prod_table.sql');
+
+// Replaces each `{{name}}` in `template` with `vars[name]`. A
+// multi-line value whose placeholder starts a line gets that line's
+// indentation on every line.
+function expandSql(template: string, vars: Record<string, string>): string {
+  const expanded = Object.entries(vars).reduce(
+    (sql, [name, value]) =>
+      sql
+        .replace(new RegExp(`^([ \\t]*)\\{\\{${name}\\}\\}`, 'gm'), (_, indent: string) =>
+          value
+            .trimEnd()
+            .split('\n')
+            .map(line => (line ? indent + line : line))
+            .join('\n')
+        )
+        .replaceAll(`{{${name}}}`, () => value),
+    template
+  );
+  const unexpanded = expanded.match(/\{\{\w+\}\}/);
+  if (unexpanded) {
+    throw new Error(`No value for ${unexpanded[0]} in SQL template`);
+  }
+  return expanded;
+}
 
 function installHourlyScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   prodDataset: gcp.bigquery.Dataset,
-  context: ScheduledQueryContext
+  context: ScheduledQueryContext,
+  replicatedTables: ReplicatedTables
 ) {
   const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
     const colName = tableConfig.datePartitionColumn;
+    const { appendMode } = tableConfig;
+    if (appendMode === 'newKeys' && primaryKeyExpr.includes(',')) {
+      throw new Error(`${tableName}: appendMode 'newKeys' needs a single-column primary key`);
+    }
 
     let recordTimestampExpr: string;
     if (tableConfig.timeType === 'micros') {
@@ -442,16 +525,21 @@ function installHourlyScheduledQueries(
         const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
         const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
 
-        return rawSqlTemplate
-          .replaceAll('{{tableName}}', tableName)
-          .replaceAll('{{schemaName}}', schemaName)
-          .replaceAll('{{primaryKeyExpr}}', primaryKeyExpr)
-          .replaceAll('{{recordTimestampExpr}}', recordTimestampExpr)
-          .replaceAll('{{recordDateExpr}}', recordDateExpr)
-          .replaceAll('{{prodTable}}', prodTable)
-          .replaceAll('{{stagingTable}}', stagingTable)
-          .replaceAll('{{watermarksTable}}', watermarksTable)
-          .replaceAll('{{prodInfoSchema}}', prodInfoSchema);
+        const vars = {
+          tableName,
+          schemaName,
+          primaryKeyExpr,
+          recordTimestampExpr,
+          recordDateExpr,
+          prodTable,
+          stagingTable,
+          watermarksTable,
+          prodInfoSchema,
+        };
+        return expandSql(appendSqlTemplates[appendMode], {
+          ...vars,
+          createProdTable: expandSql(createProdTableSqlTemplate, vars),
+        });
       });
 
     const routineId = `sp_append_${tableName}`;
@@ -490,7 +578,8 @@ function installDailyPurgeScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   context: ScheduledQueryContext,
-  retentionPeriodSeconds: number
+  retentionPeriodSeconds: number,
+  replicatedTables: ReplicatedTables
 ) {
   const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
@@ -728,6 +817,8 @@ function createPublicationAndReplicationSlots(
   databaseInstance: gcp.sql.DatabaseInstance,
   replicatorUser: gcp.sql.User,
   scan: InstalledHelmChart | undefined,
+  flywayMigrationToWaitFor: FlywayMigrationToWaitFor,
+  tablesToReplicate: string[],
   enableLegacy: boolean,
   enableStagProd: boolean
 ): {
@@ -856,6 +947,7 @@ export async function configureScanBigQuery({
     legacyDesiredState,
     stagProdDesiredState,
     retentionPeriodSeconds,
+    flywayMigrationToWaitFor,
   } = bigQueryConfig;
 
   if (!enableLegacyDatastream && !enableStagProdDatastream) {
@@ -873,12 +965,17 @@ export async function configureScanBigQuery({
     }
   })();
 
+  const replicatedTables = replicatedTablesFor(flywayMigrationToWaitFor);
+  const tablesToReplicate = Object.keys(replicatedTables);
+
   const passwordSecret = installReplicatorPassword(namespace);
   const slots = createPublicationAndReplicationSlots(
     namespace,
     databaseInstance,
     createPostgresReplicatorUser(namespace, databaseInstance, passwordSecret),
     scanChart,
+    flywayMigrationToWaitFor,
+    tablesToReplicate,
     enableLegacyDatastream,
     enableStagProdDatastream
   );
@@ -915,7 +1012,8 @@ export async function configureScanBigQuery({
       legacyDestinationProfile,
       legacyDataset,
       slots.slot1,
-      legacyDesiredState
+      legacyDesiredState,
+      tablesToReplicate
     );
   }
 
@@ -935,15 +1033,23 @@ export async function configureScanBigQuery({
       stagingDestinationProfile,
       stagingDataset,
       slots.slot2,
-      stagProdDesiredState
+      stagProdDesiredState,
+      tablesToReplicate
     );
     const scheduledQueryContext = installBqScheduledQueryContext();
-    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, scheduledQueryContext);
+    installHourlyScheduledQueries(
+      namespace,
+      stagingDataset,
+      prodDataset,
+      scheduledQueryContext,
+      replicatedTables
+    );
     installDailyPurgeScheduledQueries(
       namespace,
       stagingDataset,
       scheduledQueryContext,
-      retentionPeriodSeconds
+      retentionPeriodSeconds,
+      replicatedTables
     );
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
