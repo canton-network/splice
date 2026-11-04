@@ -317,3 +317,5 @@ deploy_sv_reonboard done (user: 11106 assigned OriolMunoz-da, dups closed). Next
 11184 11185: user found the closed precedent 10213 (search configs-private) and the GitHub incident 2026-11-04 09:49-11:50 UTC (Pull Requests, Git Operations and Issues). Closing both as dups of 10213 instead of the comment in comments/11184.md. Skill step 3 and family J updated (closed-issue search, githubstatus). githubstatus.com needs a sandbox network approval.
 
 11177: dup of 10907 (U, 4th hit), close only; user: no recurrence comment (duplicates are linked). Note: API shows 10907 without assignee (julientinguely-da unassigned 2026-11-04 09:46). Skill: recurrence comment only without assignee/owner discussion.
+
+11165 (AH): SequencerPruningIntegrationTest disabled the shared alice/bob/splitwell participants (12:58:29.802); later suites fail at setup. Owner suggestion via git blame: test body from the 2024-09 import, last behavioural change martinflorian-da (#3062 for 6243). Lesson W45 3 (shared infrastructure) from this item. 11168 is a different failure (no disabled members), next.

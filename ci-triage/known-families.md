@@ -46,6 +46,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AE | frontend login helper misses already-logged-in state on a slow page load | 11161 | open, test fix proposed |
 | AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (related 10475) | open, test fix proposed |
 | AG | first Postgres connection > 5 s at shard start, createDatabase retry WARN | 10739, 11141 | open, test config fix proposed |
+| AH | SequencerPruningIntegrationTest disables the shared participants at the global sequencer | 11165 | open, owner suggested martinflorian-da |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -618,3 +619,18 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - 11105 Canton 3.7.0: sv1Participant WARN `Internal stream [Internal ACS Updates Stream] completed with a failure`
   (AbruptTerminationException, fanoutPublisherSink) 250 ms after the commitment matcher turns Ok on first connect;
   matcher stays Failed. First hit, no ignore.
+
+## AH. SequencerPruningIntegrationTest disables the shard's shared participants
+- Signature: after SequencerPruningIntegrationTest in a shard, every later environment start times out
+  (`Timeout while waiting for initialization of <validator>`); canton.clog: globalSequencerSv1 `Disabling member at
+  the sequencer: PAR::aliceValidator...` (and bob, splitwell) during the pruning test, then
+  `SEQUENCER_SUBMISSION_REQUEST_REFUSED ... is not active at the sequencer` until the end of the shard; validator side
+  `INVALID_PRESCRIBED_SYNCHRONIZER_ID` for new parties (do not confuse with family L).
+- Confirm: `zcat canton.clog.gz | grep -a 'Disabling member at the sequencer'` lists members other than the test's
+  stopped external participant.
+- Mechanism: the test resumes SequencerPruningTrigger (retention 120 s) on the shared Canton; idle participants of the
+  shard whose last acknowledgement is older than the pruning point are force-disabled with the stopped one; disabling
+  is permanent. Test passes, later suites fail.
+- 11165 (2026-11-03, main 6a32b00e92, wall-clock-time (6), run 41637223316): disabled 12:58:29.802, last acks
+  12:55:30, pruning point 12:57:34; 3 UnclaimedActivityRecord cases and the next suite failed at setup.
+- Fix: own Canton instance or CI job for the pruning test (owner: suggested martinflorian-da, splice#3062).
