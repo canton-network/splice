@@ -3,9 +3,11 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
+  ansDomainPrefix,
   Auth0Client,
   BootstrappingDumpConfig,
   CLUSTER_BASENAME,
+  CLUSTER_HOSTNAME,
   CnChartVersion,
   CnInput,
   config,
@@ -166,6 +168,7 @@ export async function installValidatorApp(
       minBalanceUSD: config.sweep.minBalance,
       receiver: config.sweep.toParty,
       useTransferPreapproval: config.sweep.useTransferPreapproval,
+      useTokenStandardTransfer: config.sweep.useTokenStandardTransfer,
     },
   };
 
@@ -238,7 +241,13 @@ export async function installValidatorApp(
       participantPruningSchedule: config.participantPruningConfig,
       deduplicationDuration: config.deduplicationDuration,
       maxVettingDelay: networkWideConfig?.maxVettingDelay,
-      disableAuth: baseConfig.disableAuth || false,
+      disableAuth: config.disableAuth || false,
+      allowedOrigins: config.disableAuth
+        ? [
+            `https://wallet.${config.xns.logicalName}.${CLUSTER_HOSTNAME}`,
+            `https://${ansDomainPrefix}.${config.xns.logicalName}.${CLUSTER_HOSTNAME}`,
+          ]
+        : undefined,
       logLevel: config.logLevel,
       apiRequestLogLevel: config.apiRequestLogLevel,
       logAsyncFlush: config.logAsync,

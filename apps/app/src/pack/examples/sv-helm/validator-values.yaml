@@ -38,6 +38,9 @@ enableWallet: true
 #                                    and not to auto accepting transfers. Auto accept transfers does not setup preapproval contracts that allow
 #                                    for a direct transfer but just automates the acceptance of the transfer offer so in that case
 #                                    useTransferPreapproval should be set to false.
+#    useTokenStandardTransfer: false # sweep via the token standard transfer factory. Completes directly if the receiver
+#                                      has a transfer preapproval, otherwise creates a transfer instruction that the
+#                                      receiver must accept. Ignored if useTransferPreapproval is true.
 # SWEEP_END
 
 # AUTO_ACCEPT_START

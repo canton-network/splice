@@ -117,7 +117,7 @@ spec:
       # but never retries nor indicates non-readiness, so we unfortunately need to wait for it
       # to be ready before spinning up postgres-exporter.
       - name: postgres-exporter-init
-        image: postgres:14
+        image: postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
         env:
           - name: PGPASSWORD
 {{ include "splice-util-lib.secret" (dict "overrides" $persistence.secretOverrides "overrideKey" "postgresPassword" "secretName" $persistence.secretName "secretKey" "postgresPassword") | indent 12 }}

@@ -261,36 +261,36 @@ interface BalanceUpdatesProps {
   party: string;
 }
 
+const BalanceUpdateItem: React.FC<{ update: Contract<BalanceUpdate> }> = ({ update }) => {
+  const amuletAcronym = useConfig().spliceInstanceNames.amuletNameAcronym;
+  if (update.payload.update.tag === 'ExternalPayment') {
+    const value = update.payload.update.value;
+    return (
+      <ListItem className="balance-updates-list-item">
+        <AnsEntryComponent className="sender" partyId={value.payer} />
+        <span className="description">
+          paid {value.amount} {amuletAcronym} {'for'} {value.description}
+        </span>
+      </ListItem>
+    );
+  } else if (update.payload.update.tag === 'Transfer') {
+    const value = update.payload.update.value;
+    return (
+      <ListItem className="balance-updates-list-item">
+        <AnsEntryComponent className="sender" partyId={value.sender} />
+        <span className="description">
+          sent {value.amount} {amuletAcronym} {'to '}
+        </span>
+        <AnsEntryComponent className="receiver" partyId={value.receiver} />
+      </ListItem>
+    );
+  } else {
+    return <ListItem>Netting: Not yet implemented</ListItem>;
+  }
+};
+
 const BalanceUpdates: React.FC<BalanceUpdatesProps> = ({ group, party }) => {
   const balanceUpdates = useBalanceUpdates(group, party);
-  const amuletAcronym = useConfig().spliceInstanceNames.amuletNameAcronym;
-
-  const Update: React.FC<{ update: Contract<BalanceUpdate> }> = ({ update }) => {
-    if (update.payload.update.tag === 'ExternalPayment') {
-      const value = update.payload.update.value;
-      return (
-        <ListItem className="balance-updates-list-item">
-          <AnsEntryComponent className="sender" partyId={value.payer} />
-          <span className="description">
-            paid {value.amount} {amuletAcronym} {'for'} {value.description}
-          </span>
-        </ListItem>
-      );
-    } else if (update.payload.update.tag === 'Transfer') {
-      const value = update.payload.update.value;
-      return (
-        <ListItem className="balance-updates-list-item">
-          <AnsEntryComponent className="sender" partyId={value.sender} />
-          <span className="description">
-            sent {value.amount} {amuletAcronym} {'to '}
-          </span>
-          <AnsEntryComponent className="receiver" partyId={value.receiver} />
-        </ListItem>
-      );
-    } else {
-      return <ListItem>Netting: Not yet implemented</ListItem>;
-    }
-  };
 
   if (balanceUpdates.isPending) {
     return <Loading />;
@@ -304,7 +304,7 @@ const BalanceUpdates: React.FC<BalanceUpdatesProps> = ({ group, party }) => {
       <Typography variant="button">Balance Updates</Typography>
       <List>
         {balanceUpdates.data.map(c => (
-          <Update key={c.contractId} update={c} />
+          <BalanceUpdateItem key={c.contractId} update={c} />
         ))}
       </List>
     </Stack>

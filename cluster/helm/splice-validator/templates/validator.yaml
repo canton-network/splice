@@ -265,6 +265,7 @@ spec:
                 min-balance-usd = {{ $v.minBalanceUSD }}
                 receiver = {{ $v.receiver | quote }}
                 use-transfer-preapproval = {{ $v.useTransferPreapproval | default false }}
+                use-token-standard-transfer = {{ $v.useTokenStandardTransfer | default false }}
               }
               {{- end }}
             }
