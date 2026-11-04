@@ -22,11 +22,11 @@ inputs:
     required: false
     default: "false"
   gcp_kms_creds:
-    description: "GCP KMS service account credentials, relevant when with_gcp_creds == true (from GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS secret)"
+    description: "GCP KMS service account credentials, relevant when with_gcp_creds == true (from GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS_V2 secret)"
     required: false
     default: ""
   gcp_data_export_creds:
-    description: "GCP Data Export service account credentials, relevant when with_gcp_creds == true (from GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS secret)"
+    description: "GCP Data Export service account credentials, relevant when with_gcp_creds == true (from GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS_V2 secret)"
     required: false
     default: ""
   with_frontend_creds:
@@ -46,19 +46,19 @@ inputs:
     required: false
     default: "false"
   auth0_management_api_client_id:
-    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID secret)"
+    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID_V2 secret)"
     required: false
     default: ""
   auth0_management_api_client_secret:
-    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET secret)"
+    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET_V2 secret)"
     required: false
     default: ""
   compose_validator_web_ui_password:
-    description: "password for the validator in docker-compose tests (from COMPOSE_VALIDATOR_WEB_UI_PASSWORD secret)"
+    description: "password for the validator in docker-compose tests (from COMPOSE_VALIDATOR_WEB_UI_PASSWORD_V2 secret)"
     required: false
     default: ""
   auth0_validator_audience:
-    description: "audience for the validator in docker-compose tests (from AUTH0_TESTS_VALIDATOR_AUDIENCE secret)"
+    description: "audience for the validator in docker-compose tests (from AUTH0_TESTS_VALIDATOR_AUDIENCE_V2 secret)"
     required: false
     default: ""
   additional_nix_args:
