@@ -276,3 +276,28 @@ spread (write 269 s, sync 1.6 s at 14:41:52). Vite bundling 14:38:15-21. Runner-
 (covers apps and Canton nodes; Hikari connectionTimeout via StorageConfig). Presented; branch offered, not created.
 
 Item 8: user checked GKE metrics: node CPU 3 -> 9 cores in the window, neighbours < 0.05 cores; node pool replaced since. Slowdown = the job's own startup burst. Comment and packet updated.
+
+## Re-prioritized 2026-11-04 (inbox export 10:21, 37 items; triaged export 10:40, 19 items)
+
+User: first-pass every inbox item without a verdict, then process in order of importance: hard broken, cluster
+deployments, frequent flakes, rest. First pass (job log only, no deep analysis):
+
+| Prio | Refs | First pass | Family / parent | Next |
+|---|---|---|---|---|
+| 1 hard broken | 11178; 11180, 11181 | mainnet-Daml nightly (41776986892): tests need splice-amulet 0.1.25, nightly runs them against MainNet packages; every night since 10-31 | Y: dup 10930; dup 10933 (confirm greps done: batchType only BatchOfMintingAllowances; transfer POST then UNKNOWN_INFORMEES 42-43 ms) | fix branch rautenrieth-da/fix-10930-mainnet-daml-test-tags; close dups |
+| 1 hard broken | 10728 | release lines: javac inference on codegen, one job per run | Q | waiting (cause open) |
+| 2 cluster | 11106 11137 11142 11151 11171 11183 | deploy_sv_reonboard (CircleCI), 5 of the runs since 11-02 08:00 | ciperiodic, after #8125 | needs CircleCI step output |
+| 2 cluster | 11185 | deploy_ciperiodic_upgrade_workflow (CircleCI 88091) | ciperiodic deploy_upgrade (10677, 10736) | needs CircleCI step output |
+| 2 cluster | 11184 | bump_splice (CircleCI 88092) | - | needs CircleCI step output |
+| 2 cluster | 10680 | reset_validator_runbook_devnet 0.9.4 (CircleCI 87309) | - | needs CircleCI step output |
+| 2 cluster | 11145 11174; 11117 | Devnet backup_status_cluster at 18:1x on 11-02 and 11-03; 11117 06:00 after the Devnet LSU | 18:00 race 10915 (suspected); 11117 own | needs cni GHA log |
+| 2 cluster infra | 11170, 11179, 10479 | cni GHA cluster_lock_reaper, auth0_user_cleanup, Purge Unused Databases | - | needs cni GHA log |
+| 3 frequent | 11177 | mainnet nightly simtime (0): sv4 JoiningNodeInitializer IMPORT_ACS_ERROR topology offset, app exit | U, 4th hit (10907, 11107, 11163, 11177) | close dup; owner needed |
+| 3 frequent | 11165, 11168 | UnclaimedActivityRecordIntegrationTest twice on 11-03 (11165 env setup failed; 11168 vote request list empty, line 109) | unknown | triage |
+| 3 frequent | 11173 | checkErrors: aliceValidator high-priority circuit breaker tripped (DistributedDomainIntegrationTest) | like 9752, 10300, 10611 | triage |
+| 3 frequent | 11172 | Splitwell settle debts multiple parties: no logout-button/loginFailed 20 s after login click (FrontendLoginUtil.scala:61) | AE-adjacent | triage |
+| 4 rest | 11164 | WalletSurviveCantonRestartIntegrationTest CommandFailure | - | triage |
+| 4 rest | 11182 | docker-canton-simtime checkErrors: BFT `Not all objects are known to the BFT peers` | - (first) | triage |
+| 4 rest | 11175 | static_tests setup: 3 fetches of release-line-0.10.0 failed (15 min) | J infra one-off | comment, Infrequent |
+| done | 10495 10496 11104 11105 11140 11147 | verdicts from earlier rounds (queue items 9, 12-16) | G, J, AA, -, AB, AF | hand out commands |
+| waiting | 10893 10917 10918 10919 | as before | | none |
