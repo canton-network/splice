@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  id-token: write # Required to create a GitHub OIDC token for GCP Workload Identity Federation (used by GCS download and failure notifications)
+  id-token: write # Required to create a GitHub OIDC token for GCP Workload Identity Federation (used by GCS download and failure notifications) # zizmor: ignore[excessive-permissions]
   contents: read
 
 jobs:

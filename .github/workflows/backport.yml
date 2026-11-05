@@ -21,6 +21,7 @@ on:
 
 jobs:
   backport:
+    permissions: {}
     uses: ./.github/workflows/backport_workflow.yml
     with:
       commit_sha: ${{ inputs.commit_sha }}

@@ -36,7 +36,7 @@ on:
         default: "35"
 
 permissions:
-  id-token: write # Required for GCP Workload Identity for failure notifications
+  id-token: write # Required for GCP Workload Identity for failure notifications # zizmor: ignore[excessive-permissions]
   contents: read
   pull-requests: read # Required for the static tests
   issues: read # Required for the static tests

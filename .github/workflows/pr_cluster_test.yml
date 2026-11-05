@@ -1,6 +1,6 @@
 name: Trigger a cluster test on a PR
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] gated by OWNER/MEMBER check
     types: [created]
   workflow_call:
     inputs:
@@ -13,8 +13,8 @@ on:
 permissions:
   contents: read
   issues: read
-  pull-requests: write # To comment back on the PR
-  id-token: write
+  pull-requests: write # To comment back on the PR # zizmor: ignore[excessive-permissions]
+  id-token: write # zizmor: ignore[excessive-permissions] required for GCP Workload Identity
 
 jobs:
 
@@ -40,7 +40,8 @@ jobs:
           echo "PR number: $pr_number"
           query="query pullRequestDetails { repository(name: \"${REPO_NAME}\", owner: \"${REPO_OWNER}\") { pullRequest(number: ${pr_number}) { headRef { target { oid } } } } }"
           echo "query: $query"
-          result=$(curl -H "Authorization: Bearer $GH_TOKEN" -X POST -d " { \"query\": \"$query\" } " https://api.github.com/graphql)
+          payload=$(jq -n --arg query "$query" '{query: $query}')
+          result=$(curl -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json" -X POST -d "$payload" https://api.github.com/graphql)
           if ! echo "$result" | jq empty > /dev/null 2>&1; then
             echo "GitHub API did not return valid JSON. Response: $result"
             exit 1

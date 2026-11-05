@@ -11,4 +11,7 @@ zizmor \
   --offline \
   --strict-collection \
   --show-audit-urls=always \
-  .github/ gha-scripts/actions/
+  .github/workflows/ \
+  .github/actions/ \
+  .github/dependabot.yml \
+  gha-scripts/actions/
