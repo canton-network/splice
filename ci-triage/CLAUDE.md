@@ -6,9 +6,14 @@ It holds the triage of failed CI jobs filed in `DACH-NY/cn-test-failures`.
 
 Skills (not discovered from here; install once per sandbox with
 `ln -s $PWD/ci-triage/skills/* ~/.claude/skills/`):
-- `ci-triage`: triage one issue into an evidence packet.
-- `ci-triage-inbox`: work through the board's inbox: fetch, classify, group; then batch mode (all groups in parallel, one
-  hand-over) or step mode (one item at a time with the user, resolved before the next).
+- `ci-triage`: triage one issue into an evidence packet and a fix spec.
+- `ci-triage-inbox`: the triage agent. Empties the board's inbox on every pass: every item gets a verdict (duplicate,
+  triaged, fixed, one-off, needs-log) and its board commands; fixes go into `fix-queue.tsv`.
+- `ci-triage-fix`: the fix agent. Works through `fix-queue.tsv`: fix branches, static checks, PR text, then follows
+  the PRs until the issues close; tracks them in `fixes.tsv`.
+
+The two agents run as separate sessions, usually in the same sandbox and checkout. The fix agent owns `fixes.tsv`
+and `fixes/`, the triage agent everything else here; each commits only its own paths (`git commit -- <paths>`).
 
 ref = a cn-test-failures issue number.
 
@@ -19,10 +24,12 @@ ref = a cn-test-failures issue number.
 | `evidence/<ref>-<slug>.md` | evidence packets, one per issue or per group of issues |
 | `evidence/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
-| `STATE.md` | current state: inbox, open questions, open fix branches |
+| `STATE.md` | triage state: current round, needs-log requests, open owner questions |
+| `fix-queue.tsv` | fixes decided by the triage agent, append only; columns in the ci-triage-inbox skill |
+| `fixes.tsv`, `fixes/<ref>.md` | fix agent: one row per fix branch (state, PR); PR description and verification per fix |
 | `lessons/<YYYY>-W<ww>.md` | weekly lessons for the splice engineers: test-code patterns behind the week's failures (ISO week) |
 | `rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` | one directory per inbox round: findings, commands handed out, open ends |
-| `skills/` | the two skills; command recipes in `skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
+| `skills/` | the three skills; command recipes in `skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
 | `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
 
@@ -115,7 +122,7 @@ is missing or newer than the export.
   unmergeable), `[ci]` on fix branches, `[static]` for lint-only.
 - The triage branch carries only `ci-triage/`. Never commit memory files or CLAUDE.md files outside `ci-triage/`.
 - Do not run sbt compiles or start Canton unless asked; triage works from the run's logs and artifacts. Exception:
-  every fix branch passes the CI static checks locally before it is handed over (ci-triage step 9), never skipped.
+  every fix branch passes the CI static checks locally before it is handed over (ci-triage-fix step 2), never skipped.
 - Artifacts the sandbox downloads go to `log/<ref>/` (gitignored), with `TMPDIR` under `log/` too; keep `.clog.gz`
   compressed and stream with `zcat`. Never pipe a large `zcat` into `sort` (it spills to `/tmp`); count with `awk`.
   Never put tokens (e.g. a contents `download_url`) into files.
