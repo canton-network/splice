@@ -576,6 +576,17 @@ class TxLogBackfillingStoreTest
         party,
         backfillingRequired,
         internedStringStore(storage),
+        KeyValueStore(
+          StoreDescriptor(
+            version = 1,
+            name = "TxLogBackfillingStoreTest",
+            party = party,
+            participant = participantId,
+            key = Map(),
+          ),
+          storage,
+          loggerFactory,
+        ).futureValue,
         analyzableTimeWindowDuration =
           NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
         loggerFactory,

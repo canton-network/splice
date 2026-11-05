@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import com.daml.ledger.javaapi.data.{DamlRecord, Unit as damlUnit}
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
@@ -1787,6 +1788,12 @@ class DbScanStoreTest
       partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory] = {
     for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId("whatever"),
+        storage.underlying,
+        loggerFactory,
+      )
       updateHistory <- UpdateHistory.create(
         storage.underlying, // not under test
         migrationId,
@@ -1795,6 +1802,7 @@ class DbScanStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,

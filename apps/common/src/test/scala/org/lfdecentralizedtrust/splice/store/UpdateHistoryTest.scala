@@ -36,6 +36,7 @@ import StoreTestBase.*
 import cats.data.NonEmptyList
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.config.NonNegativeDuration
+import org.scalatest.exceptions.TestFailedException
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 class UpdateHistoryTest extends UpdateHistoryTestBase {
@@ -830,6 +831,56 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           o2 <- store.lookupLastIngestedOffset()
           _ = o2 shouldBe Some(5)
         } yield succeed
+      }
+    }
+
+    "lastLegacyRecordTime" should {
+
+      "be the latest legacy record time and stay fixed once recorded" in {
+        val store1 = mkStore(party1, migration1, participant1)
+        val store2 = mkStore(party1, migration2, participant1)
+        for {
+          _ <- initStore(store1)
+          _ <- create(domain1, validContractId(1), validOffset(1), party1, store1, time(1))
+          _ <- initStore(store2)
+          _ <- create(domain1, validContractId(2), validOffset(1), party1, store2, time(2))
+          _ <- unassign(
+            domain1,
+            domain2,
+            validContractId(2),
+            validOffset(2),
+            party1,
+            1,
+            reassignmentId1,
+            store2,
+            time(3),
+          )
+          _ <- create(domain1, validContractId(3), validOffset(3), party1, store2, time(4))
+          _ <- moveToLegacyTables(store1.historyId, time(4))
+          cutStore = mkStore(party1, migration2, participant1)
+          _ <- storage
+            .update(
+              sql"delete from update_history_unassignments_legacy".asUpdate,
+              "deleteLegacyUnassignments",
+            )
+            .failOnShutdown
+          reopenedStore = mkStore(party1, migration2, participant1)
+        } yield {
+          store1.lastLegacyRecordTime shouldBe None
+          store2.lastLegacyRecordTime shouldBe None
+          cutStore.lastLegacyRecordTime shouldBe Some(time(3))
+          reopenedStore.lastLegacyRecordTime shouldBe Some(time(3))
+        }
+      }
+
+      "fail store creation when the recorded value cannot be decoded" in {
+        val key = UpdateHistory.lastLegacyRecordTimeKey(mkStore().historyId)
+        for {
+          _ <- mkKeyValueStore().setValue(key, "not a timestamp")
+        } yield {
+          val failure = the[TestFailedException] thrownBy mkStore()
+          failure.getCause.getMessage should include(key)
+        }
       }
     }
 

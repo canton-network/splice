@@ -1325,6 +1325,7 @@ class DbAppActivityRecordStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage,
         migrationId,
@@ -1333,6 +1334,7 @@ class DbAppActivityRecordStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = false,
@@ -1361,6 +1363,7 @@ class DbAppActivityRecordStoreTest
   ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage,
         migrationId,
@@ -1369,6 +1372,7 @@ class DbAppActivityRecordStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = false,
