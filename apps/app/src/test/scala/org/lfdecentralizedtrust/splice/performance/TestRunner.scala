@@ -5,12 +5,13 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.performance.tests.{
+  BaseStorePerformanceTest,
   ScanStoreIngestionPerformanceTest,
-  StoreIngestionPerformanceTest,
   StoreReadPerformanceTest,
   SvDsoStoreIngestionPerformanceTest,
   UpdateHistoryIngestionPerformanceTest,
   UpdateHistoryReadPerformanceTest,
+  VerdictStoreIngestionPerformanceTest,
 }
 
 import java.nio.file.Path
@@ -18,7 +19,7 @@ import scala.concurrent.{Await, ExecutionContext}
 import scala.util.control.NonFatal
 import scala.concurrent.duration.DurationInt
 
-class TestRunner(testNames: String, configPath: Path, updateHistoryDumpPath: Path)(implicit
+class TestRunner(testNames: String, configPath: Path, dumpPath: Path)(implicit
     ec: ExecutionContext,
     actorSystem: ActorSystem,
     val loggerFactory: NamedLoggerFactory,
@@ -29,27 +30,31 @@ class TestRunner(testNames: String, configPath: Path, updateHistoryDumpPath: Pat
   def run(): Unit = {
     val config: Config = ConfigFactory.parseFile(configPath.toFile).resolve()
 
-    val ingestionTests: Map[String, () => StoreIngestionPerformanceTest] = Map(
+    val ingestionTests: Map[String, () => BaseStorePerformanceTest] = Map(
       "DbSvDsoStore" -> (() =>
-        SvDsoStoreIngestionPerformanceTest.tryCreate(updateHistoryDumpPath, config, loggerFactory)
+        SvDsoStoreIngestionPerformanceTest.tryCreate(dumpPath, config, loggerFactory)
       ),
       "DbScanStore" -> (() =>
         ScanStoreIngestionPerformanceTest
-          .tryCreate(updateHistoryDumpPath, config, loggerFactory)
+          .tryCreate(dumpPath, config, loggerFactory)
       ),
       "UpdateHistory" -> (() =>
         UpdateHistoryIngestionPerformanceTest.tryCreate(
-          updateHistoryDumpPath,
+          dumpPath,
           config,
           loggerFactory,
         )
+      ),
+      // expects an events dump
+      "VerdictStore" -> (() =>
+        VerdictStoreIngestionPerformanceTest.tryCreate(dumpPath, config, loggerFactory)
       ),
     )
 
     val readTests: Map[String, () => StoreReadPerformanceTest] = Map(
       "UpdateHistoryRead" -> (() =>
         UpdateHistoryReadPerformanceTest
-          .tryCreate(updateHistoryDumpPath, config, loggerFactory)
+          .tryCreate(dumpPath, config, loggerFactory)
       )
     )
 

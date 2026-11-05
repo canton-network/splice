@@ -73,8 +73,11 @@ abstract class BaseStorePerformanceTest(
 
   protected implicit val closeContext: CloseContext = CloseContext(this)
 
-  type Store <: HasIngestionSink
+  type Store
   protected def mkStore(storage: DbStorage): Future[Store]
+
+  /** Entry point for a perf test run. */
+  def run(): Future[Unit]
 
   /** Metrics factory wired into the storage's [[DbStorageMetrics]].
     *  The DB executor `exectime` timer is recorded and can be read back to measure DB time.
@@ -229,7 +232,7 @@ abstract class BaseStorePerformanceTest(
   }
 
   @SuppressWarnings(Array("org.lfdecentralizedtrust.splice.wart.Println"))
-  protected def ingestAll(store: Store, txs: Seq[TreeUpdateWithMigrationId])(implicit
+  protected def ingestAll(store: HasIngestionSink, txs: Seq[TreeUpdateWithMigrationId])(implicit
       tc: TraceContext
   ): Future[Unit] = {
     Source
