@@ -7,9 +7,7 @@ import { CnChartVersionSchema } from './versionSchema';
 export const defaultActiveMigration = {
   id: 0,
   version: 'local',
-  sequencer: {
-    enableBftSequencer: false,
-  },
+  sequencer: {},
 };
 
 export const GitReferenceSchema = z.object({
@@ -31,18 +29,13 @@ export const MigrationInfoSchema = z
     releaseReference: GitReferenceSchema.optional(),
     sequencer: z
       .object({
-        enableBftSequencer: z.boolean().default(true),
+        // TODO (#8263): remove, unused as all synchronizers use DA BFT.
+        enableBftSequencer: z.literal(true).default(true),
         // Use a separate DB server for DABFT.
         dedicatedBftSequencerDb: z.boolean().default(true),
       })
       .strict()
       .prefault({}),
-    // TODO (#8263): remove the CometBFT config
-    cometbft: z
-      .object({
-        volumeSize: z.string().optional(),
-      })
-      .optional(),
   })
   .strict();
 
