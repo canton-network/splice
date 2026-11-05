@@ -65,7 +65,7 @@ The board is project 48 (`DACH-NY/projects/48`). Its `Status` field:
 - `Vulnerability Inbox`: default for blackduck dependency scans; not part of this triage.
 - `Triaged`: root cause identified.
 - `In progress`: a person is assigned and working on it.
-- `Infrequent / no repro`: deliberately ignored, rare or not reproducible.
+- `Infrequent / no repro`: deliberately ignored, rare or not reproducible; only after about 2 weeks without a duplicate, so a new first hit goes to Triaged.
 - `Closed`: set automatically when the issue is closed; never set it by hand.
 
 ## Priority

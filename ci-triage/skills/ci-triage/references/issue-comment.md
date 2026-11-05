@@ -17,7 +17,7 @@ Shape (Markdown, short paragraphs of one to three sentences; as short as the fac
    of the investigation, no list of runs checked.
 5. Resolution only when someone has to act and the action is not obvious from the verdict: the fix in one sentence
    (file and change) and the owner. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
-No triage-branch vocabulary: no family letters ("family L") or packet names; describe the mechanism instead. No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
+Do not claim evidence is absent ("not in the artifacts", "the logs do not show") unless a stated search settled it; an unexplained step is left out or named as open ("not found" is a statement about our search, not the logs). No triage-branch vocabulary: no family letters ("family L") or packet names; describe the mechanism instead. No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
 assignee is set with the command), and no "Not checked" paragraph unless the missing evidence decides whether
 someone has to act; then one sentence, and if the evidence is in a system the user can read (GCP logs: recipe 13),
 hand them the link first.
