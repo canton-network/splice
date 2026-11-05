@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Export the open Status = Inbox issues of the cn-test-failures board, with bodies and comments, one JSON object
-per line.
+"""Export the open issues of the cn-test-failures board by Status, with bodies, comments and the PRs that will close
+them, one JSON object per line and one file per Status.
 
 Runs on the host (needs a gh token with the project scope, SSO-authorized for the organization). Usage, from the
 repo root:
-  direnv exec . ci-triage/scripts/export_inbox.py
+  direnv exec . ci-triage/scripts/export_board.py                      # Inbox, Triaged, In progress
+  direnv exec . ci-triage/scripts/export_board.py --status Inbox
 Closed issues are skipped, whatever their Status.
-Writes ci-triage/export/inbox.jsonl unless --out is given.
+Writes ci-triage/export/<status>.jsonl (inbox.jsonl, triaged.jsonl, in-progress.jsonl) unless --out-dir is given.
 """
 import argparse
 import json
@@ -44,12 +45,14 @@ query($ids: [ID!]!) {
       labels(first: 20) { nodes { name } }
       body
       comments(first: 100) { totalCount nodes { author { login } createdAt body } }
+      closedByPullRequestsReferences(first: 10, includeClosedPrs: true) { nodes { url state } }
     }
   }
 }
 """
 
 ISSUES_BATCH = 20
+DEFAULT_STATUSES = ("Inbox", "Triaged", "In progress")
 
 
 def graphql(query: str, variables: dict[str, Any]) -> Any:
@@ -84,25 +87,39 @@ def main() -> None:
     ap.add_argument("--org", default="DACH-NY")
     ap.add_argument("--project", type=int, default=48)
     ap.add_argument("--repo", default="DACH-NY/cn-test-failures")
-    ap.add_argument("--status", default="Inbox")
-    ap.add_argument("--out", default="ci-triage/export/inbox.jsonl")
+    ap.add_argument("--status", action="append", help="board Status to export, repeatable (default: " + ", ".join(DEFAULT_STATUSES) + ")")
+    ap.add_argument("--out-dir", default="ci-triage/export")
     args = ap.parse_args()
-    out = pathlib.Path(args.out)
+    statuses: list[str] = args.status or list(DEFAULT_STATUSES)
+    out_dir = pathlib.Path(args.out_dir)
 
-    ids: list[str] = []
+    ids: dict[str, list[str]] = {s: [] for s in statuses}
     seen = 0
     for nodes in pages(args.org, args.project):
         for n in nodes:
             seen += 1
             c = n.get("content") or {}
-            if (n.get("status") or {}).get("name") != args.status:
+            status = (n.get("status") or {}).get("name")
+            if status not in ids:
                 continue
             if (c.get("repository") or {}).get("nameWithOwner") != args.repo:
                 continue
             if c.get("state") != "OPEN":
                 continue
-            ids.append(c["id"])
+            ids[status].append(c["id"])
 
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for status in statuses:
+        out = out_dir / (status.lower().replace(" ", "-") + ".jsonl")
+        rows = issues(ids[status])
+        with open(out, "w") as f:
+            for r in sorted(rows, key=lambda r: r["number"]):
+                f.write(json.dumps(r) + "\n")
+        print(f"{len(rows)} open {status} issues -> {out}")
+    print(f"({seen} board items)")
+
+
+def issues(ids: list[str]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for i in range(0, len(ids), ISSUES_BATCH):
         for c in graphql(ISSUES_QUERY, {"ids": ids[i:i + ISSUES_BATCH]})["nodes"]:
@@ -119,13 +136,10 @@ def main() -> None:
                 "commentCount": c["comments"]["totalCount"],
                 "comments": [{"author": (m.get("author") or {}).get("login"), "createdAt": m["createdAt"],
                               "body": m["body"]} for m in c["comments"]["nodes"]],
+                "closingPullRequests": [{"url": pr["url"], "state": pr["state"]}
+                                        for pr in c["closedByPullRequestsReferences"]["nodes"]],
             })
-
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "w") as f:
-        for r in sorted(rows, key=lambda r: r["number"]):
-            f.write(json.dumps(r) + "\n")
-    print(f"{len(rows)} open {args.status} issues of {seen} board items -> {out}")
+    return rows
 
 
 if __name__ == "__main__":

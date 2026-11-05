@@ -1,8 +1,0 @@
-ref	branch	base	tip	pr	state	updated	note
-10732	rautenrieth-da/fix-10732-wallet-metrics-outcome-label	main 8dacec5c10	b43adb1676	8215	merged	2026-11-03	issue closed
-10930	rautenrieth-da/fix-10930-mainnet-daml-test-tags	main b5e6a1ba55	67d433fb33	8228	merged	2026-11-04	issue closed
-11128	rautenrieth-da/fix-11128-scan-party-monitor-dso-visible-tx	main 8dacec5c10	35ce67cd8f	8211	merged	2026-11-03	issue closed; PR head differs from the handed-over 0c380008f0
-11144	rautenrieth-da/fix-11144-tbar-wait-all-rounds	main 934f543eb4	9f4b991cbd	8221	merged	2026-11-04	issue closed
-11161	rautenrieth-da/fix-11161-login-helper-timeout	main 7307892450	72d55afdc9	8227	merged	2026-11-04	issue closed
-11165	rautenrieth-da/fix-11165-sequencer-pruning-retention	main 4ab8bd88e8	3ce0c3fbb5	8238	pr	2026-11-05	PR head differs from the handed-over 29019699a0; PR text accepted, do not change it
-11168	rautenrieth-da/fix-11168-unallocated-record-expiry	main 4ab8bd88e8	5d775de976	8241	merged	2026-11-04	issue closed

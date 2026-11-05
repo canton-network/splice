@@ -6,14 +6,19 @@ It holds the triage of failed CI jobs filed in `DACH-NY/cn-test-failures`.
 
 Skills (not discovered from here; install once per sandbox with
 `ln -s $PWD/ci-triage/skills/* ~/.claude/skills/`):
-- `ci-triage`: triage one issue into an evidence packet and a fix spec.
-- `ci-triage-inbox`: the triage agent. Empties the board's inbox on every pass: every item gets a verdict (duplicate,
-  triaged, fixed, one-off, needs-log) and its board commands; fixes go into `fix-queue.tsv`.
-- `ci-triage-fix`: the fix agent. Works through `fix-queue.tsv`: fix branches, static checks, PR text, then follows
-  the PRs until the issues close; tracks them in `fixes.tsv`.
+- `ci-triage`: triage one issue into an evidence packet and one suggested action on the issue.
+- `ci-triage-inbox`: the triage agent, for Status Inbox. Triages the groups in parallel, then presents them one at a
+  time: cause, evidence, the suggested action with its commands and comment bodies; the user reviews and runs it.
+- `ci-triage-fix`: the fix agent, for Status Triaged without an assignee. Proposes a fix, iterates with the user,
+  writes the fix branch and the PR text, and follows the PR.
 
-The two agents run as separate sessions, usually in the same sandbox and checkout. The fix agent owns `fixes.tsv`
-and `fixes/`, the triage agent everything else here; each commits only its own paths (`git commit -- <paths>`).
+The board is the only work queue: Inbox (triage agent), Triaged without assignee (fix agent), In progress with an
+assignee (that person; the fix agent only for the user's own PRs). Both agents run as separate sessions in the same
+sandbox and checkout: the fix agent needs the packets and the scripts, and the user fetches both kinds of branches
+from one remote. The fix agent changes code only in fix worktrees; on the triage branch it touches only a packet
+whose cause changed. Each agent commits only its own paths (`git add <paths> && git commit -s -m '...' -- <paths>`,
+never `-a`); on `index.lock` errors wait and retry. Run one sbt build at a time (16 GB: the static checks alone come
+close), so the triage agent does not compile while a fix is checked.
 
 ref = a cn-test-failures issue number.
 
@@ -24,9 +29,7 @@ ref = a cn-test-failures issue number.
 | `evidence/<ref>-<slug>.md` | evidence packets, one per issue or per group of issues |
 | `evidence/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
-| `STATE.md` | triage state: current round, needs-log requests, open owner questions |
-| `fix-queue.tsv` | fixes decided by the triage agent, append only; columns in the ci-triage-inbox skill |
-| `fixes.tsv`, `fixes/<ref>.md` | fix agent: one row per fix branch (state, PR); PR description and verification per fix |
+| `STATE.md` | triage state: current round, log requests, open owner questions |
 | `lessons/<YYYY>-W<ww>.md` | weekly lessons for the splice engineers: test-code patterns behind the week's failures (ISO week) |
 | `rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` | one directory per inbox round: findings, commands handed out, open ends |
 | `skills/` | the three skills; command recipes in `skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
@@ -122,7 +125,7 @@ is missing or newer than the export.
   unmergeable), `[ci]` on fix branches, `[static]` for lint-only.
 - The triage branch carries only `ci-triage/`. Never commit memory files or CLAUDE.md files outside `ci-triage/`.
 - Do not run sbt compiles or start Canton unless asked; triage works from the run's logs and artifacts. Exception:
-  every fix branch passes the CI static checks locally before it is handed over (ci-triage-fix step 2), never skipped.
+  every fix branch passes the CI static checks locally before it is handed over (ci-triage-fix step 3), never skipped.
 - Artifacts the sandbox downloads go to `log/<ref>/` (gitignored), with `TMPDIR` under `log/` too; keep `.clog.gz`
   compressed and stream with `zcat`. Never pipe a large `zcat` into `sort` (it spills to `/tmp`); count with `awk`.
   Never put tokens (e.g. a contents `download_url`) into files.
@@ -141,7 +144,7 @@ Scripts are fully typed and pass the same check as the repo's scripts (`scripts/
 | Script | Where | What |
 |---|---|---|
 | `export_issues.py --since <date>` | host | recent issues with comments (recipe 9) |
-| `export_inbox.py` | host | open Status = Inbox issues of project 48 (recipe 10) |
+| `export_board.py [--status <s>]...` | host | open issues of project 48 by Status (Inbox, Triaged, In progress), with closing PRs, to `export/<status>.jsonl` (recipe 10) |
 | `export_circleci.py <ref> <job url or number>... [--all-steps]` | host, `CIRCLECI_TOKEN` | failed step output of CircleCI jobs to `export/<ref>/` |
 | `deployment_runs.py [--days N] [--workflow <regex>] [--excerpts]` | host, `CIRCLECI_TOKEN` | CircleCI workflow runs (passed too) as JSON lines to `export/circleci-runs-<date>.jsonl`; failed jobs with step excerpt, issue URL, splice commit |
 | `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |

@@ -1,6 +1,6 @@
 ---
 name: ci-triage
-description: Triage one DACH-NY/cn-test-failures issue (auto-filed for a failed GitHub Actions or CircleCI job) into a reproducible evidence packet - resolve the issue to its exact CI job, fetch the job log and artifacts, isolate the flagged lines or failing assertion, check known flake families and recent issues for duplicates, find the root cause with commands and verbatim log output, record it on the triage branch, suggest issue updates, and queue the fix for the ci-triage-fix agent. Use for "triage cn-test-failures #N", "is this a dup", "root cause of shard failure", checkErrors WARN/ERROR failures, integration test flakes. For the whole inbox use ci-triage-inbox; to write the fix use ci-triage-fix.
+description: Triage one DACH-NY/cn-test-failures issue (auto-filed for a failed GitHub Actions or CircleCI job) into a reproducible evidence packet - resolve the issue to its exact CI job, fetch the job log and artifacts, isolate the flagged lines or failing assertion, check known flake families and recent issues for duplicates, find the root cause with commands and verbatim log output, record it on the triage branch, and suggest one action on the issue (comment, close as duplicate, Status) for the user to review. Use for "triage cn-test-failures #N", "is this a dup", "root cause of shard failure", checkErrors WARN/ERROR failures, integration test flakes. For the whole inbox use ci-triage-inbox; to write the fix use ci-triage-fix.
 ---
 
 # Triage one cn-test-failures issue
@@ -12,7 +12,7 @@ Input: one ref. Read its body and comments with the method `probe_access.py` rep
 (CLAUDE.md, Access). If no method has it, stop and ask the user to fix access or rerun the export.
 
 Output: a packet `ci-triage/evidence/<ref>-<slug>.md`, its row in `ci-triage/evidence/INDEX.tsv`, a duplicate verdict,
-issue commands for the user, and a fix-queue row. Everything you write must be reproducible by someone else:
+and one suggested action on the issue (commands plus comment body) for the user. Everything you write must be reproducible by someone else:
 every claim is a command plus its verbatim output.
 
 When run as one of several parallel agents (ci-triage-inbox), follow the brief: it usually limits you to your own
@@ -74,16 +74,12 @@ edits to shared files.
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
    packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
-9. Fix spec. Decide where the fix belongs and write it precisely enough to implement without the chat (file, line,
-   change; for a backport the PR and the release line), into the packet's Verdict and as a row of
-   `ci-triage/fix-queue.tsv` (columns and kinds in the ci-triage-inbox skill, Fix queue). Mark it `auto = yes` only
-   when all of these hold: the root cause is established with evidence, the fix touches only test code or test
-   configuration (`src/test/`, test resources, test scripts; no production code, no Daml, no deployment config) or
-   is a clean cherry-pick, and it is small enough to review in one screen. Name a suggested owner (git blame of the
-   lines the fix touches). The branch, its static checks and the PR are written by the ci-triage-fix agent, never
-   here.
-10. Commit on the triage branch with `[skip ci]` and `-s`. Report: one line per ref with duplicate verdict and fix-queue
-    row, then the commands from step 8.
+9. Fix. Decide where the fix belongs and state it in the packet's Verdict and in the comment, precisely enough to
+   implement without the chat: file and change (for a backport the PR and the release line), and a suggested owner
+   (git blame of the lines it touches; for infra or Canton the component owner). No branch here: the fix agent
+   (`ci-triage-fix`) picks the issue up from Status Triaged and agrees the change with the user first.
+10. Commit on the triage branch with `[skip ci]` and `-s`. Report: one line per ref with the verdict, then the
+    action from step 8 with the full comment bodies.
 
 ## Rules of evidence
 

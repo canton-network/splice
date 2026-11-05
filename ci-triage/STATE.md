@@ -40,8 +40,9 @@ Round `rounds/2026-11-03T131520Z/`, step mode; nothing handed out has run yet. T
 
 ## Fix branches
 
-Since 2026-11-05 tracked by the fix agent in `fixes.tsv` (skill `ci-triage-fix`); the queue is `fix-queue.tsv`,
-seeded with every fix branch of this triage branch and 10915.
+Since 2026-11-05 not tracked here: the fix agent (skill `ci-triage-fix`) works from the board (Status Triaged
+without assignee, `closingPullRequests` in the export). Open on 2026-11-05: `rautenrieth-da/fix-11165-sequencer-pruning-retention`, PR 8238
+(PR text accepted, do not change it). All earlier fix branches are merged and their issues closed.
 
 ## Open owner questions
 

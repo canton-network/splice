@@ -1,9 +1,0 @@
-ref	refs	date	kind	auto	owner	spec	packet
-10732	11143	2026-11-03	test	yes		WalletMetricsTest: look up trigger.completed by outcome success (family AC)	
-11128	11138 11139 11158	2026-11-03	test	yes		ScanPartyMonitorScriptIntegrationTest: tap after the private transaction (family Z)	
-11144		2026-11-03	test	yes		TrafficBasedRewardsTimeBasedIntegrationTest assertRewardCalcs: retry all per-round calls (family AD)	
-11161		2026-11-04	test	yes		FrontendLoginUtil.loginOnceConfirmedToBeAtUrl: login attempt timeout 5 s to 15 s (family AE)	
-10930	10933 11178 11180 11181	2026-11-04	test	yes		coupon suite NoDamlCompatibilityCheck; traffic test cases taggedAs SpliceAmulet_0_1_25 (family Y)	
-11165		2026-11-04	test	yes	martinflorian-da	SequencerPruningIntegrationTest: retention 120 s to 180 s, wait 3 to 5 min (family AH)	
-11168		2026-11-04	test	yes		UnclaimedActivityRecordIntegrationTest first test case: record expiry 5 s to 10 s, as #5176 for the second	
-10915	11145 11174 11190	2026-11-05	infra	no	krzysztofczyz-da	canton-network-internal Devnet Backup Status: move the 18:00 check to 20:00 or 21:00, or 14 h threshold, or a backup between 04:00 and 16:00; now daily since the Devnet LSU to serial 7	evidence/2026-10-30-infra-c.md

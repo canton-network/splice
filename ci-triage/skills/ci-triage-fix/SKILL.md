@@ -1,98 +1,72 @@
 ---
 name: ci-triage-fix
-description: The fix agent for triaged cn-test-failures issues - work through ci-triage/fix-queue.tsv (written by the ci-triage-inbox agent), write test fixes and backports on fix branches in their own worktrees, pass the CI static checks, hand the user the fetch commands and a PR description that closes the issue, then follow each PR (CI checks, review comments, merge) until the issue is closed. Tracks every fix in ci-triage/fixes.tsv. Does not triage the inbox. Use for "work on the fix queue", "implement the triaged fixes", "what fixes are open", "PR 8238 failed static_tests", "/ci-triage-fix".
+description: The fix agent for cn-test-failures issues with Status Triaged and no assignee - pick one from the board export (or the issue the user names), read its root cause from the issue comments and the evidence packet if there is one, propose a fix and iterate on it with the user, then write it on a fix branch in its own worktree, pass the CI static checks, and hand over the fetch commands, the PR title and description (closing the issue) and the board commands; also follows the user's open fix PRs (CI failures, review comments). Use for "fix a triaged issue", "what can be fixed", "fix #11165", "PR 8238 failed static_tests", "/ci-triage-fix".
 ---
 
-# Fix triaged CI failures
+# Fix a triaged CI failure
 
 Context, access and conventions: `ci-triage/CLAUDE.md` on the triage branch. Branch mechanics and the static checks:
-`ci-triage/skills/ci-triage/references/recipes.md` section 8. The triage agent (`ci-triage-inbox`) decides what is
-wrong; this agent turns its decisions into PRs.
+`ci-triage/skills/ci-triage/references/recipes.md` section 8. The root cause comes from the triage (issue comments,
+packets); this skill turns it into a PR, together with the user.
 
-## Ownership (two agents share the triage branch)
+## 1. Candidates
 
-The fix agent owns `ci-triage/fixes.tsv` and `ci-triage/fixes/`; everything else under `ci-triage/` belongs to the
-triage agent (read it, never edit it). Code changes happen only in fix worktrees (`../fix-<ref>`,
-`../backport-<ref>`), never in the triage checkout. Both agents may run at the same time in the same checkout, so commit only your own paths:
-`git add <paths> && git commit -s -m '[skip ci] fixes: <ref> <state>' -- <paths>`; on `index.lock` errors wait a few
-seconds and retry. Never commit with `-a` or a bare `git add -A` on the triage branch.
+- Source: `/run/sandbox/source/ci-triage/export/triaged.jsonl` and `in-progress.jsonl` (recipe 10, `export_board.py`;
+  ask for a fresh one when it is older than a day), or the issue the user names (read it live, recipe 11).
+- Candidates: Triaged, no assignee, no open entry in `closingPullRequests`. Issues with an assignee belong to that
+  person; issues with an open closing PR are in flight (step 5).
+- For each candidate, the fix as the issue states it: the last root-cause comment (any author: issues are also
+  triaged by hand), and the packet when `evidence/INDEX.tsv` has the ref. Classify: test (test code or test
+  config), backport (a fix on main missing on a release line), production (splice code, Daml, deployment config),
+  not ours (infra, Canton, an external owner: suggest assigning instead), unclear (no fix stated).
+- Show one line per candidate: ref, title, kind, the fix in a few words, how often it failed (duplicates closed into
+  it). Order: hard broken, frequent, the rest. The user picks; the rest of this skill is one issue at a time.
 
-When a queued spec turns out to be wrong (the fix does not address the evidence, or the cause looks different once
-you are in the code), do not re-triage: set the fix to `blocked` with the reason and tell the user, who hands it back
-to the triage agent.
+## 2. Propose
 
-## The tracker
+- Read the issue, its duplicates and the packet; check that main has no fix yet (`git log origin/main` on the
+  touched files since the failing sha; `git merge-base --is-ancestor` for backports).
+- Present in one screen: the cause in two or three sentences with the decisive log line, the proposed change (file,
+  diff sketch), the alternatives considered and why this one, what it does not cover, and the suggested owner (git
+  blame of the lines it touches). Give the board command to take the issue:
+  ```
+  gh issue edit <ref> -R DACH-NY/cn-test-failures --add-assignee @me
+  direnv exec . ci-triage/scripts/set_status.py Triaged 'In progress' <ref>
+  ```
+- Wait for the user. Expect disagreement: the user often wants a smaller or different change. Iterate until the user
+  agrees on the change. If the discussion changes the root cause, update the packet (only that file, committed on
+  the triage branch with `-- <path>`) and give the correction as a comment for the user to review and post.
+- A draft branch may be written before the user agrees, to make the proposal concrete; it is only a proposal and is
+  rewritten freely until handed over.
 
-`ci-triage/fixes.tsv`, one row per fix branch, sorted by ref, tab-separated, columns:
-`ref branch base tip pr state updated note`
-- `ref`: the queue's parent ref; `base`: `main` or the release line, with the sha the branch started from;
-  `tip`: the sha handed to the user last; `pr`: splice PR number once the user opened it.
-- `state`: `branch` (written, checks passed, waiting for the user to push), `pr` (open), `merged`, `blocked`
-  (reason in `note`), `dropped` (with the reason).
-`ci-triage/fixes/<ref>.md` per fix: the PR title and description (posted with `--body-file`), what was verified
-locally with the commands and their result, and later the PR history (CI failures, review rounds).
+## 3. Write
 
-## Pass
-
-### 1. Read the queue
-
-- `fix-queue.tsv`, last row per ref (later rows correct earlier ones; `withdrawn` removes the ref).
-- Pending = queue refs without a `fixes.tsv` row, plus rows whose queue spec is newer than the tracker row.
-- Open = tracker rows in state `branch` or `pr`.
-- Print one table: ref, kind, auto, owner, one-line spec, tracker state. Pending `auto = yes` rows of kind `test` or
-  `backport` are worked on now without asking, oldest first; the rest are listed:
-  - `auto = no`, kind `test` or `backport`: offered; written only when the user says so.
-  - `prod`, `infra`, `canton`, `owner`: not written; listed with the suggested owner, unless the user asks for a
-    branch (then as for `auto = no`, and production changes get a code-reviewer pass before hand-over).
-
-### 2. Write a fix
-
-- Read the packet and its INDEX row. Check that main does not already contain a fix (`git log origin/main` for the
-  test file since the failing sha); if it does, record `dropped` with the commit.
 - Worktree and branch per recipe 8: `<user>/fix-<ref>-<slug>` off a fresh `origin/main` (HTTPS fetch in the
-  sandbox), or `<user>/backport-<ref>-<pr>-<release-line>` with `cherry-pick -x -s`. One branch per queue row; a
-  correction to an open PR is a follow-up commit on the same branch.
-- Implement the spec, matching the surrounding code; no code comments unless the code would mislead without one.
-- Static checks, mandatory, never skipped (recipe 8, including the sandbox memory fallback; say plainly when lint
-  ran only partially). Run the touched test locally only when it is cheap (unit, store, a 1-SV integration test);
-  otherwise leave it to the PR's CI and say so.
-- Commit `[ci] <one subject line>` with `-s`, no other trailers.
+  sandbox), or `<user>/backport-<ref>-<pr>-<release-line>` with `cherry-pick -x -s`. One branch per PR.
+- Match the surrounding code; a code comment only when the code would mislead without it (the user may ask for one).
+- Static checks, mandatory, never skipped (recipe 8, with the sandbox memory fallback; say when lint ran only
+  partially). Run the touched test locally only when cheap (unit, store, a 1-SV integration test); otherwise leave
+  it to the PR's CI and say so.
+- Commit `[ci] <one subject line>` with `-s`, no other trailers. Production changes get a code-reviewer pass first.
 
-### 3. Hand over a branch
+## 4. Hand over
 
-- Write `fixes/<ref>.md`: PR title (`<Suite>: <change>`), description (what failed, in two or three sentences without
-  triage-branch references, the change, how it was verified, and a last line
-  `Fixes DACH-NY/cn-test-failures#<ref>` plus one such line per covered ref), and the verification record.
-- Add or update the tracker row (`branch`), commit the two files on the triage branch.
-- Print: the commit list and fetch block (global CLAUDE.md template) for the fix branch, the diff (or its stat when
-  over one screen), what was and was not verified, then the PR command and the full description in a `~~~` fence:
-  ```
-  gh pr create -R canton-network/splice --head <branch> --title '<title>' --body-file ci-triage/fixes/<ref>.md
-  ```
-  (the user fetches the triage branch first to have the file; the title follows the shell rules of CLAUDE.md).
+Print, in this order:
+1. The commit list and the fetch block (global CLAUDE.md template) for the fix branch, and the diff (or its stat
+   when longer than a screen).
+2. What was and was not verified.
+3. The PR title (`<Suite or component>: <change>`) and the description in a `~~~` fence: what failed in two or three
+   sentences (no triage-branch references), the change, how it was verified, and as last lines
+   `Fixes DACH-NY/cn-test-failures#<ref>`, one per issue it fixes. The merge then closes the issues.
 
-### 4. Follow open PRs
+## 5. Follow open PRs
 
-For each tracker row in state `branch` or `pr` (splice is public: `gh api repos/canton-network/splice/...`):
-- `branch` and a PR now exists for the branch (`pulls?head=canton-network:<branch>&state=all`): record the PR
-  number, state `pr`.
-- Failed checks: read the failed job's log (recipe 1). Caused by the change (format, compile, the touched test):
-  fix with a follow-up commit and hand over the new tip. Unrelated flake: say which job and why it is unrelated,
-  and let the user re-run it; it is the triage agent's if it is filed in cn-test-failures.
+When the user asks (or names a PR): the user's In progress issues with an open `closingPullRequests` entry, or the
+PR named. splice is public, `gh api repos/canton-network/splice/...` reads it.
+- Failed checks: read the failed job's log (recipe 1). Caused by the change (format, compile, the touched test): a
+  follow-up commit and a new hand-over. Unrelated flake: say which job and why it is unrelated, so the user re-runs
+  it; a filed flake belongs to the triage agent.
 - Review comments: show them with a proposed answer or follow-up commit; changes only after the user agrees.
-- Never rewrite or force-push a branch whose PR has reviews; after the user said a PR text is accepted, do not
-  change it (it would re-run CI).
-- Merged: state `merged`. Check that the `Fixes` lines closed the issues (`gh api
-  repos/DACH-NY/cn-test-failures/issues/<ref> --jq .state`); for an issue still open, hand the user its close
-  command. Remove the worktree (the branch stays).
-- Closed without merge: ask the user why, then `dropped` or `blocked` with the reason.
-
-### 5. Report
-
-One line per tracker change, then the commands (fetch blocks, PR commands, re-runs, closes) in one fenced block,
-then the triage-branch commit list. A pass with nothing to do says so in one line.
-
-## Running continuously
-
-The pass can run under `/loop` (for example every hour): new queue rows and PR checks are readable from the
-sandbox. Pushing and opening PRs stay with the user.
+- Never rewrite or force-push a branch whose PR has reviews, and do not change an accepted PR text (it re-runs CI).
+- Merged: check that the issues closed (`gh api repos/DACH-NY/cn-test-failures/issues/<ref> --jq .state`) and give
+  the close command for any still open. Remove the worktree; the branch stays.

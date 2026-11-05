@@ -139,14 +139,16 @@ direnv exec . ci-triage/scripts/export_issues.py --since <YYYY-MM-DD>
 Read it from the sandbox as `/run/sandbox/source/ci-triage/export/issues-since-<YYYY-MM-DD>.jsonl`; one JSON
 object per line (number, title, state, stateReason, createdAt, closedAt, assignees, labels, body, comments).
 
-## 10. Export inbox on the host
+## 10. Export the board on the host
 
 Needed with either source (`ghx` cannot read Projects v2). Ask the user to run, from the host repo root:
 ```
-direnv exec . ci-triage/scripts/export_inbox.py
+direnv exec . ci-triage/scripts/export_board.py
 ```
-Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl` (open Status = Inbox issues of project 48,
-with bodies and comments; `commentCount` shows when more than the 100 exported comments exist).
+Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl`, `triaged.jsonl` and
+`in-progress.jsonl` (open issues of project 48 with that Status, with bodies and comments; `commentCount` shows when
+more than the 100 exported comments exist; `closingPullRequests` lists the PRs whose `Fixes` line names the issue,
+with state OPEN, MERGED or CLOSED). `--status Inbox` exports one Status only.
 
 Reading the exports in the sandbox (one issue, or a text search for the duplicate check):
 ```
