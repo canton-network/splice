@@ -12,6 +12,7 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import io.circe.parser.decode
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.http.scaladsl.server.Directives.provide
 import org.apache.pekko.http.scaladsl.server.Route
@@ -102,7 +103,7 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
 
   "onboardSvDownload" should {
 
-    "report failed and unknown ids as missing and pending exports as unavailable" in {
+    "report unknown ids as not found and failed exports as gone" in {
       val failed =
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
           {
@@ -111,23 +112,32 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
               _ =>
                 Future.failed(new RuntimeException("/snapshots/private/export (Permission denied)")),
             )
-            eventually()(snapshotService.lookup(id) shouldBe None)
+            eventually()(
+              snapshotService.lookup(id) shouldBe Some(
+                SnapshotState.Failed("Snapshot export failed")
+              )
+            )
             id
           },
           forExactly(1, _)(_.warningMessage should include("failed")),
         )
       download(failed) ~> route ~> check {
-        status shouldBe StatusCodes.NotFound
+        status shouldBe StatusCodes.Gone
         val body = responseAs[String]
-        body should include(s"Onboarding snapshot $failed not found")
+        body should include(s"Onboarding snapshot $failed failed: Snapshot export failed")
         body should not include "/snapshots/private"
         body should not include "Permission denied"
       }
 
       download(SvOnboardingSnapshotId("unknown")) ~> route ~> check {
         status shouldBe StatusCodes.NotFound
+        responseAs[String] should include("Onboarding snapshot unknown not found")
       }
+    }
 
+    "report queued and running exports as accepted with their state and times" in {
+      def pendingBody = decode[definitions.OnboardSvDownloadPendingResponse](responseAs[String])
+        .fold(throw _, identity)
       val exported = Promise[Unit]()
       try {
         val exporting = prepare(
@@ -137,27 +147,41 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
             exported.future
           },
         )
+        eventually()(snapshotService.lookup(exporting) should matchPattern {
+          case Some(SnapshotState.Exporting(_, _)) =>
+        })
         val queued = prepare("queued", writeSnapshot)
-        Seq(exporting, queued).foreach { id =>
-          download(id) ~> route ~> check {
-            status shouldBe StatusCodes.ServiceUnavailable
-            responseAs[String] should include("still being exported")
-          }
+        download(exporting) ~> route ~> check {
+          status shouldBe StatusCodes.Accepted
+          pendingBody.status shouldBe definitions.OnboardSvDownloadPendingResponse.Status.Exporting
+          pendingBody.startedAt shouldBe defined
+        }
+        download(queued) ~> route ~> check {
+          status shouldBe StatusCodes.Accepted
+          pendingBody.status shouldBe definitions.OnboardSvDownloadPendingResponse.Status.Queued
+          pendingBody.startedAt shouldBe None
         }
       } finally exported.trySuccess(()).discard
     }
 
-    "report a completed snapshot whose file is missing as not found" in {
+    "report a completed snapshot whose file is missing as gone and record it once" in {
       val id = prepare("missing-file", writeSnapshot)
       val file = eventually() {
         inside(snapshotService.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
       }
       Files.delete(file)
+      loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
+        download(id) ~> route ~> check {
+          status shouldBe StatusCodes.Gone
+          val body = responseAs[String]
+          body should include(s"Onboarding snapshot $id failed: Snapshot file is missing")
+          body should not include file.toString
+        },
+        _.warningMessage should include("is unusable"),
+      )
+      Files.exists(file.resolveSibling("metadata.json")) shouldBe false
       download(id) ~> route ~> check {
-        status shouldBe StatusCodes.NotFound
-        val body = responseAs[String]
-        body should include(s"Onboarding snapshot $id not found")
-        body should not include file.toString
+        status shouldBe StatusCodes.Gone
       }
     }
   }

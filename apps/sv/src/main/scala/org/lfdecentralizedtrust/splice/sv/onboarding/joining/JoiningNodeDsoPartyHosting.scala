@@ -105,19 +105,13 @@ class JoiningNodeDsoPartyHosting(
                             Future.failed(proposalNotFound)
                           }
                         case Right(id) =>
-                          retryProvider
-                            .retry(
-                              RetryFor.WaitingOnInitDependencyLong,
-                              "download_dso_party_snapshot",
-                              s"download DSO party snapshot $id from sponsor",
-                              snapshotDownload
-                                .download(id, svConnection.downloadOnboardingSnapshot),
-                              logger,
-                            )
-                            .recoverWith {
-                              case SvOnboardingSnapshotDownload.SnapshotNotFound(notFound) =>
-                                Future.failed(notFound)
-                            }
+                          snapshotDownload.downloadWithRetries(
+                            id,
+                            svConnection.downloadOnboardingSnapshot,
+                            retryProvider,
+                            RetryFor.WaitingOnInitDependencyLong,
+                            logger,
+                          )
                       },
                     logger,
                   )

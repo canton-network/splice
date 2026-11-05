@@ -8,6 +8,7 @@ import cats.syntax.applicative.*
 import cats.syntax.option.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.*
@@ -60,6 +61,7 @@ import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSe
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
 
 import java.nio.file.{Files, NoSuchFileException, Path}
+import java.time.ZoneOffset
 import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -928,18 +930,26 @@ object HttpSvPublicHandler {
       snapshotService: SvOnboardingSnapshotService,
       id: SvOnboardingSnapshotId,
   )(implicit
-      ec: ExecutionContext
+      ec: ExecutionContext,
+      tc: TraceContext,
   ): Future[rStream.OnboardSvDownloadResponse] = {
     val respond = rStream.OnboardSvDownloadResponse
+    val Pending = definitions.OnboardSvDownloadPendingResponse
+    def utc(time: CantonTimestamp) = time.toInstant.atOffset(ZoneOffset.UTC)
     def notFound = respond.NotFound(definitions.ErrorResponse(s"Onboarding snapshot $id not found"))
+    def gone(reason: String) =
+      respond.Gone(definitions.ErrorResponse(s"Onboarding snapshot $id failed: $reason"))
     Future {
       blocking {
         snapshotService.lookup(id) match {
-          case None | Some(SnapshotState.Failed(_)) => notFound
-          case Some(SnapshotState.Exporting) =>
-            respond.ServiceUnavailable(
-              definitions.ErrorResponse(s"Onboarding snapshot $id is still being exported")
+          case None => notFound
+          case Some(SnapshotState.Queued(queuedAt)) =>
+            respond.Accepted(Pending(Pending.Status.Queued, utc(queuedAt)))
+          case Some(SnapshotState.Exporting(queuedAt, startedAt)) =>
+            respond.Accepted(
+              Pending(Pending.Status.Exporting, utc(queuedAt), Some(utc(startedAt)))
             )
+          case Some(SnapshotState.Failed(reason)) => gone(reason)
           case Some(SnapshotState.Ready(file)) =>
             try
               respond.OK(
@@ -949,7 +959,13 @@ object HttpSvPublicHandler {
                   FileIO.fromPath(file),
                 )
               )
-            catch { case _: NoSuchFileException => notFound }
+            catch {
+              case _: NoSuchFileException =>
+                snapshotService.lookup(id) match {
+                  case Some(SnapshotState.Failed(reason)) => gone(reason)
+                  case _ => notFound
+                }
+            }
         }
       }
     }
