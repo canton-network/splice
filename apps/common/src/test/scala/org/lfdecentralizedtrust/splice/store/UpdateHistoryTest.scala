@@ -28,6 +28,7 @@ import com.daml.ledger.javaapi.data.Transaction
 import java.time.{Instant, LocalDate, ZoneOffset}
 import java.util.Collections
 import scala.concurrent.Future
+import scala.util.Try
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -857,6 +858,7 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           )
           _ <- create(domain1, validContractId(3), validOffset(3), party1, store2, time(4))
           _ <- moveToLegacyTables(store1.historyId, time(4))
+          _ <- forgetLastLegacyRecordTime(store1.historyId)
           cutStore = mkStore(party1, migration2, participant1)
           _ <- storage
             .update(
@@ -871,6 +873,44 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           cutStore.lastLegacyRecordTime shouldBe Some(time(3))
           reopenedStore.lastLegacyRecordTime shouldBe Some(time(3))
         }
+      }
+
+      "do not recompute for a history without legacy updates" in {
+        val store = mkStore(party1, migration1, participant1)
+        for {
+          _ <- initStore(store)
+          _ <- create(domain1, validContractId(1), validOffset(1), party1, store, time(1))
+          // if it was recomputed, lastLegacyRecordTime would be time(2)
+          _ <- moveToLegacyTables(store.historyId, time(2))
+          reopenedStore = mkStore(party1, migration1, participant1)
+        } yield {
+          store.lastLegacyRecordTime shouldBe None
+          reopenedStore.lastLegacyRecordTime shouldBe None
+        }
+      }
+
+      "be None when the legacy tables do not exist" in {
+        val legacyTables = Seq(
+          "update_history_transactions_legacy",
+          "update_history_assignments_legacy",
+          "update_history_unassignments_legacy",
+        )
+        def renameLegacyTables(from: String => String, to: String => String) =
+          MonadUtil.sequentialTraverse(legacyTables) { table =>
+            storage.underlying
+              .update(
+                sqlu"alter table #${from(table)} rename to #${to(table)}",
+                "renameLegacyTable",
+              )
+              .failOnShutdown
+          }
+        val hidden = (table: String) => s"${table}_hidden"
+        for {
+          _ <- renameLegacyTables(identity, hidden)
+          storeAttempt = Try(mkStore(party1, migration1, participant1))
+          _ <- renameLegacyTables(hidden, identity)
+          store <- Future.fromTry(storeAttempt)
+        } yield store.lastLegacyRecordTime shouldBe None
       }
 
       "fail store creation when the recorded value cannot be decoded" in {

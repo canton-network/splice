@@ -300,6 +300,9 @@ abstract class UpdateHistoryTestBase
       .futureValue
   }
 
+  protected def forgetLastLegacyRecordTime(historyId: Long): Future[Unit] =
+    mkKeyValueStore().deleteKey(UpdateHistory.lastLegacyRecordTimeKey(historyId))
+
   protected def moveToLegacyTables(
       historyId: Long,
       recordTimeBefore: CantonTimestamp,

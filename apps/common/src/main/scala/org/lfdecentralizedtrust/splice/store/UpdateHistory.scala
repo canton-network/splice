@@ -2538,7 +2538,7 @@ object UpdateHistory {
       ec: ExecutionContext,
       closeContext: CloseContext,
   ): Future[Option[CantonTimestamp]] = {
-    val kvKey = s"update_history_last_legacy_record_time_$historyId"
+    val kvKey = lastLegacyRecordTimeKey(historyId)
     for {
       stored <- keyValueStore
         .getValue[Option[CantonTimestamp]](kvKey)
@@ -2564,6 +2564,9 @@ object UpdateHistory {
       }
     } yield lastLegacyRecordTime
   }
+
+  def lastLegacyRecordTimeKey(historyId: Long): String =
+    s"update_history_last_legacy_record_time_$historyId"
 
   private def computeLastLegacyRecordTime(
       storage: DbStorage,
