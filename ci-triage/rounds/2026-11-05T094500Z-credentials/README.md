@@ -45,6 +45,10 @@ Groups triaged in background forks; state: open, presented, handed out, ran, ski
 | resint | 11189 11191 | main resource-intensive (0), 11-04 14:27 and 17:52 | open |
 | wc7 | 11193 11195 | main wall-clock-time (7), 11-04 21:43 and 22:40 | open |
 | fe | 11186 11187 11192 | main frontend-wall-clock-time (2), (0), (1) on 11-04; 11192 Splitwell settle debts | open |
-| burst | 11207 11208 11211 11212 | release-line runs 08:19-08:32, not credentials (CommandFailure, 2x sbt 40 min timeout, BFT orderer DB) | open |
+| burst | 11207 11208 11211 11212 | release-line runs 08:19-08:32, not credentials (CommandFailure, 2x sbt 40 min timeout, BFT orderer DB) | ran 2026-11-05: 11208 11212 dup 10358; 11207 (backport #7909), 11211 (ignore pattern) Triaged |
 | singles | 11188 11182 | main app-upgrade (0) 11-04 14:11; docker-canton-simtime (0) 11-04 | open |
 | needs-log | 11194 11196 11179 | CircleCI monitor_sv_catchup_test; cni cluster_lock_reaper, auth0_user_cleanup | log requested |
+
+User: duplicate one-liners inline (no file); commit body files before handing out commands (both now in the skills).
+Board export 2026-11-05 11:02: 30 Inbox, 19 Triaged, 7 In progress. Group `old`: 14 items from earlier rounds that
+only need their Status (and 4 a comment). Fork `old3`: 11164, 11172, 11175.

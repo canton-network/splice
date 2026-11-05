@@ -358,6 +358,9 @@ State as recorded in the family section, not rechecked against the tracker on 20
   npm/Maven dependencies, daml/dars.lock): 10681/10682 (#7989 scan.yaml), 10684/10685 (#7995 npm), 10697 (#8003
   dars.lock), #7969 wall-clock (0), 10727 (#8007 Maven). Fix in CI:
   a fallback restore key without the dependencies hash, or Test/compile outside the timed step.
+  Release-line runs never hit the classes cache (`Cache not found ... classes-10 branch:release-line-...` also on
+  passing runs), so every release-line shard compiles (8-13 min) inside the 40 min budget: 11208, 11212 (2026-11-05,
+  five runs at once, compile 12.5 min).
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
   splice commit. 10683, 10688, likely 10689. Fixed by the #8015 revert.
