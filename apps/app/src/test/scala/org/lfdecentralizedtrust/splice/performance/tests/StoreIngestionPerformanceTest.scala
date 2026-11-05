@@ -25,7 +25,6 @@ final case class StoreIngestionPerfMetrics(
     totalTimeNs: BigDecimal,
     processCpuTimeNs: BigDecimal,
     peakHeapBytes: BigDecimal,
-    totalAppActivityRecords: Long = 0L,
 ) {
   def avgItemTimeNs: BigDecimal =
     if (totalItems > 0) totalTimeNs / totalItems else BigDecimal(0)

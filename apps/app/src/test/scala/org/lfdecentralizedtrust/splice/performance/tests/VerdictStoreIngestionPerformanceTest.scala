@@ -35,6 +35,11 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
+final case class VerdictIngestionPerfMetrics(
+    base: StoreIngestionPerfMetrics,
+    totalAppActivityRecords: Long,
+)
+
 class VerdictStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
@@ -130,75 +135,53 @@ class VerdictStoreIngestionPerformanceTest(
             "Expected table to be non-empty after ingestion, but no rows were inserted."
           )
         )
-        _ = writeIngestionMetrics(metrics, success = true, names = verdictStoreMetricNames)
+        _ = writeIngestionMetrics(metrics, success = true)
       } yield ()
     }
   }
 
-  private val verdictStoreMetricNames: IngestionMetricNames = IngestionMetricNames(
-    avgPrimaryTimeName = "avg_verdict_time_ns",
-    avgPrimaryTimeDesc = "Average nanoseconds per ingested verdict",
-    totalPrimaryName = "total_verdicts",
-    totalPrimaryDesc = "Total number of verdicts written to scan_verdict_store",
-    primaryRateName = "verdicts_per_sec",
-    primaryRateDesc = "Ingested verdicts per second",
-    totalSecondaryName = "total_transaction_views",
-    totalSecondaryDesc =
-      "Total number of transaction views written to scan_verdict_transaction_view_store",
-    secondaryRateName = "transaction_views_per_sec",
-    secondaryRateDesc = "Ingested transaction views per second",
-  )
-
-  private case class IngestionMetricNames(
-      avgPrimaryTimeName: String,
-      avgPrimaryTimeDesc: String,
-      totalPrimaryName: String,
-      totalPrimaryDesc: String,
-      primaryRateName: String,
-      primaryRateDesc: String,
-      totalSecondaryName: String,
-      totalSecondaryDesc: String,
-      secondaryRateName: String,
-      secondaryRateDesc: String,
-  )
-
   private def writeIngestionMetrics(
-      metrics: StoreIngestionPerfMetrics,
+      metrics: VerdictIngestionPerfMetrics,
       success: Boolean,
-      names: IngestionMetricNames,
   ): Unit = {
-    val extraMetrics = Seq(
-      StoreIngestionPerfMetrics.metric(
-        names.avgPrimaryTimeName,
-        names.avgPrimaryTimeDesc,
-        metrics.avgItemTimeNs,
+    import StoreIngestionPerfMetrics.metric
+    val extra = Seq(
+      metric(
+        "total_verdicts",
+        "Total number of verdicts ingested",
+        BigDecimal(metrics.base.totalItems),
       ),
-      StoreIngestionPerfMetrics.metric(
-        names.totalPrimaryName,
-        names.totalPrimaryDesc,
-        BigDecimal(metrics.totalItems),
+      metric(
+        "verdicts_per_sec",
+        "Ingested verdicts per second",
+        metrics.base.updatesPerSec,
       ),
-      StoreIngestionPerfMetrics.metric(
-        names.primaryRateName,
-        names.primaryRateDesc,
-        metrics.updatesPerSec,
+      metric(
+        "total_transaction_views",
+        "Total number of transaction views ingested across all verdicts",
+        BigDecimal(metrics.base.totalEvents),
       ),
-      StoreIngestionPerfMetrics.metric(
-        names.totalSecondaryName,
-        names.totalSecondaryDesc,
-        BigDecimal(metrics.totalEvents),
+      metric(
+        "transaction_views_per_sec",
+        "Ingested transaction views per second",
+        metrics.base.eventsPerSec,
       ),
-      StoreIngestionPerfMetrics.metric(
-        names.secondaryRateName,
-        names.secondaryRateDesc,
-        metrics.eventsPerSec,
+      metric(
+        "total_app_activity_records",
+        "Total number of app activity records ingested alongside verdicts",
+        BigDecimal(metrics.totalAppActivityRecords),
+      ),
+      metric(
+        "app_activity_records_per_sec",
+        "Ingested app activity records per second",
+        metrics.base.ratePerSec(metrics.totalAppActivityRecords),
       ),
     )
     writeMetricsFile(
       StoreIngestionPerfMetrics.toMetricsJson(
-        metrics,
+        metrics.base,
         success,
-        extraMetrics = extraMetrics,
+        extra,
         includeUpdateCounts = false,
       ),
       StoreIngestionPerfMetrics.MetricsDir,
@@ -231,7 +214,7 @@ class VerdictStoreIngestionPerformanceTest(
   private def ingestWithMetrics(
       store: DbScanVerdictStore,
       verdicts: Seq[LoadedVerdict],
-  )(implicit tc: TraceContext): Future[StoreIngestionPerfMetrics] = {
+  )(implicit tc: TraceContext): Future[VerdictIngestionPerfMetrics] = {
     var totalTimeNs = BigDecimal(0)
     var totalItems = 0L
     var totalEvents = 0L
@@ -313,14 +296,16 @@ class VerdictStoreIngestionPerformanceTest(
             f"transaction-views=${ratePerSec(totalTransactionViews)}%.2f, " +
             f"app-activity-records=${ratePerSec(totalAppActivityRecords)}%.2f"
         )
-        StoreIngestionPerfMetrics(
-          totalItems = totalItems,
-          totalEvents = totalEvents,
-          totalBatches = totalBatches,
-          totalTimeNs = totalTimeNs,
-          processCpuTimeNs = totalCpuNs,
-          peakHeapBytes = maxHeapBytes,
-          totalAppActivityRecords = totalAppActivityRecords,
+        VerdictIngestionPerfMetrics(
+          StoreIngestionPerfMetrics(
+            totalItems = totalItems,
+            totalEvents = totalEvents,
+            totalBatches = totalBatches,
+            totalTimeNs = totalTimeNs,
+            processCpuTimeNs = totalCpuNs,
+            peakHeapBytes = maxHeapBytes,
+          ),
+          totalAppActivityRecords,
         )
       }
   }
