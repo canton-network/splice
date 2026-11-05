@@ -17,8 +17,7 @@ assignee (that person; the fix agent only for the user's own PRs). Both agents r
 sandbox and checkout: the fix agent needs the packets and the scripts, and the user fetches both kinds of branches
 from one remote. The fix agent changes code only in fix worktrees; on the triage branch it touches only a packet
 whose cause changed. Each agent commits only its own paths (`git add <paths> && git commit -s -m '...' -- <paths>`,
-never `-a`); on `index.lock` errors wait and retry. Run one sbt build at a time (16 GB: the static checks alone come
-close), so the triage agent does not compile while a fix is checked.
+never `-a`); on `index.lock` errors wait and retry. Only the fix agent runs sbt.
 
 ref = a cn-test-failures issue number.
 
@@ -68,6 +67,22 @@ The board is project 48 (`DACH-NY/projects/48`). Its `Status` field:
 - `In progress`: a person is assigned and working on it.
 - `Infrequent / no repro`: deliberately ignored, rare or not reproducible.
 - `Closed`: set automatically when the issue is closed; never set it by hand.
+
+## Priority
+
+Both agents work in priority order: the triage agent orders its queue by it, the fix agent its candidates. It takes
+judgement; the rules:
+1. Hard broken before frequent flakes before rare flakes and one-offs.
+2. At the same level, deployment failures before integration test failures.
+3. Judge frequency against how often the job runs, not by the raw count. Cluster deployments and nightly workflows
+   run once a day (some a few times), so two failures in a row mean no passing run for two days: treat that as hard
+   broken and urgent until proven otherwise. Integration test shards run several times a day on main and on every
+   PR, so one failure a day is a frequent flake, not hard broken; hard broken there means the same failure on
+   (nearly) every run since a commit.
+Count failures as the issue plus its duplicates, open and closed, over the last week (search closed issues too:
+`gh api -X GET search/issues -f q='repo:DACH-NY/cn-test-failures is:issue "<job or test>" created:>=<date>'`). Count
+runs from the workflow's history: GHA runs of the workflow (recipe 1), CircleCI via `deployment_runs.py`. Say in
+one line per item why it has its rank.
 
 ## Access
 
@@ -124,8 +139,8 @@ is missing or newer than the export.
 - Commits: one subject line plus `-s`. `[skip ci]` on the triage branch (never on a PR branch: it makes the PR
   unmergeable), `[ci]` on fix branches, `[static]` for lint-only.
 - The triage branch carries only `ci-triage/`. Never commit memory files or CLAUDE.md files outside `ci-triage/`.
-- Do not run sbt compiles or start Canton unless asked; triage works from the run's logs and artifacts. Exception:
-  every fix branch passes the CI static checks locally before it is handed over (ci-triage-fix step 3), never skipped.
+- Triage never runs sbt or Canton: it works from the run's logs and artifacts. The fix agent runs the CI static checks
+  on every fix branch before it is handed over (ci-triage-fix step 3), never skipped.
 - Artifacts the sandbox downloads go to `log/<ref>/` (gitignored), with `TMPDIR` under `log/` too; keep `.clog.gz`
   compressed and stream with `zcat`. Never pipe a large `zcat` into `sort` (it spills to `/tmp`); count with `awk`.
   Never put tokens (e.g. a contents `download_url`) into files.

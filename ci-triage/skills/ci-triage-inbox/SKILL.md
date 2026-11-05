@@ -19,12 +19,18 @@ One per item or group; an action may be several commands.
 
 | Action | When | Commands |
 |---|---|---|
-| root cause | mechanism established | comment, retitle while the title starts with `GHA Run` or `Pipeline`, `set_status.py Inbox Triaged`; add `--add-assignee` when the fix is not ours to write (infra, Canton, a component owner) |
+| root cause | mechanism established | comment, retitle while the title starts with `GHA Run` or `Pipeline`, `set_status.py Inbox Triaged`; `--add-assignee` when there are one or two clear candidates (below) |
 | duplicate | same failure as a parent, confirming grep done (ci-triage step 3) | `close_duplicates.py <parent> <refs>`; a recurrence comment on the parent only when it has neither an assignee nor an owner discussion |
 | already fixed | the fix is on main (`git merge-base --is-ancestor`) and the run predates it | comment, close as completed |
 | one-off | infra or GitHub incident that recovered, or a first hit without a pattern | comment, `set_status.py Inbox 'Infrequent / no repro'` |
 | log request | the evidence is only where no method reaches (CircleCI always) | the exact job and step to save to `export/<ref>/`; the item stays in Inbox until the log is there |
 | question | the job mapping is ambiguous, or deciding needs something only the user knows | the question; the item stays in Inbox |
+
+Assignee: suggest one (or two) only when the evidence points at a person: the PR that introduced the failure (the
+first failing sha, a bisect over the runs, the commit that changed the failing code), the author of the code or test
+the fix touches when git blame shows one clear owner, or the owner of the component when the fix is outside splice
+(infra, Canton). Name the evidence next to the suggestion. Otherwise leave it unassigned: the issue then goes to the
+fix agent (Triaged without assignee).
 
 Without a root cause after a reasonable effort (about 30 minutes of agent work per group), say what was found and
 what would decide it, and suggest root cause with an owner (recurring) or one-off (first hit). Do not hold an item
@@ -52,8 +58,9 @@ back because the analysis is unfinished.
 - Same run (per-job issues of one workflow run): one group. Same sha, same test or same flagged line across runs:
   one group. Grep the signature against `known-families.md` and `evidence/INDEX.tsv` and note the suspected family.
 - Resolve each issue's job id (ci-triage step 1); an ambiguous mapping becomes a question.
-- Order: hard broken (fails every run), cluster deployments, frequent flakes, the rest.
-- Show the queue once, one line per group (refs, signature, suspected family), and write it into the round README
+- Order by priority (`ci-triage/CLAUDE.md`, Priority): count the duplicates and the job's runs for every group, and
+  give the rank and its reason in the queue line.
+- Show the queue once, one line per group (refs, signature, suspected family, rank and why), and write it into the round README
   with a state column (open, presented, handed out, ran, skipped).
 
 ## 3. Triage in parallel

@@ -19,8 +19,10 @@ packets); this skill turns it into a PR, together with the user.
   triaged by hand), and the packet when `evidence/INDEX.tsv` has the ref. Classify: test (test code or test
   config), backport (a fix on main missing on a release line), production (splice code, Daml, deployment config),
   not ours (infra, Canton, an external owner: suggest assigning instead), unclear (no fix stated).
-- Show one line per candidate: ref, title, kind, the fix in a few words, how often it failed (duplicates closed into
-  it). Order: hard broken, frequent, the rest. The user picks; the rest of this skill is one issue at a time.
+- Show one line per candidate, in priority order (`ci-triage/CLAUDE.md`, Priority): ref, title, kind, the fix in a
+  few words, failures in the last week against the job's runs, and the rank with its reason. Recount: an issue
+  triaged as a rare flake may have gathered duplicates since. The user picks; the rest of this skill is one issue at
+  a time.
 
 ## 2. Propose
 

@@ -75,8 +75,9 @@ edits to shared files.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
    packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
 9. Fix. Decide where the fix belongs and state it in the packet's Verdict and in the comment, precisely enough to
-   implement without the chat: file and change (for a backport the PR and the release line), and a suggested owner
-   (git blame of the lines it touches; for infra or Canton the component owner). No branch here: the fix agent
+   implement without the chat: file and change (for a backport the PR and the release line), and a suggested assignee only
+   when the evidence points at one or two people: the PR that introduced the failure, the one clear owner git blame
+   shows for the code the fix touches, or the component owner for infra or Canton (ci-triage-inbox, Assignee). No branch here: the fix agent
    (`ci-triage-fix`) picks the issue up from Status Triaged and agrees the change with the user first.
 10. Commit on the triage branch with `[skip ci]` and `-s`. Report: one line per ref with the verdict, then the
     action from step 8 with the full comment bodies.
