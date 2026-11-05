@@ -407,8 +407,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId5") {
       val event = fetchEvent(updateId5, "updateId5")
       assertTrafficSummary(event, "updateId5")
-      // See updateId3. (Alice's own transfers in round 9 are separate updates
-      // and contribute to assertRewardCalcs below.)
+      // See updateId3. updateId5 is the venue's settlement. Alice's own
+      // allocation submissions are separate updates that this block
+      // doesn't fetch: their app activity contributes to assertRewardCalcs,
+      // and they generate no asset activity because Alice is FAK_Basic
+      // through round 9.
       assertAppActivity(event, "updateId5", Set(venueParty), expectedRound = 9)
     }
 
