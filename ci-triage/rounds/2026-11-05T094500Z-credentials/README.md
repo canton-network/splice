@@ -54,3 +54,4 @@ Board export 2026-11-05 11:02: 30 Inbox, 19 Triaged, 7 In progress. Group `old`:
 only need their Status (and 4 a comment). Fork `old3`: 11164, 11172, 11175.
 
 User: present one item at a time, most important first, prefer items with many duplicates. No family letters in issue comments.
+- 11182 (scan false ERROR after BFT success): ran 2026-11-05, Triaged, assigned isegall-da.
