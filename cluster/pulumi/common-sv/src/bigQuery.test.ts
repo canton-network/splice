@@ -118,20 +118,21 @@ describe('configureScanBigQuery', () => {
     });
   });
 
-  test.each(['V068__app_activity_record_meta.sql', 'V074__string_interning.sql', 'V082__partition_update_history.sql'] as const)(
-    'both publication and slot commands wait for %s',
-    async migration => {
-      const resources = await installBigQuery(true, true, migration);
-      const commands = resources.filter(command.local.Command.isInstance);
-      const scripts = await Promise.all(
-        commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
-      );
-      expect(scripts).toHaveLength(4);
-      for (const script of scripts) {
-        expect(script).toContain(`--flyway-migration-to-wait-for="${migration}"`);
-      }
+  test.each([
+    'V068__app_activity_record_meta.sql',
+    'V074__string_interning.sql',
+    'V082__partition_update_history.sql',
+  ] as const)('both publication and slot commands wait for %s', async migration => {
+    const resources = await installBigQuery(true, true, migration);
+    const commands = resources.filter(command.local.Command.isInstance);
+    const scripts = await Promise.all(
+      commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
+    );
+    expect(scripts).toHaveLength(4);
+    for (const script of scripts) {
+      expect(script).toContain(`--flyway-migration-to-wait-for="${migration}"`);
     }
-  );
+  });
 
   test.each([
     ['V068__app_activity_record_meta.sql', false],
@@ -212,7 +213,7 @@ describe('flywayMigrationToWaitFor', () => {
   test.each([
     'V077__verdict_add_round_number.sql',
     'V074__string_interning',
-    'V082__partition_update_history.sql',
+    'V081__partition_update_history.sql',
   ])('rejects %s', async migration => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
