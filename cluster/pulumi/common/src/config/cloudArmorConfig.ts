@@ -27,6 +27,10 @@ export const WafRuleGroupSchema = z.object({
   name: z.string().min(1),
   description: z.string(),
   signatures: z.array(WafSignatureSchema).min(1),
+  // Per-node host prefix regexes whose traffic this group skips, on top of
+  // wafRules.excludedHostPrefixes. Expanded to `<regex>.<node>.<cluster dns name>` like
+  // the publicEndpoints hostPrefixRegex
+  excludedHostPrefixes: z.array(z.string().min(1)).default([]),
 });
 
 export const WafRuleGroupsSchema = z

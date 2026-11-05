@@ -520,3 +520,22 @@ cloudArmor:
   enabled: true
   logging:
     enabled: true
+  wafRules:
+    groups:
+      - name: waf-sqli-sessionfixation-generic
+        description: 'WAF: SQL injection, session fixation and generic attacks'
+        signatures:
+          - name: sqli-v422-stable
+            sensitivity: 1
+            optOutRuleIds: ['942100', '942190']
+          - name: sessionfixation-v422-stable
+            sensitivity: 1
+          - name: generic-v422-stable
+            optOutRuleIds: ['934150']
+        # these signatures inspect the request body, which is binary protobuf on gRPC hosts
+        excludedHostPrefixes: ['sequencer-[0-9]+']
+      - name: waf-protocolattack
+        description: 'WAF: protocol attacks'
+        signatures:
+          - name: protocolattack-v422-stable
+            sensitivity: 1

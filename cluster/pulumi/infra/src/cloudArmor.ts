@@ -23,6 +23,7 @@ import {
   ipWhitelistRuleChunks,
   matchExpression,
   seededPriorityOffset,
+  wafExcludedHostsCondition,
   wafRuleExpression,
 } from './cloudArmorRules';
 import { loadIPRanges } from './whitelisting/ipRanges';
@@ -159,13 +160,6 @@ function addWafRules(
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
-  const excludedHostsExpr =
-    excludedHostPrefixes.length > 0
-      ? hostCondition('waf-excluded-hosts', CLUSTER_HOSTNAME, {
-          hostPrefixRegex: excludedHostPrefixes.map(p => p.toLowerCase()).join('|'),
-          perNodeHost: false,
-        })
-      : undefined;
   const firstOffset = seededPriorityOffset(
     groups.map(g => g.name),
     CLOUD_ARMOR_RULE_GROUP_SIZE
@@ -183,7 +177,10 @@ function addWafRules(
         action: 'deny(502)',
         match: {
           expr: {
-            expression: wafRuleExpression(group, excludedHostsExpr),
+            expression: wafRuleExpression(
+              group,
+              wafExcludedHostsCondition(group, excludedHostPrefixes, CLUSTER_HOSTNAME)
+            ),
           },
         },
       },
