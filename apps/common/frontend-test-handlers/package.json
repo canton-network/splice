@@ -7,7 +7,7 @@
     ".": "./lib/index.js"
   },
   "devDependencies": {
-    "@daml/types": "^3.6.2",
+    "@daml/types": "^3.7.0",
     "@trivago/prettier-plugin-sort-imports": "6.0.2",
     "@types/node": "26.6.6",
     "eslint": "^10.13.0",
