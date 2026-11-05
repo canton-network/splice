@@ -6,11 +6,11 @@ on:
       - 'release-line-**'
 
 permissions:
-  id-token: write # Required for GCP Workload Identity for failure notifications
+  id-token: write # Required for GCP Workload Identity for failure notifications # zizmor: ignore[excessive-permissions]
   contents: read
   pull-requests: read # Required for the static tests
   issues: read # Required for the static tests
-  actions: write # Required for the cancel_if_not_opt_in job
+  actions: write # Required for the cancel_if_not_opt_in job # zizmor: ignore[excessive-permissions]
 
 jobs:
   ci:

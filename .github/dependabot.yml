@@ -15,10 +15,10 @@ updates:
     commit-message:
       prefix: "[ci] "
     cooldown:
-      default-days: 5
+      default-days: 7
       semver-major-days: 30
       semver-minor-days: 7
-      semver-patch-days: 3
+      semver-patch-days: 7
     # minor and patch version upgrades get pulled into a single PR
     # major versions create PRs one by one (for easier resolution)
     groups: 
@@ -47,10 +47,10 @@ updates:
     labels:
       - "static"
     cooldown:
-      default-days: 5
+      default-days: 7
       semver-major-days: 30
       semver-minor-days: 7
-      semver-patch-days: 3
+      semver-patch-days: 7
     # minor and patch version upgrades get pulled into a single PR
     # major versions create PRs one by one (for easier resolution)
     groups:
@@ -79,10 +79,10 @@ updates:
     labels:
       - "static"
     cooldown:
-      default-days: 5
+      default-days: 7
       semver-major-days: 30
       semver-minor-days: 7
-      semver-patch-days: 3
+      semver-patch-days: 7
     # minor and patch version upgrades get pulled into a single PR
     # major versions create PRs one by one (for easier resolution)
     groups:
@@ -109,10 +109,10 @@ updates:
       - "pawelperek-da"
       - "martinflorian-da"
     cooldown:
-      default-days: 5
+      default-days: 7
       semver-major-days: 30
       semver-minor-days: 7
-      semver-patch-days: 3
+      semver-patch-days: 7
     commit-message:
       prefix: "[ci] "
     # minor and patch version upgrades get pulled into a single PR
