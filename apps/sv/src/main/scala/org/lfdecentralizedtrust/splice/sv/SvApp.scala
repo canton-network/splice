@@ -266,7 +266,7 @@ class SvApp(
       // -------------------------------------------------------------------------------
       case (
         decentralizedSynchronizer,
-        _,
+        dsoPartyHosting,
         svStore,
         svAutomation,
         dsoStore,
@@ -462,6 +462,7 @@ class SvApp(
           participantAdminConnection,
           ledgerClient,
           retryProvider,
+          dsoPartyHosting,
           loggerFactory,
         ),
         svAutomation.onboardingSnapshotService,
