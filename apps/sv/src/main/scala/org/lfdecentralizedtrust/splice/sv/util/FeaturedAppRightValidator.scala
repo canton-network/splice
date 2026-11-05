@@ -41,15 +41,7 @@ object FeaturedAppRightValidator {
             val providerPartyId = PartyId.tryFromProtoPrimitive(value.provider)
             val proposed =
               SvUtil.optionalJavaListToSeq(value.opsParties).map(PartyId.tryFromProtoPrimitive)
-            store.lookupFeaturedAppRight(providerPartyId).flatMap {
-              case Some(existing) =>
-                Future.successful(
-                  Left(
-                    s"provider already has a FeaturedAppRight with contractId: ${existing.contractId.contractId}"
-                  )
-                )
-              case None => checkOpsParties(store, providerPartyId, proposed, None)
-            }
+            checkOpsParties(store, providerPartyId, proposed, None)
 
           case u: SRARC_CreateFeaturedAppConfigUpdateInstruction =>
             val value = u.dsoRules_CreateFeaturedAppConfigUpdateInstructionValue
@@ -120,7 +112,7 @@ object FeaturedAppRightValidator {
     else {
       val appParties = (provider +: proposedOpsParties).distinct
       val querySet = appParties.toSet
-      store.findFeaturedAppRightsForParties(appParties).map { rights =>
+      store.listFeaturedAppRightsForParties(appParties).map { rights =>
         // The DB returns every right overlapping the query set; drop the right being amended, then
         // map each remaining overlap back to the proposed party and the right it collides with.
         val conflicts = rights

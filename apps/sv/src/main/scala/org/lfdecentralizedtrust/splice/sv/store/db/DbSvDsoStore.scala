@@ -2497,7 +2497,7 @@ class DbSvDsoStore private (
     } yield result.map(contractFromRow(FeaturedAppActivityMarker.COMPANION)(_))
   }
 
-  override def findFeaturedAppRightsForParties(
+  override def listFeaturedAppRightsForParties(
       appParties: Seq[PartyId],
       limit: Limit,
   )(implicit

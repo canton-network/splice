@@ -1249,7 +1249,7 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
-  def findFeaturedAppRightsForParties(
+  def listFeaturedAppRightsForParties(
       appParties: Seq[PartyId],
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]]
