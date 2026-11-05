@@ -64,14 +64,10 @@ object StoreIngestionPerfMetrics {
   )
 
   /** The common ingestion metrics, followed by any test-specific `extra` metrics.
-    * The JSON structure keeps the Python side read-only, so new metrics can be added without changing the script.
-    *
     * @param ingestionMetrics    raw measurements of the ingestion run
     * @param extraMetrics        test-specific metrics appended after the common ones
     * @param includeUpdateCounts whether to emit the update/event counts (`total_items`, `updates_per_sec`,
-    *                            `total_events`, `events_per_sec`). The other common metrics are always emitted.
-    *                            Tests that don't ingest updates (e.g. verdicts) set this to `false` and report
-    *                            their own counts via `extraMetrics`.
+    *                            `total_events`, `events_per_sec`)
     */
   def toMetricsJson(
       ingestionMetrics: StoreIngestionPerfMetrics,
