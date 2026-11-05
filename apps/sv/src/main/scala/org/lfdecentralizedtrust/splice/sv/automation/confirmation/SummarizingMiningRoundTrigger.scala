@@ -284,6 +284,13 @@ object SummarizingMiningRoundTrigger {
       totals: definitions.RewardAccountingActivityTotalsOk
   ): AppRewardCouponsSum =
     AppRewardCouponsSum(
+      // Note that because there are separate issuance ratios for
+      // featured app activity and featured asset activity, we must
+      // report their totals separately.
+      //
+      // We accept that explorers that have not upgraded to also read the 
+      // asset activity totals may show fewer app rewards being minted 
+      // in total.
       featured = BigDecimal(totals.totalAppRewardFromAppActivity),
       unfeatured = BigDecimal(0),
     )
