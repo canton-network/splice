@@ -7,6 +7,7 @@ import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.time.WallClock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.Config
@@ -27,6 +28,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, 
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.StoreTestBase.mockLedgerConnection
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
@@ -72,6 +74,7 @@ class VerdictStoreIngestionPerformanceTest(
 
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
     implicit val initTc: TraceContext = TraceContext.empty
+    val clock = new WallClock(timeouts, loggerFactory)
     UpdateHistory
       .create(
         storage = storage,
@@ -91,8 +94,14 @@ class VerdictStoreIngestionPerformanceTest(
         loggerFactory = loggerFactory,
         enableImportUpdateBackfill = false,
         metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+        clock = clock,
       )
-      .flatMap(updateHistory => updateHistory.ingestionSink.initialize().map(_ => updateHistory))
+      .flatMap(updateHistory =>
+        // we don't actually insert into updateHistory in this test, so the mock doesn't matter
+        updateHistory.ingestionSink
+          .initialize(mockLedgerConnection(clock.now))
+          .map(_ => updateHistory)
+      )
       .map { updateHistory =>
         val appActivityStore = new DbAppActivityRecordStore(
           storage,
