@@ -1,0 +1,29 @@
+# Round 2026-11-05T094500Z-credentials
+
+Source: live issue list (gh api, open issues since 2026-11-04), no board export; the user reports 51 Inbox items.
+User: secrets were rotated, Pulumi secret config changed (splice#8246); report secret problems first; clean inbox.
+
+## CI credentials (parent 11217)
+
+Runs 41993608457 (0.9.x), 41993637533 (0.10.0), 41993663804 (0.9.4), 41993685927 (0.9.3), 41995289384 (main), pushed
+08:19-08:32. Auth0 client credentials, GCP data export SA key and GCP KMS credentials (all `_V2`, read since
+splice#8248, merged 11-04 19:04) rejected from about 08:55 UTC. First errors: KMS 08:55:34, GCP 08:58:12, Auth0
+09:02:23. Main runs 19:05 to 00:16 passed docker-compose (1), frontend (1)/(2), key-download (0) with `_V2`.
+Job logs and two artifacts in `log/inbox-2026-11-05/` (sandbox).
+
+| Ref | Run | Job | Evidence in its job log |
+|---|---|---|---|
+| 11217 (parent) | main | docker-compose (1) | auth0 access_denied |
+| 11198 11199 11201 11215 | 0.10.0, 0.9.x, 0.9.4, 0.9.3 | docker-compose (1) | auth0 access_denied |
+| 11213 11216 | main | frontend-wall-clock-time (2), (1) | auth0 401 |
+| 11197 11214 | 0.10.0, main | key-download (0) | Invalid JWT Signature (backup dumps) |
+| 11200 11202 11205 11206 11210 | 0.9.4, 0.10.0, 0.9.x, 0.9.3, main | wall-clock-time (1)/(0) | Invalid JWT Signature (topology snapshot) |
+| 11203 11204 11209 | 0.9.4, 0.9.x, 0.9.3 | wall-clock-time (9) | Invalid JWT Signature (backup dumps) |
+| 11218 | main | wall-clock-time (9) | interrupted in ParticipantKmsIdentitiesIntegrationTest; artifact: KMS UNAUTHENTICATED 08:55:34 |
+
+Not credentials, same runs, still to triage: 11207 (0.9.4 wall-clock (8), ValidatorReonboardingWithPartiesToMigrate
+CommandFailure), 11208 (0.9.x wall-clock (3), sbt 40 min timeout), 11211 (0.9.4 wall-clock (0), checkErrors: BFT
+orderer can't connect to database 08:55:08), 11212 (0.9.4 wall-clock (4), sbt 40 min timeout).
+
+Possibly credential-related, logs needed: 11194 (CircleCI monitor_sv_catchup_test on cni #7949), 11179
+(auth0_user_cleanup), 11196 (cluster_lock_reaper).
