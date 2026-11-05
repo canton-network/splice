@@ -116,6 +116,10 @@ function backup_cloudsql() {
     if [ $backup_exit_code -ne 0 ]; then
       if [[ $output == *"another operation was already in progress"* ]]; then
         _error_msg "Backup failed due to another operation in progress, retrying: $output"
+      elif [[ $output == *"is taking longer than expected. You can continue waiting for the operation by running"* ]]; then
+        _info "Backup is taking longer than expected, awaiting operation completion..."
+        op_id=$(echo "$output" | grep -oE 'operations/[a-f0-9-]+' | cut -d/ -f2)
+        gcloud beta sql operations wait "$op_id" --timeout=3000
       else
         _error_msg "$output"
       fi
