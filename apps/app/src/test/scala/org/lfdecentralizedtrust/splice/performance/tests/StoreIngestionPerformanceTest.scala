@@ -8,6 +8,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TransactionTreeUpdate,
   TreeUpdateOrOffsetCheckpoint,
@@ -62,6 +63,8 @@ abstract class StoreIngestionPerformanceTest(
       loggerFactory,
       ingestionConfig,
     ) {
+
+  override type Store <: HasIngestionSink
 
   def run(): Future[Unit] = withStorage { storage =>
     TraceContext

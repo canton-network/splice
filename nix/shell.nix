@@ -46,7 +46,7 @@ let
     openjdk21
     pigz
     popeye
-    postgresql_14
+    postgresql_18
     pre-commit
     procps
     protobuf_25
@@ -118,6 +118,7 @@ let
     which
     xxd
     zip
+    zizmor
 
     # Package required to install daml studio
     yq-go
@@ -144,6 +145,7 @@ let
     shellcheck
     skopeo
     which
+    zizmor
   ] ++ linuxOnly;
 
 in pkgs.mkShell {

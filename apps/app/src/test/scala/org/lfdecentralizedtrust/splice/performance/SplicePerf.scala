@@ -112,6 +112,38 @@ object SplicePerfImpl {
       .orElse(
         Opts.subcommand(
           Command(
+            "download-scan-events",
+            "Downloads the events (verdicts, traffic summaries, updates) of the given migration from the provided SV (default DA SV-2 MainNet) for the given time window.",
+          )(
+            (
+              Opts
+                .option[String]("host", "Host URI of Scan. Default: DA SV-2's Scan on MainNet", "h")
+                .withDefault("https://scan.sv-2.global.canton.network.digitalasset.com"),
+              Opts.option[Int]("migration-id", "Migration ID to query the events for", "m"),
+              Opts
+                .option[String]("write-path", "Path to write the events to", "w")
+                .map(Paths.get(_)),
+              Opts
+                .option[String](
+                  "download-start-time",
+                  "The time from which to start downloading events (ISO-8601 format). Default: 1h ago",
+                  "s",
+                )
+                .map(Instant.parse)
+                .withDefault(Instant.now().minus(1, ChronoUnit.HOURS)),
+              Opts
+                .option[String]("duration", "Duration (Scala Duration notation). Default: 1h", "d")
+                .map(Duration.create)
+                .withDefault(Duration(1, TimeUnit.HOURS)),
+            ).mapN { (host, migrationId, writePath, startAt, duration) =>
+              run(new DownloadScanEvents(host, migrationId, writePath, startAt, duration))
+            }
+          )
+        )
+      )
+      .orElse(
+        Opts.subcommand(
+          Command(
             "run",
             "Runs the given test(s)",
           )(
