@@ -53,11 +53,11 @@ class VerdictStoreIngestionPerformanceTest(
 
   override type Store = DbScanVerdictStore
 
-  /** A verdict from the dump, with its optional traffic summary and app activity records.
+  /** A verdict from the event dump together with its optional traffic summary, app activity records
+    * and the round number resolved for the verdict row.
     *
-    * The dump only has a round when there are app activity records. For verdicts without one,
-    * `resolvedRound` reuses the last round seen. This keeps rounds from decreasing within a batch,
-    * which `insertVerdictsWithAppActivityRecords` requires.
+    * a round is only exposed via `app_activity_records`.
+    * when app_activity_records is missing, we use the last-seen round.
     */
   private case class LoadedVerdict(
       verdict: httpDefs.EventHistoryVerdict,
