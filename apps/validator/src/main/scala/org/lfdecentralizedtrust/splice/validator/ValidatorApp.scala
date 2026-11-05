@@ -733,6 +733,8 @@ class ValidatorApp(
             domainMigrationId,
             participantId,
             validatorTopupConfig,
+            internalStore,
+            config.maxAllowedOperatorBalance,
             config.walletSweep,
             config.autoAcceptTransfers,
             config.rewardSharingConfigByParty,

@@ -48,6 +48,7 @@ class UserWalletAutomationService(
     packageVersionSupport: PackageVersionSupport,
     override protected val loggerFactory: NamedLoggerFactory,
     validatorTopupConfigO: Option[ValidatorTopupConfig],
+    operatorBalanceMonitorO: Option[OperatorBalanceMonitor],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
     rewardSharingConfig: RewardSharingConfig,
@@ -131,6 +132,7 @@ class UserWalletAutomationService(
         treasury,
         scanConnection,
         validatorTopupConfigO,
+        operatorBalanceMonitorO,
         clock,
       )
     )
