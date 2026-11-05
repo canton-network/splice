@@ -2,7 +2,7 @@
   "custom": true,
   "id": "",
   "inputs": {
-    "backfillAll": {},
+    "backfillNone": {},
     "desiredState": "RUNNING",
     "destinationConfig": {
       "bigqueryDestinationConfig": {
