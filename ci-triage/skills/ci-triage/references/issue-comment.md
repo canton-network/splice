@@ -4,7 +4,11 @@ Reader: a senior engineer who knows splice and Canton but never opens the triage
 its own: no packet paths or other triage-branch references.
 
 Shape (Markdown, short paragraphs of one to three sentences; as short as the facts allow):
-1. Verdict in one line: what kind of failure, and whether splice needs a change.
+1. Verdict in one line: what kind of failure, and whether splice needs a change. State it as certain only when
+   every link from the trigger to the failure is shown in the log; otherwise say "likely" and name the unshown
+   link in one sentence. When the code has a guard against exactly this failure (a cleanup, a pause, a retry), the
+   verdict must say why the guard did not work; a cause that skips the guard is incomplete (11195: blamed the suite
+   that left vetted packages behind, missed that `withNoVettedPackages` skipped the disconnected participant).
 2. What failed, by plain job or test name (`docker-compose`, `key-download`, the test name), without run ids, shas,
    shard numbers or which duplicate belongs to which job: the issue and the linked duplicates show those.
 3. The decisive log lines verbatim in a fenced code block (two to six lines, timestamps kept, secrets and long JSON
