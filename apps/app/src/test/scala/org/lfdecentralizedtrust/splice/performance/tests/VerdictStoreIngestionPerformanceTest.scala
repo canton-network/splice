@@ -69,7 +69,6 @@ class VerdictStoreIngestionPerformanceTest(
   override protected val tablesToSanityCheck: Seq[String] =
     Seq("scan_verdict_store", "scan_verdict_transaction_view_store")
 
-  // Held so run() can initialize the underlying update-history schema.
   private var updateHistoryRef: Option[UpdateHistory] = None
 
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
@@ -136,8 +135,6 @@ class VerdictStoreIngestionPerformanceTest(
     }
   }
 
-  /** Verdict-store specific metric labels
-    */
   private val verdictStoreMetricNames: IngestionMetricNames = IngestionMetricNames(
     avgPrimaryTimeName = "avg_verdict_time_ns",
     avgPrimaryTimeDesc = "Average nanoseconds per ingested verdict",
@@ -152,9 +149,6 @@ class VerdictStoreIngestionPerformanceTest(
     secondaryRateDesc = "Ingested transaction views per second",
   )
 
-  /** Labels/descriptions for the store-specific "primary" (verdicts) and "secondary"
-    * (transaction views) counts emitted alongside the common ingestion metrics.
-    */
   private case class IngestionMetricNames(
       avgPrimaryTimeName: String,
       avgPrimaryTimeDesc: String,
@@ -168,10 +162,6 @@ class VerdictStoreIngestionPerformanceTest(
       secondaryRateDesc: String,
   )
 
-  /** A separate Python script pushes the metrics to Prometheus Pushgateway.
-    * We structure the JSON file so the Python side stays mostly read-only, enabling new metrics to
-    * be added to the JSON without changing the Python script.
-    */
   private def writeIngestionMetrics(
       metrics: StoreIngestionPerfMetrics,
       success: Boolean,
