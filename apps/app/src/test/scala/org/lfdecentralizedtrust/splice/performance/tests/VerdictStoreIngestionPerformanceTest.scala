@@ -35,9 +35,6 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Ingests verdicts, transaction views and app activity records downloaded from Scan's `/v0/events`,
-  * measuring the `insertVerdictsWithAppActivityRecords` write path.
-  */
 class VerdictStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
@@ -165,7 +162,7 @@ class VerdictStoreIngestionPerformanceTest(
           s"Failed to parse the events from $eventsDumpPath. It should have the structure of EventHistoryResponse."
         )
       )
-    // carrying the last-seen round forward yields a non-decreasing round sequence
+    // carrying the last-seen round forward gives a non-decreasing round sequence
     var lastRound: Option[Long] = None
     dump.events.toSeq.flatMap { item =>
       item.verdict.map { v =>
@@ -199,8 +196,7 @@ class VerdictStoreIngestionPerformanceTest(
       .runWith(Sink.foreachAsync(parallelism = 1) { case (batch, index) =>
         logger.info(s"Ingesting batch $index of ${batch.length} verdicts")
         val items = batch.map(lv => toVerdictRow(lv.verdict, lv.trafficSummary, lv.resolvedRound))
-        // App activity records, keyed by the verdict's record time (the store resolves the
-        // placeholder verdictRowId to the real row_id during insertion, exactly like production).
+        // App activity records, keyed by the verdict's record time
         val appActivityRecords = batch.flatMap { lv =>
           lv.appActivityRecords.map { aar =>
             parseTimestamp(lv.verdict.recordTime) -> DbAppActivityRecordStore.AppActivityRecordT(
@@ -212,15 +208,11 @@ class VerdictStoreIngestionPerformanceTest(
           }
         }
         val hasTrafficSummaries = batch.exists(_.trafficSummary.isDefined)
-        // Approximate the round boundaries production obtains via open-mining-round lookups:
-        // the earliest round seen in the batch, and no archival info from the dump.
         val firstActiveRoundO = appActivityRecords.map(_._2.roundNumber).minOption
         // prod passes the last archived round, which adds a per-batch meta-row update
         // the dump lacks it, so we approximate it to keep that update in the batch
         val lastArchivedRoundO = batch.flatMap(_.resolvedRound).maxOption.map(_ - 1)
-        // Count transaction views as the per-item "work" proxy.
         val batchEventCount = batch.map(_.verdict.transactionViews.views.size.toLong).sum
-        // One AppActivityRecordT == one row in app_activity_record_store.
         val batchAppActivityCount = appActivityRecords.size.toLong
         val wallBefore = System.nanoTime()
         val cpuBefore = getProcessCpuTimeNs
@@ -279,7 +271,6 @@ class VerdictStoreIngestionPerformanceTest(
       }
   }
 
-  /** Map a `/v0/events` verdict to the store's row + transaction views. */
   private def toVerdictRow(
       v: httpDefs.EventHistoryVerdict,
       trafficSummaryO: Option[httpDefs.EventHistoryTrafficSummary],
