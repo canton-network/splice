@@ -56,6 +56,9 @@ class SvOnboardingSnapshotServiceTest
     Files.write(file.resolve("block-deletion"), Array[Byte](1))
   }
 
+  private def unavailable(lookup: => Option[SnapshotState]) =
+    (the[StatusRuntimeException] thrownBy lookup).getStatus.getCode shouldBe Status.Code.UNAVAILABLE
+
   private def withService(
       config: Path => SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig(_)
   )(
@@ -90,7 +93,9 @@ class SvOnboardingSnapshotServiceTest
           .futureValue
 
         val id = prepare("sv1")
-        service.lookup(id) shouldBe Some(SnapshotState.Exporting)
+        eventually()(service.lookup(id) should matchPattern {
+          case Some(SnapshotState.Exporting(_, _)) =>
+        })
         prepare("sv1") shouldBe id
 
         exported.success(())
@@ -106,6 +111,32 @@ class SvOnboardingSnapshotServiceTest
         eventually()(exports.get() shouldBe 2)
     }
 
+    "report queued and running exports with the times from the service clock" in withService() {
+      (service, clock, _) =>
+        val first = Promise[Unit]()
+        val second = Promise[Unit]()
+        try {
+          val queuedAt = clock.now
+          val running = service.prepare(key("sv1"), writeSnapshot(first.future)).futureValue
+          eventually()(
+            service.lookup(running) shouldBe Some(SnapshotState.Exporting(queuedAt, queuedAt))
+          )
+
+          clock.advance(Duration.ofMinutes(1))
+          val waitingSince = clock.now
+          val waiting = service.prepare(key("sv2"), writeSnapshot(second.future)).futureValue
+          service.lookup(waiting) shouldBe Some(SnapshotState.Queued(waitingSince))
+
+          clock.advance(Duration.ofMinutes(1))
+          first.success(())
+          eventually()(
+            service.lookup(waiting) shouldBe Some(
+              SnapshotState.Exporting(waitingSince, clock.now)
+            )
+          )
+        } finally Seq(first, second).foreach(_.trySuccess(()))
+    }
+
     "start a new export after a failed one" in withService() { (service, _, _) =>
       val failedId =
         loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
@@ -116,12 +147,16 @@ class SvOnboardingSnapshotServiceTest
                 writeSnapshot(Future.failed(new RuntimeException("boom"))),
               )
               .futureValue
-            eventually()(service.lookup(id) shouldBe None)
+            eventually()(
+              service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
+            )
             id
           },
           forExactly(1, _)(_.warningMessage should include("failed")),
         )
-      eventually()(File(service.exportsDirectory).list.toList shouldBe empty)
+      (File(service.exportsDirectory) / failedId.value).list
+        .map(_.name)
+        .toList shouldBe List("failure.json")
 
       val id =
         service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
@@ -141,7 +176,12 @@ class SvOnboardingSnapshotServiceTest
       val replacement =
         service.prepare(snapshotKey, writeSnapshot(Future.unit)).futureValue
       replacement should not be id
+      loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
+        service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot file is missing")),
+        _.warningMessage should include(s"Onboarding snapshot $id is unusable"),
+      )
       service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot file is missing"))
+      Files.exists(file.resolveSibling("metadata.json")) shouldBe false
       eventually()(service.lookup(replacement) should matchPattern {
         case Some(SnapshotState.Ready(_)) =>
       })
@@ -150,34 +190,67 @@ class SvOnboardingSnapshotServiceTest
         .futureValue shouldBe replacement
     }
 
-    "log removal of a failed export's file only once" in withService() { (service, clock, _) =>
-      val failedId =
-        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+    "keep a failed export for the retention period and log its removal once" in withService() {
+      (service, clock, _) =>
+        val failed = SnapshotState.Failed("Snapshot export failed")
+        val failedId =
+          loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+            {
+              val id = service
+                .prepare(
+                  key("sv1"),
+                  writeSnapshot(Future.failed(new RuntimeException("export failed"))),
+                )
+                .futureValue
+              eventually()(service.lookup(id) shouldBe Some(failed))
+              id
+            },
+            forExactly(1, _)(_.warningMessage should include("Onboarding snapshot export")),
+          )
+        clock.advance(Duration.ofHours(24).minusSeconds(1))
+        service.removeExpired(clock.now).futureValue shouldBe 0
+        service.lookup(failedId) shouldBe Some(failed)
+
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
           {
-            val id = service
-              .prepare(
-                key("sv1"),
-                writeSnapshot(Future.failed(new RuntimeException("export failed"))),
-              )
-              .futureValue
-            eventually()(service.lookup(id) shouldBe None)
-            id
+            clock.advance(Duration.ofSeconds(1))
+            service.removeExpired(clock.now).futureValue shouldBe 1
+            service.removeExpired(clock.now).futureValue shouldBe 0
           },
-          entries => {
-            forExactly(1, entries)(_.warningMessage should include("Onboarding snapshot export"))
-            forExactly(1, entries)(_.message should startWith("Removed onboarding snapshot file"))
-          },
+          entries =>
+            forExactly(1, entries)(_.message should startWith("Removed onboarding snapshot file")),
         )
-      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
-        {
-          clock.advance(Duration.ofHours(24))
-          service.removeExpired(clock.now).futureValue shouldBe 0
-          service.lookup(failedId) shouldBe None
-        },
-        entries =>
-          forAll(entries)(_.message should not startWith "Removed onboarding snapshot file"),
-      )
+        service.lookup(failedId) shouldBe None
     }
+
+    "keep failed exports across restarts without reusing them" in File
+      .usingTemporaryDirectory() { directory =>
+        val config = SvOnboardingSnapshotsConfig(directory.path)
+        val failedId = new java.util.concurrent.atomic.AtomicReference[SvOnboardingSnapshotId]()
+        withService(_ => config) { (service, _, _) =>
+          loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+            {
+              failedId.set(
+                service
+                  .prepare(key("sv1"), writeSnapshot(Future.failed(new RuntimeException("boom"))))
+                  .futureValue
+              )
+              eventually()(service.lookup(failedId.get()) should matchPattern {
+                case Some(SnapshotState.Failed(_)) =>
+              })
+            },
+            forExactly(1, _)(_.warningMessage should include("failed")),
+          )
+        }
+        withService(_ => config) { (service, _, _) =>
+          service.lookup(failedId.get()) shouldBe Some(
+            SnapshotState.Failed("Snapshot export failed")
+          )
+          service
+            .prepare(key("sv1"), writeSnapshot(Future.unit))
+            .futureValue should not be failedId.get()
+        }
+      }
 
     "run at most `parallelism` exports and reject them when the queue is full" in withService(
       SvOnboardingSnapshotsConfig(_, parallelism = PositiveInt.two, queueSize = PositiveInt.one)
@@ -249,7 +322,9 @@ class SvOnboardingSnapshotServiceTest
         trigger.performWorkIfAvailable().futureValue
         service.lookup(ready) shouldBe None
         Files.exists(readyFile) shouldBe false
-        service.lookup(exporting) shouldBe Some(SnapshotState.Exporting)
+        eventually()(service.lookup(exporting) should matchPattern {
+          case Some(SnapshotState.Exporting(_, _)) =>
+        })
         service
           .prepare(key("sv1"), writeSnapshot(Future.unit))
           .futureValue should not be ready
@@ -289,7 +364,9 @@ class SvOnboardingSnapshotServiceTest
                 },
               )
               .futureValue
-            eventually()(service.lookup(id) shouldBe None)
+            eventually()(
+              service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
+            )
             id
           },
           entries => {
@@ -304,10 +381,37 @@ class SvOnboardingSnapshotServiceTest
         })
 
         val child = blocker.future.futureValue
+        val leftover = child.getParent
         Files.delete(child)
-        service.removeExpired(clock.now).futureValue shouldBe 1
-        Files.exists(child.getParent) shouldBe false
+        service.removeExpired(clock.now).futureValue shouldBe 0
+        Files.exists(leftover) shouldBe false
+        Files.exists(leftover.resolveSibling("failure.json")) shouldBe true
+        service.lookup(failedId) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
+        service.lookup(next) should matchPattern { case Some(SnapshotState.Ready(_)) => }
+
+        clock.advance(Duration.ofHours(24))
+        service.removeExpired(clock.now).futureValue shouldBe 2
+        Files.exists(leftover.getParent) shouldBe false
         service.lookup(failedId) shouldBe None
+    }
+
+    "record a snapshot whose file disappeared when cleanup finds it" in withService() {
+      (service, clock, _) =>
+        val id = service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
+        val file = eventually() {
+          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
+        }
+        Files.delete(file)
+        loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
+          service.removeExpired(clock.now).futureValue shouldBe 0,
+          _.warningMessage should include(s"Onboarding snapshot $id is unusable"),
+        )
+        Files.exists(file.resolveSibling("metadata.json")) shouldBe false
+        service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot file is missing"))
+        service.removeExpired(clock.now).futureValue shouldBe 0
+        clock.advance(Duration.ofHours(24))
+        service.removeExpired(clock.now).futureValue shouldBe 1
+        service.lookup(id) shouldBe None
     }
 
     "retry an expired file deletion without retaining download eligibility or blocking other cleanup" in withService() {
@@ -381,7 +485,7 @@ class SvOnboardingSnapshotServiceTest
             eventually()(service.isClosing shouldBe true)
             closed.isCompleted shouldBe false
             Files.exists(file) shouldBe true
-            service.lookup(active) shouldBe None
+            unavailable(service.lookup(active))
             inside(
               service.prepare(key("sv1"), _ => Future.unit).failed.futureValue
             ) { case e: StatusRuntimeException =>
@@ -390,7 +494,7 @@ class SvOnboardingSnapshotServiceTest
           } finally exported.trySuccess(())
 
           closed.futureValue
-          service.lookup(active) shouldBe None
+          unavailable(service.lookup(active))
           Files.readAllBytes(file) shouldBe Array[Byte](1, 2)
           Files.exists(file.getParent.resolve("metadata.json")) shouldBe true
           queuedStarted.get() shouldBe 0
@@ -468,13 +572,14 @@ class SvOnboardingSnapshotServiceTest
       service.lookup(SvOnboardingSnapshotId("../../other")) shouldBe None
     }
 
-    "reject exports after shutdown" in withService() { (service, _, retryProvider) =>
+    "reject exports and lookups after shutdown" in withService() { (service, _, retryProvider) =>
       retryProvider.close()
       inside(
         service.prepare(key("sv1"), _ => Future.unit).failed.futureValue
       ) { case e: StatusRuntimeException =>
         e.getStatus.getCode shouldBe Status.Code.UNAVAILABLE
       }
+      unavailable(service.lookup(SvOnboardingSnapshotId(UUID.randomUUID().toString)))
     }
   }
 }

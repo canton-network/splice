@@ -36,6 +36,8 @@ object SvStreamClient {
   sealed abstract class OnboardSvDownloadResponse
   object OnboardSvDownloadResponse {
     case class OK(entity: ResponseEntity) extends OnboardSvDownloadResponse
+    case class Accepted(value: definitions.OnboardSvDownloadPendingResponse)
+        extends OnboardSvDownloadResponse
   }
 
   sealed abstract class OnboardSvSequencerResponse
@@ -92,6 +94,17 @@ class SvStreamClient(host: String = "https://example.com")(implicit
     )
   }
 
+  private val pendingResponseDecoder = {
+    structuredJsonEntityUnmarshaller.flatMap(_ =>
+      _ =>
+        json =>
+          io.circe
+            .Decoder[definitions.OnboardSvDownloadPendingResponse]
+            .decodeJson(json)
+            .fold(FastFuture.failed, FastFuture.successful)
+    )
+  }
+
   def onboardSvDownload(
       id: String,
       headers: List[HttpHeader] = Nil,
@@ -109,6 +122,14 @@ class SvStreamClient(host: String = "https://example.com")(implicit
             resp.status match {
               case StatusCodes.OK =>
                 FastFuture.successful(Right(OnboardSvDownloadResponse.OK(resp.entity)))
+              case StatusCodes.Accepted =>
+                Unmarshal(resp.entity)
+                  .to[definitions.OnboardSvDownloadPendingResponse](
+                    pendingResponseDecoder,
+                    implicitly,
+                    implicitly,
+                  )
+                  .map(x => Right(OnboardSvDownloadResponse.Accepted(x)))
               case _ => FastFuture.successful(Left(Right(resp)))
             }
           )

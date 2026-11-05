@@ -22,19 +22,50 @@ paths:
             type: string
       responses:
         "200":
-          description: The exported snapshot.
+          description: The response body contains the exported snapshot file.
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
                 x-scala-type: org.apache.pekko.http.scaladsl.model.ResponseEntity
+        "202":
+          description: |
+            The export is queued or still running. Retry the download with the same ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OnboardSvDownloadPendingResponse"
         "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+          description: |
+            The sponsor does not know this ID. Call prepare again to get a new ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
+        "410":
+          description: |
+            The export with this ID failed or its snapshot is no longer usable.
+            Call prepare again to get a new ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
         "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+          description: |
+            Unexpected error. Retry the download with the same ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
         "503":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/503"
+          description: |
+            The sponsor is temporarily unavailable, for example during shutdown.
+            Retry the download with the same ID.
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ErrorResponse"
 
   /v0/onboard/sv/sequencer:
     post:
@@ -65,6 +96,24 @@ paths:
 
 components:
   schemas:
+    OnboardSvDownloadPendingResponse:
+      type: object
+      required:
+        - status
+        - queued_at
+      properties:
+        status:
+          type: string
+          enum:
+            - queued
+            - exporting
+        queued_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          description: Set once the export is running.
     OnboardSvSequencerRequest:
       type: object
       required:

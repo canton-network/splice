@@ -13,8 +13,10 @@ import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.FileIO
+import com.digitalasset.canton.logging.TracedLogger
+import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
-import org.lfdecentralizedtrust.splice.environment.RetryProvider
+import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient.{
   OnboardSvDownloadResponse
 }
@@ -71,31 +73,67 @@ final class SvOnboardingSnapshotDownload private (
           Files.deleteIfExists(metadataFile)
         }).flatMap { _ =>
           downloadFrom(id)
-            .recoverWith { case notFound @ HttpCommandException(_, StatusCodes.NotFound, _) =>
-              Future.failed(SnapshotNotFound(notFound))
+            .recoverWith {
+              case error @ HttpCommandException(_, StatusCodes.NotFound | StatusCodes.Gone, _) =>
+                Future.failed(PrepareAgain(error))
             }
-            .flatMap { case OnboardSvDownloadResponse.OK(entity) =>
-              entity.dataBytes
-                .runWith(FileIO.toPath(file))
-                .flatMap { result =>
-                  Future(blocking {
-                    if (entity.contentLengthOption.exists(_ != result.count))
-                      throw new java.io.IOException("Incomplete onboarding snapshot download")
-                    writeMetadata(DownloadMetadata(id.value, createdAt, result.count))
-                    file
-                  })
-                }
-                .recoverWith { case NonFatal(e) =>
-                  Future.failed(
-                    Status.UNAVAILABLE
-                      .withDescription(s"Download of onboarding snapshot was interrupted: $e")
-                      .withCause(e)
-                      .asRuntimeException()
-                  )
-                }
+            .flatMap {
+              case OnboardSvDownloadResponse.Accepted(pending) =>
+                Future.failed(
+                  Status.UNAVAILABLE
+                    .withDescription(
+                      s"Onboarding snapshot $id is ${pending.status}, queued at ${pending.queuedAt}" +
+                        pending.startedAt.fold("")(startedAt => s", started at $startedAt")
+                    )
+                    .asRuntimeException()
+                )
+              case OnboardSvDownloadResponse.OK(entity) =>
+                entity.dataBytes
+                  .runWith(FileIO.toPath(file))
+                  .flatMap { result =>
+                    Future(blocking {
+                      if (entity.contentLengthOption.exists(_ != result.count))
+                        throw new java.io.IOException("Incomplete onboarding snapshot download")
+                      writeMetadata(DownloadMetadata(id.value, createdAt, result.count))
+                      file
+                    })
+                  }
+                  .recoverWith { case NonFatal(e) =>
+                    Future.failed(
+                      Status.UNAVAILABLE
+                        .withDescription(s"Download of onboarding snapshot was interrupted: $e")
+                        .withCause(e)
+                        .asRuntimeException()
+                    )
+                  }
             }
         }
     }
+
+  def downloadWithRetries(
+      id: SvOnboardingSnapshotId,
+      downloadFrom: SvOnboardingSnapshotId => Future[OnboardSvDownloadResponse],
+      retryProvider: RetryProvider,
+      retryFor: RetryFor,
+      logger: TracedLogger,
+  )(implicit ec: ExecutionContext, mat: Materializer, tc: TraceContext): Future[Path] =
+    retryProvider
+      .retry(
+        retryFor,
+        "download_onboarding_snapshot",
+        s"download onboarding snapshot $id from sponsor",
+        download(id, downloadFrom),
+        logger,
+      )
+      .recoverWith { case PrepareAgain(cause) =>
+        Future.failed(
+          Status.FAILED_PRECONDITION
+            .withDescription(
+              s"Sponsor answered ${cause.status} for onboarding snapshot $id, preparing a new one"
+            )
+            .asRuntimeException()
+        )
+      }
 
   def delete(): Unit =
     File(directory).delete(swallowIOExceptions = true).discard
@@ -107,7 +145,7 @@ object SvOnboardingSnapshotDownload {
   private implicit val encoder: Encoder[DownloadMetadata] = deriveEncoder
   private implicit val decoder: Decoder[DownloadMetadata] = deriveDecoder
 
-  final case class SnapshotNotFound(cause: HttpCommandException)
+  final case class PrepareAgain(cause: HttpCommandException)
       extends RetryProvider.QuietNonRetryableException(cause.getMessage)
 
   def downloadDirectory(config: SvOnboardingSnapshotsConfig, name: String): Path =
