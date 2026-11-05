@@ -37,6 +37,21 @@ into `<round dir>/comments/<ref>.md` and is posted with `--body-file` (or `close
 never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
 content in a `~~~` fence (so inner ``` fences render as part of it).
 
+## What the user changes when posting (drafts vs posted comments, 2026-11-05: 11164, 11170, 11172, 11175, 11186, 11219, 11226, 11228, 11232)
+
+- Drops the verdict label ("Rare:", "Test flake, likely on the client side:", "Product bug in ...:"); the first
+  sentence states the mechanism. Keep "Likely" when a link is unproven.
+- Drops run context the issue already shows (branch, sha, shard) and references to unrelated PRs that were only ruled
+  out (#8227, #6577 in 11172).
+- Several alternatives or guards go into a short bullet list ("Two possible causes:", "Two guards did not apply:"),
+  not one long sentence; an unconfirmed explanation is one of the bullets, not the verdict.
+- When an owner is assigned, the fix line is often shortened to a hint ("The expire check above already has a longer
+  timeout (80 s).", "We should ...") or left out for the owner to decide; keep a full fix line only when it is
+  trivial and certain.
+- The assignee is pinged in a separate comment: `@<login> Could you please have a look?`. Hand that out as its own
+  `gh issue comment` command next to `--add-assignee` (the main comment still has no @mentions).
+- External incidents: the failing log lines and one sentence ("Random GitHub flake during incident."), then close.
+
 ## Example (11217, as the user posted it on 2026-11-05)
 
 Draft: `rounds/2026-11-05T094500Z-credentials/comments/11217.md`; posted: `11217-posted.md` next to it. The user cut
