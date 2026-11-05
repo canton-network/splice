@@ -172,7 +172,7 @@ class SummarizingMiningRoundTrigger(
         else Future.successful(None)
       // Opt fields on OpenMiningRoundSummary were introduced in amulet 0.1.25;
       // populating them with Some(_) on older packages fails choice execution.
-      summarySupport <- packageVersionSupport.supportsTbarV11Summary(
+      summarySupport <- packageVersionSupport.supportsTbarV1_1(
         Seq(dsoParty),
         context.clock.now,
       )

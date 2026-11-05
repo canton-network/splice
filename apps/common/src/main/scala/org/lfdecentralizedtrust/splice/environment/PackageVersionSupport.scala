@@ -166,7 +166,7 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
-  def supportsTbarV11Summary(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+  def supportsTbarV1_1(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =
     isDarSupported(
