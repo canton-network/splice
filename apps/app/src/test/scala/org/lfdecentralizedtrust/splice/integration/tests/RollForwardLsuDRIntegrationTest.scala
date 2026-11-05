@@ -171,6 +171,7 @@ class RollForwardLsuDRIntegrationTest
                   .modify(c => c.copy(legacy = c.current.some))
             ),
           ),
+        // TODO (#8263): remove, EnvironmentDefinition already enables DA BFT for all nodes
         (_, config) => ConfigTransforms.withBftSequencers(_.contains("Local"))(config),
       )
       .addConfigTransform((_, config) =>

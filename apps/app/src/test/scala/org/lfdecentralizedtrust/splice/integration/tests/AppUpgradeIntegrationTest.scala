@@ -605,6 +605,7 @@ object AppUpgradeIntegrationTest {
     conf
   }
 
+  // TODO (#8263): remove once the base version's bundled configs enable DA BFT (needs transform-config.sc to apply withBftSequencers)
   // The bundled config transforms don't enable DA BFT (EnvironmentDefinition does that for the
   // test environment), so we enable it for the bundled SV and scan apps here.
   def bundledBftConfig(app: String): Seq[String] =

@@ -82,6 +82,7 @@ case class AutomationConfig(
     /** Only intended for testing. Allows disabling archival of closed rounds.
       */
     enableClosedRoundArchival: Boolean = true,
+    // TODO (#8263): remove together with the CometBFT triggers
     /** Only intended for testing. Allows disabling cometbft config
       * publish/reconcile automation.
       */
