@@ -19,10 +19,14 @@ import {
   LookupFeaturedAppRightByContractIdResponse,
   ListVoteRequestByTrackingCidResponse,
   LookupDsoRulesVoteRequestResponse,
+  ListSynchronizerRegistrationsResponse,
+  LookupSynchronizerRegistrationByContractIdResponse,
   PrepareValidatorOnboardingResponse,
 } from '@canton-network/sv-openapi';
 
 import {
+  activeSynchronizerRegistration,
+  activeSynchronizerRegistrationPayload,
   voteRequest,
   voteRequests,
   voteResultsAmuletRules,
@@ -38,6 +42,31 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
   }),
 
   dsoInfoHandler(svUrl),
+
+  // Only the fixture's synchronizer id is registered.
+  http.get(`${svUrl}/v0/admin/sv/synchronizers/:synchronizerId/registrations`, ({ params }) => {
+    const synchronizerId = decodeURIComponent(String(params.synchronizerId));
+    return HttpResponse.json<ListSynchronizerRegistrationsResponse>({
+      registrations:
+        synchronizerId === activeSynchronizerRegistrationPayload.synchronizerId
+          ? [activeSynchronizerRegistration]
+          : [],
+    });
+  }),
+
+  // Only the fixture registration is active; any other contract id reads as archived.
+  http.get(
+    `${svUrl}/v0/admin/sv/synchronizers/registrations/by-contract-id/:contractId`,
+    ({ params }) => {
+      const contractId = decodeURIComponent(String(params.contractId));
+      return HttpResponse.json<LookupSynchronizerRegistrationByContractIdResponse>({
+        registration:
+          contractId === activeSynchronizerRegistration.contract_id
+            ? activeSynchronizerRegistration
+            : undefined,
+      });
+    }
+  ),
 
   http.get(`${svUrl}/v0/admin/sv/voterequests`, () => {
     return HttpResponse.json<ListDsoRulesVoteRequestsResponse>(voteRequests);

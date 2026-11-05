@@ -6,7 +6,9 @@ import type {
   AmuletRules_ActionRequiringConfirmation,
   DsoRules_ActionRequiringConfirmation,
   DsoRules_CloseVoteRequestResult,
+  DsoRules_RegisterSynchronizer,
   DsoRules_SetConfig,
+  DsoRules_UpdateSynchronizerRegistration,
   DsoRulesConfig,
   SvInfo,
   Vote,
@@ -31,6 +33,9 @@ import type {
   UnclaimedActivityRecordProposal,
   UnfeatureAppProposal,
   UpdateFeatureAppProposal,
+  RegisterSynchronizerProposal,
+  ArchiveSynchronizerRegistrationProposal,
+  UpdateSynchronizerRegistrationProposal,
   UpdateSvRewardWeightProposal,
   YourVoteStatus,
 } from '../utils/types';
@@ -53,6 +58,9 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
+  SRARC_RegisterSynchronizer: 'Register Dedicated Synchronizer',
+  SRARC_ArchiveSynchronizerRegistration: 'Offboard Dedicated Synchronizer',
+  SRARC_UpdateSynchronizerRegistration: 'Update Dedicated Synchronizer Registration',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
 });
 
@@ -74,6 +82,12 @@ export const createProposalActions: {
   },
   { name: 'Set Amulet Rules Configuration', value: 'CRARC_SetConfig' },
   { name: 'Update Super Validator Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
+  { name: 'Register Dedicated Synchronizer', value: 'SRARC_RegisterSynchronizer' },
+  { name: 'Offboard Dedicated Synchronizer', value: 'SRARC_ArchiveSynchronizerRegistration' },
+  {
+    name: 'Update Dedicated Synchronizer Registration',
+    value: 'SRARC_UpdateSynchronizerRegistration',
+  },
 ];
 
 export const getVoteResultStatus = (
@@ -187,6 +201,14 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
     switch (dsoAction.tag) {
       case 'SRARC_OffboardSv':
         return createOffboardMemberProposal(dsoAction.value.sv);
+      case 'SRARC_RegisterSynchronizer':
+        return createRegisterSynchronizerProposal(dsoAction.value);
+      case 'SRARC_ArchiveSynchronizerRegistration':
+        return createArchiveSynchronizerRegistrationProposal(
+          dsoAction.value.registeredSynchronizerCid
+        );
+      case 'SRARC_UpdateSynchronizerRegistration':
+        return createUpdateSynchronizerRegistrationProposal(dsoAction.value);
       case 'SRARC_UpdateSvRewardWeight': {
         const allSvInfos = dsoInfo?.dsoRules.payload.svs.entriesArray() || [];
         const svToUpdate = dsoAction.value.svParty;
@@ -255,6 +277,37 @@ function createUpdateFeatureAppProposal(
 function createRevokeFeatureAppProposal(rightContractId: string): UnfeatureAppProposal {
   return {
     rightContractId: rightContractId,
+  };
+}
+
+function createRegisterSynchronizerProposal(
+  register: DsoRules_RegisterSynchronizer
+): RegisterSynchronizerProposal {
+  return {
+    synchronizerId: register.synchronizerId,
+    paymaster: register.paymaster,
+    maxActivityWeight: register.maxActivityWeight,
+    maxAssetActivityWeight: register.maxAssetActivityWeight,
+  };
+}
+
+function createArchiveSynchronizerRegistrationProposal(
+  registeredSynchronizerCid: string
+): ArchiveSynchronizerRegistrationProposal {
+  return { registeredSynchronizerCid };
+}
+
+function createUpdateSynchronizerRegistrationProposal({
+  registeredSynchronizerCid,
+  update,
+}: DsoRules_UpdateSynchronizerRegistration): UpdateSynchronizerRegistrationProposal {
+  return {
+    registeredSynchronizerCid,
+    newFields: {
+      paymaster: update.newPaymaster,
+      maxActivityWeight: update.newMaxActivityWeight,
+      maxAssetActivityWeight: update.newMaxAssetActivityWeight,
+    },
   };
 }
 

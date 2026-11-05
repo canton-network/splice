@@ -12,6 +12,9 @@ import {
   ProposalDetails,
   ProposalVote,
   ProposalVotingInformation,
+  ArchiveSynchronizerRegistrationProposal,
+  RegisterSynchronizerProposal,
+  UpdateSynchronizerRegistrationProposal,
   UnclaimedActivityRecordProposal,
   UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
@@ -22,7 +25,11 @@ import { server, svUrl } from '../setup/setup';
 import { http, HttpResponse } from 'msw';
 import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
-import { svPartyId } from '../mocks/constants';
+import {
+  activeSynchronizerRegistration,
+  activeSynchronizerRegistrationPayload,
+  svPartyId,
+} from '../mocks/constants';
 import { Wrapper } from '../helpers';
 import {
   EFFECTIVE_AT_LABEL,
@@ -1508,5 +1515,148 @@ describe('Closed proposal', () => {
 
     expect(screen.queryByTestId('your-vote-form')).not.toBeInTheDocument();
     expect(screen.queryByTestId('your-vote-edit-button')).not.toBeInTheDocument();
+  });
+});
+
+describe('Dedicated synchronizer votes', () => {
+  const liveCid = activeSynchronizerRegistration.contract_id;
+  const archivedCid = '00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+
+  const renderDetails = (proposalDetails: ProposalDetails, isVoteRequest = true) =>
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={{ ...proposalDetails, isVoteRequest }}
+          votingInformation={{ ...voteRequest.votingInformation, status: 'In Progress' }}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+  const archiveDetails = (registeredSynchronizerCid: string) =>
+    ({
+      ...voteRequest.proposalDetails,
+      actionName: 'Offboard Dedicated Synchronizer',
+      action: 'SRARC_ArchiveSynchronizerRegistration',
+      proposal: { registeredSynchronizerCid } as ArchiveSynchronizerRegistrationProposal,
+    }) as ProposalDetails;
+
+  const updateDetails = (registeredSynchronizerCid: string) =>
+    ({
+      ...voteRequest.proposalDetails,
+      actionName: 'Update Dedicated Synchronizer Registration',
+      action: 'SRARC_UpdateSynchronizerRegistration',
+      proposal: {
+        registeredSynchronizerCid,
+        newFields: {
+          paymaster: activeSynchronizerRegistrationPayload.paymaster,
+          maxActivityWeight: '2.5000000000',
+          maxAssetActivityWeight: activeSynchronizerRegistrationPayload.maxAssetActivityWeight,
+        },
+      } as UpdateSynchronizerRegistrationProposal,
+    }) as ProposalDetails;
+
+  test('a register vote shows the synchronizer, paymaster and weights', () => {
+    renderDetails({
+      ...voteRequest.proposalDetails,
+      actionName: 'Register Dedicated Synchronizer',
+      action: 'SRARC_RegisterSynchronizer',
+      proposal: {
+        synchronizerId: 'dedicated::1220deadbeef',
+        paymaster: 'paymaster::1220feedface',
+        maxActivityWeight: '1.0000000000',
+        maxAssetActivityWeight: '0.2500000000',
+      } as RegisterSynchronizerProposal,
+    } as ProposalDetails);
+
+    expect(screen.getByTestId('proposal-details-action-value').textContent).toBe(
+      'Register Dedicated Synchronizer'
+    );
+    expect(
+      screen.getByTestId('proposal-details-register-synchronizer-section')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('proposal-details-synchronizer-id')).toHaveTextContent(
+      'dedicated::1220deadbeef'
+    );
+    expect(screen.getByTestId('proposal-details-paymaster-party-id')).toHaveTextContent(
+      'paymaster::1220feedface'
+    );
+    expect(screen.getByTestId('proposal-details-maxActivityWeight').textContent).toBe('1.0');
+    expect(screen.getByTestId('proposal-details-maxAssetActivityWeight').textContent).toBe('0.25');
+  });
+
+  test('an offboard vote shows the synchronizer and paymaster of a live registration', async () => {
+    renderDetails(archiveDetails(liveCid));
+
+    expect(screen.getByTestId('proposal-details-action-value').textContent).toBe(
+      'Offboard Dedicated Synchronizer'
+    );
+    expect(
+      await screen.findByTestId('proposal-details-archive-synchronizer-synchronizer-id')
+    ).toHaveTextContent(activeSynchronizerRegistrationPayload.synchronizerId);
+    expect(
+      screen.getByTestId('proposal-details-archive-synchronizer-paymaster-party-id')
+    ).toHaveTextContent(activeSynchronizerRegistrationPayload.paymaster);
+    expect(
+      screen.getByTestId('proposal-details-archive-synchronizer-contract-id')
+    ).toHaveTextContent(liveCid);
+    expect(
+      screen.queryByTestId('proposal-details-archive-synchronizer-stale-warning')
+    ).not.toBeInTheDocument();
+  });
+
+  test('an open offboard vote warns when its registration is no longer active', async () => {
+    renderDetails(archiveDetails(archivedCid));
+
+    expect(
+      await screen.findByTestId('proposal-details-archive-synchronizer-stale-warning')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('proposal-details-archive-synchronizer-contract-id')
+    ).toHaveTextContent(archivedCid);
+  });
+
+  test('a closed offboard vote does not warn, its registration being archived is expected', async () => {
+    renderDetails(archiveDetails(archivedCid), false);
+
+    // Wait for the lookup to settle before asserting the warning's absence.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('proposal-details-archive-synchronizer-contract-id')
+      ).toHaveTextContent(archivedCid)
+    );
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(
+      screen.queryByTestId('proposal-details-archive-synchronizer-stale-warning')
+    ).not.toBeInTheDocument();
+  });
+
+  test('an update vote shows the changed values, current and proposed side by side', async () => {
+    renderDetails(updateDetails(liveCid));
+
+    expect(screen.getByTestId('proposal-details-action-value').textContent).toBe(
+      'Update Dedicated Synchronizer Registration'
+    );
+    expect(
+      await screen.findByTestId('proposal-details-update-synchronizer-registration-synchronizer-id')
+    ).toHaveTextContent(activeSynchronizerRegistrationPayload.synchronizerId);
+    await waitFor(() =>
+      expect(screen.getByTestId('config-change-current-value').textContent).toBe('1.0')
+    );
+    expect(screen.getAllByTestId('config-change')).toHaveLength(1);
+    expect(screen.getByTestId('config-change-new-value').textContent).toBe('2.5');
+  });
+
+  test('an open update vote on an archived registration warns and shows only the proposal', async () => {
+    renderDetails(updateDetails(archivedCid));
+
+    expect(
+      await screen.findByTestId('proposal-details-update-synchronizer-registration-stale-warning')
+    ).toBeInTheDocument();
+    // Without the current registration there is nothing to compare, so every value is listed.
+    expect(screen.getAllByTestId('config-change')).toHaveLength(3);
+    expect(screen.queryByTestId('config-change-current-value')).toBeNull();
   });
 });

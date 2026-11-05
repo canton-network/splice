@@ -20,7 +20,9 @@ import {
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
   ListFeaturedAppRightsByProviderResponse,
+  ListSynchronizerRegistrationsResponse,
   LookupFeaturedAppRightByContractIdResponse,
+  LookupSynchronizerRegistrationByContractIdResponse,
   ListValidatorLicensesResponse,
   ListVoteRequestByTrackingCidResponse,
   ListVoteResultsRequest,
@@ -104,6 +106,12 @@ export interface SvAdminClient {
   lookupFeaturedAppRightByContractId: (
     contractId: string
   ) => Promise<LookupFeaturedAppRightByContractIdResponse>;
+  listSynchronizerRegistrations: (
+    synchronizerId: string
+  ) => Promise<ListSynchronizerRegistrationsResponse>;
+  lookupSynchronizerRegistrationByContractId: (
+    contractId: string
+  ) => Promise<LookupSynchronizerRegistrationByContractIdResponse>;
 }
 
 class ApiMiddleware
@@ -258,6 +266,16 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
         contractId: string
       ): Promise<LookupFeaturedAppRightByContractIdResponse> => {
         return await svAdminClient.lookupFeaturedAppRightByContractId(contractId);
+      },
+      listSynchronizerRegistrations: async (
+        synchronizerId: string
+      ): Promise<ListSynchronizerRegistrationsResponse> => {
+        return await svAdminClient.listSynchronizerRegistrations(synchronizerId);
+      },
+      lookupSynchronizerRegistrationByContractId: async (
+        contractId: string
+      ): Promise<LookupSynchronizerRegistrationByContractIdResponse> => {
+        return await svAdminClient.lookupSynchronizerRegistrationByContractId(contractId);
       },
     };
   }, [url, userAccessToken]);

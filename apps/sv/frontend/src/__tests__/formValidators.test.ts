@@ -12,6 +12,7 @@ import {
   switchOverEntriesToConfigValue,
   switchOverMapToConfigValue,
   validateSwitchOverTimes,
+  validateSynchronizerId,
   visibleSwitchOverRows,
 } from '../components/forms/formValidators';
 
@@ -217,5 +218,32 @@ describe('switch-over display helpers', () => {
       { key: 'amulet-v2', time: '2026-09-10T08:00:00Z' },
     ];
     expect(visibleSwitchOverRows(entries)).toEqual([{ entry: entries[1], index: 1 }]);
+  });
+});
+
+// Mirrors Canton's SynchronizerId parser, which SvAppVoteRequestValidationTest covers in the SV app.
+describe('validateSynchronizerId', () => {
+  const fingerprint = '12207f9750b391b3bb521ead855db783d8cf661f17108e563ca72c0084052f035011';
+
+  it.each([
+    `dedicated::${fingerprint}`,
+    `global-domain::${fingerprint}`,
+    `my dedicated:sync::${fingerprint}`,
+    `${'a'.repeat(185)}::${'1'.repeat(68)}`,
+  ])('accepts %s', id => {
+    expect(validateSynchronizerId(id)).toBe(false);
+  });
+
+  it.each([
+    ['', 'Required'],
+    ['dedicated', 'Expected format: name::fingerprint'],
+    ['dedicated::', 'the fingerprint after `::` is empty'],
+    [`::${fingerprint}`, 'the name before `::` is empty'],
+    [`dedicated::${fingerprint}::extra`, '`::` may appear only once'],
+    [`dedicated!::${fingerprint}`, 'only letters, digits, spaces and : _ - are allowed'],
+    [`${'a'.repeat(186)}::${fingerprint}`, 'the name has more than 185 characters'],
+    [`dedicated::${'1'.repeat(69)}`, 'the fingerprint has more than 68 characters'],
+  ])('rejects %j', (id, message) => {
+    expect(validateSynchronizerId(id)).toContain(message);
   });
 });

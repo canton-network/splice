@@ -15,6 +15,10 @@ import type { OffboardSvFormData } from '../components/forms/OffboardSvForm';
 import type { SetAmuletConfigCompleteFormData } from '../components/forms/SetAmuletConfigRulesForm';
 import type { SetDsoConfigCompleteFormData } from '../components/forms/SetDsoConfigRulesForm';
 import type { UpdateSvRewardWeightFormData } from '../components/forms/UpdateSvRewardWeightForm';
+import type { RegisterSynchronizerFormData } from '../components/forms/RegisterSynchronizerForm';
+import type { ArchiveSynchronizerRegistrationFormData } from '../components/forms/ArchiveSynchronizerRegistrationForm';
+import type { UpdateSynchronizerRegistrationFormData } from '../components/forms/UpdateSynchronizerRegistrationForm';
+import type { RegistrationFields } from '../components/forms/registrationFields';
 
 export interface OffBoardMemberProposal {
   memberToOffboard: string;
@@ -73,6 +77,20 @@ export interface ConfigChange {
   description?: string;
 }
 
+export interface RegisterSynchronizerProposal extends RegistrationFields {
+  synchronizerId: string;
+}
+
+/** The vote pins a registration contract, not a synchronizer id. */
+export interface ArchiveSynchronizerRegistrationProposal {
+  registeredSynchronizerCid: string;
+}
+
+export interface UpdateSynchronizerRegistrationProposal {
+  registeredSynchronizerCid: string;
+  newFields: RegistrationFields;
+}
+
 export interface UpdateSvRewardWeightProposal {
   svToUpdate: string;
   currentWeight: string;
@@ -96,6 +114,9 @@ export type Proposal =
   | FeatureAppProposal
   | UnfeatureAppProposal
   | UpdateSvRewardWeightProposal
+  | RegisterSynchronizerProposal
+  | ArchiveSynchronizerRegistrationProposal
+  | UpdateSynchronizerRegistrationProposal
   | UnclaimedActivityRecordProposal
   | AmuletRulesConfigProposal
   | DsoRulesConfigProposal
@@ -107,6 +128,9 @@ export type ProposalActionMap = {
   SRARC_GrantFeaturedAppRight: FeatureAppProposal;
   SRARC_RevokeFeaturedAppRight: UnfeatureAppProposal;
   SRARC_UpdateSvRewardWeight: UpdateSvRewardWeightProposal;
+  SRARC_RegisterSynchronizer: RegisterSynchronizerProposal;
+  SRARC_ArchiveSynchronizerRegistration: ArchiveSynchronizerRegistrationProposal;
+  SRARC_UpdateSynchronizerRegistration: UpdateSynchronizerRegistrationProposal;
   SRARC_CreateUnallocatedUnclaimedActivityRecord: UnclaimedActivityRecordProposal;
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
@@ -149,6 +173,9 @@ export type SupportedActionTag =
   | 'SRARC_RevokeFeaturedAppRight'
   | 'SRARC_SetConfig'
   | 'SRARC_UpdateSvRewardWeight'
+  | 'SRARC_RegisterSynchronizer'
+  | 'SRARC_ArchiveSynchronizerRegistration'
+  | 'SRARC_UpdateSynchronizerRegistration'
   | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
   | 'SRARC_UpdateFeaturedAppRight';
 
@@ -224,6 +251,9 @@ export interface UpdateFeatureAppFormData extends CommonProposalFormData {
 
 export type NonConfigProposalFormData =
   | UpdateSvRewardWeightFormData
+  | RegisterSynchronizerFormData
+  | ArchiveSynchronizerRegistrationFormData
+  | UpdateSynchronizerRegistrationFormData
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData

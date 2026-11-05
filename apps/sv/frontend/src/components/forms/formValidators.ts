@@ -53,6 +53,44 @@ export const partyIdSchema = z
     message: 'Invalid PartyId format. Expected format: identifier::fingerprint',
   });
 
+// Mirrors Canton's SynchronizerId.fromString, which the SV app also runs before it creates the
+// vote: the Daml choice only requires a non-empty id, but a malformed one breaks SV and Scan
+// ingestion. The id splits at its first `::` into a name and a fingerprint, both Daml party
+// strings without `::`, of at most 185 and 68 characters.
+const cantonIdPart = /^[a-zA-Z0-9:_ -]+$/;
+
+const synchronizerIdError = (id: string): string | undefined => {
+  const delimiter = id.indexOf('::');
+  if (delimiter < 0) return 'Invalid synchronizer id. Expected format: name::fingerprint';
+  const name = id.slice(0, delimiter);
+  const fingerprint = id.slice(delimiter + 2);
+  if (!name) return 'Invalid synchronizer id: the name before `::` is empty';
+  if (!fingerprint) return 'Invalid synchronizer id: the fingerprint after `::` is empty';
+  if (fingerprint.includes('::')) return 'Invalid synchronizer id: `::` may appear only once';
+  if (!cantonIdPart.test(name) || !cantonIdPart.test(fingerprint)) {
+    return 'Invalid synchronizer id: only letters, digits, spaces and : _ - are allowed';
+  }
+  if (name.length > 185) return 'Invalid synchronizer id: the name has more than 185 characters';
+  if (fingerprint.length > 68) {
+    return 'Invalid synchronizer id: the fingerprint has more than 68 characters';
+  }
+  return undefined;
+};
+
+export const synchronizerIdSchema = z
+  .string()
+  .min(1, { message: 'Required' })
+  .superRefine((id, ctx) => {
+    const message = synchronizerIdError(id);
+    if (message) ctx.addIssue({ code: 'custom', message });
+  });
+
+// Canton contract ids are hex strings.
+export const contractIdSchema = z
+  .string()
+  .min(1, { message: 'Required' })
+  .regex(/^[0-9a-fA-F]+$/, { message: 'Invalid contract id. Expected a hex string' });
+
 export const svWeightSchema = z
   .string()
   .min(1, { message: 'Weight is required' })
@@ -201,6 +239,16 @@ export const validateUrl = (value: string): string | false => {
 
 export const validateRevokeFeaturedAppRight = (value: string): string | false => {
   const result = revokeFeaturedAppRightSchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const validateSynchronizerId = (value: string): string | false => {
+  const result = synchronizerIdSchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const validateContractId = (value: string): string | false => {
+  const result = contractIdSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;
 };
 

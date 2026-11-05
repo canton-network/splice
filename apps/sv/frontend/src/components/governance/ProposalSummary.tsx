@@ -12,7 +12,13 @@ import {
   THRESHOLD_DEADLINE_LABEL,
   THRESHOLD_DEADLINE_SUBTITLE,
 } from '../../utils/constants';
+import type { ResolvedSynchronizerRegistration } from '../../hooks/useSynchronizerRegistrationPicker';
 import type { ConfigChange } from '../../utils/types';
+import {
+  RegistrationFields,
+  registrationChanges,
+  registrationFields,
+} from '../forms/registrationFields';
 import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
 import { ProposalReviewField } from './ProposalReviewField';
@@ -74,6 +80,20 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         beneficiary: string;
         amount: string;
         expiresAt: string;
+      }
+    | {
+        formType: 'register-synchronizer';
+        synchronizerId: string;
+        fields: RegistrationFields;
+      }
+    | {
+        formType: 'archive-synchronizer-registration';
+        registration: ResolvedSynchronizerRegistration;
+      }
+    | {
+        formType: 'update-synchronizer-registration';
+        registration: ResolvedSynchronizerRegistration;
+        newFields: RegistrationFields;
       }
     | {
         formType: 'update-right-weight';
@@ -234,6 +254,72 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             label="Member"
             value={
               <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
+            }
+          />
+        )}
+
+        {formType === 'register-synchronizer' && (
+          <>
+            <ProposalReviewField
+              id="synchronizerId"
+              label="Synchronizer ID"
+              value={props.synchronizerId}
+            />
+            <ProposalReviewField
+              id="paymaster"
+              label={registrationFields.paymaster.label}
+              value={
+                <ReviewPartyId partyId={props.fields.paymaster} data-testid="paymaster-party-id" />
+              }
+            />
+            <ProposalReviewField
+              id="maxActivityWeight"
+              label={registrationFields.maxActivityWeight.label}
+              value={props.fields.maxActivityWeight}
+            />
+            <ProposalReviewField
+              id="maxAssetActivityWeight"
+              label={registrationFields.maxAssetActivityWeight.label}
+              value={props.fields.maxAssetActivityWeight}
+            />
+          </>
+        )}
+
+        {(formType === 'archive-synchronizer-registration' ||
+          formType === 'update-synchronizer-registration') && (
+          <>
+            <ProposalReviewField
+              id="synchronizerId"
+              label="Synchronizer ID"
+              value={props.registration.synchronizerId}
+            />
+            <ProposalReviewField
+              id="paymaster"
+              label={registrationFields.paymaster.label}
+              value={
+                <ReviewPartyId
+                  partyId={props.registration.fields.paymaster}
+                  data-testid="paymaster-party-id"
+                />
+              }
+            />
+            <ProposalReviewField
+              id="registeredSynchronizerCid"
+              label="Registration Contract ID"
+              value={props.registration.contractId}
+            />
+          </>
+        )}
+
+        {formType === 'update-synchronizer-registration' && (
+          <ProposalReviewField
+            id="registrationChanges"
+            label="Proposed Changes"
+            value={
+              <ConfigValuesChanges
+                isSummaryView
+                changes={registrationChanges(props.registration.fields, props.newFields)}
+              />
             }
           />
         )}

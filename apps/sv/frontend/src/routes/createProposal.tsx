@@ -11,6 +11,9 @@ import { SetAmuletConfigRulesForm } from '../components/forms/SetAmuletConfigRul
 import { SetDsoConfigRulesForm } from '../components/forms/SetDsoConfigRulesForm';
 import { UpdateFeaturedAppForm } from '../components/forms/UpdateFeaturedAppForm';
 import { UpdateSvRewardWeightForm } from '../components/forms/UpdateSvRewardWeightForm';
+import { RegisterSynchronizerForm } from '../components/forms/RegisterSynchronizerForm';
+import { ArchiveSynchronizerRegistrationForm } from '../components/forms/ArchiveSynchronizerRegistrationForm';
+import { UpdateSynchronizerRegistrationForm } from '../components/forms/UpdateSynchronizerRegistrationForm';
 import { InitiateProposalLayout } from '../components/governance/InitiateProposalLayout';
 import { useDsoInfos } from '../contexts/SvContext';
 import { createProposalActions } from '../utils/governance';
@@ -24,6 +27,12 @@ const ProposalForm: React.FC<{ action: SupportedActionTag }> = ({ action }) => {
   switch (action) {
     case 'SRARC_UpdateSvRewardWeight':
       return <UpdateSvRewardWeightForm />;
+    case 'SRARC_RegisterSynchronizer':
+      return <RegisterSynchronizerForm />;
+    case 'SRARC_ArchiveSynchronizerRegistration':
+      return <ArchiveSynchronizerRegistrationForm />;
+    case 'SRARC_UpdateSynchronizerRegistration':
+      return <UpdateSynchronizerRegistrationForm />;
     case 'SRARC_OffboardSv':
       return <OffboardSvForm />;
     case 'SRARC_GrantFeaturedAppRight':

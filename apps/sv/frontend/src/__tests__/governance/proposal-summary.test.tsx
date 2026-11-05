@@ -245,6 +245,105 @@ describe('Review Proposal Component', () => {
     expect(screen.queryByTestId('updateReason-field')).not.toBeInTheDocument();
   });
 
+  const registration = {
+    contractId: '00a1b2c3d4e5f6',
+    synchronizerId: 'dedicated::1220deadbeef',
+    fields: {
+      paymaster: 'paymaster::1220feedface',
+      maxActivityWeight: '1.0000000000',
+      maxAssetActivityWeight: '0.5000000000',
+    },
+  };
+
+  test('should render review proposal component for register dedicated synchronizer', () => {
+    const actionName = 'Register Dedicated Synchronizer';
+
+    render(
+      <ProposalSummary
+        actionName={actionName}
+        url={url}
+        summary={summary}
+        expiryDate={expiryDate}
+        effectiveDate={effectiveDate}
+        formType="register-synchronizer"
+        synchronizerId={registration.synchronizerId}
+        fields={{ ...registration.fields, maxActivityWeight: '1.0', maxAssetActivityWeight: '2.5' }}
+        onEdit={() => {}}
+        onSubmit={() => {}}
+      />
+    );
+
+    expectCommonReviewFields(actionName);
+    expect(screen.getByTestId('synchronizerId-field').textContent).toBe(
+      registration.synchronizerId
+    );
+    expect(screen.getByTestId('paymaster-party-id-value').textContent).toBe(
+      registration.fields.paymaster
+    );
+    expect(screen.getByTestId('maxActivityWeight-field').textContent).toBe('1.0');
+    expect(screen.getByTestId('maxAssetActivityWeight-field').textContent).toBe('2.5');
+  });
+
+  test('should render review proposal component for offboard dedicated synchronizer', () => {
+    const actionName = 'Offboard Dedicated Synchronizer';
+
+    render(
+      <ProposalSummary
+        actionName={actionName}
+        url={url}
+        summary={summary}
+        expiryDate={expiryDate}
+        effectiveDate={effectiveDate}
+        formType="archive-synchronizer-registration"
+        registration={registration}
+        onEdit={() => {}}
+        onSubmit={() => {}}
+      />
+    );
+
+    expectCommonReviewFields(actionName);
+    expect(screen.getByTestId('synchronizerId-field').textContent).toBe(
+      registration.synchronizerId
+    );
+    expect(screen.getByTestId('paymaster-party-id-value').textContent).toBe(
+      registration.fields.paymaster
+    );
+    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(
+      registration.contractId
+    );
+    expect(screen.queryByTestId('registrationChanges-field')).not.toBeInTheDocument();
+  });
+
+  test('should render review proposal component for update dedicated synchronizer registration', () => {
+    const actionName = 'Update Dedicated Synchronizer Registration';
+
+    render(
+      <ProposalSummary
+        actionName={actionName}
+        url={url}
+        summary={summary}
+        expiryDate={expiryDate}
+        effectiveDate={effectiveDate}
+        formType="update-synchronizer-registration"
+        registration={registration}
+        newFields={{ ...registration.fields, maxActivityWeight: '2.5' }}
+        onEdit={() => {}}
+        onSubmit={() => {}}
+      />
+    );
+
+    expectCommonReviewFields(actionName);
+    expect(screen.getByTestId('registeredSynchronizerCid-field').textContent).toBe(
+      registration.contractId
+    );
+    expect(screen.getByTestId('registrationChanges-title').textContent).toBe('Proposed Changes');
+    // Only the changed value is listed.
+    expect(screen.getAllByTestId('config-change')).toHaveLength(1);
+    expect(screen.getByTestId('config-change-field-label').textContent).toBe('Max Activity Weight');
+    expect(screen.getByTestId('config-change-current-value').textContent).toBe('1.0');
+    expect(screen.getByTestId('config-change-new-value').textContent).toBe('2.5');
+  });
+
   test('should render review proposal component for dso rules config', () => {
     const actionName = 'Set DSO Rules Configuration';
     const numThresholdTitle = 'Number of Unclaimed Rewards Threshold';
