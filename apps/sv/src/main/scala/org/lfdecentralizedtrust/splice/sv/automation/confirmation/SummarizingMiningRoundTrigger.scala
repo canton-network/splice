@@ -168,9 +168,25 @@ class SummarizingMiningRoundTrigger(
     for {
       rewardTotals <-
         if (useTrafficBasedAppRewards(payload))
-          fetchRewardAccountingTotals(round).map(rewardTotalsFromScan)
+          fetchRewardAccountingTotals(round).map { totals =>
+            RewardTotals(
+              appRewardCoupons = appRewardCouponsFromScanTotals(totals),
+              issuancePerFeaturedAppActivity = BigDecimal(totals.issuancePerFeaturedAppActivity),
+              totalAppRewardUnclaimed = BigDecimal(totals.totalAppRewardUnclaimed),
+              totalAppRewardFromAssetActivity = BigDecimal(totals.totalAppRewardFromAssetActivity),
+              issuancePerFeaturedAssetActivity = BigDecimal(totals.issuancePerFeaturedAssetActivity),
+            )
+          }
         else
-          store.sumAppRewardCouponsOnDomain(round, domain).map(rewardTotalsFromStore)
+          store.sumAppRewardCouponsOnDomain(round, domain).map { appRewardCoupons =>
+            RewardTotals(
+              appRewardCoupons = appRewardCoupons,
+              issuancePerFeaturedAppActivity = BigDecimal(0),
+              totalAppRewardUnclaimed = BigDecimal(0),
+              totalAppRewardFromAssetActivity = BigDecimal(0),
+              issuancePerFeaturedAssetActivity = BigDecimal(0),
+            )
+          }
       // Opt fields on OpenMiningRoundSummary were introduced in amulet 0.1.25 with TBARv1.1;
       // populating them with Some(_) on older packages fails choice execution.
       tbarV_1 <- packageVersionSupport.supportsTbarV1_1(
@@ -342,28 +358,6 @@ object SummarizingMiningRoundTrigger {
       totalAppRewardFromAssetActivity: BigDecimal,
       issuancePerFeaturedAssetActivity: BigDecimal,
   )
-
-  private[confirmation] def rewardTotalsFromScan(
-      totals: definitions.RewardAccountingActivityTotalsOk
-  ): RewardTotals =
-    RewardTotals(
-      appRewardCoupons = appRewardCouponsFromScanTotals(totals),
-      issuancePerFeaturedAppActivity = BigDecimal(totals.issuancePerFeaturedAppActivity),
-      totalAppRewardUnclaimed = BigDecimal(totals.totalAppRewardUnclaimed),
-      totalAppRewardFromAssetActivity = BigDecimal(totals.totalAppRewardFromAssetActivity),
-      issuancePerFeaturedAssetActivity = BigDecimal(totals.issuancePerFeaturedAssetActivity),
-    )
-
-  private[confirmation] def rewardTotalsFromStore(
-      appRewardCoupons: AppRewardCouponsSum
-  ): RewardTotals =
-    RewardTotals(
-      appRewardCoupons = appRewardCoupons,
-      issuancePerFeaturedAppActivity = BigDecimal(0),
-      totalAppRewardUnclaimed = BigDecimal(0),
-      totalAppRewardFromAssetActivity = BigDecimal(0),
-      issuancePerFeaturedAssetActivity = BigDecimal(0),
-    )
 
   class SummarizingMiningRoundMetrics(metricsFactory: LabeledMetricsFactory) {
 
