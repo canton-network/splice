@@ -9,7 +9,7 @@
     "@google-cloud/storage": "^7.19.0",
     "@kubernetes/client-node": "^1.4.0",
     "@types/auth0": "^3.3.2",
-    "auth0": "^6.4.0",
+    "auth0": "^7.3.0",
     "ip": "^2.0.1"
   },
   "scripts": {
