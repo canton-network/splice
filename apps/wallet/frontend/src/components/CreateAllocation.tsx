@@ -36,7 +36,7 @@ const CreateAllocation: React.FC = () => {
   const { createAllocationV2 } = useWalletClient();
   const userParty = usePrimaryParty();
   const [error, setError] = useState<object | null>(null);
-  const [allocation, setAllocation] = useState<PartialAllocateAmuletV2Request>(emptyForm());
+  const [allocation, setAllocation] = useState<PartialAllocateAmuletV2Request>(() => emptyForm());
   const validated = validatedForm(userParty!, allocation);
   const createAllocationMutation = useMutation({
     mutationFn: async () => {

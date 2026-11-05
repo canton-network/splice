@@ -11,7 +11,7 @@ import {
   updateIdFromEventId,
 } from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
-import formatISO from 'date-fns/formatISO';
+import { formatISO } from 'date-fns';
 
 import {
   AccountBalanceWallet,

@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from 'react';
+import { JSX, useState } from 'react';
 
 import { Button, ButtonProps, Typography } from '@mui/material';
 
