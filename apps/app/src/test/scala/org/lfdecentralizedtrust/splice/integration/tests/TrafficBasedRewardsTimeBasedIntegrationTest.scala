@@ -751,12 +751,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       opsParties: Seq[PartyId] = Seq.empty,
       weight: BigDecimal = BigDecimal(1),
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val opsPartiesArg =
-      if (opsParties.isEmpty) java.util.Optional.empty[java.util.List[String]]()
-      else
-        java.util.Optional.of(
-          java.util.List.copyOf(opsParties.map(_.toProtoPrimitive).asJava)
-        )
+    val opsPartiesArg: java.util.Optional[java.util.List[String]] =
+      Option
+        .when(opsParties.nonEmpty)(opsParties.map(_.toProtoPrimitive).asJava)
+        .toJava
     val action = new ARC_DsoRules(
       new SRARC_GrantFeaturedAppRight(
         new DsoRules_GrantFeaturedAppRight(
