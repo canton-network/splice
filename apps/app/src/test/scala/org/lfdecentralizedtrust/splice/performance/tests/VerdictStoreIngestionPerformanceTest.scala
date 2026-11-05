@@ -152,6 +152,70 @@ class VerdictStoreIngestionPerformanceTest(
     secondaryRateDesc = "Ingested transaction views per second",
   )
 
+  /** Labels/descriptions for the store-specific "primary" (verdicts) and "secondary"
+    * (transaction views) counts emitted alongside the common ingestion metrics.
+    */
+  private case class IngestionMetricNames(
+      avgPrimaryTimeName: String,
+      avgPrimaryTimeDesc: String,
+      totalPrimaryName: String,
+      totalPrimaryDesc: String,
+      primaryRateName: String,
+      primaryRateDesc: String,
+      totalSecondaryName: String,
+      totalSecondaryDesc: String,
+      secondaryRateName: String,
+      secondaryRateDesc: String,
+  )
+
+  /** A separate Python script pushes the metrics to Prometheus Pushgateway.
+    * We structure the JSON file so the Python side stays mostly read-only, enabling new metrics to
+    * be added to the JSON without changing the Python script.
+    */
+  private def writeIngestionMetrics(
+      metrics: StoreIngestionPerfMetrics,
+      success: Boolean,
+      names: IngestionMetricNames,
+  ): Unit = {
+    val extraMetrics = Seq(
+      StoreIngestionPerfMetrics.metric(
+        names.avgPrimaryTimeName,
+        names.avgPrimaryTimeDesc,
+        metrics.avgItemTimeNs,
+      ),
+      StoreIngestionPerfMetrics.metric(
+        names.totalPrimaryName,
+        names.totalPrimaryDesc,
+        BigDecimal(metrics.totalItems),
+      ),
+      StoreIngestionPerfMetrics.metric(
+        names.primaryRateName,
+        names.primaryRateDesc,
+        metrics.updatesPerSec,
+      ),
+      StoreIngestionPerfMetrics.metric(
+        names.totalSecondaryName,
+        names.totalSecondaryDesc,
+        BigDecimal(metrics.totalEvents),
+      ),
+      StoreIngestionPerfMetrics.metric(
+        names.secondaryRateName,
+        names.secondaryRateDesc,
+        metrics.eventsPerSec,
+      ),
+    )
+    writeMetricsFile(
+      StoreIngestionPerfMetrics.toMetricsJson(
+        metrics,
+        success,
+        extraMetrics = extraMetrics,
+        includeUpdateCounts = false,
+      ),
+      StoreIngestionPerfMetrics.MetricsDir,
+      "Ingestion",
+    )
+  }
+
   private def loadVerdictsFromDump(): Seq[LoadedVerdict] = {
     val dump = (for {
       json <- io.circe.parser.parse(Files.readString(eventsDumpPath))
