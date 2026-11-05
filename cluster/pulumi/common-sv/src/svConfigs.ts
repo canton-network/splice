@@ -20,6 +20,7 @@ import {
   svRunbookConfigBasic,
 } from './svConfigsBasic';
 
+// TODO (#8263): remove the CometBFT keys and node configs
 const svCometBftSecrets: pulumi.Output<SvCometBftKeys>[] = isMainNet
   ? [svCometBftKeysFromSecret('sv1-cometbft-keys')]
   : [

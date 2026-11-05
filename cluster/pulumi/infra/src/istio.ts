@@ -317,6 +317,7 @@ function configureInternalGatewayService(
   );
 }
 
+// TODO (#8263): remove the CometBFT gateway
 function configureCometBFTGatewayService(
   ingressNs: k8s.core.v1.Namespace,
   ingressIp: pulumi.Output<string>,

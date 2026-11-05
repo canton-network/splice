@@ -12,6 +12,7 @@ export interface CantonBftSynchronizerNode {
   externalSequencerP2pAddress: string;
 }
 
+// TODO (#8263): remove the CometBFT synchronizer nodes
 export interface CometbftSynchronizerNode {
   cometbftRpcServiceName: string;
 }

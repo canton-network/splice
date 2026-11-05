@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+# TODO (#8263): remove together with the CometBFT gateway
 cometbftPorts:
   nodes: 10
   domains: 5

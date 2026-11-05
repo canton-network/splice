@@ -33,6 +33,7 @@ function clusterDnsEntries(
   dnsName: string,
   managedZone: string,
   ingressIp: gcp.compute.Address,
+  // TODO (#8263): remove the CometBFT ingress IP and DNS record
   cometbftIngressIp: gcp.compute.Address
 ): gcp.dns.RecordSet[] {
   const opts: pulumi.CustomResourceOptions = {
