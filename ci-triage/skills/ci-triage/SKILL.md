@@ -67,7 +67,7 @@ edits to shared files.
      `<Suite or job>: <cause>` while the title still starts with `GHA Run` or `Pipeline`, and
      `direnv exec . ci-triage/scripts/set_status.py Inbox Triaged <ref>` (recipe 12).
    - Duplicate: `direnv exec . ci-triage/scripts/close_duplicates.py <parent> <ref>... --comment '<why>'` (a
-     single line of plain text; anything longer `--comment-file <round dir>/comments/<parent>-dups.md`), one line
+     single line of plain text, inline, no body file), one line
      per parent with all its duplicates (closing moves them to `Closed`). The duplicate close links the occurrence to the parent; add a recurrence comment on the parent only
      when it recurs often and has neither an assignee nor an owner discussion.
    - No root cause: a comment with what was investigated and what is missing to decide, and no Status change

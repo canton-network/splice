@@ -23,7 +23,8 @@ cn-test-failures issues; a splice PR or commit is `canton-network/splice#N` or a
 (not to name the commit under test, which the issue already shows).
 
 Leave out what the reader can see on the issue itself (links, the job list) and the triage process (which recipes
-ran, what was grepped). Duplicate-close comments stay one or two sentences: the one fact that makes it the same failure. They do not
+ran, what was grepped). Duplicate-close comments are one sentence of plain text, the one fact that makes it the same failure, passed inline
+with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes, so it fits the shell rules). They do not
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
 

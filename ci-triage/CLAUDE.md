@@ -179,7 +179,7 @@ quotes: no variables, `$`, backticks, heredocs or `&&` chains.
 
 Comment bodies go into a body file, `<round dir>/comments/<ref>.md` (committed, so the user has it after fetching the
 branch), posted with `gh issue comment <ref> -R DACH-NY/cn-test-failures --body-file <path>` or `close_duplicates.py
---comment-file <path>`. Only a single-line comment of plain text (no Markdown, backticks, quotes, backslashes or `$`)
-may be passed inline with `--body` or `--comment`; a multi-line body, a code block or a log line always goes into a
+--comment-file <path>`. A single-line comment of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed
+inline with `--body` or `--comment`, never as a file; duplicate-close comments are always written this way; a multi-line body, a code block or a log line always goes into a
 file. Write bodies as readable Markdown, with paragraphs and fenced code blocks for log lines. Always print the full
 body in chat as well, so the user reviews it there.

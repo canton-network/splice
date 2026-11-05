@@ -84,7 +84,8 @@ In at most one screen, in this order:
 3. Why this and not something else: the family and duplicate check, the alternatives ruled out.
 4. Fix, as the comment states it (file, change, owner), or why none is needed; the proposed lesson in one line or
    "Lesson: none".
-5. The suggested action: its commands in one fenced block, after re-checking the live state of its refs; then the
+5. The suggested action: its commands in one fenced block, after re-checking the live state of its refs and after
+   committing every file the commands use (body files, packets), so the user has them after fetching; then the
    full body of every comment in a `~~~` fence, also when it is posted from a body file and also when it is
    unchanged from an earlier message (the user sometimes posts by hand with changed wording).
 
