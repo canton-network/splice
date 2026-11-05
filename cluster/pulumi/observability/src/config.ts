@@ -144,9 +144,6 @@ const MonitoringConfigSchema = z
         cloudSql: z.object({
           maintenance: z.boolean(),
         }),
-        cometbft: z.object({
-          expectedMaxBlocksPerSecond: z.number(),
-        }),
         loadTester: z.object({
           minRate: z.number(),
         }),
@@ -219,7 +216,7 @@ const MonitoringConfigSchema = z
           .default({ enabled: false }),
         globalSynchronizerHealth: z.object({
           // Fraction (0-1) of sequenced confirmation requests that were discarded
-          // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+          // (i.e., never processed by the mediator)
           // above which the alert fires.
           discardedConfirmationRequestsThreshold: z.number(),
           // Fraction (0-1) of confirmation requests that failed (as observed by the
