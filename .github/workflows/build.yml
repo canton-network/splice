@@ -109,7 +109,7 @@ jobs:
       runs_on: self-hosted-k8s-large
       test_names_file: 'test-full-class-names-sim-time.log'
       start_canton_options: -s
-      parallelism: 4
+      parallelism: 6
       test_name: simtime
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
