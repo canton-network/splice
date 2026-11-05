@@ -20,13 +20,12 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
-// Validates FeaturedAppRight grant/amend actions before they become vote-requests: it is the
-// authoritative gate for the opsParties rules (no duplicates, provider is not its own opsParty,
-// valid party ids) and additionally checks cross-right overlap against the ACS.
-// The UI pre-checks the first three for fast feedback, but only the backend can do the ACS overlap check.
-// The UI also surfaces an advisory warning when opsParties overlap an in-flight vote-request; this validator
-// deliberately does not re-check in-flight requests (that query would run on every proposal), so the
-// authoritative check here is ACS-only and the cross-request race is left as the TOCTOU limitation noted below.
+// This validates FeaturedAppRight grant and amend actions, before the vote-requests are created for them.
+//   -  For grant action this confirms that right does not exist for the `provider`.
+//   - For both grant and amend actions: this confirms that parties present in `opsParties` are
+//  - Distinct, and different from `provider`
+//  - Are not present in any FeaturedAppRight in ACS (either as `provider` or `opsParties`)
+// But this does not check the in-flight vote-requests; which is done by the UI directly.
 object FeaturedAppRightValidator {
 
   def validateFeaturedAppRightAction(
