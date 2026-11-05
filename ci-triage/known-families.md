@@ -369,6 +369,11 @@ State as recorded in the family section, not rechecked against the tracker on 20
   Release-line runs never hit the classes cache (`Cache not found ... classes-10 branch:release-line-...` also on
   passing runs), so every release-line shard compiles (8-13 min) inside the 40 min budget: 11208, 11212 (2026-11-05,
   five runs at once, compile 12.5 min).
+  Fix: splice #8319 (ray-roestenburg-da, merged 2026-11-05 21:06 UTC) compiles the tests in their own step before the
+  timed step, in `.github/actions/tests/scala_test/action.yml` only. Covers GHA scala_test shards on main; release
+  lines only once backported. Does not cover the CircleCI preflight jobs (11221, 10677, 10736:
+  `preflight_check_final_upgrade_docker`, 20 min `timeout` around sbt). A cold-compile timeout in a GHA shard after
+  that merge (on main) is a regression of #8319, not a plain duplicate.
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
   splice commit. 10683, 10688, likely 10689. Fixed by the #8015 revert.
