@@ -24,7 +24,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | I | test races (venue, bulk storage, traffic, external party, sv4 sequencer) | 8784, 10149, 10179, 10690, 10691 | mixed |
 | J | infra, no code change | many | see section |
 | K | sim time: mediator pruning backoff after a 30 d jump | 10184 | PR 7440 open (2026-09-22) |
-| L | reference sequencer `insert block` 40001 retry storm | 10139, 10197, 11160 | open, Canton / test infra |
+| L | reference sequencer `insert block` 40001 retry storm | 10139, 10197, 11160, 11189, 11191 | open; goes away with splice#8234 (all tests on DA BFT) |
 | M | slow BFT confirmation vs 10 s client deadline | 10281 | fixed, #7909 |
 | N | SV1 bootstrap below participant default PV (PV 36 nightly) | 10520 | fixed, #8065 / #8125 |
 | O | AcsCommitmentSender close hang crashes participant (Canton 3.7) | 10729 | open, Canton |
@@ -246,6 +246,14 @@ State as recorded in the family section, not rechecked against the tracker on 20
   do not put it in `canton_log.ignore.txt`, in production the line means the mediator lags the clock by > retention.
 
 ## L. Reference sequencer `insert block` SQLSTATE 40001 retry storm (slow ordering, not only teardown exits)
+- 2026-11-05: the reference driver is being removed from Canton (DACH-NY/canton#29603); splice#8234 (rautenrieth-da,
+  open) moves every test to DA BFT. After it merges, L cannot recur; close new hits on main as dups only if their run
+  predates the merge. DA BFT makes simtime tests about 33% slower (cause unknown), so watch the 40 min sbt budget
+  (10358) and BFT-specific failures (BFT orderer DB health, 11211; ordering delay while a BFT peer joins, 11165).
+- 2026-11-05 (11189, 11191, resource-intensive (0), main 11-04): BootstrapPackageConfigIntegrationTest.scala:291
+  `observe AmuletRules with upgraded config` (45 s after the votes; 19 s vote expiry leaves about 20 s): the
+  DsoRules_CloseVoteRequest waited 20-26 s in ordering (Sv1 insert block chain 21.7 s from 18:15:48.9 in 11191, 18.0 s
+  from 15:26:11.1 in 11189) and completed after the check. 2 of 62 resource-intensive (0) main runs since 10-31.
 - Signature: a ledger command or confirmation takes 10-25 s; participants log `timeout-result has not completed after
   N milliseconds` / `succeed successfully but slow`; on the sequencer, `enqueued reference sequencer store request` is
   followed by `Created batch reference-driver-requests-batch` many seconds later, and `DbStorageSingle` logs
