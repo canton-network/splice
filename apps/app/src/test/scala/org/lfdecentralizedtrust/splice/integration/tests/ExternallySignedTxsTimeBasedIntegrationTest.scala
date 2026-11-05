@@ -91,7 +91,7 @@ class ExternallySignedTxsTimeBasedIntegrationTest
         transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Direct,
         expectedTimeBounds =
           Some((beforePrepare, beforePrepare.plusSeconds(10 * 60).addMicros(-1))),
-        advanceTimeBeforeExecute = Some(Duration.ofMinutes(9)),
+        beforeExecute = Some(() => advanceTime(Duration.ofMinutes(9))),
       )
 
       val afterExecute = env.environment.clock.now
