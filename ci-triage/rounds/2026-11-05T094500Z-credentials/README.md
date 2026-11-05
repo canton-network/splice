@@ -34,3 +34,17 @@ User posted a shortened 11217 comment (`comments/11217-posted.md`; style rules n
 bad timing: the credentials were rotated while the 08:19-08:32 runs were testing. Supported by main 6ecd22cf (09:28):
 frontend-wall-clock-time (2) passed. To confirm: docker-compose (1) and key-download (0) of 6ecd22cf / 5bfb8eed pass,
 then 11217 can be closed.
+
+## Inbox to zero (2026-11-05, from 10:15)
+
+User: get the inbox to 0; board export requested (`export_board.py`). Until it lands, the queue is the live issue list.
+Groups triaged in background forks; state: open, presented, handed out, ran, skipped.
+
+| Group | Refs | Signature | State |
+|---|---|---|---|
+| resint | 11189 11191 | main resource-intensive (0), 11-04 14:27 and 17:52 | open |
+| wc7 | 11193 11195 | main wall-clock-time (7), 11-04 21:43 and 22:40 | open |
+| fe | 11186 11187 11192 | main frontend-wall-clock-time (2), (0), (1) on 11-04; 11192 Splitwell settle debts | open |
+| burst | 11207 11208 11211 11212 | release-line runs 08:19-08:32, not credentials (CommandFailure, 2x sbt 40 min timeout, BFT orderer DB) | open |
+| singles | 11188 11182 | main app-upgrade (0) 11-04 14:11; docker-canton-simtime (0) 11-04 | open |
+| needs-log | 11194 11196 11179 | CircleCI monitor_sv_catchup_test; cni cluster_lock_reaper, auth0_user_cleanup | log requested |
