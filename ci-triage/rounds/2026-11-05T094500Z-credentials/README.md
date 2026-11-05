@@ -55,3 +55,4 @@ only need their Status (and 4 a comment). Fork `old3`: 11164, 11172, 11175.
 
 User: present one item at a time, most important first, prefer items with many duplicates. No family letters in issue comments.
 - 11182 (scan false ERROR after BFT success): ran 2026-11-05, Triaged, assigned isegall-da.
+- 11195 (scheduled vetting vs shared alice participant): ran 2026-11-05, Triaged, assigned julientinguely-da. User corrected "latest DARs" (Splitwell vets all versions 0.1.19-0.1.25); the fork had reconstructed a log line, fixed; rule: verify agent quotes.
