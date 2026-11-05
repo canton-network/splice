@@ -33,7 +33,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | R | forced ACS snapshot 500 on advisory lock | 10740 (dup 10916) | open, OriolMunoz-da |
 | S | environment close timeout on in-flight submission | 10742 | open |
 | T | CI test credentials rotated 2026-10-29 | 10896, 10901 | resolved by the rotation |
-| U | joining SV ACS import refused, topology offset (Canton 3.7) | 10907 (dups 11107, 11163) | open, 3 hits, owner needed |
+| U | joining SV ACS import refused, topology offset (Canton 3.7) | 10907 (dups 11107, 11163, 11177, 11222) | fixed upstream in Canton, no splice action; close new hits as dups |
 | V | PeriodicTopologySnapshot missing 'scopes' (pekko-connectors 1.3.0) | 10921 (dups 10923, 10891) | fixed on main, #8148 |
 | W | ScanEventHistoryIntegrationTest pre-tap cursor race | 10912 | open, rautenrieth-da |
 | X | PV 37 topology on a PV 36 synchronizer | 10934 (X1), 10927 (X2), 10937 (X3) | X1, X3 fixed; X2 open |
@@ -659,3 +659,6 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - Parent 9752 (2026-08-24, closed after 2 weeks without recurrence; fix referenced as cni#2785, not readable here);
   10300 (2026-10-07, dup); 11173 (2026-11-03, DistributedDomainIntegrationTest, aliceValidator, 19 rejections
   17:01:20.567-17:01:38.536, wall-clock-time (3) run 41674340437). Different from 10611 (P2P connectivity).
+- U: 11222 (release-line-0.10.0 8458061baa, simtime (1), 2026-11-05) dup of 10907; 5 hits in 8 days (10907, 11107,
+  11163, 11177, 11222). User 2026-11-05: fixed in upstream Canton, splice does nothing; close further hits as dups
+  until the Canton bump lands.
