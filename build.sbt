@@ -934,8 +934,8 @@ lazy val `splice-amulet-daml` =
           (`splice-token-standard-utils-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value ++
-          (`splice-api-credential-registry-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value,
+          (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-registry-v1-daml` / Compile / damlBuild).value,
     )
 
 lazy val `splice-test-token-v1-test-daml` =
