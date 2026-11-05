@@ -918,7 +918,10 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
         for {
           _ <- mkKeyValueStore().setValue(key, "not a timestamp")
         } yield {
-          val failure = the[TestFailedException] thrownBy mkStore()
+          val failure = loggerFactory.assertLogs(
+            the[TestFailedException] thrownBy mkStore(),
+            _.errorMessage should include(s"Failed to decode value for key '$key'"),
+          )
           failure.getCause.getMessage should include(key)
         }
       }
