@@ -171,9 +171,9 @@ class SummarizingMiningRoundTrigger(
           fetchRewardAccountingTotals(round).map(rewardTotalsFromScan)
         else
           store.sumAppRewardCouponsOnDomain(round, domain).map(rewardTotalsFromStore)
-      // Opt fields on OpenMiningRoundSummary were introduced in amulet 0.1.25;
+      // Opt fields on OpenMiningRoundSummary were introduced in amulet 0.1.25 with TBARv1.1;
       // populating them with Some(_) on older packages fails choice execution.
-      summarySupport <- packageVersionSupport.supportsTbarV1_1(
+      tbarV_1 <- packageVersionSupport.supportsTbarV1_1(
         Seq(dsoParty),
         context.clock.now,
       )
@@ -199,13 +199,12 @@ class SummarizingMiningRoundTrigger(
       validatorLivenessActivityRecords = validatorFaucetCoupons + validatorLivenessActivityRecords,
       svRewardCouponsWeightSum = svRewardCouponsWeightSum,
       optIssuancePerFeaturedAppRewardCoupon =
-        Option.when(summarySupport.supported)(rewardTotals.issuancePerFeaturedAppActivity),
-      optUnclaimedAppRewards =
-        Option.when(summarySupport.supported)(rewardTotals.totalAppRewardUnclaimed),
+        Option.when(tbarV_1.supported)(rewardTotals.issuancePerFeaturedAppActivity),
+      optUnclaimedAppRewards = Option.when(tbarV_1.supported)(rewardTotals.totalAppRewardUnclaimed),
       optTotalFeaturedAssetRewardCoupons =
-        Option.when(summarySupport.supported)(rewardTotals.totalAppRewardFromAssetActivity),
+        Option.when(tbarV_1.supported)(rewardTotals.totalAppRewardFromAssetActivity),
       optIssuancePerFeaturedAssetRewardCoupon =
-        Option.when(summarySupport.supported)(rewardTotals.issuancePerFeaturedAssetActivity),
+        Option.when(tbarV_1.supported)(rewardTotals.issuancePerFeaturedAssetActivity),
     )
   }
 
