@@ -97,3 +97,16 @@ Fix (test only), one of:
 - give the startup check a longer budget (for example 120 s), which also covers the reconnect backoff.
 
 Owner: moritzkiefer-da (author of the suite, #8125).
+
+## Correction 2026-11-05 (main thread)
+
+Startup did not exceed the budget: the sv1 participant listened on 27102 from 14:17:51.447 (45 s into the 60 s
+`eventually`), and the polls at 14:17:55.471, 14:18:00.473 and 14:18:05.475 failed with `UNAVAILABLE/io exception` in
+the same millisecond as `sending request`, with no request logged by the participant. The connections are built before
+`withCantonSvNodes` (lines 78-81), so the channel has failed since 14:17:06. Likely gRPC reconnect backoff (not shown in
+the logs). Fix: build the connections after Canton is up or use a fresh one per poll; moving the suite to
+resource-intensive only shortens startup.
+```
+grep -aE 'GetId to 127.0.0.1:27102' log/11228/test.tsv | awk -F'\t' '$1>="14:17:50"'
+zcat log/11228/art/canton-standalone-sv1-bootstrap-pv36.clog.gz | jq -r 'select(.logger_name|test("sv1StandaloneParticipant")) | ...' | grep -aE 'admin-api|Stage Admin API'
+```
