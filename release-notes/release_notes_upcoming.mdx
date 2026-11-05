@@ -13,6 +13,20 @@
       - `asset_activity_records`: asset-side activity records (CIP-104). Omitted from JSON when there is no asset activity.
       - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app. Omitted from JSON when absent.
 
+    - CIP-104 v1.1 populates four optional fields on `OpenMiningRoundSummary`:
+      `optIssuancePerFeaturedAppRewardCoupon`, `optUnclaimedAppRewards`,
+      `optIssuancePerFeaturedAssetRewardCoupon`, and
+      `optTotalFeaturedAssetRewardCoupons`. The two `*Asset*` fields carry
+      the asset-side issuance ratio and the total featured-asset reward
+      coupons.
+
+    - Explorer operators:
+
+      Because featured-app and featured-asset activity now have separate
+      issuance ratios, explorers should ingest the new `*Asset*` fields
+      alongside the existing app-activity ones; explorers that only read the
+      app-activity fields will under-report total app rewards minted.
+
     - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
 
   - Validator App
