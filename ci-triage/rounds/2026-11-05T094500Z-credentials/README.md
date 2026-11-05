@@ -42,7 +42,7 @@ Groups triaged in background forks; state: open, presented, handed out, ran, ski
 
 | Group | Refs | Signature | State |
 |---|---|---|---|
-| resint | 11189 11191 | main resource-intensive (0), 11-04 14:27 and 17:52 | open |
+| resint | 11189 11191 | main resource-intensive (0), 11-04 14:27 and 17:52 | ran 2026-11-05: dups of 11160 (user dropped "family L" from the comment); user linked 11160 to splice#8234 (DA BFT everywhere, simtime parallelism 4 to 6) |
 | wc7 | 11193 11195 | main wall-clock-time (7), 11-04 21:43 and 22:40 | open |
 | fe | 11186 11187 11192 | main frontend-wall-clock-time (2), (0), (1) on 11-04; 11192 Splitwell settle debts | open |
 | burst | 11207 11208 11211 11212 | release-line runs 08:19-08:32, not credentials (CommandFailure, 2x sbt 40 min timeout, BFT orderer DB) | ran 2026-11-05: 11208 11212 dup 10358; 11207 (backport #7909), 11211 (ignore pattern) Triaged |
@@ -52,3 +52,5 @@ Groups triaged in background forks; state: open, presented, handed out, ran, ski
 User: duplicate one-liners inline (no file); commit body files before handing out commands (both now in the skills).
 Board export 2026-11-05 11:02: 30 Inbox, 19 Triaged, 7 In progress. Group `old`: 14 items from earlier rounds that
 only need their Status (and 4 a comment). Fork `old3`: 11164, 11172, 11175.
+
+User: present one item at a time, most important first, prefer items with many duplicates. No family letters in issue comments.
