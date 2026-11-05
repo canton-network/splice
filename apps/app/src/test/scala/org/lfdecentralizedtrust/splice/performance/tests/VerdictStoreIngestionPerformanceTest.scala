@@ -184,7 +184,9 @@ class VerdictStoreIngestionPerformanceTest(
         }
         val hasTrafficSummaries = batch.exists(_.trafficSummary.isDefined)
         val firstActiveRoundO = appActivityRecords.map(_._2.roundNumber).minOption
-        val lastArchivedRoundO = Option.empty[Long]
+        // prod passes the last archived round, which adds a per-batch meta-row update
+        // the dump lacks it, so we approximate it to keep that update in the batch
+        val lastArchivedRoundO = batch.flatMap(_.resolvedRound).maxOption.map(_ - 1)
         val batchEventCount = batch.map(_.verdict.transactionViews.views.size.toLong).sum
         val batchAppActivityCount = appActivityRecords.size.toLong
         val wallBefore = System.nanoTime()
