@@ -180,21 +180,6 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
         )
       verifyNothingPrepared(service)
     }
-
-    "return 503 without exporting while the DSO party is not yet hosted" in {
-      val service = mock[SvOnboardingSnapshotService]
-      HttpSvPublicHandler
-        .onboardSvPartyMigrationPrepareResponse(
-          service,
-          Right(None),
-          (_, file) => writeSnapshot(file),
-        )
-        .futureValue shouldBe SvPublicResource.OnboardSvPartyMigrationPrepareResponse
-        .ServiceUnavailable(
-          definitions.ErrorResponse("The DSO party is not yet hosted on the candidate participant")
-        )
-      verifyNothingPrepared(service)
-    }
   }
 
   "unavailableOnGrpcFailure" should {

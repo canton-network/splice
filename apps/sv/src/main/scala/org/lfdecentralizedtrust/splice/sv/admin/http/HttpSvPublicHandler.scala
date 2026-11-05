@@ -907,7 +907,7 @@ object HttpSvPublicHandler {
 
   private[http] def onboardSvPartyMigrationPrepareResponse(
       snapshotService: SvOnboardingSnapshotService,
-      prepared: Either[DsoPartyMigrationFailure, Option[SnapshotKey.Acs]],
+      prepared: Either[DsoPartyMigrationFailure, SnapshotKey.Acs],
       exportSnapshot: (SnapshotKey.Acs, Path) => Future[Unit],
   )(implicit
       ec: ExecutionContext,
@@ -917,15 +917,7 @@ object HttpSvPublicHandler {
     prepared match {
       case Left(DsoPartyHosting.RequiredProposalNotFound(partyToParticipantSerial)) =>
         Future.successful(respond.BadRequest(proposalNotFoundResponse(partyToParticipantSerial)))
-      case Right(None) =>
-        Future.successful(
-          respond.ServiceUnavailable(
-            definitions.ErrorResponse(
-              "The DSO party is not yet hosted on the candidate participant"
-            )
-          )
-        )
-      case Right(Some(key)) =>
+      case Right(key) =>
         snapshotService
           .prepare(key, exportSnapshot(key, _))
           .map(id => respond.OK(definitions.OnboardSvSnapshotPrepareResponse(id.value)))

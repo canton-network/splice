@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import com.digitalasset.canton.participant.admin.party.PartyManagementServiceError
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
+import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting.DsoPartyMigrationFailure
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.SnapshotKey
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
@@ -23,6 +24,7 @@ import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
+import io.grpc.Status
 
 import io.grpc.StatusRuntimeException
 import java.nio.file.Path
@@ -35,6 +37,7 @@ class DsoPartyMigration(
     participantAdminConnection: ParticipantAdminConnection,
     @unused ledgerClient: SpliceLedgerClient,
     retryProvider: RetryProvider,
+    dsoPartyHosting: DsoPartyHosting,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor
@@ -46,23 +49,45 @@ class DsoPartyMigration(
   private val partyHosting = new SponsorDsoPartyHosting(
     participantAdminConnection,
     dsoParty,
+    dsoPartyHosting,
     loggerFactory,
   )
 
   def authorizeParticipantForHostingDsoParty(
       participantId: ParticipantId
-  )(implicit
-      tc: TraceContext
-  ): EitherT[Future, DsoPartyMigrationFailure, Option[SnapshotKey.Acs]] =
+  )(implicit tc: TraceContext): EitherT[Future, DsoPartyMigrationFailure, SnapshotKey.Acs] = {
+    logger.info(s"Sponsor SV authorizing DSO party to participant $participantId")
     for {
       dsoRules <- EitherT.liftF(dsoStore.getDsoRules())
-      _ <- partyHosting.ensureDsoPartyToParticipantProposalSigned(dsoRules.domain, participantId)
+      // this will wait until the PartyToParticipant state change completed
+      _ <- partyHosting
+        .authorizeDsoPartyToParticipant(
+          dsoRules.domain,
+          participantId,
+        )
       activationTx <- EitherT.liftF(
         participantAdminConnection
-          .getDsoPartyToParticipantTransaction(dsoRules.domain, participantId, dsoParty)
-          .value
+          .getDsoPartyToParticipantTransaction(
+            dsoRules.domain,
+            participantId,
+            dsoParty,
+          )
+          .getOrElseF(
+            Future.failed(
+              Status.NOT_FOUND
+                .withDescription(
+                  s"Transaction where the participant $participantId was activated not found."
+                )
+                .asRuntimeException()
+            )
+          )
       )
-    } yield activationTx.map(tx => SnapshotKey.Acs(dsoRules.domain, dsoParty, tx.base.validFrom))
+      activationTime = activationTx.base.validFrom
+      _ = logger.info(
+        s"DSO party was authorized on $participantId, preparing snapshot at time $activationTime."
+      )
+    } yield SnapshotKey.Acs(dsoRules.domain, dsoParty, activationTime)
+  }
 
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
   def exportSnapshotToFile(key: SnapshotKey.Acs, targetParticipantId: ParticipantId, file: Path)(
