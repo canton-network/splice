@@ -6,7 +6,6 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
 import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.automation.Trigger
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -277,21 +276,10 @@ abstract class WalletSweepIntegrationTest
     )
     val previousBalance = walletClient.balance().unlockedQty
 
-    val (_, instruction) = actAndCheck("Sweep kicks in", runTokenStandardSweep() shouldBe true)(
-      "sender is drained and receiver sees a pending transfer instruction (no preapproval yet)",
+    actAndCheck("Sweep kicks in", runTokenStandardSweep() shouldBe true)(
+      "sender is drained and AutoAcceptTransferInstructionsTrigger accepts the transfer instruction",
       _ => {
         bobWalletClient.balance().unlockedQty should beAround(minBalanceUsd)
-        inside(walletClient.listTokenStandardTransfers()) { case Seq(t) => t }
-      },
-    )
-    actAndCheck(
-      "Receiver accepts the transfer instruction",
-      walletClient.acceptTokenStandardTransfer(
-        new TransferInstruction.ContractId(instruction.contractId.contractId)
-      ),
-    )(
-      "Receiver got the funds",
-      _ => {
         walletClient.listTokenStandardTransfers() shouldBe empty
         walletClient.balance().unlockedQty should beAround(previousBalance + 18)
       },
@@ -472,7 +460,9 @@ class WalletSweepToValidatorOperatorIntegrationTest extends WalletSweepIntegrati
             c.copy(
               autoAcceptTransfers = Map(
                 alicePartyId.toProtoPrimitive ->
-                  AutoAcceptTransfersConfig(fromParties = Seq(sv1PartyId))
+                  AutoAcceptTransfersConfig(fromParties =
+                    Seq(sv1PartyId, bobTokenStandardSweeperPartyId(config))
+                  )
               )
             )
           } else if (name == "bobValidator") {
@@ -579,7 +569,9 @@ class WalletSweepToEndUserIntegrationTest extends WalletSweepIntegrationTest {
             c.copy(
               autoAcceptTransfers = Map(
                 alicePartyId.toProtoPrimitive ->
-                  AutoAcceptTransfersConfig(fromParties = Seq(sv1PartyId))
+                  AutoAcceptTransfersConfig(fromParties =
+                    Seq(sv1PartyId, bobTokenStandardSweeperPartyId(config))
+                  )
               )
             )
           } else if (name == "bobValidator") {

@@ -187,6 +187,17 @@ class UserWalletAutomationService(
         clock,
       )
     )
+    registerTrigger(
+      new AutoAcceptTransferInstructionsTrigger(
+        triggerContext,
+        store,
+        connection(SpliceLedgerConnectionPriority.Low),
+        config,
+        scanConnection,
+        validatorTopupConfigO,
+        clock,
+      )
+    )
   }
 
   rewardSharingConfig match {
@@ -244,6 +255,7 @@ object UserWalletAutomationService extends AutomationServiceCompanion {
       aTrigger[WalletPreapprovalSweepTrigger],
       aTrigger[WalletTokenStandardSweepTrigger],
       aTrigger[AutoAcceptTransferOffersTrigger],
+      aTrigger[AutoAcceptTransferInstructionsTrigger],
       aTrigger[AmuletMetricsTrigger],
       aTrigger[ExpireMintingDelegationTrigger],
       aTrigger[ExpireMintingDelegationProposalTrigger],
