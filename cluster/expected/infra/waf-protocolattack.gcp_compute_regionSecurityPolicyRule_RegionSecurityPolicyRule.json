@@ -1,0 +1,19 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "action": "deny(502)",
+    "description": "WAF: protocol attacks",
+    "match": {
+      "expr": {
+        "expression": "!(request.headers['host'].lower().matches(R\"^(?:grafana)\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")) && (evaluatePreconfiguredWaf('protocolattack-v422-stable', {'sensitivity': 1}))"
+      }
+    },
+    "preview": true,
+    "priority": 186508353,
+    "securityPolicy": "waf-whitelist-throttle-ban-mock"
+  },
+  "name": "waf-protocolattack",
+  "provider": "",
+  "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+}

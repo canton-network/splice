@@ -1,0 +1,19 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "action": "deny(502)",
+    "description": "WAF: SQL injection, session fixation and generic attacks",
+    "match": {
+      "expr": {
+        "expression": "!(request.headers['host'].lower().matches(R\"^(?:grafana)\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\") || request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")) && (evaluatePreconfiguredWaf('sqli-v422-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v042200-id942100-sqli', 'owasp-crs-v042200-id942190-sqli']}) || evaluatePreconfiguredWaf('sessionfixation-v422-stable', {'sensitivity': 1}) || evaluatePreconfiguredWaf('generic-v422-stable', {'opt_out_rule_ids': ['owasp-crs-v042200-id934150-generic']}))"
+      }
+    },
+    "preview": true,
+    "priority": 186508352,
+    "securityPolicy": "waf-whitelist-throttle-ban-mock"
+  },
+  "name": "waf-sqli-sessionfixation-generic",
+  "provider": "",
+  "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+}
