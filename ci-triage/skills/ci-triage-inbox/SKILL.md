@@ -89,6 +89,11 @@ In at most one screen, in this order:
    full body of every comment in a `~~~` fence, also when it is posted from a body file and also when it is
    unchanged from an earlier message (the user sometimes posts by hand with changed wording).
 
+Before presenting a group a background agent triaged, grep every log line its comment and packet quote against the
+log it names: a quote must be a real line (shortened only with `...`), never reconstructed from several lines or
+from a truncated message. Check its interpretations of names and versions the same way (e.g. "latest" against
+DarResources).
+
 Then stop. The user may question the analysis, ask for more digging, disagree, edit the action, skip, or report what
 ran. A discussion that changes the cause changes the packet, the comment and the action before anything else
 happens. Do not present the next group before the user says so.
