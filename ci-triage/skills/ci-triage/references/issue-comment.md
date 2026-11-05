@@ -3,16 +3,20 @@
 Reader: a senior engineer who knows splice and Canton but never opens the triage branch. The comment must stand on
 its own: no packet paths or other triage-branch references.
 
-Shape (Markdown, short paragraphs; a few sentences each):
+Shape (Markdown, short paragraphs of one to three sentences; as short as the facts allow):
 1. Verdict in one line: what kind of failure, and whether splice needs a change.
-2. What failed: run, sha, job or test, step; which issues belong to it and how that is known.
-3. Cause, with the decisive log lines verbatim in a fenced code block (two to four lines, timestamps kept,
-   secrets and long JSON trimmed with `...`), then one or two sentences interpreting them.
-4. What rules out the alternatives (same sha passing, later runs, unrelated commit, family checked).
-5. Resolution: the fix in one sentence (file and change) or why none is needed; owner if known. No reference to the
-   fix PR or branch: the PR links the issue with `Fixes ...`.
-6. Not checked: what was not verified and where the missing evidence lives; when it is worth chasing. If the
-   evidence is in a system the user can read (GCP logs: recipe 13), hand them the link before writing this.
+2. What failed, by plain job or test name (`docker-compose`, `key-download`, the test name), without run ids, shas,
+   shard numbers or which duplicate belongs to which job: the issue and the linked duplicates show those.
+3. The decisive log lines verbatim in a fenced code block (two to six lines, timestamps kept, secrets and long JSON
+   trimmed with `...`), then one or two sentences interpreting them.
+4. Only the facts that settle the verdict, one sentence each (a check that passed, the last good run). No timeline
+   of the investigation, no list of runs checked.
+5. Resolution only when someone has to act and the action is not obvious from the verdict: the fix in one sentence
+   (file and change) and the owner. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
+No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
+assignee is set with the command), and no "Not checked" paragraph unless the missing evidence decides whether
+someone has to act; then one sentence, and if the evidence is in a system the user can read (GCP logs: recipe 13),
+hand them the link first.
 
 References: a bare `#N` in a cn-test-failures comment links to cn-test-failures issue N. Write `#N` only for
 cn-test-failures issues; a splice PR or commit is `canton-network/splice#N` or a sha, and only when the reader needs it
@@ -28,7 +32,32 @@ into `<round dir>/comments/<ref>.md` and is posted with `--body-file` (or `close
 never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
 content in a `~~~` fence (so inner ``` fences render as part of it).
 
-## Example (11152, accepted by the user on 2026-11-03)
+## Example (11217, as the user posted it on 2026-11-05)
+
+Draft: `rounds/2026-11-05T094500Z-credentials/comments/11217.md`; posted: `11217-posted.md` next to it. The user cut
+the run and duplicate details, the evidence timeline, the guess about the rotation, the resolution, the @mention and
+"Not checked".
+
+~~~
+CI credentials broken, every run fails: since about 08:55 UTC on 2026-11-05, Auth0, GCP data export and GCP KMS reject the credentials the scala_test jobs get from the `_V2` GitHub secrets.
+
+Failing jobs: docker-compose, the Auth0 frontend login tests, and the GCP bucket and KMS tests in key-download and wall-clock-time.
+
+Three different credentials are rejected:
+
+```
+09:04:53 Failed to start secret machine login: failed to fetch access token using client credentials.
+         error: oauth2: "access_denied" "Unauthorized".
+09:02:23 com.auth0.exception.APIException: Request failed with status code 401: Unauthorized
+08:58:12 StorageException: Error getting access token for service account: 400 Bad Request
+         {"error":"invalid_grant","error_description":"Invalid JWT Signature."}, iss: splice-data-export-tests@da-cn-splice.iam.gserviceaccount.com
+08:55:34 KMS operation `signing with key KmsKeyId(b14aeff8-...)` failed: ... UNAUTHENTICATED: Request had invalid authentication credentials.
+```
+
+The secrets are set (the `Check required secrets are set` step added by canton-network/splice#8248 passed), so the values, not the names, are wrong. The same `_V2` secrets worked until this morning. All three credentials broke within a few minutes of each other.
+~~~
+
+## Older example (11152, accepted by the user on 2026-11-03, longer than the user now prefers)
 
 ```
 gh issue comment 11152 -R DACH-NY/cn-test-failures --body-file ci-triage/rounds/2026-11-03T131520Z/comments/11152.md

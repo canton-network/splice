@@ -27,3 +27,10 @@ orderer can't connect to database 08:55:08), 11212 (0.9.4 wall-clock (4), sbt 40
 
 Possibly credential-related, logs needed: 11194 (CircleCI monitor_sv_catchup_test on cni #7949), 11179
 (auth0_user_cleanup), 11196 (cluster_lock_reaper).
+
+## Outcome
+
+User posted a shortened 11217 comment (`comments/11217-posted.md`; style rules now in issue-comment.md) and judges it
+bad timing: the credentials were rotated while the 08:19-08:32 runs were testing. Supported by main 6ecd22cf (09:28):
+frontend-wall-clock-time (2) passed. To confirm: docker-compose (1) and key-download (0) of 6ecd22cf / 5bfb8eed pass,
+then 11217 can be closed.
