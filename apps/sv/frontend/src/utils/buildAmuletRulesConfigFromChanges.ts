@@ -206,10 +206,17 @@ export function buildAmuletRulesConfigFromChanges(
               microseconds: getValue('rewardConfigRewardCouponTimeToLive', false),
             },
             appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold', false),
-            // TODO(#7901) make these CIP-104 fieldseditable
-            extraFeaturedAssetActivityWeight: null,
-            maxExtraFeaturedAssetActivityWeightPerAsset: null,
-            dsoAppActivityWeight: null,
+            // Optional Decimal fields: a blank input maps to null (None), which the protocol
+            // interprets as "use the default". Hence getValue(..., true), mirroring dryRunVersion.
+            extraFeaturedAssetActivityWeight: getValue(
+              'rewardConfigExtraFeaturedAssetActivityWeight',
+              true
+            ),
+            maxExtraFeaturedAssetActivityWeightPerAsset: getValue(
+              'rewardConfigMaxExtraFeaturedAssetActivityWeightPerAsset',
+              true
+            ),
+            dsoAppActivityWeight: getValue('rewardConfigDsoAppActivityWeight', true),
           },
 
     governanceLockConfig: nullIfAllNull({
