@@ -20,7 +20,7 @@ One per item or group; an action may be several commands.
 | Action | When | Commands |
 |---|---|---|
 | root cause | mechanism established | comment, retitle while the title starts with `GHA Run` or `Pipeline`, `set_status.py Inbox Triaged`; `--add-assignee` when there are one or two clear candidates (below) |
-| duplicate | same failure as a parent, confirming grep done (ci-triage step 3) | `close_duplicates.py <parent> <refs>`; a recurrence comment on the parent only when it has neither an assignee nor an owner discussion |
+| duplicate | same failure as a parent, confirming grep done (ci-triage step 3) | `close_duplicates.py <parent> <refs>`; a recurrence comment on the parent only when it adds a fact that changes its priority or owner (e.g. the hit rate jumped, a new branch); the close already links the two |
 | already fixed | the fix is on main (`git merge-base --is-ancestor`) and the run predates it | comment, close as completed |
 | one-off | infra or GitHub incident that recovered, or a first hit without a pattern | comment, `set_status.py Inbox 'Infrequent / no repro'` |
 | log request | the evidence is only where no method reaches (CircleCI always) | the exact job and step to save to `export/<ref>/`; the item stays in Inbox until the log is there |
