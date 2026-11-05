@@ -35,6 +35,14 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
+/** Verdict ingestion metrics: the common ingestion metrics (items = verdicts, events = transaction views)
+  * plus the app activity records ingested alongside the verdicts.
+  */
+final case class VerdictIngestionPerfMetrics(
+    base: StoreIngestionPerfMetrics,
+    totalAppActivityRecords: Long,
+)
+
 class VerdictStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
@@ -119,12 +127,13 @@ class VerdictStoreIngestionPerformanceTest(
           )
         )
         verdicts = loadVerdictsFromDump()
-        _ <- ingestWithMetrics(store, verdicts)
+        metrics <- ingestWithMetrics(store, verdicts)
         _ <- sanityCheckTables(storage)(count =>
           Option.when(count == 0)(
             "Expected table to be non-empty after ingestion, but no rows were inserted."
           )
         )
+        _ = writeIngestionMetrics(metrics, success = true)
       } yield ()
     }
   }
@@ -154,7 +163,7 @@ class VerdictStoreIngestionPerformanceTest(
   private def ingestWithMetrics(
       store: DbScanVerdictStore,
       verdicts: Seq[LoadedVerdict],
-  )(implicit tc: TraceContext): Future[Unit] = {
+  )(implicit tc: TraceContext): Future[VerdictIngestionPerfMetrics] = {
     var totalTimeNs = BigDecimal(0)
     var totalBatches = 0L
     var totalCpuNs = BigDecimal(0)
@@ -218,11 +227,15 @@ class VerdictStoreIngestionPerformanceTest(
         }
       })
       .map { _ =>
-        def ratePerSec(count: Long): BigDecimal = {
-          if (totalTimeNs > 0) BigDecimal(count) * BigDecimal(1000000000L) / totalTimeNs
-          else BigDecimal(0)
-        }
-        // metrics will be exported to the json file and prometheous in the next steps
+        // verdicts are the ingested items, transaction views are the ingested events
+        val base = StoreIngestionPerfMetrics(
+          totalItems = totalVerdicts,
+          totalEvents = totalTransactionViews,
+          totalBatches = totalBatches,
+          totalTimeNs = totalTimeNs,
+          processCpuTimeNs = totalCpuNs,
+          peakHeapBytes = maxHeapBytes,
+        )
         println(
           f"Process-level metrics: CPU time=${totalCpuNs / 1e6}%.2f ms, peak heap=$maxHeapBytes bytes, batches=$totalBatches"
         )
@@ -230,11 +243,61 @@ class VerdictStoreIngestionPerformanceTest(
           f"Ingestion counts: verdicts=$totalVerdicts, transaction-views=$totalTransactionViews, app-activity-records=$totalAppActivityRecords (in $totalTimeNs ns)"
         )
         println(
-          f"Ingestion rates (per sec): verdicts=${ratePerSec(totalVerdicts)}%.2f, " +
-            f"transaction-views=${ratePerSec(totalTransactionViews)}%.2f, " +
-            f"app-activity-records=${ratePerSec(totalAppActivityRecords)}%.2f"
+          f"Ingestion rates (per sec): verdicts=${base.updatesPerSec}%.2f, " +
+            f"transaction-views=${base.eventsPerSec}%.2f, " +
+            f"app-activity-records=${base.ratePerSec(totalAppActivityRecords)}%.2f"
         )
+        VerdictIngestionPerfMetrics(base, totalAppActivityRecords)
       }
+  }
+
+  private def writeIngestionMetrics(
+      metrics: VerdictIngestionPerfMetrics,
+      success: Boolean,
+  ): Unit = {
+    import StoreIngestionPerfMetrics.metric
+    val extra = Seq(
+      metric(
+        "total_verdicts",
+        "Total number of verdicts ingested",
+        BigDecimal(metrics.base.totalItems),
+      ),
+      metric(
+        "verdicts_per_sec",
+        "Ingested verdicts per second",
+        metrics.base.updatesPerSec,
+      ),
+      metric(
+        "total_transaction_views",
+        "Total number of transaction views ingested across all verdicts",
+        BigDecimal(metrics.base.totalEvents),
+      ),
+      metric(
+        "transaction_views_per_sec",
+        "Ingested transaction views per second",
+        metrics.base.eventsPerSec,
+      ),
+      metric(
+        "total_app_activity_records",
+        "Total number of app activity records ingested alongside verdicts",
+        BigDecimal(metrics.totalAppActivityRecords),
+      ),
+      metric(
+        "app_activity_records_per_sec",
+        "Ingested app activity records per second",
+        metrics.base.ratePerSec(metrics.totalAppActivityRecords),
+      ),
+    )
+    writeMetricsFile(
+      StoreIngestionPerfMetrics.toMetricsJson(
+        metrics.base,
+        success,
+        extra,
+        includeUpdateCounts = false,
+      ),
+      StoreIngestionPerfMetrics.MetricsDir,
+      "Ingestion",
+    )
   }
 
   private def toVerdictRow(

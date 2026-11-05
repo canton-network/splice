@@ -45,6 +45,103 @@ final case class StoreIngestionPerfMetrics(
     */
   def cpuToWallClockRatio: BigDecimal =
     if (totalTimeNs > 0) processCpuTimeNs / totalTimeNs else BigDecimal(0)
+
+  def ratePerSec(count: Long): BigDecimal =
+    if (totalTimeNs > 0) BigDecimal(count) * BigDecimal(1000000000L) / totalTimeNs
+    else BigDecimal(0)
+}
+
+object StoreIngestionPerfMetrics {
+
+  val MetricsDir: String = "store-ingestion-perf-metrics"
+
+  private val JobName = "splice_perf_ingestion"
+
+  def metric(metricName: String, description: String, value: BigDecimal): Json = Json.obj(
+    "name" -> Json.fromString(s"${JobName}_$metricName"),
+    "description" -> Json.fromString(description),
+    "value" -> Json.fromBigDecimal(value),
+  )
+
+  /** The common ingestion metrics, followed by any test-specific `extra` metrics.
+    * The JSON structure keeps the Python side read-only, so new metrics can be added without changing the script.
+    *
+    * @param ingestionMetrics    raw measurements of the ingestion run
+    * @param extraMetrics        test-specific metrics appended after the common ones
+    * @param includeUpdateCounts whether to emit the update/event counts (`total_items`, `updates_per_sec`,
+    *                            `total_events`, `events_per_sec`). The other common metrics are always emitted.
+    *                            Tests that don't ingest updates (e.g. verdicts) set this to `false` and report
+    *                            their own counts via `extraMetrics`.
+    */
+  def toMetricsJson(
+      ingestionMetrics: StoreIngestionPerfMetrics,
+      success: Boolean,
+      extraMetrics: Seq[Json] = Seq.empty,
+      includeUpdateCounts: Boolean = true,
+  ): Json = {
+    val completionEpochSec = java.time.Instant.now().getEpochSecond
+    val successInt = if (success) 1 else 0
+    val avgItemTime = metric(
+      "avg_item_time_ns",
+      "Average nanoseconds per ingested item",
+      ingestionMetrics.avgItemTimeNs,
+    )
+    val updateCounts =
+      if (!includeUpdateCounts) Seq.empty
+      else
+        Seq(
+          metric(
+            "total_items",
+            "Total number of items ingested",
+            BigDecimal(ingestionMetrics.totalItems),
+          ),
+          metric(
+            "updates_per_sec",
+            "Ingested updates per second",
+            ingestionMetrics.updatesPerSec,
+          ),
+          metric(
+            "total_events",
+            "Total number of created + exercised/archived events across all ingested updates",
+            BigDecimal(ingestionMetrics.totalEvents),
+          ),
+          metric(
+            "events_per_sec",
+            "Ingested events per second",
+            ingestionMetrics.eventsPerSec,
+          ),
+        )
+    val common = (avgItemTime +: updateCounts) ++ Seq(
+      metric("total_time_ns", "Total ingestion time in nanoseconds", ingestionMetrics.totalTimeNs),
+      metric(
+        "total_batches",
+        "Total number of batches ingested",
+        BigDecimal(ingestionMetrics.totalBatches),
+      ),
+      metric(
+        "completion_timestamp_seconds",
+        "Epoch seconds when the test run completed",
+        BigDecimal(completionEpochSec),
+      ),
+      metric("success", "Test run succeeded (1) or failed (0)", BigDecimal(successInt)),
+      metric(
+        "process_cpu_time_ns",
+        "Process-wide CPU time in nanoseconds (all cores combined)",
+        ingestionMetrics.processCpuTimeNs,
+      ),
+      metric(
+        "peak_heap_bytes",
+        "Peak JVM heap memory usage in bytes observed across all ingestion batches",
+        ingestionMetrics.peakHeapBytes,
+      ),
+      metric(
+        "cpu_to_wall_clock_ratio",
+        "Ratio of process CPU time to wall-clock time (>0.7=CPU-bound, 0.25~0.7=standard, <0.25=I/O-bound)",
+        ingestionMetrics.cpuToWallClockRatio,
+      ),
+    )
+    Json.arr((common ++ extraMetrics)*)
+  }
 }
 
 abstract class StoreIngestionPerformanceTest(
@@ -164,68 +261,10 @@ abstract class StoreIngestionPerformanceTest(
   /** A separate Python script pushes the metrics to Prometheus Pushgateway.
     * We structure JSON file making the python side mostly readonly, enabling to add new metrics to JSON without changing python script.
     */
-  private def writeIngestionMetrics(metrics: StoreIngestionPerfMetrics, success: Boolean): Unit = {
-    val completionEpochSec = java.time.Instant.now().getEpochSecond
-    val successInt = if (success) 1 else 0
-    val jobName = "splice_perf_ingestion"
-
-    def metric(metricName: String, description: String, value: BigDecimal): Json = Json.obj(
-      "name" -> Json.fromString(s"${jobName}_$metricName"),
-      "description" -> Json.fromString(description),
-      "value" -> Json.fromBigDecimal(value),
+  private def writeIngestionMetrics(metrics: StoreIngestionPerfMetrics, success: Boolean): Unit =
+    writeMetricsFile(
+      StoreIngestionPerfMetrics.toMetricsJson(metrics, success),
+      StoreIngestionPerfMetrics.MetricsDir,
+      "Ingestion",
     )
-
-    val metricsJson = Json.arr(
-      metric(
-        "avg_item_time_ns",
-        "Average nanoseconds per ingested item",
-        metrics.avgItemTimeNs,
-      ),
-      metric("total_items", "Total number of items ingested", BigDecimal(metrics.totalItems)),
-      metric(
-        "updates_per_sec",
-        "Ingested updates per second",
-        metrics.updatesPerSec,
-      ),
-      metric(
-        "total_events",
-        "Total number of created + exercised/archived events across all ingested updates",
-        BigDecimal(metrics.totalEvents),
-      ),
-      metric(
-        "events_per_sec",
-        "Ingested events per second",
-        metrics.eventsPerSec,
-      ),
-      metric("total_time_ns", "Total ingestion time in nanoseconds", metrics.totalTimeNs),
-      metric(
-        "total_batches",
-        "Total number of batches ingested",
-        BigDecimal(metrics.totalBatches),
-      ),
-      metric(
-        "completion_timestamp_seconds",
-        "Epoch seconds when the test run completed",
-        BigDecimal(completionEpochSec),
-      ),
-      metric("success", "Test run succeeded (1) or failed (0)", BigDecimal(successInt)),
-      metric(
-        "process_cpu_time_ns",
-        "Process-wide CPU time in nanoseconds (all cores combined)",
-        metrics.processCpuTimeNs,
-      ),
-      metric(
-        "peak_heap_bytes",
-        "Peak JVM heap memory usage in bytes observed across all ingestion batches",
-        metrics.peakHeapBytes,
-      ),
-      metric(
-        "cpu_to_wall_clock_ratio",
-        "Ratio of process CPU time to wall-clock time (>0.7=CPU-bound, 0.25~0.7=standard, <0.25=I/O-bound)",
-        metrics.cpuToWallClockRatio,
-      ),
-    )
-
-    writeMetricsFile(metricsJson, "store-ingestion-perf-metrics", "Ingestion")
-  }
 }
