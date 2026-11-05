@@ -14,6 +14,8 @@ import { type GcpQuotaAlertsConfig, monitoringConfig, type NatPortUsageConfig } 
 
 const enableChaosMesh = config.envFlag('ENABLE_CHAOS_MESH');
 
+const topologyKeyMonitorContainerName = 'topology-key-monitor';
+
 function ensureTrailingNewline(s: string): string {
   return s.endsWith('\n') ? s : `${s}\n`;
 }
@@ -207,6 +209,67 @@ ${ensureTrailingNewline(loggedSecretsFilter)}`;
           // No retest period -- any secret in logs is critical
           duration: '0s',
           filter: pulumi.interpolate`resource.type="k8s_container" AND metric.type = "logging.googleapis.com/user/${loggedSecretsMetric.name}"`,
+          trigger: {
+            count: 1,
+          },
+        },
+        displayName: displayName,
+      },
+    ],
+    displayName: displayName,
+    notificationChannels: [notificationChannel.name],
+  });
+}
+
+export function installTopologyKeyMonitorAlerts(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  const topologyKeyMonitorMetric = new gcp.logging.Metric('topology_key_monitor_warnings', {
+    name: `topology_key_monitor_warnings_${CLUSTER_BASENAME}`,
+    description: 'Logs of the topology key monitor with a severity level of warning or above',
+    filter: `resource.labels.cluster_name="${CLUSTER_NAME}"
+resource.type="k8s_container"
+resource.labels.container_name="${topologyKeyMonitorContainerName}"
+severity>=WARNING
+`,
+    labelExtractors: {
+      cluster: 'EXTRACT(resource.labels.cluster_name)',
+      namespace: 'EXTRACT(resource.labels.namespace_name)',
+    },
+    metricDescriptor: {
+      labels: [
+        {
+          description: 'Pod namespace',
+          key: 'namespace',
+        },
+        {
+          description: 'Cluster name',
+          key: 'cluster',
+        },
+      ],
+      metricKind: 'DELTA',
+      valueType: 'INT64',
+    },
+  });
+
+  const displayName = `Topology key monitor warnings in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('topologyKeyMonitorAlert', {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    conditions: [
+      {
+        conditionThreshold: {
+          aggregations: [
+            {
+              alignmentPeriod: '600s',
+              crossSeriesReducer: 'REDUCE_SUM',
+              groupByFields: ['metric.label.cluster'],
+              perSeriesAligner: 'ALIGN_SUM',
+            },
+          ],
+          comparison: 'COMPARISON_GT',
+          duration: '0s',
+          filter: pulumi.interpolate`resource.type="k8s_container" AND metric.type = "logging.googleapis.com/user/${topologyKeyMonitorMetric.name}"`,
           trigger: {
             count: 1,
           },
@@ -518,6 +581,44 @@ export function installNatAlerts(
           query: `sum by (gateway_name) ((router_googleapis_com:nat_port_usage{monitored_resource="nat_gateway", gateway_name=~"nat-${CLUSTER_BASENAME}-gw.*"} / 64512) * 100) > ${natConfig.thresholdPercent}`,
           // 64512 is the maximum number of ports per IP for Cloud NAT, as documented here: https://docs.cloud.google.com/nat/docs/ports-and-addresses#ports
           ...prometheusDefaults,
+        },
+      },
+    ],
+  });
+}
+
+export function installSequencerParticipantRegistrationAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): void {
+  const displayName = `Participant registered with sv-1 sequencer in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('sequencerParticipantRegistrationAlert', {
+    alertStrategy: {
+      autoClose: '1800s',
+      // Minimum allowed for log match alerts; registrations within this period are not notified separately.
+      notificationRateLimit: { period: '300s' },
+    },
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    userLabels: { cluster: CLUSTER_BASENAME },
+    displayName,
+    documentation: {
+      subject: `Participant \${log.extracted_label.participant} registered in ${CLUSTER_BASENAME}`,
+      content: `Participant \`\${log.extracted_label.participant}\` was registered in ${CLUSTER_BASENAME}.`,
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName,
+        conditionMatchedLog: {
+          filter: `resource.type="k8s_container"
+resource.labels.cluster_name="${CLUSTER_NAME}"
+resource.labels.namespace_name="sv-1"
+resource.labels.container_name="sequencer"
+jsonPayload.message:"Topology change has triggered sequencer registration of member PAR::"`,
+          labelExtractors: {
+            participant:
+              'REGEXP_EXTRACT(jsonPayload.message, "registration of member (PAR::[^ ]+)")',
+          },
         },
       },
     ],

@@ -13,16 +13,20 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from typing import Any
 
 # Rate of confirmation requests accepted by the sequencer.
 SEQUENCER_METRIC = "daml_sequencer_block_events_total"
 SEQUENCER_LABELS = {"type": "send-confirmation-request"}
 # Rate of confirmation requests processed by the mediator (approved and rejected).
 MEDIATOR_METRIC = "daml_mediator_requests_total"
-MEDIATOR_LABELS = {}
+MEDIATOR_LABELS: dict[str, str] = {}
 
 LABEL_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
 ESCAPES = {"\\": "\\", '"': '"', "n": "\n"}
+
+# Samples of a metric, indexed by their sorted labels.
+Samples = dict[tuple[tuple[str, str], ...], float]
 
 
 class ConfigError(Exception):
@@ -34,8 +38,8 @@ class ScrapeError(Exception):
 
 
 # minimal json log helper to avoid having to pull in dependencies. field names chosen to match canton logging.
-def log(severity, message, **fields):
-    entry = {
+def log(severity: str, message: str, **fields: Any) -> None:
+    entry: dict[str, Any] = {
         "level": severity,
         "@timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "message": message,
@@ -44,7 +48,7 @@ def log(severity, message, **fields):
     print(json.dumps(entry), flush=True)
 
 # unescape helper to deal with escaped labels
-def unescape(value):
+def unescape(value: str) -> str:
     out = []
     chars = iter(value)
     for char in chars:
@@ -56,10 +60,10 @@ def unescape(value):
     return "".join(out)
 
 
-def parse_samples(text, metric, required_labels, source):
+def parse_samples(text: str, metric: str, required_labels: dict[str, str], source: str) -> Samples:
     """Parse all entries for `metric` that have `required_labels` and return them as a dict indexed by the labels.
     """
-    samples = {}
+    samples: Samples = {}
     labelled_prefix = metric + "{"
     unlabelled_prefix = metric + " "
     for line in text.splitlines():
@@ -93,7 +97,7 @@ def parse_samples(text, metric, required_labels, source):
     return samples
 
 
-def scrape(url, metric, required_labels, timeout):
+def scrape(url: str, metric: str, required_labels: dict[str, str], timeout: float) -> Samples:
     try:
         request = urllib.request.Request(
             f"{url}?name[]={metric}", headers={"Accept": "text/plain"}
@@ -107,7 +111,7 @@ def scrape(url, metric, required_labels, timeout):
     return samples
 
 
-def counter_increase(previous, current):
+def counter_increase(previous: Samples, current: Samples) -> float:
     # we already did filter to relevant labels when scraping so here we just sum up everything.
     total_previous = 0.0
     total_current = 0.0
@@ -118,7 +122,7 @@ def counter_increase(previous, current):
     return total_current - total_previous
 
 
-def env_float(name):
+def env_float(name: str) -> float:
     raw = os.environ.get(name)
     if not raw:
         raise ConfigError(f"{name} must be set")
@@ -129,7 +133,7 @@ def env_float(name):
     return value
 
 
-def env_url(name):
+def env_url(name: str) -> str:
     url = os.environ.get(name, "").strip()
     if not url:
         raise ConfigError(f"{name} must be set")
@@ -137,7 +141,7 @@ def env_url(name):
 
 
 class Config:
-    def __init__(self):
+    def __init__(self) -> None:
         self.sequencer_url = env_url("WATCHDOG_SEQUENCER_METRICS_URL")
         self.mediator_url = env_url("WATCHDOG_MEDIATOR_METRICS_URL")
         self.poll_interval = env_float("WATCHDOG_POLL_INTERVAL_SECONDS")
@@ -146,7 +150,7 @@ class Config:
         self.scrape_timeout = env_float("WATCHDOG_SCRAPE_TIMEOUT_SECONDS")
         self.startup_grace = env_float("WATCHDOG_STARTUP_GRACE_SECONDS")
         self.cooldown = env_float("WATCHDOG_COOLDOWN_SECONDS")
-        self.marker_file = os.environ.get("WATCHDOG_MARKER_FILE")
+        self.marker_file: str | None = os.environ.get("WATCHDOG_MARKER_FILE")
         if self.evaluation_interval < self.poll_interval:
             raise ConfigError(
                 "WATCHDOG_EVALUATION_INTERVAL_SECONDS must be at least "
@@ -154,7 +158,7 @@ class Config:
                 "restart"
             )
 
-    def as_dict(self):
+    def as_dict(self) -> dict[str, Any]:
         return {
             "sequencerUrl": self.sequencer_url,
             "mediatorUrl": self.mediator_url,
@@ -169,24 +173,26 @@ class Config:
 
 
 class Watchdog:
-    def __init__(self, config):
+    def __init__(self, config: Config) -> None:
         self.config = config
+        self.previous: tuple[float, Samples, Samples] | None = None
+        self.breach_since: float | None = None
+
+    def reset(self) -> None:
         self.previous = None
         self.breach_since = None
 
-    def reset(self):
-        self.previous = None
-        self.breach_since = None
-
-    def request_restart(self, reason):
+    def request_restart(self, reason: str) -> None:
         marker = self.config.marker_file
+        if marker is None:
+            raise ConfigError("WATCHDOG_MARKER_FILE must be set to request a restart")
         # atomic file write
         temporary = marker + ".tmp"
         with open(temporary, "w", encoding="utf-8") as handle:
             handle.write(reason + "\n")
         os.replace(temporary, marker)
 
-    def poll(self, now):
+    def poll(self, now: float) -> tuple[float, float, float] | None:
         """Scrape and return last time and rate measured by sequencer and mediator"""
         config = self.config
         sequencer = scrape(
@@ -214,12 +220,12 @@ class Watchdog:
         mediator_rate = counter_increase(previous_mediator, mediator) / elapsed
         return previous_time, sequencer_rate, mediator_rate
 
-    def evaluate(self, now, observation):
+    def evaluate(self, now: float, observation: tuple[float, float, float]) -> str | None:
         """Given the data from poll check if we exceeded the threshold. Returns the reason to restart, or None."""
         interval_start, sequencer_rate, mediator_rate = observation
         # counters reset to 0 after restart so guard against that.
         if sequencer_rate < 0:
-            Log(
+            log(
                 "INFO",
                 "sequencer rate was negative likely because sequencer restarted, resetting state",
                 sequencerRate=round(sequencer_rate, 4)
@@ -227,7 +233,7 @@ class Watchdog:
             self.reset()
             return None
         if mediator_rate < 0:
-            Log(
+            log(
                 "INFO",
                 "mediator rate was negative likely because mediator restarted, resetting state",
                 mediatorRate=round(mediator_rate, 4)
@@ -262,7 +268,7 @@ class Watchdog:
         return None
 
 
-def main():
+def main() -> int:
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
         config = Config()

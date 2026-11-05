@@ -21,10 +21,10 @@ const Root: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <Box height="100%" sx={{ display: 'flex', flexDirection: 'column' }}>
-        <Box bgcolor="colors.neutral.20">
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ bgcolor: 'colors.neutral.20' }}>
           <Header title={config.spliceInstanceNames.nameServiceName}>
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               {primaryPartyId && ( // Using a DirectoryEntry here seems a bit circular
                 <PartyId partyId={primaryPartyId} id="logged-in-user" />
               )}

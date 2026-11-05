@@ -6,6 +6,7 @@ module Splice.TokenStandard.Utils.Internal.Conversions.Iso8601 (
 ) where
 
 import DA.Date
+import DA.Time
 import DA.Either (optionalToEither)
 import DA.Text qualified as Text
 
@@ -40,25 +41,63 @@ parseMinute = parseIntInRange "minute" 0 59
 parseSecond : Text -> Either Text Int
 parseSecond = parseIntInRange "second" 0 59
 
--- Parse ISO 8601 formatted text into a Time.
+parseFractionalSeconds : Text -> Either Text Int
+parseFractionalSeconds input =
+  -- Pad the right with zeros so input is always 6 digits, i.e. `123` becomes `123000`
+  let padded = input <> Text.implode (replicate (6 - Text.length input) "0")
+  in parseIntInRange "fractional seconds" 0 999999 padded
+
+-- | Parse ISO 8601 formatted text into a Time.
+-- At most, 6 digits of fractional seconds (microsecond-precision) are supported, since this is the precision of a Time.
 parseIso8601UtcTime : Text -> Either Text Time
 parseIso8601UtcTime input = do
   let
     invalidTime = "Invalid Time: '" <> input <> "'"
 
-    parseFromRange : Int -> Int -> Text -> (Text -> Either Text a) -> Either Text a
-    parseFromRange low high terminator parse = do
-      let numChars = high - low
-          textWithTerminator = Text.take (numChars + 1) (Text.drop low input)
-      case Text.splitAt numChars textWithTerminator of
-        (text, end) | Text.length text == numChars && end == terminator -> parse text
+    -- | Parse `numChars` characters, starting at `start`.
+    -- When `optTerminator` is `Some`, the text immediately following this range must match it.
+    parseFromRange' : Int -> Int -> Optional Text -> (Text -> Either Text a) -> Either Text a
+    parseFromRange' start numChars optTerminator parse =
+      let (numCharsWithTerminator, checkTerminator) = case optTerminator of
+            Some terminator -> (numChars + 1, (==) terminator)
+            None -> (numChars, const True)
+          targetText = Text.take numCharsWithTerminator (Text.drop start input)
+      in case Text.splitAt numChars targetText of
+        (text, end) | Text.length text == numChars && checkTerminator end -> parse text
         _ -> Left $ invalidTime
 
-  assertMsg invalidTime $ Text.length input <= 20
+    -- | Parse `numChars` characters, starting at `start`, and followed by `terminator`.
+    parseFromRange : Int -> Int -> Text -> (Text -> Either Text a) -> Either Text a
+    parseFromRange start numChars terminator = parseFromRange' start numChars (Some terminator)
+
+  let inputWithoutTrailingZ = Text.dropWhileEnd (== "Z") input
+  assertMsg invalidTime $
+    -- 27 is the max length if all 6 digits of microseconds are specified
+    Text.length input <= 27
+    -- Ensure the input ends with "Z"
+    && "Z" `Text.isSuffixOf` input
+    -- Ensure it ends with exactly one "Z"
+    && Text.dropSuffix "Z" input == inputWithoutTrailingZ
+
   year <- parseFromRange 0 4 "-" parseYear
-  month <- parseFromRange 5 7 "-" parseMonth
-  day <- parseFromRange 8 10 "T" $ parseDay year month
-  hour <- parseFromRange 11 13 ":" parseHour
-  minute <- parseFromRange 14 16 ":" parseMinute
-  second <- parseFromRange 17 19 "Z" parseSecond
-  pure $ datetime year month day hour minute second
+  month <- parseFromRange 5 2 "-" parseMonth
+  day <- parseFromRange 8 2 "T" $ parseDay year month
+  hour <- parseFromRange 11 2 ":" parseHour
+  minute <- parseFromRange 14 2 ":" parseMinute
+  second <- parseFromRange' 17 2 None parseSecond
+  micros <- case Text.drop 19 inputWithoutTrailingZ of
+    "" -> Right 0
+    -- ISO 8601 allows fractional seconds to be separated by either `.` or `,`
+    text -> case Text.stripPrefix "." text <|> Text.stripPrefix "," text of
+      None -> Left invalidTime
+      Some "" -> Left invalidTime
+      Some text | Text.length text <= 6 && all Text.isDigit (Text.explode text) -> parseFractionalSeconds text
+      Some text -> Left $ "Invalid fractional seconds: " <> text
+
+  pure $ datetime year month day hour minute second `addRelTime` convertMicrosecondsToRelTime micros
+
+-- Utilities
+------------
+
+(<|>) : Optional a -> Optional a -> Optional a
+(<|>) x y = optional y Some x

@@ -132,7 +132,9 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       configs,
       extraSequencerConfig.flatMap(config =>
         sequencers.map(id => s"canton.sequencers.sv${id}StandaloneSequencer.$config")
-      ) ++ Option.when(enableKeyDownload)(ProcessTestUtil.enableKeyDownloadConfig),
+      ) ++ Option.when(enableKeyDownload)(ProcessTestUtil.enableKeyDownloadConfig) :+
+        // As in production, SV participants serve the repair service for Scan's ACS snapshot endpoint
+        ProcessTestUtil.enableRepairCommandsConfig,
       logSuffix,
       allExtraEnv*
     )(test)

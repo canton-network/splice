@@ -34,6 +34,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
+  GovernanceLock,
+  GovernanceLockKey,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -72,6 +76,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
+  GovernanceLockUtil,
   PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
@@ -437,6 +442,43 @@ class DbScanStore private (
         )
     } yield contractWithStateFromRow(TransferPreapproval.COMPANION)(row)).value
   }
+
+  override def listGovernanceLocksByKey(
+      key: GovernanceLockKey,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
+    waitUntilAcsIngested {
+      val (lockType, lockSubject) =
+        GovernanceLockUtil.specificationTypeAndSubject(key.specification)
+      val specification = payloadJsonFromDefinedDataType(key.specification)
+      for {
+        rows <- storage.query(
+          selectFromAcsTableWithState(
+            ScanTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            GovernanceLock.COMPANION,
+            // The type and subject use the index, but only the specification
+            // also matches the vesting period and end time.
+            additionalWhere = sql"""
+              and governance_lock_type = ${lengthLimited(lockType.storeValue)}
+              and governance_lock_subject = ${lengthLimited(lockSubject)}
+              and create_arguments->>'owner' = ${key.owner}
+              and create_arguments->'specification' = $specification
+            """,
+            orderLimit = sql"""
+              order by (create_arguments->>'amount')::numeric desc, event_number
+              limit ${sqlLimit(limit)}
+            """,
+          ),
+          "listGovernanceLocksByKey",
+        )
+      } yield applyLimit("listGovernanceLocksByKey", limit, rows).map(
+        contractWithStateFromRow(GovernanceLock.COMPANION)(_)
+      )
+    }
 
   override def lookupTransferCommandCounterByParty(
       partyId: PartyId

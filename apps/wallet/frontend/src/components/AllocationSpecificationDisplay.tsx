@@ -100,7 +100,7 @@ const AllocationSpecificationDisplay: React.FC<{
                       <BftAnsEntry partyId={sender.provider} className="allocation-provider" />
                     ) : null}
                     {sender.id ? (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                         Account: {sender.id}
                       </Typography>
                     ) : null}
@@ -113,12 +113,12 @@ const AllocationSpecificationDisplay: React.FC<{
                       className="allocation-receiver"
                     />
                     {receiver.provider ? (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                         Provider: {receiver.provider}
                       </Typography>
                     ) : null}
                     {receiver.id ? (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                         Account: {receiver.id}
                       </Typography>
                     ) : null}

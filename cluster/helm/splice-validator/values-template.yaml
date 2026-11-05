@@ -38,7 +38,7 @@ persistence:
   # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
   # bootstrapDatabaseName: cantonnet
   enablePgInitContainer: true
-  initImageName: "postgres:14"
+  initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
   # Optional: Provide raw strings to override the default Kubernetes secret injection.
 #  secretOverrides:
 #    postgresPassword: ""
@@ -115,6 +115,8 @@ validatorWebUi:
 
 # set to true to disable auth (this is highly insecure)
 disableAuth: false
+# Required to be non-empty if disableAuth is true. If empty, all origins are allowed.
+allowedOrigins: []
 
 #auth:
 #  # Optional: override the K8s secret name the validator app reads ledger API credentials from.

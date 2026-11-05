@@ -38,7 +38,7 @@ declare global {
 export const server: SetupServer = buildServer(window.splice_config.services);
 
 // Start server before all tests
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 
 //  Close server after all tests
 afterAll(() => server.close());

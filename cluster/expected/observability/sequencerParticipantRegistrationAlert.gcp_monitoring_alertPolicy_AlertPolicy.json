@@ -1,0 +1,39 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "alertStrategy": {
+      "autoClose": "1800s",
+      "notificationRateLimit": {
+        "period": "300s"
+      }
+    },
+    "combiner": "OR",
+    "conditions": [
+      {
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"k8s_container\"\nresource.labels.cluster_name=\"cn-mocknet\"\nresource.labels.namespace_name=\"sv-1\"\nresource.labels.container_name=\"sequencer\"\njsonPayload.message:\"Topology change has triggered sequencer registration of member PAR::\"",
+          "labelExtractors": {
+            "participant": "REGEXP_EXTRACT(jsonPayload.message, \"registration of member (PAR::[^ ]+)\")"
+          }
+        },
+        "displayName": "Participant registered with sv-1 sequencer in mock"
+      }
+    ],
+    "displayName": "Participant registered with sv-1 sequencer in mock",
+    "documentation": {
+      "content": "Participant `${log.extracted_label.participant}` was registered in mock.",
+      "mimeType": "text/markdown",
+      "subject": "Participant ${log.extracted_label.participant} registered in mock"
+    },
+    "notificationChannels": [
+      null
+    ],
+    "userLabels": {
+      "cluster": "mock"
+    }
+  },
+  "name": "sequencerParticipantRegistrationAlert",
+  "provider": "",
+  "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+}

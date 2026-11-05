@@ -9,8 +9,12 @@ export const TitledTable: React.FC<
   PropsWithChildren<{ title: string; style?: React.CSSProperties }>
 > = ({ children, title, style }) => {
   return (
-    <Stack style={{ width: '100%' }} justifyContent={'flex-start'} spacing={0} marginTop={3}>
-      <Typography variant="h4" fontWeight="bold">
+    <Stack
+      style={{ width: '100%' }}
+      spacing={0}
+      sx={{ justifyContent: 'flex-start', marginTop: 3 }}
+    >
+      <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
         {title}
       </Typography>
       <TableContainer>

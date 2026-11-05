@@ -13,11 +13,7 @@ const externalConfig = window.splice_config;
 // the external config.
 const envConfigString = import.meta.env.VITE_SPLICE_CONFIG;
 
-export class ConfigReader<
-  A extends z.ZodRawShape,
-  B extends z.ZodTypeAny,
-  T extends z.ZodObject<A, 'strip', B>,
-> {
+export class ConfigReader<T extends z.ZodObject> {
   private schema;
 
   constructor(schema: T) {

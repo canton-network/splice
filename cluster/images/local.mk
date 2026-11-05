@@ -32,7 +32,6 @@ images := \
 	multi-validator \
 	multi-participant \
 	\
-	splice-test-postgres \
 	splice-test-ci \
 	splice-test-docker-runner \
 	splice-test-cometbft \

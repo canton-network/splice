@@ -22,10 +22,7 @@
           "hide": true,
           "iconColor": "rgba(0, 211, 255, 1)",
           "name": "Annotations & Alerts",
-          "builtIn": true,
-          "legacyOptions": {
-            "type": "dashboard"
-          }
+          "builtIn": true
         }
       }
     ],
@@ -77,13 +74,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -103,7 +101,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -163,13 +161,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -189,7 +188,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -247,15 +246,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -289,11 +286,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -302,6 +301,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -309,6 +309,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -368,15 +369,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -412,11 +411,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -425,6 +426,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -432,6 +434,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -497,7 +500,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -529,11 +532,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -542,6 +547,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -549,6 +555,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -608,15 +615,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -643,7 +648,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -652,11 +657,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -665,6 +672,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -672,6 +680,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -731,15 +740,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -766,7 +773,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -775,11 +782,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -788,6 +797,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -795,6 +805,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -856,13 +867,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -882,7 +894,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -942,13 +954,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -968,7 +981,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -1020,15 +1033,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1065,11 +1076,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -1078,6 +1091,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -1085,6 +1099,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -1175,7 +1190,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.1.5",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1188,6 +1203,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -1201,7 +1217,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       },
                       {
@@ -1214,11 +1230,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -1227,6 +1245,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -1234,6 +1253,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -1343,21 +1363,20 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "area",
                 "justifyMode": "center",
                 "orientation": "auto",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "last"
@@ -1365,7 +1384,9 @@
                   "fields": "",
                   "values": false
                 },
-                "textMode": "auto"
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
               },
               "fieldConfig": {
                 "defaults": {
@@ -1376,7 +1397,7 @@
                     "mode": "percentage",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "dark-red"
                       },
                       {
@@ -1441,7 +1462,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.1.5",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1451,6 +1472,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
@@ -1462,7 +1484,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -1471,11 +1493,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 100,
                     "gradientMode": "none",
@@ -1484,6 +1508,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -1491,6 +1516,7 @@
                       "type": "linear"
                     },
                     "showPoints": "never",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -1549,7 +1575,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.1.5",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1559,6 +1585,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
@@ -1570,7 +1597,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       },
                       {
@@ -1583,11 +1610,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 100,
                     "gradientMode": "none",
@@ -1596,6 +1625,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -1603,6 +1633,7 @@
                       "type": "linear"
                     },
                     "showPoints": "never",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -1662,15 +1693,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1706,11 +1735,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -1719,6 +1750,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -1726,6 +1758,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -1787,7 +1820,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1797,6 +1830,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -1809,7 +1843,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -1818,11 +1852,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 0,
                     "gradientMode": "none",
@@ -1831,6 +1867,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -1838,6 +1875,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -1942,7 +1980,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "state-timeline",
-            "version": "10.1.5",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "alignValue": "left",
@@ -1955,6 +1993,7 @@
                 "rowHeight": 0.9,
                 "showValue": "always",
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
@@ -1969,7 +2008,7 @@
                     "mode": "percentage",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "red"
                       },
                       {
@@ -1990,7 +2029,14 @@
                     "mode": "thresholds"
                   },
                   "custom": {
+                    "axisPlacement": "auto",
                     "fillOpacity": 70,
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
                     "lineWidth": 0,
                     "spanNulls": false
                   }
@@ -2044,7 +2090,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.1.5",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2057,6 +2103,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2070,7 +2117,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -2079,11 +2126,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -2092,6 +2141,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -2099,6 +2149,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -2191,13 +2242,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -2217,7 +2269,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -2271,15 +2323,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2289,6 +2339,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2301,7 +2352,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -2318,11 +2369,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -2331,6 +2384,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -2338,6 +2392,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -2393,15 +2448,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2411,6 +2464,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2423,7 +2477,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -2440,11 +2494,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -2453,6 +2509,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -2460,6 +2517,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -2515,15 +2573,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2533,6 +2589,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2544,7 +2601,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -2561,11 +2618,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -2574,6 +2633,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -2581,6 +2641,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -2636,15 +2697,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2654,6 +2713,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2666,7 +2726,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -2683,11 +2743,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -2696,6 +2758,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -2703,6 +2766,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -2764,13 +2828,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -2790,7 +2855,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -2844,15 +2909,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2862,6 +2925,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2874,7 +2938,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -2891,11 +2955,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -2904,6 +2970,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -2911,6 +2978,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -2966,15 +3034,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -2984,6 +3050,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -2996,7 +3063,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -3013,11 +3080,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3026,6 +3095,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3033,6 +3103,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3088,15 +3159,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3106,6 +3175,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -3118,7 +3188,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "#7eb26d"
                       },
                       {
@@ -3135,11 +3205,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3148,6 +3220,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3155,6 +3228,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3210,15 +3284,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3228,6 +3300,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -3251,7 +3324,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       },
                       {
@@ -3264,11 +3337,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3277,6 +3352,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3284,6 +3360,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3340,7 +3417,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3350,6 +3427,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -3360,7 +3438,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       },
                       {
@@ -3373,11 +3451,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 0,
                     "gradientMode": "none",
@@ -3386,6 +3466,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3393,6 +3474,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3449,7 +3531,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3459,6 +3541,7 @@
                   "showLegend": true
                 },
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "multi",
                   "sort": "none"
                 }
@@ -3470,7 +3553,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       },
                       {
@@ -3483,11 +3566,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3496,6 +3581,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3503,6 +3589,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3556,15 +3643,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3601,11 +3686,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3614,6 +3701,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3621,6 +3709,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3705,15 +3794,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3750,11 +3837,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3763,6 +3852,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3770,6 +3860,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3854,15 +3945,13 @@
                 }
               ],
               "transformations": [],
-              "queryOptions": {
-                "hideTimeOverride": true
-              }
+              "queryOptions": {}
             }
           },
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "10.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -3899,11 +3988,13 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
+                    "axisBorderShow": false,
                     "axisCenteredZero": false,
                     "axisColorMode": "text",
                     "axisLabel": "",
                     "axisPlacement": "auto",
                     "barAlignment": 0,
+                    "barWidthFactor": 0.6,
                     "drawStyle": "line",
                     "fillOpacity": 10,
                     "gradientMode": "none",
@@ -3912,6 +4003,7 @@
                       "tooltip": false,
                       "viz": false
                     },
+                    "insertNulls": false,
                     "lineInterpolation": "linear",
                     "lineWidth": 1,
                     "pointSize": 5,
@@ -3919,6 +4011,7 @@
                       "type": "linear"
                     },
                     "showPoints": "auto",
+                    "showValues": false,
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
@@ -3966,132 +4059,12 @@
           }
         }
       },
-      "panel-91": {
-        "kind": "Panel",
-        "spec": {
-          "id": 91,
-          "title": "BFT ordering members",
-          "description": "Sequencers that are part of the BFT ordering topology",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "prometheus"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "daml_sequencer_bftordering_topology_topology_member{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-                        "interval": "",
-                        "legendFormat": " (reporter: {{namespace}}.{{node}}) {{sequencer_id}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "mode": "single",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": null,
-                        "color": "green"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisGridShow": true,
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "normal"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byName",
-                      "options": "Value"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.axisPlacement",
-                        "value": "hidden"
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        }
-      },
       "panel-95": {
         "kind": "Panel",
         "spec": {
           "id": 95,
           "title": "BFT ordering leaders",
-          "description": "Sequencers that are allowed to propose blocks for ordering",
+          "description": "Leadership status of each current topology member: Leader (1) or Non-leader (0). Leaders are allowed to propose blocks for ordering.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4125,33 +4098,50 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
+            "group": "state-timeline",
+            "version": "13.2.2",
             "spec": {
               "options": {
+                "alignValue": "left",
                 "legend": {
-                  "calcs": [],
                   "displayMode": "list",
                   "placement": "bottom",
                   "showLegend": true
                 },
+                "mergeValues": true,
+                "rowHeight": 0.9,
+                "showValue": "auto",
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
               },
               "fieldConfig": {
                 "defaults": {
+                  "mappings": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "0": {
+                          "text": "Non-leader",
+                          "color": "gray",
+                          "index": 0
+                        },
+                        "1": {
+                          "text": "Leader",
+                          "color": "green",
+                          "index": 1
+                        }
+                      }
+                    }
+                  ],
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
                       }
                     ]
                   },
@@ -4159,50 +4149,19 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
                     "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
+                    "fillOpacity": 70,
                     "hideFrom": {
                       "legend": false,
                       "tooltip": false,
                       "viz": false
                     },
-                    "lineInterpolation": "linear",
+                    "insertNulls": true,
                     "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "normal"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
+                    "spanNulls": false
                   }
                 },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byName",
-                      "options": "Value"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.axisPlacement",
-                        "value": "hidden"
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -4212,8 +4171,8 @@
         "kind": "Panel",
         "spec": {
           "id": 96,
-          "title": "P2P authenticated endpoints",
-          "description": "",
+          "title": "P2P endpoints status",
+          "description": "Status of P2P endpoints as seen by each reporting node: Disconnected, Connected (but not yet authenticated), or Authenticated.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4232,10 +4191,10 @@
                       "spec": {
                         "editorMode": "code",
                         "exemplar": false,
-                        "expr": "daml_sequencer_bftordering_p2p_authenticated_endpoint{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
+                        "expr": "daml_sequencer_bftordering_p2p_endpoint_status{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
                         "format": "time_series",
                         "instant": false,
-                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{endpoint}}",
+                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{exported_endpoint}}",
                         "range": true
                       }
                     },
@@ -4250,33 +4209,55 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
+            "group": "state-timeline",
+            "version": "13.2.2",
             "spec": {
               "options": {
+                "alignValue": "left",
                 "legend": {
-                  "calcs": [],
                   "displayMode": "list",
                   "placement": "bottom",
                   "showLegend": true
                 },
+                "mergeValues": true,
+                "rowHeight": 0.9,
+                "showValue": "auto",
                 "tooltip": {
+                  "hideZeros": false,
                   "mode": "single",
                   "sort": "none"
                 }
               },
               "fieldConfig": {
                 "defaults": {
+                  "mappings": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "0": {
+                          "text": "Disconnected",
+                          "color": "red",
+                          "index": 0
+                        },
+                        "1": {
+                          "text": "Connected",
+                          "color": "yellow",
+                          "index": 1
+                        },
+                        "2": {
+                          "text": "Authenticated",
+                          "color": "green",
+                          "index": 2
+                        }
+                      }
+                    }
+                  ],
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
                       }
                     ]
                   },
@@ -4284,281 +4265,19 @@
                     "mode": "palette-classic"
                   },
                   "custom": {
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
                     "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
+                    "fillOpacity": 70,
                     "hideFrom": {
                       "legend": false,
                       "tooltip": false,
                       "viz": false
                     },
-                    "lineInterpolation": "linear",
+                    "insertNulls": false,
                     "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "normal"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
+                    "spanNulls": false
                   }
                 },
                 "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-97": {
-        "kind": "Panel",
-        "spec": {
-          "id": 97,
-          "title": "P2P connected but unauthenticated endpoints",
-          "description": "",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "prometheus"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "daml_sequencer_bftordering_p2p_unauthenticated_endpoint{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{endpoint}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "mode": "single",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": null,
-                        "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byName",
-                      "options": "Value"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.axisPlacement",
-                        "value": "hidden"
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        }
-      },
-      "panel-98": {
-        "kind": "Panel",
-        "spec": {
-          "id": 98,
-          "title": "P2P disconnected endpoints",
-          "description": "",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "prometheus"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "daml_sequencer_bftordering_p2p_disconnected_endpoint{namespace=~\"$namespace\",job=~\"$job\",node=~\"$node\"}",
-                        "legendFormat": "(reporter: {{namespace}}.{{node}}) {{endpoint}}",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "",
-            "spec": {
-              "options": {
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "mode": "single",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": null,
-                        "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "hidden",
-                    "barAlignment": 0,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byName",
-                      "options": "Value"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.axisPlacement",
-                        "value": "hidden"
-                      }
-                    ]
-                  }
-                ]
               }
             }
           }
@@ -4609,13 +4328,14 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "9.5.12",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "colorMode": "value",
                 "graphMode": "none",
                 "justifyMode": "auto",
                 "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
                 "reduceOptions": {
                   "calcs": [
                     "lastNotNull"
@@ -4635,7 +4355,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": null,
+                        "value": 0,
                         "color": "green"
                       }
                     ]
@@ -4786,20 +4506,7 @@
                       "spec": {
                         "x": 0,
                         "y": 23,
-                        "width": 12,
-                        "height": 21,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-91"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 12,
-                        "y": 23,
-                        "width": 12,
+                        "width": 24,
                         "height": 21,
                         "element": {
                           "kind": "ElementReference",
@@ -4812,37 +4519,11 @@
                       "spec": {
                         "x": 0,
                         "y": 44,
-                        "width": 8,
+                        "width": 24,
                         "height": 21,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-96"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 8,
-                        "y": 44,
-                        "width": 8,
-                        "height": 21,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-97"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "x": 16,
-                        "y": 44,
-                        "width": 8,
-                        "height": 21,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-98"
                         }
                       }
                     },
@@ -4979,19 +4660,6 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 12,
-                        "y": 93,
-                        "width": 12,
-                        "height": 7,
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-106"
-                        }
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
                         "x": 0,
                         "y": 100,
                         "width": 12,
@@ -5007,6 +4675,19 @@
                       "spec": {
                         "x": 12,
                         "y": 100,
+                        "width": 12,
+                        "height": 7,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-106"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 12,
+                        "y": 107,
                         "width": 6,
                         "height": 7,
                         "element": {
@@ -5019,7 +4700,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 18,
-                        "y": 100,
+                        "y": 107,
                         "width": 6,
                         "height": 7,
                         "element": {
@@ -5032,7 +4713,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 107,
+                        "y": 114,
                         "width": 24,
                         "height": 28,
                         "element": {
@@ -5045,7 +4726,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 135,
+                        "y": 142,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -5058,7 +4739,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 135,
+                        "y": 142,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -5071,7 +4752,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 142,
+                        "y": 149,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -5084,7 +4765,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 142,
+                        "y": 149,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -5097,7 +4778,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 149,
+                        "y": 156,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -5110,7 +4791,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 149,
+                        "y": 156,
                         "width": 12,
                         "height": 7,
                         "element": {
@@ -5254,6 +4935,7 @@
             }
           },
           "regex": "",
+          "regexApplyTo": "value",
           "sort": "disabled",
           "definition": "label_values(daml_health_status,namespace}",
           "options": [],
@@ -5293,6 +4975,7 @@
             }
           },
           "regex": "",
+          "regexApplyTo": "value",
           "sort": "disabled",
           "definition": "label_values(daml_health_status{namespace=~\"$namespace\"},job)",
           "options": [],
@@ -5332,6 +5015,7 @@
             }
           },
           "regex": "",
+          "regexApplyTo": "value",
           "sort": "disabled",
           "definition": "label_values(daml_health_status{namespace=~\"$namespace\", job=~\"$job\"},node)",
           "options": [],
@@ -5402,7 +5086,8 @@
           "label": "Percentile",
           "hide": "dontHide",
           "skipUrlSync": false,
-          "allowCustomValue": true
+          "allowCustomValue": true,
+          "valuesFormat": "csv"
         }
       }
     ]

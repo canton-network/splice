@@ -3,7 +3,7 @@
 import { onAuthExpired } from '@canton-network/splice-common-frontend-utils';
 import { User } from 'oidc-client-ts';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AuthState, useAuth } from 'react-oidc-context';
+import { AuthContext, AuthState } from 'react-oidc-context';
 
 import {
   AuthConfig,
@@ -28,15 +28,9 @@ interface UserState {
 
 export const UserContext = React.createContext<UserState | undefined>(undefined);
 
-// useAuth hook throws an error if used without a parent AuthProvider context,
-// which is OK if the app supports only a hs-256-unsafe auth config
-const useAuthSafe = () => {
-  try {
-    return useAuth();
-  } catch {
-    return undefined;
-  }
-};
+// The react-oidc-context useAuth hook complains used without a parent AuthProvider context,
+// which is OK if the app supports only a hs-256-unsafe auth config, so we read the context directly instead.
+const useAuthSafe = () => useContext(AuthContext);
 
 const SESSION_STORAGE_KEY = 'canton.network.wallet.userid';
 
@@ -98,7 +92,7 @@ export const UserProvider: React.FC<{
     }
   };
 
-  const signoutInFlight = useRef(false);
+  const signoutInFlightRef = useRef(false);
 
   const signoutFromIdp = useCallback(() => {
     if (auth === undefined || !auth.isAuthenticated) return;
@@ -108,8 +102,8 @@ export const UserProvider: React.FC<{
   }, [auth]);
 
   const signoutOnExpiry = useCallback(() => {
-    if (signoutInFlight.current) return;
-    signoutInFlight.current = true;
+    if (signoutInFlightRef.current) return;
+    signoutInFlightRef.current = true;
     signoutFromIdp();
   }, [signoutFromIdp]);
 

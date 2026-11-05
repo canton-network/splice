@@ -453,29 +453,23 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       aliceParty: PartyId,
       venueParty: PartyId,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    clue("Scan computes activity totals through round 10") {
-      eventually() {
-        sv1ScanBackend.getRewardAccountingActivityTotals(10L) shouldBe an[
-          GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
-        ]
-      }
-    }
-
     val totalsByRound: Map[Long, definitions.RewardAccountingActivityTotalsOk] =
       clue("Rounds 0..10 activity totals and root hash are computed") {
-        (0L to 10L).map { round =>
-          val totalsOk = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
-            case GetRewardAccountingActivityTotalsResponse.members
-                  .RewardAccountingActivityTotalsOk(t) =>
-              t
-          } withClue s"Round $round should have totals"
-          val rootHashOk = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
-            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
-              h
-          } withClue s"Round $round should have a root hash"
-          rootHashOk.rootHash should have length 64 // hex-encoded SHA-256
-          round -> totalsOk
-        }.toMap
+        eventually() {
+          (0L to 10L).map { round =>
+            val totalsOk = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+              case GetRewardAccountingActivityTotalsResponse.members
+                    .RewardAccountingActivityTotalsOk(t) =>
+                t
+            } withClue s"Round $round should have totals"
+            val rootHashOk = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+                h
+            } withClue s"Round $round should have a root hash"
+            rootHashOk.rootHash should have length 64 // hex-encoded SHA-256
+            round -> totalsOk
+          }.toMap
+        }
       }
 
     // Rounds 0..4 have no activity records (totals are zero);

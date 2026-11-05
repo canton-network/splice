@@ -186,18 +186,24 @@ object ExerciseNode {
     case Right(v) => v
   }
 
+  // The package name must match as well, otherwise a template with the same module and entity name
+  // in an unrelated package could masquerade as the expected one.
+  private def isTemplate(
+      template: ContractCompanion[?, ?, ?]
+  )(event: ExercisedEvent) =
+    template.PACKAGE_NAME == event.getPackageName &&
+      QualifiedName(template.getTemplateIdWithPackageId) == QualifiedName(event.getTemplateId)
+
   private def isChoice(companion: ExerciseNodeCompanion)(event: ExercisedEvent) = {
-    QualifiedName(companion.template.getTemplateIdWithPackageId) == QualifiedName(
-      event.getTemplateId
-    ) && event.getChoice == companion.choice.name
+    isTemplate(companion.template)(event) &&
+    event.getChoice == companion.choice.name
   }
 
   private def isInterfaceChoice(
       companion: InterfaceExerciseNodeCompanion
   )(event: ExercisedEvent) = {
-    QualifiedName(companion.template.getTemplateIdWithPackageId) == QualifiedName(
-      event.getTemplateId
-    ) && java.util.Optional.of(
+    isTemplate(companion.template)(event) &&
+    java.util.Optional.of(
       companion.interface.getTemplateIdWithPackageId
     ) == event.getInterfaceId &&
     event.getChoice == companion.choice.name

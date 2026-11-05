@@ -27,10 +27,7 @@
           "hide": true,
           "iconColor": "rgba(0, 211, 255, 1)",
           "name": "Annotations & Alerts",
-          "builtIn": true,
-          "legacyOptions": {
-            "type": "dashboard"
-          }
+          "builtIn": true
         }
       }
     ],
@@ -42,6 +39,7 @@
         "spec": {
           "id": 10,
           "title": "GC Timing",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -97,7 +95,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -177,6 +175,7 @@
         "spec": {
           "id": 11,
           "title": "Memory Limit",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -211,7 +210,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -291,6 +290,7 @@
         "spec": {
           "id": 12,
           "title": "Memory Committed ",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -325,7 +325,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -405,6 +405,7 @@
         "spec": {
           "id": 13,
           "title": "Memory Used After Last GC ",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -439,7 +440,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -519,6 +520,7 @@
         "spec": {
           "id": 15,
           "title": "Threads",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -558,7 +560,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -637,6 +639,7 @@
         "spec": {
           "id": 17,
           "title": "Count",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -677,9 +680,17 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "gauge",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
+                "barShape": "flat",
+                "barWidthFactor": 0.5,
+                "effects": {
+                  "barGlow": false,
+                  "centerGlow": false,
+                  "gradient": false
+                },
+                "endpointMarker": "point",
                 "minVizHeight": 75,
                 "minVizWidth": 75,
                 "orientation": "auto",
@@ -690,9 +701,14 @@
                   "fields": "",
                   "values": false
                 },
+                "segmentCount": 1,
+                "segmentSpacing": 0.3,
+                "shape": "gauge",
                 "showThresholdLabels": false,
                 "showThresholdMarkers": true,
-                "sizing": "auto"
+                "sizing": "auto",
+                "sparkline": false,
+                "textMode": "auto"
               },
               "fieldConfig": {
                 "defaults": {
@@ -724,6 +740,7 @@
         "spec": {
           "id": 18,
           "title": "CPU Usage",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -758,7 +775,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -838,6 +855,7 @@
         "spec": {
           "id": 19,
           "title": "CPU Utilization",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -869,6 +887,28 @@
                     "refId": "A",
                     "hidden": false
                   }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "jvm_cpu_recent_utilization{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", service=~\"$app\"}",
+                        "instant": false,
+                        "legendFormat": "{{job}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
                 }
               ],
               "transformations": [],
@@ -878,7 +918,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -958,6 +998,7 @@
         "spec": {
           "id": 2,
           "title": "GC Runs",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -992,7 +1033,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1071,6 +1112,7 @@
         "spec": {
           "id": 20,
           "title": "Buffer Memory Limit",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1105,7 +1147,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1185,6 +1227,7 @@
         "spec": {
           "id": 21,
           "title": "Buffer Memory Usage",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1219,7 +1262,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {
@@ -1299,6 +1342,7 @@
         "spec": {
           "id": 5,
           "title": "Memory Used",
+          "description": "",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1333,7 +1377,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "12.4.0",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "legend": {

@@ -77,7 +77,8 @@ trait SplitwellFrontendTestUtil extends TestCommon with AnsTestUtil {
     val field = eventually() {
       textField(id("group-invite-field"))
     }
-    field.value = invite
+    field.underlying.clear()
+    sendKeysChunked(field.underlying, invite)
     val link = eventually() {
       find(id("request-membership-link")).valueOrFail("Request membership link not found")
     }

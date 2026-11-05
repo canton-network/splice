@@ -1,10 +1,10 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+FROM --platform=$BUILDPLATFORM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
 ARG base_version
-LABEL org.opencontainers.image.base.name="debian:bookworm-slim"
+LABEL org.opencontainers.image.base.name="debian:trixie-slim"
 
 WORKDIR /tmp
 ENV GCSPROXY_VERSION=0.3.1

@@ -481,91 +481,108 @@ class SV1Initializer(
             "sequencer is initialized",
             synchronizerNode.sequencerAdminConnection.getStatus
               .map(_.successOption.map(_.synchronizerId)),
-            for {
-              // must be done before the other topology transaction as the decentralize namespace is used for authorization
-              decentralizedNamespace <- participantAdminConnection
-                .proposeInitialDecentralizedNamespaceDefinition(
-                  namespace,
-                  NonEmpty.mk(Set, participantId.uid.namespace),
-                  threshold = PositiveInt.one,
+            participantAdminConnection.withTemporaryTopologyStore(
+              s"${synchronizerId.identifier.unwrap}-sv1-bootstrap",
+              sv1Config.initialProtocolVersion,
+            ) { tempStore =>
+              for {
+                participantIdentityTransactions <- participantAdminConnection
+                  .getIdentityTransactions(participantId.uid, TopologyStoreId.Authorized)
+                participantIdentity <- participantAdminConnection.reauthorizeTransactions(
+                  tempStore,
+                  sv1Config.initialProtocolVersion,
+                  participantIdentityTransactions,
                 )
-              sv1PermissionTx <-
-                if (config.permissionedSynchronizer) {
-                  logger.debug(
-                    "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
+                (mediatorIdentity, sequencerIdentity) <- (
+                  synchronizerNode.mediatorAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion),
+                  synchronizerNode.sequencerAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion),
+                ).tupled
+                _ <- participantAdminConnection.addTopologyTransactions(
+                  tempStore,
+                  mediatorIdentity ++ sequencerIdentity,
+                  ForceFlag.AlienMember,
+                )
+                // must be done before the other topology transaction as the decentralize namespace is used for authorization
+                decentralizedNamespace <- participantAdminConnection
+                  .proposeInitialDecentralizedNamespaceDefinition(
+                    tempStore,
+                    namespace,
+                    NonEmpty.mk(Set, participantId.uid.namespace),
+                    threshold = PositiveInt.one,
                   )
-                  participantAdminConnection
-                    .proposeMapping(
-                      TopologyStoreId.Authorized,
-                      transaction.ParticipantSynchronizerPermission(
-                        synchronizerId,
-                        participantId,
-                        ParticipantPermission.Submission,
-                        None,
-                        None,
-                      ),
-                      serial = PositiveInt.one,
-                      isProposal = false,
+                sv1PermissionTx <-
+                  if (config.permissionedSynchronizer) {
+                    logger.debug(
+                      "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
                     )
-                    .map(Some(_))
-                } else Future.successful(None)
-              (
-                identityTransactions,
-                synchronizerParametersState,
-                sequencerState,
-                mediatorState,
-              ) <- (
-                for {
-                  participantIdentity <- participantAdminConnection.getIdentityTransactions(
-                    participantId.uid,
-                    TopologyStoreId.Authorized,
-                  )
-                  mediatorIdentity <- synchronizerNode.mediatorAdminConnection
-                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
-                  sequencerIdentity <- synchronizerNode.sequencerAdminConnection
-                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion)
-                } yield participantIdentity ++ mediatorIdentity ++ sequencerIdentity,
-                participantAdminConnection.proposeInitialDomainParameters(
-                  synchronizerId,
-                  values,
-                ),
-                participantAdminConnection.proposeInitialSequencerSynchronizerState(
-                  synchronizerId,
-                  active = Seq(sequencerId),
-                  observers = Seq.empty,
-                ),
-                participantAdminConnection.proposeInitialMediatorSynchronizerState(
-                  synchronizerId,
-                  group = NonNegativeInt.zero,
-                  active = Seq(mediatorId),
-                  observers = Seq.empty,
-                ),
-              ).tupled
-              bootstrapTransactions =
-                (Seq(
-                  decentralizedNamespace,
+                    participantAdminConnection
+                      .proposeMapping(
+                        tempStore,
+                        transaction.ParticipantSynchronizerPermission(
+                          synchronizerId,
+                          participantId,
+                          ParticipantPermission.Submission,
+                          None,
+                          None,
+                        ),
+                        serial = PositiveInt.one,
+                        isProposal = false,
+                      )
+                      .map(Some(_))
+                  } else Future.successful(None)
+                (
                   synchronizerParametersState,
                   sequencerState,
                   mediatorState,
-                ) ++ sv1PermissionTx.toList ++ identityTransactions).sorted
-                  .mapFilter(_.selectOp[TopologyChangeOp.Replace])
-                  .map(signed =>
-                    StoredTopologyTransaction(
-                      SequencedTime(CantonTimestamp.MinValue.immediateSuccessor),
-                      EffectiveTime(CantonTimestamp.MinValue.immediateSuccessor),
-                      None,
-                      signed.copy(isProposal = false),
-                      None,
+                ) <- (
+                  participantAdminConnection.proposeInitialDomainParameters(
+                    tempStore,
+                    synchronizerId,
+                    values,
+                  ),
+                  participantAdminConnection.proposeInitialSequencerSynchronizerState(
+                    tempStore,
+                    synchronizerId,
+                    active = Seq(sequencerId),
+                    observers = Seq.empty,
+                  ),
+                  participantAdminConnection.proposeInitialMediatorSynchronizerState(
+                    tempStore,
+                    synchronizerId,
+                    group = NonNegativeInt.zero,
+                    active = Seq(mediatorId),
+                    observers = Seq.empty,
+                  ),
+                ).tupled
+                identityTransactions = participantIdentity ++ mediatorIdentity ++ sequencerIdentity
+                bootstrapTransactions =
+                  (Seq(
+                    decentralizedNamespace,
+                    synchronizerParametersState,
+                    sequencerState,
+                    mediatorState,
+                  ) ++ sv1PermissionTx.toList ++ identityTransactions).sorted
+                    .mapFilter(_.selectOp[TopologyChangeOp.Replace])
+                    .map(signed =>
+                      StoredTopologyTransaction(
+                        SequencedTime(CantonTimestamp.MinValue.immediateSuccessor),
+                        EffectiveTime(CantonTimestamp.MinValue.immediateSuccessor),
+                        None,
+                        signed.copy(isProposal = false),
+                        None,
+                      )
                     )
-                  )
-              _ <- synchronizerNode.sequencerAdminConnection.initializeFromBeginning(
-                StoredTopologyTransactions(bootstrapTransactions),
-                synchronizerNode.staticSynchronizerParameters(
-                  NonNegativeInt.zero,
-                  sv1Config.initialProtocolVersion,
-                ),
-              )
-            } yield (),
+                _ <- synchronizerNode.sequencerAdminConnection.initializeFromBeginning(
+                  StoredTopologyTransactions(bootstrapTransactions),
+                  synchronizerNode.staticSynchronizerParameters(
+                    NonNegativeInt.zero,
+                    sv1Config.initialProtocolVersion,
+                  ),
+                )
+              } yield ()
+            },
             logger,
           )
           _ <- retryProvider.ensureThatB(

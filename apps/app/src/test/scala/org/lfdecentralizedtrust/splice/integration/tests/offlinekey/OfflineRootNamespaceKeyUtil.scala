@@ -14,6 +14,8 @@ import com.digitalasset.canton.topology.transaction.{
   TopologyChangeOp,
 }
 import com.digitalasset.canton.topology.{Namespace, ParticipantId}
+import com.digitalasset.canton.version.ProtocolVersion
+import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.environment.SpliceConsoleEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -45,7 +47,8 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
   }
 
   def setupOfflineNodeWithKey(
-      delegateKey: SigningPublicKey
+      delegateKey: SigningPublicKey,
+      protocolVersion: ProtocolVersion,
   )(implicit env: SpliceConsoleEnvironment): (
       Namespace,
       SignedTopologyTransaction[TopologyChangeOp, NamespaceDelegation],
@@ -72,6 +75,9 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
           RemoteParticipantConfig(
             adminApiConfig,
             FullClientConfig(port = Port.tryCreate(27701)),
+            adminApiToken = Some(
+              AuthUtil.CantonAdminApi.participantAdminApiTestToken
+            ),
           ),
         )
       offlineParticipantClient.health.wait_for_ready_for_id()
@@ -82,11 +88,14 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
         ParticipantId("offlineKeyGeneration", offlineGeneratedNamespace).uid,
         waitForReady = false,
       )
+      val delegationsStore = offlineParticipantClient.topology.stores
+        .create_temporary_topology_store("offline-root-key-delegations", protocolVersion)
       val rootNamespaceDelegation =
         offlineParticipantClient.topology.namespace_delegations.propose_delegation(
           offlineGeneratedNamespace,
           offlineRootKey,
           delegationRestriction = DelegationRestriction.CanSignAllMappings,
+          store = delegationsStore,
           signedBy = Seq(offlineGeneratedNamespace.fingerprint),
         )
 
@@ -95,6 +104,7 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
           offlineGeneratedNamespace,
           delegateKey,
           delegationRestriction = DelegationRestriction.CanSignAllButNamespaceDelegations,
+          store = delegationsStore,
           signedBy = Seq(offlineRootKey.fingerprint),
         )
 
@@ -103,7 +113,11 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
     }
   }
 
-  def initializeInstanceWithOfflineRootNamespaceKey(name: String, node: InstanceReference)(implicit
+  def initializeInstanceWithOfflineRootNamespaceKey(
+      name: String,
+      node: InstanceReference,
+      protocolVersion: ProtocolVersion,
+  )(implicit
       env: SpliceTestConsoleEnvironment
   ): Unit = {
     node.health.wait_for_ready_for_id()
@@ -116,28 +130,38 @@ trait OfflineRootNamespaceKeyUtil extends PostgresAroundEach {
       )
 
     val (offlineGeneratedNamespace, rootNamespaceDelegation, delegationTopologyTransaction) =
-      setupOfflineNodeWithKey(delegatedNamespaceKey)
+      setupOfflineNodeWithKey(delegatedNamespaceKey, protocolVersion)
+    val delegations = Seq(rootNamespaceDelegation, delegationTopologyTransaction)
     node.topology.init_id_from_uid(
       ParticipantId(name, offlineGeneratedNamespace).uid,
       waitForReady = false,
-      delegations = Seq(rootNamespaceDelegation, delegationTopologyTransaction),
+      delegations = delegations,
     )
-    node.id.member match {
-      case _: ParticipantId => ()
-      case _ =>
-        node.topology.transactions.load(
-          Seq(rootNamespaceDelegation, delegationTopologyTransaction),
-          TopologyStoreId.Authorized,
-        )
-    }
     val encryptionKey =
       node.keys.secret.generate_encryption_key("ecryption")
-    node.topology.owner_to_key_mappings.propose(
-      node.id.member,
-      NonEmpty(Seq, signingKey, encryptionKey),
-      Some(PositiveInt.one),
-      signedBy = Seq(delegatedNamespaceKey.fingerprint, signingKey.fingerprint),
-    )
+    def proposeOwnerToKeyMapping(store: TopologyStoreId) =
+      node.topology.owner_to_key_mappings.propose(
+        node.id.member,
+        NonEmpty(Seq, signingKey, encryptionKey),
+        Some(PositiveInt.one),
+        signedBy = Seq(delegatedNamespaceKey.fingerprint, signingKey.fingerprint),
+        store = store,
+      )
+    node.id.member match {
+      case _: ParticipantId =>
+        proposeOwnerToKeyMapping(TopologyStoreId.Authorized)
+      case _ =>
+        // Sequencer and mediator onboarding needs identity transactions at exactly this PV.
+        val identityStore = node.topology.stores
+          .create_temporary_topology_store("offline-root-key-identity", protocolVersion)
+        node.topology.transactions.load(delegations, identityStore)
+        val ownerToKeyMapping = proposeOwnerToKeyMapping(identityStore)
+        node.topology.transactions.load(
+          delegations :+ ownerToKeyMapping,
+          TopologyStoreId.Authorized,
+        )
+        node.topology.stores.drop_temporary_topology_store(identityStore)
+    }
   }
 
   private def checkInstanceHasRootNamespaceKey(participant: InstanceReference): Boolean = {
