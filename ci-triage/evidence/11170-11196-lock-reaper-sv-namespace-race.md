@@ -11,8 +11,10 @@ grep -a -A1 'kubernetes:core/v1:Namespace: (delete)' job.log
 ```
 11196:
 ```
-03:04:25.609 [organization/sv/sv.sv.scratche]- kubernetes:core/v1:Namespace: (delete)   [id=sv]
-03:04:34.699 [organization/sv-runbook/sv-runbook.scratche]- kubernetes:helm.sh/v3:Release: (delete)   [id=sv/cluster-ingress-sv]
+03:04:25.609 [organization/sv/sv.sv.scratche]- kubernetes:core/v1:Namespace: (delete)
+03:04:25.609     [id=sv]
+03:04:34.699 [organization/sv-runbook/sv-runbook.scratche]- kubernetes:helm.sh/v3:Release: (delete)
+03:04:34.699     [id=sv/cluster-ingress-sv]
 03:04:43.434 [organization/sv-runbook/sv-runbook.scratche] - error - error: uninstallation completed with 1 error(s): uninstall: Failed to purge the release: release: not found
 03:04:46.412 Aborting after the wait time: organization/sv-runbook/sv-runbook.scratche - Aborting because of caught exception
 ```
