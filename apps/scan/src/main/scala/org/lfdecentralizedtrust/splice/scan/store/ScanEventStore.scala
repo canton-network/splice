@@ -25,7 +25,7 @@ class ScanEventStore(
 
   type VerdictT = DbScanVerdictStore.VerdictT
   type TransactionViewT = DbScanVerdictStore.TransactionViewT
-  type AppActivityRecordT = DbAppActivityRecordStore.AppActivityRecordT
+  type AppAndAssetActivityRecordT = DbAppActivityRecordStore.AppAndAssetActivityRecordT
   type Verdict = (VerdictT, Seq[TransactionViewT])
   type Event = (Option[Verdict], Option[TreeUpdateWithMigrationId])
 
@@ -131,9 +131,9 @@ class ScanEventStore(
       currentMigrationId,
     ).map(ts => if (ts == CantonTimestamp.MinValue) None else Some(ts))
 
-  def getAppActivityRecords(verdictRowIds: Seq[Long])(implicit
+  def getAppAndAssetActivityRecords(verdictRowIds: Seq[Long])(implicit
       tc: TraceContext
-  ): Future[Map[Long, AppActivityRecordT]] =
+  ): Future[Map[Long, AppAndAssetActivityRecordT]] =
     verdictStore.appActivityRecordStore.getRecordsByVerdictRowIds(verdictRowIds)
 
   // Get values from in-memory refs, fallsback to DB read

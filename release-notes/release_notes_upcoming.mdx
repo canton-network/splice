@@ -6,6 +6,15 @@
 
     - Upgrade base image to 1.0.19
 
+  - Scan App
+
+    - `/v0/events` responses now include two new per-event fields:
+
+      - `asset_activity_records`: asset-side activity records (CIP-104). Omitted from JSON when there is no asset activity.
+      - `submitting_app_provider`: the submitting app provider party identifier when the submitter is a featured-app. Omitted from JSON when absent.
+
+    - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
+
   - Validator App
 
     - `synchronizer-topology.num-parties` metric now includes also parties not hosted on any participant. This also fixes an issue where those were deducted from the metric on update,

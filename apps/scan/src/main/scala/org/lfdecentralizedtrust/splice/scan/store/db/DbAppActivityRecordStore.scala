@@ -37,7 +37,7 @@ object DbAppActivityRecordStore {
     * @param assetActivityWeights asset activity weight (in bytes of traffic) for each asset provider,
     *                             in one-to-one correspondence with assetActivityProviderParties
     */
-  final case class AppActivityRecordT(
+  final case class AppAndAssetActivityRecordT(
       verdictRowId: Long,
       roundNumber: Long,
       appProviderParties: Seq[String],
@@ -142,11 +142,11 @@ class DbAppActivityRecordStore(
 
   private def historyId = updateHistory.historyId
 
-  type AppActivityRecordT = DbAppActivityRecordStore.AppActivityRecordT
+  type AppAndAssetActivityRecordT = DbAppActivityRecordStore.AppAndAssetActivityRecordT
 
-  private implicit val getResultAppActivityRecord: GetResult[AppActivityRecordT] = GetResult {
-    prs =>
-      DbAppActivityRecordStore.AppActivityRecordT(
+  private implicit val getResultAppActivityRecord: GetResult[AppAndAssetActivityRecordT] =
+    GetResult { prs =>
+      DbAppActivityRecordStore.AppAndAssetActivityRecordT(
         verdictRowId = prs.<<[Long],
         roundNumber = prs.<<[Long],
         appProviderParties = stringArrayGetResult(prs).toSeq,
@@ -155,7 +155,7 @@ class DbAppActivityRecordStore(
         assetActivityProviderParties = stringSeqGetResult(prs),
         assetActivityWeights = longSeqGetResult(prs),
       )
-  }
+    }
 
   /** Find the earliest round with complete app activity.
     * The first ingested round may be partial, so the earliest complete round
@@ -284,7 +284,7 @@ class DbAppActivityRecordStore(
   @VisibleForTesting
   def getRecordByVerdictRowIdForTesting(verdictRowId: Long)(implicit
       tc: TraceContext
-  ): Future[Option[AppActivityRecordT]] = {
+  ): Future[Option[AppAndAssetActivityRecordT]] = {
     runQuerySingle(
       sql"""
         select verdict_row_id, round_number, app_provider_parties, app_activity_weights,
@@ -292,14 +292,14 @@ class DbAppActivityRecordStore(
         from #${Tables.appActivityRecords}
         where history_id = $historyId and verdict_row_id = $verdictRowId
         limit 1
-      """.as[AppActivityRecordT].headOption,
+      """.as[AppAndAssetActivityRecordT].headOption,
       "appActivity.getRecordByVerdictRowIdForTesting",
     )
   }
 
   def getRecordsByVerdictRowIds(
       verdictRowIds: Seq[Long]
-  )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
+  )(implicit tc: TraceContext): Future[Map[Long, AppAndAssetActivityRecordT]] = {
     NonEmpty.from(verdictRowIds) match {
       case None => Future.successful(Map.empty)
       case Some(verdictRowIds) =>
@@ -314,7 +314,7 @@ class DbAppActivityRecordStore(
                 from #${Tables.appActivityRecords}
                 where history_id = $historyId and """ ++ DbStorage
                   .toInClause("verdict_row_id", verdictRowIds))
-                  .as[AppActivityRecordT],
+                  .as[AppAndAssetActivityRecordT],
                 "appActivity.getRecordsByVerdictRowIds",
               )
               .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
@@ -323,7 +323,7 @@ class DbAppActivityRecordStore(
   }
 
   /** Batch insert app activity records using multi-row INSERT. */
-  private def batchInsertAppActivityRecords(items: Seq[AppActivityRecordT]) = {
+  private def batchInsertAppActivityRecords(items: Seq[AppAndAssetActivityRecordT]) = {
     if (items.isEmpty) {
       DBIO.successful(0)
     } else {
@@ -353,7 +353,7 @@ class DbAppActivityRecordStore(
     * as complete.
     */
   def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT],
+      items: Seq[AppAndAssetActivityRecordT],
       firstRecordTimeMicros: Long,
       hasTrafficSummaries: Boolean,
       firstActiveRoundO: Option[Long] = None,
@@ -403,7 +403,7 @@ class DbAppActivityRecordStore(
     */
   @VisibleForTesting
   def insertAppActivityRecordsForTesting(
-      items: Seq[AppActivityRecordT]
+      items: Seq[AppAndAssetActivityRecordT]
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
