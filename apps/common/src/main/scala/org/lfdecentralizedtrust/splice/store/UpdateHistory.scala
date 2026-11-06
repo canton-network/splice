@@ -10,6 +10,7 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmptyReturningOps.*
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.util.HexString
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent.{Assign, Unassign}
@@ -1555,41 +1556,19 @@ class UpdateHistory private (
     }
   }
 
-  private def queryEventsOfTransactions[R: GetResult](
-      table: String,
-      transactions: Seq[SelectFromTransactions],
-      selectColumns: SQLActionBuilder,
-      operationName: String,
-  )(implicit tc: TraceContext): Future[Seq[R]] = {
-    val (legacy, partitioned) =
-      transactions.partition(tx => lastLegacyRecordTime.exists(tx.recordTime <= _))
-    // creates: updt_hist_crea_unique_legacy / updt_hist_crea_uri, exercises: updt_hist_exer_unique_legacy / none (no update_row_id index on the partitioned exercises, only partition pruning on record_time)
-    val queries = Seq(
-      NonEmpty.from(legacy).map { txs =>
-        selectColumns ++ sql" from #${table}_legacy where " ++
-          DbStorage.toInClause("update_row_id", txs.map(_.rowId))
-      },
-      NonEmpty.from(partitioned).map { txs =>
-        val recordTimes = txs.map(_.recordTime)
-        selectColumns ++ sql" from #$table where " ++
-          DbStorage.toInClause("update_row_id", txs.map(_.rowId)) ++
-          sql" and record_time between ${recordTimes.min1} and ${recordTimes.max1}"
-      },
-    ).flatten
-    MonadUtil
-      .sequentialTraverse(queries)(query =>
-        storage.query(query.toActionBuilder.as[R], operationName)
-      )
-      .map(_.flatten)
-  }
-
   private def queryCreateEvents(
       transactions: Seq[SelectFromTransactions]
   )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromCreateEvents]]] =
-    queryEventsOfTransactions[SelectFromCreateEvents](
-      "update_history_creates",
-      transactions,
-      sql"""
+    MonadUtil
+      .sequentialTraverse(
+        transactions
+          .groupBy1(tx => historyTableContainingRecordTime("update_history_creates", tx.recordTime))
+          .toSeq
+      ) { case (table, txs) =>
+        val recordTimes = txs.map(_.recordTime)
+        storage.query(
+          // updt_hist_crea_unique_legacy / updt_hist_crea_uri
+          (sql"""
         select
           update_row_id,
           event_id,
@@ -1603,9 +1582,15 @@ class UpdateHistory private (
           signatories,
           observers,
           contract_key,
-          record_time""",
-      "queryCreateEvents",
-    ).map(_.groupBy(_.updateRowId))
+          record_time
+        from #$table
+        where """ ++ DbStorage.toInClause("update_row_id", txs.map(_.rowId)) ++
+            sql" and record_time between ${recordTimes.min1} and ${recordTimes.max1}").toActionBuilder
+            .as[SelectFromCreateEvents],
+          "queryCreateEvents",
+        )
+      }
+      .map(_.flatten.groupBy(_.updateRowId))
 
   def lookupContractById[TCId <: ContractId[?], T <: DamlRecord[?]](
       companion: Contract.Companion.Template[TCId, T]
@@ -1652,10 +1637,18 @@ class UpdateHistory private (
   private def queryExerciseEvents(
       transactions: Seq[SelectFromTransactions]
   )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromExerciseEvents]]] =
-    queryEventsOfTransactions[SelectFromExerciseEvents](
-      "update_history_exercises",
-      transactions,
-      sql"""
+    MonadUtil
+      .sequentialTraverse(
+        transactions
+          .groupBy1(tx =>
+            historyTableContainingRecordTime("update_history_exercises", tx.recordTime)
+          )
+          .toSeq
+      ) { case (table, txs) =>
+        val recordTimes = txs.map(_.recordTime)
+        storage.query(
+          // updt_hist_exer_unique_legacy / none (no update_row_id index on the partitioned exercises, only partition pruning on record_time)
+          (sql"""
         select
           update_row_id,
           event_id,
@@ -1672,9 +1665,15 @@ class UpdateHistory private (
           acting_parties,
           interface_id_package_id,
           interface_id_module_name,
-          interface_id_entity_name""",
-      "queryExerciseEvents",
-    ).map(_.groupBy(_.updateRowId))
+          interface_id_entity_name
+        from #$table
+        where """ ++ DbStorage.toInClause("update_row_id", txs.map(_.rowId)) ++
+            sql" and record_time between ${recordTimes.min1} and ${recordTimes.max1}").toActionBuilder
+            .as[SelectFromExerciseEvents],
+          "queryExerciseEvents",
+        )
+      }
+      .map(_.flatten.groupBy(_.updateRowId))
 
   /** Decodes the result of fetching one import contract ([[SelectFromImportUpdates]]) into
     * an artificial update ([[UpdateHistoryResponse]]) with exactly one create event.
