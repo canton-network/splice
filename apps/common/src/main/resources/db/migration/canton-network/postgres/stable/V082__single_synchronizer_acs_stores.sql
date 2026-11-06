@@ -1,6 +1,12 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
+-- Contracts with the DSO party can never be reassigned in prod.
+-- SVs also generally don't connect to other syncs so they will not have reassignments.
+-- As of time of this migration, we also don't expect any other reassignments to be in prod for templates
+-- ingested in our stores so the deletes here are safe. If really needed an acs store reingestion could be forced
+-- by bumping the user store descriptor.
+
 delete from acs_store_template where assigned_domain is null;
 delete from validator_acs_store where assigned_domain is null;
 delete from user_wallet_acs_store where assigned_domain is null;

@@ -1378,8 +1378,8 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
     ): Option[NonEmptyList[Transaction]] =
       NonEmptyList.fromList(
         trees.batch.toVector
+          .filter(tx => !tx.tree.getWorkflowId.startsWith(IMPORT_ACS_WORKFLOW_ID_PREFIX) && tx.synchronizerId == synchronizerId)
           .map(_.tree)
-          .filter(tree => !tree.getWorkflowId.startsWith(IMPORT_ACS_WORKFLOW_ID_PREFIX))
           .toList
       )
 
@@ -1837,6 +1837,7 @@ object DbMultiDomainAcsStore {
       handleIngestionSummary: IngestionSummary => Unit = _ => (),
       defaultLimit: Limit,
       acsArchiveConfigOpt: Option[AcsArchiveConfig] = None,
+      additionalIngestionSinks: Seq[AdditionalIngestionSink] = Seq.empty,
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
@@ -1862,6 +1863,7 @@ object DbMultiDomainAcsStore {
         handleIngestionSummary,
         defaultLimit,
         acsArchiveConfigOpt,
+        additionalIngestionSinks,
       )
     }
 

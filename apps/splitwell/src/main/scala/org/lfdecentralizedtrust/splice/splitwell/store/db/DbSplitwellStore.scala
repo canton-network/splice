@@ -427,7 +427,6 @@ class DbSplitwellStore private (
         )
         .getOrRaise(offsetExpectedError())
       result = row.row
-        .filter(_ => synchronizerId == acsSynchronizerId)
         .map(r => contractFromRow(splitwellCodegen.SplitwellRules.COMPANION)(r))
     } yield QueryResult(
       row.offset,
