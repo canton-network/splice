@@ -330,7 +330,7 @@ class DbScanRewardsReferenceStoreTest
       } yield succeed
     }
 
-    "lookupSvParticipantIdsAsOf returns the SV participants from the DsoRules active at a given time" in {
+    "lookupDsoRulesAsOf returns the DsoRules active at a given time" in {
       val store = mkStore()
       val sv1Pid = mkParticipantId("sv1")
       val sv2Pid = mkParticipantId("sv2")
@@ -364,54 +364,25 @@ class DbScanRewardsReferenceStoreTest
         )
 
         // Before ingestion start
-        emptyResult <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(50))
-        _ = emptyResult shouldBe empty
-
-        atV1 <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(100))
-        _ = atV1 shouldBe Set(sv1Pid.uid.toProtoPrimitive, sv2Pid.uid.toProtoPrimitive)
-
-        midV1 <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(150))
-        _ = midV1 shouldBe Set(sv1Pid.uid.toProtoPrimitive, sv2Pid.uid.toProtoPrimitive)
-
-        atV2 <- store.lookupSvParticipantIdsAsOf(CantonTimestamp.ofEpochSecond(300))
-        _ = atV2 shouldBe Set(sv1Pid.uid.toProtoPrimitive, sv3Pid.uid.toProtoPrimitive)
-      } yield succeed
-    }
-
-    "lookupAmuletConfigAsOf returns the config from the AmuletRules active at a given time" in {
-      val store = mkStore()
-
-      val rulesV1 = amuletRules(initialTickDuration = 10)
-        .copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
-      val rulesV2 = amuletRules(initialTickDuration = 20)
-        .copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
-
-      for {
-        _ <- initWithAcs()(store.multiDomainAcsStore)
-
-        // Ingest v1 at t=100, swap to v2 at t=300.
-        _ <- sync1.create(rulesV1, recordTime = CantonTimestamp.ofEpochSecond(100).toInstant)(
-          store.multiDomainAcsStore
-        )
-        _ <- sync1.archive(rulesV1, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
-          store.multiDomainAcsStore
-        )
-        _ <- sync1.create(rulesV2, recordTime = CantonTimestamp.ofEpochSecond(300).toInstant)(
-          store.multiDomainAcsStore
-        )
-
-        // Before ingestion start
-        emptyResult <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(50))
+        emptyResult <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(50))
         _ = emptyResult shouldBe None
 
-        atV1 <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(100))
-        _ = atV1 shouldBe Some(rulesV1.payload.configSchedule.initialValue)
+        atV1 <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(100))
+        _ = atV1 shouldBe Some(rulesV1.payload)
+        _ = ScanRewardsReferenceStore.svParticipantIds(atV1.value) shouldBe Set(
+          sv1Pid.uid.toProtoPrimitive,
+          sv2Pid.uid.toProtoPrimitive,
+        )
 
-        midV1 <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(150))
-        _ = midV1 shouldBe Some(rulesV1.payload.configSchedule.initialValue)
+        midV1 <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(150))
+        _ = midV1 shouldBe Some(rulesV1.payload)
 
-        atV2 <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(300))
-        _ = atV2 shouldBe Some(rulesV2.payload.configSchedule.initialValue)
+        atV2 <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(300))
+        _ = atV2 shouldBe Some(rulesV2.payload)
+        _ = ScanRewardsReferenceStore.svParticipantIds(atV2.value) shouldBe Set(
+          sv1Pid.uid.toProtoPrimitive,
+          sv3Pid.uid.toProtoPrimitive,
+        )
       } yield succeed
     }
 

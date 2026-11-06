@@ -6,19 +6,31 @@ package org.lfdecentralizedtrust.splice.scan.rewards
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.mediator.admin.v30
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.timestamp.Timestamp as ProtoTimestamp
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.PackageConfig
-import org.lfdecentralizedtrust.splice.environment.DarResources
+import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.CometBftConfigLimits
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
+  DsoDecentralizedSynchronizerConfig,
+  SynchronizerNodeConfigLimits,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
+  DsoRulesConfig,
+  SvInfo,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
-import org.lfdecentralizedtrust.splice.util.SpliceUtil
+import org.lfdecentralizedtrust.splice.util.SwitchOverTimes
 import org.scalatest.wordspec.AnyWordSpec
 
+import java.util.{Collections, Optional}
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters.*
 
 class AppActivityComputationTest extends AnyWordSpec with BaseTest {
 
@@ -169,7 +181,8 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   }
 
   private val ts = CantonTimestamp.ofEpochSecond(1000)
-  private val defaultSubmittingParticipant = "participant1"
+  private val roundOpensAt = CantonTimestamp.ofEpochSecond(0)
+  private val defaultSubmittingParticipant = "participant1::namespace"
   private val dsoParty = PartyId.tryFromProtoPrimitive("dso::namespace")
 
   "a transaction submitted by an asset mover" when {
@@ -200,7 +213,19 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       submittingParties = Seq("moverOps"),
     )
 
-    "the amulet version is above 0.1.24" should {
+    "the round opens at or after the CIP-104 amended calculation switch-over time" should {
+
+      "split the extra burn among assets if the round opens at the switch-over time" in {
+        val result = computeWithFeaturedAppParties(
+          featuredAppParties,
+          Seq((summary, verdict)),
+          cip104SwitchOverTime = Some(roundOpensAt),
+        )
+        result should have size 1
+        result.head.submittingAppProvider shouldBe Some("mover")
+        result.head.assetActivityProviderParties shouldBe Seq("asset1", "mover")
+        result.head.assetActivityWeights shouldBe Seq(100L, 10L)
+      }
 
       "split the extra burn among assets" in {
         val result = computeWithFeaturedAppParties(featuredAppParties, Seq((summary, verdict)))
@@ -229,13 +254,15 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       }
     }
 
-    "the amulet version is up to 0.1.24" should {
+    "the round opens before the CIP-104 amended calculation switch-over time" should {
 
-      def assertUserSubmitted(amuletVersion: Option[String]) = {
+      val switchOverAfterRoundOpens = Some(roundOpensAt.plusSeconds(1))
+
+      def assertUserSubmitted(cip104SwitchOverTime: Option[CantonTimestamp]) = {
         val result = computeWithFeaturedAppParties(
           featuredAppParties,
           Seq((summary, verdict)),
-          amuletVersion = amuletVersion,
+          cip104SwitchOverTime = cip104SwitchOverTime,
         )
         result should have size 1
         result.head.submittingAppProvider shouldBe None
@@ -249,11 +276,10 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       }
 
       "compute it as user submitted" in {
-        assertUserSubmitted(Some(DarResources.amulet_0_1_24.metadata.version.toString))
+        assertUserSubmitted(switchOverAfterRoundOpens)
       }
 
-      // This can happen only for rounds before we added ingestion of AmuletRules
-      "compute it as user submitted if the AmuletRules are not ingested" in {
+      "compute it as user submitted if no switch-over time is set" in {
         assertUserSubmitted(None)
       }
 
@@ -261,7 +287,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
         val result = computeWithFeaturedAppParties(
           featuredAppParties,
           Seq((summary, verdictWithAssetOps)),
-          amuletVersion = Some(DarResources.amulet_0_1_24.metadata.version.toString),
+          cip104SwitchOverTime = switchOverAfterRoundOpens,
         )
         result should have size 1
         result.head.submittingAppProvider shouldBe None
@@ -589,15 +615,13 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       params,
     )
 
-  private val roundOpensAt = CantonTimestamp.ofEpochSecond(0)
-
   /** Run computation and extract just the AppAndAssetActivityRecordT results.
     * All featured providers use the default activity weight of 1.0.
     */
   private def computeWith(
       featured: Set[String],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
-      svParticipantIds: Set[String] = Set("someSvParticipant"),
+      svParticipantIds: Set[String] = Set("someSvParticipant::namespace"),
   ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] =
     computeWithWeights(featured.map(_ -> BigDecimal(1)).toMap, input, svParticipantIds)
 
@@ -605,7 +629,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   private def computeWithWeights(
       featuredWeights: Map[String, BigDecimal],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
-      svParticipantIds: Set[String] = Set("someSvParticipant"),
+      svParticipantIds: Set[String] = Set("someSvParticipant::namespace"),
   ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] =
     computeWithFeaturedAppParties(
       ScanRewardsReferenceStore.FeaturedAppParties(
@@ -621,29 +645,13 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   private def computeWithFeaturedAppParties(
       featuredAppParties: ScanRewardsReferenceStore.FeaturedAppParties,
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
-      svParticipantIds: Set[String] = Set("someSvParticipant"),
+      svParticipantIds: Set[String] = Set("someSvParticipant::namespace"),
       assetActivityParams: AssetActivityParams = defaultAssetParams,
-      amuletVersion: Option[String] = Some(DarResources.amulet.latest.metadata.version.toString),
+      cip104SwitchOverTime: Option[CantonTimestamp] = Some(CantonTimestamp.MinValue),
   ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
     val store = mock[ScanRewardsReferenceStore]
-    val amuletConfig = amuletVersion.map { version =>
-      val packageConfig = SpliceUtil.readPackageConfig()
-      SpliceUtil.defaultAmuletConfig(
-        SpliceUtil.defaultInitialTickDuration,
-        100L,
-        SynchronizerId.tryFromString("domain::id"),
-        initialPackageConfig = new PackageConfig(
-          version,
-          packageConfig.amuletNameService,
-          packageConfig.dsoGovernance,
-          packageConfig.validatorLifecycle,
-          packageConfig.wallet,
-          packageConfig.walletPayments,
-        ),
-      )
-    }
-    when(store.lookupAmuletConfigAsOf(any[CantonTimestamp])(any[TraceContext]))
-      .thenReturn(Future.successful(amuletConfig))
+    when(store.lookupDsoRulesAsOf(any[CantonTimestamp])(any[TraceContext]))
+      .thenReturn(Future.successful(Some(mkDsoRules(svParticipantIds, cip104SwitchOverTime))))
     when(store.key).thenReturn(
       ScanRewardsReferenceStore.Key(dsoParty, SynchronizerId.tryFromString("domain::id"))
     )
@@ -659,12 +667,59 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       }
     when(store.lookupFeaturedAppPartiesAsOf(any[CantonTimestamp])(any[TraceContext]))
       .thenReturn(Future.successful(featuredAppParties))
-    when(store.lookupSvParticipantIdsAsOf(any[CantonTimestamp])(any[TraceContext]))
-      .thenReturn(Future.successful(svParticipantIds))
     new AppActivityComputation(store, loggerFactory)(directExecutionContext)
       .computeActivities(input)(traceContext)
       .futureValue
       .flatMap { case (_, _, recordO, _) => recordO }
+  }
+
+  private def mkDsoRules(
+      svParticipantIds: Set[String],
+      cip104SwitchOverTime: Option[CantonTimestamp],
+  ): DsoRules = {
+    val synchronizerId = "domain::id"
+    val svs = svParticipantIds.toSeq.zipWithIndex.map { case (uid, i) =>
+      s"sv$i::namespace" -> new SvInfo(
+        s"sv$i",
+        new Round(0L),
+        1L,
+        ParticipantId(UniqueIdentifier.tryFromProtoPrimitive(uid)).toProtoPrimitive,
+      )
+    }.toMap
+    new DsoRules(
+      dsoParty.toProtoPrimitive,
+      1,
+      svs.asJava,
+      Collections.emptyMap(),
+      dsoParty.toProtoPrimitive,
+      new DsoRulesConfig(
+        1,
+        1,
+        new RelTime(1),
+        new RelTime(1),
+        new RelTime(1),
+        new RelTime(1),
+        new RelTime(1),
+        new SynchronizerNodeConfigLimits(new CometBftConfigLimits(1, 1, 1, 1, 1)),
+        1,
+        new DsoDecentralizedSynchronizerConfig(
+          Collections.emptyMap(),
+          synchronizerId,
+          synchronizerId,
+        ),
+        Optional.empty(),
+        Optional.empty(), // voteCooldownTime
+        Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
+        Optional.of(
+          cip104SwitchOverTime.toList
+            .map(t => SwitchOverTimes.UseCip104AmendedCalculationAfter -> t.toInstant)
+            .toMap
+            .asJava
+        ), // svOperationsSwitchOverTimes
+      ),
+      Collections.emptyMap(),
+      true,
+    )
   }
 
   private def mkVerdict(

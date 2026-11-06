@@ -134,9 +134,7 @@ object SvOnboardingConfig {
       // dry-run) via a config transform in ConfigTransforms.defaults().
       initialRewardConfig: Option[InitialRewardConfig] = Some(InitialRewardConfig()),
       initialSvOperationsSwitchOverTimes: Option[Map[String, CantonTimestamp]] = Some(
-        Map(
-          SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
-        )
+        SwitchOverTimes.defaultSvOperationsSwitchOverTimes
       ),
       initialProtocolVersion: ProtocolVersion = ProtocolVersion.v37,
       initialGovernanceLockConfig: Option[InitialGovernanceLockConfig] = None,
