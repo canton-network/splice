@@ -19,10 +19,11 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import com.digitalasset.canton.util.ShowUtil.*
 
 // This validates FeaturedAppRight grant and amend actions, before the vote-requests are created for them.
-//   -  For grant action this confirms that right does not exist for the `provider`.
-//   - For both grant and amend actions: this confirms that parties present in `opsParties` are
+//  -  For grant action this confirms that right does not exist for the `provider`.
+//  - For both grant and amend actions: this confirms that parties present in `opsParties` are
 //  - Distinct, and different from `provider`
 //  - Are not present in any FeaturedAppRight in ACS (either as `provider` or `opsParties`)
 // But this does not check the in-flight vote-requests; which is done by the UI directly.
@@ -40,7 +41,7 @@ object FeaturedAppRightValidator {
             val providerPartyId = PartyId.tryFromProtoPrimitive(value.provider)
             val proposed =
               SvUtil.optionalJavaListToSeq(value.opsParties).map(PartyId.tryFromProtoPrimitive)
-            checkOpsParties(store, providerPartyId, proposed, None)
+            validateNoConflictingAppRights(store, providerPartyId, proposed, None)
 
           case u: SRARC_CreateFeaturedAppConfigUpdateInstruction =>
             val value = u.dsoRules_CreateFeaturedAppConfigUpdateInstructionValue
@@ -84,14 +85,16 @@ object FeaturedAppRightValidator {
           .optionalJavaListToSeq(current.payload.opsParties)
           .map(PartyId.tryFromProtoPrimitive)
         val effective = resolveOps(baseParties, currentParties, proposedParties)
-        checkOpsParties(store, providerPartyId, effective, Some(current.contractId))
+        validateNoConflictingAppRights(store, providerPartyId, effective, Some(current.contractId))
     }
   }
 
+  // Note this validation check does not fully guarantee that there are no conflicts.
   // If multiple vote-requests are created by different SVs, due to ACS snapshot race conditions
   // we could in principle still end up in a situation where a single party is specified in multiple rights.
-  // Time of Check, Time of Use (TOCTOU) problem
-  def checkOpsParties(
+  // We accept this limitation, as it is seldom and can be remedied by
+  // archiving and/or updating the conflicting right.
+  def validateNoConflictingAppRights(
       store: SvDsoStore,
       provider: PartyId,
       proposedOpsParties: Seq[PartyId],
@@ -129,6 +132,7 @@ object FeaturedAppRightValidator {
           case cs =>
             val rendered = cs
               .map { case (party, cid) => s"$party (on right ${cid.contractId})" }
+              .limit(10)
               .mkString(", ")
             Left(s"parties already in use: $rendered")
         }
