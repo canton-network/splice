@@ -159,7 +159,7 @@
         "participantAddress": "participant",
         "participantClient": {
           "adminApi": {
-            "disableAuth": true
+            "disableAuth": false
           }
         },
         "periodicTopologySnapshotConfig": {

@@ -29,7 +29,7 @@
           "targetAudience": "https://participant_admin_api.example.com",
           "user": "validator-client-id@clients"
         },
-        "disableAuth": true
+        "disableAuth": false
       },
       "affinity": {
         "nodeAffinity": {
