@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.Unit as damlUnit
 import com.daml.ledger.javaapi.data.codegen.ContractId
@@ -14,6 +15,7 @@ import org.lfdecentralizedtrust.splice.store.{
   StoreErrors,
   StoreTestBase,
   UpdateHistory,
+  UpdateHistoryTestBase,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.FutureUnlessShutdownOps
@@ -1357,8 +1359,16 @@ trait AcsSnapshotStoreTest
       participantId: String = "whatever",
       // Default to backfilling being always complete, to avoid unnecessary complexity in the tests
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.BackfillingNotRequired,
+      timeStart: CantonTimestamp = CantonTimestamp.Epoch,
+      partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory] = {
     for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId(participantId),
+        storage.underlying,
+        loggerFactory,
+      )
       updateHistory <- UpdateHistory.create(
         storage.underlying, // not under test
         migrationId,
@@ -1367,12 +1377,19 @@ trait AcsSnapshotStoreTest
         dsoParty,
         backfillingRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
+      _ <- UpdateHistoryTestBase.createUpdateHistoryPartitions(
+        updateHistory,
+        timeStart,
+        partitionRunwayDays,
+      )
     } yield updateHistory
   }
 

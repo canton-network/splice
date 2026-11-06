@@ -1,5 +1,7 @@
 package org.lfdecentralizedtrust.splice.store
 
+import com.digitalasset.canton.time.Clock
+
 import com.daml.ledger.api.v2.TraceContextOuterClass
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Transaction}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent.{Assign, Unassign}
@@ -9,7 +11,12 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
   TransactionTreeUpdate,
 }
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsTables, SplicePostgresTest}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsJdbcTypes,
+  AcsTables,
+  SplicePostgresTest,
+  StoreDescriptor,
+}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -23,12 +30,16 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodeg
 import org.lfdecentralizedtrust.splice.util.Contract
 import org.scalatest.Assertion
 
-import scala.concurrent.Future
+import java.time.{LocalDate, ZoneOffset}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import UpdateHistory.UpdateHistoryResponse
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.NonNegativeDuration
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
+import com.digitalasset.canton.util.MonadUtil
+import com.digitalasset.canton.lifecycle.CloseContext
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 abstract class UpdateHistoryTestBase
     extends StoreTestBase
@@ -230,9 +241,35 @@ abstract class UpdateHistoryTestBase
     succeed
   }
 
-  protected def initStore(implicit store: UpdateHistory): Future[Unit] = {
-    store.testIngestionSink.initialize().map(_ => ())
-  }
+  protected def initStore(
+      store: UpdateHistory,
+      timeStart: CantonTimestamp = time(0),
+      partitionRunwayDays: Int = 7,
+  ): Future[Unit] = for {
+    _ <- createUpdateHistoryPartitions(
+      store,
+      timeStart,
+      partitionRunwayDays,
+    )
+    _ <- store.testIngestionSink.initialize(mockLedgerConnection(timeStart))
+  } yield ()
+
+  protected def mkKeyValueStore(
+      updateStreamParty: PartyId = party1,
+      participantId: ParticipantId = participant1,
+      storeName: String = storeName1,
+  ): KeyValueStore =
+    KeyValueStore(
+      StoreDescriptor(
+        version = 1,
+        name = "UpdateHistoryTestBase",
+        party = updateStreamParty,
+        participant = participantId,
+        key = Map("storeName" -> storeName),
+      ),
+      storage,
+      loggerFactory,
+    ).futureValue
 
   protected def mkStore(
       updateStreamParty: PartyId = party1,
@@ -242,6 +279,7 @@ abstract class UpdateHistoryTestBase
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.NeedsBackfilling,
       analyzableTimeWindowDuration: NonNegativeDuration =
         NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+      clock: Clock = this.clock,
   ): UpdateHistory = {
     UpdateHistory
       .create(
@@ -252,13 +290,24 @@ abstract class UpdateHistoryTestBase
         updateStreamParty,
         backfillingRequired,
         internedStringStore(storage),
+        mkKeyValueStore(updateStreamParty, participantId, storeName),
         analyzableTimeWindowDuration,
         loggerFactory,
         enableImportUpdateBackfill = true,
         HistoryMetrics.apply(NoOpMetricsFactory, domainMigrationId),
+        clock,
       )
       .futureValue
   }
+
+  protected def forgetLastLegacyRecordTime(historyId: Long): Future[Unit] =
+    mkKeyValueStore().deleteKey(UpdateHistory.lastLegacyRecordTimeKey(historyId))
+
+  protected def moveToLegacyTables(
+      historyId: Long,
+      recordTimeBefore: CantonTimestamp,
+  ): Future[Unit] =
+    UpdateHistoryTestBase.moveToLegacyTables(storage.underlying, historyId, recordTimeBefore)
 
   override def cleanDb(
       storage: DbStorage
@@ -485,5 +534,76 @@ object UpdateHistoryTestBase {
         )
       case _ => throw new RuntimeException("Invalid transfer type")
     }
+  }
+
+  def moveToLegacyTables(
+      storage: DbStorage,
+      historyId: Long,
+      recordTimeBefore: CantonTimestamp,
+  )(implicit ec: ExecutionContext, tc: TraceContext, cc: CloseContext): Future[Unit] = {
+    val tables = Seq(
+      "update_history_transactions",
+      "update_history_creates",
+      "update_history_exercises",
+      "update_history_assignments",
+      "update_history_unassignments",
+    )
+    for {
+      _ <- MonadUtil.sequentialTraverse(tables) { table =>
+        for {
+          columns <- storage
+            .query(
+              sql"""
+              select column_name
+              from information_schema.columns
+              where table_schema = current_schema and table_name = ${s"${table}_legacy"}
+              order by ordinal_position
+            """.as[String],
+              "moveToLegacyTables.columns",
+            )
+            .failOnShutdownToAbortException("moveToLegacyTables")
+          columnList = columns.mkString(", ")
+          _ <- storage
+            .update(
+              sqlu"""
+              insert into #${table}_legacy (#$columnList)
+              select #$columnList
+              from #$table
+              where history_id = $historyId and record_time < ${recordTimeBefore.toMicros}
+            """,
+              "moveToLegacyTables.insert",
+            )
+            .failOnShutdownToAbortException("moveToLegacyTables")
+        } yield ()
+      }
+      _ <- MonadUtil.sequentialTraverse(tables.reverse) { table =>
+        storage
+          .update(
+            sqlu"""
+            delete from #$table
+            where history_id = $historyId and record_time < ${recordTimeBefore.toMicros}
+          """,
+            "moveToLegacyTables.delete",
+          )
+          .failOnShutdownToAbortException("moveToLegacyTables")
+      }
+    } yield ()
+  }
+
+  def createUpdateHistoryPartitions(
+      updateHistory: UpdateHistory,
+      timeStart: CantonTimestamp,
+      partitionRunwayDays: Int,
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Unit] = {
+    val firstDay = LocalDate.ofInstant(timeStart.toInstant, ZoneOffset.UTC)
+    for {
+      // for tests that want import updates
+      _ <- updateHistory.createPartitions(
+        LocalDate.ofInstant(CantonTimestamp.MinValue.toInstant, ZoneOffset.UTC)
+      )
+      _ <- MonadUtil.sequentialTraverse(0.until(partitionRunwayDays)) { n =>
+        updateHistory.createPartitions(firstDay.plusDays(n.toLong))
+      }
+    } yield ()
   }
 }

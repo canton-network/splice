@@ -1325,6 +1325,7 @@ class DbScanAppRewardsStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage,
         migrationId,
@@ -1333,12 +1334,14 @@ class DbScanAppRewardsStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = false,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
     } yield {
       val appActivityRecordStore = new DbAppActivityRecordStore(
         storage.underlying,

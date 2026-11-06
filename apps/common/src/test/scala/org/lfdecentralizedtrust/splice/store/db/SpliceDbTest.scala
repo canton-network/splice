@@ -71,6 +71,22 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
       _ <- storage.queryAndUpdate(
         for {
           _ <- debugPrintPgActivity()
+          // Partitions are created at runtime (see UpdateHistory.createPartitions),
+          // drop them so that tests can re-create them.
+          updateHistoryPartitions <- sql"""
+            select child.relname
+            from pg_inherits i
+            join pg_class child on child.oid = i.inhrelid
+            where i.inhparent in (
+              'update_history_transactions'::regclass,
+              'update_history_creates'::regclass,
+              'update_history_exercises'::regclass,
+              'update_history_assignments'::regclass,
+              'update_history_unassignments'::regclass
+            )""".as[String]
+          _ <- DBIO.seq(
+            updateHistoryPartitions.map(partition => sqlu"""drop table if exists "#$partition"""")*
+          )
           _ <- sql"""TRUNCATE
                 active_parties,
                 user_wallet_acs_store,
@@ -94,6 +110,11 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
                 update_history_creates,
                 update_history_assignments,
                 update_history_unassignments,
+                update_history_transactions_legacy,
+                update_history_exercises_legacy,
+                update_history_creates_legacy,
+                update_history_assignments_legacy,
+                update_history_unassignments_legacy,
                 update_history_backfilling,
                 acs_snapshot_data,
                 acs_snapshot,

@@ -236,10 +236,13 @@ class ScanApp(
         store.acsContractFilter.ingestionFilter.primaryParty,
         BackfillingRequirement.NeedsBackfilling,
         internedStringStore,
+        kvStore,
         config.analyzableTimeWindow.duration,
         loggerFactory,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
         scanAppMetrics.dbScanStore.history,
+        clock,
+        partitionRunwayDays = config.updateHistoryPartitionRunwayDays,
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
