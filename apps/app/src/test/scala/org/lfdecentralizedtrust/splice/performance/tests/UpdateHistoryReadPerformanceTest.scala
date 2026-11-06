@@ -15,7 +15,9 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding
+import io.circe.syntax.*
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{DamlValueEncoding, UpdateHistoryItem}
+import org.lfdecentralizedtrust.splice.scan.admin.http.ScanJsonSupport.*
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
   ExternalHashInclusionPolicy,
   ScanHttpEncodings,
@@ -95,6 +97,7 @@ class UpdateHistoryReadPerformanceTest(
     Seq(
       getUpdateByIdOperation(store, txs),
       encodeUpdateOperation(txs),
+      serializeJsonOperation(txs),
     )
 
   /** Fetches the update from the store and decode. */
@@ -142,6 +145,50 @@ class UpdateHistoryReadPerformanceTest(
     )
   }
 
+  /** Runs circe JSON serialization on the already-encoded API objects.
+    */
+  private def serializeJsonOperation(
+      txs: Seq[TreeUpdateWithMigrationId]
+  ): ReadOperation = {
+    implicit val elc: ErrorLoggingContext =
+      ErrorLoggingContext.fromTracedLogger(logger)(TraceContext.empty)
+    // encode outside the timed block so only the JSON serialization is measured.
+    // .toVector.map ensures the encoding is done eagerly, not lazily during the timed block.
+    // encodeCount verifies this at runtime
+    val encodeCount = new java.util.concurrent.atomic.AtomicInteger(0)
+    val encoded: Seq[UpdateHistoryItem] = txs.toVector.map { tx =>
+      encodeCount.incrementAndGet()
+      ScanHttpEncodings.encodeUpdate(
+        tx,
+        encoding = DamlValueEncoding.members.CompactJson,
+        version = ScanHttpEncodings.V1,
+        hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
+        externalTransactionHashThresholdTime =
+          ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
+      )
+    }
+    require(
+      encodeCount.get() == txs.size,
+      s"encode did not run eagerly at construction: expected ${txs.size}, got ${encodeCount.get()}",
+    )
+    ReadOperation(
+      name = "serializeJson",
+      execute = { (_: TraceContext) =>
+        Future {
+          val encodeCountBefore = encodeCount.get()
+          encoded.foreach { item =>
+            val _ = item.asJson.noSpaces
+          }
+          require(
+            encodeCount.get() == encodeCountBefore,
+            s"encode leaked into the timed serialization block: count advanced from " +
+              s"$encodeCountBefore to ${encodeCount.get()}",
+          )
+        }
+      },
+    )
+  }
+
   override protected def verifyReadResults(
       store: UpdateHistory,
       originalTxs: Seq[TreeUpdateWithMigrationId],
@@ -182,6 +229,7 @@ object UpdateHistoryReadPerformanceTest {
       dsoParty: String,
       migrationId: Long,
   )
+
   private implicit val configReader: ConfigReader[UpdateHistoryReadPerformanceTestConfig] =
     deriveReader[UpdateHistoryReadPerformanceTestConfig]
 
