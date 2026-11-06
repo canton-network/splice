@@ -177,7 +177,8 @@ class UpdateHistoryReadPerformanceTest(
         Future {
           val encodeCountBefore = encodeCount.get()
           encoded.foreach { item =>
-            val _ = item.asJson.noSpaces
+            // mirror the HTTP layer's circe marshaller exactly
+            val _ = io.circe.Printer.noSpaces.print(item.asJson)
           }
           require(
             encodeCount.get() == encodeCountBefore,
