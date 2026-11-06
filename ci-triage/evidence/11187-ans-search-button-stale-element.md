@@ -39,3 +39,22 @@ So two earlier hits of the exception in other tests, none since January.
 ## Verdict
 New, rare Selenium race in a shared helper. Possible fix (test only): retry the click in `eventuallyClickOn` on
 StaleElementReferenceException. Not verified: what re-rendered the button (no browser trace of the DOM).
+
+## 4. Test log (added 2026-11-06, artifact logs-frontend-wall-clock-time-0, 13336017364)
+
+```
+zcat log/11187/art/canton_network_test.clog.gz | jq -r 'select(.["@timestamp"]>="2026-11-04T14:55:07" and .["@timestamp"]<="2026-11-04T14:55:22") | select(.logger_name|test("AnsFrontendIntegrationTest:AnsFrontendIntegrationTest$|LogReporter")) | [.["@timestamp"][11:23], .message]|@tsv'
+zcat log/11187/art/canton_network_test.clog.gz | jq -r 'select(.["@timestamp"]>="2026-11-04T14:55:07.5" and .["@timestamp"]<="2026-11-04T14:55:07.86") | select(.logger_name|test("web-frontend")) | [.["@timestamp"][11:23], .message]|@tsv'
+```
+```
+14:55:07.130 Running clue: requesting an existing name to check the already taken message
+14:55:07.541 Running clue: Waiting for IdQuery(search-entry-button) to be clickable
+14:55:07.793 Finished clue: Waiting for IdQuery(search-entry-button) to be clickable
+14:55:07.795 web-frontend=alice | Render
+14:55:07.796 web-frontend=alice | RequestAnsEntry
+14:55:07.854 Failed clue: requesting an existing name to check the already taken message
+14:55:07.855 Caught error org.openqa.selenium.StaleElementReferenceException: The element with the reference b5131b1e-... is stale; ...
+```
+The failing step is the second search (after "Reserving ans name: mycool_entry.unverified.ans", 14:55:07.130), not the
+first. The `Render` / `RequestAnsEntry` console lines are React render-trace output of alice's page; they show a render of
+the component holding the button between the clickable check and the click, not which state change caused it.
