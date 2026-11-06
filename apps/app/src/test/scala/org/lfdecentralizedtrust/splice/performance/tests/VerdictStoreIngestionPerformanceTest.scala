@@ -64,6 +64,8 @@ class VerdictStoreIngestionPerformanceTest(
       verdict: httpDefs.EventHistoryVerdict,
       trafficSummary: Option[httpDefs.EventHistoryTrafficSummary],
       appActivityRecords: Option[httpDefs.EventHistoryAppActivityRecords],
+      assetActivityRecords: Seq[httpDefs.ActivityRecord],
+      submittingAppProvider: Option[String],
       resolvedRound: Option[Long],
   )
 
@@ -145,7 +147,14 @@ class VerdictStoreIngestionPerformanceTest(
       item.verdict.map { v =>
         val roundO = item.appActivityRecords.map(_.roundNumber)
         roundO.foreach(r => lastRound = Some(r))
-        LoadedVerdict(v, item.trafficSummary, item.appActivityRecords, roundO.orElse(lastRound))
+        LoadedVerdict(
+          v,
+          item.trafficSummary,
+          item.appActivityRecords,
+          item.assetActivityRecords.fold(Seq.empty[httpDefs.ActivityRecord])(_.value),
+          item.submittingAppProvider.map(_.value),
+          roundO.orElse(lastRound),
+        )
       }
     }
   }
@@ -174,12 +183,16 @@ class VerdictStoreIngestionPerformanceTest(
         // App activity records, keyed by the verdict's record time
         val appActivityRecords = batch.flatMap { lv =>
           lv.appActivityRecords.map { aar =>
-            parseTimestamp(lv.verdict.recordTime) -> DbAppActivityRecordStore.AppActivityRecordT(
-              verdictRowId = DbAppActivityRecordStore.DUMMY_VERDICT_ROW_ID,
-              roundNumber = aar.roundNumber,
-              appProviderParties = aar.records.toSeq.map(_.party),
-              appActivityWeights = aar.records.toSeq.map(_.weight),
-            )
+            parseTimestamp(lv.verdict.recordTime) -> DbAppActivityRecordStore
+              .AppAndAssetActivityRecordT(
+                verdictRowId = DbAppActivityRecordStore.DUMMY_VERDICT_ROW_ID,
+                roundNumber = aar.roundNumber,
+                appProviderParties = aar.records.toSeq.map(_.party),
+                appActivityWeights = aar.records.toSeq.map(_.weight),
+                submittingAppProvider = lv.submittingAppProvider,
+                assetActivityProviderParties = lv.assetActivityRecords.map(_.party),
+                assetActivityWeights = lv.assetActivityRecords.map(_.weight),
+              )
           }
         }
         val hasTrafficSummaries = batch.exists(_.trafficSummary.isDefined)
