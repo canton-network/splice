@@ -47,7 +47,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (related 10475) | open, test fix proposed |
 | AG | first Postgres connection > 5 s at shard start, createDatabase retry WARN | 10739, 11141 | open, test config fix proposed |
 | AH | SequencerPruningIntegrationTest disables the shared participants at the global sequencer | 11165 | open, owner suggested martinflorian-da |
-| AI | SUBMISSION_ALREADY_IN_FLIGHT trips the validator circuit breaker | 9752 (dups 10300, 11173) | closed 9752, fix cni#2785 status unknown |
+| AI | SUBMISSION_ALREADY_IN_FLIGHT trips the validator circuit breaker | 9752 (dups 10300, 11173; 11240 via B) | closed 9752, fix cni#2785 status unknown |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -81,6 +81,12 @@ State as recorded in the family section, not rechecked against the tracker on 20
   retried (`Retry has not been configured for GrpcServiceUnavailable, giving up`), the command stays in flight until
   max sequencing time (`UnSequencedCommandRejected` ~60 s later), the trigger's resubmits get
   `SUBMISSION_ALREADY_IN_FLIGHT`, and after 20 the `SpliceCircuitBreaker` WARNs `tripped after 20 failures`.
+- Same symptom without the rejection (11240, 2026-11-06, main 97df2c4399, canton 3.7.2, CopyVotesIntegrationTest
+  setup, splitwellValidator): epoch 32 (2 -> 4) below strong quorum until 12:22:23.842, newcomers set up the epoch at
+  12:22:27/12:22:31, first output 12:22:34.500; the top-up submission is ordered late, the test-only 5 s
+  `buyExtraTraffic.grpcDeadline` (`ConfigTransforms.setDefaultGrpcDeadlineForBuyExtraTraffic`) cancels the wait,
+  19 resubmits get `SUBMISSION_ALREADY_IN_FLIGHT`, breaker trips 14 ms after the submission completes. Test-only
+  mitigation: that deadline 5 s -> 30 s (as #7909 for the treasury).
 
 ## C. False off-boarding conclusion during onboarding state transfer (10048 family) - FIXED
 - Signatures: `Received topology for epoch N, but this node isn't part of it (i.e., it has been off-boarded)` on a
