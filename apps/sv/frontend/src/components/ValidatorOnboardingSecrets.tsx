@@ -64,8 +64,8 @@ const ValidatorOnboardingSecrets: React.FC = () => {
   );
 
   return (
-    <Stack spacing={4} direction="column" justifyContent="center">
-      <Typography mt={4} variant="h4">
+    <Stack spacing={4} direction="column" sx={{ justifyContent: 'center' }}>
+      <Typography variant="h4" sx={{ mt: 4 }}>
         Validator Onboarding Secrets
       </Typography>
 
@@ -75,14 +75,14 @@ const ValidatorOnboardingSecrets: React.FC = () => {
         </Typography>
       )}
 
-      <Stack direction="column" mb={4} spacing={1}>
+      <Stack direction="column" spacing={1} sx={{ mb: 4 }}>
         <Typography variant="h6">Party Hint</Typography>
         <TextField
           error={partyHint === '' || !VALID_PARTY_ID_REGEX.test(partyHint)}
           autoComplete="off"
           id="create-party-hint"
           placeholder="<organization>-<function>-<enumerator>"
-          inputProps={{ 'data-testid': 'create-party-hint' }}
+          slotProps={{ htmlInput: { 'data-testid': 'create-party-hint' } }}
           onChange={e => setPartyHint(e.target.value)}
           value={partyHint}
         />
@@ -193,10 +193,7 @@ const OnboardingRow: React.FC<OnboardingRowProps> = props => {
       </TableCell>
       <TableCell sx={{ display: 'flex', alignItems: 'center' }}>
         <Typography
-          sx={{
-            overflowWrap: 'break-word',
-            wordBreak: 'break-word',
-          }}
+          sx={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
           className="onboarding-secret-table-secret"
         >
           {props.secret}

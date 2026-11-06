@@ -150,6 +150,18 @@ class UserWalletAutomationService(
           packageVersionSupport,
         )
       )
+    } else if (config.useTokenStandardTransfer) {
+      registerTrigger(
+        new WalletTokenStandardSweepTrigger(
+          triggerContext,
+          store,
+          config,
+          scanConnection,
+          treasury,
+          dedupDuration,
+          packageVersionSupport,
+        )
+      )
     } else {
       registerTrigger(
         new WalletTransferOfferSweepTrigger(
@@ -230,6 +242,7 @@ object UserWalletAutomationService extends AutomationServiceCompanion {
       aTrigger[TransferFollowTrigger],
       aTrigger[WalletTransferOfferSweepTrigger],
       aTrigger[WalletPreapprovalSweepTrigger],
+      aTrigger[WalletTokenStandardSweepTrigger],
       aTrigger[AutoAcceptTransferOffersTrigger],
       aTrigger[AmuletMetricsTrigger],
       aTrigger[ExpireMintingDelegationTrigger],

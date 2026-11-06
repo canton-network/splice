@@ -144,12 +144,12 @@ jobs:
           test_names: ${{ needs.split_tests.outputs.test_names }}
           runner_index: ${{ matrix.runner-index }}
           with_gcp_creds: ${{ inputs.with_gcp_creds }}
-          gcp_kms_creds: ${{ secrets.GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS }}
-          gcp_data_export_creds: ${{ secrets.GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS }}
+          gcp_kms_creds: ${{ secrets.GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS_V2 }}
+          gcp_data_export_creds: ${{ secrets.GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS_V2 }}
           is_frontend_test: ${{ inputs.is_frontend_test }}
-          auth0_management_api_client_id: ${{ secrets.AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID }}
-          auth0_management_api_client_secret: ${{ secrets.AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET }}
-          auth0_validator_audience: ${{ secrets.AUTH0_TESTS_VALIDATOR_AUDIENCE }}
+          auth0_management_api_client_id: ${{ secrets.AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID_V2 }}
+          auth0_management_api_client_secret: ${{ secrets.AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET_V2 }}
+          auth0_validator_audience: ${{ secrets.AUTH0_TESTS_VALIDATOR_AUDIENCE_V2 }}
           pre_sbt_cmd: ${{ inputs.pre_sbt_cmd }}
           google_workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
           failure_notifications_invoker_sa: ${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}

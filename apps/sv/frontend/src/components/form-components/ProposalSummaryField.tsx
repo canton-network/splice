@@ -55,15 +55,10 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
         error={!field.state.meta.isValid}
         helperText={field.state.meta.errors?.[0]}
         placeholder={PROPOSAL_SUMMARY_PLACEHOLDER}
-        inputProps={{ 'data-testid': id, maxLength }}
+        slotProps={{ htmlInput: { 'data-testid': id, maxLength } }}
       />
       <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 2,
-        }}
+        sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}
       >
         <Typography
           component="p"

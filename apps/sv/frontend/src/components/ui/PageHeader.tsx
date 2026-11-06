@@ -17,10 +17,8 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, actionElement, 'data-tes
   >
     <Typography
       variant="h2"
-      lineHeight={1}
-      fontSize={40}
-      fontFamily="termina"
       data-testid={`${testId}-title`}
+      sx={{ lineHeight: 1, fontSize: 40, fontFamily: 'termina' }}
     >
       {title}
     </Typography>

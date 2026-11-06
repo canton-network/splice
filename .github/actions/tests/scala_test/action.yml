@@ -22,11 +22,11 @@ inputs:
     required: false
     default: "false"
   gcp_kms_creds:
-    description: "GCP KMS service account credentials, relevant when with_gcp_creds == true (from GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS secret)"
+    description: "GCP KMS service account credentials, relevant when with_gcp_creds == true (from GCP_KMS_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS_V2 secret)"
     required: false
     default: ""
   gcp_data_export_creds:
-    description: "GCP Data Export service account credentials, relevant when with_gcp_creds == true (from GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS secret)"
+    description: "GCP Data Export service account credentials, relevant when with_gcp_creds == true (from GCP_DATA_EXPORT_INTEGRATION_TEST_SERVICE_ACCOUNT_CREDENTIALS_V2 secret)"
     required: false
     default: ""
   with_frontend_creds:
@@ -46,19 +46,19 @@ inputs:
     required: false
     default: "false"
   auth0_management_api_client_id:
-    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID secret)"
+    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID_V2 secret)"
     required: false
     default: ""
   auth0_management_api_client_secret:
-    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET secret)"
+    description: "Auth0 Management API Client ID, relevant for frontend tests (from AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET_V2 secret)"
     required: false
     default: ""
   compose_validator_web_ui_password:
-    description: "password for the validator in docker-compose tests (from COMPOSE_VALIDATOR_WEB_UI_PASSWORD secret)"
+    description: "password for the validator in docker-compose tests (from COMPOSE_VALIDATOR_WEB_UI_PASSWORD_V2 secret)"
     required: false
     default: ""
   auth0_validator_audience:
-    description: "audience for the validator in docker-compose tests (from AUTH0_TESTS_VALIDATOR_AUDIENCE secret)"
+    description: "audience for the validator in docker-compose tests (from AUTH0_TESTS_VALIDATOR_AUDIENCE_V2 secret)"
     required: false
     default: ""
   additional_nix_args:
@@ -94,6 +94,39 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Missing GitHub secrets resolve to "", which otherwise only surfaces as confusing test failures much later.
+    - name: Check required secrets are set
+      shell: bash
+      env:
+        WITH_GCP_CREDS: ${{ inputs.with_gcp_creds }}
+        WITH_AUTH0_CREDS: ${{ inputs.is_frontend_test == 'true' || inputs.with_frontend_creds == 'true' }}
+        WITH_COMPOSE_CREDS: ${{ inputs.with_frontend_creds }}
+        GCP_KMS_CREDS: ${{ inputs.gcp_kms_creds }}
+        GCP_DATA_EXPORT_CREDS: ${{ inputs.gcp_data_export_creds }}
+        AUTH0_CLIENT_ID: ${{ inputs.auth0_management_api_client_id }}
+        AUTH0_CLIENT_SECRET: ${{ inputs.auth0_management_api_client_secret }}
+        AUTH0_AUDIENCE: ${{ inputs.auth0_validator_audience }}
+        COMPOSE_PASSWORD: ${{ inputs.compose_validator_web_ui_password }}
+      run: |
+        missing=()
+        check() { [[ -n "${!1}" ]] || missing+=("$2"); }
+        if [[ "$WITH_GCP_CREDS" == "true" ]]; then
+          check GCP_KMS_CREDS gcp_kms_creds
+          check GCP_DATA_EXPORT_CREDS gcp_data_export_creds
+        fi
+        if [[ "$WITH_AUTH0_CREDS" == "true" ]]; then
+          check AUTH0_CLIENT_ID auth0_management_api_client_id
+          check AUTH0_CLIENT_SECRET auth0_management_api_client_secret
+          check AUTH0_AUDIENCE auth0_validator_audience
+        fi
+        if [[ "$WITH_COMPOSE_CREDS" == "true" ]]; then
+          check COMPOSE_PASSWORD compose_validator_web_ui_password
+        fi
+        if (( ${#missing[@]} > 0 )); then
+          echo "::error::Empty secret inputs: ${missing[*]}. Check that the GitHub secrets that the calling workflow passes (still) exist. You might need to rebase your target branch/fork to the latest upstream main."
+          exit 1
+        fi
+
     - name: Setup
       uses: ./.github/actions/tests/common_test_setup
       with:
@@ -144,6 +177,8 @@ runs:
         cmd: |
           if [[ "${{ inputs.daml_base_version }}" != "" ]]; then
             echo "Running with initial package config from ${{ inputs.daml_base_version }}"
+            branch="release-line-${{ inputs.daml_base_version }}"
+            git fetch --depth 1 origin "+refs/heads/$branch:refs/remotes/origin/$branch"
             ./scripts/initial-package-config.py ${{ inputs.daml_base_version }} initial_package_config scala_test_tags
             echo "Initial package config" $(cat initial_package_config)
             echo "ScalaTest tags: $(cat scala_test_tags)"

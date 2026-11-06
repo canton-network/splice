@@ -193,7 +193,7 @@ function cantonDomainTab(
 ) {
   const sequencerSection = (
     <div>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Sequencer status
       </Typography>
       <StatusDisplay status={sequencerStatus} />
@@ -201,7 +201,7 @@ function cantonDomainTab(
   );
   const mediatorSection = (
     <div>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Mediator status
       </Typography>
       <StatusDisplay status={mediatorStatus} />

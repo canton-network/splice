@@ -190,7 +190,7 @@ class SvOnboardingAddlIntegrationTest
     sv4ValidatorBackend.waitForInitialization()
 
     // we need to wait for a minute due to non sv validator only connect to sequencers after initialization + sequencerAvailabilityDelay which is is 60s
-    eventually(timeUntilSuccess = 1.minutes, maxPollInterval = 1.second) {
+    eventually(timeUntilSuccess = 2.minutes, maxPollInterval = 1.second) {
       val sv1NodeStates = sv1Backend.getDsoInfo().svNodeStates
 
       forAll(Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)) { svBackend =>

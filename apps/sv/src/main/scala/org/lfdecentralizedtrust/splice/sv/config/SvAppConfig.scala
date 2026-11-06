@@ -40,7 +40,7 @@ import org.lfdecentralizedtrust.splice.config.{
   BackupDumpConfig,
   BaseParticipantClientConfig,
   GcpBucketConfig,
-  LedgerApiClientConfig,
+  ClientConfigWithAuth,
   ParticipantBootstrapDumpConfig,
   PeriodicBackupDumpConfig,
   PruningConfig,
@@ -369,14 +369,14 @@ final case class BeneficiaryConfig(
 )
 
 final case class SvParticipantClientConfig(
-    override val adminApi: FullClientConfig,
-    override val ledgerApi: LedgerApiClientConfig,
+    override val adminApi: ClientConfigWithAuth,
+    override val ledgerApi: ClientConfigWithAuth,
     sequencerRequestAmplification: SubmissionRequestAmplification =
       SvAppBackendConfig.DefaultParticipantSequencerRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
       SequencerConnectionPoolDelays.default,
     subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
-) extends BaseParticipantClientConfig(adminApi, ledgerApi)
+) extends BaseParticipantClientConfig
 
 final case class BftSequencingParameters(
     pbftViewChangeTimeout: PositiveFiniteDuration =
@@ -412,9 +412,8 @@ object BftSequencingParameters {
   val default =
     BftSequencingParameters(
       pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
-      // increased from default as epoch changes are synchronization points which can slow things down.
-      segmentLength =
-        PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
+      // 20 seems to be the sweat spot atm for lowish latency with decent throughput.
+      segmentLength = PositiveNumeric.tryCreate(20),
       blacklistLeaderSelectionPolicyConfig =
         SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
           howLongToBlacklist = BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(

@@ -30,8 +30,7 @@ export const useUnclaimedDevelopmentFundTotal = (): UseUnclaimedDevelopmentFundT
 
       return coupons.reduce((total, coupon) => {
         const payload = coupon.contract?.payload as
-          | UnclaimedDevelopmentFundCouponPayload
-          | undefined;
+          UnclaimedDevelopmentFundCouponPayload | undefined;
         const amount = new BigNumber(payload?.amount || 0);
         return total.plus(amount);
       }, new BigNumber(0));

@@ -32,8 +32,13 @@ if __name__ == "__main__":
     logging.error("FAILURE_NOTIFICATIONS_TOKEN is not set")
     sys.exit(1)
 
+  url = os.environ.get('FAILURE_NOTIFICATIONS_URL')
+  if not url:
+    logging.error("FAILURE_NOTIFICATIONS_URL is not set")
+    sys.exit(1)
+
   r = requests.post(
-    url = os.environ.get('FAILURE_NOTIFICATIONS_URL'),
+    url = url,
     headers = {
       "Authorization": f"Bearer {token}",
     },

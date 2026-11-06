@@ -28,9 +28,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import Any, NoReturn
 
 
-def fail(msg: str) -> None:
+def fail(msg: str) -> NoReturn:
     print(f"FAIL: {msg}")
     sys.exit(1)
 
@@ -52,7 +53,7 @@ PG_CLIENT_IMAGE = os.environ.get("PG_CLIENT_IMAGE", "postgres:17")
 
 
 def run(args: list[str], capture: bool = False, check: bool = True,
-        stdin_data: str | None = None) -> subprocess.CompletedProcess:
+        stdin_data: str | None = None) -> subprocess.CompletedProcess[str]:
     # stdin defaults to /dev/null so attached pods can never consume anything
     return subprocess.run(
         args,
@@ -65,7 +66,7 @@ def run(args: list[str], capture: bool = False, check: bool = True,
     )
 
 
-def kubectl_json(*args: str):
+def kubectl_json(*args: str) -> Any:
     out = run(["kubectl", *args, "-o", "json"], capture=True).stdout
     return json.loads(out)
 
@@ -90,7 +91,7 @@ OVERRIDES = json.dumps({
 
 
 def pgpod(name: str, password: str, *cmd: str, env: dict[str, str] | None = None,
-          check: bool = True) -> subprocess.CompletedProcess:
+          check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a one-off client pod; returns the completed process with output captured."""
     env_args = [f"--env=PGPASSWORD={password}"]
     for key, value in (env or {}).items():
@@ -107,7 +108,7 @@ def pgpod(name: str, password: str, *cmd: str, env: dict[str, str] | None = None
     return result
 
 
-def pod_lines(result: subprocess.CompletedProcess) -> list[str]:
+def pod_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
     """Pod stdout minus kubectl chatter and blanks."""
     return [
         line for line in result.stdout.splitlines()
@@ -211,7 +212,7 @@ for release in releases:
 if not to_repoint:
     fail(f"no release has persistence.host pointing at {SOURCE_HOST}")
 print("releases to repoint:")
-for name, chart, _ in to_repoint:
+for name, chart, _values in to_repoint:
     print(f"{name} {chart}")
 
 secret_yaml = run(["kubectl", "create", "secret", "generic", SECRET_NAME,
@@ -220,7 +221,7 @@ secret_yaml = run(["kubectl", "create", "secret", "generic", SECRET_NAME,
 run(["kubectl", "apply", "-f", "-"], stdin_data=secret_yaml)
 
 
-def repoint(name: str, chart: str, values: dict) -> None:
+def repoint(name: str, chart: str, values: dict[str, Any]) -> None:
     match = re.match(r"^(?P<chart>.+)-(?P<version>\d+\.\d+\..+)$", chart)
     if not match:
         fail(f"cannot parse chart/version from {chart}")

@@ -76,6 +76,7 @@ export const ValidatorAppConfigSchema = z.object({
 
 export const ParticipantConfigSchema = z.object({
   enableKeyDownload: z.boolean().default(false),
+  enableRepairCommands: z.boolean().default(false),
   additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
   additionalJvmOptions: z.string().optional(),
   resources: K8sResourceSchema.default({
@@ -96,6 +97,15 @@ export const WalletGatewayConfigSchema = z.object({
 });
 
 export type WalletGatewayConfig = z.infer<typeof WalletGatewayConfigSchema>;
+
+export const SweepConfigSchema = z.object({
+  fromParty: z.string(),
+  toParty: z.string(),
+  maxBalance: z.number(),
+  minBalance: z.number(),
+  useTransferPreapproval: z.boolean().optional(),
+  useTokenStandardTransfer: z.boolean().optional(),
+});
 
 export const ValidatorNodeConfigSchema = z.object({
   logging: z
@@ -147,6 +157,7 @@ export const ValidatorConfigSchema = z
     onboardingSecret: z.string().optional(),
     partyAllocator: PartyAllocatorConfigSchema.prefault({ enable: false }),
     version: z.string().optional(),
+    sweep: SweepConfigSchema.optional(),
   })
   .and(ValidatorNodeConfigSchema);
 

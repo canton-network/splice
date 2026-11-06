@@ -24,7 +24,7 @@ const DevelopmentFundTotal: React.FC = () => {
       <CardContent>
         <Stack spacing={1}>
           <Typography variant="h5">Development Fund Total</Typography>
-          <Typography variant="h4" fontWeight="bold" id="unclaimed-total-amount">
+          <Typography variant="h4" id="unclaimed-total-amount" sx={{ fontWeight: 'bold' }}>
             {isLoadingUnclaimedTotal ? (
               <CircularProgress size={24} />
             ) : (
