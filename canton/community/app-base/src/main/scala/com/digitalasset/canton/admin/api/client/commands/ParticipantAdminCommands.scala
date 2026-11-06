@@ -202,13 +202,7 @@ object ParticipantAdminCommands {
       }
     }
 
-    final case class DarData(
-        darPath: String,
-        description: String,
-        expectedMainPackageId: String,
-        // We sometimes want to upload DARs that are inside JARs, which is hard with just a path.
-        darDataO: Option[ByteString] = None,
-    )
+    final case class DarData(darPath: String, description: String, expectedMainPackageId: String)
     final case class UploadDar(
         dars: Seq[DarData],
         synchronizerId: Option[SynchronizerId],
@@ -222,17 +216,12 @@ object ParticipantAdminCommands {
           .traverse(dar =>
             for {
               _ <- Either.cond(dar.darPath.nonEmpty, (), "Provided DAR path is empty")
-              filenameAndDarData <- dar.darDataO.fold(loadDarData(dar.darPath))(darData =>
-                Right(Paths.get(dar.darPath).getFileName.toString -> darData)
-              )
+              filenameAndDarData <- loadDarData(dar.darPath)
               (filename, darData) = filenameAndDarData
               descriptionOrFilename =
                 if (dar.description.isEmpty)
                   PathUtils.getFilenameWithoutExtension(Path.of(filename))
                 else dar.description
-              _ = logger.info(s"Sending upload dar for ${descriptionOrFilename}")(
-                TraceContext.empty
-              )
             } yield v30.UploadDarRequest.UploadDarData(
               darData,
               Some(descriptionOrFilename),
@@ -296,9 +285,8 @@ object ParticipantAdminCommands {
           expectedMainPackageId: String,
           requestHeaders: Map[String, String],
           logger: TracedLogger,
-          darDataO: Option[ByteString],
       ): UploadDar = UploadDar(
-        Seq(DarData(darPath, description, expectedMainPackageId, darDataO)),
+        Seq(DarData(darPath, description, expectedMainPackageId)),
         synchronizerId,
         vetAllPackages = vetAllPackages,
         synchronizeVetting = synchronizeVetting,
@@ -764,7 +752,7 @@ object ParticipantAdminCommands {
     }
 
     final case class ImportPartyAcs(
-        inputStream: java.io.InputStream,
+        file: File,
         synchronizerId: SynchronizerId,
         workflowIdPrefix: String,
         contractImportMode: ContractImportMode,
@@ -806,7 +794,7 @@ object ParticipantAdminCommands {
               partyId = Option.when(isFirst)(party.map(_.toProtoPrimitive)).flatten,
             )
           },
-          inputStream,
+          new FileInputStream(file),
         )
       }
 

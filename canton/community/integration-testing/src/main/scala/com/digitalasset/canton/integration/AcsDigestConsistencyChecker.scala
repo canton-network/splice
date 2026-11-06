@@ -80,7 +80,6 @@ class AcsDigestConsistencyChecker(
                 s"Participant config is not available for external participant ${participant.name}"
               )
             )
-          case unknown => throw new IllegalArgumentException(s"Unsupported config: $unknown")
         }
 
         if (config.enableNewAcsCommitmentProcessor) {
