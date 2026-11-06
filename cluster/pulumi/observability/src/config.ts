@@ -144,6 +144,7 @@ const MonitoringConfigSchema = z
         cloudSql: z.object({
           maintenance: z.boolean(),
         }),
+        // TODO (#8263): remove the CometBFT monitoring config
         cometbft: z.object({
           expectedMaxBlocksPerSecond: z.number(),
         }),

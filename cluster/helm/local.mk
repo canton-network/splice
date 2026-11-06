@@ -1,6 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO (#8263): remove the splice-cometbft chart
 app_charts := \
 	splice-cluster-ingress-runbook \
 	splice-cometbft \

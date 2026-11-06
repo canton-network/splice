@@ -658,6 +658,7 @@ final case class SvSequencerConfig(
     // TODO (#845): consider reading config value from participant instead of configuring here
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
+    // TODO (#8263): remove once DA BFT is the only supported sequencer
     isCantonBftSequencer: Boolean = false,
     cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
@@ -705,6 +706,7 @@ final case class SvScanConfig(
 final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
+    // TODO (#8263): remove, CometBFT is no longer supported
     cometBftConfig: Option[SvCometBftConfig] = None,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests

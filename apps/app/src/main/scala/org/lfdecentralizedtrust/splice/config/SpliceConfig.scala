@@ -629,6 +629,7 @@ object SpliceConfig {
       deriveReader[ExpectedValidatorOnboardingConfig]
     implicit val approvedSvIdentityConfigReader: ConfigReader[ApprovedSvIdentityConfig] =
       deriveReader[ApprovedSvIdentityConfig]
+    // TODO (#8263): remove together with SvCometBftConfig
     implicit val cometBftConfigReader: ConfigReader[SvCometBftConfig] = deriveReader
     implicit val cometBftGovernanceKeyReader: ConfigReader[CometBftGovernanceKey] = deriveReader
     implicit val sequencerPruningConfig: ConfigReader[SequencerPruningConfig] =
@@ -1179,6 +1180,7 @@ object SpliceConfig {
       )
     implicit val approvedSvIdentityConfigWriter: ConfigWriter[ApprovedSvIdentityConfig] =
       deriveWriter[ApprovedSvIdentityConfig]
+    // TODO (#8263): remove together with SvCometBftConfig
     implicit val cometBftConfigWriter: ConfigWriter[SvCometBftConfig] = deriveWriter
     implicit val cometBftGovernanceKeyWriter: ConfigWriter[CometBftGovernanceKey] =
       confidentialWriter[CometBftGovernanceKey](CometBftGovernanceKey.hideConfidential)

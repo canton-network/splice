@@ -30,6 +30,7 @@ IMAGE_SHA256_MAP = {
 
 # List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check
 IGNORED_FILE_PATTERNS = [
+    # TODO (#8263): remove the CometBFT images and build args
     re.compile(r"^cluster/images/cometbft/Dockerfile$"),
     re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$"),
 ]

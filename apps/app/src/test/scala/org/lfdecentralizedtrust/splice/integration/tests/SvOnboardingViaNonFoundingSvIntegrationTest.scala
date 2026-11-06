@@ -6,10 +6,7 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_OffboardSv
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  bumpUrl,
-  IsTheCantonSequencerBFTEnabled,
-}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.bumpUrl
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
@@ -230,25 +227,23 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
         }
 
         // resume only after the other offboarding triggeres finished to not brick sv1's sequencer too early
-        if (IsTheCantonSequencerBFTEnabled) {
-          sv1Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
-          sv2Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
-          eventually() {
-            sv2Backend.participantClient.topology.sequencers
-              .list(
-                store = Some(TopologyStoreId.Synchronizer(decentralizedSynchronizerId))
-              )
-              .loneElement
-              .item
-              .allSequencers
-              .toIndexedSeq should have size 1 withClue "sole sequencers"
-            sv2Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
-              .getSequencerOrderingTopology()
-              .futureValue
-              .sequencerIds should have size 1 withClue "sole sequencerId"
-          }
-          sv2Backend.dsoAutomation.trigger[SvBftSequencerPeerOffboardingTrigger].resume()
+        sv1Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
+        sv2Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
+        eventually() {
+          sv2Backend.participantClient.topology.sequencers
+            .list(
+              store = Some(TopologyStoreId.Synchronizer(decentralizedSynchronizerId))
+            )
+            .loneElement
+            .item
+            .allSequencers
+            .toIndexedSeq should have size 1 withClue "sole sequencers"
+          sv2Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
+            .getSequencerOrderingTopology()
+            .futureValue
+            .sequencerIds should have size 1 withClue "sole sequencerId"
         }
+        sv2Backend.dsoAutomation.trigger[SvBftSequencerPeerOffboardingTrigger].resume()
         clue("Stop SV1") {
           sv1Backend.stop()
         }

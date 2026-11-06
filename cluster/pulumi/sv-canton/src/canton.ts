@@ -32,6 +32,7 @@ export async function installCantonComponents(
     isCoreSv: boolean;
   } & SingleSvConfiguration,
   migrationConfig: DecentralizedSynchronizerMigrationConfig,
+  // TODO (#8263): remove the CometBFT synchronizer node
   cometbft: {
     nodeConfigs: {
       self: StaticCometBftConfigWithNodeName;

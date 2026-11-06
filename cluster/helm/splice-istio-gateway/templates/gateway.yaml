@@ -40,6 +40,7 @@ spec:
     - "{{ (.Values.cluster).daHostname }}"
     - "*.{{ (.Values.cluster).daHostname }}"
 ---
+{{- /* TODO (#8263): remove this gateway, it only serves the CometBFT p2p ports */}}
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
