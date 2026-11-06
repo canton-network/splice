@@ -99,9 +99,9 @@ class UpdateHistoryReadPerformanceTest(
       getUpdateByIdOperation(store, txs),
       // (2) converts LAPI API object to Scan API object
       encodeUpdateOperation(txs),
-      // (3) v1-to-v2 reshape of API object
+      // (3) v1-to-v2 reshape of Scan API object
       // our preliminary benchmarks show v1-to-v2 only consumes 2% of the overall execution time, so we ignore it.
-      // (4) serializes the API object to JSON
+      // (4) serializes the Scan API object to JSON
       serializeJsonOperation(txs),
     )
 
