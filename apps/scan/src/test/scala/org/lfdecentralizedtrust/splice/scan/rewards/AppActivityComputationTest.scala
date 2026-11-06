@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.scan.rewards
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.mediator.admin.v30
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.timestamp.Timestamp as ProtoTimestamp
 import com.google.protobuf.ByteString
@@ -17,7 +17,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   DsoDecentralizedSynchronizerConfig,
   SynchronizerNodeConfigLimits,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules, DsoRulesConfig}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
+  DsoRulesConfig,
+  SvInfo,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.util.SwitchOverTimes
@@ -177,7 +182,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
 
   private val ts = CantonTimestamp.ofEpochSecond(1000)
   private val roundOpensAt = CantonTimestamp.ofEpochSecond(0)
-  private val defaultSubmittingParticipant = "participant1"
+  private val defaultSubmittingParticipant = "participant1::namespace"
   private val dsoParty = PartyId.tryFromProtoPrimitive("dso::namespace")
 
   "a transaction submitted by an asset mover" when {
@@ -616,7 +621,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   private def computeWith(
       featured: Set[String],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
-      svParticipantIds: Set[String] = Set("someSvParticipant"),
+      svParticipantIds: Set[String] = Set("someSvParticipant::namespace"),
   ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] =
     computeWithWeights(featured.map(_ -> BigDecimal(1)).toMap, input, svParticipantIds)
 
@@ -624,7 +629,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   private def computeWithWeights(
       featuredWeights: Map[String, BigDecimal],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
-      svParticipantIds: Set[String] = Set("someSvParticipant"),
+      svParticipantIds: Set[String] = Set("someSvParticipant::namespace"),
   ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] =
     computeWithFeaturedAppParties(
       ScanRewardsReferenceStore.FeaturedAppParties(
@@ -640,13 +645,13 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   private def computeWithFeaturedAppParties(
       featuredAppParties: ScanRewardsReferenceStore.FeaturedAppParties,
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
-      svParticipantIds: Set[String] = Set("someSvParticipant"),
+      svParticipantIds: Set[String] = Set("someSvParticipant::namespace"),
       assetActivityParams: AssetActivityParams = defaultAssetParams,
       cip104SwitchOverTime: Option[CantonTimestamp] = Some(CantonTimestamp.MinValue),
   ): Seq[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
     val store = mock[ScanRewardsReferenceStore]
     when(store.lookupDsoRulesAsOf(any[CantonTimestamp])(any[TraceContext]))
-      .thenReturn(Future.successful(Some(mkDsoRules(cip104SwitchOverTime))))
+      .thenReturn(Future.successful(Some(mkDsoRules(svParticipantIds, cip104SwitchOverTime))))
     when(store.key).thenReturn(
       ScanRewardsReferenceStore.Key(dsoParty, SynchronizerId.tryFromString("domain::id"))
     )
@@ -662,20 +667,29 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       }
     when(store.lookupFeaturedAppPartiesAsOf(any[CantonTimestamp])(any[TraceContext]))
       .thenReturn(Future.successful(featuredAppParties))
-    when(store.lookupSvParticipantIdsAsOf(any[CantonTimestamp])(any[TraceContext]))
-      .thenReturn(Future.successful(svParticipantIds))
     new AppActivityComputation(store, loggerFactory)(directExecutionContext)
       .computeActivities(input)(traceContext)
       .futureValue
       .flatMap { case (_, _, recordO, _) => recordO }
   }
 
-  private def mkDsoRules(cip104SwitchOverTime: Option[CantonTimestamp]): DsoRules = {
+  private def mkDsoRules(
+      svParticipantIds: Set[String],
+      cip104SwitchOverTime: Option[CantonTimestamp],
+  ): DsoRules = {
     val synchronizerId = "domain::id"
+    val svs = svParticipantIds.toSeq.zipWithIndex.map { case (uid, i) =>
+      s"sv$i::namespace" -> new SvInfo(
+        s"sv$i",
+        new Round(0L),
+        1L,
+        ParticipantId(UniqueIdentifier.tryFromProtoPrimitive(uid)).toProtoPrimitive,
+      )
+    }.toMap
     new DsoRules(
       dsoParty.toProtoPrimitive,
       1,
-      Collections.emptyMap(),
+      svs.asJava,
       Collections.emptyMap(),
       dsoParty.toProtoPrimitive,
       new DsoRulesConfig(

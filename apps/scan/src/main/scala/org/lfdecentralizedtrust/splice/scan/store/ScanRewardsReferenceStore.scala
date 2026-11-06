@@ -87,23 +87,6 @@ trait ScanRewardsReferenceStore extends AppStore {
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Option[DsoRules]]
 
-  /** Returns the set of SV participant UIDs from the DsoRules active as of the given time.
-    * Returns an empty set only if asOf time is before the creation time of oldest DsoRules ingested.
-    */
-  def lookupSvParticipantIdsAsOf(
-      asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]] =
-    lookupDsoRulesAsOf(asOf).map(_.fold(Set.empty[String]) { dsoRules =>
-      import scala.jdk.CollectionConverters.*
-      dsoRules.svs.values().asScala.toSet[splice.dsorules.SvInfo].map { info =>
-        // svInfo.participantId is in the proto-primitive form accepted by
-        // ParticipantId.tryFromProtoPrimitive (with `PAR::` prefix), while
-        // verdict.submittingParticipantUid carries only the UID portion.
-        // Normalize to the latter for direct comparison.
-        ParticipantId.tryFromProtoPrimitive(info.participantId).uid.toProtoPrimitive
-      }
-    })
-
   /** Look up an OpenMiningRound contract by its round number.
     * Checks both the active ACS table and the archive table,
     * since the round may have already been closed by the time the trigger runs.
@@ -268,6 +251,20 @@ object ScanRewardsReferenceStore {
         defaultLimit = defaultLimit,
       )
       .map(dbStore => new CachingScanRewardsReferenceStore(dbStore, loggerFactory))
+  }
+
+  /** The UIDs of the SV participants listed in the given DsoRules.
+    *
+    * svInfo.participantId is in the proto-primitive form accepted by
+    * ParticipantId.tryFromProtoPrimitive (with `PAR::` prefix), while
+    * verdict.submittingParticipantUid carries only the UID portion.
+    * We normalize to the latter for direct comparison.
+    */
+  def svParticipantIds(dsoRules: DsoRules): Set[String] = {
+    import scala.jdk.CollectionConverters.*
+    dsoRules.svs.values().asScala.toSet[splice.dsorules.SvInfo].map { info =>
+      ParticipantId.tryFromProtoPrimitive(info.participantId).uid.toProtoPrimitive
+    }
   }
 
   /** The info we need from OpenMiningRound for activity-record calcs

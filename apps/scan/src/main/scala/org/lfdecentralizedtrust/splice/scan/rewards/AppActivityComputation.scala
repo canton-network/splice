@@ -46,13 +46,11 @@ object AppActivityComputation {
 
   // Whether to perform the CIP-104 amendment based calcs for FA submitted transactions.
   // This guard exists to synchronize the round from which on the amended calcs become active among SVs.
-  def computeFASubmitted(roundOpensAt: CantonTimestamp, dsoRules: Option[DsoRules]): Boolean =
-    dsoRules.exists(
-      SwitchOverTimes.hasSwitchedOverAsOf(
-        roundOpensAt,
-        _,
-        SwitchOverTimes.UseCip104AmendedCalculationAfter,
-      )
+  def computeFASubmitted(roundOpensAt: CantonTimestamp, dsoRules: DsoRules): Boolean =
+    SwitchOverTimes.hasSwitchedOverAsOf(
+      roundOpensAt,
+      dsoRules,
+      SwitchOverTimes.UseCip104AmendedCalculationAfter,
     )
 
   /** The featured app provider that submitted a transaction, if any.
@@ -170,20 +168,21 @@ class AppActivityComputation(
                 featuredAppParties <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
                   roundOpensAt
                 )
-                svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
-                  roundOpensAt
-                )
-                dsoRules <- rewardsReferenceStore.lookupDsoRulesAsOf(roundOpensAt)
+                dsoRulesO <- rewardsReferenceStore.lookupDsoRulesAsOf(roundOpensAt)
               } yield {
-                if (svParticipantIds.isEmpty) {
+                val dsoRules = dsoRulesO.getOrElse(
                   // We should never hit this; as we have round info in store and must have DsoRules also
                   throw Status.INTERNAL
                     .withDescription(
-                      s"Round info present as of roundOpensAt=$roundOpensAt, " +
-                        s"but no DsoRules/Sv participant found"
+                      s"Round info present as of roundOpensAt=$roundOpensAt, but no DsoRules found"
                     )
                     .asRuntimeException()
-                } else if (svParticipantIds.contains(verdict.submittingParticipantUid)) {
+                )
+                if (
+                  ScanRewardsReferenceStore
+                    .svParticipantIds(dsoRules)
+                    .contains(verdict.submittingParticipantUid)
+                ) {
                   // SV-submitted transactions don't burn traffic, so they
                   // must not contribute to app activity.
                   (summary, verdict, None, Some(roundNumber))
