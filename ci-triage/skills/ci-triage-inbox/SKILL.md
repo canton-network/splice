@@ -89,7 +89,8 @@ In at most one screen, in this order:
    full body of every comment in a `~~~` fence, also when it is posted from a body file and also when it is
    unchanged from an earlier message (the user sometimes posts by hand with changed wording).
 
-Before presenting a group a background agent triaged, grep every log line its comment and packet quote against the
+Before presenting a group a background agent triaged, check that every claim in its comment has a packet section with
+the command and output that support it (ci-triage step 8), and grep every log line its comment and packet quote against the
 log it names: a quote must be a real line (shortened only with `...`), never reconstructed from several lines or
 from a truncated message. Check its interpretations of names and versions the same way (e.g. "latest" against
 DarResources).
@@ -100,7 +101,8 @@ happens. Do not present the next group before the user says so.
 
 ## 5. Resolve the group
 
-- Apply the user's corrections to the packet and the body files; a correction that applies to later items (wording,
+- Apply the user's corrections to the packet and the body files (a claim corrected or added in the main thread gets its
+  command and output in the packet too, so packet and comment stay in step); a correction that applies to later items (wording,
   a family judgement, a command convention) goes into the round README as a rule and is applied to the rest.
 - Merge (main thread only): rows into `evidence/INDEX.tsv` (sorted by ref), the family text into `known-families.md`,
   the accepted lesson into `lessons/<ISO week>.md` (`ci-triage/CLAUDE.md`, Lessons), log requests and owner

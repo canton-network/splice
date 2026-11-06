@@ -74,6 +74,11 @@ edits to shared files.
      unless the user chooses `Infrequent / no repro`.
    Write every comment in the shape of `references/issue-comment.md`, into a body file (self-contained for a senior engineer, no
    packet references, decisive log lines in a fenced block, Markdown paragraphs; it has an accepted example).
+   Every claim in the comment must be reproducible from the packet alone: each fact, count, comparison and code
+   reference has a packet section with the command and its verbatim output (a code claim: `git show <sha>:<file>`
+   with the lines). A search result is listed per hit with one line on why it is or is not the same failure (title
+   or the matching line), and only the hits that are the same failure are counted in the comment. A claim with no
+   packet section is either added to the packet first or left out of the comment.
 9. Fix. Decide where the fix belongs and state it in the packet's Verdict and in the comment, precisely enough to
    implement without the chat: file and change (for a backport the PR and the release line), and a suggested assignee only
    when the evidence points at one or two people: the PR that introduced the failure, the one clear owner git blame
