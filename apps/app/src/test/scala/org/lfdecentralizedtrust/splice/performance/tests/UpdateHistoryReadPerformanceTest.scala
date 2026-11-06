@@ -181,7 +181,7 @@ class UpdateHistoryReadPerformanceTest(
           }
           require(
             encodeCount.get() == encodeCountBefore,
-            s"encode leaked into the timed serialization block: count advanced from " +
+            s"encode leaked into the timed serialization block: count increased from " +
               s"$encodeCountBefore to ${encodeCount.get()}",
           )
         }
