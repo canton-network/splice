@@ -147,7 +147,7 @@ function createParticipantAdminApiAudience(
     {
       name: `Participant Admin API for SV ${namespace} on ${clusterBasename} (Pulumi managed)`,
       identifier: audience,
-      tokenLifetime: tokenLifetime(), // TODO: review this lifetime.
+      tokenLifetime: tokenLifetime(),
     },
     { provider: auth0DomainProvider }
   );

@@ -325,10 +325,18 @@ async function participantAdminApiSecretContent(
 
   const clientSecret = clientSecrets.client_secret;
 
-  return {
-    audience,
-    url: `https://${cfg.auth0Domain}/.well-known/openid-configuration`,
-    'client-id': clientId,
-    'client-secret': clientSecret,
-  };
+  if (fixedTokens()) {
+    const token = await auth0Client.getClientAccessToken(clientId, clientSecret, audience);
+    return {
+      audience,
+      token,
+    };
+  } else {
+    return {
+      audience,
+      url: `https://${cfg.auth0Domain}/.well-known/openid-configuration`,
+      'client-id': clientId,
+      'client-secret': clientSecret,
+    };
+  }
 }
