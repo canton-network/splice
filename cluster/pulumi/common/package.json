@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@dotenvx/dotenvx": "^1.75.1",
-    "@google-cloud/storage": "^7.19.0",
+    "@google-cloud/storage": "^8.3.0",
     "@kubernetes/client-node": "^1.4.0",
     "@pulumi/command": "1.2.1",
     "@pulumi/gcp": "^9.18.0",
