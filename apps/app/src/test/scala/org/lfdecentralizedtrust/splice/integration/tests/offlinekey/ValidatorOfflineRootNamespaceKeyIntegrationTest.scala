@@ -102,11 +102,13 @@ class ValidatorOfflineRootNamespaceKeyIntegrationTest
         instanceHasRootNamespaceKey(aliceValidatorBackend.participantClientWithAdminToken)
       }
       clue("Canton created purpose-scoped signing keys") {
-        val usages = aliceValidatorBackend.participantClientWithAdminToken.keys.secret
-          .list()
-          .map(_.publicKeyWithName.publicKey)
-          .collect { case k: SigningPublicKey => k.usage }
-        usages should not contain SigningKeyUsage.All
+        val keys = aliceValidatorBackend.participantClientWithAdminToken.keys.secret.list()
+        forAll(keys) { key =>
+          key.publicKeyWithName.publicKey match {
+            case k: SigningPublicKey => k.usage should not be SigningKeyUsage.All
+            case _ => succeed
+          }
+        }
       }
       val aliceParticipant = aliceValidatorBackend.participantClientWithAdminToken
       val rootKeyId = aliceParticipant.topology.namespace_delegations
