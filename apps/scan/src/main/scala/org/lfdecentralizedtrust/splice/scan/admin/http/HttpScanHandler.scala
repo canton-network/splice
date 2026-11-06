@@ -835,8 +835,6 @@ class HttpScanHandler(
     }
   }
 
-  // TODO(#7837): cover the asset_activity_records and submitting_app_provider fields in the
-  // integration test.
   private def buildEventHistoryItem(
       verdictWithViewsO: Option[eventStore.Verdict],
       updateO: Option[TreeUpdateWithMigrationId],
