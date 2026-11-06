@@ -472,6 +472,7 @@ class SvApp(
           dsoPartyHosting,
           loggerFactory,
         ),
+        svAutomation.onboardingSnapshotService,
         loggerFactory,
       )
 

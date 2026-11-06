@@ -531,6 +531,63 @@ tests:
             persistentVolumeClaim:
               claimName: mock-sv-sv-app-pvc
 
+  - it: "onboarding snapshots are stored on their own PVC mounted at /onboarding-snapshots"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: onboarding-snapshots-volume
+            mountPath: /onboarding-snapshots
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: onboarding-snapshots-volume
+            persistentVolumeClaim:
+              claimName: mock-sv-onboarding-snapshots-pvc
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_ONBOARDING_SNAPSHOTS
+            value: |
+              canton.sv-apps.sv.onboarding-snapshots.directory = "/onboarding-snapshots"
+
+  - it: "onboarding snapshots PVC defaults to the migration PVC's storage class"
+    set:
+      pvc:
+        volumeStorageClass: "operator-storage"
+    documentSelector:
+      path: metadata.name
+      value: mock-sv-onboarding-snapshots-pvc
+    asserts:
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: 35Gi
+      - equal:
+          path: spec.storageClassName
+          value: "operator-storage"
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/resource-policy: keep
+
+  - it: "onboarding snapshots PVC can use its own storage class"
+    set:
+      onboardingSnapshotsPvc:
+        volumeStorageClass: "premium-rwo"
+    documentSelector:
+      path: metadata.name
+      value: mock-sv-onboarding-snapshots-pvc
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: "premium-rwo"
+
   - it: "sets default security contexts for pod, sv-app, and init container"
     documentSelector:
       path: kind
