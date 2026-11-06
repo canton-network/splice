@@ -297,7 +297,7 @@ export const ListVoteRequests: React.FC<ListVoteRequestsProps> = ({
   return (
     <Stack>
       <Typography variant="h4">Vote Requests</Typography>
-      <Box mt={4} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ mt: 4, borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={value} onChange={handleChange} aria-label="json tabs">
           {tabsToTabPanel.map(([tab, _]) => tab())}
         </Tabs>

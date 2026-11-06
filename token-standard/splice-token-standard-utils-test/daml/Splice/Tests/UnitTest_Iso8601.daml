@@ -5,6 +5,7 @@ module Splice.Tests.UnitTest_Iso8601 where
 
 import DA.Assert
 import DA.Date
+import DA.Time
 
 import Daml.Script
 
@@ -27,6 +28,17 @@ test_parseIso8601UtcTime_valid = do
   expectParsed "2026-12-31T23:59:59Z" (datetime 2026 Dec 31 23 59 59)
   expectParsed "2024-02-29T12:34:56Z" (datetime 2024 Feb 29 12 34 56)
   expectParsed "0001-10-08T07:08:09Z" (datetime 1 Oct 8 7 8 9)
+  test_parseIso8601UtcTime_validFractionalSeconds "."
+  test_parseIso8601UtcTime_validFractionalSeconds ","
+
+test_parseIso8601UtcTime_validFractionalSeconds : Text -> Script ()
+test_parseIso8601UtcTime_validFractionalSeconds separator = do
+  expectParsed ("2026-01-01T00:00:00" <> separator <> "000Z") (datetime 2026 Jan 1 0 0 0)
+  expectParsed ("2026-01-01T00:00:00" <> separator <> "12Z") (datetime 2026 Jan 1 0 0 0 `addRelTime` convertMicrosecondsToRelTime 120000)
+  expectParsed ("2026-01-01T00:00:00" <> separator <> "123Z") (datetime 2026 Jan 1 0 0 0 `addRelTime` convertMicrosecondsToRelTime 123000)
+  expectParsed ("2026-01-01T00:00:00" <> separator <> "000000Z") (datetime 2026 Jan 1 0 0 0)
+  expectParsed ("2026-01-01T00:00:00" <> separator <> "12345Z") (datetime 2026 Jan 1 0 0 0 `addRelTime` convertMicrosecondsToRelTime 123450)
+  expectParsed ("2026-01-01T00:00:00" <> separator <> "123456Z") (datetime 2026 Jan 1 0 0 0 `addRelTime` convertMicrosecondsToRelTime 123456)
 
 test_parseIso8601UtcTime_invalidDigit : Script ()
 test_parseIso8601UtcTime_invalidDigit = do
@@ -81,6 +93,20 @@ test_parseIso8601UtcTime_invalidSecond = do
   expectError "2026-01-01T00:00:60Z" "Invalid second: 60. Expected a value between 0 and 59"
   expectError "2026-01-01T00:00:99Z" "Invalid second: 99. Expected a value between 0 and 59"
 
+test_parseIso8601UtcTime_invalidFractionalSeconds : Script ()
+test_parseIso8601UtcTime_invalidFractionalSeconds = do
+  expectError "2026-01-01T00:00:00.Z" "Invalid Time: '2026-01-01T00:00:00.Z'"
+  expectError "2026-01-01T00:00:00.1a2Z" "Invalid fractional seconds: 1a2"
+  expectError "2026-01-01T00:00:00.-12Z" "Invalid fractional seconds: -12"
+  expectError "2026-01-01T00:00:00.1.2Z" "Invalid fractional seconds: 1.2"
+
+test_parseIso8601UtcTime_invalidAfterSeconds : Script ()
+test_parseIso8601UtcTime_invalidAfterSeconds = do
+  expectError "2026-01-01T00:00:00XZ" "Invalid Time: '2026-01-01T00:00:00XZ'"
+  expectError "2026-01-01T00:00:00XYZ" "Invalid Time: '2026-01-01T00:00:00XYZ'"
+  expectError "2026-01-01T00:00:00Z.1Z" "Invalid Time: '2026-01-01T00:00:00Z.1Z'"
+  expectError "2026-01-01T00:00:00 123Z" "Invalid Time: '2026-01-01T00:00:00 123Z'"
+
 test_parseIso8601UtcTime_tooShort : Script ()
 test_parseIso8601UtcTime_tooShort = do
   expectError "" "Invalid Time: ''"
@@ -90,5 +116,5 @@ test_parseIso8601UtcTime_tooShort = do
 
 test_parseIso8601UtcTime_tooLong : Script ()
 test_parseIso8601UtcTime_tooLong = do
-  expectError "2026-01-01T00:00:00ZZ" "Invalid Time: '2026-01-01T00:00:00ZZ'"
-  expectError "2026-01-01T00:00:00.000Z" "Invalid Time: '2026-01-01T00:00:00.000Z'"
+  expectError "2026-01-01T00:00:00.000000ZZ" "Invalid Time: '2026-01-01T00:00:00.000000ZZ'"
+  expectError "2026-01-01T00:00:00.0000000Z" "Invalid Time: '2026-01-01T00:00:00.0000000Z'"

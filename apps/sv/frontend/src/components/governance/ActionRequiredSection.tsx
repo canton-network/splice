@@ -118,11 +118,12 @@ const ActionCard = (props: ActionCardProps) => {
           content={
             <Typography
               variant="body1"
-              color="text.light"
-              fontWeight="medium"
-              fontSize={14}
-              lineHeight={1.4}
+              data-testid="action-required-description-content"
               sx={{
+                color: 'text.light',
+                fontWeight: 'medium',
+                fontSize: 14,
+                lineHeight: 1.4,
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: 'vertical',
@@ -130,7 +131,6 @@ const ActionCard = (props: ActionCardProps) => {
                 textOverflow: 'ellipsis',
                 width: '100%',
               }}
-              data-testid="action-required-description-content"
             >
               {description}
             </Typography>
@@ -171,12 +171,17 @@ const ActionCard = (props: ActionCardProps) => {
         />
         <Stack
           direction="row"
-          alignItems="center"
-          gap={1}
-          sx={{ flexShrink: 0, justifySelf: 'end', py: '15px', px: '16px' }}
           data-testid="action-required-view-details"
+          sx={{
+            alignItems: 'center',
+            gap: 1,
+            flexShrink: 0,
+            justifySelf: 'end',
+            py: '15px',
+            px: '16px',
+          }}
         >
-          <Typography fontWeight={500} color="text.light" whiteSpace="nowrap">
+          <Typography sx={{ fontWeight: 500, color: 'text.light', whiteSpace: 'nowrap' }}>
             View Details
           </Typography>
           <East fontSize="small" color="secondary" />
@@ -210,24 +215,23 @@ const ActionCardSegment: React.FC<ActionCardSegmentProps> = ({
     data-testid={testId}
   >
     <Typography
-      fontSize={12}
-      lineHeight="22px"
-      fontWeight={600}
       variant="subtitle2"
-      color="colors.neutral.80"
-      sx={{ textTransform: 'uppercase' }}
       data-testid={`${testId}-title`}
+      sx={{
+        fontSize: 12,
+        lineHeight: '22px',
+        fontWeight: 600,
+        color: 'colors.neutral.80',
+        textTransform: 'uppercase',
+      }}
     >
       {title}
     </Typography>
     {typeof content === 'string' ? (
       <Typography
         variant="body1"
-        color="text.light"
-        fontWeight="medium"
-        fontSize={14}
-        lineHeight="26px"
         data-testid={`${testId}-content`}
+        sx={{ color: 'text.light', fontWeight: 'medium', fontSize: 14, lineHeight: '26px' }}
       >
         {content}
       </Typography>

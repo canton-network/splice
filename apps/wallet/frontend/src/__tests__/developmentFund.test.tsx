@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, test, vi } from 'vitest';
@@ -225,11 +225,11 @@ describe('Development Fund page', () => {
     ).toBeDefined();
 
     const invalidExpirationDate = dayjs().subtract(2, 'day').format('MM/DD/YYYY hh:mm A');
-    const expiresAtInput = screen.getByRole('textbox', { name: /expires at/i });
-    await user.type(expiresAtInput, invalidExpirationDate);
+    const expiresAtInput = screen.getByLabelText('Expires At', { selector: 'input' });
+    fireEvent.change(expiresAtInput, { target: { value: invalidExpirationDate } });
     await user.tab();
 
-    await waitFor(() => expect(expiresAtInput).toHaveAttribute('aria-invalid', 'true'));
+    expect(await screen.findByText('Expiry must be in the future')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Allocate' })).toBeDisabled();
   });
 
@@ -685,7 +685,7 @@ describe('Development Fund page', () => {
       );
 
     const { user } = await loginAndOpenDevelopmentFund();
-    expect(screen.getByLabelText('Mint After (optional)')).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Mint After (optional)' })).toBeDefined();
 
     await user.click(await screen.findByRole('button', { name: 'Allocate' }));
 

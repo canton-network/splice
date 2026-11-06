@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
-import { extractApiErrorMessage } from '@canton-network/splice-common-frontend';
+import { extractApiErrorMessage, parseBigNumber } from '@canton-network/splice-common-frontend';
 import { useWalletClient } from '../contexts/WalletServiceContext';
 import useGetAmuletRules from './scan-proxy/useGetAmuletRules';
 import { useIsDevelopmentFundManager } from './useIsDevelopmentFundManager';
@@ -85,7 +85,7 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
   const mintAfter = mintAfterOverride !== undefined ? mintAfterOverride : defaultMintAfter;
   const setMintAfter = (value: Dayjs | null) => setMintAfterOverride(value);
 
-  const amountNum = useMemo(() => (amount ? new BigNumber(amount) : null), [amount]);
+  const amountNum = useMemo(() => (amount ? parseBigNumber(amount) : null), [amount]);
   const isAmountValid = amountNum !== null && amountNum.isFinite() && amountNum.gt(0);
   const amountExceedsAvailable = isAmountValid && amountNum.gt(unclaimedTotal);
   const isExpiryValid = expiresAt != null && expiresAt.isValid() && expiresAt.isAfter(dayjs());

@@ -30,12 +30,15 @@ jobs:
       result: ${{ steps.get_commit_sha.outputs.result }}
     steps:
       - name: Check Inputs
+        env:
+          INPUT_COMMIT_SHA: ${{ inputs.commit_sha }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          if [ -z "${{ inputs.commit_sha }}" ] && [ -z "${{ inputs.pr_number }}" ]; then
+          if [ -z "$INPUT_COMMIT_SHA" ] && [ -z "$INPUT_PR_NUMBER" ]; then
             echo "Either commit_sha or pr_number must be provided"
             exit 1
           fi
-          if [ -n "${{ inputs.commit_sha }}" ] && [ -n "${{ inputs.pr_number }}" ]; then
+          if [ -n "$INPUT_COMMIT_SHA" ] && [ -n "$INPUT_PR_NUMBER" ]; then
             echo "Only one of commit_sha or pr_number can be provided"
             exit 1
           fi
@@ -66,6 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          persist-credentials: true # needed to push backport branch
           ref: ${{ inputs.base_branch }}
           submodules: 'true'
           token: ${{ secrets.strong_token }}
@@ -73,16 +77,19 @@ jobs:
         id: create_branch
         shell: bash
         timeout-minutes: 20
+        env:
+          COMMIT_SHA: ${{ needs.get_commit_sha.outputs.result }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
         run: |
-          commit_sha="${{ needs.get_commit_sha.outputs.result }}"
-          base_branch="${{ inputs.base_branch }}"
+          commit_sha="$COMMIT_SHA"
+          base_branch="$BASE_BRANCH"
           new_branch="automation/backport-$commit_sha-$base_branch"
           echo "Backporting commit $commit_sha to branch $base_branch (using branch $new_branch)"
-          git fetch origin $base_branch
-          git fetch origin --recurse-submodules=no $commit_sha
+          git fetch origin "$base_branch"
+          git fetch origin --recurse-submodules=no "$commit_sha"
           git config user.email "splice-maintainers@digitalasset.com"
           git config user.name "DA Automation"
-          git checkout -b $new_branch origin/$base_branch
+          git checkout -b "$new_branch" "origin/$base_branch"
           # Filter files for the patch
           EXPECTED_FILE_REGEX="cluster/expected/.*\.json"
           RESOLVED_CONFIG_FILE_REGEX="cluster/deployment/.*/config\.resolved\.yaml"
@@ -94,9 +101,9 @@ jobs:
               git reset "$file"
             done
           fi
-          git commit --author="$(git show -s --format='%an <%ae>' $commit_sha)" \
-            --date="$(git show -s --format='%ad' $commit_sha)" \
-            -m "$(git show -s --format='%B' $commit_sha)"
+          git commit --author="$(git show -s --format='%an <%ae>' "$commit_sha")" \
+            --date="$(git show -s --format='%ad' "$commit_sha")" \
+            -m "$(git show -s --format='%B' "$commit_sha")"
           if echo "$conflicted_files" | grep -v -E "$EXPECTED_FILE_REGEX|$RESOLVED_CONFIG_FILE_REGEX" | grep -q .; then
             echo "Detected conflicts outside of expected files and resolved config files. Automated backport cannot proceed."
             exit 1
@@ -140,7 +147,7 @@ jobs:
             exit 1
           fi
           git commit -m "[static]" -s --allow-empty
-          git push origin $new_branch
+          git push origin "$new_branch"
           # output the backport branch name and update-expected result for use
           # in the next step
           echo "update_expected=$UPDATED_EXPECTED" >> "$GITHUB_OUTPUT"

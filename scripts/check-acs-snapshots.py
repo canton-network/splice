@@ -31,10 +31,11 @@ import logging
 import random
 import sys
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, TypeVar
 
 import requests
 
@@ -84,7 +85,7 @@ def short(h: int) -> str:
     return format(h, "064x")[:16]
 
 
-def examples(items) -> str:
+def examples(items: Iterable[str]) -> str:
     items = sorted(items)
     s = ", ".join(items[:MAX_EXAMPLES])
     return s + (f", ... ({len(items) - MAX_EXAMPLES} more)" if len(items) > MAX_EXAMPLES else "")
@@ -97,19 +98,20 @@ class ScanError(Exception):
 class ScanClient:
     """HTTP client for a single scan. Only ever used from one thread at a time."""
 
-    def __init__(self, url: str, args):
+    def __init__(self, url: str, args: argparse.Namespace):
         self.url = url.rstrip("/")
         self.args = args
         self.session = requests.Session()
 
-    def request(self, method: str, path: str, **kwargs) -> Optional[dict]:
+    def request(self, method: str, path: str, **kwargs: Any) -> Optional[dict[str, Any]]:
         """Returns parsed JSON, None on 404, raises ScanError on permanent failure."""
         full = f"{self.url}/api/scan{path}"
         for attempt in range(self.args.max_retries + 1):
             try:
                 r = self.session.request(method, full, timeout=self.args.request_timeout, **kwargs)
                 if r.status_code == 200:
-                    return r.json()
+                    result: dict[str, Any] = r.json()
+                    return result
                 if r.status_code == 404:
                     return None
                 if r.status_code != 429 and r.status_code < 500:
@@ -124,6 +126,7 @@ class ScanClient:
             log.warning("%s: %s %s failed (%s), retry %d/%d in %.1fs",
                         self.url, method, path, reason, attempt + 1, self.args.max_retries, delay)
             time.sleep(delay)
+        raise AssertionError("unreachable: the last attempt raises")
 
 
 @dataclass
@@ -135,11 +138,11 @@ class Digest:
     content_agg: int = 0   # order-independent hash over canonical item contents (semantic equality)
     seq_ids: "hashlib._Hash" = field(default_factory=hashlib.sha256)  # ordered ids
     seq_raw: "hashlib._Hash" = field(default_factory=hashlib.sha256)  # ordered items, as received
-    ids: set = field(default_factory=set)  # first `max_tracked` ids, for set diffs
+    ids: set[str] = field(default_factory=set)  # first `max_tracked` ids, for set diffs
     truncated: bool = False
     error: Optional[str] = None
 
-    def add(self, item_id: str, item) -> None:
+    def add(self, item_id: str, item: Any) -> None:
         self.count += 1
         id_bytes = item_id.encode()
         self.id_agg = (self.id_agg + sha256_int(id_bytes)) & MASK256
@@ -154,7 +157,7 @@ class Digest:
         else:
             self.truncated = True
 
-    def id_key(self):
+    def id_key(self) -> tuple[int, int]:
         return (self.count, self.id_agg)
 
     def summary(self) -> str:
@@ -170,18 +173,21 @@ class Progress:
         self.last = time.monotonic()
         self.start = self.last
 
-    def tick(self, msg: str, force=False):
+    def tick(self, msg: str, force: bool = False) -> None:
         now = time.monotonic()
         if force or now - self.last >= self.interval:
             self.last = now
             log.info("%s: [%s] %s (%.0fs)", self.url, self.what, msg, now - self.start)
 
 
-def run_per_scan(clients: List[ScanClient], fn: Callable[[ScanClient], object]) -> Dict[str, object]:
+T = TypeVar("T")
+
+
+def run_per_scan(clients: List[ScanClient], fn: Callable[[ScanClient], T]) -> Dict[str, T | Exception]:
     """Run fn once per scan, one thread per scan => at most one request per scan in flight."""
     with ThreadPoolExecutor(max_workers=max(1, len(clients))) as ex:
         futures = {c.url: ex.submit(fn, c) for c in clients}
-    out = {}
+    out: Dict[str, T | Exception] = {}
     for url, f in futures.items():
         try:
             out[url] = f.result()
@@ -195,7 +201,7 @@ def run_per_scan(clients: List[ScanClient], fn: Callable[[ScanClient], object]) 
 # Fetchers
 # ---------------------------------------------------------------------------
 
-def fetch_migration_info(c: ScanClient, mid: int):
+def fetch_migration_info(c: ScanClient, mid: int) -> Optional[dict[str, Any]]:
     return c.request("POST", "/v0/backfilling/migration-info", json={"migration_id": mid})
 
 
@@ -204,7 +210,7 @@ def fetch_latest_snapshot(c: ScanClient, mid: int, before: str) -> Optional[str]
     return r.get("record_time") if r else None
 
 
-def fetch_updates(c: ScanClient, args, start: str, end: datetime) -> Digest:
+def fetch_updates(c: ScanClient, args: argparse.Namespace, start: str, end: datetime) -> Digest:
     """All updates with start < record_time <= end in the given migration. Record times are unique."""
     d = Digest(args.max_tracked_ids)
     prog = Progress(c.url, "updates", args.progress_interval)
@@ -233,7 +239,7 @@ def fetch_updates(c: ScanClient, args, start: str, end: datetime) -> Digest:
     return d
 
 
-def fetch_import_updates(c: ScanClient, args) -> Digest:
+def fetch_import_updates(c: ScanClient, args: argparse.Namespace) -> Digest:
     d = Digest(args.max_tracked_ids)
     prog = Progress(c.url, "import_updates", args.progress_interval)
     after, contracts = "", 0
@@ -263,13 +269,13 @@ def fetch_import_updates(c: ScanClient, args) -> Digest:
     return d
 
 
-def fetch_acs(c: ScanClient, args, record_time: str) -> Digest:
+def fetch_acs(c: ScanClient, args: argparse.Namespace, record_time: str) -> Digest:
     d = Digest(args.max_tracked_ids)
     prog = Progress(c.url, "acs", args.progress_interval)
-    token = None
+    token: Optional[str] = None
     try:
         while True:
-            payload = {"migration_id": args.migration_id, "record_time": record_time, "page_size": args.page_size}
+            payload: dict[str, Any] = {"migration_id": args.migration_id, "record_time": record_time, "page_size": args.page_size}
             if token is not None:
                 payload["after"] = token
             body = c.request("POST", "/v2/state/acs", json=payload) or {}
@@ -352,14 +358,14 @@ def compare_digests(name: str, unit: str, results: Dict[str, Digest], max_tracke
     return consistent
 
 
-def normalize_migration_info(info, live_tolerance: timedelta):
+def normalize_migration_info(info: object, live_tolerance: timedelta) -> object:
     """Replace record time range ends that are close to wall clock time: on the current
     migration they just track the current time and naturally differ between scans."""
     if not isinstance(info, dict):
         return info
     now = datetime.now(timezone.utc)
     info = dict(info)
-    ranges = []
+    ranges: list[dict[str, Any]] = []
     for r in info.get("record_time_range", []):
         r = dict(r)
         if now - parse_ts(r["max"]) < live_tolerance:
@@ -369,7 +375,7 @@ def normalize_migration_info(info, live_tolerance: timedelta):
     return info
 
 
-def compare_migration_info(infos: Dict[str, object], live_tolerance: timedelta) -> bool:
+def compare_migration_info(infos: Mapping[str, object], live_tolerance: timedelta) -> bool:
     log.info("=" * 100)
     log.info("Result [migration_info] (range ends less than %s behind now are ignored)", live_tolerance)
     groups: Dict[str, List[str]] = {}
@@ -394,7 +400,7 @@ def compare_migration_info(infos: Dict[str, object], live_tolerance: timedelta) 
 # Main
 # ---------------------------------------------------------------------------
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("network", help=f"One of {list(NETWORKS)} or a scan URL used to discover all scans")
     p.add_argument("migration_id", type=int)
@@ -440,6 +446,9 @@ def main() -> int:
     else:
         seed = ScanClient(NETWORKS.get(args.network, args.network), args)
         dso = seed.request("GET", "/v0/dso")
+        if dso is None:
+            log.error("%s: no DSO info found", seed.url)
+            return 1
         urls = sorted({n[1]["scan"]["publicUrl"].rstrip("/")
                        for s in dso["sv_node_states"]
                        for n in s["contract"]["payload"]["state"]["synchronizerNodes"]
@@ -455,7 +464,7 @@ def main() -> int:
     # --- phase 1: migration info + latest snapshot, per scan ---
     acs_before = args.acs_before or fmt_ts(datetime.now(timezone.utc))
 
-    def phase1(c: ScanClient):
+    def phase1(c: ScanClient) -> tuple[Optional[dict[str, Any]], Optional[str]]:
         info = fetch_migration_info(c, mid)
         snap = fetch_latest_snapshot(c, mid, acs_before) if "acs" in args.checks else None
         log.info("%s: migration_info=%s latest_snapshot=%s", c.url, json.dumps(info), snap)
@@ -477,6 +486,7 @@ def main() -> int:
             max_common = min(max(parse_ts(r["max"]) for r in i["record_time_range"]) for i in valid) if valid else None
             min_common = max(min(parse_ts(r["min"]) for r in i["record_time_range"]) for i in valid) if valid else None
             end = parse_ts(args.updates_to) if args.updates_to else max_common
+            assert end is not None  # no --updates-to implies `valid` is non-empty, so max_common is set
             start = parse_ts(args.updates_from) if args.updates_from else end - parse_duration(args.update_window)
             if min_common and start < min_common:
                 start = min_common - timedelta(microseconds=1)  # 'after' is exclusive
@@ -511,8 +521,8 @@ def main() -> int:
             had_errors = True
 
     # --- phase 2: heavy checks, sequential per scan ---
-    def phase2(c: ScanClient):
-        res = {}
+    def phase2(c: ScanClient) -> Dict[str, Digest]:
+        res: Dict[str, Digest] = {}
         if window:
             res["updates"] = fetch_updates(c, args, window[0], window[1])
         if "import_updates" in args.checks:

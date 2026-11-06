@@ -56,11 +56,13 @@ object AuthToken {
   */
 final case class AuthToken(accessToken: String, expiresAt: CantonTimestamp, user: Option[String])
 
-sealed trait AuthTokenSource {
+trait AuthTokenProvider {
   def getToken(implicit tc: TraceContext): Future[Option[AuthToken]]
 }
 
-case class AuthTokenSourceNone() extends AuthTokenSource {
+sealed trait AuthTokenSource extends AuthTokenProvider
+
+case object AuthTokenSourceNone extends AuthTokenSource {
   override def getToken(implicit tc: TraceContext): Future[Option[AuthToken]] =
     Future.successful(None)
 }
@@ -121,7 +123,7 @@ object AuthTokenSource {
       loggerFactory: NamedLoggerFactory,
   )(implicit ec: ExecutionContext, ac: ActorSystem): AuthTokenSource = config match {
     case AuthTokenSourceConfig.None() =>
-      new AuthTokenSourceNone()
+      AuthTokenSourceNone
     case AuthTokenSourceConfig.Static(token, _) =>
       new AuthTokenSourceStatic(token)
     case AuthTokenSourceConfig.SelfSigned(audience, user, secret, _) =>

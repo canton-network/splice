@@ -15,7 +15,7 @@ const DsoWithContexts: React.FC = () => {
   const svInfoQuery = useSvInfo();
   return (
     <Layout>
-      <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
+      <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
         <Container maxWidth="lg">
           <DsoViewPrettyJSON dsoInfoQuery={dsoInfoQuery} svInfoQuery={svInfoQuery} />
         </Container>

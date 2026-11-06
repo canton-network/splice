@@ -23,11 +23,20 @@ export interface PerformanceTestDb {
 export function createCloudSQLInstanceForPerformanceTests(
   ghaNamespace: ExactNamespace
 ): PerformanceTestDb {
+  // Keep this in sync with the prod cloudSql config, so that perf tests run against an instance that matches Mainnet.
   const mainnetLikeConfig = CloudSqlConfigSchema.parse({
     enabled: true,
     protected: false,
-    tier: 'db-custom-4-9728',
-    enterprisePlus: false,
+    // db-perf-optimized-N-4: 4 vCPU, 32 GB RAM, matching prod as of 30.10.2026
+    tier: 'db-perf-optimized-N-4',
+    enterprisePlus: true,
+    flags: {
+      random_page_cost: '1.1',
+      temp_file_limit: '2147483647',
+      max_wal_size: '20480', // 20GB
+      maintenance_work_mem: '2000000', // 2GB
+      work_mem: '32768', // 32MB
+    },
   });
   const zone = GCP_ZONE || config.requireEnv('DB_CLOUDSDK_COMPUTE_ZONE');
   const instance = new gcp.sql.DatabaseInstance('performance-tests-db', {
@@ -47,9 +56,17 @@ export function createCloudSQLInstanceForPerformanceTests(
       insightsConfig: {
         // presumably useful in case of sudden slow queries
         queryInsightsEnabled: true,
+        enhancedQueryInsightsEnabled: mainnetLikeConfig.enterprisePlus,
       },
-      tier: 'db-custom-4-9728', // tier used on Mainnet as of 03.02.2026
-      edition: 'ENTERPRISE', // cn-apps don't use ENTERPRISE_PLUS as of 03.02.2026
+      tier: mainnetLikeConfig.tier,
+      edition: mainnetLikeConfig.enterprisePlus ? 'ENTERPRISE_PLUS' : 'ENTERPRISE',
+      ...(mainnetLikeConfig.enterprisePlus
+        ? {
+            dataCacheConfig: {
+              dataCacheEnabled: true,
+            },
+          }
+        : undefined),
       ipConfiguration: {
         ipv4Enabled: false,
         privateNetwork: pulumi.interpolate`projects/${gcp.organizations.getProjectOutput({}).name}/global/networks/default`,
