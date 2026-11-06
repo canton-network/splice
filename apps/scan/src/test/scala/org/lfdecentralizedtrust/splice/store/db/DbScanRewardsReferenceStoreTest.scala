@@ -378,13 +378,15 @@ class DbScanRewardsReferenceStoreTest
       } yield succeed
     }
 
-    "lookupAmuletConfigAsOf returns the config from the AmuletRules active at a given time" in {
+    "lookupDsoRulesAsOf returns the DsoRules active at a given time" in {
       val store = mkStore()
 
-      val rulesV1 = amuletRules(initialTickDuration = 10)
-        .copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
-      val rulesV2 = amuletRules(initialTickDuration = 20)
-        .copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
+      val rulesV1 = dsoRules(
+        svs = Map(userParty(11).toProtoPrimitive -> svInfo("sv1", mkParticipantId("sv1")))
+      ).copy(createdAt = CantonTimestamp.ofEpochSecond(100).toInstant)
+      val rulesV2 = dsoRules(
+        svs = Map(userParty(12).toProtoPrimitive -> svInfo("sv2", mkParticipantId("sv2")))
+      ).copy(createdAt = CantonTimestamp.ofEpochSecond(300).toInstant)
 
       for {
         _ <- initWithAcs()(store.multiDomainAcsStore)
@@ -401,17 +403,17 @@ class DbScanRewardsReferenceStoreTest
         )
 
         // Before ingestion start
-        emptyResult <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(50))
+        emptyResult <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(50))
         _ = emptyResult shouldBe None
 
-        atV1 <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(100))
-        _ = atV1 shouldBe Some(rulesV1.payload.configSchedule.initialValue)
+        atV1 <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(100))
+        _ = atV1 shouldBe Some(rulesV1.payload)
 
-        midV1 <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(150))
-        _ = midV1 shouldBe Some(rulesV1.payload.configSchedule.initialValue)
+        midV1 <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(150))
+        _ = midV1 shouldBe Some(rulesV1.payload)
 
-        atV2 <- store.lookupAmuletConfigAsOf(CantonTimestamp.ofEpochSecond(300))
-        _ = atV2 shouldBe Some(rulesV2.payload.configSchedule.initialValue)
+        atV2 <- store.lookupDsoRulesAsOf(CantonTimestamp.ofEpochSecond(300))
+        _ = atV2 shouldBe Some(rulesV2.payload)
       } yield succeed
     }
 

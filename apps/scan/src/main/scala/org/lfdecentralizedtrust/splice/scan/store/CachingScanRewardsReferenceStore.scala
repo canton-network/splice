@@ -8,8 +8,8 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import com.github.blemale.scaffeine.Scaffeine
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.store.{Limit, MultiDomainAcsStore, SynchronizerStore}
 import org.lfdecentralizedtrust.splice.util.Contract
@@ -46,24 +46,13 @@ class CachingScanRewardsReferenceStore private[splice] (
       loader = implicit tc => asOf => store.lookupFeaturedAppPartiesAsOf(asOf),
     )(logger, "featuredAppPartiesAsOf")
 
-  private val svParticipantIdsCache
-      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Set[String]] =
-    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Set[String]](
+  private val dsoRulesCache
+      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Option[DsoRules]] =
+    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Option[DsoRules]](
       Scaffeine()
         .maximumSize(2L),
-      loader = implicit tc => asOf => store.lookupSvParticipantIdsAsOf(asOf),
-    )(logger, "svParticipantIdsAsOf")
-
-  private val amuletConfigCache: ScaffeineCache.TracedAsyncLoadingCache[
-    Future,
-    CantonTimestamp,
-    Option[AmuletConfig[USD]],
-  ] =
-    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Option[AmuletConfig[USD]]](
-      Scaffeine()
-        .maximumSize(2L),
-      loader = implicit tc => asOf => store.lookupAmuletConfigAsOf(asOf),
-    )(logger, "amuletConfigAsOf")
+      loader = implicit tc => asOf => store.lookupDsoRulesAsOf(asOf),
+    )(logger, "dsoRulesAsOf")
 
   override def key: ScanRewardsReferenceStore.Key = store.key
 
@@ -83,15 +72,10 @@ class CachingScanRewardsReferenceStore private[splice] (
   ): Future[ScanRewardsReferenceStore.FeaturedAppParties] =
     featuredAppPartiesCache.get(asOf)
 
-  override def lookupSvParticipantIdsAsOf(
+  override def lookupDsoRulesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]] =
-    svParticipantIdsCache.get(asOf)
-
-  override def lookupAmuletConfigAsOf(
-      asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Option[AmuletConfig[USD]]] =
-    amuletConfigCache.get(asOf)
+  )(implicit tc: TraceContext): Future[Option[DsoRules]] =
+    dsoRulesCache.get(asOf)
 
   override def lookupOpenMiningRoundByNumber(
       roundNumber: Long

@@ -12,13 +12,10 @@ import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
-import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppKind,
   FeaturedAppRight,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
@@ -37,7 +34,6 @@ import org.lfdecentralizedtrust.splice.store.db.{
 }
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.SelectFromAcsTableResult
 import org.lfdecentralizedtrust.splice.util.{
-  AmuletConfigSchedule,
   Contract,
   ContractWithState,
   PackageQualifiedName,
@@ -248,36 +244,15 @@ class DbScanRewardsReferenceStore private (
       )
     }
 
-  override def lookupSvParticipantIdsAsOf(
+  override def lookupDsoRulesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]] =
+  )(implicit tc: TraceContext): Future[Option[DsoRules]] =
     tcsStore.listAllContractsAsOf(DsoRules.COMPANION, asOf, limit = Some(2)).map {
-      case Seq() => Set.empty[String]
-      case Seq(c) =>
-        import scala.jdk.CollectionConverters.*
-        c.contract.payload.svs.values().asScala.toSet[splice.dsorules.SvInfo].map { info =>
-          // svInfo.participantId is in the proto-primitive form accepted by
-          // ParticipantId.tryFromProtoPrimitive (with `PAR::` prefix), while
-          // verdict.submittingParticipantUid carries only the UID portion.
-          // Normalize to the latter for direct comparison.
-          ParticipantId.tryFromProtoPrimitive(info.participantId).uid.toProtoPrimitive
-        }
+      case Seq() => None
+      case Seq(c) => Some(c.contract.payload)
       case multiple =>
         throw new IllegalStateException(
           s"Expected at most one active DsoRules contract as of $asOf, but found ${multiple.size}: " +
-            multiple.map(_.contract.contractId.contractId).mkString(", ")
-        )
-    }
-
-  override def lookupAmuletConfigAsOf(
-      asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Option[AmuletConfig[USD]]] =
-    tcsStore.listAllContractsAsOf(AmuletRules.COMPANION, asOf, limit = Some(2)).map {
-      case Seq() => None
-      case Seq(c) => Some(AmuletConfigSchedule(c.contract).getConfigAsOf(asOf))
-      case multiple =>
-        throw new IllegalStateException(
-          s"Expected at most one active AmuletRules contract as of $asOf, but found ${multiple.size}: " +
             multiple.map(_.contract.contractId.contractId).mkString(", ")
         )
     }

@@ -13,8 +13,8 @@ import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.codegen.java.splice
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
@@ -80,19 +80,29 @@ trait ScanRewardsReferenceStore extends AppStore {
       tc: TraceContext
   ): Future[ScanRewardsReferenceStore.FeaturedAppParties]
 
+  /** Returns the DsoRules active as of the given time.
+    * Returns None only if asOf time is before the creation time of oldest DsoRules ingested.
+    */
+  def lookupDsoRulesAsOf(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[DsoRules]]
+
   /** Returns the set of SV participant UIDs from the DsoRules active as of the given time.
     * Returns an empty set only if asOf time is before the creation time of oldest DsoRules ingested.
     */
   def lookupSvParticipantIdsAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]]
-
-  /** Returns the AmuletConfig active at the given time
-    * Returns None only if asOf time is before the creation time of oldest AmuletRules ingested.
-    */
-  def lookupAmuletConfigAsOf(
-      asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Option[AmuletConfig[USD]]]
+  )(implicit tc: TraceContext): Future[Set[String]] =
+    lookupDsoRulesAsOf(asOf).map(_.fold(Set.empty[String]) { dsoRules =>
+      import scala.jdk.CollectionConverters.*
+      dsoRules.svs.values().asScala.toSet[splice.dsorules.SvInfo].map { info =>
+        // svInfo.participantId is in the proto-primitive form accepted by
+        // ParticipantId.tryFromProtoPrimitive (with `PAR::` prefix), while
+        // verdict.submittingParticipantUid carries only the UID portion.
+        // Normalize to the latter for direct comparison.
+        ParticipantId.tryFromProtoPrimitive(info.participantId).uid.toProtoPrimitive
+      }
+    })
 
   /** Look up an OpenMiningRound contract by its round number.
     * Checks both the active ACS table and the archive table,
@@ -322,10 +332,6 @@ object ScanRewardsReferenceStore {
         },
         mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanRewardsReferenceStoreRowData(contract = contract)
-        },
-        mkFilter(splice.amuletrules.AmuletRules.COMPANION)(co => co.payload.dso == dso) {
-          contract =>
-            ScanRewardsReferenceStoreRowData(contract = contract)
         },
         mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
           co => co.payload.dso == dso,
