@@ -25,7 +25,6 @@ export function installDeploymentStack(reference: GitFluxRef, envRefs: EnvRefs):
     'deployment',
     'deployment',
     namespace.logicalName,
-    false,
     reference,
     envRefs,
     credentialsSecret,
