@@ -20,6 +20,12 @@
       (helm: `useTokenStandardTransfer: true`) in the sweep config. The transfer completes directly if the receiver
       has a transfer preapproval, otherwise it creates a transfer instruction that the receiver must accept.
 
+  - Scan App
+
+    - Added `POST /v0/reward-coupons-v2-disclosures`, which returns base64-encoded
+    created event blobs for active `Splice.Amulet:RewardCouponV2` contracts (up to
+    100 contract IDs per request) for use by external reward-sharing automation.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
