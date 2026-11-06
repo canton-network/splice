@@ -48,7 +48,7 @@ class SvOnboardingSnapshotService(
     with FlagCloseableAsync
     with RetryProvider.Has {
 
-  private[sponsor] val exportsDirectory: Path =
+  private val exportsDirectory: Path =
     (File(config.directory) / "exports").createDirectories().path
 
   private val mutex = Mutex()
@@ -248,13 +248,17 @@ class SvOnboardingSnapshotService(
             logger.info(s"Queued onboarding snapshot export $id for $key")
             id
           case Dropped =>
-            throw Status.UNAVAILABLE
-              .withDescription(
-                s"Too many onboarding snapshot exports queued (max ${config.queueSize.value})"
-              )
-              .asRuntimeException()
+            val message =
+              s"Too many onboarding snapshot exports queued (max ${config.queueSize.value})"
+            logger.warn(s"Rejected onboarding snapshot export for $key: $message")
+            throw Status.UNAVAILABLE.withDescription(message).asRuntimeException()
           case QueueClosed => throw shutdownError
-          case QueueOfferResult.Failure(cause) => throw cause
+          case QueueOfferResult.Failure(cause) =>
+            logger.warn(s"Failed to queue onboarding snapshot export for $key", cause)
+            throw Status.UNAVAILABLE
+              .withDescription("Failed to queue the onboarding snapshot export")
+              .withCause(cause)
+              .asRuntimeException()
         }
       }
     }
