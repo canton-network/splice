@@ -311,5 +311,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpireGovernanceLockTransferTrigger],
     aTrigger[ExpireGovernanceLockSubstitutionTrigger],
     aTrigger[ProvisionalFeaturedAppLockConversionTrigger],
+    aTrigger[ExecuteFeaturedAppConfigUpdateInstructionTrigger],
+    aTrigger[ExpireFeaturedAppConfigUpdateInstructionTrigger],
   )
 }
