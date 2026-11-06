@@ -45,6 +45,32 @@ valueFrom:
 {{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "scope" "secretName" $secretName "secretKey" "scope" "optional" true) | indent 2 }}
 {{- end }}
 {{- end -}}
+{{- define "splice-util-lib.auth0-participant-admin-api-env-vars" -}}
+{{- $app := .appName }}
+{{- $keyName := .keyName }}
+{{- $fixedTokens := .fixedTokens }}
+{{- $secretName := .secretName | default (printf "splice-app-%s-participant-admin-api-auth" $keyName) }}
+{{- if .fixedTokens }}
+- name: ADDITIONAL_CONFIG_FIXED_TOKENS_PARTICIPANT_ADMIN_API_AUTH
+  value: |
+    _participant_client_admin_api_auth_config = null
+    _participant_client_admin_api_auth_config = {
+      type = "static"
+      token = ${SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_TOKEN}
+    }
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_TOKEN"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "token" "secretName" $secretName "secretKey" "token" "optional" false) | indent 2 }}
+{{ else }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_AUDIENCE"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "audience" "secretName" $secretName "secretKey" "audience" "optional" false) | indent 2 }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_URL"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "url" "secretName" $secretName "secretKey" "url" "optional" false) | indent 2 }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_CLIENT_ID"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientId" "secretName" $secretName "secretKey" "client-id" "optional" false) | indent 2 }}
+- name: "SPLICE_APP_{{ $app | upper }}_PARTICIPANT_ADMIN_API_AUTH_CLIENT_SECRET"
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientSecret" "secretName" $secretName "secretKey" "client-secret" "optional" false) | indent 2 }}
+{{- end }}
+{{- end -}}
 {{- define "splice-util-lib.auth0-user-env-var" -}}
 {{- $app := .appName }}
 {{- $keyName := .keyName }}

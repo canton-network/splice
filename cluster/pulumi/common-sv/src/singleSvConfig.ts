@@ -69,6 +69,7 @@ const SvParticipantConfigSchema = z
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
     resources: K8sResourceSchema,
+    disableParticipantAdminApiAuth: z.boolean().optional(),
   })
   .strict();
 const Auth0ConfigSchema = z

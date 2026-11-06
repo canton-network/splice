@@ -206,6 +206,7 @@ async function installValidator(
       false, // We don't currently support non-auth for validator-runbook
       validatorVersion,
       postgres,
+      [],
       {
         dependsOn: imagePullDeps.concat([postgres]),
       }

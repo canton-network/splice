@@ -47,6 +47,9 @@
       "migration": {
         "id": 9
       },
+      "participantClient": {
+        "adminApi": {}
+      },
       "participantHost": "participant",
       "persistence": {
         "databaseName": "app_splitwell",

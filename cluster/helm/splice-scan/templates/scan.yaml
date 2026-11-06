@@ -272,6 +272,14 @@ spec:
           value: {{ .Values.spliceInstanceNames.nameServiceName | quote }}
         - name: SPLICE_APP_UI_NAME_SERVICE_NAME_ACRONYM
           value: {{ .Values.spliceInstanceNames.nameServiceNameAcronym | quote }}
+        {{- if .Values.participantClient.adminApi.disableAuth }}
+        - name: ADDITIONAL_CONFIG_DISABLE_PARTICIPANT_ADMIN_API_AUTH
+          value: |
+            canton.scan-apps.scan-app.participant-client.admin-api.auth-config = ""
+            canton.scan-apps.scan-app.participant-client.admin-api.auth-config = { type = "none" }
+        {{- else }}
+        {{- include "splice-util-lib.auth0-participant-admin-api-env-vars" (dict "appName" "scan" "keyName" "sv" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.participantClient.adminApi.auth).secretOverrides "secretName" (.Values.participantClient.adminApi.auth).secretName) | indent 8}}
+        {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
         {{- with .Values.imagePullPolicy }}

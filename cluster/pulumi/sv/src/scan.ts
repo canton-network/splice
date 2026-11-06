@@ -124,6 +124,11 @@ export function installScan(
       : {}),
     publicUrl: publicScanUrl(config),
     pvc: persistentHeapDumpsPvc(),
+    participantClient: {
+      adminApi: {
+        disableAuth: config.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   if (svsConfig?.scan?.externalRateLimits) {
