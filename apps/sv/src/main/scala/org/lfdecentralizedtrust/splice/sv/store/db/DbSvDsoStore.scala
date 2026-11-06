@@ -69,6 +69,7 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.FeaturedAppConfigUpdateInstruction
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import slick.jdbc.GetResult
@@ -922,6 +923,42 @@ class DbSvDsoStore private (
       assignedContractFromRow(splice.amulet.RewardCouponV2.COMPANION)(_)
     )
 
+  override def listFeaturedAppConfigUpdateInstructionSample(limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[
+    AssignedContract[
+      FeaturedAppConfigUpdateInstruction.ContractId,
+      FeaturedAppConfigUpdateInstruction,
+    ]
+  ]] =
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+              "sample."
+            )}
+             from (
+               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+               from #${DsoTables.acsTableName} acs
+               where acs.store_id = $acsStoreId
+                 and acs.migration_id = $domainMigrationId
+                 and acs.package_name = ${FeaturedAppConfigUpdateInstruction.PACKAGE_NAME}
+                 and acs.template_id_qualified_name = ${QualifiedName(
+              FeaturedAppConfigUpdateInstruction.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+               limit 1000
+             ) sample
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[AcsQueries.SelectFromAcsTableWithStateResult],
+          "listFeaturedAppConfigUpdateInstructionSample",
+        )
+      limited = applyLimit("listFeaturedAppConfigUpdateInstructionSample", limit, result)
+    } yield limited.map(
+      assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(_)
+    )
+
   override def getRewardCouponsV2AgeHistogram(
       t1: FiniteDuration,
       t2: FiniteDuration,
@@ -1596,6 +1633,42 @@ class DbSvDsoStore private (
           limited = applyLimit("listExpiredRewardCouponsV2", limit, result)
         } yield limited.map(assignedContractFromRow(RewardCouponV2.COMPANION)(_))
       }
+  }
+
+  override def listExpiredFeaturedAppConfigUpdateInstruction: ListExpiredContracts[
+    FeaturedAppConfigUpdateInstruction.ContractId,
+    FeaturedAppConfigUpdateInstruction,
+  ] = { (now, limit) => implicit tc =>
+    waitUntilAcsIngested {
+      for {
+        result <- storage.query(
+          selectFromAcsTableWithState(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            FeaturedAppConfigUpdateInstruction.COMPANION,
+            additionalWhere = sql"""and acs.contract_expires_at < $now
+              and not exists (
+                select 1
+                from #${DsoTables.acsTableName} fa_right
+                where fa_right.store_id = acs.store_id
+                  and fa_right.migration_id = acs.migration_id
+                  and fa_right.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+                  and fa_right.template_id_qualified_name = ${QualifiedName(
+                FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
+              )}
+                  and fa_right.assigned_domain is not null
+                  and fa_right.featured_app_right_provider = acs.create_arguments->>'provider'
+              )""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listExpiredFeaturedAppConfigUpdateInstruction",
+        )
+        limited = applyLimit("listExpiredFeaturedAppConfigUpdateInstruction", limit, result)
+      } yield limited.map(
+        assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(_)
+      )
+    }
   }
 
   override def listMemberTrafficContracts(
