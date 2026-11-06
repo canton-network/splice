@@ -22,6 +22,7 @@ import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 import org.lfdecentralizedtrust.splice.util.{
   SynchronizerFeesTestUtil,
   TokenStandardMetadata,
+  TriggerTestUtil,
   WalletTestUtil,
 }
 import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
@@ -458,10 +459,10 @@ class TokenStandardTransferIntegrationTest
         aliceValidatorBackend.appState.automation.trigger[TopupMemberTrafficTrigger]
 
       val (result, balanceBefore) =
-        bracket(topupMemberTrafficTrigger.pause().futureValue, topupMemberTrafficTrigger.resume()) {
+        TriggerTestUtil.setTriggersWithin(triggersToPauseAtStart = Seq(topupMemberTrafficTrigger)) {
           // Wait for this tap to reach SV1 participant before taking the
           // baseline. Both reads use SV1 participant's ACS, so observing this
-          // later tap confirms eventual, earlier top-ups from the top-up triggerare included.
+          // later tap confirms eventual, earlier top-ups from the top-up trigger are included.
           actAndCheck(
             "Alice taps after automatic top-ups are paused",
             aliceWalletClient.tap(100),
