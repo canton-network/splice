@@ -49,6 +49,7 @@ export type ParticipantArgs = {
   disableProtection?: boolean;
   participantAdminUserNameFrom?: k8s.types.input.core.v1.EnvVarSource;
   imagePullServiceAccountName?: string;
+  nodeIdentifier: string;
 };
 
 export type ParticipantOutput = {
@@ -85,6 +86,7 @@ function installParticipantChart(
     auth0,
     participantAdminUserNameFrom,
     imagePullServiceAccountName,
+    nodeIdentifier,
   }: ParticipantArgs,
   db: Postgres,
   customOptions?: SpliceCustomResourceOptions
@@ -130,6 +132,7 @@ function installParticipantChart(
     enableKeyDownload: svParticipantKeyDownloadEnabled(participant),
     serviceAccountName: imagePullServiceAccountName,
     resources: participant?.resources,
+    nodeIdentifier,
     pvc: persistentHeapDumpsPvc(),
   };
 

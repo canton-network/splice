@@ -79,7 +79,7 @@ export async function installValidator1(
       true
     ));
   const validatorDbName = `validator1`;
-
+  const nodeIdentifier = 'validator1';
   const participantDependsOn: CnInput<pulumi.Resource>[] = imagePullDeps.concat(loopback);
 
   checkValidatorKeyDownloadForPeriodicBackups('validator1', validator1Config, backupConfig);
@@ -87,6 +87,7 @@ export async function installValidator1(
     validator1Config,
     xns,
     auth0Client.getCfg(),
+    nodeIdentifier,
     validator1Config?.disableAuth,
     decentralizedSynchronizerMigrationConfig.active.version,
     defaultPostgres,
@@ -127,7 +128,7 @@ export async function installValidator1(
     auth0Client: auth0Client,
     auth0ValidatorAppName: 'validator1',
     autoAcceptTransfers: autoAcceptTransfers,
-    nodeIdentifier: 'validator1',
+    nodeIdentifier,
     participantPruningConfig,
     deduplicationDuration: validator1Config?.deduplicationDuration,
     disableAuth: validator1Config?.disableAuth,

@@ -26,7 +26,7 @@ persistence:
 # PARTICIPANT_BOOTSTRAP_MIGRATE_TO_NEW_PARTICIPANT_END
 
 # Replace YOUR_VALIDATOR_NODE_NAME with the name you provided for your validator identity.
-# This value will be used for the node identifier of your participant.
+# Must match the nodeIdentifier in your standalone-participant-values.yaml.
 nodeIdentifier: "YOUR_VALIDATOR_NODE_NAME"
 
 # CONFIGURING_TOPUP_START

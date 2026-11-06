@@ -25,6 +25,11 @@
 
     - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
 
+  - Helm Charts
+
+      - `splice-participant`: `nodeIdentifier` is now a required value. Canton initializes the participant's identity itself,
+        so it must be given the node identifier that the controlling SV or validator app expects.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,

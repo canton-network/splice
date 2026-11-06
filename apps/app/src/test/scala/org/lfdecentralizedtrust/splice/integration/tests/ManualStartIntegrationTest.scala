@@ -149,10 +149,12 @@ class ManualStartIntegrationTest
         extraParticipantsConfigFileNames = Seq(
           "standalone-participant-extra.conf",
           "standalone-participant-sv1-reduced-max-dedup-duration.conf",
+          "standalone-participant-extra-auto-init.conf",
         ),
         extraParticipantsEnvMap = Map(
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> ("participant_extra_" + dbsSuffix),
+          "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
         ),
       )() {
         val allCnAppsBase = Seq[AppBackendReference](
@@ -166,18 +168,23 @@ class ManualStartIntegrationTest
         val allCnAppsAtStart = allCnAppsBase ++ Seq(sv1ValidatorBackend)
         val allCnApps = allCnAppsBase ++ Seq(sv1ValidatorWithPruningBackend)
 
-        val allTopologyConnections
+        val participantTopologyConnections
             : Seq[(TopologyAdminConnection, UniqueIdentifier => Member & NodeIdentity)] = Seq(
           (participantAdminConnection("sv1", sv1Backend.config), ParticipantId.apply),
-          (sequencerAdminConnection("sv1", sv1Backend.config), SequencerId.apply),
-          (mediatorAdminConnection("sv1", sv1Backend.config), MediatorId.apply),
           (participantAdminConnection("sv2", sv2Backend.config), ParticipantId.apply),
-          (sequencerAdminConnection("sv2", sv2Backend.config), SequencerId.apply),
-          (mediatorAdminConnection("sv2", sv2Backend.config), MediatorId.apply),
           (participantAdminConnection("alice", aliceValidatorBackend.config), ParticipantId.apply),
         )
+        val synchronizerTopologyConnections
+            : Seq[(TopologyAdminConnection, UniqueIdentifier => Member & NodeIdentity)] = Seq(
+          (sequencerAdminConnection("sv1", sv1Backend.config), SequencerId.apply),
+          (mediatorAdminConnection("sv1", sv1Backend.config), MediatorId.apply),
+          (sequencerAdminConnection("sv2", sv2Backend.config), SequencerId.apply),
+          (mediatorAdminConnection("sv2", sv2Backend.config), MediatorId.apply),
+        )
+        val allTopologyConnections =
+          participantTopologyConnections ++ synchronizerTopologyConnections
 
-        clue("All Canton nodes are running but have no identity") {
+        clue("The synchronizer nodes are running but have no identity") {
           def assertHasNoIdentity(connection: TopologyAdminConnection) = {
             // Eventually, because the query to the server will fail while the server is still starting up
             // Long timeout because Canton is slow to start up
@@ -188,7 +195,17 @@ class ManualStartIntegrationTest
             }
           }
 
-          allTopologyConnections.foreach(x => assertHasNoIdentity(x._1))
+          synchronizerTopologyConnections.foreach(x => assertHasNoIdentity(x._1))
+        }
+
+        clue("The participants have initialized themselves") {
+          // Participants no longer wait for the app to give them an identity:
+          // Canton auto-initializes them.
+          participantTopologyConnections.foreach { case (connection, _) =>
+            eventually(timeUntilSuccess = 60.seconds) {
+              connection.getIdOption().futureValue.uniqueIdentifier shouldBe defined
+            }
+          }
         }
 
         clue("Starting all Splice apps") {
@@ -306,6 +323,10 @@ class ManualStartIntegrationTest
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> ("participant_extra_" + dbsSuffix),
         ),
+        // This test sets up sv2's and alice's identities itself, with a
+        // deliberately reused signing key, so Canton must leave those alone.
+        // sv1 is skipped below and still relies on Canton initializing it.
+        autoInitParticipants = Set(1),
       )() {
 
         val allCnApps = Seq[AppBackendReference](

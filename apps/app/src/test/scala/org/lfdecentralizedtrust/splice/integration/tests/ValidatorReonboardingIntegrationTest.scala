@@ -248,11 +248,13 @@ class ValidatorReonboardingIntegrationTest extends ValidatorReonboardingIntegrat
           // lockAmulets does a direct ledger API submission and our usual magic for getting admin tokens
           // in tests for Canton does not work for standalone instances.
           testResourcesPath / "standalone-participant-extra-no-auth.conf",
+          testResourcesPath / "standalone-participant-extra-auto-init.conf",
         ),
         Seq(ProcessTestUtil.enableKeyDownloadConfig),
         "alice-participant",
         "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorLocalBackend.config.ledgerApiUser,
         "EXTRA_PARTICIPANT_DB" -> oldParticipantDb,
+        "EXTRA_PARTICIPANT_IDENTIFIER" -> participantIdentifier(aliceValidatorBackend),
       ) {
         aliceValidatorBackend.startSync()
         val aliceValidatorWalletParty =

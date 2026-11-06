@@ -42,6 +42,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       disableProtection: staticConfig.nodeName === svRunbookConfig.nodeName,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,
+      nodeIdentifier: staticConfig.onboardingName,
     },
     { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }
   );

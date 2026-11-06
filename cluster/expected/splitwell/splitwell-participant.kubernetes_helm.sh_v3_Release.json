@@ -58,6 +58,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "splitwell",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",
