@@ -294,6 +294,16 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.LookupFeaturedAppRightByContractId(contractId))
     }
 
+  @Help.Summary(
+    "Get created event blobs for active RewardCouponV2 contracts by contract ID"
+  )
+  def getRewardCouponsV2Disclosures(
+      contractIds: Seq[String]
+  ): Map[String, ByteString] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetRewardCouponsV2Disclosures(contractIds))
+    }
+
   @Help.Summary("Get the Amulet config parameters for a given round")
   def getAmuletConfigForRound(
       round: Long

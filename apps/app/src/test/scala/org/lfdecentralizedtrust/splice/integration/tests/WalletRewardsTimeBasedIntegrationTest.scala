@@ -302,4 +302,56 @@ class WalletRewardsTimeBasedIntegrationTest
       }
     }
   }
+
+  "serve RewardCouponV2 created event blobs via getRewardCouponsV2Disclosures" in { implicit env =>
+    val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
+
+    // An open round is needed for createRewardCouponsV2 to pick a round.
+    val openRounds = eventually() {
+      val rounds = sv1ScanBackend.getOpenAndIssuingMiningRounds()._1
+      rounds should not be empty withClue "openRounds"
+      rounds
+    }
+    val otherTemplateCid =
+      openRounds.map(_.contractId.contractId).headOption.getOrElse(fail("no open round"))
+
+    // Pause bob's collection trigger so the coupon is not minted away before we read it.
+    val bobRewardTrigger = bobValidatorBackend
+      .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
+      .futureValue
+      .trigger[CollectRewardsAndMergeAmuletsTrigger]
+
+    setTriggersWithin(triggersToPauseAtStart = Seq(bobRewardTrigger)) {
+      createRewardCouponsV2(Seq((bobValidatorParty, BigDecimal(1.0), None)))
+
+      val couponCid = eventually() {
+        sv1Backend.appState.dsoStore
+          .listRewardCouponsV2()
+          .futureValue
+          .filter(_.payload.provider == bobValidatorParty.toProtoPrimitive)
+          .loneElement
+          .contractId
+          .contractId
+      }
+
+      clue("Scan serves the created event blob for the active coupon and omits non-matches") {
+        eventually() {
+          // The open-round contract id is of a different template and must be omitted.
+          val disclosures =
+            sv1ScanBackend.getRewardCouponsV2Disclosures(Seq(couponCid, otherTemplateCid))
+          disclosures.keySet shouldBe Set(couponCid)
+          disclosures(couponCid).size should be > 0
+        }
+      }
+
+      clue("Requests exceeding the 100 contract-id limit are rejected with 400") {
+        assertThrowsAndLogsCommandFailures(
+          sv1ScanBackend.getRewardCouponsV2Disclosures(Seq.fill(101)(couponCid)),
+          _.errorMessage should (include("HTTP 400 Bad Request") and include(
+            "Expected 'contract_ids' to contain at most 100 items, but contained 101."
+          )),
+        )
+      }
+    }
+  }
 }
