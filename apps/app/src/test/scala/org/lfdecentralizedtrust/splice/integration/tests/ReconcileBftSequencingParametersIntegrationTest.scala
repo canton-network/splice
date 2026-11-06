@@ -75,9 +75,9 @@ class SvReconcileBftSequencingParametersIntegrationTest
         .value
       bftParameters.pbftViewChangeTimeout shouldBe com.digitalasset.canton.time.PositiveFiniteDuration
         .tryOfSeconds(5)
-      bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
-        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
-      ]
+      // ConfigTransforms.defaults disables blacklisting in tests
+      bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe
+        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.NoBlacklisting
       sv1Backend.stop()
       actAndCheck(
         "Restart with modified bft sequencing parameters",
