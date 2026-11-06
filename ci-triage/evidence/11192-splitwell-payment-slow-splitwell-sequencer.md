@@ -67,6 +67,23 @@ Normal stores take 2-10 ms. The stalled stores of the three sequencers end in th
 is shared (DB or the Canton process), not the splitwell synchronizer. No full JVM pause: canton.clog.gz kept logging
 during 19:41:46.5-49.5 (46-111 lines per 0.5 s, vs 283-489 at 19:41:45). Why the stores stalled: not found.
 
+## 6. Not family L (11160), checked 2026-11-06
+```
+zgrep -c "The operation 'insert block' has failed" canton.clog.gz
+0
+```
+(the 75 `40001` hits in canton.clog.gz are hex substrings in ids, e.g. 19:38:44.726 SequencerReader lines). In 11160 one
+global sequencer lost every 40001 retry while the other writers of the shared driver DB kept storing; here no insert
+failed and the global and both splitwell sequencers stalled together. Same window, DB lock checks of several nodes
+were rejected:
+```
+zgrep -h "LockCheckRejected" canton.clog.gz | jq -r '.["@timestamp"][11:16]' | sort | uniq -c
+19:33:1 19:37:2 19:38:4 19:41:16 19:42:1 19:45:3 19:47:1 19:49:1 19:50:1
+19:41:42.474 DbLockPostgres:participant=bobParticipant/connId=pool-0/lockId=706826278 | The operation 'com.digitalasset.canton.resource.DbLock.runLockCheck' was not successful. New kind of error: no success error (request infinite retries). Retrying after 0.2s. Result: Outcome(Left(LockCheckRejected(lockId = 706826278))).
+```
+(also globalMediatorSv1 19:41:41.821, splitwellParticipant 19:41:42.349, aliceParticipant 19:41:45.536). Points at
+the shared Postgres; not confirmed (no Postgres log in the artifact found).
+
 ## Verdict
 New, rare (first hit of this mechanism; earlier Splitwell settle-debts failures 10156 and 11161/11172 failed at login).
 Fix options (test only): wait longer than 20 s for the redirect after `payment-accept` (the payment can need a
