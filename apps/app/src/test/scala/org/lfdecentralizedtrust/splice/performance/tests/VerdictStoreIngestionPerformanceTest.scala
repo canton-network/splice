@@ -35,6 +35,11 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
+final case class VerdictIngestionPerfMetrics(
+    base: StoreIngestionPerfMetrics,
+    totalAppActivityRecords: Long,
+)
+
 class VerdictStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
@@ -49,7 +54,6 @@ class VerdictStoreIngestionPerformanceTest(
       storageConfig,
       timeouts,
       loggerFactory,
-      ingestionConfig,
     ) {
 
   override type Store = DbScanVerdictStore
@@ -69,6 +73,8 @@ class VerdictStoreIngestionPerformanceTest(
 
   override protected val tablesToSanityCheck: Seq[String] =
     Seq("scan_verdict_store", "scan_verdict_transaction_view_store")
+
+  private var updateHistoryRef: Option[UpdateHistory] = None
 
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
     implicit val initTc: TraceContext = TraceContext.empty
@@ -92,8 +98,8 @@ class VerdictStoreIngestionPerformanceTest(
         enableImportUpdateBackfill = false,
         metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
       )
-      .flatMap(updateHistory => updateHistory.ingestionSink.initialize().map(_ => updateHistory))
       .map { updateHistory =>
+        updateHistoryRef = Some(updateHistory)
         val appActivityStore = new DbAppActivityRecordStore(
           storage,
           updateHistory,
@@ -113,20 +119,74 @@ class VerdictStoreIngestionPerformanceTest(
     TraceContext.withNewTraceContext(this.getClass.getName) { implicit tc =>
       for {
         store <- mkStore(storage)
+        updateHistory = updateHistoryRef.getOrElse(
+          throw new IllegalStateException("UpdateHistory was not initialized by mkStore")
+        )
+        _ <- updateHistory.ingestionSink.initialize()
         _ <- sanityCheckTables(storage)(count =>
           Option.when(count != 0)(
             s"Expected table to be empty before ingestion, but found $count rows."
           )
         )
         verdicts = loadVerdictsFromDump()
-        _ <- ingestWithMetrics(store, verdicts)
+        metrics <- ingestWithMetrics(store, verdicts)
         _ <- sanityCheckTables(storage)(count =>
           Option.when(count == 0)(
             "Expected table to be non-empty after ingestion, but no rows were inserted."
           )
         )
+        _ = writeIngestionMetrics(metrics, success = true)
       } yield ()
     }
+  }
+
+  private def writeIngestionMetrics(
+      metrics: VerdictIngestionPerfMetrics,
+      success: Boolean,
+  ): Unit = {
+    import StoreIngestionPerfMetrics.metric
+    val extra = Seq(
+      metric(
+        "total_verdicts",
+        "Total number of verdicts ingested",
+        BigDecimal(metrics.base.totalItems),
+      ),
+      metric(
+        "verdicts_per_sec",
+        "Ingested verdicts per second",
+        metrics.base.updatesPerSec,
+      ),
+      metric(
+        "total_transaction_views",
+        "Total number of transaction views ingested across all verdicts",
+        BigDecimal(metrics.base.totalEvents),
+      ),
+      metric(
+        "transaction_views_per_sec",
+        "Ingested transaction views per second",
+        metrics.base.eventsPerSec,
+      ),
+      metric(
+        "total_app_activity_records",
+        "Total number of app activity records ingested alongside verdicts",
+        BigDecimal(metrics.totalAppActivityRecords),
+      ),
+      metric(
+        "app_activity_records_per_sec",
+        "Ingested app activity records per second",
+        metrics.base.ratePerSec(metrics.totalAppActivityRecords),
+      ),
+    )
+    writeMetricsFile(
+      StoreIngestionPerfMetrics.toMetricsJson(
+        metrics.base,
+        success,
+        extra,
+        includeUpdateCounts = false,
+      ),
+      StoreIngestionPerfMetrics.MetricsDir,
+      "Ingestion",
+    )
   }
 
   private def loadVerdictsFromDump(): Seq[LoadedVerdict] = {
@@ -154,8 +214,10 @@ class VerdictStoreIngestionPerformanceTest(
   private def ingestWithMetrics(
       store: DbScanVerdictStore,
       verdicts: Seq[LoadedVerdict],
-  )(implicit tc: TraceContext): Future[Unit] = {
+  )(implicit tc: TraceContext): Future[VerdictIngestionPerfMetrics] = {
     var totalTimeNs = BigDecimal(0)
+    var totalItems = 0L
+    var totalEvents = 0L
     var totalBatches = 0L
     var totalCpuNs = BigDecimal(0)
     var maxHeapBytes = BigDecimal(0)
@@ -207,24 +269,24 @@ class VerdictStoreIngestionPerformanceTest(
           totalTimeNs += duration
           totalCpuNs += math.max(getProcessCpuTimeNs - cpuBefore, 0L)
           maxHeapBytes = maxHeapBytes.max(getHeapUsedBytes)
+          totalItems += batch.length
+          totalEvents += batchEventCount
           totalBatches += 1
           totalVerdicts += batch.length.toLong
           totalTransactionViews += batchEventCount
           totalAppActivityRecords += batchAppActivityCount
           val msg =
-            f"Ingested batch $index (${batch.length} verdicts, $batchEventCount views, $batchAppActivityCount app-activity-records) in $duration ns, total $totalVerdicts verdicts in $totalTimeNs ns"
+            f"Ingested batch $index (${batch.length} verdicts, $batchEventCount views, $batchAppActivityCount app-activity-records) in $duration ns, total $totalItems verdicts in $totalTimeNs ns"
           logger.info(msg)
           println(s"${this.getClass.getName}: $msg")
         }
       })
       .map { _ =>
-        def ratePerSec(count: Long): BigDecimal = {
+        def ratePerSec(count: Long): BigDecimal =
           if (totalTimeNs > 0) BigDecimal(count) * BigDecimal(1000000000L) / totalTimeNs
           else BigDecimal(0)
-        }
-        // metrics will be exported to the json file and prometheous in the next steps
         println(
-          f"Process-level metrics: CPU time=${totalCpuNs / 1e6}%.2f ms, peak heap=$maxHeapBytes bytes, batches=$totalBatches"
+          f"Process-level metrics: CPU time=${totalCpuNs / 1e6}%.2f ms, peak heap=$maxHeapBytes bytes"
         )
         println(
           f"Ingestion counts: verdicts=$totalVerdicts, transaction-views=$totalTransactionViews, app-activity-records=$totalAppActivityRecords (in $totalTimeNs ns)"
@@ -233,6 +295,17 @@ class VerdictStoreIngestionPerformanceTest(
           f"Ingestion rates (per sec): verdicts=${ratePerSec(totalVerdicts)}%.2f, " +
             f"transaction-views=${ratePerSec(totalTransactionViews)}%.2f, " +
             f"app-activity-records=${ratePerSec(totalAppActivityRecords)}%.2f"
+        )
+        VerdictIngestionPerfMetrics(
+          StoreIngestionPerfMetrics(
+            totalItems = totalItems,
+            totalEvents = totalEvents,
+            totalBatches = totalBatches,
+            totalTimeNs = totalTimeNs,
+            processCpuTimeNs = totalCpuNs,
+            peakHeapBytes = maxHeapBytes,
+          ),
+          totalAppActivityRecords,
         )
       }
   }
