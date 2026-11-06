@@ -30,6 +30,11 @@ gh api -X GET search/issues -f q='repo:DACH-NY/cn-test-failures is:issue StaleEl
 ```
 total 3: 10270 (2026-10-01), 6828 (2026-01-20), 1411 (2024-12-17)
 ```
+Per hit (`gh issue view <n> --json title,body,comments`, grep StaleElementReferenceException), checked 2026-11-06:
+- 10270: not the same failure; only a quoted code comment ("robust against `StaleElementReferenceException` errors").
+- 6828 (SvFrontendIntegrationTest, 2026-01-20): same exception, `The element with the reference 064b2797-... is stale`.
+- 1411 (Validator1PreflightIntegrationTest, 2024-12-17): same exception, `The element with the reference 873a0e3c-... is stale`.
+So two earlier hits of the exception in other tests, none since January.
 
 ## Verdict
 New, rare Selenium race in a shared helper. Possible fix (test only): retry the click in `eventuallyClickOn` on
