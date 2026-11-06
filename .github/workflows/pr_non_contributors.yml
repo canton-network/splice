@@ -1,6 +1,6 @@
 name: CI on PRs from forks
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] gated by ci-forks environment approval
     types: [ opened, synchronize, reopened ]
     branches: [ main, 'staging-*', 'feature-*' ]
 
@@ -35,6 +35,7 @@ jobs:
 
   env_hold:
     name: "Approve CI for Forks"
+    permissions: {}
     environment: ci-forks
     runs-on: ubuntu-24.04
     if: github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name

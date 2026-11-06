@@ -118,6 +118,7 @@ let
     which
     xxd
     zip
+    zizmor
 
     # Package required to install daml studio
     yq-go
@@ -144,6 +145,7 @@ let
     shellcheck
     skopeo
     which
+    zizmor
   ] ++ linuxOnly;
 
 in pkgs.mkShell {
