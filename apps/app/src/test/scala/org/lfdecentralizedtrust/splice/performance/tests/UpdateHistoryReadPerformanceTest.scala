@@ -235,7 +235,6 @@ object UpdateHistoryReadPerformanceTest {
       dsoParty: String,
       migrationId: Long,
   )
-
   private implicit val configReader: ConfigReader[UpdateHistoryReadPerformanceTestConfig] =
     deriveReader[UpdateHistoryReadPerformanceTestConfig]
 
