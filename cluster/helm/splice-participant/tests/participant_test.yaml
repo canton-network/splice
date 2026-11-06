@@ -358,7 +358,7 @@ tests:
     set:
       imageRepo: "secure-registry.example.com"
       imageName: "custom-participant"
-      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      persistence.initImageName: "secure-registry.example.com/postgres:18-custom"
       persistence.enablePgInitContainer: true
     documentSelector:
       path: kind
@@ -369,7 +369,7 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-participant:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-custom"
+          value: "secure-registry.example.com/postgres:18-custom"
 
   - it: "allows overriding participant database secret env vars with raw strings"
     set:

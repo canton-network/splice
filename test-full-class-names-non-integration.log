@@ -67,6 +67,7 @@ org.lfdecentralizedtrust.splice.store.db.LegacyAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
 org.lfdecentralizedtrust.splice.store.db.TablePerAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTriggerTest
+org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.SvOffboardingPartyToParticipantProposalTriggerTest
 org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingPartyToParticipantProposalTriggerTest
 org.lfdecentralizedtrust.splice.sv.onboarding.SequencerBftPeerReconcilerSpec
 org.lfdecentralizedtrust.splice.sv.util.SvOnboardingTokenTest

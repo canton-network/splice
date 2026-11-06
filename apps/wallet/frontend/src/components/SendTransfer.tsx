@@ -7,7 +7,7 @@ import {
   parseBigNumber,
 } from '@canton-network/splice-common-frontend';
 import { useMutation } from '@tanstack/react-query';
-import addHours from 'date-fns/addHours';
+import { addHours } from 'date-fns';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { v4 as uuidv4 } from 'uuid';

@@ -266,6 +266,15 @@ async function installValidator(
         }
       : undefined,
     participantPruningSchedule: participantPruningConfig,
+    walletSweep: validatorConfig.sweep && {
+      [validatorConfig.sweep.fromParty]: {
+        maxBalanceUSD: validatorConfig.sweep.maxBalance,
+        minBalanceUSD: validatorConfig.sweep.minBalance,
+        receiver: validatorConfig.sweep.toParty,
+        useTransferPreapproval: validatorConfig.sweep.useTransferPreapproval,
+        useTokenStandardTransfer: validatorConfig.sweep.useTokenStandardTransfer,
+      },
+    },
     ...(participantBootstrapDumpSecret ? { nodeIdentifier: newParticipantIdentifier } : {}),
     persistence: {
       ...validatorValuesFromYamlFiles.persistence,
