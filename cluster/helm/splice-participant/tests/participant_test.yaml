@@ -12,6 +12,7 @@ chart:
   version: 0.1.1
   appVersion: 0.1.0
 set:
+  nodeIdentifier: participant-1
   persistence:
     host: mock-pg-host
     schema: participant

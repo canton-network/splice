@@ -6,6 +6,7 @@ templates:
   - participant.yaml
 set:
   # Things we need just to pass the schema
+  nodeIdentifier: participant-1
   persistence:
     host: mock-pg-host
     schema: participant
