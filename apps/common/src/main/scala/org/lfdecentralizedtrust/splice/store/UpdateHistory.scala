@@ -163,7 +163,7 @@ class UpdateHistory private (
 
   def waitUntilInitialized: Future[Unit] = state.get().initialized.future
 
-  // The tables that can hold records in [atOrAfter, before): the legacy table up to the cutover, the partitioned one after it
+  // Returns legacy and/or partitioned table, depending on whether the used filters would need data from one or the other.
   def historyTablesToQuery(
       tableName: String,
       atOrAfter: Option[CantonTimestamp] = None,
@@ -1592,17 +1592,17 @@ class UpdateHistory private (
       }
       .map(_.flatten.groupBy(_.updateRowId))
 
+  // TODO (#8075): remove this
   def lookupContractById[TCId <: ContractId[?], T <: DamlRecord[?]](
-      companion: Contract.Companion.Template[TCId, T]
+    companion: Contract.Companion.Template[TCId, T]
   )(contractId: TCId)(implicit tc: TraceContext): Future[Option[Contract[TCId, T]]] = {
-    def lookupIn(table: String) = for {
+    for {
       // Annoyingly our index for contract id lookups does not include the history id.
       // In production, we only ever have one history id per database but at least in tests
       // postgres sometimes picks an index to filter by history_id and does a linear search over contract_id.
       // The materialized CTE forces it to pick the contract_id index.
       r <- storage
         .querySingle(
-          // legacy: contract_create_lookup_legacy, partitioned: none (no contract_id index, scans all partitions)
           sql"""
             with unfiltered_contracts as materialized (select
               update_row_id,
@@ -1619,7 +1619,7 @@ class UpdateHistory private (
               contract_key,
               history_id,
               record_time
-            from #$table
+            from update_history_creates_legacy
             where contract_id = $contractId)
             select * from unfiltered_contracts where history_id = $historyId""".toActionBuilder
             .as[SelectFromCreateEvents]
@@ -1629,9 +1629,6 @@ class UpdateHistory private (
         .value
         .map(_.map(_.toContract(companion)))
     } yield r
-    MonadUtil
-      .sequentialTraverse(historyTablesToQuery("update_history_creates"))(lookupIn)
-      .map(_.flatten.headOption)
   }
 
   private def queryExerciseEvents(
@@ -1647,7 +1644,7 @@ class UpdateHistory private (
       ) { case (table, txs) =>
         val recordTimes = txs.map(_.recordTime)
         storage.query(
-          // updt_hist_exer_unique_legacy / none (no update_row_id index on the partitioned exercises, only partition pruning on record_time)
+          // updt_hist_exer_unique_legacy / updt_hist_exer_uri
           (sql"""
         select
           update_row_id,
