@@ -302,7 +302,7 @@ spec:
             canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = ""
             canton.validator-apps.validator_backend.participant-client.admin-api.auth-config = { type = "none" }
         {{- else }}
-        {{- include "splice-util-lib.auth0-participant-admin-api-env-vars" (dict "appName" "validator" "keyName" "validator" "secretOverrides" (.Values.participantClient.adminApi.auth).secretOverrides "secretName" (.Values.participantClient.adminApi.auth).secretName) | indent 8}}
+        {{- include "splice-util-lib.auth0-participant-admin-api-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.participantClient.adminApi.auth).secretOverrides "secretName" (.Values.participantClient.adminApi.auth).secretName) | indent 8}}
         {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
