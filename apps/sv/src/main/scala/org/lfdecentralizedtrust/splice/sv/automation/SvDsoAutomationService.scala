@@ -511,6 +511,7 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Medium),
         () => getOrCreateOwnScanConnection(),
         () => getOrCreatePeerScanConnection(),
+        packageVersionSupport,
       )
     )
     registerTrigger(
