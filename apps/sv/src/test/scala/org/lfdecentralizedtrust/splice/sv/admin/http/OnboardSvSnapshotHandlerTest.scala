@@ -10,14 +10,15 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.time.SimClock
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.parser.decode
+import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.StatusCodes
-import org.apache.pekko.http.scaladsl.server.Directives.provide
+import org.apache.pekko.http.scaladsl.server.Directives.{complete, provide}
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
-import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
+import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource
@@ -28,7 +29,10 @@ import org.lfdecentralizedtrust.splice.http.v0.sv_public_stream.{
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingSnapshotsConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
-import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService
+import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.{
+  DsoPartyMigration,
+  SvOnboardingSnapshotService,
+}
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.{
   SnapshotKey,
   SnapshotState,
@@ -204,36 +208,58 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
         )
       verifyNothingPrepared(service)
     }
-  }
 
-  "unavailableOnGrpcFailure" should {
-
-    "turn gRPC failures of a readiness check into 503 without exposing internal details" in {
-      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
-        HttpSvPublicHandler
-          .unavailableOnGrpcFailure("check", logger)(
-            Future.failed(
-              io.grpc.Status.UNIMPLEMENTED
-                .withDescription("Readiness check failed at internal-sequencer:5009")
-                .withCause(new RuntimeException("Internal readiness failure"))
-                .asRuntimeException()
+    "report a missing activation transaction without exporting" in {
+      val service = mock[SvOnboardingSnapshotService]
+      val participantId = ParticipantId("candidate")
+      HttpSvPublicHandler
+        .onboardSvPartyMigrationPrepareResponse(
+          service,
+          Left(DsoPartyHosting.AcceptedStateNotFound(participantId)),
+          (_, file) => writeSnapshot(file),
+        )
+        .futureValue shouldBe SvPublicResource.OnboardSvPartyMigrationPrepareResponse
+        .BadRequest(
+          definitions.AcceptedStateNotFoundErrorResponse(
+            definitions.ErrorResponse(
+              s"Transaction where the participant $participantId was activated not found."
             )
           )
-          .failed
-          .futureValue should matchPattern {
-          case HttpErrorWithHttpCode(
-                StatusCodes.ServiceUnavailable,
-                "check failed: UNIMPLEMENTED",
-              ) =>
-        },
-        entries =>
-          forExactly(1, entries) { entry =>
-            entry.message should include("check failed")
-            inside(entry.throwable) { case Some(e) =>
-              e.getMessage should include("internal-sequencer:5009")
-            }
-          },
-      )
+        )
+      verifyNothingPrepared(service)
+    }
+
+    def responseTo(failure: Exception) = {
+      val failed = Future
+        .failed[String](failure)
+        .recoverWith(DsoPartyMigration.temporarilyUnavailable(ParticipantId("candidate")))
+      val failing =
+        Route.seal(new HttpErrorHandler(loggerFactory).exceptionsDirective(traceContext) {
+          complete(failed)
+        })
+      (failed, Get("/") ~> failing)
+    }
+
+    Seq(Status.FAILED_PRECONDITION, Status.NOT_FOUND, Status.UNIMPLEMENTED).foreach { grpcStatus =>
+      s"answer ${grpcStatus.getCode} from the participant with a retryable 503" in {
+        val failure = grpcStatus.withDescription("internal-sequencer:5009").asRuntimeException()
+        val (failed, response) = responseTo(failure)
+        response ~> check {
+          status shouldBe StatusCodes.ServiceUnavailable
+          val body = responseAs[String]
+          body should include("temporarily unavailable")
+          body should not include "internal-sequencer"
+        }
+        failed.failed.futureValue.getCause shouldBe failure
+      }
+    }
+
+    "leave other participant errors to the shared error handling" in {
+      val (_, response) =
+        responseTo(Status.INVALID_ARGUMENT.withDescription("invalid").asRuntimeException())
+      response ~> check {
+        status shouldBe StatusCodes.BadRequest
+      }
     }
   }
 }
