@@ -82,6 +82,7 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
+import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
 
 import scala.util.Try
 
@@ -117,6 +118,8 @@ class UpdateHistory private (
     metrics: HistoryMetrics,
     clock: Clock,
     partitionRunwayDays: Int,
+    // After this record time, updates are stored in the partitioned table instead of legacy
+    val lastLegacyRecordTime: Option[CantonTimestamp],
 )(implicit
     ec: ExecutionContext,
     closeContext: CloseContext,
@@ -388,35 +391,16 @@ class UpdateHistory private (
   def readLastIngestedRecordTime()(implicit
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] = {
-    val updateTables = Seq(
-      "update_history_transactions",
-      "update_history_assignments",
-      "update_history_unassignments",
-    )
-    val legacyTables = updateTables.map(table => s"${table}_legacy")
+    val updateTables = UpdateHistory.updateTables
+    val legacyTables = updateTables.map(UpdateHistory.legacyTableName)
     for {
       // These might not exist after pruning
-      existingLegacyTables <- storage.query(
-        sql"""
-          select t
-          from unnest($legacyTables) t
-          where to_regclass(t) is not null -- checks that the table exists
-        """.as[String],
-        "readLastIngestedRecordTime.getExistingLegacyTables",
-      )
-      maxRecordTimes = (updateTables ++ existingLegacyTables)
-        .map { table =>
-          SQLActionBuilderChain(
-            sql"(select max(record_time) from #$table where history_id = $historyId and migration_id = $domainMigrationId)"
-          )
-        }
-        .reduceOption((acc, next) => acc ++ sql"," ++ next)
-        .getOrElse(SQLActionBuilderChain(sql""))
-      result <- storage.query(
-        (sql"select greatest(" ++ maxRecordTimes ++ sql")").toActionBuilder
-          .as[Option[CantonTimestamp]]
-          .head,
-        "readLastIngestedRecordTime",
+      existingLegacyTables <- UpdateHistory.filterExistingTables(legacyTables, storage)
+      result <- UpdateHistory.readLastIngestedRecordTime(
+        updateTables ++ existingLegacyTables,
+        historyId,
+        domainMigrationId,
+        storage,
       )
     } yield result
   }
@@ -2479,6 +2463,7 @@ object UpdateHistory {
       updateStreamParty: PartyId,
       backfillingRequired: BackfillingRequirement,
       internedStringStore: InternedStringStore,
+      keyValueStore: KeyValueStore,
       analyzableTimeWindowDuration: NonNegativeDuration,
       loggerFactory: NamedLoggerFactory,
       enableImportUpdateBackfill: Boolean,
@@ -2518,6 +2503,12 @@ object UpdateHistory {
             s"No row for ($updateStreamParty,$participantId) found, which was just inserted!"
           )
         )
+      lastLegacyRecordTime <- readLastLegacyRecordTime(
+        storage,
+        keyValueStore,
+        newHistoryId,
+        domainMigrationId,
+      )
     } yield new UpdateHistory(
       newHistoryId,
       storage,
@@ -2533,6 +2524,115 @@ object UpdateHistory {
       metrics,
       clock,
       partitionRunwayDays,
+      lastLegacyRecordTime,
+    )
+  }
+
+  private def readLastLegacyRecordTime(
+      storage: DbStorage,
+      keyValueStore: KeyValueStore,
+      historyId: Long,
+      migrationId: Long,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+      closeContext: CloseContext,
+  ): Future[Option[CantonTimestamp]] = {
+    val kvKey = lastLegacyRecordTimeKey(historyId)
+    for {
+      stored <- keyValueStore
+        .getValue[Option[CantonTimestamp]](kvKey)
+        .map {
+          case Right(value) => value
+          case Left(err) =>
+            throw new IllegalStateException(
+              s"FATAL BUG: Failed to decode $kvKey from the db: $err"
+            )
+        }
+        .value
+      lastLegacyRecordTime <- stored match {
+        case Some(Some(recordTime)) =>
+          Future.successful(Some(recordTime))
+        case Some(None) =>
+          // None was stored explicitly. This can happen for new SVs, that never had data in legacy tables.
+          Future.successful(None)
+        case None =>
+          for {
+            computed <- computeLastLegacyRecordTime(storage, historyId, migrationId)
+            _ <- keyValueStore.setValue[Option[CantonTimestamp]](kvKey, computed)
+          } yield computed
+      }
+    } yield lastLegacyRecordTime
+  }
+
+  def lastLegacyRecordTimeKey(historyId: Long): String =
+    s"update_history_last_legacy_record_time_$historyId"
+
+  private def computeLastLegacyRecordTime(
+      storage: DbStorage,
+      historyId: Long,
+      migrationId: Long,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+      closeContext: CloseContext,
+  ): Future[Option[CantonTimestamp]] = {
+    val legacyTables = updateTables.map(legacyTableName)
+    for {
+      existingLegacyTables <- filterExistingTables(legacyTables, storage)
+      result <-
+        if (existingLegacyTables.isEmpty) Future.successful(None)
+        else readLastIngestedRecordTime(existingLegacyTables, historyId, migrationId, storage)
+    } yield result
+  }
+
+  private val updateTables = Seq(
+    "update_history_transactions",
+    "update_history_assignments",
+    "update_history_unassignments",
+  )
+
+  private def legacyTableName(table: String): String = s"${table}_legacy"
+
+  private def filterExistingTables(tables: Seq[String], storage: DbStorage)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+      closeContext: CloseContext,
+  ): Future[Vector[String]] = {
+    import com.digitalasset.canton.resource.DbStorage.Implicits.setParameterArrayString
+    storage.query(
+      sql"""
+          select t
+          from unnest(${tables.toArray[String]}) t
+          where to_regclass(t) is not null -- checks that the table exists
+        """.as[String],
+      "tablesExist",
+    )
+  }
+
+  private def readLastIngestedRecordTime(
+      tables: Seq[String],
+      historyId: Long,
+      domainMigrationId: Long,
+      storage: DbStorage,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+      closeContext: CloseContext,
+  ): Future[Option[CantonTimestamp]] = {
+    val subQueries = tables
+      .map { table =>
+        SQLActionBuilderChain(
+          sql"(select max(record_time) from #$table where history_id = $historyId and migration_id = $domainMigrationId)"
+        )
+      }
+      .reduceOption((acc, next) => acc ++ sql"," ++ next)
+      .getOrElse(SQLActionBuilderChain(sql""))
+    storage.query(
+      (sql"select greatest(" ++ subQueries ++ sql")").toActionBuilder
+        .as[Option[CantonTimestamp]]
+        .head,
+      "readLastIngestedRecordTime",
     )
   }
 

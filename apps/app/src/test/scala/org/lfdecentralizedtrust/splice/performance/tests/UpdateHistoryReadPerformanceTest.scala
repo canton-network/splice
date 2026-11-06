@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.performance.tests
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import com.digitalasset.canton.time.WallClock
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
@@ -69,26 +70,36 @@ class UpdateHistoryReadPerformanceTest(
 
   override protected def mkStore(storage: DbStorage): Future[UpdateHistory] = {
     implicit val initTc: TraceContext = TraceContext.empty
-    UpdateHistory.create(
-      storage = storage,
-      domainMigrationId = migrationId,
-      storeName = this.getClass.getName,
-      participantId = StoreMemberId(mkParticipantId(this.getClass.getSimpleName)),
-      updateStreamParty = dsoParty,
-      backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
-      internedStringStore = InternedStringStore.createWithoutWarmup(
+    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
+    for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId(this.getClass.getSimpleName),
         storage,
-        10_000L,
-        FiniteDuration(1, "hour"),
         loggerFactory,
-        NoOpMetricsFactory,
-      ),
-      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
-      loggerFactory = loggerFactory,
-      enableImportUpdateBackfill = false,
-      metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
-      new WallClock(timeouts, loggerFactory),
-    )
+      )
+      updateHistory <- UpdateHistory.create(
+        storage = storage,
+        domainMigrationId = migrationId,
+        storeName = this.getClass.getName,
+        participantId = StoreMemberId(mkParticipantId(this.getClass.getSimpleName)),
+        updateStreamParty = dsoParty,
+        backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
+        internedStringStore = InternedStringStore.createWithoutWarmup(
+          storage,
+          10_000L,
+          FiniteDuration(1, "hour"),
+          loggerFactory,
+          NoOpMetricsFactory,
+        ),
+        keyValueStore = kvStore,
+        analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
+        loggerFactory = loggerFactory,
+        enableImportUpdateBackfill = false,
+        metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+        new WallClock(timeouts, loggerFactory),
+      )
+    } yield updateHistory
   }
 
   override protected def readOperations(

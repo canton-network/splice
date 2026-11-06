@@ -5,7 +5,7 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.WallClock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
@@ -31,8 +31,9 @@ import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.mockLedgerConnection
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
-
 import io.circe.Json
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
+
 import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
@@ -74,48 +75,55 @@ class VerdictStoreIngestionPerformanceTest(
 
   override protected def mkStore(storage: DbStorage): Future[DbScanVerdictStore] = {
     implicit val initTc: TraceContext = TraceContext.empty
+    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
     val clock = new WallClock(timeouts, loggerFactory)
-    UpdateHistory
-      .create(
-        storage = storage,
-        domainMigrationId = migrationId,
-        storeName = this.getClass.getName,
-        participantId = StoreMemberId(mkParticipantId(this.getClass.getSimpleName)),
-        updateStreamParty = dsoParty,
-        backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
-        internedStringStore = InternedStringStore.createWithoutWarmup(
-          storage,
-          10_000L,
-          FiniteDuration(1, "hour"),
-          loggerFactory,
-          NoOpMetricsFactory,
-        ),
-        analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
-        loggerFactory = loggerFactory,
-        enableImportUpdateBackfill = false,
-        metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
-        clock = clock,
+    for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId(this.getClass.getSimpleName),
+        storage,
+        loggerFactory,
       )
-      .flatMap(updateHistory =>
-        // we don't actually insert into updateHistory in this test, so the mock doesn't matter
-        updateHistory.ingestionSink
-          .initialize(mockLedgerConnection(clock.now))
-          .map(_ => updateHistory)
-      )
-      .map { updateHistory =>
-        val appActivityStore = new DbAppActivityRecordStore(
-          storage,
-          updateHistory,
-          DbAppActivityRecordStore.IngestionVersions(
-            AppActivityComputation.ActivityIngestionCodeVersion,
-            0,
+      updateHistory <- UpdateHistory
+        .create(
+          storage = storage,
+          domainMigrationId = migrationId,
+          storeName = this.getClass.getName,
+          participantId = StoreMemberId(mkParticipantId(this.getClass.getSimpleName)),
+          updateStreamParty = dsoParty,
+          backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
+          internedStringStore = InternedStringStore.createWithoutWarmup(
+            storage,
+            10_000L,
+            FiniteDuration(1, "hour"),
+            loggerFactory,
+            NoOpMetricsFactory,
           ),
-          isFirstSv = false,
-          initialRound = 0L,
-          loggerFactory,
+          analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
+          loggerFactory = loggerFactory,
+          enableImportUpdateBackfill = false,
+          metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+          keyValueStore = kvStore,
+          clock = clock,
         )
-        DbScanVerdictStore(storage, updateHistory, appActivityStore, loggerFactory)
-      }
+      _ <- updateHistory.ingestionSink
+        // we don't actually insert into updateHistory in this test, so the mock doesn't matter
+        .initialize(mockLedgerConnection(clock.now))
+        .map(_ => updateHistory)
+    } yield {
+      val appActivityStore = new DbAppActivityRecordStore(
+        storage,
+        updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(
+          AppActivityComputation.ActivityIngestionCodeVersion,
+          0,
+        ),
+        isFirstSv = false,
+        initialRound = 0L,
+        loggerFactory,
+      )
+      DbScanVerdictStore(storage, updateHistory, appActivityStore, loggerFactory)
+    }
   }
 
   def run(): Future[Unit] = withStorage { storage =>

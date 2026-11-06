@@ -28,6 +28,7 @@ import com.daml.ledger.javaapi.data.Transaction
 import java.time.{Instant, LocalDate, ZoneOffset}
 import java.util.Collections
 import scala.concurrent.Future
+import scala.util.Try
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -36,6 +37,7 @@ import StoreTestBase.*
 import cats.data.NonEmptyList
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.config.NonNegativeDuration
+import org.scalatest.exceptions.TestFailedException
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 class UpdateHistoryTest extends UpdateHistoryTestBase {
@@ -830,6 +832,98 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           o2 <- store.lookupLastIngestedOffset()
           _ = o2 shouldBe Some(5)
         } yield succeed
+      }
+    }
+
+    "lastLegacyRecordTime" should {
+
+      "be the latest legacy record time and stay fixed once recorded" in {
+        val store1 = mkStore(party1, migration1, participant1)
+        val store2 = mkStore(party1, migration2, participant1)
+        for {
+          _ <- initStore(store1)
+          _ <- create(domain1, validContractId(1), validOffset(1), party1, store1, time(1))
+          _ <- initStore(store2)
+          _ <- create(domain1, validContractId(2), validOffset(1), party1, store2, time(2))
+          _ <- unassign(
+            domain1,
+            domain2,
+            validContractId(2),
+            validOffset(2),
+            party1,
+            1,
+            reassignmentId1,
+            store2,
+            time(3),
+          )
+          _ <- create(domain1, validContractId(3), validOffset(3), party1, store2, time(4))
+          _ <- moveToLegacyTables(store1.historyId, time(4))
+          _ <- forgetLastLegacyRecordTime(store1.historyId)
+          cutStore = mkStore(party1, migration2, participant1)
+          _ <- storage
+            .update(
+              sql"delete from update_history_unassignments_legacy".asUpdate,
+              "deleteLegacyUnassignments",
+            )
+            .failOnShutdown
+          reopenedStore = mkStore(party1, migration2, participant1)
+        } yield {
+          store1.lastLegacyRecordTime shouldBe None
+          store2.lastLegacyRecordTime shouldBe None
+          cutStore.lastLegacyRecordTime shouldBe Some(time(3))
+          reopenedStore.lastLegacyRecordTime shouldBe Some(time(3))
+        }
+      }
+
+      "do not recompute for a history without legacy updates" in {
+        val store = mkStore(party1, migration1, participant1)
+        for {
+          _ <- initStore(store)
+          _ <- create(domain1, validContractId(1), validOffset(1), party1, store, time(1))
+          // if it was recomputed, lastLegacyRecordTime would be time(2)
+          _ <- moveToLegacyTables(store.historyId, time(2))
+          reopenedStore = mkStore(party1, migration1, participant1)
+        } yield {
+          store.lastLegacyRecordTime shouldBe None
+          reopenedStore.lastLegacyRecordTime shouldBe None
+        }
+      }
+
+      "be None when the legacy tables do not exist" in {
+        val legacyTables = Seq(
+          "update_history_transactions_legacy",
+          "update_history_assignments_legacy",
+          "update_history_unassignments_legacy",
+        )
+        def renameLegacyTables(from: String => String, to: String => String) =
+          MonadUtil.sequentialTraverse(legacyTables) { table =>
+            storage.underlying
+              .update(
+                sqlu"alter table #${from(table)} rename to #${to(table)}",
+                "renameLegacyTable",
+              )
+              .failOnShutdown
+          }
+        val hidden = (table: String) => s"${table}_hidden"
+        for {
+          _ <- renameLegacyTables(identity, hidden)
+          storeAttempt = Try(mkStore(party1, migration1, participant1))
+          _ <- renameLegacyTables(hidden, identity)
+          store <- Future.fromTry(storeAttempt)
+        } yield store.lastLegacyRecordTime shouldBe None
+      }
+
+      "fail store creation when the recorded value cannot be decoded" in {
+        val key = UpdateHistory.lastLegacyRecordTimeKey(mkStore().historyId)
+        for {
+          _ <- mkKeyValueStore().setValue(key, "not a timestamp")
+        } yield {
+          val failure = loggerFactory.assertLogs(
+            the[TestFailedException] thrownBy mkStore(),
+            _.errorMessage should include(s"Failed to decode value for key '$key'"),
+          )
+          failure.getCause.getMessage should include(key)
+        }
       }
     }
 

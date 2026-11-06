@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.Unit as damlUnit
 import com.daml.ledger.javaapi.data.codegen.ContractId
@@ -1362,6 +1363,12 @@ trait AcsSnapshotStoreTest
       partitionRunwayDays: Int = 7,
   ): Future[UpdateHistory] = {
     for {
+      kvStore <- ScanKeyValueStore(
+        dsoParty,
+        mkParticipantId(participantId),
+        storage.underlying,
+        loggerFactory,
+      )
       updateHistory <- UpdateHistory.create(
         storage.underlying, // not under test
         migrationId,
@@ -1370,6 +1377,7 @@ trait AcsSnapshotStoreTest
         dsoParty,
         backfillingRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,

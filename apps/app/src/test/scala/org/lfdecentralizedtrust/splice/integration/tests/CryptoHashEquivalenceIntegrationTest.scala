@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueStore
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.mockLedgerConnection
 
 import com.daml.ledger.javaapi.data.{
@@ -151,6 +152,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
             loggerFactory,
             NoOpMetricsFactory,
           ),
+          ScanKeyValueStore(svParty, participantId, storage, loggerFactory).futureValue,
           AnalyzableTimeWindowConfig.UnlimitedAtw,
           loggerFactory,
           enableImportUpdateBackfill = false,

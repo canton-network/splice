@@ -1062,6 +1062,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
   ): Future[UpdateHistory] = {
     val participantId = mkParticipantId("ScanEventStoreTest")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage.underlying, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage.underlying,
         migrationId,
@@ -1070,6 +1071,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = true,
