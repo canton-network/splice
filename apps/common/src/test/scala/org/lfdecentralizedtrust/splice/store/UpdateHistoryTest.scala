@@ -11,11 +11,12 @@ import com.daml.ledger.javaapi.data.{
 }
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.util.{HexString, MonadUtil}
 import com.digitalasset.daml.lf.data.Bytes
 import com.google.rpc.status.Status
 import com.google.rpc.status.Status.toJavaProto
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, AppRewardCoupon}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import com.digitalasset.canton.time.SimClock
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
@@ -143,34 +144,6 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           _ <- create(domain1, cid2, offset2, party1, store, time(20))
         } yield store.startAnalyzableTimeWindow shouldBe Some(
           time(20).minus(java.time.Duration.ofSeconds(atwSeconds))
-        )
-      }
-
-      "handle single create and query it by contract id" in {
-        val store = mkStore()
-        for {
-          _ <- initStore(store)
-          result <- store.lookupContractById(AppRewardCoupon.COMPANION)(
-            new AppRewardCoupon.ContractId(cid1)
-          )
-          _ = result shouldBe None
-          _ <- create(domain1, cid1, offset1, party1, store, time(1))
-          result <- store.lookupContractById(AppRewardCoupon.COMPANION)(
-            new AppRewardCoupon.ContractId(cid1)
-          )
-          _ = result shouldBe Some(
-            appRewardCoupon(
-              round = 0,
-              provider = party1,
-              contractId = cid1,
-            )
-          )
-          updates <- updates(store)
-        } yield checkUpdates(
-          updates,
-          Seq(
-            ExpectedCreate(cid1, domain1)
-          ),
         )
       }
 
@@ -832,6 +805,168 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           o2 <- store.lookupLastIngestedOffset()
           _ = o2 shouldBe Some(5)
         } yield succeed
+      }
+    }
+
+    "reading across the cutover to partitioned tables" should {
+
+      "return the same results as without the cutover" in {
+        val store = mkStore(party1, migration1, participant1)
+        val unit = com.daml.ledger.javaapi.data.Unit.getInstance()
+        def archive(
+            domain: SynchronizerId,
+            contractId: String,
+            offset: Long,
+            store: UpdateHistory,
+            recordTime: CantonTimestamp,
+        ) =
+          domain.exercise(
+            appRewardCoupon(0, party1, contractId = contractId),
+            None,
+            "Archive",
+            unit,
+            unit,
+            offset,
+            recordTime.toInstant,
+            recordTime.toInstant,
+          )(store)
+        val cids = (1 to 8).map(validContractId(_))
+
+        def paginate(
+            page: Option[TimestampWithMigrationId] => Future[Seq[TreeUpdateWithMigrationId]]
+        ): Future[Seq[TreeUpdateWithMigrationId]] = {
+          def go(
+              after: Option[TimestampWithMigrationId],
+              acc: Seq[TreeUpdateWithMigrationId],
+          ): Future[Seq[TreeUpdateWithMigrationId]] =
+            for {
+              result <- page(after)
+              all <- result.lastOption match {
+                case None => Future.successful(acc)
+                case Some(last) =>
+                  go(
+                    Some(TimestampWithMigrationId(last.update.update.recordTime, last.migrationId)),
+                    acc ++ result,
+                  )
+              }
+            } yield all
+          go(None, Seq.empty)
+        }
+
+        def readEverything(
+            store: UpdateHistory,
+            updateIds: Seq[String],
+        ) = for {
+          allUpdates <- store.getAllUpdates(None, PageLimit.tryCreate(1000))
+          allUpdatesPaginated <- paginate(store.getAllUpdates(_, PageLimit.tryCreate(2)))
+          withoutImports <- store.getUpdatesWithoutImportUpdates(None, PageLimit.tryCreate(1000))
+          withoutImportsPaginated <- paginate(
+            store.getUpdatesWithoutImportUpdates(_, PageLimit.tryCreate(2))
+          )
+          before <- store.getUpdatesBefore(
+            migration1,
+            domain1,
+            time(10),
+            None,
+            PageLimit.tryCreate(1000),
+          )
+          beforeAtOrAfter <- store.getUpdatesBefore(
+            migration1,
+            domain1,
+            time(10),
+            Some(time(6)),
+            PageLimit.tryCreate(2),
+          )
+          byId <- MonadUtil.sequentialTraverse(updateIds)(store.getUpdate)
+          range <- store.getRecordTimeRange(migration1)
+          previousMigration <- store.getPreviousMigrationId(migration1)
+          importUpdates <- store.getImportUpdates(migration1, "", PageLimit.tryCreate(1000))
+          lastImportUpdateId <- store.getLastImportUpdateId(migration1)
+          lowestMigrations <- MonadUtil.sequentialTraverse(Seq(time(0), time(5), time(8)))(
+            store.getLowestMigrationForRecordTime
+          )
+          backfillingState <- store.getBackfillingState()
+        } yield (
+          allUpdates,
+          allUpdatesPaginated,
+          withoutImports,
+          withoutImportsPaginated,
+          before,
+          beforeAtOrAfter,
+          byId,
+          range,
+          (previousMigration, importUpdates, lastImportUpdateId, lowestMigrations),
+          backfillingState,
+        )
+
+        def countRows(table: String) =
+          storage
+            .query(sql"select count(*) from #$table".as[Int].head, "countRows")
+            .failOnShutdown
+
+        for {
+          _ <- initStore(store)
+          tx1 <- create(domain1, cids(0), validOffset(1), party1, store, time(1))
+          _ <- unassign(
+            domain1,
+            domain2,
+            cids(0),
+            validOffset(2),
+            party1,
+            1,
+            reassignmentId1,
+            store,
+            time(2),
+          )
+          _ <- assign(
+            domain2,
+            domain1,
+            cids(0),
+            validOffset(3),
+            party1,
+            1,
+            reassignmentId1,
+            store,
+            time(3),
+          )
+          tx4 <- archive(domain2, cids(0), validOffset(4), store, time(4))
+          tx5 <- create(domain1, cids(1), validOffset(5), party1, store, time(5))
+          tx6 <- create(domain1, cids(2), validOffset(6), party1, store, time(6))
+          tx7 <- archive(domain1, cids(1), validOffset(7), store, time(7))
+          tx8 <- create(domain1, cids(3), validOffset(8), party1, store, time(8))
+          _ <- unassign(
+            domain1,
+            domain2,
+            cids(3),
+            validOffset(9),
+            party1,
+            1,
+            "%08d".format(2),
+            store,
+            time(9),
+          )
+          tx9 <- archive(domain1, cids(2), validOffset(10), store, time(9).plusMillis(1))
+          updateIds = Seq(tx1, tx4, tx5, tx6, tx7, tx8, tx9).map(_.getUpdateId)
+
+          uncut <- readEverything(store, updateIds)
+          _ <- moveToLegacyTables(store.historyId, time(7))
+          _ <- forgetLastLegacyRecordTime(store.historyId)
+          cutStore = mkStore(party1, migration1, participant1)
+          cut <- readEverything(cutStore, updateIds)
+          legacyTransactions <- countRows("update_history_transactions_legacy")
+          partitionedTransactions <- countRows("update_history_transactions")
+          legacyExercises <- countRows("update_history_exercises_legacy")
+          partitionedExercises <- countRows("update_history_exercises")
+        } yield {
+          store.lastLegacyRecordTime shouldBe None
+          cutStore.lastLegacyRecordTime shouldBe Some(time(6))
+          legacyTransactions shouldBe 4
+          partitionedTransactions shouldBe 3
+          legacyExercises shouldBe 1
+          partitionedExercises shouldBe 2
+          uncut._1 should have size 10
+          cut shouldBe uncut
+        }
       }
     }
 

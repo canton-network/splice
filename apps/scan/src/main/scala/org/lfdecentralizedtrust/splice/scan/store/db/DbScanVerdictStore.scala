@@ -781,13 +781,19 @@ class DbScanVerdictStore(
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] = {
     val historyId = updateHistory.historyId
-    val q = sql"""
-      select max(record_time) from (
-        select max(record_time) as record_time from update_history_transactions where history_id = $historyId and migration_id = $migrationId
-         union all select max(record_time) as record_time from update_history_assignments where history_id = $historyId and migration_id = $migrationId
-         union all select max(record_time) as record_time from update_history_unassignments where history_id = $historyId and migration_id = $migrationId
-      ) t
+    def maxRecordTime(tableSuffix: String) =
+      sql"""
+      (select max(record_time) from (
+        select max(record_time) as record_time from #${"update_history_transactions" + tableSuffix} where history_id = $historyId and migration_id = $migrationId
+         union all select max(record_time) as record_time from #${"update_history_assignments" + tableSuffix} where history_id = $historyId and migration_id = $migrationId
+         union all select max(record_time) as record_time from #${"update_history_unassignments" + tableSuffix} where history_id = $historyId and migration_id = $migrationId
+      ) t)
     """
+    val q =
+      if (updateHistory.lastLegacyRecordTime.isDefined)
+        sql"select coalesce(" ++ maxRecordTime("") ++ sql", " ++ maxRecordTime("_legacy") ++ sql")"
+      else
+        sql"select " ++ maxRecordTime("")
 
     storage
       .query(

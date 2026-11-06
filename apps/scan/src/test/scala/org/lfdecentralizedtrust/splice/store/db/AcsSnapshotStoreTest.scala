@@ -291,7 +291,6 @@ trait AcsSnapshotStoreTest
           )
         }
       }
-
     }
 
     "queryAcsSnapshot" should {
@@ -1426,15 +1425,20 @@ trait AcsSnapshotStoreTest
         recordTime.toInstant,
       )
     )
-    updateHistory.ingestionSink
-      .ingestUpdate(
-        dummyDomain,
-        update,
-      )
-      .map(_ => update)
+    for {
+      _ <- updateHistory.ingestionSink.ingestUpdate(dummyDomain, update)
+      _ <-
+        if (recordTime == CantonTimestamp.MinValue)
+          UpdateHistoryTestBase.moveToLegacyTables(
+            storage.underlying,
+            updateHistory.historyId,
+            CantonTimestamp.MinValue.immediateSuccessor,
+          )
+        else Future.unit
+    } yield update
   }
 
-  private def ingestArchive[TCid <: ContractId[T], T](
+  protected def ingestArchive[TCid <: ContractId[T], T](
       updateHistory: UpdateHistory,
       archive: Contract[TCid, T],
       recordTime: CantonTimestamp,
@@ -1480,7 +1484,7 @@ trait AcsSnapshotStoreTest
     )
   }
 
-  private def ingestAcs[TCid <: ContractId[T], T](
+  protected def ingestAcs[TCid <: ContractId[T], T](
       updateHistory: UpdateHistory,
       acs: Seq[Contract[TCid, T]],
   ): Future[Unit] = {
@@ -1491,7 +1495,7 @@ trait AcsSnapshotStoreTest
       .map(_ => ())
   }
 
-  private def queryAll(
+  protected def queryAll(
       store: AcsSnapshotStore,
       timestamp: CantonTimestamp,
       migrationId: Long = DefaultMigrationId,
@@ -1546,54 +1550,155 @@ trait AcsSnapshotStoreTest
   }
 }
 
-class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
-  override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.Next
+class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+  override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.NextV2
 
-  "same-contract rows have consecutive row_ids" in {
-    import storage.api.jdbcProfile.api.*
+  "produce the same snapshots across the cutover to partitioned tables" in {
+    val acs = Seq(openMiningRound(dsoParty, 0L, 1.0), openMiningRound(dsoParty, 1L, 1.0))
+    val c1 = openMiningRound(dsoParty, 2L, 1.0)
+    val c2 = openMiningRound(dsoParty, 3L, 1.0)
+    val c3 = openMiningRound(dsoParty, 4L, 1.0)
+    val snapshotTimes = Seq(timestamp1, timestamp2, timestamp3)
 
-    val contracts = (1 to 20).map(n =>
-      amulet(providerParty(n), n, n.toLong, 0.1) -> Seq(
-        providerParty(n - 1),
-        providerParty(n),
-        dsoParty,
-        providerParty(n + 1),
-      )
-    )
+    def computeSnapshots(store: AcsSnapshotStore) =
+      MonadUtil.sequentialTraverse(snapshotTimes) { t =>
+        store.insertNewSnapshot(nextTable, DefaultMigrationId, t)
+      }
+
+    def readSnapshots(store: AcsSnapshotStore) =
+      MonadUtil.sequentialTraverse(snapshotTimes) { t =>
+        queryAll(store, t).map(_.createdEventsInPage)
+      }
+
     for {
       updateHistory <- mkUpdateHistory()
       store = mkStore(updateHistory)
-      _ <- MonadUtil.sequentialTraverse(contracts.zipWithIndex) {
-        case ((contract, stakeholders), i) =>
-          ingestCreate(
-            updateHistory,
-            contract,
-            timestamp1.minusSeconds(i.toLong),
-            signatories = stakeholders,
-          )
-      }
-      _ <- store.insertNewSnapshot(IncrementalAcsSnapshotTable.Next, DefaultMigrationId, timestamp1)
-      rowIds <- storage
-        .query(
-          sql"select create_id, row_id from acs_snapshot_data".as[(Int, Int)],
-          "get_row_ids",
-        )
-        .failOnShutdown
+      _ <- ingestAcs(updateHistory, acs)
+      _ <- ingestCreate(updateHistory, c1, timestamp1.minusSeconds(10L))
+      _ <- ingestCreate(updateHistory, c2, timestamp1.minusSeconds(5L))
+      _ <- ingestArchive(updateHistory, acs(1), timestamp2.minusSeconds(20L))
+      _ <- ingestCreate(updateHistory, c3, timestamp2.minusSeconds(5L))
+      _ <- ingestArchive(updateHistory, c1, timestamp3.minusSeconds(5L))
+
+      _ <- computeSnapshots(store)
+      uncut <- readSnapshots(store)
+      snapshots <- MonadUtil.sequentialTraverse(snapshotTimes)(t =>
+        store.lookupSnapshotAtOrBefore(DefaultMigrationId, t)
+      )
+      _ <- MonadUtil.sequentialTraverse(snapshots.flatten)(store.deleteSnapshot)
+
+      _ <- UpdateHistoryTestBase.moveToLegacyTables(
+        storage.underlying,
+        updateHistory.historyId,
+        timestamp2.minusSeconds(10L),
+      )
+      _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+        storage.underlying,
+        updateHistory.historyId,
+      )
+      cutUpdateHistory <- mkUpdateHistory()
+      cutStore = mkStore(cutUpdateHistory)
+      _ <- computeSnapshots(cutStore)
+      cut <- readSnapshots(cutStore)
     } yield {
-      rowIds should have size 20 * 4
-      forAll(rowIds.groupBy(_._1).values) { rows =>
-        val sortedRowIds = rows.map(_._2).sorted
-        forAll(sortedRowIds.zip(sortedRowIds.drop(1))) { case (first, second) =>
-          second shouldBe first + 1
-        }
-      }
+      cutUpdateHistory.lastLegacyRecordTime should not be empty
+      uncut.map(_.map(_.event.getContractId)) shouldBe Seq(
+        acs ++ Seq(c1, c2),
+        Seq(acs(0), c1, c2, c3),
+        Seq(acs(0), c2, c3),
+      ).map(_.map(_.contractId.contractId))
+      cut shouldBe uncut
     }
   }
 
-}
+  "read a legacy snapshot and continue it incrementally across the cutover" in {
+    val acs = Seq(openMiningRound(dsoParty, 0L, 1.0), openMiningRound(dsoParty, 1L, 1.0))
+    val c1 = openMiningRound(dsoParty, 2L, 1.0)
+    val c2 = openMiningRound(dsoParty, 3L, 1.0)
+    val c3 = openMiningRound(dsoParty, 4L, 1.0)
+    val snapshotTimes = Seq(timestamp1, timestamp2, timestamp3)
 
-class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
-  override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.NextV2
+    def continueSnapshots(store: AcsSnapshotStore) =
+      for {
+        first <- store.lookupSnapshotAtOrBefore(DefaultMigrationId, timestamp1)
+        leftover <- store.getIncrementalSnapshot(nextTable)
+        _ <- leftover.fold(Future.unit)(store.deleteIncrementalSnapshot(nextTable, _))
+        _ <- store.initializeIncrementalSnapshot(nextTable, first.value, timestamp2)
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(timestamp2 -> timestamp3, timestamp3 -> timestamp4)
+        ) { case (target, next) =>
+          for {
+            snapshot <- store.getIncrementalSnapshot(nextTable)
+            _ <- store.updateIncrementalSnapshot(nextTable, snapshot.value, target)
+            updated <- store.getIncrementalSnapshot(nextTable)
+            _ <- store.saveIncrementalSnapshot(nextTable, updated.value, next)
+            _ <- indexSnapshot(store, DefaultMigrationId, target)
+          } yield ()
+        }
+        incremental <- store.getIncrementalSnapshot(nextTable)
+        _ <- store.deleteIncrementalSnapshot(nextTable, incremental.value)
+      } yield ()
+
+    def readSnapshots(store: AcsSnapshotStore) =
+      MonadUtil.sequentialTraverse(snapshotTimes) { t =>
+        queryAll(store, t).map(_.createdEventsInPage)
+      }
+
+    for {
+      updateHistory <- mkUpdateHistory()
+      _ <- ingestAcs(updateHistory, acs)
+      _ <- ingestCreate(updateHistory, c1, timestamp1.minusSeconds(10L))
+      _ <- ingestCreate(updateHistory, c2, timestamp1.minusSeconds(5L))
+      _ <- ingestArchive(updateHistory, acs(1), timestamp2.minusSeconds(20L))
+      _ <- ingestCreate(updateHistory, c3, timestamp2.minusSeconds(5L))
+      _ <- ingestArchive(updateHistory, c1, timestamp3.minusSeconds(5L))
+
+      _ <- UpdateHistoryTestBase.moveToLegacyTables(
+        storage.underlying,
+        updateHistory.historyId,
+        timestamp1.immediateSuccessor,
+      )
+      _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+        storage.underlying,
+        updateHistory.historyId,
+      )
+      legacyUpdateHistory <- mkUpdateHistory()
+      store = mkStore(legacyUpdateHistory)
+      _ <- store.insertNewSnapshot(
+        IncrementalAcsSnapshotTable.Next,
+        DefaultMigrationId,
+        timestamp1,
+      )
+      _ <- continueSnapshots(store)
+      uncut <- readSnapshots(store)
+      continued <- MonadUtil.sequentialTraverse(Seq(timestamp2, timestamp3))(t =>
+        store.lookupSnapshotAtOrBefore(DefaultMigrationId, t)
+      )
+      _ <- MonadUtil.sequentialTraverse(continued.flatten)(store.deleteSnapshot)
+
+      _ <- UpdateHistoryTestBase.moveToLegacyTables(
+        storage.underlying,
+        updateHistory.historyId,
+        timestamp2.minusSeconds(10L),
+      )
+      _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+        storage.underlying,
+        updateHistory.historyId,
+      )
+      cutUpdateHistory <- mkUpdateHistory()
+      cutStore = mkStore(cutUpdateHistory)
+      _ <- continueSnapshots(cutStore)
+      cut <- readSnapshots(cutStore)
+    } yield {
+      cutUpdateHistory.lastLegacyRecordTime should not be empty
+      uncut.map(_.map(_.event.getContractId)) shouldBe Seq(
+        acs ++ Seq(c1, c2),
+        Seq(acs(0), c1, c2, c3),
+        Seq(acs(0), c2, c3),
+      ).map(_.map(_.contractId.contractId))
+      cut shouldBe uncut
+    }
+  }
 
   "initialize from legacy snapshot" in {
     val c1 = amuletRules()
@@ -1601,25 +1706,35 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
     val c3 = amulet(providerParty(3), 1, 1L, 0.1)
 
     for {
+      ingestingUpdateHistory <- mkUpdateHistory()
+      _ <- ingestCreate(
+        ingestingUpdateHistory,
+        c1,
+        timestamp1.minusSeconds(3L),
+      )
+      _ <- ingestCreate(
+        ingestingUpdateHistory,
+        c2,
+        timestamp1.minusSeconds(2L),
+      )
+      _ <- ingestCreate(
+        ingestingUpdateHistory,
+        c3,
+        timestamp1.minusSeconds(1L),
+      )
+      _ <- UpdateHistoryTestBase.moveToLegacyTables(
+        storage.underlying,
+        ingestingUpdateHistory.historyId,
+        timestamp1.immediateSuccessor,
+      )
+      _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+        storage.underlying,
+        ingestingUpdateHistory.historyId,
+      )
       updateHistory <- mkUpdateHistory()
       store = mkStore(updateHistory)
 
       snapshot1 <- clueF(s"Create non-incremental snapshot")(for {
-        _ <- ingestCreate(
-          updateHistory,
-          c1,
-          timestamp1.minusSeconds(3L),
-        )
-        _ <- ingestCreate(
-          updateHistory,
-          c2,
-          timestamp1.minusSeconds(2L),
-        )
-        _ <- ingestCreate(
-          updateHistory,
-          c3,
-          timestamp1.minusSeconds(1L),
-        )
         _ <- store.insertNewSnapshot(
           IncrementalAcsSnapshotTable.Next,
           DefaultMigrationId,
