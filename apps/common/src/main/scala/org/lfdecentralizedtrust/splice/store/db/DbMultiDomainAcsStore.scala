@@ -1378,7 +1378,10 @@ final class DbMultiDomainAcsStore[TXE] private[db] (
     ): Option[NonEmptyList[Transaction]] =
       NonEmptyList.fromList(
         trees.batch.toVector
-          .filter(tx => !tx.tree.getWorkflowId.startsWith(IMPORT_ACS_WORKFLOW_ID_PREFIX) && tx.synchronizerId == synchronizerId)
+          .filter(tx =>
+            !tx.tree.getWorkflowId
+              .startsWith(IMPORT_ACS_WORKFLOW_ID_PREFIX) && tx.synchronizerId == synchronizerId
+          )
           .map(_.tree)
           .toList
       )
