@@ -522,7 +522,7 @@
         "spec": {
           "id": 8,
           "title": "Total Events",
-          "description": "Total created + exercised/archived events ingested.",
+          "description": "Total created + exercised/archived events processed. Every event is processed, but stores with a contract filter (e.g. Scan, SvDso) only write the matching ones; UpdateHistory writes all of them.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -601,7 +601,7 @@
         "spec": {
           "id": 9,
           "title": "Event Rate",
-          "description": "Events per sec.",
+          "description": "Events processed per sec.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -680,7 +680,7 @@
         "spec": {
           "id": 10,
           "title": "Update Rate",
-          "description": "Updates per sec.",
+          "description": "Updates processed per sec. Stores with a contract filter (e.g. Scan, SvDso) only write the matching events of each update; UpdateHistory writes every update in full, so for it this is updates ingested per sec.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1245,7 +1245,7 @@
         "spec": {
           "id": 17,
           "title": "Verdict Rate",
-          "description": "Verdicts per sec.",
+          "description": "Verdicts ingested per sec.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1403,7 +1403,7 @@
         "spec": {
           "id": 19,
           "title": "Transaction View Rate",
-          "description": "Transaction views per sec.",
+          "description": "Transaction views ingested per sec.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1561,7 +1561,7 @@
         "spec": {
           "id": 21,
           "title": "App Activity Record Rate",
-          "description": "App activity records per sec.",
+          "description": "App activity records ingested per sec.",
           "links": [],
           "data": {
             "kind": "QueryGroup",

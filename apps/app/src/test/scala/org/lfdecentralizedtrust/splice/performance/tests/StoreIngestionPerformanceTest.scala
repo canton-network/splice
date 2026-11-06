@@ -93,17 +93,17 @@ object StoreIngestionPerfMetrics {
           ),
           metric(
             "updates_per_sec",
-            "Ingested updates per second",
+            "Processed updates per second",
             ingestionMetrics.updatesPerSec,
           ),
           metric(
             "total_events",
-            "Total number of created + exercised/archived events across all ingested updates",
+            "Total number of created + exercised/archived events processed across all ingested updates",
             BigDecimal(ingestionMetrics.totalEvents),
           ),
           metric(
             "events_per_sec",
-            "Ingested events per second",
+            "Processed events per second",
             ingestionMetrics.eventsPerSec,
           ),
         )
