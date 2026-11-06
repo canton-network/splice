@@ -66,6 +66,7 @@ import org.lfdecentralizedtrust.splice.http.{
   UrlValidator,
 }
 import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.DsoSequencerDeduplication
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequestV2,
@@ -637,7 +638,19 @@ class HttpScanHandler(
         }
         .map(list =>
           list.map { case (synchronizerId, sequencers) =>
-            synchronizerId -> sequencers.filter { sequencer =>
+            val (uniqueSequencers, duplicates) =
+              DsoSequencerDeduplication.partitionUniqueBy(sequencers)(sequencer =>
+                (sequencer.synchronizerSerial, sequencer.id)
+              )
+            duplicates.foreach { case ((serial, sequencerId), duplicatedSequencers) =>
+              logger.warn(
+                s"Not serving sequencer $sequencerId for domain $synchronizerId and serial ${serial
+                    .getOrElse("<none>")} as it is claimed by multiple SVs: ${duplicatedSequencers
+                    .map(_.svName)
+                    .mkString(", ")}"
+              )
+            }
+            synchronizerId -> uniqueSequencers.filter { sequencer =>
               UrlValidator.isValid(sequencer.url) match {
                 case Left(failure) =>
                   logger.warn(
