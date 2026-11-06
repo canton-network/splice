@@ -16,7 +16,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: max by (blacklist_sequencer)(daml_sequencer_bftordering_blacklist_sequencer)
+              expr: max by (job, blacklist_sequencer)(daml_sequencer_bftordering_blacklist_sequencer)
               instant: true
               intervalMs: 1000
               legendFormat: __auto
@@ -53,9 +53,9 @@ groups:
         execErrState: Alerting
         for: 5m
         annotations:
-          description: The CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted.
+          description: The CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted by {{ $labels.job }}.
           severity: warning
-          summary: CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted for {{ index $values "blacklisted_epochs" }} epochs
+          summary: CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted by {{ $labels.job }} for {{ index $values "blacklisted_epochs" }} epochs
         labels: {}
         isPaused: false
       - uid: e2a9c7b4f1d6

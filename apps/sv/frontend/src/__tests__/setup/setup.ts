@@ -44,7 +44,7 @@ export const server: SetupServer = buildServer(svUrl);
 // Start server before all tests
 beforeAll(() => {
   setupIntersectionMocking(vi.fn);
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 
 //  Close server after all tests
