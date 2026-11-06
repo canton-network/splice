@@ -939,7 +939,7 @@ class ParticipantPartiesAdministrationGroup(
       consoleEnvironment.run {
         reference.adminCommand(
           ParticipantAdminCommands.PartyManagement.ImportPartyAcs(
-            new java.io.FileInputStream(importFilePath),
+            new java.io.File(importFilePath),
             synchronizerId,
             if (workflowIdPrefix.nonEmpty) workflowIdPrefix else s"import-${UUID.randomUUID}",
             contractImportMode,
