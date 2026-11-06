@@ -1545,6 +1545,7 @@ class TopologyAdministrationGroup(
           forceChanges = forceFlags,
           waitToBecomeEffective = synchronize,
           serverVersion = nodeStatus.releaseVersion,
+          protocolVersion = None,
         )
       )
     }
@@ -2015,6 +2016,7 @@ class TopologyAdministrationGroup(
           forceChanges = force,
           waitToBecomeEffective = synchronize,
           serverVersion = nodeStatus.releaseVersion,
+          protocolVersion = None,
         )
       ).discard
     }
@@ -2048,6 +2050,7 @@ class TopologyAdministrationGroup(
           forceChanges = force,
           waitToBecomeEffective = synchronize,
           serverVersion = nodeStatus.releaseVersion,
+          protocolVersion = None,
         )
       )
     }
@@ -2117,6 +2120,7 @@ class TopologyAdministrationGroup(
           forceChanges = force,
           waitToBecomeEffective = synchronize,
           serverVersion = nodeStatus.releaseVersion,
+          protocolVersion = None,
         )
       )
     }
@@ -2332,6 +2336,12 @@ class TopologyAdministrationGroup(
         |  do not host the party, and while any participant is Freezing, the Canton protocol
         |  treats the party as if it were not hosted on any participant on the synchronizer.
         |  Nominated and Freezing are supported only in protocol version 37 and higher.
+        |- protocolVersion: The protocol version to create the topology transaction for, so that
+        |  clients that only read topology transactions of an older protocol version can read it,
+        |  e.g. 36 on a synchronizer with protocol version 37. Defaults to the store's protocol
+        |  version. A topology transaction of protocol version 36 cannot express the Nominated and
+        |  Freezing hosting states: the command fails if the new mapping has a participant in one
+        |  of these states, and, unless forced, if the current mapping has one.
         """
     )
     def propose_delta(
@@ -2348,6 +2358,7 @@ class TopologyAdministrationGroup(
         forceFlags: ForceFlags = ForceFlags.none,
         requiresPartyToBeOnboarded: Boolean = false,
         participantStates: Map[ParticipantId, HostingState] = Map.empty,
+        protocolVersion: Option[ProtocolVersion] = None,
     ): SignedTopologyTransaction[TopologyChangeOp, PartyToParticipant] = {
 
       val (
@@ -2386,6 +2397,7 @@ class TopologyAdministrationGroup(
             if (requiresPartyToBeOnboarded) adds.map(_._1) else Nil,
           partySigningKeys = partySigningKeys,
           participantStates = newParticipantStates,
+          protocolVersion = protocolVersion,
         )
       } else {
         // we would remove the last participant, therefore we issue a REMOVE
@@ -2403,6 +2415,7 @@ class TopologyAdministrationGroup(
           forceFlags = forceFlags,
           partySigningKeys = partySigningKeys,
           participantStates = existingParticipantStates,
+          protocolVersion = protocolVersion,
         )
 
       }
@@ -2459,6 +2472,12 @@ class TopologyAdministrationGroup(
       |  the Canton protocol treats the party as if it were not hosted on any participant on
       |  the synchronizer. Nominated and Freezing are supported only in
       |  protocol version 37 and higher.
+      |- protocolVersion: The protocol version to create the topology transaction for, so that
+      |  clients that only read topology transactions of an older protocol version can read it,
+      |  e.g. 36 on a synchronizer with protocol version 37. Defaults to the store's protocol
+      |  version. A topology transaction of protocol version 36 cannot express the Nominated and
+      |  Freezing hosting states: the command fails if the new mapping has a participant in one
+      |  of these states, and, unless forced, if the current mapping has one.
       """
     )
     def propose(
@@ -2477,6 +2496,7 @@ class TopologyAdministrationGroup(
         forceFlags: ForceFlags = ForceFlags.none,
         participantsRequiringPartyToBeOnboarded: Seq[ParticipantId] = Nil,
         participantStates: Map[ParticipantId, HostingState] = Map.empty,
+        protocolVersion: Option[ProtocolVersion] = None,
     ): SignedTopologyTransaction[TopologyChangeOp, PartyToParticipant] = {
       val nodeStatus = instance.health.status
       val command = TopologyAdminCommands.Write.Propose(
@@ -2501,6 +2521,7 @@ class TopologyAdministrationGroup(
         forceChanges = forceFlags,
         waitToBecomeEffective = synchronize,
         serverVersion = nodeStatus.releaseVersion,
+        protocolVersion = protocolVersion,
       )
 
       runAdminCommand(command)
@@ -3298,6 +3319,7 @@ class TopologyAdministrationGroup(
         forceChanges = force,
         waitToBecomeEffective = synchronize,
         serverVersion = nodeStatus.releaseVersion,
+        protocolVersion = None,
       )
 
       runAdminCommand(command).discard
@@ -3532,6 +3554,7 @@ class TopologyAdministrationGroup(
         store = store.getOrElse(synchronizerId),
         waitToBecomeEffective = synchronize,
         serverVersion = nodeStatus.releaseVersion,
+        protocolVersion = None,
       )
 
       runAdminCommand(command)
@@ -3682,6 +3705,7 @@ class TopologyAdministrationGroup(
               store = store.getOrElse(synchronizerId),
               waitToBecomeEffective = synchronize,
               serverVersion = nodeStatus.releaseVersion,
+              protocolVersion = None,
             )
           )
         } yield result
@@ -4538,6 +4562,7 @@ class TopologyAdministrationGroup(
               store = store.getOrElse(successorSynchronizerId.logical),
               waitToBecomeEffective = synchronize,
               serverVersion = nodeStatus.releaseVersion,
+              protocolVersion = None,
             )
           )
         }

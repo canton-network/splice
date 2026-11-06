@@ -2079,6 +2079,7 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
     case PathList("ch", "qos", "logback", _*) => MergeStrategy.first
     case PathList("META-INF", "okhttp.kotlin_module") => MergeStrategy.first
     case PathList("META-INF", "okio.kotlin_module") => MergeStrategy.last
+    case PathList("META-INF", "kotlin-project-structure-metadata.json") => MergeStrategy.discard
     case PathList(
           "META-INF",
           "org",
@@ -2113,8 +2114,6 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.first
     // Multiple dependencies ship this GraalVM metadata with differing content.
     case PathList("META-INF", "native-image", "reflect-config.json") => MergeStrategy.first
-    // Copy-pasta from Canton (DACH-NY/canton#31788): Remove this merge strategy once zipkin exporter is removed
-    case PathList("okhttp3", _ @_*) => MergeStrategy.first
     // this file comes in multiple flavors, from io.get-coursier:interface and from org.scala-lang.modules:scala-collection-compat. Since the content differs it is resolve this explicitly with this MergeStrategy.
     case path if path.endsWith("scala-collection-compat.properties") => MergeStrategy.first
     // Don't really care about the notice file so just take any.
@@ -2454,7 +2453,6 @@ lazy val `apps-app`: Project =
         CantonDependencies.opentelemetry_sdk_autoconfigure,
         CantonDependencies.opentelemetry_sdk_autoconfigure,
         CantonDependencies.opentelemetry_prometheus,
-        CantonDependencies.opentelemetry_zipkin,
         CantonDependencies.opentelemetry_instrumentation_grpc,
         CantonDependencies.opentelemetry_instrumentation_runtime_metrics,
       ),
