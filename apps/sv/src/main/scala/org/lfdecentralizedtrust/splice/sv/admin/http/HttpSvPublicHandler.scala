@@ -816,6 +816,8 @@ class HttpSvPublicHandler(
 
 object HttpSvPublicHandler {
 
+  private val DownloadChunkSize = 1024 * 1024
+
   private def proposalNotFoundResponse(
       partyToParticipantSerial: PositiveInt
   ): definitions.ProposalNotFoundErrorResponse =
@@ -884,7 +886,7 @@ object HttpSvPublicHandler {
                 HttpEntity(
                   ContentTypes.`application/octet-stream`,
                   Files.size(file),
-                  FileIO.fromPath(file),
+                  FileIO.fromPath(file, DownloadChunkSize),
                 )
               )
             catch {

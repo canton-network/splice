@@ -196,8 +196,8 @@ class ParticipantAdminConnection(
       _ = logger.info(
         show"Exporting ACS snapshot for party $party from domain $synchronizerId at offset $beforeActivationOffset"
       )
-      observer <- Future(
-        blocking(new OutputFileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk))
+      observer = blocking(
+        new OutputFileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk)
       )
       _ <- runCmd(
         ParticipantAdminCommands.PartyManagement.ExportPartyAcs(

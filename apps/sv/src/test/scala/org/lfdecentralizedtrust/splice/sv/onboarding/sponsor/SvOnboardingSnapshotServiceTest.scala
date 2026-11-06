@@ -137,32 +137,34 @@ class SvOnboardingSnapshotServiceTest
         } finally Seq(first, second).foreach(_.trySuccess(()))
     }
 
-    "start a new export after a failed one" in withService() { (service, _, _) =>
-      val failedId =
-        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-          {
-            val id = service
-              .prepare(
-                key("sv1"),
-                writeSnapshot(Future.failed(new RuntimeException("boom"))),
+    "start a new export after a failed one" in File.usingTemporaryDirectory() { directory =>
+      withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, _, _) =>
+        val failedId =
+          loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+            {
+              val id = service
+                .prepare(
+                  key("sv1"),
+                  writeSnapshot(Future.failed(new RuntimeException("boom"))),
+                )
+                .futureValue
+              eventually()(
+                service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
               )
-              .futureValue
-            eventually()(
-              service.lookup(id) shouldBe Some(SnapshotState.Failed("Snapshot export failed"))
-            )
-            id
-          },
-          forExactly(1, _)(_.warningMessage should include("failed")),
-        )
-      (File(service.exportsDirectory) / failedId.value).list
-        .map(_.name)
-        .toList shouldBe List("failure.json")
+              id
+            },
+            forExactly(1, _)(_.warningMessage should include("failed")),
+          )
+        (directory / "exports" / failedId.value).list
+          .map(_.name)
+          .toList shouldBe List("failure.json")
 
-      val id =
-        service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
-      id should not be failedId
-      eventually()(service.lookup(id) should matchPattern { case Some(SnapshotState.Ready(_)) =>
-      })
+        val id =
+          service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
+        id should not be failedId
+        eventually()(service.lookup(id) should matchPattern { case Some(SnapshotState.Ready(_)) =>
+        })
+      }
     }
 
     "prepare a new snapshot if the ready file was deleted" in withService() { (service, _, _) =>
@@ -278,11 +280,14 @@ class SvOnboardingSnapshotServiceTest
           running.started.future.futureValue
         }
         queued.prepare()
-        inside(
-          service.prepare(key("sv4"), _ => Future.unit).failed.futureValue
-        ) { case e: StatusRuntimeException =>
-          e.getStatus.getCode shouldBe Status.Code.UNAVAILABLE
-        }
+        loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
+          inside(
+            service.prepare(key("sv4"), _ => Future.unit).failed.futureValue
+          ) { case e: StatusRuntimeException =>
+            e.getStatus.getCode shouldBe Status.Code.UNAVAILABLE
+          },
+          _.warningMessage should include("Too many onboarding snapshot exports queued"),
+        )
         queued.started.isCompleted shouldBe false
 
         fast.done.success(())
