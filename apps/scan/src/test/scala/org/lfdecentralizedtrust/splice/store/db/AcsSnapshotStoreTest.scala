@@ -1633,6 +1633,10 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
         updateHistory.historyId,
         timestamp2.minusSeconds(10L),
       )
+      _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+        storage.underlying,
+        updateHistory.historyId,
+      )
       cutUpdateHistory <- mkUpdateHistory()
       cutStore = mkStore(cutUpdateHistory)
       _ <- computeSnapshots(cutStore)
@@ -1707,6 +1711,10 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
         storage.underlying,
         updateHistory.historyId,
         timestamp2.minusSeconds(10L),
+      )
+      _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+        storage.underlying,
+        updateHistory.historyId,
       )
       cutUpdateHistory <- mkUpdateHistory()
       cutStore = mkStore(cutUpdateHistory)

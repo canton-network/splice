@@ -168,6 +168,10 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
           ctx.updateHistory.historyId,
           recordTs1.plusSeconds(1),
         )
+        _ <- UpdateHistoryTestBase.forgetLastLegacyRecordTime(
+          storage.underlying,
+          ctx.updateHistory.historyId,
+        )
         cutCtx <- newEventStore()
         capRightAfterCutover <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
         recordTs2 = recordTs1.plusSeconds(2)
