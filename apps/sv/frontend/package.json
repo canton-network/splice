@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@braintree/sanitize-url": "^7.1.2",
-    "@daml/types": "^3.6.2",
+    "@daml/types": "^3.7.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "9.5.0",

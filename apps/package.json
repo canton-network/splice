@@ -16,7 +16,7 @@
     "postinstall": "node scripts/link-generated-packages.mjs"
   },
   "dependencies": {
-    "@daml/types": "^3.6.2",
+    "@daml/types": "^3.7.0",
     "@dmsnell/diff-match-patch": "^1.1.0",
     "@mojotech/json-type-validation": "^3.1.0",
     "dompurify": "^3.4.16",
