@@ -158,6 +158,28 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       }
     }
 
+    "Cap the verdicts till the latest legacy update right after the cutover" in {
+      for {
+        ctx <- newEventStore()
+        recordTs1 = CantonTimestamp.now()
+        _ <- insertUpdate(ctx.updateHistory, recordTs1, "update1")
+        _ <- UpdateHistoryTestBase.moveToLegacyTables(
+          storage.underlying,
+          ctx.updateHistory.historyId,
+          recordTs1.plusSeconds(1),
+        )
+        cutCtx <- newEventStore()
+        capRightAfterCutover <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
+        recordTs2 = recordTs1.plusSeconds(2)
+        _ <- insertUpdate(cutCtx.updateHistory, recordTs2, "update2")
+        capAfterNextUpdate <- cutCtx.verdictStore.maxUpdateRecordTime(domainMigrationId)
+      } yield {
+        cutCtx.updateHistory.lastLegacyRecordTime should not be empty
+        capRightAfterCutover shouldBe Some(recordTs1)
+        capAfterNextUpdate shouldBe Some(recordTs2)
+      }
+    }
+
     "Cap the verdict till the latest update" in {
       for {
         ctx <- newEventStore()
