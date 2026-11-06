@@ -67,13 +67,7 @@
                 }
               }
             }
-          },
-          "allOf": [
-            {
-              "if": { "properties": { "disableAuth": { "const": false } } },
-              "then": { "required": ["auth"] }
-            }
-          ]
+          }
         }
       }
     }
