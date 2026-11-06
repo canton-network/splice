@@ -73,34 +73,15 @@ class NodeInitializer(
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Unit] =
-    for {
-      nodeId <- connection.getIdOption()
-      _ <- nodeId.uniqueIdentifier match {
-        case Some(id) if id.identifier.unwrap == identifierName =>
-          logger.info(
-            s"Node has identity $id, matching expected identifier " +
-              s"$identifierName."
+    withExpectedIdentifier(identifierName, nodeIdentity) {
+      Future.failed(
+        Status.INTERNAL
+          .withDescription(
+            s"${connection.serviceName} reports as initialized but has no identity."
           )
-          // fixes previously initialized nodes with messed up keys
-          // TODO(#3115): we probably don't need this anymore; consider removing
-          rotateSigningKeyIfSameAsNamespaceKey(id, nodeIdentity)
-        case Some(id) =>
-          val msg =
-            s"Node has identity $id, but identifier $identifierName " +
-              s"was expected."
-          logger.error(msg)
-          Future.failed(Status.INTERNAL.withDescription(msg).asRuntimeException())
-        case None =>
-          Future.failed(
-            Status.INTERNAL
-              .withDescription(
-                s"${connection.serviceName} reports as initialized but " +
-                  s"has no identity."
-              )
-              .asRuntimeException()
-          )
-      }
-    } yield ()
+          .asRuntimeException()
+      )
+    }
 
   // Note: this method is not idempotent or crash fault tolerant. We accept that it may brick a node if initialization
   // fails, since we can easily recover by resetting the node.
@@ -164,6 +145,22 @@ class NodeInitializer(
       nodeIdentity: UniqueIdentifier => Member & NodeIdentity,
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
     logger.info(s"Making sure canton node has an identity")
+    withExpectedIdentifier(identifierName, nodeIdentity) {
+      logger.info(s"Node has no identity, generating a new one")
+      initializeWithNewIdentity(identifierName, nodeIdentity)
+    }
+  }
+
+  /** Reads the node's identity and checks that it carries the expected
+    * identifier. `ifNoIdentity` decides what to do when the node has none:
+    * either initialize it, or fail because Canton should already have.
+    */
+  private def withExpectedIdentifier(
+      identifierName: String,
+      nodeIdentity: UniqueIdentifier => Member & NodeIdentity,
+  )(
+      ifNoIdentity: => Future[Unit]
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
     val emptyIdDeadline = new AtomicReference[Option[Deadline]](None)
     for {
       // If the node was started concurrently with the app, it might not immediately be responding, so we're
@@ -207,29 +204,18 @@ class NodeInitializer(
         logger,
       )
       _ <- nodeId.uniqueIdentifier match {
+        case Some(id) if id.identifier.unwrap == identifierName =>
+          logger.info(
+            s"Node has identity $id, matching expected identifier $identifierName."
+          )
+          // fixes previously initialized nodes with messed up keys
+          // TODO(#3115): we probably don't need this anymore; consider removing
+          rotateSigningKeyIfSameAsNamespaceKey(id, nodeIdentity)
         case Some(id) =>
-          if (id.identifier.unwrap == identifierName) {
-            logger.info(
-              s"Node has identity $id, matching expected identifier $identifierName."
-            )
-            // fixes previously initialized nodes with messed up keys
-            // TODO(#3115): we probably don't need this anymore; consider removing
-            rotateSigningKeyIfSameAsNamespaceKey(id, nodeIdentity)
-          } else {
-            logger.error(
-              s"Node has identity $id, but identifier $identifierName was expected."
-            )
-            Future.failed(
-              Status.INTERNAL
-                .withDescription(
-                  s"Node has identity $id, but identifier $identifierName was expected."
-                )
-                .asRuntimeException()
-            )
-          }
-        case None =>
-          logger.info(s"Node has no identity, generating a new one")
-          initializeWithNewIdentity(identifierName, nodeIdentity)
+          val msg = s"Node has identity $id, but identifier $identifierName was expected."
+          logger.error(msg)
+          Future.failed(Status.INTERNAL.withDescription(msg).asRuntimeException())
+        case None => ifNoIdentity
       }
     } yield ()
   }
