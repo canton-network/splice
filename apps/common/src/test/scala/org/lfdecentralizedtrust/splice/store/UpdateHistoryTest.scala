@@ -16,7 +16,7 @@ import com.digitalasset.canton.util.{HexString, MonadUtil}
 import com.digitalasset.daml.lf.data.Bytes
 import com.google.rpc.status.Status
 import com.google.rpc.status.Status.toJavaProto
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, AppRewardCoupon}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import com.digitalasset.canton.time.SimClock
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
@@ -144,34 +144,6 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           _ <- create(domain1, cid2, offset2, party1, store, time(20))
         } yield store.startAnalyzableTimeWindow shouldBe Some(
           time(20).minus(java.time.Duration.ofSeconds(atwSeconds))
-        )
-      }
-
-      "handle single create and query it by contract id" in {
-        val store = mkStore()
-        for {
-          _ <- initStore(store)
-          result <- store.lookupContractById(AppRewardCoupon.COMPANION)(
-            new AppRewardCoupon.ContractId(cid1)
-          )
-          _ = result shouldBe None
-          _ <- create(domain1, cid1, offset1, party1, store, time(1))
-          result <- store.lookupContractById(AppRewardCoupon.COMPANION)(
-            new AppRewardCoupon.ContractId(cid1)
-          )
-          _ = result shouldBe Some(
-            appRewardCoupon(
-              round = 0,
-              provider = party1,
-              contractId = cid1,
-            )
-          )
-          updates <- updates(store)
-        } yield checkUpdates(
-          updates,
-          Seq(
-            ExpectedCreate(cid1, domain1)
-          ),
         )
       }
 
@@ -839,8 +811,7 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
     "reading across the cutover to partitioned tables" should {
 
       "return the same results as without the cutover" in {
-        val store1 = mkStore(party1, migration1, participant1)
-        val store2 = mkStore(party1, migration2, participant1)
+        val store = mkStore(party1, migration1, participant1)
         val unit = com.daml.ledger.javaapi.data.Unit.getInstance()
         def archive(
             domain: SynchronizerId,
@@ -883,47 +854,38 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
         }
 
         def readEverything(
-            store1: UpdateHistory,
-            store2: UpdateHistory,
+            store: UpdateHistory,
             updateIds: Seq[String],
         ) = for {
-          allUpdates <- store2.getAllUpdates(None, PageLimit.tryCreate(1000))
-          allUpdatesPaginated <- paginate(store2.getAllUpdates(_, PageLimit.tryCreate(2)))
-          withoutImports <- store2.getUpdatesWithoutImportUpdates(None, PageLimit.tryCreate(1000))
+          allUpdates <- store.getAllUpdates(None, PageLimit.tryCreate(1000))
+          allUpdatesPaginated <- paginate(store.getAllUpdates(_, PageLimit.tryCreate(2)))
+          withoutImports <- store.getUpdatesWithoutImportUpdates(None, PageLimit.tryCreate(1000))
           withoutImportsPaginated <- paginate(
-            store2.getUpdatesWithoutImportUpdates(_, PageLimit.tryCreate(2))
+            store.getUpdatesWithoutImportUpdates(_, PageLimit.tryCreate(2))
           )
-          before <- store2.getUpdatesBefore(
-            migration2,
+          before <- store.getUpdatesBefore(
+            migration1,
             domain1,
             time(10),
             None,
             PageLimit.tryCreate(1000),
           )
-          beforeAtOrAfter <- store2.getUpdatesBefore(
-            migration2,
+          beforeAtOrAfter <- store.getUpdatesBefore(
+            migration1,
             domain1,
             time(10),
             Some(time(6)),
             PageLimit.tryCreate(2),
           )
-          byId <- MonadUtil.sequentialTraverse(updateIds)(store2.getUpdate)
-          rangeBySynchronizer1 <- store1.getRecordTimeRangeBySynchronizer(migration1)
-          rangeBySynchronizer2 <- store2.getRecordTimeRangeBySynchronizer(migration2)
-          range1 <- store1.getRecordTimeRange(migration1)
-          range2 <- store2.getRecordTimeRange(migration2)
-          previousMigration <- store2.getPreviousMigrationId(migration2)
-          importUpdates <- store2.getImportUpdates(migration2, "", PageLimit.tryCreate(1000))
-          lastImportUpdateId <- store2.getLastImportUpdateId(migration2)
+          byId <- MonadUtil.sequentialTraverse(updateIds)(store.getUpdate)
+          range <- store.getRecordTimeRange(migration1)
+          previousMigration <- store.getPreviousMigrationId(migration1)
+          importUpdates <- store.getImportUpdates(migration1, "", PageLimit.tryCreate(1000))
+          lastImportUpdateId <- store.getLastImportUpdateId(migration1)
           lowestMigrations <- MonadUtil.sequentialTraverse(Seq(time(0), time(5), time(8)))(
-            store2.getLowestMigrationForRecordTime
+            store.getLowestMigrationForRecordTime
           )
-          contracts <- MonadUtil.sequentialTraverse(cids)(cid =>
-            store2.lookupContractById(AppRewardCoupon.COMPANION)(
-              new AppRewardCoupon.ContractId(cid)
-            )
-          )
-          backfillingState <- store2.getBackfillingState()
+          backfillingState <- store.getBackfillingState()
         } yield (
           allUpdates,
           allUpdatesPaginated,
@@ -932,9 +894,8 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
           before,
           beforeAtOrAfter,
           byId,
-          (rangeBySynchronizer1, rangeBySynchronizer2, range1, range2),
+          range,
           (previousMigration, importUpdates, lastImportUpdateId, lowestMigrations),
-          contracts,
           backfillingState,
         )
 
@@ -944,8 +905,8 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
             .failOnShutdown
 
         for {
-          _ <- initStore(store1)
-          tx1 <- create(domain1, cids(0), validOffset(1), party1, store1, time(1))
+          _ <- initStore(store)
+          tx1 <- create(domain1, cids(0), validOffset(1), party1, store, time(1))
           _ <- unassign(
             domain1,
             domain2,
@@ -954,7 +915,7 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
             party1,
             1,
             reassignmentId1,
-            store1,
+            store,
             time(2),
           )
           _ <- assign(
@@ -965,48 +926,45 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
             party1,
             1,
             reassignmentId1,
-            store1,
+            store,
             time(3),
           )
-          tx4 <- archive(domain2, cids(0), validOffset(4), store1, time(4))
-          tx5 <- create(domain1, cids(1), validOffset(5), party1, store1, time(5))
-
-          _ <- initStore(store2)
-          _ <- importUpdate(tx5, validOffset(1), store2)
-          tx6 <- create(domain1, cids(2), validOffset(2), party1, store2, time(6))
-          tx7 <- archive(domain1, cids(1), validOffset(3), store2, time(7))
-          tx8 <- create(domain1, cids(3), validOffset(4), party1, store2, time(8))
+          tx4 <- archive(domain2, cids(0), validOffset(4), store, time(4))
+          tx5 <- create(domain1, cids(1), validOffset(5), party1, store, time(5))
+          tx6 <- create(domain1, cids(2), validOffset(6), party1, store, time(6))
+          tx7 <- archive(domain1, cids(1), validOffset(7), store, time(7))
+          tx8 <- create(domain1, cids(3), validOffset(8), party1, store, time(8))
           _ <- unassign(
             domain1,
             domain2,
             cids(3),
-            validOffset(5),
+            validOffset(9),
             party1,
             1,
             "%08d".format(2),
-            store2,
+            store,
             time(9),
           )
-          tx9 <- archive(domain1, cids(2), validOffset(6), store2, time(9).plusMillis(1))
+          tx9 <- archive(domain1, cids(2), validOffset(10), store, time(9).plusMillis(1))
           updateIds = Seq(tx1, tx4, tx5, tx6, tx7, tx8, tx9).map(_.getUpdateId)
 
-          uncut <- readEverything(store1, store2, updateIds)
-          _ <- moveToLegacyTables(store1.historyId, time(7))
-          cutStore1 = mkStore(party1, migration1, participant1)
-          cutStore2 = mkStore(party1, migration2, participant1)
-          cut <- readEverything(cutStore1, cutStore2, updateIds)
+          uncut <- readEverything(store, updateIds)
+          _ <- moveToLegacyTables(store.historyId, time(7))
+          _ <- forgetLastLegacyRecordTime(store.historyId)
+          cutStore = mkStore(party1, migration1, participant1)
+          cut <- readEverything(cutStore, updateIds)
           legacyTransactions <- countRows("update_history_transactions_legacy")
           partitionedTransactions <- countRows("update_history_transactions")
           legacyExercises <- countRows("update_history_exercises_legacy")
           partitionedExercises <- countRows("update_history_exercises")
         } yield {
-          store2.lastLegacyRecordTime shouldBe None
-          cutStore2.lastLegacyRecordTime shouldBe Some(time(6))
-          legacyTransactions shouldBe 5
+          store.lastLegacyRecordTime shouldBe None
+          cutStore.lastLegacyRecordTime shouldBe Some(time(6))
+          legacyTransactions shouldBe 4
           partitionedTransactions shouldBe 3
           legacyExercises shouldBe 1
           partitionedExercises shouldBe 2
-          uncut._1 should have size 11
+          uncut._1 should have size 10
           cut shouldBe uncut
         }
       }
