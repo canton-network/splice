@@ -21,7 +21,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | H | evidence loss (sys.exit, teardown cascade) | 10137, 10139, 10183, 10088, 10180, 10176 | fix branches open |
 | H2 | LSU: validator init against a non-active psid | 10088, 10174, 10180 | 10174 fixed, 10180 open |
 | H3 | trigger pause timeout (TriggerTestUtil.scala:93) | 10175, 10176 | 10175 fixed |
-| I | test races (venue, bulk storage, traffic, external party, sv4 sequencer) | 8784, 10149, 10179, 10690, 10691 | mixed |
+| I | test races (venue, bulk storage, traffic, external party, sv4 sequencer, sequencer reconnect) | 8784, 10149, 10179, 10690, 10691, 11238 | mixed |
 | J | infra, no code change | many | see section |
 | K | sim time: mediator pruning backoff after a 30 d jump | 10184 | PR 7440 open (2026-09-22) |
 | L | reference sequencer `insert block` 40001 retry storm | 10139, 10197, 11160, 11189, 11191 | open; goes away with splice#8234 (all tests on DA BFT) |
@@ -232,6 +232,13 @@ State as recorded in the family section, not rechecked against the tracker on 20
 - 10691: SvOnboardingAddlIntegrationTest waits 1 minute for sv4's own sequencer, which is published with a 60 s
   `availableAfter`; synchronizer-time lag on an idle synchronizer pushes the reconcile past the deadline. Confirm:
   sv4Validator's `For synchronizer 'global' at time` lines only list :5408 after the test failed. Fix: 2 minutes.
+- 11238: SvInitializationIntegrationTest "connect to all domains during initialization" reads sv4's
+  `list_connected()` once after `sv4Backend.startSync()`, while sv4Validator's ReconcileSequencerConnectionsTrigger
+  bounces the connection (disconnect + reconnect, ~60 ms) to add a sequencer that just passed its 60 s `availableAfter`.
+  Signature: `inside ... was: List() (SvInitializationIntegrationTest.scala:82)`. Confirm: sv4Validator
+  `reconnect to the synchronizer Synchronizer 'global' for new sequencer configuration to take effect` and the
+  canton `Disconnected from Synchronizer 'global'` of sv4Participant within 100 ms before the test's
+  `ListConnectedSynchronizers()`. Earlier hit 5051 (2025-07, unanalysed). Fix: `eventually()` around the read.
 
 
 ## K. Sim time: mediator pruning scheduler backoff after a jump of at least the retention period
