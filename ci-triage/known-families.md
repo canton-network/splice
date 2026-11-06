@@ -374,6 +374,11 @@ State as recorded in the family section, not rechecked against the tracker on 20
   lines only once backported. Does not cover the CircleCI preflight jobs (11221, 10677, 10736:
   `preflight_check_final_upgrade_docker`, 20 min `timeout` around sbt). A cold-compile timeout in a GHA shard after
   that merge (on main) is a regression of #8319, not a plain duplicate.
+  Checked 2026-11-06: no release line has the step (`name: Compile tests` absent on release-line-0.10.0, 0.9.4, 0.9.x).
+  cni#7978 (merged 2026-11-05) adds Test/compile to CircleCI preflight_check_docker; whether it covers
+  preflight_check_final_upgrade_docker is unconfirmed. Job-level `timeout-minutes` still covers compile + tests
+  (build.scala_test.yml 60, _for_compose 45, _with_cometbft 35): a cold compile can now end as a *cancelled* job
+  instead of `Killed SBT`; treat that as this family. Cache misses themselves: 11220 (open; splice #8312 closed unmerged).
 - Helm values schema with `additionalProperties: false` (#7178) rejecting a value a concurrent chart change added
   (`httpHealthProbes`, #7976): deployment_test `- at '/httpHealthProbes': false schema`, and CircleCI deploys of that
   splice commit. 10683, 10688, likely 10689. Fixed by the #8015 revert.
