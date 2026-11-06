@@ -58,3 +58,30 @@ zcat log/11187/art/canton_network_test.clog.gz | jq -r 'select(.["@timestamp"]>=
 The failing step is the second search (after "Reserving ans name: mycool_entry.unverified.ans", 14:55:07.130), not the
 first. The `Render` / `RequestAnsEntry` console lines are React render-trace output of alice's page; they show a render of
 the component holding the button between the clickable check and the click, not which state change caused it.
+
+## 5. What replaced the button (added 2026-11-06)
+
+```
+zcat log/11187/art/canton_network_test.clog.gz | jq -r 'select(.["@timestamp"]>="2026-11-04T14:55:07.17" and .["@timestamp"]<="2026-11-04T14:55:08.2") | select(.message|test("by-name|ans-entries|mycool_entry";"i")) | [.["@timestamp"][11:23], .logger_name, .message]|@tsv'
+git show FETCH_HEAD:apps/ans/frontend/src/components/RequestAnsEntry.tsx | sed -n 50,77p
+git show FETCH_HEAD:apps/common/frontend/src/components/DisableConditionally.tsx | sed -n 38,60p
+```
+```
+14:55:07.801 web-frontend=alice | scan-proxy calling GET http://localhost:5503/api/validator/v0/scan-proxy/ans-entries/by-name/mycool_entry.unverified.ans with body: undefined ...
+14:55:07.811 validator=aliceValidator | HTTP GET /api/validator/v0/scan-proxy/ans-entries/by-name/mycool_entry.unverified.ans from (127.0.0.1:40760): Responding with status code: 200 OK
+```
+RequestAnsEntry.tsx: `<DisableConditionally conditions={[{ disabled: nameLookupStatus === 'loading', reason: 'Loading...' }]}>`
+around `<Button id="search-entry-button">`; the Searchbar's `onChange` calls `debounced(...)`, `onKeyDown` Enter calls
+`setDisplayValidationResult(true); debounced.flush()` (same as the button's onClick).
+DisableConditionally.tsx: disabled -> `<Stack>... <Tooltip ...><span>{cloneElement(child, {disabled: true})}</span></Tooltip></Stack>`,
+enabled -> `props.children`. Different element trees, so React unmounts and remounts the Button on each toggle.
+
+Mechanism: the debounced lookup started at 14:55:07.801, 8 ms after the clickable check (.793), switching the button to
+the disabled tree; the click inside `clickOn` (FrontendIntegrationTest.scala:866) at ~.854 hit the old node.
+Inferred, not shown: the exact remount moments (the render-trace lines `MuiStackRoot`/`ForwardRef(Tooltip)` at .797 fit
+the disabled tree but other components also render those).
+
+PR 3604 (6828) re-found the element inside `eventually` by calling `checkNewVoteRequestInProgressTab` again; the query
+was unchanged. `eventuallyClickOn` already finds by query at click time, so the window here is inside `clickOn`.
+A retry of `clickOn` alone can land on the disabled button (Selenium clicks it without error, onClick does not fire).
+Fix options: DisableConditionally renders the same tree in both states; or the test presses Enter in entry-name-field.
