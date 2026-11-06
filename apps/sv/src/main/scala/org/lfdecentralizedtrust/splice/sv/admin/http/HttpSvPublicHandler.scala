@@ -9,7 +9,7 @@ import cats.syntax.option.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
+import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
@@ -465,10 +465,9 @@ class HttpSvPublicHandler(
           candidateParty =>
             for {
               participantId <- candidateParticipant(candidateParty)
-              prepared <- HttpSvPublicHandler.unavailableOnGrpcFailure(
-                s"Preparing DSO party hosting on $participantId",
-                logger,
-              )(dsoPartyMigration.authorizeParticipantForHostingDsoParty(participantId).value)
+              prepared <- dsoPartyMigration
+                .authorizeParticipantForHostingDsoParty(participantId)
+                .value
               response <- HttpSvPublicHandler.onboardSvPartyMigrationPrepareResponse(
                 onboardingSnapshotService,
                 prepared,
@@ -888,16 +887,6 @@ class HttpSvPublicHandler(
 
 object HttpSvPublicHandler {
 
-  private[http] def unavailableOnGrpcFailure[T](description: String, logger: TracedLogger)(
-      check: Future[T]
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] =
-    check.recoverWith { case e: StatusRuntimeException =>
-      logger.info(s"$description failed", e)
-      Future.failed(
-        HttpErrorHandler.serviceUnavailable(s"$description failed: ${e.getStatus.getCode}")
-      )
-    }
-
   private def proposalNotFoundResponse(
       partyToParticipantSerial: PositiveInt
   ): definitions.ProposalNotFoundErrorResponse =
@@ -919,6 +908,16 @@ object HttpSvPublicHandler {
     prepared match {
       case Left(DsoPartyHosting.RequiredProposalNotFound(partyToParticipantSerial)) =>
         Future.successful(respond.BadRequest(proposalNotFoundResponse(partyToParticipantSerial)))
+      case Left(DsoPartyHosting.AcceptedStateNotFound(participantId)) =>
+        Future.successful(
+          respond.BadRequest(
+            definitions.AcceptedStateNotFoundErrorResponse(
+              definitions.ErrorResponse(
+                s"Transaction where the participant $participantId was activated not found."
+              )
+            )
+          )
+        )
       case Right(key) =>
         snapshotService
           .prepare(key, exportSnapshot(key, _))
