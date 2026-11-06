@@ -12,7 +12,7 @@ const AmuletPriceVotes: React.FC = () => {
 
   return (
     <Layout>
-      <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
+      <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
         <Container maxWidth="lg" sx={{ marginTop: 2 }}>
           <MedianAmuletPrice amuletName={config.spliceInstanceNames.amuletName} />
           <ListAmuletPriceVotes />

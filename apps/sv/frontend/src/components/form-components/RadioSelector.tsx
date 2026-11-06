@@ -80,11 +80,13 @@ export const RadioSelector: React.FC<RadioSelectorProps> = props => {
   return (
     <Box id={id} data-testid={id} sx={sectionSx}>
       <Typography
-        fontSize={12}
-        lineHeight="22px"
-        fontWeight={600}
-        textTransform="uppercase"
-        color="common.white"
+        sx={{
+          fontSize: 12,
+          lineHeight: '22px',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          color: 'common.white',
+        }}
       >
         {title}
       </Typography>
@@ -116,11 +118,11 @@ export const RadioSelector: React.FC<RadioSelectorProps> = props => {
             }
             label={
               <Box sx={optionLabelColumnSx}>
-                <Typography variant="body2" lineHeight="22px" color="text.light">
+                <Typography variant="body2" sx={{ lineHeight: '22px', color: 'text.light' }}>
                   {option.label}
                 </Typography>
                 {option.description && (
-                  <Typography fontSize={12} lineHeight="22px" color="text.light">
+                  <Typography sx={{ fontSize: 12, lineHeight: '22px', color: 'text.light' }}>
                     {option.description}
                   </Typography>
                 )}

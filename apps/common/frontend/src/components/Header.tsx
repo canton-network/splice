@@ -35,11 +35,15 @@ const Header: React.FC<HeaderProps> = ({ children, title, titleVariant, navLinks
       >
         <Typography
           id="app-title"
-          textTransform="uppercase"
           variant={titleVariant || 'h5'}
-          fontFamily={theme => theme.fonts.monospace.fontFamily}
-          fontWeight={theme => theme.fonts.monospace.fontWeight}
-          sx={{ flexShrink: 0, textWrap: 'balance', marginRight: 2 }}
+          sx={{
+            flexShrink: 0,
+            textWrap: 'balance',
+            marginRight: 2,
+            textTransform: 'uppercase',
+            fontFamily: theme => theme.fonts.monospace.fontFamily,
+            fontWeight: theme => theme.fonts.monospace.fontWeight,
+          }}
         >
           {title}
         </Typography>
@@ -48,9 +52,7 @@ const Header: React.FC<HeaderProps> = ({ children, title, titleVariant, navLinks
           <Stack
             direction="row"
             spacing={3}
-            alignItems="center"
-            justifyContent="space-evenly"
-            sx={{ flex: 1 }}
+            sx={{ alignItems: 'center', justifyContent: 'space-evenly', flex: 1 }}
           >
             {navLinks.map((navLink, index) => (
               <Box key={`nav-link-${index}`}>

@@ -11,7 +11,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 DEFAULT_GROUP_NAME = "Upcoming"
 
@@ -33,7 +33,7 @@ ACTIVITY_DAML = "Splice Daml Model Effectivity"
 ACTIVITY_LSU = "Protocol Upgrades (LSU)"
 ACTIVITY_CONFIG = "Configuration Change"
 
-_BOARD_CACHE: dict[int, dict] = {}
+_BOARD_CACHE: dict[int, dict[str, Any]] = {}
 _ITEMS_CACHE: dict[int, dict[str, list[str]]] = {}
 
 
@@ -134,7 +134,7 @@ def board_id_from_env() -> int:
         raise RuntimeError(f"MONDAY_BOARD_ID must be numeric; got {value!r}") from exc
 
 
-def monday_request(token: str, query: str, variables: dict) -> dict:
+def monday_request(token: str, query: str, variables: dict[str, Any]) -> dict[str, Any]:
     headers = {"Authorization": token, "Content-Type": "application/json",
                "Accept": "application/graphql-response+json, application/json"}
 
@@ -160,7 +160,7 @@ def monday_request(token: str, query: str, variables: dict) -> dict:
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Could not reach Monday API: {exc}") from exc
 
-    parsed = json.loads(body)
+    parsed: dict[str, Any] = json.loads(body)
 
     if parsed.get("errors"):
         raise RuntimeError(
@@ -170,7 +170,7 @@ def monday_request(token: str, query: str, variables: dict) -> dict:
     return parsed
 
 
-def get_board(token: str, board_id: int) -> dict:
+def get_board(token: str, board_id: int) -> dict[str, Any]:
     if board_id in _BOARD_CACHE:
         return _BOARD_CACHE[board_id]
 
@@ -197,7 +197,7 @@ def get_board(token: str, board_id: int) -> dict:
 
     response = monday_request(token, query, {"boardId": [board_id]})
 
-    boards = response.get("data", {}).get("boards", [])
+    boards: list[dict[str, Any]] = response.get("data", {}).get("boards", [])
 
     if not boards:
         raise RuntimeError(f"Board not found or not accessible: {board_id}")
@@ -207,10 +207,10 @@ def get_board(token: str, board_id: int) -> dict:
     return boards[0]
 
 
-def get_column(board: dict, title: str) -> dict:
+def get_column(board: dict[str, Any], title: str) -> dict[str, Any]:
     target = title.strip().casefold()
 
-    matches = [
+    matches: list[dict[str, Any]] = [
         column
         for column in board.get("columns", [])
         if (str(column.get("title", "")).strip().casefold() == target)
@@ -229,7 +229,7 @@ def get_column(board: dict, title: str) -> dict:
     return matches[0]
 
 
-def get_group_id(board: dict, group_name: str) -> str:
+def get_group_id(board: dict[str, Any], group_name: str) -> str:
     target = group_name.strip().casefold()
 
     matches = [
@@ -257,7 +257,7 @@ def get_group_id(board: dict, group_name: str) -> str:
     return str(matches[0]["id"])
 
 
-def column_labels(column: dict) -> set[str]:
+def column_labels(column: dict[str, Any]) -> set[str]:
     settings = column.get("settings") or {}
 
     if isinstance(settings, str):
@@ -298,7 +298,7 @@ def column_labels(column: dict) -> set[str]:
     return labels
 
 
-def ensure_column_type(column: dict, allowed: set[str]) -> None:
+def ensure_column_type(column: dict[str, Any], allowed: set[str]) -> None:
     actual = str(column.get("type", "")).lower()
 
     if actual not in allowed:
@@ -307,7 +307,7 @@ def ensure_column_type(column: dict, allowed: set[str]) -> None:
         )
 
 
-def require_label(column: dict, label: str) -> None:
+def require_label(column: dict[str, Any], label: str) -> None:
     labels = column_labels(column)
 
     if labels and label not in labels:
@@ -316,7 +316,7 @@ def require_label(column: dict, label: str) -> None:
         )
 
 
-def preflight(token: str, board_id: int, group_name: str) -> tuple[dict, str]:
+def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any], str]:
     board = get_board(token, board_id)
 
     date_col = get_column(board, DATE_COLUMN_NAME)
@@ -354,7 +354,7 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict, str]:
     return (board, get_group_id(board, group_name))
 
 
-def choice_value(column: dict, label: str):
+def choice_value(column: dict[str, Any], label: str) -> dict[str, Any] | str:
     column_type = str(column.get("type", "")).lower()
 
     if column_type in {"status", "color"}:
@@ -369,7 +369,7 @@ def choice_value(column: dict, label: str):
     raise RuntimeError(f"Unsupported choice column type {column_type!r} for {column['title']!r}")
 
 
-def date_value(event_date: datetime.date, time_utc: Optional[str]) -> dict:
+def date_value(event_date: datetime.date, time_utc: Optional[str]) -> dict[str, Any]:
     value = {"date": event_date.isoformat()}
 
     if time_utc is not None:
@@ -382,8 +382,8 @@ def date_value(event_date: datetime.date, time_utc: Optional[str]) -> dict:
 
 
 def build_column_values(
-    board: dict, event: ScheduledEvent, include_submission_status: bool
-) -> dict:
+    board: dict[str, Any], event: ScheduledEvent, include_submission_status: bool
+) -> dict[str, Any]:
     date_col = get_column(board, DATE_COLUMN_NAME)
 
     network_col = get_column(board, NETWORK_COLUMN_NAME)
@@ -469,7 +469,7 @@ def load_existing_items(token: str, board_id: int) -> dict[str, list[str]]:
 
 
 def create_item(
-    token: str, board_id: int, group_id: str, board: dict, event: ScheduledEvent
+    token: str, board_id: int, group_id: str, board: dict[str, Any], event: ScheduledEvent
 ) -> str:
     mutation = """
     mutation CreateItem(
@@ -507,7 +507,7 @@ def create_item(
 
 
 def update_item(
-    token: str, board_id: int, board: dict, item_id: str, event: ScheduledEvent
+    token: str, board_id: int, board: dict[str, Any], item_id: str, event: ScheduledEvent
 ) -> None:
     mutation = """
     mutation UpdateItem(
@@ -549,7 +549,7 @@ def describe_event(event: ScheduledEvent) -> str:
 
 
 def upsert_event(
-    token: str, board_id: int, group_id: str, board: dict, event: ScheduledEvent, dry_run: bool
+    token: str, board_id: int, group_id: str, board: dict[str, Any], event: ScheduledEvent, dry_run: bool
 ) -> Optional[str]:
     items = load_existing_items(token, board_id)
 
@@ -589,7 +589,7 @@ def upsert_event(
 
 
 def set_dependency(
-    token: str, board_id: int, board: dict, item_id: str, dependency_item_id: str
+    token: str, board_id: int, board: dict[str, Any], item_id: str, dependency_item_id: str
 ) -> None:
     dependency_col = get_column(board, DEPENDENCY_COLUMN_NAME)
 
@@ -627,7 +627,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
 
     patch_count = mondays_in_month(month)
 
-    specs = [
+    specs: list[dict[str, Any]] = [
         {
             "network": NETWORK_DEVNET,
             "weekly_offset": 0,

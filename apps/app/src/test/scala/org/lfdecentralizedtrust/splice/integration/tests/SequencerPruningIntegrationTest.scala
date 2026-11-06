@@ -1,6 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.config.{FullClientConfig, NonNegativeFiniteDuration}
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.logging.SuppressionRule
@@ -37,7 +37,10 @@ class SequencerPruningIntegrationTest
                     Some(
                       SequencerPruningConfig(
                         pruningInterval = NonNegativeFiniteDuration(2.seconds),
-                        retentionPeriod = NonNegativeFiniteDuration(120.seconds),
+                        // Members that are behind the retention period get disabled. Healthy members acknowledge
+                        // every minute, but a slowly ordered acknowledgement makes the sequencer drop the next one
+                        // (conflation window), so their last acknowledgement can be over two minutes old.
+                        retentionPeriod = NonNegativeFiniteDuration(180.seconds),
                       )
                     )
                   )
@@ -60,7 +63,12 @@ class SequencerPruningIntegrationTest
                 bobValidatorConfig
                   .copy(
                     participantClient = ParticipantClientConfig(
-                      FullClientConfig(port = Port.tryCreate(5902)),
+                      bobValidatorConfig.participantClient.adminApi.copy(
+                        clientConfig =
+                          bobValidatorConfig.participantClient.adminApi.clientConfig.copy(
+                            port = Port.tryCreate(5902)
+                          )
+                      ),
                       bobValidatorConfig.participantClient.ledgerApi.copy(
                         clientConfig =
                           bobValidatorConfig.participantClient.ledgerApi.clientConfig.copy(
@@ -137,7 +145,7 @@ class SequencerPruningIntegrationTest
           entry.message should include regex show"LaggingMember\\(member = $unavailableParticipantId"
         }
       },
-      timeUntilSuccess = 3.minutes,
+      timeUntilSuccess = 5.minutes,
     )
   }
 }

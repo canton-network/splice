@@ -127,7 +127,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     error={!field.state.meta.isValid}
                     helperText={field.state.meta.errors?.[0]}
                     placeholder={VOTE_REASON_PLACEHOLDER}
-                    inputProps={{ 'data-testid': 'your-vote-reason-input' }}
+                    slotProps={{ htmlInput: { 'data-testid': 'your-vote-reason-input' } }}
                     sx={proposalSummaryFieldSx}
                   />
                 </Box>
@@ -170,7 +170,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                       </span>
                     }
                     placeholder={VOTE_REASON_URL_PLACEHOLDER}
-                    inputProps={{ 'data-testid': 'your-vote-url-input' }}
+                    slotProps={{ htmlInput: { 'data-testid': 'your-vote-url-input' } }}
                     sx={singleLineFieldSx}
                   />
                 </Box>
@@ -193,7 +193,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
               }}
             >
               {isSubmitting ? (
-                <Typography color="text.secondary">Submitting...</Typography>
+                <Typography sx={{ color: 'text.secondary' }}>Submitting...</Typography>
               ) : (
                 <>
                   <Button

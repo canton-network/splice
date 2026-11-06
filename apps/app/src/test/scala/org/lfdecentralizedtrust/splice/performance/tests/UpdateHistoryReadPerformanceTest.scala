@@ -2,7 +2,12 @@ package org.lfdecentralizedtrust.splice.performance.tests
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
+import com.digitalasset.canton.config.{
+  NonNegativeFiniteDuration,
+  ProcessingTimeout,
+  QueryCostMonitoringConfig,
+  StorageConfig,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
@@ -56,6 +61,9 @@ class UpdateHistoryReadPerformanceTest(
     ) {
 
   override type Store = UpdateHistory
+
+  override protected def logQueryCost: Option[QueryCostMonitoringConfig] =
+    Some(QueryCostMonitoringConfig(every = NonNegativeFiniteDuration.ofSeconds(5)))
 
   override protected def mkStore(storage: DbStorage): Future[UpdateHistory] = {
     implicit val initTc: TraceContext = TraceContext.empty

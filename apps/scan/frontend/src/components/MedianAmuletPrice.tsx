@@ -45,8 +45,8 @@ export const MedianAmuletPrice: React.FC<MedianAmuletPriceProps> = props => {
   }
 
   return (
-    <Stack mt={4} spacing={2} direction="column" justifyContent="center">
-      <Typography mt={4} variant="h4">
+    <Stack spacing={2} direction="column" sx={{ mt: 4, justifyContent: 'center' }}>
+      <Typography variant="h4" sx={{ mt: 4 }}>
         {amuletName} Price for Next Open Mining Round
       </Typography>
       <Typography id="median-amulet-price-usd" variant="h2">

@@ -67,8 +67,8 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
               {change.disabled && (
                 <Typography
                   variant="caption"
-                  color="warning.main"
                   data-testid="config-change-disabled-label"
+                  sx={{ color: 'warning.main' }}
                 >
                   Disabled field
                 </Typography>
@@ -98,8 +98,8 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
                   ) : (
                     <Typography
                       variant="body2"
-                      fontFamily="monospace"
                       data-testid="config-change-current-value"
+                      sx={{ fontFamily: 'monospace' }}
                     >
                       {change.currentValue}
                     </Typography>
@@ -133,8 +133,8 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
               ) : (
                 <Typography
                   variant="body2"
-                  fontFamily="monospace"
                   data-testid="config-change-new-value"
+                  sx={{ fontFamily: 'monospace' }}
                 >
                   {change.newValue}
                 </Typography>

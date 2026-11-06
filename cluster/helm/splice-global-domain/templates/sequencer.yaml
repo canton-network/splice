@@ -233,7 +233,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- end }}
-          image: {{ $p.initImageName | default "postgres:14" }}
+          image: {{ $p.initImageName | default "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6" }}
           env:
             - name: PGPASSWORD
               {{- if or (and .Values.sequencer.driver ((.Values.sequencer.driver.persistence).secretOverrides).postgresPassword) ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}

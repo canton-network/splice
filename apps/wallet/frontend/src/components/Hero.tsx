@@ -28,7 +28,7 @@ const Hero: React.FC = () => {
   }
 
   return (
-    <Stack mt={4} mb={4} spacing={4} direction="row" justifyContent="space-between">
+    <Stack spacing={4} direction="row" sx={{ mt: 4, mb: 4, justifyContent: 'space-between' }}>
       <Stack direction="column" spacing={1}>
         {isLoading ? (
           <Loading />

@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
   TransferTxLogEntry,
   TxLogEntry,
 }
+import org.scalatest.Tag
 
 import com.digitalasset.canton.topology.PartyId
 
@@ -428,7 +429,9 @@ class TokenStandardTransferIntegrationTest
       )
     }
 
-    "buy traffic through a transfer to the traffic purchase receiver" in { implicit env =>
+    "buy traffic through a transfer to the traffic purchase receiver" taggedAs Tag(
+      "org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25"
+    ) in { implicit env =>
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(100)
 

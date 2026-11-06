@@ -33,9 +33,10 @@ class InMemoryPartyToParticipantStore extends PartyToParticipantStore {
   override def initialize(
       offset: Long,
       hostingParticipants: Map[PartyId, Seq[ParticipantId]],
-  ): Future[Unit] =
+  ): Future[Unit] = {
     if (state.compareAndSet(None, Some(State(offset, hostingParticipants)))) Future.unit
     else Future.failed(new IllegalStateException("PartyToParticipantStore is already initialized"))
+  }
 
   override def ingest(updates: Seq[TopologyTransactionUpdate]): Future[Unit] =
     Future.fromTry(Try {
@@ -70,7 +71,9 @@ object InMemoryPartyToParticipantStore {
             case _: ParticipantAuthorizationRevoked =>
               current.filterNot(_ == event.participantId)
           }
-          if (updated.isEmpty) acc - event.partyId else acc.updated(event.partyId, updated)
+          // Note that we do not remove the party from the map even if it has no participants,
+          // as it's still in the topology state, even if not hosted anywhere.
+          acc.updated(event.partyId, updated)
         },
       )
   }

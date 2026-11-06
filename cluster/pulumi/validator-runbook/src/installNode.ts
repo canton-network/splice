@@ -192,6 +192,12 @@ async function installValidator(
     validatorVersion
   );
   checkValidatorKeyDownloadForPeriodicBackups(validatorName, validatorConfig, backupConfig);
+  if (validatorConfig.migrateParty && !validatorConfig.participant.enableRepairCommands) {
+    throw new Error(
+      `${validatorName}: migrating the validator party requires importing its ACS through the participant's repair service. ` +
+        'Set `participant.enableRepairCommands: true` for this node in config.yaml.'
+    );
+  }
   const participantAddress = (
     await installParticipant(
       validatorConfig,
@@ -256,6 +262,15 @@ async function installValidator(
         }
       : undefined,
     participantPruningSchedule: participantPruningConfig,
+    walletSweep: validatorConfig.sweep && {
+      [validatorConfig.sweep.fromParty]: {
+        maxBalanceUSD: validatorConfig.sweep.maxBalance,
+        minBalanceUSD: validatorConfig.sweep.minBalance,
+        receiver: validatorConfig.sweep.toParty,
+        useTransferPreapproval: validatorConfig.sweep.useTransferPreapproval,
+        useTokenStandardTransfer: validatorConfig.sweep.useTokenStandardTransfer,
+      },
+    },
     ...(participantBootstrapDumpSecret ? { nodeIdentifier: newParticipantIdentifier } : {}),
     persistence: {
       ...validatorValuesFromYamlFiles.persistence,

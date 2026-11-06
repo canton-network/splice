@@ -15,9 +15,9 @@ const NetworkBanner: React.FC = () => {
   return (
     <Stack
       direction="row"
-      alignItems="center"
-      justifyContent="center"
       sx={{
+        alignItems: 'center',
+        justifyContent: 'center',
         position: 'sticky',
         top: 0,
         zIndex: theme => theme.zIndex.appBar,

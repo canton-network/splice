@@ -16,7 +16,12 @@ const PageSectionHeader: React.FC<PageSectionHeaderProps> = ({
   'data-testid': testId,
 }) => (
   <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-    <Typography variant="h3" fontSize={18} data-testid={`${testId}-title`} id={`${testId}-title`}>
+    <Typography
+      variant="h3"
+      data-testid={`${testId}-title`}
+      id={`${testId}-title`}
+      sx={{ fontSize: 18 }}
+    >
       {title}
     </Typography>
     <Badge

@@ -44,11 +44,11 @@ const ListAllocations: React.FC = () => {
     <Stack
       spacing={4}
       direction="column"
-      justifyContent="center"
       id="allocations"
       aria-labelledby="allocations-label"
+      sx={{ justifyContent: 'center' }}
     >
-      <Typography mt={6} variant="h4" id="allocations-label">
+      <Typography variant="h4" id="allocations-label" sx={{ mt: 6 }}>
         Allocations <Chip label={allocations.length} color="success" />
       </Typography>
       {allocations.map(allocation => (
@@ -81,8 +81,8 @@ const AllocationDisplay: React.FC<{
           alignItems: 'center',
         }}
       >
-        <Stack width="100%" spacing={2}>
-          <Stack direction="row" alignItems="center" spacing={1}>
+        <Stack spacing={2} sx={{ width: '100%' }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Chip label={v2 ? 'V2' : 'V1'} color={v2 ? 'primary' : 'default'} size="small" />
           </Stack>
           <AllocationSettlementDisplay settlement={settlement} />

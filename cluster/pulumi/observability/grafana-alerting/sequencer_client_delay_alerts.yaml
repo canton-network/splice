@@ -16,7 +16,7 @@ groups:
               datasourceUid: prometheus
               model:
                 editorMode: code
-                expr: min by (namespace, job) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros) - (daml_sequencer_client_handler_last_sequencing_time_micros>0)/1e6)
+                expr: min by (namespace, job) (timestamp(daml_sequencer_client_handler_last_sequencing_time_micros$LEGACY_MIGRATIONS_JOB_FILTER) - (daml_sequencer_client_handler_last_sequencing_time_micros$LEGACY_MIGRATIONS_JOB_FILTER>0)/1e6)
                 instant: true
                 intervalMs: 1000
                 legendFormat: __auto

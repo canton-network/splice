@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from 'react';
+import { JSX, useState } from 'react';
 
 import { Button, ButtonProps, Typography } from '@mui/material';
 
@@ -29,7 +29,7 @@ const WalletButton = <T,>(props: Props<T>, walletPage: string) => {
 
   return (
     <Button {...buttonProps} onClick={onClick} disabled={clicked}>
-      <Typography variant="body1" textTransform="none">
+      <Typography variant="body1" sx={{ textTransform: 'none' }}>
         {text}
       </Typography>
     </Button>
