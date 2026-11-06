@@ -1594,7 +1594,7 @@ class UpdateHistory private (
 
   // TODO (#8075): remove this
   def lookupContractById[TCId <: ContractId[?], T <: DamlRecord[?]](
-    companion: Contract.Companion.Template[TCId, T]
+      companion: Contract.Companion.Template[TCId, T]
   )(contractId: TCId)(implicit tc: TraceContext): Future[Option[Contract[TCId, T]]] = {
     for {
       // Annoyingly our index for contract id lookups does not include the history id.
