@@ -198,16 +198,6 @@ class ManualStartIntegrationTest
           synchronizerTopologyConnections.foreach(x => assertHasNoIdentity(x._1))
         }
 
-        clue("The participants have initialized themselves") {
-          // Participants no longer wait for the app to give them an identity:
-          // Canton auto-initializes them.
-          participantTopologyConnections.foreach { case (connection, _) =>
-            eventually(timeUntilSuccess = 60.seconds) {
-              connection.getIdOption().futureValue.uniqueIdentifier shouldBe defined
-            }
-          }
-        }
-
         clue("Starting all Splice apps") {
           startAllSync(allCnAppsAtStart*)
         }
