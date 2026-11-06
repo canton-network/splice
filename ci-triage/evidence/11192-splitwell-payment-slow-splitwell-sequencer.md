@@ -1,7 +1,7 @@
 # 11192 - SplitwellFrontendIntegrationTest settle debts: payment accept took 21.5 s (run 41896689021)
 
 new. main 8e9e279feae2 (contains #8227, family AE fix), job 126808631728 `frontend-wall-clock-time (1)` (attempt 1).
-Slow splitwell synchronizer: the payment needs its AppPaymentRequest unassigned from splitwell to global first; slow
+Slow reference sequencer stores (all three sequencers stalled together, section 5): the payment needs its AppPaymentRequest unassigned from splitwell to global first; slow
 Postgres writes on the splitwell sequencer made the unassignment take 13 s, and the accept 21.5 s, longer than the
 20 s the test waits for the redirect back to Splitwell.
 
@@ -48,6 +48,24 @@ Unassignment 13.2 s, assignment 4.5 s, transaction 2.7 s.
 ```
 A 3.4 s reference-driver insert (46.419 to 49.804) and a 4 s gap before the verdict was read back. Not family L
 (`ref_seq_contention.py` on canton.clog.gz: 0 failed inserts; it covers the global sequencers only).
+
+## 5. Correction 2026-11-06: the stall hit all three reference sequencers, not only splitwell
+Store latency per sequencer ("Storing an ordered request" to "Stored batch of requests", same trace-id, canton.clog.gz):
+```
+zgrep -h '"@timestamp":"2026-11-04T19:4[12]' canton.clog.gz | jq -r 'select(.message|test("^Storing an ordered request|^Stored batch of requests")) | [.["@timestamp"][11:23], .["trace-id"], (.logger_name|capture("sequencer=(?<s>[^/]+)").s), .message[0:30]]|@tsv' | (pair by trace-id)
+19:41:46.138 19:41:49.711 globalSequencerSv1 3.573
+19:41:46.409 19:41:49.804 splitwellUpgradeSequencer 3.395
+19:41:46.419 19:41:49.804 splitwellSequencer 3.385
+19:41:53.609 19:41:55.884 splitwellSequencer 2.275
+19:41:53.609 19:41:55.884 globalSequencerSv1 2.275
+19:41:53.609 19:41:55.884 splitwellUpgradeSequencer 2.275
+19:42:01.998 19:42:03.954 splitwellSequencer 1.956
+19:42:01.988 19:42:03.954 globalSequencerSv1 1.966
+19:42:02.019 19:42:03.954 splitwellUpgradeSequencer 1.935
+```
+Normal stores take 2-10 ms. The stalled stores of the three sequencers end in the same millisecond, so the bottleneck
+is shared (DB or the Canton process), not the splitwell synchronizer. No full JVM pause: canton.clog.gz kept logging
+during 19:41:46.5-49.5 (46-111 lines per 0.5 s, vs 283-489 at 19:41:45). Why the stores stalled: not found.
 
 ## Verdict
 New, rare (first hit of this mechanism; earlier Splitwell settle-debts failures 10156 and 11161/11172 failed at login).
