@@ -33,3 +33,10 @@ because nothing advances the sim clock during setup:
 - M2, mediator verdict refused by the blacklisted sequencer, aggregation below threshold, decision timeout in sim time
   never fires, DSO participants stop indexing: 11258, 11275, 11276. Removed by #8356.
 Other: 11274 test bug (#8224 tag on abstract base), 11256 dup 10729.
+
+## 11274 (presented 2026-11-07)
+
+Fix branch `rautenrieth-da/fix-11274-tbar-mainnet-tags` (c4391e6180, off main 0b2ccec235): tags moved from the
+abstract base to both concrete TrafficBasedRewards classes. Checks: scalafmtOnly on the file, apps-app/Test/compile,
+javap shows both tags on both concrete classes. Full lint OOM-killed in the sandbox (recipe 8); left to static_tests.
+Action: comment, retitle, Triaged, assignee adetokunbo (#8224), PR closes it.
