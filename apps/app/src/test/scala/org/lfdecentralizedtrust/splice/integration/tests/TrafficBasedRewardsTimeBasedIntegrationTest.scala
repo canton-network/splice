@@ -59,8 +59,6 @@ import scala.util.Random
 // event as described in CIP-104
 //
 // DvP settlement from TokenStandardTest is used here just to confirm distribution of rewards
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -961,6 +959,8 @@ object TrafficBasedRewardsTimeBasedIntegrationTestBase {
   val appRewardCouponThreshold = BigDecimal("50")
 }
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class TrafficBasedRewardsTimeBasedIntegrationTest
     extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
   override protected val rewardConfigMode
@@ -968,6 +968,8 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 }
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class TrafficBasedRewardsDryRunTimeBasedIntegrationTest
     extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
   override protected val rewardConfigMode
