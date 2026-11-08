@@ -41,6 +41,8 @@ import org.lfdecentralizedtrust.splice.validator.config.ValidatorCantonIdentifie
 import org.scalatest.{Inside, Inspectors, OptionValues}
 import org.scalatest.matchers.should.Matchers
 
+import scala.annotation.tailrec
+
 /** Analogue to Canton's CommunityEnvironmentDefinition. */
 case class EnvironmentDefinition(
     override val baseConfig: SpliceConfig,
@@ -109,7 +111,8 @@ case class EnvironmentDefinition(
           !sv.name.endsWith("Onboarded") && !sv.name.endsWith("Local") && !extraIgnoredSvPrefixes
             .exists(sv.name.startsWith)
         ) {
-          EnvironmentDefinition.withAllocatedAdminUser(
+          // The SV may already have been started by SequentialBftSequencerOnboarding
+          EnvironmentDefinition.ensureAllocatedAdminUser(
             sv.config.ledgerApiUser,
             sv.participantClientWithAdminToken,
           )
@@ -676,6 +679,22 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
       readAs = Set.empty,
       participantAdmin = true,
     )
+  }
+
+  private[splice] def ensureAllocatedAdminUser(
+      user: String,
+      admin: com.digitalasset.canton.console.commands.BaseLedgerApiAdministration,
+  ): User = {
+    // The filter is applied per page, so we need to go through all pages
+    @tailrec
+    def exists(pageToken: String): Boolean = {
+      val page = admin.ledger_api.users.list(filterUser = user, pageToken = pageToken)
+      page.users.exists(_.id == user) || (page.nextPageToken.nonEmpty && exists(
+        page.nextPageToken
+      ))
+    }
+    if (exists("")) admin.ledger_api.users.get(user)
+    else withAllocatedAdminUser(user, admin)
   }
 
   def withAllocatedValidatorUser(validator: ValidatorAppBackendReference): User =
