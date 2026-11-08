@@ -40,3 +40,10 @@ Fix branch `rautenrieth-da/fix-11274-tbar-mainnet-tags` (c4391e6180, off main 0b
 abstract base to both concrete TrafficBasedRewards classes. Checks: scalafmtOnly on the file, apps-app/Test/compile,
 javap shows both tags on both concrete classes. Full lint OOM-killed in the sandbox (recipe 8); left to static_tests.
 Action: comment, retitle, Triaged, assignee adetokunbo (#8224), PR closes it. User opened canton-network/splice#8362 (2026-11-07).
+
+## BFT onboarding window: one parent (user decision 2026-11-08)
+
+Parent 11255 (comment, retitle, Triaged); duplicates 11241 11242 11248 11257 11173 closed into it, even where the
+shape differs (rejected send, lost batch, 1 -> 2 strong-quorum stall, newcomer segment stall). Correction to the
+earlier chat claim: sequential onboarding removes the rejected and lost sends (11241 11242 11248 11255) but not the
+newcomer catch-up stalls (11257 at 1 -> 2, 11173 sv4 segment). 11240 was handed out earlier as dup of 10165; left as is.
