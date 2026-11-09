@@ -158,3 +158,14 @@ User closed 11287 and 11288 as dup 11255 with per-ref one-liners; no parent comm
 User pasted the failing CircleCI step (nix setup). Verdict: one-off, GitHub incident 05:59-09:09 UTC (504 on a
 GitHub release download after a binary cache miss), family J. Packet evidence/11285-nix-setup-github-504-incident.md,
 comment comments/11285.md, INDEX row g6-11285.tsv. Action: comment, close not planned. 10680 log request stays open.
+
+## 11285 and 10680 closed (2026-11-09)
+
+User closed 11285 (comment) and 10680 (comment with its CircleCI step: submodule clone of splice, "Too long with no
+output (exceeded 10m0s)", same as 10334). 10680 log request done.
+
+## 11286 presented: log request
+
+cni Mainnet Backup Status, run 42590612787, issue 09:06. Family candidates: 10643 (timeout, fixed cni #7727), 10915
+(Devnet 18:00 race, closed, splice#8310), 11117 (Devnet LSU serial 7). First Mainnet status hit since the 10643 dups.
+Overlaps the GitHub incident 05:59-09:09 (not assumed related). Needs the job log: export/11286/.
