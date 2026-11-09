@@ -245,6 +245,7 @@ case class EnvironmentDefinition(
     copy(
       preAppStart = implicit env => {
         participants(env).foreach { p =>
+          p.synchronizers.reconnect_all(ignoreFailures = false)
           p.synchronizers.list_connected().foreach { connected =>
             val currentVettedPackages = p.topology.vetted_packages.list(
               store = Some(TopologyStoreId.Synchronizer(connected.synchronizerId)),
