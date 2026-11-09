@@ -54,7 +54,6 @@ export function installInfo(
       },
       synchronizer: {
         current: {
-          chainIdSuffix: '0',
           migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
           synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
           version: CnChartVersion.stringify(
@@ -63,7 +62,6 @@ export function installInfo(
         },
         legacy: decentralizedSynchronizerMigrationConfig.legacy
           ? {
-              chainIdSuffix: '0',
               migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
               synchronizerSerialId: decentralizedSynchronizerMigrationConfig.legacy.id,
               version: CnChartVersion.stringify(
@@ -73,7 +71,6 @@ export function installInfo(
           : null,
         successor: decentralizedSynchronizerMigrationConfig.upgrade
           ? {
-              chainIdSuffix: '0',
               migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
               synchronizerSerialId: decentralizedSynchronizerMigrationConfig.upgrade.id,
               version: CnChartVersion.stringify(
