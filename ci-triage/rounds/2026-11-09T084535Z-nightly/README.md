@@ -94,3 +94,11 @@ the posted first comment, by rautenrieth-da 2026-11-08, stays unchanged). Opener
 the four hits, says #8356 helps for them and why the first comment's "does not help" still holds for its hits);
 the 11282/11283 paragraph now says "shapes described in the comment above". Rule: a follow-up comment opens with
 what it adds, not with a count of shapes.
+
+## 11255 onboarding bullet (2026-11-09, user question)
+
+User: is blacklisting a consequence of onboarding in parallel? Yes as far as the data goes (packet addendum (2)):
+blacklisting only after a two-newcomer step, none after the single-newcomer step in 11257. The bullet "one at a time
+probably does not remove it alone" was an unverified guess and is replaced: sequential onboarding probably removes
+all shapes, #8356 only the lost-verdict one. Rule: a "not verified" guess does not go into a comment as a conclusion;
+check it against the epoch tables of the existing packets first. Open: why always sv4.

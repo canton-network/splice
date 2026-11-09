@@ -435,3 +435,24 @@ zcat log/<ref>/<dir>/canton-simtime.clog.gz | jq -r 'select(.logger_name|test("g
 In both runs the ordering topology goes 1 -> 2 -> 4 (sv3 and sv4 in one step), and sv4 is blacklisted from the
 first epoch after the 2 -> 4 switch, i.e. sv4 failed its segment as a newcomer leader in the switch epoch. The stuck
 request is sequenced right at the switch. Not checked: why the sv4 segment failed (catch-up, as 11257 / 11173).
+
+## Addendum 2026-11-09 (2): blacklisting only after a two-newcomer step
+
+Supersedes "sv4 failed its segment as a newcomer leader" (section above, never verified). Epoch tables from the
+packets: 11257 section 3 (`evidence/11257-onboard-sv-sequencer-timeout-bft-1-to-2.md`), 11173 section 5
+(`evidence/11173-distributeddomain-topup-in-flight-circuit-breaker-bft-sv4-segment-stall.md`), 11275 and 11284
+"When sv4 is blacklisted" above.
+
+| Run | Step | Blacklisted afterwards |
+|---|---|---|
+| 11257 (wall clock) | 1 -> 2, sv4 joins alone (epoch 166, 16:36:16.576) | nobody, epochs 166-169 |
+| 11257 | 2 -> 4, sv2 and sv3 join (epoch 169, 16:36:59.070) | sv4 from epoch 170 (16:37:14.650), not a newcomer of this step |
+| 11173 (wall clock) | 2 -> 4, sv3 and sv4 join (epoch 279) | sv4, epochs 280-282 and 284-288 |
+| 11275 (simtime) | 2 -> 4, sv3 and sv4 join (epoch 14, 05:32:47.898) | sv4, epochs 15-17 |
+| 11284 (simtime) | 2 -> 4, sv3 and sv4 join (epoch 79, 05:34:13.330) | sv4, epochs 80-82 |
+
+Reading: blacklisting appears only after a step that adds two sequencers at once; the one single-newcomer step
+(11257, 1 -> 2) blacklisted nobody (it stalled 33 s below strong quorum instead). So onboarding one at a time
+probably removes the lost-verdict shape as well as the rejected and lost-batch shapes; #8356 removes only this
+shape. Not tested: no run onboards all three one at a time (4 runs total). Open question: the blacklisted node is
+always sv4, also in 11257 where sv4 joined three epochs before the step.
