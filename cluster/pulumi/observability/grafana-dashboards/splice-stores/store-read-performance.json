@@ -444,6 +444,7 @@
         "spec": {
           "id": 7,
           "title": "Total Allocated Memory",
+          "description": "Total bytes allocated during the operation. Process-wide for getUpdate, otherwise per-thread.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
