@@ -1,12 +1,37 @@
 # CI triage state
 
+## Handover 2026-11-09 afternoon
+
+Round `rounds/2026-11-09T084535Z-nightly/` done except 11286 (log request). Live state checked 2026-11-09 ~13:30 UTC.
+Closed today: 10680, 11231, 11255 dups (11258 11275 11276 11282 11283 11284 11287 11288), 11274 (+ dups, #8362 merged
+13:10), 11285. Triaged today: 11279, 11280 (jagathweerasinghe-da).
+
+Inbox still open, oldest first, with the outstanding action:
+- 10479 (10-21) cni Purge Unused Databases: needs-log (cni GHA), never commented.
+- 10495, 10496 (10-23), 11104, 11105 (10-30), 10728, 10893: commented, only `set_status.py Inbox Triaged` missing.
+- 10917, 10918 (10-29, no comment), 10919: owner questions; suggested Triaged with the question in the comment.
+- 11117 (10-31) Devnet backup after LSU: needs cni GHA log; may pair with 11286.
+- 11140, 11147 (11-02): packets exist, comment/retitle/Triaged never run (STATE table above).
+- 11194 (11-04) CircleCI monitor_sv_catchup_test: log request (rounds/2026-11-05T094500Z-credentials).
+- 11238 (11-06): commands in rounds/2026-11-06T141528Z-11238/README.md, not run.
+- 11256 (11-06): close dup 10729 (rounds/2026-11-07T155023Z-bft/g2-6f7a5f8.md), not run.
+- 11259 (11-06) cni cluster_lock_reaper: log request.
+- 11286 (11-09) cni Mainnet Backup Status: log request to export/11286/; asked whether Mainnet had an LSU.
+- 11255 (parent, open, unassigned): fix candidates splice#8356 (open), sequential sequencer onboarding, simtime
+  delayed-verdict-sender off; at least 5/13 post-merge main runs hit since 11-06. Needs an owner.
+
+Not merged yet into shared files: INDEX.tsv rows of the bft and nightly rounds (g*-files, g6-11285.tsv),
+known-families text for the 11255 shapes, lessons/2026-W46.md candidates (11274 tag on abstract base; simtime and
+sequencer-clock delays). Rules from 2026-11-09 in the round README (duplicates: per-ref one-liners, no parent comment
+unless understanding changes; no unverified guesses in comments).
+
 ## State 2026-11-03
 
 Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Continues the previous
 triage branch `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02), which has the earlier README, handover and
 onboarding.
 
-Current round: `rounds/2026-11-09T084535Z-nightly/` (inbox export 2026-11-09 08:40, 32 items; resume from its last "Resume state" section).
+Current round: `rounds/2026-11-09T084535Z-nightly/` (exports 08:40 and 12:13; see "Handover 2026-11-09 afternoon" above).
 Previous: `rounds/2026-11-07T155023Z-bft/` (export 2026-11-07 15:47, 29 items).
 Queue and per-item state in its README. Earlier: `rounds/2026-11-03T131520Z/`.
 Previous round `rounds/2026-11-02T153358Z-singles/`: its commands did not run (export 2026-11-03).
