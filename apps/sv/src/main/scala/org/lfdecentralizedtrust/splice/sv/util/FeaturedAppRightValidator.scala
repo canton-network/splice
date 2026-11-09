@@ -24,8 +24,8 @@ import com.digitalasset.canton.util.ShowUtil.*
 // This validates FeaturedAppRight grant and amend actions, before the vote-requests are created for them.
 //  - For grant action this confirms that right does not exist for the `provider`.
 //  - For both grant and amend actions: this confirms that parties present in `opsParties` are
-//  - Distinct, and different from `provider`
-//  - Are not present in any FeaturedAppRight in ACS (either as `provider` or `opsParties`)
+//    - Distinct, and different from `provider`
+//    - Are not present in any FeaturedAppRight in ACS (either as `provider` or `opsParties`)
 // But this does not check the in-flight vote-requests; which is done by the UI directly.
 object FeaturedAppRightValidator {
 
