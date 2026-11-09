@@ -23,6 +23,7 @@ resources:
 sequencer:
   imageName: "canton-sequencer"
   additionalJvmOptions: ""
+  # TODO (#8263): remove together with the CometBFT sequencer driver
   cometbft:
     imageName: "canton-cometbft-sequencer"
   persistence:

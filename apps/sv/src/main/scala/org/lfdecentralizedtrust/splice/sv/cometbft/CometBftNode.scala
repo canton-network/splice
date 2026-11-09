@@ -37,6 +37,7 @@ import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
+// TODO (#8263): remove the CometBFT support in the SV app (this package, triggers, API endpoints, config)
 /** A handle to a CometBFT node.
   */
 class CometBftNode(

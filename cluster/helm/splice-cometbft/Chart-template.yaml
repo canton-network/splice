@@ -1,6 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO (#8263): remove this chart, CometBFT is no longer used
 apiVersion: v2
 name: splice-cometbft
 description: Helm chart for a CometBFT node

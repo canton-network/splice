@@ -60,42 +60,25 @@ object Dependencies {
   lazy val s3mock_testcontainers = "com.adobe.testing" % "s3mock-testcontainers" % "4.12.4" % "test"
 
   private lazy val jackson_version = "2.22.4"
-  private lazy val netty_version = "4.1.138.Final"
-  private lazy val bouncy_castle_version = "1.86"
 
   // Applied to all projects as dependencyOverrides, so only these modules move and their parents stay as they are.
-  // The older versions come from Canton's direct dependencies in CantonDependencies.scala (circe 0.14.2 -> jawn),
+  // The older versions come from Canton's direct dependencies in CantonDependencies.scala (postgresql 42.7.3),
   // from libraries already on their latest release (scala-compiler 2.13.18 -> jline, httpclient5 5.6.4 -> httpcore5),
-  // or from several libraries at once (jackson-databind: auth0, flyway, json4s and logstash).
+  // or from several libraries at once (jackson-databind: auth0, flyway, json4s and logstash; okhttp 4: auth0 and sttp,
+  // next to okhttp-jvm 5 from OpenTelemetry).
   // Remove an entry once the build resolves that version without it.
   lazy val pinnedTransitiveVersions: Seq[ModuleID] = Seq(
-    "buffer",
-    "codec",
-    "codec-http",
-    "codec-http2",
-    "common",
-    "handler",
-    "resolver",
-    "transport",
-    "transport-classes-epoll",
-    "transport-native-unix-common",
-  ).map(module => "io.netty" % s"netty-$module" % netty_version) ++ Seq(
-    "bcprov",
-    "bcpkix",
-    "bcutil",
-  ).map(module => "org.bouncycastle" % s"$module-jdk18on" % bouncy_castle_version) ++ Seq(
-    "com.fasterxml.jackson.core" % "jackson-core" % jackson_version,
+    "com.squareup.okhttp3" % "okhttp" % "5.5.0",
+    "com.squareup.okhttp3" % "logging-interceptor" % "5.5.0",
     "com.fasterxml.jackson.core" % "jackson-databind" % jackson_version,
     "com.fasterxml.jackson.core" % "jackson-annotations" % "2.22",
     "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % jackson_version,
     "com.fasterxml.jackson.datatype" % "jackson-datatype-jsr310" % jackson_version,
     "org.jline" % "jline" % "3.30.17",
     "org.postgresql" % "postgresql" % "42.7.14",
-    "org.typelevel" %% "jawn-parser" % "1.7.0",
     "com.lihaoyi" %% "sourcecode" % "0.4.4",
     "org.apache.httpcomponents.core5" % "httpcore5" % "5.4.4",
     "org.apache.httpcomponents.core5" % "httpcore5-h2" % "5.4.4",
-    "org.apache.httpcomponents.client5" % "httpclient5" % "5.6.4",
     "org.apache.logging.log4j" % "log4j-core" % "2.25.5",
     "org.apache.logging.log4j" % "log4j-api" % "2.25.5",
   )

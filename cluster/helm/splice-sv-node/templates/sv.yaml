@@ -261,6 +261,7 @@ spec:
                       port = 5007
                     }
                   }
+                  {{- /* TODO (#8263): remove the CometBFT config */}}
                   {{- with $sync.cometBFT }}
                   comet-bft-config {
                     enabled = {{ .enabled }}
@@ -309,6 +310,7 @@ spec:
                       port = 5007
                     }
                   }
+                  {{- /* TODO (#8263): remove the CometBFT config */}}
                   {{- with $sync.cometBFT }}
                   comet-bft-config {
                     enabled = {{ .enabled }}
@@ -330,6 +332,7 @@ spec:
             - name: SPLICE_APP_SV_GLOBAL_DOMAIN_URL
               value: {{ .Values.decentralizedSynchronizerUrl | quote }}
             {{- end }}
+            {{- /* TODO (#8263): remove the CometBFT config */}}
             {{- if (.Values.cometBFT).enabled }}
             - name: ADDITIONAL_CONFIG_SV_COMETBFT
               value: |

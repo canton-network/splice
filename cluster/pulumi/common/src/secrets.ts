@@ -14,6 +14,7 @@ export type SvIdKey = {
   privateKey: string;
 };
 
+// TODO (#8263): remove the CometBFT node and governance key secrets
 export type SvCometBftKeys = {
   nodePrivateKey: string;
   validatorPrivateKey: string;

@@ -31,6 +31,7 @@ import {
 } from './physicalSynchronizerConfig';
 import { CatchupTestSchema } from './testing';
 
+// TODO (#8263): remove the CometBFT config
 const SvCometbftConfigSchema = z
   .object({
     nodeId: z.string().optional(),

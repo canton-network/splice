@@ -154,7 +154,6 @@ runs:
         POSTGRES_PORT: 5432
         POSTGRES_USER: postgres
         POSTGRES_PASSWORD: postgres
-        COMETBFT_DOCKER_IP: 127.0.0.1
       with:
         cmd: |
           if [[ "${{ inputs.with_canton }}" == "false" ]]; then
@@ -189,9 +188,11 @@ runs:
     - name: Export Daml package versions output
       id: daml_package_versions
       shell: bash
+      env:
+        DAML_BASE_VERSION: ${{ inputs.daml_base_version }}
       run: |
         # We can't export from within run so we do it here.
-        if [[ "${{ inputs.daml_base_version }}" != "" ]]; then
+        if [[ "$DAML_BASE_VERSION" != "" ]]; then
           echo "initial_package_versions='$(cat initial_package_config)'" >> "$GITHUB_OUTPUT"
         fi
 
@@ -209,6 +210,8 @@ runs:
     - name: Set RUN_SPLITTED_TESTS_CMD
       id: list_tests
       shell: bash
+      env:
+        RUNNER_INDEX: ${{ inputs.runner_index }}
       run: |
         tags=""
         if [ -f scala_test_tags ]
@@ -222,7 +225,7 @@ runs:
         # `testOnly` without test names runs every test, so an empty batch must skip sbt instead
         count=$(wc -w < /tmp/tests)
         if [[ "$count" == "0" ]]; then
-          echo "No tests assigned to runner ${{ inputs.runner_index }}, skipping the test run"
+          echo "No tests assigned to runner $RUNNER_INDEX, skipping the test run"
         fi
         echo "test_count=$count" >> "$GITHUB_OUTPUT"
 
@@ -264,14 +267,23 @@ runs:
         cmd_retry_count: 5 # Retry in case of dependency download errors
         additional_nix_args: "--keep DOCKER_CERT_PATH --keep DOCKER_HOST --keep DOCKER_MACHINE_NAME --keep DOCKER_TLS_VERIFY --keep PULUMI_VERSION --keep NO_PROXY --keep CIRCLE_REPOSITORY_URL --keep CIRCLE_SHA1"
 
+    - name: Compile tests
+      if: ${{ steps.list_tests.outputs.test_count != '0' }}
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        cmd: Test/compile
+
     - name: Wait for Canton to be ready
       shell: bash
+      env:
+        WITH_CANTON: ${{ inputs.with_canton }}
+        START_CANTON_OPTIONS: ${{ inputs.start_canton_options }}
       run: |
-        if [[ "${{ inputs.with_canton }}" == "false" ]]; then
+        if [[ "$WITH_CANTON" == "false" ]]; then
           echo "This job does not require Canton"
           exit 0
         fi
-        start_canton_options="${{ inputs.start_canton_options }}"
+        start_canton_options="$START_CANTON_OPTIONS"
         if [[ "$start_canton_options" == *"-w"* ]]; then
           ./wait-for-canton.sh -w
         elif [[ "$start_canton_options" == *"-s"* ]]; then
