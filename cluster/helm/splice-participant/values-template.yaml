@@ -66,6 +66,10 @@ disableAuth: false
 # Set to true to allow downloading the participant's private keys via its admin API.
 # Required for participant identities backups and dumps if the participant does not use KMS.
 enableKeyDownload: false
+# Set to false when the participant's identity comes from somewhere else, e.g.
+# while restoring from an identities dump or using an offline root namespace
+# key. Canton must not create a fresh identity in those cases.
+enableAutoInit: true
 # Set to true to serve the participant's repair service (canton.features.enable-repair-commands) on its admin API.
 # Required on SV participants, for Scan's ACS snapshot endpoint, and on validator participants while
 # they restore from an identities dump (migrateValidatorParty) or import an ACS.

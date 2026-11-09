@@ -88,6 +88,7 @@ export async function installValidator1(
     xns,
     auth0Client.getCfg(),
     nodeIdentifier,
+    !participantBootstrapDump,
     validator1Config?.disableAuth,
     decentralizedSynchronizerMigrationConfig.active.version,
     defaultPostgres,

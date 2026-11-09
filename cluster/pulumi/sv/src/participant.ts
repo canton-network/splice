@@ -50,6 +50,7 @@ export type ParticipantArgs = {
   participantAdminUserNameFrom?: k8s.types.input.core.v1.EnvVarSource;
   imagePullServiceAccountName?: string;
   nodeIdentifier: string;
+  enableAutoInit: boolean;
 };
 
 export type ParticipantOutput = {
@@ -87,6 +88,7 @@ function installParticipantChart(
     participantAdminUserNameFrom,
     imagePullServiceAccountName,
     nodeIdentifier,
+    enableAutoInit,
   }: ParticipantArgs,
   db: Postgres,
   customOptions?: SpliceCustomResourceOptions
@@ -133,6 +135,7 @@ function installParticipantChart(
     serviceAccountName: imagePullServiceAccountName,
     resources: participant?.resources,
     nodeIdentifier,
+    enableAutoInit,
     pvc: persistentHeapDumpsPvc(),
   };
 

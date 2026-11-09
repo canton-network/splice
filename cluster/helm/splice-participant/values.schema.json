@@ -175,6 +175,9 @@
     "enableKeyDownload": {
       "type": "boolean"
     },
+    "enableAutoInit": {
+      "type": "boolean"
+    },
     "enableRepairCommands": {
       "type": "boolean"
     },

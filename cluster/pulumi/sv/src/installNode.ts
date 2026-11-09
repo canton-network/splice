@@ -15,6 +15,7 @@ import {
   svConfigs,
   svRunbookConfig,
 } from '@canton-network/splice-pulumi-common-sv';
+import { readBackupConfig } from '@canton-network/splice-pulumi-common-validator/src/backup';
 
 import { installParticipant } from './participant';
 import { installSvApps } from './sv';
@@ -31,6 +32,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   if (staticConfig.nodeName !== svRunbookConfig.nodeName) {
     await installSvApps(xns, staticConfig, config, auth0Client, []);
   }
+  const backupConfig = await readBackupConfig();
   const version = config.versionOverride ?? activeVersion;
   const participant = await installParticipant(
     {
@@ -43,6 +45,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,
       nodeIdentifier: staticConfig.onboardingName,
+      enableAutoInit: !backupConfig.bootstrappingDumpConfig,
     },
     { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }
   );

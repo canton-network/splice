@@ -70,6 +70,7 @@ export async function installSplitwell(
     xns,
     auth0Client.getCfg(),
     nodeIdentifier,
+    !participantBootstrapDump,
     false,
     decentralizedSynchronizerMigrationConfig.active.version,
     sharedPostgres,

@@ -207,6 +207,7 @@ async function installValidator(
       xns,
       auth0Client.getCfg(),
       nodeIdentifier,
+      !participantBootstrapDumpSecret,
       false, // We don't currently support non-auth for validator-runbook
       validatorVersion,
       postgres,

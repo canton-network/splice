@@ -226,6 +226,26 @@ tests:
       - equal:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')].value
           value: canton.parameters.enable-key-download = yes
+  - it: "auto-initializes the participant by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_MANUAL_INIT')]
+  - it: "switches the participant to manual init when enableAutoInit is false"
+    set:
+      enableAutoInit: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_MANUAL_INIT')].value
+          pattern: 'init\.identity = null'
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_MANUAL_INIT')].value
+          pattern: 'init\.identity = \{ type = manual \}'
   - it: "does not enable repair commands by default"
     documentSelector:
       path: kind
