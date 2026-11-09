@@ -20,3 +20,22 @@ Access: cn-test-failures and splice via gh api (sandbox token); canton-network-i
 Waiting from earlier rounds (re-list, not re-triaged): 11238, 11256, 11258, 11274, 11275, 11276 (round
 2026-11-07T155023Z-bft, actions not run; INDEX.tsv rows for 11256 11258 11274 11275 11276 not merged yet),
 11259 and 11194 (log requests), and the STATE.md list.
+
+## Resume state (2026-11-09, before sandbox restart)
+
+All four groups landed and are verified; the overview went to the user. Nothing presented group by group yet,
+no commands handed out, nothing ran. Next: present groups in queue order (mainnet nightly first) with commands and
+comment bodies, unless the user wants a single hand-over.
+
+Suggested actions (details and commands in the g* files):
+- 11277 11278 11281: close dup 11274 (run the pending 11274 action from round 2026-11-07T155023Z-bft first).
+- 11284: close dup 11275; add the 11-09 recurrence (simtime (1)) to the unposted bft-round comments/11275.md.
+- 11282 11283: close dup 11255 (11255 already retitled and Triaged by someone else).
+- 11280: comments/11280.md, retitle, Triaged, assignee jagathweerasinghe-da (#8269), ping comment.
+- 11279: comments/11279.md, retitle, Triaged (first hit).
+- 11231: close dup 10358 (closed); #8319 not backported to release lines, ask the user about a tracking issue.
+- 11285: log request (CircleCI reset_validator_runbook_devnet, release-line-0.10.1, sibling of 10680).
+
+INDEX.tsv rows not merged yet: this round's rows are in g1-n1108-result.md, g2-n1109.md, g3-ingest-notes.md,
+g4-rl094.md (fix the date column of 11277-11279 to 2026-11-08 when merging); the 2026-11-07 round's rows for 11255,
+11256, 11258, 11274, 11275, 11276 are missing too.
