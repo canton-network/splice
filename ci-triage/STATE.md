@@ -32,6 +32,7 @@ triage branch `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02), which has t
 onboarding.
 
 Current round: `rounds/2026-11-09T084535Z-nightly/` (exports 08:40 and 12:13; see "Handover 2026-11-09 afternoon" above).
+Handover note for the next agent: `HANDOVER-2026-11-09.md`.
 Previous: `rounds/2026-11-07T155023Z-bft/` (export 2026-11-07 15:47, 29 items).
 Queue and per-item state in its README. Earlier: `rounds/2026-11-03T131520Z/`.
 Previous round `rounds/2026-11-02T153358Z-singles/`: its commands did not run (export 2026-11-03).
