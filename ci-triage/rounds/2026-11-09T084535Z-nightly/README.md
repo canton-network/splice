@@ -137,3 +137,8 @@ Agent verdict: both dup 11255 (11287 lost-verdict shape, 11288 rejected MED::sv4
 quotes grepped against log/11287 canton-simtime.clog.gz (the sv1 "Delaying" line was reformatted by the agent, now
 the real line; linked to request .257Z by trace 800a817a in the packet); "5 of 13" changed to "at least 5 of 13 (3
 other failed runs not checked)". Not presented yet (11231 question pending).
+
+## 11231 ran (2026-11-09)
+
+User closed 11231 as dup 10358. Backport tracking question for #8319 left unanswered: nothing tracked. Next:
+g5 (11287 11288 dup 11255) handed out.
