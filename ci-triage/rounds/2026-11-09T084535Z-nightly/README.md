@@ -152,3 +152,9 @@ hit (one close_duplicates call per ref). g5: recurrence comment on 11255 dropped
 ## g5 ran (2026-11-09)
 
 User closed 11287 and 11288 as dup 11255 with per-ref one-liners; no parent comment. Next: 11285.
+
+## 11285 (2026-11-09)
+
+User pasted the failing CircleCI step (nix setup). Verdict: one-off, GitHub incident 05:59-09:09 UTC (504 on a
+GitHub release download after a binary cache miss), family J. Packet evidence/11285-nix-setup-github-504-incident.md,
+comment comments/11285.md, INDEX row g6-11285.tsv. Action: comment, close not planned. 10680 log request stays open.
