@@ -80,3 +80,9 @@ New after the export: 11286 backup_status_cluster (09:06), untriaged, likely 111
 Still to merge into shared files: INDEX.tsv rows (this round and the bft round), known-families text for the
 lost-verdict shape under the 11255 family, lessons/2026-W46.md candidates: scalatest tags on abstract base are
 ignored (11274); simtime and components scheduling on the sequencer clock (11255 verdict shape).
+
+## 11282 11283 (presented 2026-11-09)
+
+Plain duplicates of 11255 (first two shapes: rejected MED::sv4 proposal; lost batch for MED::sv2). Joined the 11255
+close command; paragraph listing both added to comments/11255.md. 11255 fold not yet run at this point (11255 had
+1 comment, the four dups still open), so the whole set is handed out again as one block. State: handed out.
