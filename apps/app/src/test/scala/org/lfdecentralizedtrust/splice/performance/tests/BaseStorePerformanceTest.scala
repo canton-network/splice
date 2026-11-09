@@ -392,7 +392,6 @@ final case class DbQuerySample(timerName: String, callsite: String, nanos: Long,
   * that uses nanoseconds for higher precision
   */
 class NanoInMemoryMetricsFactory extends InMemoryMetricsFactory {
-
   import java.util.concurrent.atomic.AtomicLong
 
   private val samples = new java.util.concurrent.ConcurrentLinkedQueue[DbQuerySample]()
@@ -419,7 +418,6 @@ class NanoInMemoryMetricsFactory extends InMemoryMetricsFactory {
     */
   private final class NanoTimer(override val info: MetricInfo) extends Timer {
     private val name = info.name.toString
-
     private def callsiteOf(context: MetricsContext): String =
       context.labels.getOrElse("query", "<none>")
 
