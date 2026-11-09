@@ -102,3 +102,9 @@ blacklisting only after a two-newcomer step, none after the single-newcomer step
 probably does not remove it alone" was an unverified guess and is replaced: sequential onboarding probably removes
 all shapes, #8356 only the lost-verdict one. Rule: a "not verified" guess does not go into a comment as a conclusion;
 check it against the epoch tables of the existing packets first. Open: why always sv4.
+
+## 11255 fold ran (2026-11-09)
+
+User closed 11275 11258 11276 11284 11282 11283 as duplicates of 11255 (each has its closing comment). Instead of a
+second comment, the user updated the existing 11255 comment (rautenrieth-da, edited 12:10:42Z, 3180 chars) with
+their own wording. State: ran. Next: 11279.
