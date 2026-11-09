@@ -233,12 +233,14 @@ class JoiningNodeInitializer(
       svStore <- newSvStore(
         storeKey,
         domainMigrationId,
+        decentralizedSynchronizerId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
+        decentralizedSynchronizerId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
