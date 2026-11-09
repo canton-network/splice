@@ -8,7 +8,6 @@ import {
   BootstrappingDumpConfig,
   CnInput,
   ExpectedValidatorOnboarding,
-  SvCometBftGovernanceKey,
   SvIdKey,
   ValidatorTopupConfig,
   RateLimitSchema,
@@ -20,10 +19,6 @@ import { z } from 'zod';
 
 import { BulkStorageBuckets } from './bulkStorage';
 import { SingleSvConfiguration } from './singleSvConfig';
-import {
-  StaticCometBftConfig,
-  StaticCometBftConfigWithNodeName,
-} from './synchronizer/cometbftConfig';
 
 export type SvOnboarding =
   | { type: 'domain-migration' }
@@ -52,19 +47,13 @@ export interface StaticSvConfig extends StaticSvConfigBasic {
   validatorWalletUser?: string;
   auth0ValidatorAppName: string;
   auth0SvAppName: string;
-  cometBft: StaticCometBftConfig;
   onboardingPollingInterval?: string;
   svIdKeySecretName?: string;
-  cometBftGovernanceKeySecretName?: string;
 }
 
 export interface SvConfig extends StaticSvConfig, SingleSvConfiguration {
   isFirstSv: boolean;
   auth0Client: Auth0Client;
-  nodeConfigs: {
-    sv1: StaticCometBftConfigWithNodeName;
-    peers: StaticCometBftConfigWithNodeName[];
-  };
   onboarding: SvOnboarding;
   expectedValidatorOnboardings: ExpectedValidatorOnboarding[];
   isDevNet: boolean;
@@ -75,7 +64,6 @@ export interface SvConfig extends StaticSvConfig, SingleSvConfiguration {
   splitPostgresInstances: boolean;
   disableOnboardingParticipantPromotionDelay: boolean;
   onboardingPollingInterval?: string;
-  cometBftGovernanceKey?: CnInput<SvCometBftGovernanceKey>;
   initialRound?: string;
   periodicTopologySnapshotConfig?: CnInput<BucketConfig>;
   version: CnChartVersion;
@@ -93,24 +81,6 @@ export const TopologySnapshotSchema = z.object({
 export const SvConfigSchema = z.object({
   sv: z
     .object({
-      cometbft: z
-        .object({
-          volumeSize: z.string().optional(),
-          protected: z.boolean().optional(),
-          watchdog: z
-            .object({
-              disabled: z.boolean().default(false),
-              threshold: z.number().optional(),
-              evaluationIntervalSeconds: z.number().optional(),
-              pollIntervalSeconds: z.number().optional(),
-              scrapeTimeoutSeconds: z.number().optional(),
-              startupGraceSeconds: z.number().optional(),
-              cooldownSeconds: z.number().optional(),
-            })
-            .strict()
-            .optional(),
-        })
-        .optional(),
       scan: z
         .object({
           rateLimit: z
