@@ -645,6 +645,8 @@ class HttpScanHandler(
                 (sequencer.synchronizerSerial, sequencer.id)
               )
             duplicates.foreach { case ((serial, sequencerId), duplicatedSequencers) =>
+              // the duplicate sequencer ids are important because they are used as aliases for the sequencer connection
+              // in the validator and that does not support duplicates
               logger.warn(
                 s"Not serving sequencer $sequencerId for synchronizer $synchronizerId and serial ${serial
                     .getOrElse("<none>")} as it is claimed by multiple SVs: ${duplicatedSequencers
