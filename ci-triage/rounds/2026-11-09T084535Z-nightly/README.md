@@ -108,3 +108,12 @@ check it against the epoch tables of the existing packets first. Open: why alway
 User closed 11275 11258 11276 11284 11282 11283 as duplicates of 11255 (each has its closing comment). Instead of a
 second comment, the user updated the existing 11255 comment (rautenrieth-da, edited 12:10:42Z, 3180 chars) with
 their own wording. State: ran. Next: 11279.
+
+## 11279 ran; export 2026-11-09 12:13 (25 items)
+
+11279: user moved to Triaged (comment and title live). New in the 12:13 export: 11286, 11287, 11288. Added to the queue:
+
+| Group | Refs | Signature | Suspected | Rank, why | State |
+|---|---|---|---|---|---|
+| g5-simtime-main | 11287 11288 | post-merge main simtime (3) run 42591855865 job 129076454622 (9dafafbece); simtime (4) run 42608940134 job 129132359292 (bd9953a523) | 11255 onboarding window | 1: simtime on main, 2 runs in 90 min | background agent |
+| - | 11286 | cni Mainnet Backup Status, backup_status_cluster, run 42590612787 (cni 36523d5) | 11117 / 10915 backup status family | 2: mainnet backup alert; cni log only via user | log request |
