@@ -30,24 +30,39 @@ const validatorSchema = z.object({
   auth: z.discriminatedUnion('kind', [oAuthSchema, selfSignedSchema]),
 });
 
-export const configSchema = z.object({
-  isDevNet: z
-    .boolean()
-    .or(z.enum(['true', 'false', '1', '0', '']).transform(val => val === 'true' || val === '1')),
-  usersPerValidator: z.number().min(1),
-  featuredUsersPerValidator: z.number().min(0),
-  validators: z.array(validatorSchema).min(1),
-  test: z.object({
-    duration: z.string().min(1),
-    iterationsPerMinute: z.coerce.number().min(1),
-    preAllocatedVUs: z.coerce.number().default(20),
-    maxVUs: z.coerce.number().default(100),
-  }),
-  adaptiveScenario: z.object({
-    enabled: z.boolean(),
-    maxVUs: z.number(),
-  }),
-});
+export const configSchema = z
+  .object({
+    isDevNet: z
+      .boolean()
+      .or(z.enum(['true', 'false', '1', '0', '']).transform(val => val === 'true' || val === '1')),
+    usersPerValidator: z.number().min(1),
+    // Number of users per validator with a featured app right of kind basic.
+    // The name predates the other kinds and is kept for backwards compatibility.
+    featuredUsersPerValidator: z.number().min(0),
+    // Number of users per validator with a featured app right of kind asset_moving
+    assetMovingFeaturedUsersPerValidator: z.number().min(0).default(0),
+    // Number of users per validator with a featured app right of kind asset
+    assetFeaturedUsersPerValidator: z.number().min(0).default(0),
+    validators: z.array(validatorSchema).min(1),
+    test: z.object({
+      duration: z.string().min(1),
+      iterationsPerMinute: z.coerce.number().min(1),
+      preAllocatedVUs: z.coerce.number().default(20),
+      maxVUs: z.coerce.number().default(100),
+    }),
+    adaptiveScenario: z.object({
+      enabled: z.boolean(),
+      maxVUs: z.number(),
+    }),
+  })
+  .refine(
+    c =>
+      c.featuredUsersPerValidator +
+        c.assetMovingFeaturedUsersPerValidator +
+        c.assetFeaturedUsersPerValidator <=
+      c.usersPerValidator,
+    { message: 'The total number of featured users per validator exceeds usersPerValidator' },
+  );
 
 export type Config = z.infer<typeof configSchema>;
 

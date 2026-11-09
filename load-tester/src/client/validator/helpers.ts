@@ -17,9 +17,19 @@ const transfersFailed = new Counter('transfers_failed');
 export function doIfOnboarded(validatorClient: ValidatorClient, action: () => void): void {
   const userStatus = validatorClient.v0.wallet.userStatus();
   if (userStatus?.user_onboarded && userStatus?.user_wallet_installed) {
-    if (!userStatus.has_featured_app_right && validatorClient.featured === true) {
-      validatorClient.v0.wallet.selfGrantFeatureAppRight();
-    } else if (userStatus.has_featured_app_right && validatorClient.featured === false) {
+    const wantedKind = validatorClient.featured;
+    if (!userStatus.has_featured_app_right && wantedKind) {
+      validatorClient.v0.wallet.selfGrantFeatureAppRight(wantedKind);
+    } else if (userStatus.has_featured_app_right && wantedKind === false) {
+      validatorClient.v0.wallet.cancelFeaturedAppRights();
+    } else if (
+      userStatus.has_featured_app_right &&
+      wantedKind &&
+      // Older validators don't report the kind, don't reconcile it in that case
+      userStatus.featured_app_kind !== undefined &&
+      userStatus.featured_app_kind !== wantedKind
+    ) {
+      // Wrong kind: cancel the right, a later iteration grants it with the wanted kind
       validatorClient.v0.wallet.cancelFeaturedAppRights();
     } else {
       action();

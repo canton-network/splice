@@ -8,6 +8,7 @@ import { HttpClient } from '../http';
 import {
   AcceptTransferOfferResponse,
   CreateTransferOfferResponse,
+  FeaturedAppKind,
   GetBalanceResponse,
   ListTransferOffersResponse,
   UserStatusResponse,
@@ -24,11 +25,11 @@ export class ValidatorClient {
 
   private token: string;
   /** Expected featured app status
-   * true: this party should be featured
+   * FeaturedAppKind: this party should be featured with the given kind
    * false: this party should not be featured
    * undefined: do not attempt to modify the featured app status of this party
    */
-  public featured: boolean | undefined;
+  public featured: FeaturedAppKind | false | undefined;
   private _partyId: string | undefined;
 
   private headers = (): Record<string, string> => ({
@@ -36,7 +37,11 @@ export class ValidatorClient {
     Authorization: `Bearer ${this.token}`,
   });
 
-  constructor(validatorBaseUrl: string, token: string, featured: boolean | undefined) {
+  constructor(
+    validatorBaseUrl: string,
+    token: string,
+    featured: FeaturedAppKind | false | undefined,
+  ) {
     this.validatorBaseUrl = validatorBaseUrl;
     this.token = token;
     this.featured = featured;
@@ -153,10 +158,10 @@ export class ValidatorClient {
           })
           .then(resp => jsonStringDecoder(userStatusResponse, resp.body));
       },
-      selfGrantFeatureAppRight: (): void => {
+      selfGrantFeatureAppRight: (appKind: FeaturedAppKind): void => {
         this.http.post.success(
           `${this.validatorBaseUrl}/api/validator/v0/wallet/self-grant-feature-app-right`,
-          null,
+          JSON.stringify({ app_kind: appKind }),
           { retry: false, headers: this.headers() },
         );
       },

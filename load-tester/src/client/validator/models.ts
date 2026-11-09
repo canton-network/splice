@@ -39,11 +39,17 @@ export const listTransferOffersResponse = z.object({
 
 export type ListTransferOffersResponse = z.infer<typeof listTransferOffersResponse>;
 
+export const featuredAppKind = z.enum(['basic', 'asset_moving', 'asset']);
+
+export type FeaturedAppKind = z.infer<typeof featuredAppKind>;
+
 export const userStatusResponse = z.object({
   party_id: z.string(),
   user_onboarded: z.boolean(),
   user_wallet_installed: z.boolean(),
   has_featured_app_right: z.boolean(),
+  // Not returned by older validators
+  featured_app_kind: featuredAppKind.optional(),
 });
 
 export type UserStatusResponse = z.infer<typeof userStatusResponse>;
