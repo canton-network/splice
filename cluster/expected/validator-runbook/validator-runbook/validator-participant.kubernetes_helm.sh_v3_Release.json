@@ -50,6 +50,7 @@
         "name": "cn-mocknet"
       },
       "disableAuth": false,
+      "enableAutoInit": true,
       "enableHealthProbes": true,
       "enableKeyDownload": true,
       "enablePostgresMetrics": true,

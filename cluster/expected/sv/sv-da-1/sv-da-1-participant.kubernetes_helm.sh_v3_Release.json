@@ -61,6 +61,7 @@
         "hostname": "mock.global.canton.network.digitalasset.com",
         "name": "cn-mocknet"
       },
+      "enableAutoInit": true,
       "enableHealthProbes": true,
       "enableKeyDownload": true,
       "enablePostgresMetrics": true,
