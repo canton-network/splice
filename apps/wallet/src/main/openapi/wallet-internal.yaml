@@ -1372,6 +1372,9 @@ components:
           type: boolean
         has_featured_app_right:
           type: boolean
+        featured_app_kind:
+          # Only set if has_featured_app_right is true.
+          $ref: "#/components/schemas/FeaturedAppKind"
 
     ListResponse:
       type: object
@@ -1428,6 +1431,30 @@ components:
     SelfGrantFeaturedAppRightRequest:
       type: object
       nullable: true
+      description: |
+        Configuration of the self-granted featured app right. All fields are optional;
+        setting any of them requires splice-wallet >= 0.1.26 to be vetted.
+        `app_kind` defaults to `basic`.
+      properties:
+        app_kind:
+          $ref: "#/components/schemas/FeaturedAppKind"
+        activity_weight:
+          description: Decimal weight of this provider's app activity. Defaults to 1.0 if not set.
+          type: string
+        ops_party_ids:
+          description: |
+            Operational parties of the featured app whose submissions are considered
+            submissions by this featured app. At most 10 entries. Defaults to [] if not set.
+          type: array
+          items:
+            type: string
+
+    FeaturedAppKind:
+      type: string
+      enum:
+        - basic
+        - asset_moving
+        - asset
 
     SelfGrantFeaturedAppRightResponse:
       type: object

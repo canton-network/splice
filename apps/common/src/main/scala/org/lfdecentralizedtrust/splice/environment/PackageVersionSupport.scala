@@ -178,6 +178,19 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
+  /** Whether WalletAppInstall_FeaturedAppRights_SelfGrant accepts activityWeight, appKind and opsParties. */
+  def supportsFeaturedAppConfigInSelfGrant(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceWallet,
+      now,
+      DarResources.wallet,
+      DarResources.wallet_0_1_26,
+      ignoreRedundantCheck = true,
+    )
+
   def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =

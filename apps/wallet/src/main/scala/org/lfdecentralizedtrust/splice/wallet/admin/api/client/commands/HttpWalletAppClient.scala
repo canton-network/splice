@@ -39,6 +39,7 @@ import org.lfdecentralizedtrust.splice.util.{
   TokenStandardAccount,
 }
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry
+import org.lfdecentralizedtrust.splice.wallet.util.FeaturedAppKindUtil
 import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
@@ -130,6 +131,7 @@ object HttpWalletAppClient {
       userOnboarded: Boolean,
       userWalletInstalled: Boolean,
       hasFeaturedAppRight: Boolean,
+      featuredAppKind: Option[amuletCodegen.FeaturedAppKind],
   )
   sealed trait SubscriptionStateContract
   final case class SubscriptionStateIdleContract(contract: definitions.Contract)
@@ -223,8 +225,11 @@ object HttpWalletAppClient {
     }
   }
 
-  case object SelfGrantFeaturedAppRight
-      extends InternalBaseCommand[
+  final case class SelfGrantFeaturedAppRight(
+      appKind: Option[amuletCodegen.FeaturedAppKind] = None,
+      activityWeight: Option[BigDecimal] = None,
+      opsParties: Option[Seq[PartyId]] = None,
+  ) extends InternalBaseCommand[
         http.SelfGrantFeatureAppRightResponse,
         amuletCodegen.FeaturedAppRight.ContractId,
       ] {
@@ -232,7 +237,16 @@ object HttpWalletAppClient {
         client: Client,
         headers: List[HttpHeader],
     ): EitherT[Future, Either[Throwable, HttpResponse], http.SelfGrantFeatureAppRightResponse] =
-      client.selfGrantFeatureAppRight(headers = headers)
+      client.selfGrantFeatureAppRight(
+        Option.when(appKind.isDefined || activityWeight.isDefined || opsParties.isDefined)(
+          definitions.SelfGrantFeaturedAppRightRequest(
+            appKind = appKind.map(FeaturedAppKindUtil.fromDaml),
+            activityWeight = activityWeight.map(Codec.encode(_)),
+            opsPartyIds = opsParties.map(_.map(_.toProtoPrimitive).toVector),
+          )
+        ),
+        headers = headers,
+      )
 
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
@@ -931,6 +945,7 @@ object HttpWalletAppClient {
             response.userOnboarded,
             response.userWalletInstalled,
             response.hasFeaturedAppRight,
+            response.featuredAppKind.map(FeaturedAppKindUtil.toDaml),
           )
         )
     }

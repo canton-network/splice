@@ -52,13 +52,16 @@ import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import TreasuryService.{AmuletOperationDedupConfig, basicAccount}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
-import org.lfdecentralizedtrust.splice.wallet.util.{TopupUtil, ValidatorTopupConfig}
+import org.lfdecentralizedtrust.splice.wallet.util.{
+  FeaturedAppKindUtil,
+  TopupUtil,
+  ValidatorTopupConfig,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ErrorUtil
 import org.lfdecentralizedtrust.splice.util.ErrorUtilExtensions.*
-import io.circe.Json
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
@@ -326,22 +329,48 @@ class HttpWalletHandler(
 
   override def selfGrantFeatureAppRight(
       respond: v0.WalletResource.SelfGrantFeatureAppRightResponse.type
-  )(request: Option[Json])(
+  )(request: Option[d0.SelfGrantFeaturedAppRightRequest])(
       tuser: WalletUserRequest
   ): Future[r0.SelfGrantFeatureAppRightResponse] = {
     implicit val WalletUserRequest(_, userWallet, traceContext) = tuser
     withSpan(s"$workflowId.selfGrantFeatureAppRight") { implicit traceContext => _ =>
+      // TODO(#8057): allow setting these fields from the wallet UI
+      val appKind = request.flatMap(_.appKind).map(FeaturedAppKindUtil.toDaml)
+      val activityWeight =
+        request.flatMap(_.activityWeight).map(Codec.tryDecode(Codec.JavaBigDecimal)(_))
+      val opsParties = request.flatMap(_.opsPartyIds).map { partyIds =>
+        if (partyIds.size > 10) {
+          throw HttpErrorHandler.badRequest(
+            s"At most 10 ops parties are allowed, got ${partyIds.size}"
+          )
+        }
+        partyIds.map(Codec.tryDecode(Codec.Party)(_).toProtoPrimitive)
+      }
+      val anyConfigSet = appKind.isDefined || activityWeight.isDefined || opsParties.isDefined
       for {
+        _ <-
+          if (anyConfigSet)
+            packageVersionSupport
+              .supportsFeaturedAppConfigInSelfGrant(
+                Seq(userWallet.store.key.validatorParty, userWallet.store.key.endUserParty),
+                walletManager.clock.now,
+              )
+              .map(support =>
+                if (!support.supported)
+                  throw HttpErrorHandler.badRequest(
+                    "Setting app_kind, activity_weight or ops_party_ids requires a newer splice-wallet package version to be vetted"
+                  )
+              )
+          else Future.unit
         amuletRules <- scanConnection.getAmuletRulesWithState()
         result <- exerciseWalletAction((installCid, _) =>
           Future.successful(
             installCid
               .exerciseWalletAppInstall_FeaturedAppRights_SelfGrant(
                 amuletRules.contractId,
-                // TODO(#8057): allow setting these fields
-                java.util.Optional.empty(),
-                java.util.Optional.empty(),
-                java.util.Optional.empty(),
+                activityWeight.toJava,
+                appKind.toJava,
+                opsParties.map(_.asJava).toJava,
               )
               .map(_.exerciseResult.featuredAppRight)
           )
