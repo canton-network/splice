@@ -49,7 +49,7 @@ class SvOfflineRootNamespaceKeyIntegrationTest
       sv4 = false,
       // the identities are built from a root key held offline, so the nodes
       // must stay uninitialized until the test sets them up
-      autoInitParticipants = Set.empty,
+      manualInitParticipants = Set(1, 2, 3),
     )() {
       initSvNodesWithOfflineRootNamespaceKey(sv1Backend, sv1ScanBackend)
       initSvNodesWithOfflineRootNamespaceKey(sv2Backend, sv2ScanBackend)

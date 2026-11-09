@@ -50,9 +50,9 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       enableBftSequencer: Boolean = IsTheCantonSequencerBFTEnabled,
       extraSequencerConfig: Seq[String] = Seq.empty,
       enableKeyDownload: Boolean = false,
-      // The SVs whose participant Canton should initialize. Narrow this for
-      // tests that set a participant's identity up themselves.
-      autoInitParticipants: Set[Int] = Set(1, 2, 3, 4),
+      // The SVs whose participant should NOT be initialized by Canton, because
+      // the test sets that participant's identity up itself.
+      manualInitParticipants: Set[Int] = Set.empty,
   )(extraEnv: (String, String)*)(test: => A)(implicit tc: TraceContext): A = {
 
     def conditionalConf(condition: Boolean, filename: String) =
@@ -67,7 +67,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
         conditionalConf(svs123 && participants, "standalone-participants-sv123.conf") ++
         (1 to 3).flatMap(i =>
           conditionalConf(
-            svs123 && participants && autoInitParticipants.contains(i),
+            svs123 && participants && !manualInitParticipants.contains(i),
             s"standalone-participant-sv${i}-auto-init.conf",
           )
         ) ++
@@ -81,7 +81,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
         ) ++
         conditionalConf(sv4 && participants, "standalone-participant-sv4.conf") ++
         conditionalConf(
-          sv4 && participants && autoInitParticipants.contains(4),
+          sv4 && participants && !manualInitParticipants.contains(4),
           "standalone-participant-sv4-auto-init.conf",
         ) ++
         conditionalConf(sv4 && sequencersMediators, "standalone-sequencer-mediator-sv4.conf") ++

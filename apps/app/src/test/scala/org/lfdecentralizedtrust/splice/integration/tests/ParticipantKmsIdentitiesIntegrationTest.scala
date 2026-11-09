@@ -171,7 +171,7 @@ class ParticipantKmsIdentitiesIntegrationTest
         ),
         // sv2 restores its identity from a dump, so Canton must not give its
         // participant a fresh one first.
-        autoInitParticipants = Set(1, 3),
+        manualInitParticipants = Set(2),
       )(
         "KMS_TYPE" -> "gcp",
         "KMS_LOCATION_ID" -> "us-central1",

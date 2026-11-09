@@ -316,7 +316,7 @@ class ManualStartIntegrationTest
         // This test sets up sv2's and alice's identities itself, with a
         // deliberately reused signing key, so Canton must leave those alone.
         // sv1 is skipped below and still relies on Canton initializing it.
-        autoInitParticipants = Set(1),
+        manualInitParticipants = Set(2, 3, 4),
       )() {
 
         val allCnApps = Seq[AppBackendReference](
