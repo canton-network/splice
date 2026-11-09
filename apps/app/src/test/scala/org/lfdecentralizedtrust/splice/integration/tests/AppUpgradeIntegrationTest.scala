@@ -132,7 +132,7 @@ class AppUpgradeIntegrationTest
           ).foreach { case (conf, apps) =>
             val version = getBaseVersion()
             val bundledConfig = getConfigFileFromBundle(version, conf)
-            val suffix = apps
+            val dbSuffix = apps
               .flatMap(app =>
                 Seq(
                   s"canton.$app.storage.config.properties.databaseName = ${conf.replace("-", "").toLowerCase}"
