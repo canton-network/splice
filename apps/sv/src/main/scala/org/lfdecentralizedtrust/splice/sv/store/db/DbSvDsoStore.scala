@@ -2497,6 +2497,40 @@ class DbSvDsoStore private (
     } yield result.map(contractFromRow(FeaturedAppActivityMarker.COMPANION)(_))
   }
 
+  override def listFeaturedAppRightsForParties(
+      appParties: Seq[PartyId],
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]] = {
+    if (appParties.isEmpty) Future.successful(Seq.empty)
+    else {
+      val arr = appParties.map(_.toProtoPrimitive).toArray
+      waitUntilAcsIngested {
+        storage
+          .query(
+            selectFromAcsTable(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              FeaturedAppRight.COMPANION,
+              where = sql"""
+                (create_arguments->>'provider') = any($arr)
+                or exists (
+                  select 1 from jsonb_array_elements_text(
+                    case when jsonb_typeof(create_arguments->'opsParties') = 'array'
+                         then create_arguments->'opsParties' else '[]'::jsonb end) e
+                  where e = any($arr))
+              """.toActionBuilder,
+              orderLimit = sql"""limit ${sqlLimit(limit)}""",
+            ),
+            "findFeaturedAppRightsForParties",
+          )
+          .map(_.map(contractFromRow(FeaturedAppRight.COMPANION)(_)))
+      }
+    }
+  }
+
   override def close(): Unit = {
     dsoStoreMetrics.close()
     super.close()

@@ -16,10 +16,53 @@ import com.daml.ledger.javaapi.data.{
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{LogEntry, NamedLogging, SuppressionRule}
 import com.digitalasset.canton.protocol.LfContractId
+import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
+import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
+import com.digitalasset.daml.lf.data.Numeric
 import com.google.protobuf.ByteString
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.Source
+import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight,
+  LockedAmulet,
+  cryptohash as cryptoHashCodegen,
+  rewardaccountingv2 as rewardAccountingCodegen,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
+  AmuletConfig,
+  RewardConfig,
+  USD,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
+  AllocationSpecification,
+  Reference,
+  SettlementInfo,
+  TransferLeg,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.Transfer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.{RewardState, SvRewardState}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
+  VRO_Accepted,
+  VRO_Rejected,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
   payment as paymentCodegen,
@@ -37,80 +80,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  cryptohash as cryptoHashCodegen,
-  rewardaccountingv2 as rewardAccountingCodegen,
-}
+import org.lfdecentralizedtrust.splice.environment.ledger.api.*
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResource, DarResources}
-import org.lfdecentralizedtrust.splice.environment.ledger.api.{
-  ActiveContract,
-  IncompleteReassignmentEvent,
-  Reassignment,
-  ReassignmentEvent,
-  ReassignmentUpdate,
-  TransactionTreeUpdate,
-  TreeUpdate,
-  TreeUpdateOrOffsetCheckpoint,
-}
-import org.lfdecentralizedtrust.splice.util.{
-  Contract,
-  EventId,
-  PackageQualifiedName,
-  SpliceUtil,
-  Trees,
-}
-import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
-import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.CloseContext
-import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.daml.lf.data.Numeric
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.Materializer
-import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  FeaturedAppKind,
-  FeaturedAppRight,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
-  AmuletConfig,
-  RewardConfig,
-  USD,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.{RewardState, SvRewardState}
-import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
-  VRO_Accepted,
-  VRO_Rejected,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  ActionRequiringConfirmation,
-  DsoRules_AddSv,
-  DsoRules_CloseVoteRequest,
-  DsoRules_CloseVoteRequestResult,
-  Reason,
-  Vote,
-  VoteRequest,
-}
 import org.lfdecentralizedtrust.splice.history.{AmuletCreate, AppRewardCreate}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.Transfer
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.LockedAmulet
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
-  AllocationSpecification,
-  Reference,
-  SettlementInfo,
-  TransferLeg,
-}
 import org.lfdecentralizedtrust.splice.store.db.{InternedStringStore, TxLogRowData}
+import org.lfdecentralizedtrust.splice.util.*
 import org.scalatest.wordspec.AsyncWordSpec
 import org.slf4j.event.Level
 
