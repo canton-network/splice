@@ -11,10 +11,10 @@ Access: cn-test-failures and splice via gh api (sandbox token); canton-network-i
 
 | Group | Refs | Signature | Suspected | Rank, why | State |
 |---|---|---|---|---|---|
-| g1-n1108 | 11277 11278 11279 | mainnet nightly 11-08 (run 42449239264): simtime (5), simtime (3), docker-no-canton (0) | 11274 tag bug, 11275 M2 | 1: nightly red 3 nights on the same sha | open |
-| g2-n1109 | 11281 11282 11283 11284 | mainnet nightly 11-09 (run 42565193320): simtime (5), (3), (0), (1) | same | 1: same | open |
-| g3-ingest | 11280 | Daily store performance tests, Ingestion Tests (run 42557724754) | unknown | 2: daily, first failure after 6 passes | open |
-| g4-rl094 | 11231 | wall-clock-time (4) on release-line-0.9.4 (run 42082967872) | unknown | 3: release line, single hit | open |
+| g1-n1108 | 11277 11278 11279 | mainnet nightly 11-08 (run 42449239264): simtime (5), simtime (3), docker-no-canton (0) | 11274 tag bug, 11275 M2 | 1: nightly red 3 nights on the same sha | landed: 11277 11278 dup 11274; 11279 new infra one-off (Testcontainers pull watchdog, s3mock); quotes verified |
+| g2-n1109 | 11281 11282 11283 11284 | mainnet nightly 11-09 (run 42565193320): simtime (5), (3), (0), (1) | same | 1: same | landed: 11281 dup 11274; 11282 11283 dup 11255; 11284 dup 11275; quotes verified |
+| g3-ingest | 11280 | Daily store performance tests, Ingestion Tests (run 42557724754) | unknown | 2: daily, first failure after 6 passes | landed: new, #8269 added VerdictStore test without threshold rule, fails every scheduled run; owner jagathweerasinghe-da; quotes verified |
+| g4-rl094 | 11231 | wall-clock-time (4) on release-line-0.9.4 (run 42082967872) | unknown | 3: release line, single hit | landed: dup 10358 (closed): cold compile + 40 min sbt timeout, #8319 not backported; quotes verified |
 | - | 11285 | CircleCI reset_validator_runbook_devnet, release-line-0.10.1 | sibling of 10680 | 2: daily deploy; log request | open |
 
 Waiting from earlier rounds (re-list, not re-triaged): 11238, 11256, 11258, 11274, 11275, 11276 (round
