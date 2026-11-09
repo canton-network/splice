@@ -533,13 +533,16 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     }
 
-    clue("Round 8 scan totals: TBAR v1.1 reward-accounting fields are all zero") {
+    clue(
+      "Round 8 scan totals: TBAR v1.1 reward-accounting fields are zero, except for the unclaimed budget"
+    ) {
       val t = totalsByRound(8L)
       t.totalAssetActivityWeight shouldBe 0L
       BigDecimal(t.totalAppRewardFromAppActivity) shouldBe BigDecimal(0)
       BigDecimal(t.totalAppRewardFromAssetActivity) shouldBe BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAppActivity) shouldBe BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAssetActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.totalAppRewardUnclaimed) should be > BigDecimal(0)
     }
 
     clue("Round 10 scan totals: TBAR v1.1 reward-accounting fields are all non-zero") {
@@ -549,6 +552,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       BigDecimal(t.totalAppRewardFromAssetActivity) should be > BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAppActivity) should be > BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAssetActivity) should be > BigDecimal(0)
+      // There still is some allowance left-over.
+      BigDecimal(t.totalAppRewardUnclaimed) should be > BigDecimal(0)
     }
 
     // The remaining assertions cover the handling of V2 contracts created on ledger.
