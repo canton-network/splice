@@ -52,6 +52,11 @@ class DsoPartyMigration(
     dsoPartyHosting,
     loggerFactory,
   )
+  private val temporaryCodes = Set(
+    Status.Code.FAILED_PRECONDITION,
+    Status.Code.NOT_FOUND,
+    Status.Code.UNIMPLEMENTED,
+  )
 
   def authorizeParticipantForHostingDsoParty(
       participantId: ParticipantId
@@ -78,8 +83,20 @@ class DsoPartyMigration(
           s"DSO party was authorized on $participantId, preparing snapshot at time $activationTime."
         )
       } yield SnapshotKey.Acs(dsoRules.domain, dsoParty, activationTime)).value
-        .recoverWith(DsoPartyMigration.temporarilyUnavailable(participantId))
+        .recoverWith(temporarilyUnavailable(participantId))
     )
+  }
+
+  private def temporarilyUnavailable[T](
+      participantId: ParticipantId
+  ): PartialFunction[Throwable, Future[T]] = {
+    case e: StatusRuntimeException if temporaryCodes.contains(e.getStatus.getCode) =>
+      Future.failed(
+        Status.UNAVAILABLE
+          .withDescription(s"DSO party authorization for $participantId is temporarily unavailable")
+          .withCause(e)
+          .asRuntimeException()
+      )
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
@@ -142,25 +159,4 @@ class DsoPartyMigration(
 
   }
 
-}
-
-object DsoPartyMigration {
-
-  private val temporaryCodes = Set(
-    Status.Code.FAILED_PRECONDITION,
-    Status.Code.NOT_FOUND,
-    Status.Code.UNIMPLEMENTED,
-  )
-
-  private[sv] def temporarilyUnavailable[T](
-      participantId: ParticipantId
-  ): PartialFunction[Throwable, Future[T]] = {
-    case e: StatusRuntimeException if temporaryCodes.contains(e.getStatus.getCode) =>
-      Future.failed(
-        Status.UNAVAILABLE
-          .withDescription(s"DSO party authorization for $participantId is temporarily unavailable")
-          .withCause(e)
-          .asRuntimeException()
-      )
-  }
 }

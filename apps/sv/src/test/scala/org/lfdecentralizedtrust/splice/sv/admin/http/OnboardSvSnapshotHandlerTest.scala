@@ -19,13 +19,18 @@ import org.apache.pekko.http.scaladsl.server.Directives.{complete, provide}
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
-import org.lfdecentralizedtrust.splice.environment.RetryProvider
+import org.lfdecentralizedtrust.splice.environment.{
+  ParticipantAdminConnection,
+  RetryProvider,
+  SpliceLedgerClient,
+}
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_public_stream.{
   SvPublicStreamHandler,
   SvPublicStreamResource,
 }
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingSnapshotsConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
@@ -37,6 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapsho
   SnapshotKey,
   SnapshotState,
 }
+import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
 import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
 
@@ -230,9 +236,23 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
     }
 
     def responseTo(failure: Exception) = {
-      val failed = Future
-        .failed[String](failure)
-        .recoverWith(DsoPartyMigration.temporarilyUnavailable(ParticipantId("candidate")))
+      val party = PartyId.tryFromProtoPrimitive("party::dummy")
+      val dsoStore = mock[SvDsoStore]
+      when(dsoStore.key).thenReturn(SvStore.Key(party, party))
+      when(dsoStore.getDsoRules()(any[TraceContext])).thenReturn(Future.failed(failure))
+      val dsoStoreWithIngestion = mock[AppStoreWithIngestion[SvDsoStore]]
+      when(dsoStoreWithIngestion.store).thenReturn(dsoStore)
+      val failed = new DsoPartyMigration(
+        mock[AppStoreWithIngestion[SvSvStore]],
+        dsoStoreWithIngestion,
+        mock[ParticipantAdminConnection],
+        mock[SpliceLedgerClient],
+        retryProvider,
+        mock[DsoPartyHosting],
+        loggerFactory,
+      ).authorizeParticipantForHostingDsoParty(ParticipantId("candidate"))
+        .value
+        .map(_.toString)
       val failing =
         Route.seal(new HttpErrorHandler(loggerFactory).exceptionsDirective(traceContext) {
           complete(failed)
@@ -250,7 +270,9 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
           body should include("temporarily unavailable")
           body should not include "internal-sequencer"
         }
-        failed.failed.futureValue.getCause shouldBe failure
+        val unavailable = failed.failed.futureValue
+        Status.fromThrowable(unavailable).getCode shouldBe Status.Code.UNAVAILABLE
+        unavailable.getCause shouldBe failure
       }
     }
 

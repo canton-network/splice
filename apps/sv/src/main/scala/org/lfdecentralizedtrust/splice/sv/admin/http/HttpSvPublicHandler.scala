@@ -827,6 +827,15 @@ object HttpSvPublicHandler {
       )
     )
 
+  private def acceptedStateNotFoundResponse(
+      participantId: ParticipantId
+  ): definitions.AcceptedStateNotFoundErrorResponse =
+    definitions.AcceptedStateNotFoundErrorResponse(
+      definitions.ErrorResponse(
+        s"Transaction where the participant $participantId was activated not found."
+      )
+    )
+
   private[http] def onboardSvPartyMigrationPrepareResponse(
       snapshotService: SvOnboardingSnapshotService,
       prepared: Either[DsoPartyMigrationFailure, SnapshotKey.Acs],
@@ -840,15 +849,7 @@ object HttpSvPublicHandler {
       case Left(DsoPartyHosting.RequiredProposalNotFound(partyToParticipantSerial)) =>
         Future.successful(respond.BadRequest(proposalNotFoundResponse(partyToParticipantSerial)))
       case Left(DsoPartyHosting.AcceptedStateNotFound(participantId)) =>
-        Future.successful(
-          respond.BadRequest(
-            definitions.AcceptedStateNotFoundErrorResponse(
-              definitions.ErrorResponse(
-                s"Transaction where the participant $participantId was activated not found."
-              )
-            )
-          )
-        )
+        Future.successful(respond.BadRequest(acceptedStateNotFoundResponse(participantId)))
       case Right(key) =>
         snapshotService
           .prepare(key, exportSnapshot(key, _))
