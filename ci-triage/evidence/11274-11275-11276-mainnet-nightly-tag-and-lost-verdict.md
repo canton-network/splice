@@ -410,3 +410,28 @@ test waits on the ledger before it advances the clock. #8356 (open) removes the 
 sim-clock delay remain. Precedent for a simtime-only override: `simple-topology-canton-simtime.conf` already
 disables the sequencer circuit breaker because it is based on block time. Candidate fix (not tested):
 `_mediator_template.parameters.delayed-verdict-sender.enabled = false` in `simple-topology-canton-simtime.conf`.
+
+### When sv4 is blacklisted (globalSequencerSv1 epochs, 11275 and 11284)
+
+```
+zcat log/<ref>/<dir>/canton-simtime.clog.gz | jq -r 'select(.logger_name|test("globalSequencerSv1")) | select(.message|test("^New epoch")) | ... leaders, blacklisted nodes, nodes of the ordering topology'
+```
+```
+== 11275 (stuck request sequenced 05:32:44-45, sv4 refusal 05:33:00.864)
+05:32:27.081 epoch 12 leaders=sv1,sv2 blacklisted= nodes=sv1,sv2
+05:32:38.080 epoch 13 leaders=sv2,sv1 blacklisted= nodes=sv1,sv2
+05:32:47.898 epoch 14 leaders=sv3,sv4,sv1,sv2 blacklisted= nodes=sv1,sv2,sv3,sv4
+05:32:59.949 epoch 15 leaders=sv1,sv2,sv3 blacklisted=sv4 nodes=sv1,sv2,sv3,sv4
+05:33:13.467 epoch 16 leaders=sv2,sv3,sv1 blacklisted=sv4 nodes=sv1,sv2,sv3,sv4
+05:33:27.505 epoch 17 leaders=sv3,sv1,sv2 blacklisted=sv4 nodes=sv1,sv2,sv3,sv4
+05:33:42.499 epoch 18 leaders=sv3,sv4,sv1,sv2 blacklisted= nodes=sv1,sv2,sv3,sv4
+== 11284 (stuck request sequenced 05:34:12, sv4 refusal 05:34:26.457)
+05:34:05.695 epoch 78 leaders=sv1,sv2 blacklisted= nodes=sv1,sv2
+05:34:13.330 epoch 79 leaders=sv4,sv1,sv2,sv3 blacklisted= nodes=sv1,sv2,sv3,sv4
+05:34:25.014 epoch 80 leaders=sv3,sv1,sv2 blacklisted=sv4 nodes=sv1,sv2,sv3,sv4
+05:34:38.239 epoch 81 leaders=sv1,sv2,sv3 blacklisted=sv4 nodes=sv1,sv2,sv3,sv4
+05:34:52.294 epoch 82 leaders=sv2,sv3,sv1 blacklisted=sv4 nodes=sv1,sv2,sv3,sv4
+```
+In both runs the ordering topology goes 1 -> 2 -> 4 (sv3 and sv4 in one step), and sv4 is blacklisted from the
+first epoch after the 2 -> 4 switch, i.e. sv4 failed its segment as a newcomer leader in the switch epoch. The stuck
+request is sequenced right at the switch. Not checked: why the sv4 segment failed (catch-up, as 11257 / 11173).
