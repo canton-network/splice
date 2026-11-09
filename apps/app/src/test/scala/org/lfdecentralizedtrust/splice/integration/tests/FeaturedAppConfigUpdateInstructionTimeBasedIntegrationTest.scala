@@ -102,6 +102,27 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
             .futureValue should not be empty,
       )
 
+      // The expire trigger only acts on instructions whose provider no longer holds a
+      // FeaturedAppRight (see ExpireFeaturedAppConfigUpdateInstructionTrigger), so withdraw it to
+      // reproduce the config-update-races-right-revocation scenario the trigger guards against.
+      val featuredAppRightCid =
+        sv1ScanBackend.lookupFeaturedAppRight(providerParty).value.contractId
+      actAndCheck(
+        "the provider's featured app right is withdrawn",
+        sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+          .submitWithResult(
+            userId = sv1Backend.config.ledgerApiUser,
+            actAs = Seq(dsoParty),
+            readAs = Seq.empty,
+            update = featuredAppRightCid.exerciseFeaturedAppRight_Withdraw(
+              "provider no longer featured"
+            ),
+          ),
+      )(
+        "the featured app right is gone from scan",
+        _ => sv1ScanBackend.lookupFeaturedAppRight(providerParty) shouldBe empty,
+      )
+
       // The execute trigger is paused, so the instruction is never applied and lives until expiry.
       advanceTime(
         java.time.Duration.ofNanos(voteRequestTimeout.microseconds * 1000).plusMinutes(1)
@@ -114,17 +135,12 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
           .runOnce()
           .futureValue,
       )(
-        "the instruction is archived and the featured app right is unchanged",
+        "the instruction is archived and the provider has no featured app right",
         _ => {
           sv1Backend.appState.dsoStore
             .listFeaturedAppConfigUpdateInstructionSample()
             .futureValue shouldBe empty
-          sv1ScanBackend
-            .lookupFeaturedAppRight(providerParty)
-            .value
-            .payload
-            .activityWeight
-            .toScala shouldBe None
+          sv1ScanBackend.lookupFeaturedAppRight(providerParty) shouldBe empty
         },
       )
   }
