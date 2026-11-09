@@ -47,7 +47,7 @@ export type Auth0Config = {
 
 export interface Auth0ClientAccessToken {
   accessToken: string;
-  expiry: string;
+  expiry: Date;
 }
 
 export interface Auth0Client {
@@ -55,7 +55,8 @@ export interface Auth0Client {
   getClientAccessToken: (
     clientId: string,
     clientSecret: string,
-    audience: string
+    audience: string,
+    api: 'ledgerApi' | 'participantAdminApi'
   ) => Promise<string>;
   getCfg: () => Auth0Config;
 }

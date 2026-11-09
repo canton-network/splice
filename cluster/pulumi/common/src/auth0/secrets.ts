@@ -68,7 +68,12 @@ async function ledgerApiSecretContent(
   const clientSecret = clientSecrets.client_secret;
 
   if (fixedTokens()) {
-    const accessToken = await auth0Client.getClientAccessToken(clientId, clientSecret, audience);
+    const accessToken = await auth0Client.getClientAccessToken(
+      clientId,
+      clientSecret,
+      audience,
+      'ledgerApi'
+    );
     return {
       audience,
       token: accessToken,
@@ -326,7 +331,12 @@ async function participantAdminApiSecretContent(
   const clientSecret = clientSecrets.client_secret;
 
   if (fixedTokens()) {
-    const token = await auth0Client.getClientAccessToken(clientId, clientSecret, audience);
+    const token = await auth0Client.getClientAccessToken(
+      clientId,
+      clientSecret,
+      audience,
+      'participantAdminApi'
+    );
     return {
       audience,
       token,

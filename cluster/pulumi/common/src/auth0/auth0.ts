@@ -5,7 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import { KubeConfig, CoreV1Api } from '@kubernetes/client-node';
 import { Output } from '@pulumi/pulumi';
-import { AuthenticationClient, ManagementClient, TokenSet, withRetries } from 'auth0';
+import { AuthenticationClient, ManagementClient, withRetries } from 'auth0';
 
 import { config, isMainNet } from '../config';
 import { StackReferences } from '../stackReferences';
@@ -13,37 +13,21 @@ import { fixedTokens } from '../utils';
 import type {
   Auth0Client,
   Auth0SecretMap,
-  Auth0ClientAccessToken,
   Auth0ClientSecret,
   Auth0Config,
   Auth0ClusterConfig,
   Auth0NamespaceConfig,
 } from './auth0types';
-
-type Auth0CacheMap = Record<string, Auth0ClientAccessToken>;
-
-/* Access tokens deployed into a cluster need to have a lifetime at
- * least as long as the cluster is expected to run. This means that
- * cached tokens set to expire during the expected lifetime of an
- * environment need to be refreshed at deployment even if they aren't
- * quite expired.
- *
- * This constant sets the length of time tokens are expected to remain
- * valid. It is currently eight days, based on the seven day life of
- * TestNet and a short additional grace period.
- */
-const REQUIRED_TOKEN_LIFETIME = 8 * 86400;
-
-function addTimeSeconds(t: Date, seconds: number): Date {
-  const t2 = new Date(t);
-  t2.setSeconds(t2.getSeconds() + seconds);
-  return t2;
-}
+import {
+  FixedTokensCache,
+  getOrUpdateToken,
+  loadFixedTokesCache,
+  persistFixedTokensCache,
+} from './fixedTokensCache';
 
 export class Auth0Fetch implements Auth0Client {
   private secrets: Auth0SecretMap | undefined;
-  private auth0Cache: Auth0CacheMap | undefined;
-  private hasDiffsToSave = false;
+  private fixedTokensCache: FixedTokensCache | undefined;
 
   private cfg: Auth0Config;
 
@@ -91,100 +75,25 @@ export class Auth0Fetch implements Auth0Client {
     return kc.makeApiClient(CoreV1Api);
   }
 
-  // Each Pulumi stack gets its own cache secret to avoid concurrent write races
-  // when multiple stacks (e.g., validator1, splitwell) run in parallel.
-  private get cacheSecretName(): string {
-    return `${this.cfg.fixedTokenCacheName}-${pulumi.getProject()}-${pulumi.getStack()}`;
-  }
-
+  // TODO: rename
   public async loadAuth0Cache(): Promise<void> {
     if (!fixedTokens()) {
       await pulumi.log.debug('Fixed tokens not enabled, skipping Auth0 cache load');
-      this.auth0Cache = undefined;
+      this.fixedTokensCache = undefined;
       return;
     }
 
-    await pulumi.log.debug('Loading Auth0 Cache');
-    const cacheMap = {} as Auth0CacheMap;
-
-    try {
-      const k8sApi = this.getK8sClient();
-      const cacheSecret = await k8sApi.readNamespacedSecret({
-        name: this.cacheSecretName,
-        namespace: 'default',
-      });
-
-      const data = cacheSecret.data;
-
-      for (const clientId in data) {
-        cacheMap[clientId] = JSON.parse(Buffer.from(data[clientId], 'base64').toString('ascii'));
-      }
-
-      await pulumi.log.debug('Auth0 cache loaded...');
-    } catch (e) {
-      await pulumi.log.warn('No Auth0 cache secret found');
-    }
-
-    this.auth0Cache = cacheMap;
+    this.fixedTokensCache = await loadFixedTokesCache(this.getK8sClient());
   }
 
+  // TODO: rename
   public async saveAuth0Cache(): Promise<void> {
-    const data = {} as Record<string, string>;
-    await pulumi.log.debug('Saving Auth0 cache');
-
-    if (!this.auth0Cache) {
+    if (this.fixedTokensCache === undefined) {
       await pulumi.log.debug('No auth0 cache to save');
       return;
     }
 
-    if (!this.hasDiffsToSave) {
-      await pulumi.log.debug('No auth0 cache diffs to save');
-      return;
-    }
-
-    for (const clientId in this.auth0Cache) {
-      const cachedToken = this.auth0Cache[clientId];
-
-      data[clientId] = Buffer.from(JSON.stringify(cachedToken)).toString('base64');
-    }
-
-    const secretBody = {
-      apiVersion: 'v1',
-      kind: 'Secret',
-      metadata: {
-        name: this.cacheSecretName,
-      },
-      data,
-    };
-
-    try {
-      await pulumi.log.info('Attempting to create secret');
-      const k8sApi = this.getK8sClient();
-      await k8sApi.createNamespacedSecret({
-        namespace: 'default',
-        body: secretBody,
-      });
-    } catch (_) {
-      try {
-        await pulumi.log.info('Deleting existing secret');
-        const k8sApi = this.getK8sClient();
-        await k8sApi.deleteNamespacedSecret({
-          name: this.cacheSecretName,
-          namespace: 'default',
-        });
-
-        await pulumi.log.info('Creating new secret');
-        await k8sApi.createNamespacedSecret({
-          namespace: 'default',
-          body: secretBody,
-        });
-      } catch (e) {
-        await pulumi.log.error(`Auth0 cache update failed: ${JSON.stringify(e)}`);
-        process.exit(1);
-      }
-    }
-
-    await pulumi.log.debug('Auth0 cache saved');
+    await persistFixedTokensCache(this.getK8sClient(), this.fixedTokensCache);
   }
 
   public async getSecrets(): Promise<Auth0SecretMap> {
@@ -195,73 +104,35 @@ export class Auth0Fetch implements Auth0Client {
     return this.secrets;
   }
 
+  // TODO: rename
   public async getClientAccessToken(
     clientId: string,
     clientSecret: string,
-    audience: string
+    audience: string,
+    api: 'ledgerApi' | 'participantAdminApi'
   ): Promise<string> {
-    await pulumi.log.debug('Getting access token for Auth0 client: ' + clientId);
-
-    const now = new Date();
-
-    if (this.auth0Cache) {
-      const cachedSecret = this.auth0Cache[clientId];
-      if (cachedSecret) {
-        const cachedSecretExpiry = new Date(cachedSecret.expiry);
-        if (addTimeSeconds(now, REQUIRED_TOKEN_LIFETIME) > cachedSecretExpiry) {
-          await pulumi.log.info('Ignoring expired cached Auth0 token for client: ' + clientId);
-        } else {
-          await pulumi.log.debug('Using cached Auth0 token for client: ' + clientId);
-          return cachedSecret.accessToken;
-        }
-      }
+    if (this.fixedTokensCache === undefined) {
+      throw new Error(); // TODO: only used for fixed tokens setup
     }
-
-    await pulumi.log.debug(
-      'Querying access token for Auth0 client: ' + clientId + ' with audience ' + audience
-    );
-    const auth0 = new AuthenticationClient({
-      domain: this.cfg.auth0Domain,
-      clientId: clientId,
-      clientSecret: clientSecret,
-    });
-
-    const tokenResponse = await auth0.oauth.clientCredentialsGrant({
-      audience,
-    });
-
-    const { expires_in } = tokenResponse.data;
-
-    if (expires_in < REQUIRED_TOKEN_LIFETIME) {
-      /* If you see this error, you either need to decrease the required token
-       * lifetime or extend the length of the tokens issued by Auth0
-       * (configured in the configuration of the ledger-api API in auth0).
-       */
-      await pulumi.log.error(
-        `Auth0 access token issued with expiry (${expires_in}) too short to meet REQUIRED_TOKEN_LIFETIME (${REQUIRED_TOKEN_LIFETIME})`
+    return await getOrUpdateToken(this.fixedTokensCache, clientId, api, async () => {
+      await pulumi.log.debug(
+        `Requesting a new fixed [${api}] token (audience: [${audience}]) for [${clientId}] from Auth0.`
       );
-      process.exit(1);
-    }
+      const auth0 = new AuthenticationClient({
+        domain: this.cfg.auth0Domain,
+        clientId: clientId,
+        clientSecret: clientSecret,
+      });
 
-    const expiry = addTimeSeconds(now, expires_in);
+      const tokenResponse = await auth0.oauth.clientCredentialsGrant({
+        audience,
+      });
 
-    await this.cacheNewToken(clientId, expiry, tokenResponse.data);
-
-    return tokenResponse.data.access_token;
-  }
-
-  private async cacheNewToken(clientId: string, expiry: Date, tokenResponse: TokenSet) {
-    await pulumi.log.debug(
-      'Caching access token for Auth0 client: ' + clientId + ' expiry: ' + expiry.toJSON()
-    );
-
-    if (this.auth0Cache && tokenResponse.access_token) {
-      this.hasDiffsToSave = true;
-      this.auth0Cache[clientId] = {
-        accessToken: tokenResponse.access_token,
-        expiry: expiry.toJSON(),
+      return {
+        accessToken: tokenResponse.data.access_token,
+        expiry: new Date(Date.now() + tokenResponse.data.expires_in * 1000),
       };
-    }
+    });
   }
 }
 
