@@ -21,6 +21,7 @@ import Splice.Fees
 import Splice.Issuance()
 
 
+import Splice.DsoBootstrap
 import Splice.DsoRules
 import Splice.DSO.AmuletPrice
 import Splice.AmuletConfig
@@ -1153,22 +1154,20 @@ testVoteCastingCooldown  = do
 
   pure ()
 
--- | SV vote replaces the credential registry free period and extension price.
 testCredentialRegistryConfigChange : Script ()
 testCredentialRegistryConfigChange = do
   (app, dso, (sv1, sv2, sv3, _)) <- initMainNet
   [(dsoRulesCid, _)] <- query @DsoRules dso
-  configCid <- submit dso $ createCmd CredentialRegistryConfig with
-    dso
-    freePeriod = days 90
-    extensionUsdPerYear = 1.0
+  [(configCid, config0)] <- query @CredentialRegistryConfig dso
+  config0.freePeriod === initialCredentialRegistryFreePeriod
+  config0.extensionUsdPerYear === initialCredentialRegistryExtensionUsdPerYear
 
   now <- getTime
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
-    action = ARC_CredentialRegistryConfig with
-      credentialRegistryConfigCid = configCid
-      credentialRegistryConfigAction = CRCARC_SetConfig CredentialRegistryConfig_SetConfig with
+    action = ARC_DsoRules with
+      dsoAction = SRARC_SetCredentialRegistryConfig DsoRules_SetCredentialRegistryConfig with
+        configCid
         newFreePeriod = days 30
         newExtensionUsdPerYear = 2.0
     reason = Reason with url = ""; body = "shorter free period"

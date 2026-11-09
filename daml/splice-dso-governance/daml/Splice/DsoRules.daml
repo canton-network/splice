@@ -78,9 +78,6 @@ data ActionRequiringConfirmation
       dummyUnitField : ()
         -- ^ Extension constructor (and field) to work around the current lack of upgrading for variants in Daml 3.0
         -- This on takes care of providing extensibility for the specific variants below.
-  | ARC_CredentialRegistryConfig with
-      credentialRegistryConfigCid : ContractId CredentialRegistryConfig
-      credentialRegistryConfigAction : CredentialRegistryConfig_ActionRequiringConfirmation
   deriving (Eq, Show, Serializable)
 
 data AmuletRules_ActionRequiringConfirmation
@@ -127,6 +124,8 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Update a specific featured app right.
   | SRARC_CreateCredentialRegistryConfig DsoRules_CreateCredentialRegistryConfig
     -- ^ Create the initial credential registry config if it was not part of network bootstrapping.
+  | SRARC_SetCredentialRegistryConfig DsoRules_SetCredentialRegistryConfig
+    -- ^ Voted action to replace the credential registry free period and extension price.
   deriving (Eq, Show, Serializable)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -134,11 +133,6 @@ data AnsEntryContext_ActionRequiringConfirmation
     -- ^ Automated action to collect initial payment of an ans entry.
   | ANSRARC_RejectEntryInitialPayment AnsEntryContext_RejectEntryInitialPayment
     -- ^ Automated action to reject initial payment of an ans entry.
-  deriving (Eq, Show, Serializable)
-
-data CredentialRegistryConfig_ActionRequiringConfirmation
-  = CRCARC_SetConfig CredentialRegistryConfig_SetConfig
-    -- ^ Voted action to replace the credential registry free period and extension price.
   deriving (Eq, Show, Serializable)
 
 -- | Information about SVs relevant to DSO governance.
@@ -383,6 +377,11 @@ data DsoRules_CreateCredentialRegistryConfigResult = DsoRules_CreateCredentialRe
   with
     credentialRegistryConfigCid : ContractId CredentialRegistryConfig
   deriving (Show, Eq, Serializable)
+
+data DsoRules_SetCredentialRegistryConfigResult = DsoRules_SetCredentialRegistryConfigResult
+  with
+    result : CredentialRegistryConfig_SetConfigResult
+  deriving (Serializable)
 
 data DsoRules_CreateTransferCommandCounterResult = DsoRules_CreateTransferCommandCounterResult
   with
@@ -1699,16 +1698,30 @@ template DsoRules with
       do cid <- create ExternalPartyAmuletRules with dso
          pure (DsoRules_CreateExternalPartyAmuletRulesResult cid)
 
-    -- | Initial free period and extension price.
-    -- Later changes go through CredentialRegistryConfig_SetConfig.
+    -- | Initial free period and extension price, for a network bootstrapped before this existed.
+    -- `DsoBootstrap` already creates it. Later changes go through `DsoRules_SetCredentialRegistryConfig`.
     nonconsuming choice DsoRules_CreateCredentialRegistryConfig : DsoRules_CreateCredentialRegistryConfigResult
+      with
+        freePeriod : RelTime
+        extensionUsdPerYear : Decimal
       controller dso
       do
-        credentialRegistryConfigCid <- create CredentialRegistryConfig with
-          dso
-          freePeriod = days 90
-          extensionUsdPerYear = 1.0
+        credentialRegistryConfigCid <- create CredentialRegistryConfig with ..
         pure DsoRules_CreateCredentialRegistryConfigResult with ..
+
+    -- | Replace the free period and extension price. The disclosed config id is archived.
+    nonconsuming choice DsoRules_SetCredentialRegistryConfig : DsoRules_SetCredentialRegistryConfigResult
+      with
+        configCid : ContractId CredentialRegistryConfig
+        newFreePeriod : RelTime
+        newExtensionUsdPerYear : Decimal
+      controller dso
+      do
+        void $ fetchChecked (ForDso with dso) configCid
+        result <- exercise configCid CredentialRegistryConfig_SetConfig with
+          newFreePeriod
+          newExtensionUsdPerYear
+        return DsoRules_SetCredentialRegistryConfigResult with result
 
     nonconsuming choice DsoRules_CreateTransferCommandCounter : DsoRules_CreateTransferCommandCounterResult
       with
@@ -1902,16 +1915,13 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateCredentialRegistryConfig choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_SetCredentialRegistryConfig choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
       ANSRARC_CollectInitialEntryPayment choiceArg -> void $ exercise ansEntryContextCid choiceArg
       ANSRARC_RejectEntryInitialPayment choiceArg -> void $ exercise ansEntryContextCid choiceArg
   ExtActionRequiringConformation _dummyUnitField -> pure ()
-  ARC_CredentialRegistryConfig with .. -> do
-    void $ fetchChecked (ForDso with dso) credentialRegistryConfigCid
-    case credentialRegistryConfigAction of
-      CRCARC_SetConfig choiceArg -> void $ exercise credentialRegistryConfigCid choiceArg
 
 -- | __Deprecated__ in favor of delegateless automation.
 -- Functions implementing instant-runoff voting
@@ -1964,7 +1974,6 @@ actionRequiringConfirmationEffectiveAt action =
     ARC_AnsEntryContext with .. -> None
     ExtActionRequiringConformation _dummyUnitField ->
       error "Encountered unexpected ExtActionRequiringConformation at runtime"
-    ARC_CredentialRegistryConfig with .. -> None
 
 
 -- On- and offboarding

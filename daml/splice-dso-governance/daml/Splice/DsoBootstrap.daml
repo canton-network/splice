@@ -9,6 +9,8 @@ import DA.Optional (fromOptional)
 
 import Splice.AmuletConfig
 import Splice.AmuletRules
+import Splice.CredentialRegistryConfig (CredentialRegistryConfig(..))
+import Splice.Credentials (CredentialRegistry(..))
 import Splice.ExternalPartyAmuletRules
 import Splice.Schedule
 import Splice.Types
@@ -19,6 +21,12 @@ import Splice.DsoRules
 
 data DsoBootstrap_BootstrapResult = DsoBootstrap_BootstrapResult
   deriving (Serializable)
+
+initialCredentialRegistryFreePeriod : RelTime
+initialCredentialRegistryFreePeriod = days 90
+
+initialCredentialRegistryExtensionUsdPerYear : Decimal
+initialCredentialRegistryExtensionUsdPerYear = 1.0
 
 -- | A template for bootstrapping DsoRules and AmuletRules.
 template DsoBootstrap with
@@ -52,6 +60,11 @@ template DsoBootstrap with
           isDevNet
           contractStateSchemaVersion = None
         _ <- create ExternalPartyAmuletRules with dso
+        _ <- create CredentialRegistry with dso
+        _ <- create CredentialRegistryConfig with
+          dso
+          freePeriod = initialCredentialRegistryFreePeriod
+          extensionUsdPerYear = initialCredentialRegistryExtensionUsdPerYear
         _ <- create AnsRules with
           dso
           config = ansRulesConfig
