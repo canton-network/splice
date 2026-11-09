@@ -13,6 +13,7 @@ import DA.Time
 
 import Splice.Amulet
 import Splice.AmuletRules
+import Splice.CredentialRegistryConfig
 import Splice.Round
 import Splice.Schedule
 import Splice.DSO.DecentralizedSynchronizer
@@ -20,6 +21,7 @@ import Splice.Fees
 import Splice.Issuance()
 
 
+import Splice.DsoBootstrap
 import Splice.DsoRules
 import Splice.DSO.AmuletPrice
 import Splice.AmuletConfig
@@ -1151,3 +1153,42 @@ testVoteCastingCooldown  = do
           optCastAt = None
 
   pure ()
+
+testCredentialRegistryConfigChange : Script ()
+testCredentialRegistryConfigChange = do
+  (app, dso, (sv1, sv2, sv3, _)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(configCid, config0)] <- query @CredentialRegistryConfig dso
+  config0.freePeriod === initialCredentialRegistryFreePeriod
+  config0.extensionUsdPerYear === initialCredentialRegistryExtensionUsdPerYear
+
+  now <- getTime
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
+    requester = sv1
+    action = ARC_DsoRules with
+      dsoAction = SRARC_SetCredentialRegistryConfig DsoRules_SetCredentialRegistryConfig with
+        configCid
+        newFreePeriod = days 30
+        newExtensionUsdPerYear = 2.0
+    reason = Reason with url = ""; body = "shorter free period"
+    targetEffectiveAt = None
+    voteRequestTimeout = Some (days 2)
+
+  request <- castVote app sv2 result.voteRequest True
+  request <- castVote app sv3 request True
+
+  closeResult <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
+    requestCid = request
+    amuletRulesCid = None
+    sv = Some sv1
+
+  closeResult.completedAt === now
+  closeResult.offboardedVoters === []
+  closeResult.abstainingSvs === ["sv4"]
+  closeResult.outcome === VRO_Accepted with effectiveAt = now
+
+  None <- queryContractId dso configCid
+  [(_, config)] <- query @CredentialRegistryConfig dso
+  config.dso === dso
+  config.freePeriod === days 30
+  config.extensionUsdPerYear === 2.0
