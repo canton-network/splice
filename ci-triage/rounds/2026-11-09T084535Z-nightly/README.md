@@ -142,3 +142,9 @@ other failed runs not checked)". Not presented yet (11231 question pending).
 
 User closed 11231 as dup 10358. Backport tracking question for #8319 left unanswered: nothing tracked. Next:
 g5 (11287 11288 dup 11255) handed out.
+
+## Rule (user, 2026-11-09): duplicates
+
+No comment on the parent unless it changes the overall understanding of the issue (hit counts and lists of
+children do not; closing as duplicate links them). Each duplicate is closed with its own one-line comment about that
+hit (one close_duplicates call per ref). g5: recurrence comment on 11255 dropped.
