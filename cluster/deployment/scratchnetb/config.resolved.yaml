@@ -1655,7 +1655,7 @@ validator1:
     maxDuration: '5m'
     retention: '1h'
   walletGateway:
-    enabled: true
+    enabled: false
     portfolioVersion: '1.14.0'
     version: '1.13.0'
 validators:
