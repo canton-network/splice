@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.api.v2.event.Event
 import com.daml.ledger.api.v2.transaction_filter
+import com.daml.ledger.javaapi.data.codegen.ValueDecoder
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands.UpdateService.TransactionWrapper
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
@@ -9,16 +10,18 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import java.time.Duration
-import java.util.UUID
+import java.util.{Optional, UUID}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationrequestv1,
   allocationv1,
   metadatav1,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_MiningRound_StartIssuing
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.issuance.OpenMiningRoundSummary
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
@@ -26,6 +29,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradinga
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.util.Contract
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
@@ -444,7 +448,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertAssetActivity(event, "updateId7", Set(aliceParty, venueParty))
     }
 
-    assertRewardCalcs(aliceParty, venueParty, round10BeginOffset)
+    assertRewardCalcs(aliceParty, venueParty)
 
     clue("Issuing rounds have the expected issuancePerFeaturedAppRewardCoupon") {
       eventually() {
@@ -469,6 +473,12 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       }
     }
 
+    // Opt fields on OpenMiningRoundSummary are only populated under TBAR
+    // minting; the marker/dry-run paths intentionally leave them None.
+    if (mintingTrafficBased) {
+      assertOpenMiningRoundSummariesForRound10(round10BeginOffset)
+    }
+
     // Other misc API tests
     clue("404 for non-existent batch data") {
       sv1ScanBackend.getRewardAccountingBatch(6L, "0" * 64) shouldBe None
@@ -478,7 +488,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def assertRewardCalcs(
       aliceParty: PartyId,
       venueParty: PartyId,
-      round10BeginOffset: Long,
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val totalsByRound: Map[Long, definitions.RewardAccountingActivityTotalsOk] =
       clue("Rounds 0..10 activity totals and root hash are computed") {
@@ -586,80 +595,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         remainingProcess shouldBe empty withClue
           "ProcessRewardsV2 contracts for rounds < 11 should be consumed"
       }
-    }
-
-    clue(
-      "OpenMiningRoundSummary opt fields are populated on AmuletRules_MiningRound_StartIssuing exercises after round 10 opens"
-    ) {
-      val summaries = openMiningRoundSummariesSince(round10BeginOffset)
-
-      withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
-        summaries should not be empty
-      }
-
-      summaries.foreach { s =>
-        withClue("optIssuancePerFeaturedAppRewardCoupon populated") {
-          s.optIssuancePerFeaturedAppRewardCoupon.toScala shouldBe defined
-        }
-        withClue("optIssuancePerFeaturedAssetRewardCoupon populated") {
-          s.optIssuancePerFeaturedAssetRewardCoupon.toScala shouldBe defined
-        }
-        withClue("optTotalFeaturedAssetRewardCoupons populated") {
-          s.optTotalFeaturedAssetRewardCoupons.toScala shouldBe defined
-        }
-        withClue("optUnclaimedAppRewards populated") {
-          s.optUnclaimedAppRewards.toScala shouldBe defined
-        }
-      }
-    }
-  }
-
-  /** Decode every `AmuletRules_MiningRound_StartIssuing` exercise emitted on the
-    * SV participant since `beginOffsetExclusive`, returning the
-    * `OpenMiningRoundSummary` carried on each one's choice argument.
-    */
-  private def openMiningRoundSummariesSince(
-      beginOffsetExclusive: Long
-  )(implicit env: SpliceTestConsoleEnvironment): Seq[OpenMiningRoundSummary] = {
-    val dsoParty = sv1Backend.getDsoInfo().dsoParty
-    val participant = sv1Backend.participantClientWithAdminToken
-    val ledgerEnd = participant.ledger_api.state.end()
-
-    val txFormat = transaction_filter.TransactionFormat(
-      eventFormat = Some(
-        transaction_filter.EventFormat(
-          filtersByParty = Map(dsoParty.toLf -> transaction_filter.Filters(Nil)),
-          filtersForAnyParty = None,
-          verbose = true,
-        )
-      ),
-      transactionShape = transaction_filter.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
-    )
-
-    val updates = participant.ledger_api.updates.updates(
-      updateFormat = transaction_filter.UpdateFormat(
-        includeTransactions = Some(txFormat),
-        includeReassignments = None,
-        includeTopologyEvents = None,
-      ),
-      completeAfter = PositiveInt.MaxValue,
-      beginOffsetExclusive = beginOffsetExclusive,
-      endOffsetInclusive = Some(ledgerEnd),
-    )
-
-    updates.toSeq.flatMap {
-      case TransactionWrapper(tx) =>
-        tx.events
-          .collect { case event if event.event.isExercised => event.event.exercised }
-          .flatten
-          .collect {
-            case e if e.choice == "AmuletRules_MiningRound_StartIssuing" =>
-              val javaValue = com.daml.ledger.javaapi.data.Value.fromProto(
-                com.daml.ledger.api.v2.value.Value.toJavaProto(e.getChoiceArgument)
-              )
-              AmuletRules_MiningRound_StartIssuing.valueDecoder().decode(javaValue).summary
-          }
-      case _ => Seq.empty
     }
   }
 
@@ -1045,6 +980,204 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       },
     )
     new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
+  }
+
+  /** Assert that every `AmuletRules_MiningRound_StartIssuing` exercise emitted
+    * on the SV participant since `round10BeginOffset` populates the four
+    * opt fields on `OpenMiningRoundSummary`, and that the round-10 exercise's
+    * opt fields match the scan-side totals numerically.
+    */
+  private def assertOpenMiningRoundSummariesForRound10(
+      round10BeginOffset: Long
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val expected = inside(sv1ScanBackend.getRewardAccountingActivityTotals(10L)) {
+      case GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk(t) =>
+        t
+    }
+    clue(
+      "OpenMiningRoundSummary opt fields are populated on AmuletRules_MiningRound_StartIssuing exercises after round 10 opens"
+    ) {
+      val (exercises, round10Summary) = eventually() {
+        val exs = openMiningRoundExercisesSince(round10BeginOffset)
+        val r10 = exs
+          .find(_.round == 10L)
+          .map(_.summary)
+          .getOrElse(
+            fail(
+              "expected AmuletRules_MiningRound_StartIssuing exercise for round 10 in the window"
+            )
+          )
+        (exs, r10)
+      }
+
+      withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
+        exercises should not be empty
+      }
+
+      // Round-10 populate-ness is implicit in the numeric `decimalMatches`
+      // calls below; skip it here to avoid duplicate failures on the same field.
+      exercises.filter(_.round != 10L).foreach { ex =>
+        withClue(s"round ${ex.round}: optIssuancePerFeaturedAppRewardCoupon populated") {
+          ex.summary.optIssuancePerFeaturedAppRewardCoupon.toScala shouldBe defined
+        }
+        withClue(s"round ${ex.round}: optIssuancePerFeaturedAssetRewardCoupon populated") {
+          ex.summary.optIssuancePerFeaturedAssetRewardCoupon.toScala shouldBe defined
+        }
+        withClue(s"round ${ex.round}: optTotalFeaturedAssetRewardCoupons populated") {
+          ex.summary.optTotalFeaturedAssetRewardCoupons.toScala shouldBe defined
+        }
+        withClue(s"round ${ex.round}: optUnclaimedAppRewards populated") {
+          ex.summary.optUnclaimedAppRewards.toScala shouldBe defined
+        }
+      }
+
+      withClue("round 10: optIssuancePerFeaturedAppRewardCoupon matches scan total") {
+        decimalMatches(
+          round10Summary.optIssuancePerFeaturedAppRewardCoupon,
+          expected.issuancePerFeaturedAppActivity,
+        )
+      }
+      withClue("round 10: optIssuancePerFeaturedAssetRewardCoupon matches scan total") {
+        decimalMatches(
+          round10Summary.optIssuancePerFeaturedAssetRewardCoupon,
+          expected.issuancePerFeaturedAssetActivity,
+        )
+      }
+      withClue("round 10: optTotalFeaturedAssetRewardCoupons matches scan total") {
+        decimalMatches(
+          round10Summary.optTotalFeaturedAssetRewardCoupons,
+          expected.totalAppRewardFromAssetActivity,
+        )
+      }
+      withClue("round 10: optUnclaimedAppRewards matches scan total") {
+        decimalMatches(
+          round10Summary.optUnclaimedAppRewards,
+          expected.totalAppRewardUnclaimed,
+        )
+      }
+    }
+  }
+
+  /** Assert that an optional java BigDecimal is defined and numerically equal
+    * to the given decimal string at daml Decimal precision (10 fractional
+    * digits). Tolerates scale mismatches (e.g. `3.1` vs `3.10`).
+    */
+  private def decimalMatches(
+      actual: Optional[java.math.BigDecimal],
+      expected: String,
+  ): Unit =
+    withClue(s"expected $expected") {
+      BigDecimal(actual.toScala.value) should beEqualUpTo(BigDecimal(expected), 10)
+    }
+
+  /** Decode a scalapb `Value` (from the ledger-api gRPC client) into a typed
+    * Daml-codegen value, routing through the javaapi `Value` representation
+    * the codegen's `ValueDecoder` expects.
+    */
+  private def decodeScalapb[T](
+      v: com.daml.ledger.api.v2.value.Value,
+      decoder: ValueDecoder[T],
+  ): T =
+    decoder.decode(
+      com.daml.ledger.javaapi.data.Value.fromProto(
+        com.daml.ledger.api.v2.value.Value.toJavaProto(v)
+      )
+    )
+
+  /** True iff `templateId` names the template given by `expected`, ignoring
+    * the package id. Compares module and entity names only, since the
+    * package id varies between upgrade versions.
+    */
+  private def matchesTemplate(
+      templateId: Option[com.daml.ledger.api.v2.value.Identifier],
+      expected: com.daml.ledger.javaapi.data.Identifier,
+  ): Boolean =
+    templateId.exists(id =>
+      id.moduleName == expected.getModuleName && id.entityName == expected.getEntityName
+    )
+
+  /** A decoded `AmuletRules_MiningRound_StartIssuing` exercise, paired with the
+    * round number of the `IssuingMiningRound` contract created in the same
+    * transaction. The round number is not carried on `OpenMiningRoundSummary`
+    * itself; it has to be lifted from the sibling create event.
+    */
+  private case class OpenMiningRoundExercise(round: Long, summary: OpenMiningRoundSummary)
+
+  /** Decode every `AmuletRules_MiningRound_StartIssuing` exercise emitted on the
+    * SV participant since `beginOffsetExclusive`. Each returned
+    * [[OpenMiningRoundExercise]] pairs the exercise's `OpenMiningRoundSummary`
+    * with the round number of the `IssuingMiningRound` contract created in the
+    * same transaction.
+    */
+  private def openMiningRoundExercisesSince(
+      beginOffsetExclusive: Long
+  )(implicit env: SpliceTestConsoleEnvironment): Seq[OpenMiningRoundExercise] = {
+    val dsoParty = sv1Backend.getDsoInfo().dsoParty
+    val participant = sv1Backend.participantClientWithAdminToken
+    val ledgerEnd = participant.ledger_api.state.end()
+
+    val txFormat = transaction_filter.TransactionFormat(
+      eventFormat = Some(
+        transaction_filter.EventFormat(
+          filtersByParty = Map(dsoParty.toLf -> transaction_filter.Filters(Nil)),
+          filtersForAnyParty = None,
+          verbose = true,
+        )
+      ),
+      transactionShape = transaction_filter.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
+    )
+
+    val updates = participant.ledger_api.updates.updates(
+      updateFormat = transaction_filter.UpdateFormat(
+        includeTransactions = Some(txFormat),
+        includeReassignments = None,
+        includeTopologyEvents = None,
+      ),
+      completeAfter = PositiveInt.MaxValue,
+      beginOffsetExclusive = beginOffsetExclusive,
+      endOffsetInclusive = Some(ledgerEnd),
+    )
+
+    updates.toSeq.flatMap {
+      case TransactionWrapper(tx) =>
+        val summaries: Seq[OpenMiningRoundSummary] = tx.events
+          .collect { case event if event.event.isExercised => event.event.exercised }
+          .flatten
+          .collect {
+            case e
+                if matchesTemplate(e.templateId, AmuletRules.TEMPLATE_ID) &&
+                  e.choice == AmuletRules.CHOICE_AmuletRules_MiningRound_StartIssuing.name =>
+              decodeScalapb(
+                e.getChoiceArgument,
+                AmuletRules_MiningRound_StartIssuing.valueDecoder(),
+              ).summary
+          }
+        val issuingRounds: Seq[Long] = tx.events
+          .collect { case event if event.event.isCreated => event.event.created }
+          .flatten
+          .collect {
+            case c if matchesTemplate(c.templateId, IssuingMiningRound.TEMPLATE_ID) =>
+              val javaCreated = com.daml.ledger.javaapi.data.CreatedEvent.fromProto(
+                com.daml.ledger.api.v2.event.CreatedEvent.toJavaProto(c)
+              )
+              Contract
+                .fromCreatedEvent(IssuingMiningRound.COMPANION)(javaCreated)
+                .value
+                .payload
+                .round
+                .number: Long
+          }
+        if (summaries.isEmpty) Seq.empty
+        else {
+          withClue(
+            s"tx ${tx.updateId}: expected one IssuingMiningRound create per AmuletRules_MiningRound_StartIssuing exercise"
+          ) {
+            issuingRounds.size shouldBe summaries.size
+          }
+          summaries.zip(issuingRounds).map { case (s, r) => OpenMiningRoundExercise(r, s) }
+        }
+      case _ => Seq.empty
+    }
   }
 }
 
