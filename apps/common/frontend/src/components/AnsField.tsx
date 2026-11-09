@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { UseQueryResult } from '@tanstack/react-query';
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { AnsEntry } from '@canton-network/scan-openapi';
 
 import { Autocomplete, StandardTextFieldProps, TextField } from '@mui/material';
@@ -42,23 +42,30 @@ interface BaseAnsFieldProps extends AnsFieldProps {
 
 export const BaseAnsField: React.FC<BaseAnsFieldProps> = propas => {
   const { userInput, updateUserInput, onPartyChanged, ansEntries, ansEntry, ...props } = propas;
-  const [resolvedPartyId, setResolvedPartyId] = React.useState<string>('');
   const nameServiceAcronym =
     window.splice_config.spliceInstanceNames?.nameServiceNameAcronym.toLowerCase();
   const dsoEntryName = `dso.${nameServiceAcronym}`;
   const filteredAnsEntriesData = ansEntries.data?.filter(entry => entry.name !== dsoEntryName);
 
+  const resolvedPartyId = ansEntry.data?.user || userInput.value;
+
+  const lastNotifiedPartyIdRef = useRef<string>('');
+  const notifyPartyChanged = useCallback(
+    (party: string) => {
+      if (lastNotifiedPartyIdRef.current !== party) {
+        lastNotifiedPartyIdRef.current = party;
+        onPartyChanged(party);
+      }
+    },
+    [onPartyChanged]
+  );
+
+  const ansEntryParty = ansEntry.data?.user;
   useEffect(() => {
-    const setPartyAndNotify = (party: string) => {
-      onPartyChanged(party);
-      setResolvedPartyId(party);
-    };
-    const ansEntryParty = ansEntry.data?.user || userInput.value;
-    if (resolvedPartyId !== ansEntryParty) {
-      // prevent infinite loop
-      setPartyAndNotify(ansEntryParty);
+    if (ansEntryParty) {
+      notifyPartyChanged(ansEntryParty);
     }
-  }, [userInput, ansEntry, resolvedPartyId, onPartyChanged]);
+  }, [ansEntryParty, notifyPartyChanged]);
 
   const onInputChange = async (_: React.SyntheticEvent, newValue: string, reason: string) => {
     if (reason === 'reset') {
@@ -70,6 +77,7 @@ export const BaseAnsField: React.FC<BaseAnsFieldProps> = propas => {
     }
 
     updateUserInput({ type: 'typed', value: newValue });
+    notifyPartyChanged(newValue);
   };
 
   const onItemSelected = async (_: React.SyntheticEvent, item: AnsEntry | string | null) => {
@@ -78,6 +86,7 @@ export const BaseAnsField: React.FC<BaseAnsFieldProps> = propas => {
     }
     // User selected an item from the auto-complete dropdown. Use the party associated with that entry.
     updateUserInput({ type: 'selected', value: item.user });
+    notifyPartyChanged(item.user);
   };
 
   return (

@@ -16,6 +16,7 @@ import {
   MAX_IP_WHITELIST_RULES,
   MAX_SUBEXPRESSION_LENGTH,
   seededPriorityOffset,
+  wafExcludedHostsCondition,
   wafRuleExpression,
 } from './cloudArmorRules';
 
@@ -257,6 +258,48 @@ describe('wafRuleExpression', () => {
 
   test('applies no host exclusion when none is configured', () => {
     expect(wafRuleExpression(wafRuleGroups[0], undefined)).toBe(expressions[0]);
+    expect(wafExcludedHostsCondition(wafRuleGroups[0], [], clusterHostname)).toBeUndefined();
+  });
+
+  describe('per group excluded hosts', () => {
+    const grpcExcluded = { ...wafRuleGroups[0], excludedHostPrefixes: ['Sequencer-[0-9]+'] };
+
+    test('match the per-node hosts of all SVs', () => {
+      const matches = matchesFromExpr(
+        wafExcludedHostsCondition(grpcExcluded, [], clusterHostname)!
+      );
+      expect(matches('sequencer-1.sv-2.scratchd.network.canton.global')).toBe(true);
+      expect(matches('sequencer-12.da-1.scratchd.network.canton.global:443')).toBe(true);
+      expect(matches('sequencer-1.scratchd.network.canton.global')).toBe(false);
+      expect(matches('sequencer-x.sv-2.scratchd.network.canton.global')).toBe(false);
+      expect(matches('scan.sv-2.scratchd.network.canton.global')).toBe(false);
+      expect(matches('sequencer-1.sv-2.other.network.canton.global')).toBe(false);
+    });
+
+    test('are combined with the global exclusions', () => {
+      const global = hostCondition('global', clusterHostname, {
+        hostPrefixRegex: 'grafana',
+        perNodeHost: false,
+      });
+      const perNode = hostCondition('per-node', clusterHostname, {
+        hostPrefixRegex: 'sequencer-[0-9]+',
+        perNodeHost: true,
+      });
+      const excluded = wafExcludedHostsCondition(grpcExcluded, ['grafana'], clusterHostname)!;
+      expect(excluded).toBe(`${global} || ${perNode}`);
+      expect(wafRuleExpression(grpcExcluded, excluded)).toBe(
+        `!(${excluded}) && (${expressions[0]})`
+      );
+    });
+
+    test('only apply to their own group', () => {
+      expect(wafExcludedHostsCondition(wafRuleGroups[1], ['grafana'], clusterHostname)).toBe(
+        hostCondition('global', clusterHostname, {
+          hostPrefixRegex: 'grafana',
+          perNodeHost: false,
+        })
+      );
+    });
   });
 
   test('has unique rule names', () => {
@@ -269,6 +312,7 @@ describe('wafRuleExpression', () => {
       wafRuleExpression({
         name: 'too-long',
         description: 'too long',
+        excludedHostPrefixes: [],
         signatures: Array.from({ length: 10 }, () => ({
           name: 'sqli-v33-stable',
           sensitivity: 1,

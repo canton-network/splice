@@ -4,8 +4,9 @@
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
 import com.digitalasset.canton.BaseTest
-import org.lfdecentralizedtrust.splice.http.OmitNullString
+import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  ActivityRecord,
   AppActivityRecord,
   CreatedEvent,
   EnvelopeTrafficSummary,
@@ -36,12 +37,12 @@ import scala.reflect.runtime.universe.*
   * When a new optional field is added, SVs that have the field emit `"field": null` while
   * SVs that don't have the field omit the key entirely — causing JSON divergence.
   *
-  * The only permitted optional type at this time is `Option[OmitNullString]`, which is handled by
-  * [[ScanJsonSupport]] to omit the key from JSON when `None`.
+  * The permitted optional types are `Option[OmitNullString]` and `Option[OmitNullArray[_]]`;
+  * both are handled by [[ScanJsonSupport]] to omit the key from JSON when `None`.
   *
   * Any other `Option[_]` field on these types will cause this test to fail, guiding the
-  * developer to either make the field required or use `OmitNullString` with the necessary
-  * wiring in `ScanJsonSupport`.
+  * developer to either make the field required or use `OmitNullString` / `OmitNullArray`
+  * with the necessary wiring in `ScanJsonSupport`.
   */
 class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTest {
 
@@ -50,42 +51,58 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
     */
   private case class HasOptionInt(x: String, y: Option[Int] = None)
 
-  /** Returns all `Option[_]` fields that are NOT `Option[OmitNullString]`. */
-  private def unsafeOptionFields[A: TypeTag]: List[String] = {
+  private final class TypeCheck[A](name: String, json: io.circe.Json)(implicit
+      tt: TypeTag[A]
+  ) {
+    def check: List[(String, Boolean)] = unhandledOmitNullStringFields[A](name, json)(tt)
+  }
+
+  private def primaryConstructor[A: TypeTag]: MethodSymbol = {
     val tpe = typeOf[A]
-    val constructor = tpe.decls
-      .collectFirst {
-        case m: MethodSymbol if m.isPrimaryConstructor => m
-      }
+    tpe.decls
+      .collectFirst { case m: MethodSymbol if m.isPrimaryConstructor => m }
       .getOrElse(fail(s"No primary constructor found for ${tpe.typeSymbol.name}"))
+  }
 
+  /** Returns all `Option[_]` fields that are NOT one of the sanctioned
+    * omit-when-None types (`Option[OmitNullString]` or `Option[OmitNullArray[_]]`).
+    */
+  private def unsafeOptionFields[A: TypeTag]: List[String] = {
     val omitNullStringOption = typeOf[Option[OmitNullString]]
-
-    constructor.paramLists.flatten.collect {
+    val omitNullArrayCtor = typeOf[OmitNullArray[Any]].typeConstructor
+    primaryConstructor[A].paramLists.flatten.collect {
       case param
           if param.typeSignature.typeConstructor =:= typeOf[Option[Any]].typeConstructor &&
-            !(param.typeSignature =:= omitNullStringOption) =>
+            !(param.typeSignature =:= omitNullStringOption) &&
+            !param.typeSignature.typeArgs.headOption
+              .exists(_.typeConstructor =:= omitNullArrayCtor) =>
         param.name.toString
     }
   }
 
-  private def omitNullStringFields[A: TypeTag]: List[String] = {
-    val tpe = typeOf[A]
-    val constructor = tpe.decls
-      .collectFirst {
-        case m: MethodSymbol if m.isPrimaryConstructor => m
-      }
-      .getOrElse(fail(s"No primary constructor found for ${tpe.typeSymbol.name}"))
-
-    constructor.paramLists.flatten.collect {
+  private def omitNullStringFields[A: TypeTag]: List[String] =
+    primaryConstructor[A].paramLists.flatten.collect {
       case param if param.typeSignature =:= typeOf[Option[OmitNullString]] =>
         param.name.toString
     }
-  }
 
   /** Converts a camelCase Scala field name to the snake_case JSON key that guardrail generates. */
   private def toSnakeCase(name: String): String =
     name.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase
+
+  /** Per `Option[OmitNullString]` field on `A`, a `(label, isPresent)` pair; empty when
+    * `A` has no such fields. `isPresent = true` is the failure case —
+    * `ScanJsonSupport` is NOT dropping the key when `None`.
+    */
+  private def unhandledOmitNullStringFields[A: TypeTag](
+      typeName: String,
+      encodedJson: io.circe.Json,
+  ): List[(String, Boolean)] =
+    omitNullStringFields[A].map { field =>
+      val key = toSnakeCase(field)
+      val present = encodedJson.hcursor.downField(key).focus.isDefined
+      (s"$typeName.$field (JSON key: $key)", present)
+    }
 
   /** Pre-existing `Option[_]` fields that are already part of the BFT consensus schema across
     * all SVs.  These were present before the `OmitNullString` mechanism was introduced and are
@@ -142,6 +159,7 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
           checkNoUnsafeOptions[TransactionView]("TransactionView") ++
           checkNoUnsafeOptions[Quorum]("Quorum") ++
           checkNoUnsafeOptions[EnvelopeTrafficSummary]("EnvelopeTrafficSummary") ++
+          checkNoUnsafeOptions[ActivityRecord]("ActivityRecord") ++
           checkNoUnsafeOptions[AppActivityRecord]("AppActivityRecord")
 
       if (violations.nonEmpty) {
@@ -205,23 +223,19 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
           )
         )
 
-      val unhandled = (
-        omitNullStringFields[UpdateHistoryTransaction].map { field =>
-          val key = toSnakeCase(field)
-          val present = txV0Json.hcursor.downField(key).focus.isDefined
-          (s"UpdateHistoryTransaction.$field (JSON key: $key)", present)
-        } ++
-          omitNullStringFields[UpdateHistoryTransactionV2].map { field =>
-            val key = toSnakeCase(field)
-            val present = txV2Json.hcursor.downField(key).focus.isDefined
-            (s"UpdateHistoryTransactionV2.$field (JSON key: $key)", present)
-          } ++
-          omitNullStringFields[UpdateHistoryTransactionV2WithHash].map { field =>
-            val key = toSnakeCase(field)
-            val present = txV2WithHashJson.hcursor.downField(key).focus.isDefined
-            (s"UpdateHistoryTransactionV2WithHash.$field (JSON key: $key)", present)
-          }
-      ).collect { case (desc, true) => desc }
+      val eventHistoryItemJson = io.circe
+        .Encoder[EventHistoryItem]
+        .apply(EventHistoryItem())
+
+      val unhandled = Seq(
+        new TypeCheck[UpdateHistoryTransaction]("UpdateHistoryTransaction", txV0Json),
+        new TypeCheck[UpdateHistoryTransactionV2]("UpdateHistoryTransactionV2", txV2Json),
+        new TypeCheck[UpdateHistoryTransactionV2WithHash](
+          "UpdateHistoryTransactionV2WithHash",
+          txV2WithHashJson,
+        ),
+        new TypeCheck[EventHistoryItem]("EventHistoryItem", eventHistoryItemJson),
+      ).flatMap(_.check).collect { case (desc, true) => desc }
 
       if (unhandled.nonEmpty) {
         fail(

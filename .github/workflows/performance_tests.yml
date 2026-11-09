@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  id-token: write # Required to create a GitHub OIDC token for GCP Workload Identity Federation (used by GCS download and failure notifications)
+  id-token: write # Required to create a GitHub OIDC token for GCP Workload Identity Federation (used by GCS download and failure notifications) # zizmor: ignore[excessive-permissions]
   contents: read
 
 jobs:
@@ -26,6 +26,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ''
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -72,7 +73,11 @@ jobs:
             echo "Downloading updates from mainnet for performance tests"
             gcloud storage cp "gs://mainnet-history-dumps/mainnetupdates.json" /tmp/mainnetupdates.json
             ls -lah /tmp/mainnetupdates.json
-          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbScanStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistory -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json"'
+
+            echo "Downloading verdict events from mainnet for performance tests"
+            gcloud storage cp "gs://mainnet-history-dumps/mainnetevents.json" /tmp/mainnetevents.json
+            ls -lah /tmp/mainnetevents.json
+          cmd: '"apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbSvDsoStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t DbScanStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t UpdateHistory -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetupdates.json" "apps-app / Test / runMain org.lfdecentralizedtrust.splice.performance.SplicePerf run -t VerdictStore -c ./apps/app/src/test/resources/performance/tests.conf -d /tmp/mainnetevents.json"'
 
       - name: Push ingestion metrics to Prometheus Pushgateway
         if: ${{ success() }}
@@ -81,7 +86,7 @@ jobs:
 
       - name: Upload ingestion metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: store-ingestion-perf-metrics-${{ github.run_id }}
           path: /tmp/store-ingestion-perf-metrics
@@ -129,6 +134,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ''
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -184,7 +190,7 @@ jobs:
 
       - name: Upload read metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: store-read-perf-metrics-${{ github.run_id }}
           path: /tmp/store-read-perf-metrics

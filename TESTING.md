@@ -236,17 +236,6 @@ If you run integration tests using sbt, we recommend running them within `apps-a
 Documentation about common pitfalls when writing new integration tests and debugging existing ones can be found [here](/apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration/tests/README.md).
 If you wish to extend our testing topology please also consult [this README](/apps/app/src/test/resources/README.md) about name and port allocation.
 
-### Enabling the new Canton bft ordering layer
-
-If you want to run the integration tests locally with the new Canton bft, canton must be started with the `-e` flag.
-This can be done by running `./start-canton.sh -we`.
-Furthermore the integration test must run with the `SPLICE_USE_CANTON_BFT_SEQUENCER` environment variable set to `true`.
-Eg of test run:
-
-```bash
- SPLICE_USE_CANTON_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
-```
-
 ### Testing App Behaviour Outside of Tests Without Running Bundle
 
 Sometimes, you may need to debug startup behaviour of the Splice apps that is causing issues for the
