@@ -17,7 +17,14 @@ const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
   const config = useScanConfig();
   const backfillingStatus = useBackfillingStatus();
   return (
-    <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" minHeight="100vh">
+    <Box
+      sx={{
+        bgcolor: 'colors.neutral.20',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+      }}
+    >
       <Container maxWidth="xl">
         <Header
           title={config.spliceInstanceNames.amuletName + ' Scan'}
@@ -31,9 +38,9 @@ const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
         {backfillingStatus.data === false && (
           <Stack
             direction="row"
-            alignItems="center"
-            justifyContent="center"
             sx={{
+              alignItems: 'center',
+              justifyContent: 'center',
               margin: '2px',
               height: '50px',
               width: '100%',

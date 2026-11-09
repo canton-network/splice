@@ -10,20 +10,35 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 
 object SwitchOverTimes {
 
-  private def shouldSwitchOver(
-      clock: Clock,
+  val NoFeaturedAppChoiceContext = "no-featured-app-choice-context"
+
+  /** Rounds opening at or after this time use the CIP-104 amended (TBAR v1.1)
+    * activity-record computation.
+    */
+  val UseCip104AmendedCalculationAfter = "cip-104/use-amended-calculation-after"
+
+  /** The default switch-over times used when founding a new DSO. */
+  val defaultSvOperationsSwitchOverTimes: Map[String, CantonTimestamp] = Map(
+    NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue,
+    UseCip104AmendedCalculationAfter -> CantonTimestamp.MinValue,
+  )
+
+  private def hasSwitchedOverAsOf(
+      asOf: CantonTimestamp,
       times: java.util.Optional[java.util.Map[String, Instant]],
       key: String,
   ): Boolean = {
     val timeO = Option(times.orElse(java.util.Map.of()).get(key))
-    timeO.fold(false)(time => clock.now >= CantonTimestamp.assertFromInstant(time))
+    timeO.fold(false)(time => asOf >= CantonTimestamp.assertFromInstant(time))
   }
 
+  /** Whether the switch-over for `key` configured in `dsoRules` happened at or before `asOf`. */
+  def hasSwitchedOverAsOf(asOf: CantonTimestamp, dsoRules: DsoRules, key: String): Boolean =
+    hasSwitchedOverAsOf(asOf, dsoRules.config.svOperationsSwitchOverTimes, key)
+
   private def shouldSwitchOver(clock: Clock, dsoRules: DsoRules, key: String): Boolean =
-    shouldSwitchOver(clock, dsoRules.config.svOperationsSwitchOverTimes, key)
+    hasSwitchedOverAsOf(clock.now, dsoRules, key)
 
   def omitFeaturedAppRightInChoiceContext(clock: Clock, dsoRules: DsoRules) =
     shouldSwitchOver(clock, dsoRules, NoFeaturedAppChoiceContext)
-
-  val NoFeaturedAppChoiceContext = "no-featured-app-choice-context"
 }

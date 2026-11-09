@@ -257,19 +257,22 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
               {isFetchingNextPage || (inView && hasNextPage) ? (
                 <CircularProgress size={24} />
               ) : hasNextPage ? (
-                <Typography fontSize={14} color="text.secondary">
+                <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
                   More results available
                 </Typography>
               ) : (pageCount ?? 0) > 1 ? (
-                <Stack alignItems="center" gap={0.5}>
-                  <Typography fontSize={14} color="text.secondary">
+                <Stack sx={{ alignItems: 'center', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
                     You've reached the end
                   </Typography>
                   <Typography
-                    fontSize={13}
-                    color="primary.main"
-                    sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
                     onClick={() => sectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    sx={{
+                      fontSize: 13,
+                      color: 'primary.main',
+                      cursor: 'pointer',
+                      '&:hover': { textDecoration: 'underline' },
+                    }}
                   >
                     Back to top
                   </Typography>
@@ -291,10 +294,11 @@ interface InfoBoxProps {
 const InfoBox: React.FC<InfoBoxProps> = ({ info, 'data-testid': testId }) => {
   return (
     <Stack
-      gap={1}
       direction="row"
-      alignItems="center"
+      data-testid={testId}
       sx={{
+        gap: 1,
+        alignItems: 'center',
         width: 'max-content',
         borderColor: 'secondary.main',
         borderWidth: '2px',
@@ -302,12 +306,9 @@ const InfoBox: React.FC<InfoBoxProps> = ({ info, 'data-testid': testId }) => {
         borderRadius: '4px',
         p: 2,
       }}
-      data-testid={testId}
     >
       <InfoOutlined color="secondary" fontSize="small" />
-      <Typography fontWeight="bold" fontSize={14}>
-        {info}
-      </Typography>
+      <Typography sx={{ fontWeight: 'bold', fontSize: 14 }}>{info}</Typography>
     </Stack>
   );
 };
@@ -320,16 +321,12 @@ interface LoadingBoxProps {
 const LoadingBox: React.FC<LoadingBoxProps> = ({ message, 'data-testid': testId }) => {
   return (
     <Stack
-      gap={1.5}
       direction="row"
-      alignItems="center"
-      sx={{ width: 'max-content', p: 2 }}
       data-testid={testId}
+      sx={{ gap: 1.5, alignItems: 'center', width: 'max-content', p: 2 }}
     >
       <CircularProgress size={20} />
-      <Typography fontSize={14} color="text.secondary">
-        {message}
-      </Typography>
+      <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>{message}</Typography>
     </Stack>
   );
 };
@@ -397,8 +394,8 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
         }}
       >
         <Typography
-          {...tableBodyTypography}
           sx={{
+            ...tableBodyTypographySx,
             width: '100%',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -516,11 +513,13 @@ const AllVotes: React.FC<AllVotesProps> = ({
   );
 };
 
-const tableBodyTypography: TypographyProps = {
+const tableBodyTypographySx = {
   fontSize: 14,
   lineHeight: 2,
   color: 'text.light',
 };
+
+const tableBodyTypography: TypographyProps = { sx: tableBodyTypographySx };
 
 const TableBodyTypography: React.FC<React.PropsWithChildren> = ({ children }) => (
   <Typography {...tableBodyTypography}>{children}</Typography>

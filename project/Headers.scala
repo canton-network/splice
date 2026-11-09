@@ -75,7 +75,9 @@ object Headers {
         ((Compile / baseDirectory).value ** "*.js") ---
           ((Compile / baseDirectory).value ** "node_modules" ** "*") ---
           ((Compile / baseDirectory).value ** "daml.js" ** "*") ---
-          ((Compile / baseDirectory).value ** "lib" ** "*")
+          ((Compile / baseDirectory).value ** "lib" ** "*") ---
+          // shipped verbatim by msw (MIT), copied from node_modules/msw/lib on upgrades
+          ((Compile / baseDirectory).value ** "mockServiceWorker.js")
       ).get,
     headerMappings := allHeaderMappings,
     headerEmptyLine := false,

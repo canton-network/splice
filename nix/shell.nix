@@ -46,7 +46,7 @@ let
     openjdk21
     pigz
     popeye
-    postgresql_14
+    postgresql_18
     pre-commit
     procps
     protobuf_25
@@ -73,10 +73,13 @@ let
     python3Packages.jsonpickle
     python3Packages.kubernetes
     python3Packages.marshmallow-dataclass
+    python3Packages.mypy
     python3Packages.polib
+    python3Packages.prometheus-client
     python3Packages.pydantic
     python3Packages.pygithub
     python3Packages.pyjwt
+    python3Packages.openapi-schema-validator
     python3Packages.pyyaml
     python3Packages.regex
     python3Packages.requests
@@ -89,6 +92,10 @@ let
     python3Packages.sphinx-copybutton
     python3Packages.sphinxcontrib-openapi
     python3Packages.sphinx-autobuild
+    python3Packages.types-docutils
+    python3Packages.types-jsonschema
+    python3Packages.types-pyyaml
+    python3Packages.types-requests
     python3Packages.waitress
     python3.pkgs.pip  # TODO(DACH-NY/canton-network-internal#565): Remove this once we switch to poetry
     python3.pkgs.sphinx-reredirects
@@ -111,6 +118,7 @@ let
     which
     xxd
     zip
+    zizmor
 
     # Package required to install daml studio
     yq-go
@@ -137,6 +145,7 @@ let
     shellcheck
     skopeo
     which
+    zizmor
   ] ++ linuxOnly;
 
 in pkgs.mkShell {
@@ -152,6 +161,7 @@ in pkgs.mkShell {
   CANTON_MEDIATOR_IMAGE_SHA256 = "${sources.canton_mediator_image_sha256}";
   DPM_SDK_VERSION = "${dpmSdkSources.version}";
   DAML_COMPILER_VERSION = "${dpmSdkSources.version}";
+  # TODO (#8263): remove the CometBFT variables together with the CometBFT images and SV app code
   COMETBFT_RELEASE_VERSION = "${cometbftDriverSources.version}";
   COMETBFT_IMAGE_SHA256 = "${cometbftDriverSources.image_sha256}";
   COMETBFT_DRIVER = "${pkgs.cometbft_driver}";

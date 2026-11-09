@@ -31,6 +31,7 @@ function localSynchronizerNodeValues(
     mediatorAddress: node.namespaceInternalMediatorAddress,
     sequencerPublicUrl: `https://sequencer-${nodeConfig.id}.${ingressName}.${CLUSTER_HOSTNAME}`,
     ...(useCantonBft ? { enableBftSequencer: true } : {}),
+    // TODO (#8263): remove the CometBFT config for the SV app
     ...(!useCantonBft
       ? {
           cometBFT: {

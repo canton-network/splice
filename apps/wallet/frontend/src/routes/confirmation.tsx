@@ -9,9 +9,9 @@ import PaymentHeader from '../components/PaymentHeader';
 
 export const Confirmation: React.FC = () => {
   return (
-    <Box display="flex" flexDirection="column" minHeight="100vh" id="confirm-payment">
+    <Box id="confirm-payment" sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <PaymentHeader />
-      <Box bgcolor="colors.neutral.15" flex={1}>
+      <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
         <Outlet />
       </Box>
     </Box>

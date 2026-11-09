@@ -49,33 +49,50 @@ runs:
     - name: Check if include commit message tag matches and skip
       if: ${{ inputs.skip_if_commit_tag != '' }}
       shell: bash
+      env:
+        SKIP_TAG: ${{ inputs.skip_if_commit_tag }}
       run: |
         last_commit_msg=$(git log -1 --pretty=%B)
-        if [[ $last_commit_msg =~ "[${{ inputs.skip_if_commit_tag }}]" ]]; then
-          echo "Commit message ($last_commit_msg) includes tag (${{ inputs.skip_if_commit_tag }}), skipping"
+        if [[ $last_commit_msg =~ "[$SKIP_TAG]" ]]; then
+          echo "Commit message ($last_commit_msg) includes tag ($SKIP_TAG), skipping"
           echo "skip=true" >> "$GITHUB_ENV"
         else
-          echo "Commit message ($last_commit_msg) does not include tag (${{ inputs.skip_if_commit_tag }}), running"
+          echo "Commit message ($last_commit_msg) does not include tag ($SKIP_TAG), running"
         fi
     - name: Check if include commit message tag matches
       if: ${{ inputs.run_if_commit_tag != '' }}
       shell: bash
+      env:
+        RUN_TAG: ${{ inputs.run_if_commit_tag }}
       run: |
         last_commit_msg=$(git log -1 --pretty=%B)
-        if [[ $last_commit_msg =~ "[${{ inputs.run_if_commit_tag }}]" ]]; then
-          echo "Commit message ($last_commit_msg) includes tag (${{ inputs.run_if_commit_tag }}), running"
+        if [[ $last_commit_msg =~ "[$RUN_TAG]" ]]; then
+          echo "Commit message ($last_commit_msg) includes tag ($RUN_TAG), running"
         else
-          echo "Commit message ($last_commit_msg) does not include tag (${{ inputs.run_if_commit_tag }}), skipping"
+          echo "Commit message ($last_commit_msg) does not include tag ($RUN_TAG), skipping"
           echo "skip=true" >> "$GITHUB_ENV"
         fi
 
     - name: Check if skip files changed
       if: ${{ inputs.skip_if_files_changed != '' }}
       shell: bash
+      env:
+        SKIP_FILES: ${{ inputs.skip_if_files_changed }}
       run: |
         latest_release=$(cat "LATEST_RELEASE")
+        # `git diff <commit> -- <paths>` compares trees, so the release-line tip is enough.
+        # Without --filter, git 2.43 resends the tip's full tree (~100 MB) into a shallow clone.
+        for attempt in {1..3}; do
+          if git fetch --no-tags --depth=1 --filter=blob:none origin "refs/heads/release-line-${latest_release}:refs/remotes/origin/release-line-${latest_release}"; then
+            break
+          elif [ "$attempt" -eq 3 ]; then
+            echo "Fetching release-line-${latest_release} failed"
+            exit 1
+          fi
+          sleep 5
+        done
         base=$(git rev-parse origin/release-line-"${latest_release}")
-        changed=$(git diff --name-only $base -- ${{ inputs.skip_if_files_changed }})
+        changed=$(git diff --name-only $base -- $SKIP_FILES)
         if [ -n "$changed" ]; then
           echo "Lock files changed ($changed), skipping"
           echo "skip=true" >> "$GITHUB_ENV"
@@ -88,6 +105,8 @@ runs:
     - name: Generate runner indices
       id: generate_index_list
       shell: bash
+      env:
+        PARALLELISM: ${{ inputs.parallelism }}
       run: |
         last_commit_msg=$(git log -1 --pretty=%B)
         echo "Last commit message: $last_commit_msg"
@@ -96,7 +115,7 @@ runs:
           echo "json=[]" >> "$GITHUB_OUTPUT"
         else
           echo "Not skipping, generating indices"
-          MAX_INDEX=$((${{ inputs.parallelism }}-1))
+          MAX_INDEX=$((PARALLELISM-1))
           INDEX_LIST=$(seq 0 ${MAX_INDEX})
           INDEX_JSON=$(jq --null-input --compact-output '. |= [inputs]' <<< "${INDEX_LIST}")
           echo "json=${INDEX_JSON}" >> "$GITHUB_OUTPUT"

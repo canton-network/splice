@@ -13,7 +13,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { DeleteOutline, InfoOutlined } from '@mui/icons-material';
+import { DeleteOutlined, InfoOutlined } from '@mui/icons-material';
 import { withForm } from '../../hooks/form';
 import {
   validateSwitchOverTimes,
@@ -116,7 +116,7 @@ export const SwitchOverTimesField = withForm({
                     data-testid={`switchover-remove-${i}`}
                     onClick={() => arrayField.removeValue(i)}
                   >
-                    <DeleteOutline />
+                    <DeleteOutlined />
                   </IconButton>
                 </Box>
               ))}

@@ -14,7 +14,10 @@ export const TextMapDisplay: React.FC<{ textMap: { [key: string]: string } }> = 
         .map(key => {
           const value = textMap[key];
           return (
-            <Stack key={`meta-${key}`} overflow="hidden" textOverflow="ellipsis" maxWidth="150px">
+            <Stack
+              key={`meta-${key}`}
+              sx={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}
+            >
               <Typography variant="body2" noWrap>
                 {key}:
               </Typography>

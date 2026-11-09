@@ -557,6 +557,10 @@ case class SystemProperties(
 }
 
 trait HttpServerSupport extends FutureHelpers {
+
+  /** Whether to accept only connections from this host, rather than on all interfaces. */
+  def bindLocalhostOnly: Boolean = false
+
   def withHttpServer[T](route: Route)(testCode: ServerBinding => T)(implicit
       ac: ActorSystem,
       ec: ExecutionContext,
@@ -573,7 +577,7 @@ trait HttpServerSupport extends FutureHelpers {
   }
   def start(route: Route)(implicit ac: ActorSystem): Future[ServerBinding] = {
     Http()
-      .newServerAt("0.0.0.0", 0)
+      .newServerAt(if (bindLocalhostOnly) "127.0.0.1" else "0.0.0.0", 0)
       .bind(route)
   }
 }

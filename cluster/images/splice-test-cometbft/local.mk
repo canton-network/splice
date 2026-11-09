@@ -1,6 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# TODO (#8263): remove this image and apps/sv/src/test/resources/cometbft, only the removed CometBFT CI job used them
 dir := $(call current_dir)
 
 $(dir)/$(docker-build): $(dir)/configs $(dir)/target/LICENSE

@@ -486,8 +486,8 @@ object SpliceConfig {
     implicit val ingestionConfig: ConfigReader[IngestionConfig] = deriveReader[IngestionConfig]
     implicit val automationConfig: ConfigReader[AutomationConfig] =
       deriveReader[AutomationConfig]
-    implicit val LedgerApiClientConfigReader: ConfigReader[LedgerApiClientConfig] =
-      deriveReader[LedgerApiClientConfig]
+    implicit val LedgerApiClientConfigReader: ConfigReader[ClientConfigWithAuth] =
+      deriveReader[ClientConfigWithAuth]
     implicit val ParticipantClientConfigReader: ConfigReader[ParticipantClientConfig] =
       deriveReader[ParticipantClientConfig]
     implicit val appInstanceReader: ConfigReader[AppInstance] =
@@ -629,6 +629,7 @@ object SpliceConfig {
       deriveReader[ExpectedValidatorOnboardingConfig]
     implicit val approvedSvIdentityConfigReader: ConfigReader[ApprovedSvIdentityConfig] =
       deriveReader[ApprovedSvIdentityConfig]
+    // TODO (#8263): remove together with SvCometBftConfig
     implicit val cometBftConfigReader: ConfigReader[SvCometBftConfig] = deriveReader
     implicit val cometBftGovernanceKeyReader: ConfigReader[CometBftGovernanceKey] = deriveReader
     implicit val sequencerPruningConfig: ConfigReader[SequencerPruningConfig] =
@@ -1059,8 +1060,8 @@ object SpliceConfig {
     implicit val ingestionConfig: ConfigWriter[IngestionConfig] = deriveWriter[IngestionConfig]
     implicit val automationConfig: ConfigWriter[AutomationConfig] =
       deriveWriter[AutomationConfig]
-    implicit val LedgerApiClientConfigWriter: ConfigWriter[LedgerApiClientConfig] =
-      deriveWriter[LedgerApiClientConfig]
+    implicit val LedgerApiClientConfigWriter: ConfigWriter[ClientConfigWithAuth] =
+      deriveWriter[ClientConfigWithAuth]
     implicit val ParticipantClientConfigWriter: ConfigWriter[ParticipantClientConfig] =
       deriveWriter[ParticipantClientConfig]
     implicit val appInstanceWriter: ConfigWriter[AppInstance] =
@@ -1179,6 +1180,7 @@ object SpliceConfig {
       )
     implicit val approvedSvIdentityConfigWriter: ConfigWriter[ApprovedSvIdentityConfig] =
       deriveWriter[ApprovedSvIdentityConfig]
+    // TODO (#8263): remove together with SvCometBftConfig
     implicit val cometBftConfigWriter: ConfigWriter[SvCometBftConfig] = deriveWriter
     implicit val cometBftGovernanceKeyWriter: ConfigWriter[CometBftGovernanceKey] =
       confidentialWriter[CometBftGovernanceKey](CometBftGovernanceKey.hideConfidential)

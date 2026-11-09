@@ -15,6 +15,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import crypto from 'crypto';
 import { SetupServer } from 'msw/node';
+import { toast } from 'sonner';
 import {
   setupIntersectionMocking,
   resetIntersectionMocking,
@@ -43,7 +44,7 @@ export const server: SetupServer = buildServer(svUrl);
 // Start server before all tests
 beforeAll(() => {
   setupIntersectionMocking(vi.fn);
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 
 //  Close server after all tests
@@ -56,5 +57,6 @@ afterAll(() => {
 afterEach(() => {
   server.resetHandlers();
   cleanup();
+  toast.dismiss();
   vi.useRealTimers();
 });

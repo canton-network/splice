@@ -69,8 +69,15 @@ import com.digitalasset.daml.lf.data.Numeric
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
+  AmuletConfig,
+  RewardConfig,
+  USD,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.{RewardState, SvRewardState}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
@@ -294,6 +301,7 @@ abstract class StoreTestBase
       amuletPrice: Double,
       opensAt: Instant = Instant.now().truncatedTo(ChronoUnit.MICROS),
       contractId: String = nextCid(),
+      rewardConfig: Optional[RewardConfig] = Optional.empty(),
   ) = {
     val template = new roundCodegen.OpenMiningRound(
       dso.toProtoPrimitive,
@@ -306,7 +314,7 @@ abstract class StoreTestBase
       SpliceUtil.issuanceConfig(10.0, 10.0, 10.0),
       new RelTime(1_000_000),
       Optional.empty(), // trafficPrice
-      Optional.empty(), // rewardConfig
+      rewardConfig,
     )
 
     contract(
@@ -548,6 +556,7 @@ abstract class StoreTestBase
       kind: governancelockCodegen.GovernanceLockKind =
         new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1"),
       vestingEndTime: Option[Instant] = None,
+      vestingPeriod: RelTime = new RelTime(1_000_000),
       contractId: String = nextCid(),
   ): Contract[
     governancelockCodegen.GovernanceLock.ContractId,
@@ -566,7 +575,7 @@ abstract class StoreTestBase
             new governancelockCodegen.governancelockspecification.GLS_VestingLock(
               new governancelockCodegen.VestingLockSpecification(
                 kind,
-                new RelTime(1_000_000),
+                vestingPeriod,
                 endTime,
               )
             )
@@ -619,6 +628,39 @@ abstract class StoreTestBase
           Seq(wantedFull, wantedVesting).map(_.contractId)
       }
     }
+
+  protected def governanceLockTransfer(
+      sender: PartyId,
+      receiver: PartyId,
+      expiresAt: Instant,
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    governancelockCodegen.transfer.GovernanceLockTransfer.ContractId,
+    governancelockCodegen.transfer.GovernanceLockTransfer,
+  ] =
+    contract(
+      identifier =
+        governancelockCodegen.transfer.GovernanceLockTransfer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new governancelockCodegen.transfer.GovernanceLockTransfer.ContractId(contractId),
+      payload = new governancelockCodegen.transfer.GovernanceLockTransfer(
+        new governancelockCodegen.GovernanceLockKey(
+          dso.toProtoPrimitive,
+          sender.toProtoPrimitive,
+          // The kind is always an SV lock here: an FA party is not a stakeholder of the
+          // transfer itself, so there is nothing extra to test for it.
+          new governancelockCodegen.governancelockspecification.GLS_FullLock(
+            new governancelockCodegen.FullLockSpecification(
+              new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1")
+            )
+          ),
+        ),
+        receiver.toProtoPrimitive,
+        BigDecimal(10).bigDecimal,
+        Instant.EPOCH,
+        expiresAt,
+      ),
+    )
 
   protected def appRewardCoupon(
       round: Int,
@@ -800,13 +842,15 @@ abstract class StoreTestBase
       providerParty: PartyId,
       contractId: String = nextCid(),
       activityWeight: Option[BigDecimal] = None,
+      appKind: Option[FeaturedAppKind] = None,
+      opsParties: Option[Seq[PartyId]] = None,
   ) = {
     val template = new FeaturedAppRight(
       dsoParty.toProtoPrimitive,
       providerParty.toProtoPrimitive,
       activityWeight.map(_.bigDecimal).toJava,
-      Optional.empty(),
-      Optional.empty(),
+      appKind.toJava,
+      opsParties.map(_.map(_.toProtoPrimitive).asJava).toJava,
     )
     contract(
       FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,

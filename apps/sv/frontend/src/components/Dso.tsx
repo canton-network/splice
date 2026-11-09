@@ -10,23 +10,24 @@ import { useMediatorStatus } from '../hooks/useMediatorStatus';
 import { useSequencerStatus } from '../hooks/useSequencerStatus';
 import { useSvConfig } from '../utils';
 
+const WithProvider: React.FC = () => {
+  const dsoInfoQuery = useDsoInfos();
+  const cometBftNodeDebugQuery = useCometBftDebug();
+  const sequencerStatusQuery = useSequencerStatus();
+  const mediatorStatusQuery = useMediatorStatus();
+  return (
+    <DsoViewPrettyJSON
+      dsoInfoQuery={dsoInfoQuery}
+      svInfoQuery={dsoInfoQuery}
+      cometBftNodeDebugQuery={cometBftNodeDebugQuery}
+      sequencerStatusQuery={sequencerStatusQuery}
+      mediatorStatusQuery={mediatorStatusQuery}
+    />
+  );
+};
+
 const DsoWithContexts: React.FC = () => {
   const config = useSvConfig();
-  const WithProvider = () => {
-    const dsoInfoQuery = useDsoInfos();
-    const cometBftNodeDebugQuery = useCometBftDebug();
-    const sequencerStatusQuery = useSequencerStatus();
-    const mediatorStatusQuery = useMediatorStatus();
-    return (
-      <DsoViewPrettyJSON
-        dsoInfoQuery={dsoInfoQuery}
-        svInfoQuery={dsoInfoQuery}
-        cometBftNodeDebugQuery={cometBftNodeDebugQuery}
-        sequencerStatusQuery={sequencerStatusQuery}
-        mediatorStatusQuery={mediatorStatusQuery}
-      />
-    );
-  };
   return (
     <SvClientProvider url={config.services.sv.url}>
       <WithProvider />

@@ -174,12 +174,7 @@ export type SupportedActionTag =
   | 'SRARC_CreateFeaturedAppConfigUpdateInstruction';
 
 export type ProposalListingStatus =
-  | 'Accepted'
-  | 'In Progress'
-  | 'Implemented'
-  | 'Rejected'
-  | 'Expired'
-  | 'Unknown';
+  'Accepted' | 'In Progress' | 'Implemented' | 'Rejected' | 'Expired' | 'Unknown';
 
 export interface ProposalListingData {
   contractId: ContractId<VoteRequest>;

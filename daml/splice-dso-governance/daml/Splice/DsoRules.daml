@@ -1277,6 +1277,7 @@ template DsoRules with
           then
             require "SV name is expected to be new unless in devnet" (newSvName `notElem` (map (.name) (Map.values svs)))
           else pure ()
+        require "Participant is not already used by another SV" (newParticipantId `notElem` map (.participantId) (Map.values svs))
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingConfirmedTimeout
         onboardingConfirmed <- create SvOnboardingConfirmed with

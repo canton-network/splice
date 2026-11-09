@@ -65,6 +65,7 @@ const getChainId = (migrationId: number): string => {
  * Furthermore, even if we register multiple istio VirtualServices with different hosts, but for the same port in the gateway,
  * istio will just ignore the host criteria for TCP ports.
  * */
+// TODO (#8263): remove the CometBFT node deployment (this file, cometbftConfig.ts, cometBftNodeConfigs.ts)
 export function installCometBftNode(
   xns: ExactNamespace,
   onboardingName: string,

@@ -113,12 +113,16 @@ const CopyableIdentifier: React.FC<CopyableIdentifierProps> = ({
           <Typography
             component="span"
             variant="body1"
-            fontWeight="medium"
-            fontFamily="Source Code Pro, monospace"
-            fontSize={fontSize}
             title={value}
             data-testid={`${testId}-value`}
-            sx={isEllipsis ? ellipsisTextSx : scrollTextSx}
+            sx={[
+              {
+                fontWeight: 'medium',
+                fontFamily: 'Source Code Pro, monospace',
+                fontSize: fontSize,
+              },
+              ...(isEllipsis ? [ellipsisTextSx] : [scrollTextSx]).flat(),
+            ]}
           >
             {value}
           </Typography>

@@ -57,10 +57,11 @@
         "hostname": "mock.global.canton.network.digitalasset.com",
         "name": "cn-mocknet"
       },
-      "disableAuth": false,
+      "disableAuth": true,
       "enableHealthProbes": true,
       "enableKeyDownload": false,
       "enablePostgresMetrics": true,
+      "enableRepairCommands": false,
       "extraVolumeMounts": [
         {
           "mountPath": "/app/gcp-credentials.json",

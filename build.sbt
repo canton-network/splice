@@ -19,10 +19,8 @@ BuildCommon.sbtSettings
 lazy val `canton-community-app` = BuildCommon.`canton-community-app`
 lazy val `canton-community-app-base` = BuildCommon.`canton-community-app-base`
 lazy val `canton-community-base` = BuildCommon.`canton-community-base`
-lazy val `canton-community-common` = BuildCommon.`canton-community-common`
 lazy val `canton-community-synchronizer` = BuildCommon.`canton-community-synchronizer`
 lazy val `canton-community-participant` = BuildCommon.`canton-community-participant`
-lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
@@ -125,7 +123,6 @@ lazy val root: Project = (project in file("."))
     `splice-test-token-v2-test-daml`,
     `build-tools-dar-lock-checker`,
     `canton-community-base`,
-    `canton-community-common`,
     `canton-community-integration-testing`,
     `canton-community-testing`,
     `canton-wartremover-extension`,
@@ -1195,10 +1192,13 @@ lazy val `lf-value-json` =
 lazy val `canton-fork-community-common-test` =
   project
     .in(file("canton-fork/community-common-test"))
-    .dependsOn(`canton-community-common`, `canton-community-testing`)
+    .dependsOn(`canton-community-testing`)
     .settings(
       scalacOptions --= JvmRulesPlugin.scalacOptionsToDisableForTests,
-      libraryDependencies += CantonDependencies.pekko_stream_testkit,
+      libraryDependencies ++= Seq(
+        CantonDependencies.canton_community_common,
+        CantonDependencies.pekko_stream_testkit,
+      ),
       Headers.ApacheDAHeaderSettings,
     )
 
@@ -1211,8 +1211,11 @@ lazy val `canton-fork-base` =
 lazy val `canton-fork-common` =
   project
     .in(file("canton-fork/common"))
-    .dependsOn(`canton-community-common`)
-    .settings(Headers.ApacheDAHeaderSettings)
+    .dependsOn(`canton-community-base`)
+    .settings(
+      libraryDependencies += CantonDependencies.canton_community_common,
+      Headers.ApacheDAHeaderSettings,
+    )
 
 lazy val `canton-fork-testing` =
   project
@@ -1236,7 +1239,6 @@ lazy val `apps-common` =
   project
     .in(file("apps/common"))
     .dependsOn(
-      `canton-community-common`,
       `canton-community-app`,
       `canton-fork-app-base`,
       `canton-fork-base`,
@@ -1411,6 +1413,7 @@ lazy val `apps-sv` =
         pekko_http_cors,
         scalapb_runtime,
       ),
+      // TODO (#8263): remove together with the CometBFT code in the SV app
       Compile / unmanagedJars := Attributed
         .blankSeq(Seq(file(s"${sys.env("COMETBFT_PROTO")}/canton-drivers-proto.jar"))),
       BuildCommon.sharedAppSettings,
@@ -2073,12 +2076,11 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
     case PathList("org", "checkerframework", _ @_*) => MergeStrategy.first
     case PathList("google", "protobuf", _*) => MergeStrategy.first
     case path @ PathList("google", _*) if path.endsWith(".proto") => MergeStrategy.first
-    // we pull these in twice through community-common. Unfortunately we can't just get rid of our fork as some of the modifications do actually matter.
-    case PathList("db", "migration", "canton", _*) => MergeStrategy.first
     case PathList("org", "apache", "logging", _*) => MergeStrategy.first
     case PathList("ch", "qos", "logback", _*) => MergeStrategy.first
     case PathList("META-INF", "okhttp.kotlin_module") => MergeStrategy.first
     case PathList("META-INF", "okio.kotlin_module") => MergeStrategy.last
+    case PathList("META-INF", "kotlin-project-structure-metadata.json") => MergeStrategy.discard
     case PathList(
           "META-INF",
           "org",
@@ -2113,8 +2115,6 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.first
     // Multiple dependencies ship this GraalVM metadata with differing content.
     case PathList("META-INF", "native-image", "reflect-config.json") => MergeStrategy.first
-    // Copy-pasta from Canton (DACH-NY/canton#31788): Remove this merge strategy once zipkin exporter is removed
-    case PathList("okhttp3", _ @_*) => MergeStrategy.first
     // this file comes in multiple flavors, from io.get-coursier:interface and from org.scala-lang.modules:scala-collection-compat. Since the content differs it is resolve this explicitly with this MergeStrategy.
     case path if path.endsWith("scala-collection-compat.properties") => MergeStrategy.first
     // Don't really care about the notice file so just take any.
@@ -2324,7 +2324,7 @@ checkErrors := {
     import better.files.File
     val logSpecificIgnores =
       if (File(ignorePatternsFilename(logName)).exists()) Seq(logName) else Seq.empty
-    // ideally we would add them only if dabft is enabled but it's too much of a pain to wire it in the github actions
+    // TODO (#8263): merge canton_log_bft into canton_log, DA BFT is always enabled now
     val bftIgnore = Seq("canton_log_bft")
 
     val simtimeIgnorePatterns = if (usesSimtime) Seq("canton_log_simtime_extra") else Seq.empty
@@ -2454,7 +2454,6 @@ lazy val `apps-app`: Project =
         CantonDependencies.opentelemetry_sdk_autoconfigure,
         CantonDependencies.opentelemetry_sdk_autoconfigure,
         CantonDependencies.opentelemetry_prometheus,
-        CantonDependencies.opentelemetry_zipkin,
         CantonDependencies.opentelemetry_instrumentation_grpc,
         CantonDependencies.opentelemetry_instrumentation_runtime_metrics,
       ),

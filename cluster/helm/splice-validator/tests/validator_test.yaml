@@ -131,6 +131,7 @@ tests:
   - it: "supports disabling auth"
     set:
       disableAuth: true
+      allowedOrigins: [ "https://wallet.mock.net" ]
     documentSelector:
       path: kind
       value: Deployment
@@ -140,6 +141,32 @@ tests:
           value: ledger-api-user
       - exists:
           path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='ADDITIONAL_CONFIG_DISABLE_AUTH')].value
+
+  - it: "requires allowedOrigins when auth is disabled"
+    set:
+      disableAuth: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "allowedOrigins must be set when disableAuth is true"
+
+  - it: "configures allowed origins"
+    set:
+      allowedOrigins: [ "https://wallet.mock.net", "https://ans.mock.net" ]
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='ADDITIONAL_CONFIG_ALLOWED_ORIGINS')].value
+          pattern: 'canton.validator-apps.validator_backend.allowed-origins = \["https://wallet.mock.net","https://ans.mock.net"\]'
+
+  - it: "does not restrict origins by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='validator-app')].env[?(@.name=='ADDITIONAL_CONFIG_ALLOWED_ORIGINS')]
 
   - it: "configures scan-client for trust-single mode"
     set:
@@ -322,7 +349,7 @@ tests:
   - it: "allows overriding imageName and persistence.initImage"
     set:
       imageName: "validator-2"
-      persistence.initImageName: "secure-registry.com/postgres:14"
+      persistence.initImageName: "secure-registry.com/postgres:18"
       persistence.enablePgInitContainer: true
     documentSelector:
       path: kind
@@ -333,7 +360,7 @@ tests:
           pattern: "validator-2:0\\.1\\.0$"
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].image
-          pattern: "secure-registry.com/postgres:14"
+          pattern: "secure-registry.com/postgres:18"
 
   - it: "allows overriding nested persistence and bucket secret env vars with raw strings"
     set:
