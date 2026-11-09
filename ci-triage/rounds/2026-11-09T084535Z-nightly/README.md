@@ -130,3 +130,10 @@ Checked: `Test/compile` step of #8319 (5c8e6ffcfa) is on main (action.yml:274) a
 0.9.x, 0.10.0, 0.10.1 (grep of action.yml via contents API). Since 11-05 the only "Killed SBT after timeout"
 issues are 11208, 11212 (closed dup 10358) and 11231; all release-line runs before #8319 merged. Open sibling 11220
 (cache fallback, krzysztofczyz-da) names "compile in its own step" as the independent lever.
+
+## g5-simtime-main landed (11287 11288)
+
+Agent verdict: both dup 11255 (11287 lost-verdict shape, 11288 rejected MED::sv4 proposal). Main-thread check:
+quotes grepped against log/11287 canton-simtime.clog.gz (the sv1 "Delaying" line was reformatted by the agent, now
+the real line; linked to request .257Z by trace 800a817a in the packet); "5 of 13" changed to "at least 5 of 13 (3
+other failed runs not checked)". Not presented yet (11231 question pending).
