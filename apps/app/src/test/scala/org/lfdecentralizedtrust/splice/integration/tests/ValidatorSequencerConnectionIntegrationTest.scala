@@ -185,8 +185,11 @@ class ValidatorSequencerConnectionIntegrationTest
           withClue("Restoring sv4's sequencer id makes scan serve all sequencers again") {
             setSequencerId(sv4Backend, sv4SequencerId.toProtoPrimitive).futureValue
             eventually() {
-              sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers).map(_.svName).toSet shouldBe
-                Set(getSvName(1), getSvName(2), getSvName(3), getSvName(4))
+              forAll(Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend)) {
+                scanBackend =>
+                  scanBackend.listDsoSequencers().flatMap(_.sequencers).map(_.svName).toSet shouldBe
+                    Set(getSvName(1), getSvName(2), getSvName(3), getSvName(4))
+              }
             }
           }
         },
