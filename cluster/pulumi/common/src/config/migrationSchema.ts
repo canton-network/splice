@@ -37,6 +37,7 @@ export const MigrationInfoSchema = z
       })
       .strict()
       .prefault({}),
+    // TODO (#8263): remove the CometBFT config
     cometbft: z
       .object({
         volumeSize: z.string().optional(),

@@ -937,6 +937,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
     .filter(e => e != undefined);
   const cantonBftEnabled =
     DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
+  // TODO (#8263): remove the CometBFT pruning and alerts
   const cometbftPruningHighestBlockRetain = allSvsConfiguration
     .map(sv => sv.pruning?.cometbft?.retainBlocks)
     .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
