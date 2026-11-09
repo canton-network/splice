@@ -72,7 +72,7 @@ class ParticipantKmsIdentitiesIntegrationTest
         },
         // default transforms that look relevant
         (_, config) => ConfigTransforms.makeAllTimeoutsBounded(config),
-        (_, config) => ConfigTransforms.useSelfSignedTokensForLedgerApiAuth("test")(config),
+        (_, config) => ConfigTransforms.useSelfSignedTokensForAuth(config),
         (_, config) => ConfigTransforms.reducePollingInterval(config),
         (_, config) => ConfigTransforms.withPausedSvDomainComponentsOffboardingTriggers()(config),
         (_, config) => ConfigTransforms.disableOnboardingParticipantPromotionDelay()(config),

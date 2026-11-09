@@ -6,7 +6,7 @@ import sbt.*
 /** Copied from Canton OSS repo. */
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
-  val canton_library_version = "3.7.0-snapshot.20261022.20797.0.vd0a4e6f2"
+  val canton_library_version = "3.7.1"
   // Canton does some sbt magic that depends on this field called version even though it is not explicitly used.
   val version = canton_library_version
   val daml_language_versions = Seq("2.1")
@@ -14,16 +14,10 @@ object CantonDependencies {
   // the non-sbt based docker build.
   val daml_compiler_version = sys.env("DAML_COMPILER_VERSION")
   val daml_java_codegen_version = daml_compiler_version
-  val use_custom_daml_version = false
-
-  lazy val osClassifier: String =
-    if (sys.props("os.name").contains("Mac")) "osx"
-    else sys.props("os.name").toLowerCase
 
   lazy val scala_version = "2.13.18"
   lazy val scala_version_short = "2.13"
 
-  lazy val anorm = "org.playframework.anorm" %% "anorm" % "2.7.0"
   lazy val apispec_version = "0.11.7"
   lazy val pekko_version = "1.2.1"
   lazy val pekko_projection_version = "1.1.0"
@@ -31,8 +25,7 @@ object CantonDependencies {
   lazy val pekko_http_version = "1.2.0"
   lazy val auth0_java = "com.auth0" % "java-jwt" % "4.2.1"
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
-  lazy val awaitility = "org.awaitility" % "awaitility" % "4.2.0"
-  lazy val grpc_version = "1.81.0"
+  lazy val grpc_version = "1.85.0"
   lazy val logback_version = "1.6.3"
   lazy val slf4j_version = "2.0.6"
   lazy val log4j_version = "2.25.5"
@@ -40,11 +33,12 @@ object CantonDependencies {
   lazy val pprint_version = "0.9.3"
   // if you update the slick version, please also update our forked code in common/slick.util.*
   lazy val slick_version = "3.5.2"
-  lazy val bouncy_castle_version = "1.83"
+  lazy val bouncy_castle_version = "1.86"
 
   lazy val pureconfig_version = "0.14.0"
 
-  lazy val circe_version = "0.14.2"
+  lazy val circe_version = "0.14.17"
+  lazy val circe_generic_extras_version = "0.14.4"
 
   lazy val scalatest_version = "3.2.19"
   lazy val scalacheck_version = "1.15.4"
@@ -59,19 +53,15 @@ object CantonDependencies {
 
   lazy val scala_collection_contrib =
     "org.scala-lang.modules" %% "scala-collection-contrib" % "0.4.0"
-  lazy val scala_reflect = "org.scala-lang" % "scala-reflect" % scala_version
   lazy val shapeless = "com.chuusai" %% "shapeless" % "2.3.12"
 
   lazy val monocle_version = "3.3.0"
-  lazy val monocle_core = "dev.optics" %% "monocle-core" % monocle_version
   lazy val monocle_macro = "dev.optics" %% "monocle-macro" % monocle_version
 
   // ammonite requires the full scala version including patch number
   lazy val ammonite = "com.lihaoyi" % "ammonite" % ammonite_version cross CrossVersion.full
   lazy val pprint = "com.lihaoyi" %% "pprint" % pprint_version
 
-  lazy val hikaricp = "com.zaxxer" % "HikariCP" % "3.2.0"
-  lazy val h2 = "com.h2database" % "h2" % "2.1.210"
   lazy val postgres = "org.postgresql" % "postgresql" % "42.7.3"
   private val flyway_version = "12.0.2"
   lazy val flyway = "org.flywaydb" % "flyway-core" % flyway_version
@@ -91,19 +81,18 @@ object CantonDependencies {
   lazy val daml_lf_transaction = "com.daml" %% "daml-lf-transaction" % canton_library_version
   lazy val daml_lf_api_type_signature =
     "com.daml" %% "daml-lf-api-type-signature" % canton_library_version
-  lazy val daml_libs_scala_grpc_test_utils =
-    "com.daml" %% "grpc-test-utils" % canton_library_version
-  lazy val daml_grpc_utils =
-    "com.daml" %% "daml-grpc-utils" % canton_library_version
 
   lazy val canton_java_bindings = "com.daml" % "bindings-java" % canton_library_version
   lazy val canton_kms_driver_api = "com.daml" %% "kms-driver-api" % canton_library_version
   lazy val canton_ledger_api_core = "com.daml" %% "ledger-api-core" % canton_library_version
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
-  lazy val canton_base_errors = "com.daml" %% "base-errors" % canton_library_version
   lazy val canton_base_validation = "com.daml" %% "base-validation" % canton_library_version
-  lazy val canton_observability_metrics =
-    "com.daml" %% "observability-metrics" % canton_library_version
+  lazy val canton_community_admin_api =
+    "com.daml" %% "community-admin-api" % canton_library_version
+  // We build `community-base` from our own copy in `canton/`, so keep the published one out of the classpath
+  lazy val canton_community_common =
+    ("com.daml" %% "community-common" % canton_library_version)
+      .excludeAll(ExclusionRule("com.daml", s"community-base_$scala_version_short"))
   lazy val canton_contextualized_logging =
     "com.daml" %% "contextualized-logging" % canton_library_version
   lazy val canton_slick_fork = "com.daml" %% "slick-fork" % canton_library_version
@@ -115,8 +104,6 @@ object CantonDependencies {
   lazy val canton_wartremover_annotations =
     "com.daml" %% "wartremover-annotations" % canton_library_version
 
-  lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
-  lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
   lazy val canton_transcode_json = "com.daml" % "transcode-codec-json_3" % canton_library_version
   lazy val canton_transcode_proto_scala =
     "com.daml" % "transcode-codec-proto-scala_3" % canton_library_version
@@ -140,12 +127,7 @@ object CantonDependencies {
   lazy val daml_executors = "com.daml" %% "executors" % canton_library_version
   lazy val daml_jwt = "com.daml" %% "daml-jwt" % canton_library_version
   lazy val daml_tls = "com.daml" %% "daml-tls" % canton_library_version
-  lazy val daml_ports = "com.daml" %% "ports" % canton_library_version
   lazy val daml_ledger_resources = "com.daml" %% "ledger-resources" % canton_library_version
-  lazy val daml_ledger_api_value_scalapb =
-    "com.daml" %% "ledger-api-value-scalapb" % canton_library_version
-  lazy val daml_ledger_api_value_java =
-    "com.daml" % "ledger-api-value-java-proto" % canton_library_version
   lazy val daml_timer_utils = "com.daml" %% "timer-utils" % canton_library_version
   lazy val daml_rs_grpc_pekko = "com.daml" %% "rs-grpc-pekko" % canton_library_version
 
@@ -160,11 +142,9 @@ object CantonDependencies {
     "org.bouncycastle" % "bcpkix-jdk18on" % bouncy_castle_version
 
   lazy val grpc_api = "io.grpc" % "grpc-api" % grpc_version
-  lazy val grpc_protobuf = "io.grpc" % "grpc-protobuf" % grpc_version
   lazy val grpc_netty_shaded = "io.grpc" % "grpc-netty-shaded" % grpc_version
   lazy val grpc_stub = "io.grpc" % "grpc-stub" % grpc_version
   lazy val grpc_services = "io.grpc" % "grpc-services" % grpc_version
-  lazy val google_common_protos = "com.google.api.grpc" % "proto-google-common-protos" % "2.59.2"
 
   lazy val scopt = "com.github.scopt" %% "scopt" % "4.0.0"
 
@@ -228,43 +208,31 @@ object CantonDependencies {
 
   lazy val cats = "org.typelevel" %% "cats-core" % "2.9.0"
   lazy val cats_law = "org.typelevel" %% "cats-laws" % "2.9.0"
-  lazy val cats_scalacheck = "io.chrisdavenport" %% "cats-scalacheck" % "0.3.2"
 
   lazy val chimney = "io.scalaland" %% "chimney" % "1.4.0"
 
-  lazy val magnolia = "com.softwaremill.magnolia1_2" %% "magnolia" % "1.1.3"
-  lazy val magnolify_shared = "com.spotify" % "magnolify-shared_2.13" % "0.6.2"
-  lazy val magnolify_scalacheck = "com.spotify" % "magnolify-scalacheck_2.13" % "0.6.2"
-
   lazy val circe_core = "io.circe" %% "circe-core" % circe_version
   lazy val circe_generic = "io.circe" %% "circe-generic" % circe_version
-  lazy val circe_parser = "io.circe" %% "circe-parser" % circe_version
-  lazy val circe_generic_extras = "io.circe" %% "circe-generic-extras" % circe_version
+  lazy val circe_generic_extras =
+    "io.circe" %% "circe-generic-extras" % circe_generic_extras_version
 
-  lazy val guava = "com.google.guava" % "guava" % "33.3.0-jre"
   lazy val tink = "com.google.crypto.tink" % "tink" % "1.12.0" excludeAll (
     ExclusionRule(organization = "com.google.guava", name = "guava-jdk5"),
     ExclusionRule(organization = "com.amazonaws", name = "aws-java-sdk-kms")
   )
 
-  lazy val opentelemetry_version = "1.60.1"
-  lazy val opentelemetry_java_instrumentation_version = "2.26.1"
+  lazy val opentelemetry_version = "1.67.0"
+  lazy val opentelemetry_java_instrumentation_version = "2.33.0"
   lazy val opentelemetry_api = "io.opentelemetry" % "opentelemetry-api" % opentelemetry_version
   lazy val opentelemetry_sdk = "io.opentelemetry" % "opentelemetry-sdk" % opentelemetry_version
-  lazy val opentelemetry_sdk_testing =
-    "io.opentelemetry" % "opentelemetry-sdk-testing" % opentelemetry_version
   lazy val opentelemetry_sdk_autoconfigure =
     "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % opentelemetry_version
   lazy val opentelemetry_prometheus =
     "io.opentelemetry" % "opentelemetry-exporter-prometheus" % s"$opentelemetry_version-alpha"
-  lazy val opentelemetry_zipkin =
-    "io.opentelemetry" % "opentelemetry-exporter-zipkin" % opentelemetry_version
-  lazy val opentelemetry_trace =
-    "io.opentelemetry" % "opentelemetry-exporter-otlp" % opentelemetry_version
   lazy val opentelemetry_instrumentation_grpc =
     "io.opentelemetry.instrumentation" % "opentelemetry-grpc-1.6" % s"$opentelemetry_java_instrumentation_version-alpha"
   lazy val opentelemetry_instrumentation_runtime_metrics =
-    "io.opentelemetry.instrumentation" % "opentelemetry-runtime-telemetry-java17" % s"$opentelemetry_java_instrumentation_version-alpha"
+    "io.opentelemetry.instrumentation" % "opentelemetry-runtime-telemetry" % s"$opentelemetry_java_instrumentation_version-alpha"
   lazy val opentelemetry_instrumentation_hikari =
     "io.opentelemetry.instrumentation" % "opentelemetry-hikaricp-3.0" % s"$opentelemetry_java_instrumentation_version-alpha"
   lazy val opentelemetry_proto = "io.opentelemetry" % "opentelemetry-proto" % "1.7.1-alpha"
@@ -278,11 +246,6 @@ object CantonDependencies {
   lazy val testcontainers = "org.testcontainers" % "testcontainers" % testcontainers_version
   lazy val testcontainers_postgresql =
     "org.testcontainers" % "testcontainers-postgresql" % testcontainers_version
-
-  lazy val sttp_version = "3.11.0"
-  lazy val sttp = "com.softwaremill.sttp.client3" %% "core" % sttp_version
-  lazy val sttp_okhttp = "com.softwaremill.sttp.client3" %% "okhttp-backend" % sttp_version
-  lazy val sttp_circe = "com.softwaremill.sttp.client3" %% "circe" % sttp_version
 
   lazy val tapir_version = "1.11.7"
   lazy val tapir_json_circe = "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % tapir_version
@@ -312,33 +275,16 @@ object CantonDependencies {
 
   lazy val toxiproxy_java = "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4"
 
-  lazy val web3j = "org.web3j" % "core" % "4.8.9"
-
-  lazy val concurrency_limits =
-    "com.netflix.concurrency-limits" % "concurrency-limits-grpc" % "0.3.6"
-
   lazy val wartremover_dep =
     "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full
 
   lazy val scalaz_scalacheck =
     "org.scalaz" %% "scalaz-scalacheck-binding" % "7.2.33-scalacheck-1.15"
-  lazy val fasterjackson_core = "com.fasterxml.jackson.core" % "jackson-core" % "2.19.1"
   lazy val scalapb_json4s = "com.thesamet.scalapb" %% "scalapb-json4s" % "0.11.1"
-
-  lazy val junit_jupiter_api = "org.junit.jupiter" % "junit-jupiter-api" % "5.9.2"
-  lazy val junit_jupiter_engine = "org.junit.jupiter" % "junit-jupiter-engine" % "5.9.2"
-  lazy val junit_platform_runner = "org.junit.platform" % "junit-platform-runner" % "1.9.2"
-  lazy val jupiter_interface = "net.aichler" % "jupiter-interface" % "0.9.0"
-
-  lazy val google_protobuf_java = "com.google.protobuf" % "protobuf-java" % "3.25.5"
-  lazy val protobuf_version = google_protobuf_java.revision
-  lazy val google_protobuf_java_util =
-    "com.google.protobuf" % "protobuf-java-util" % protobuf_version
 
   // AWS SDK for Java API to encrypt/decrypt keys using AWS KMS
   lazy val aws_version = "2.55.2"
   lazy val aws_kms = "software.amazon.awssdk" % "kms" % aws_version
-  lazy val aws_sts = "software.amazon.awssdk" % "sts" % aws_version
 
   // GCP SDK for Java API to encrypt/decrypt keys using GCP KMS
   lazy val gcp_kms_version = "2.97.0"

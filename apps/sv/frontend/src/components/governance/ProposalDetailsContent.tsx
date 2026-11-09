@@ -202,12 +202,14 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
   return (
     <Box sx={{ width: '100%' }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb="14px">
+      <Stack
+        direction="row"
+        sx={{ alignItems: 'center', justifyContent: 'space-between', mb: '14px' }}
+      >
         <Typography
           variant="h4"
-          fontSize={20}
-          fontWeight={700}
           data-testid="proposal-details-title"
+          sx={{ fontSize: 20, fontWeight: 700 }}
         >
           Proposal Details
         </Typography>
@@ -223,7 +225,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
         </Button>
       </Stack>
 
-      <Stack sx={{ bgcolor: 'colors.neutral.10', p: 6 }} alignItems="center" gap={8}>
+      <Stack sx={{ alignItems: 'center', gap: 8, bgcolor: 'colors.neutral.10', p: 6 }}>
         {/* Figma details content starts at Action — no inner section title. */}
         <VoteSection data-testid="proposal-details-proposal-details">
           <DetailItem
@@ -410,7 +412,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             label={THRESHOLD_DEADLINE_LABEL}
             labelId="proposal-details-threshold-deadline-label"
             value={
-              <Stack gap={3}>
+              <Stack sx={{ gap: 3 }}>
                 <Box data-testid="proposal-details-voting-closes-duration">
                   {dayjs(votingInformation.votingThresholdDeadline).fromNow()}
                 </Box>
@@ -426,7 +428,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             label={EFFECTIVE_AT_LABEL}
             labelId="proposal-details-effective-at-label"
             value={
-              <Stack gap={3}>
+              <Stack sx={{ gap: 3 }}>
                 <Box data-testid="proposal-details-vote-takes-effect-duration">
                   {votingInformation.voteTakesEffect === 'Threshold'
                     ? 'Threshold'
@@ -509,7 +511,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             ))}
             {getFilteredVotes().length === 0 && (
               <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   No votes found for this category.
                 </Typography>
               </Box>
@@ -551,7 +553,7 @@ const VoteSection = React.forwardRef<HTMLDivElement, VoteSectionProps>(
   ({ title, children, 'data-testid': testId, bordered = false, centered = false }, ref) => (
     <Box sx={{ width: '100%', maxWidth: '800px' }} data-testid={testId} ref={ref}>
       {title !== undefined && (
-        <Typography component="h2" fontSize={18} fontWeight={700} mb={3}>
+        <Typography component="h2" sx={{ fontSize: 18, fontWeight: 700, mb: 3 }}>
           {title}
         </Typography>
       )}
@@ -566,9 +568,7 @@ const VoteSection = React.forwardRef<HTMLDivElement, VoteSectionProps>(
           }),
         }}
       >
-        <Stack gap={3} alignItems={centered ? 'center' : undefined}>
-          {children}
-        </Stack>
+        <Stack sx={{ gap: 3, alignItems: centered ? 'center' : undefined }}>{children}</Stack>
       </Box>
     </Box>
   )
@@ -628,20 +628,11 @@ const VoteItem: React.FC<VoteItemProps> = ({
         }}
         data-testid="proposal-details-vote"
       >
-        <Box
-          sx={{
-            gridColumn: 1,
-            gridRow: 1,
-            minWidth: 0,
-            maxWidth: '100%',
-            overflow: 'hidden',
-          }}
-        >
+        <Box sx={{ gridColumn: 1, gridRow: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
           <Stack
             direction="row"
-            alignItems="center"
             spacing={1}
-            sx={{ minWidth: 0, maxWidth: '100%', width: '100%' }}
+            sx={{ alignItems: 'center', minWidth: 0, maxWidth: '100%', width: '100%' }}
           >
             <Box sx={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}>
               <CopyableIdentifier
@@ -675,10 +666,10 @@ const VoteItem: React.FC<VoteItemProps> = ({
               overflow: 'hidden',
             }}
           >
-            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
               {VOTE_REASON_SUMMARY_LABEL}
             </Typography>
-            <Typography fontSize={16} color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+            <Typography sx={{ fontSize: 16, color: 'text.secondary', overflowWrap: 'anywhere' }}>
               {comment}
             </Typography>
           </Box>
@@ -695,7 +686,7 @@ const VoteItem: React.FC<VoteItemProps> = ({
               overflow: 'hidden',
             }}
           >
-            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
               {VOTE_REASON_URL_LABEL}
             </Typography>
             <CopyableUrl
@@ -709,13 +700,7 @@ const VoteItem: React.FC<VoteItemProps> = ({
         )}
 
         <Box
-          sx={{
-            gridColumn: 3,
-            gridRow: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            pt: '2px',
-          }}
+          sx={{ gridColumn: 3, gridRow: 1, display: 'flex', justifyContent: 'center', pt: '2px' }}
         >
           <IconButton
             color="secondary"
@@ -780,11 +765,7 @@ const VoteItem: React.FC<VoteItemProps> = ({
               startIcon={<Edit fontSize="small" />}
               onClick={onEdit}
               data-testid="your-vote-edit-button"
-              sx={{
-                fontSize: 16,
-                minWidth: 0,
-                px: 0,
-              }}
+              sx={{ fontSize: 16, minWidth: 0, px: 0 }}
             >
               Edit
             </Button>
@@ -921,8 +902,7 @@ const UpdateFeatureAppSection = ({
       const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
       const contract = response.featured_app_right;
       const payload = contract?.payload as
-        | { provider?: string; activityWeight?: string | null }
-        | undefined;
+        { provider?: string; activityWeight?: string | null } | undefined;
       return {
         provider: payload?.provider ?? null,
         currentWeight: contract ? (payload?.activityWeight ?? DEFAULT_APP_ACTIVITY_WEIGHT) : '',

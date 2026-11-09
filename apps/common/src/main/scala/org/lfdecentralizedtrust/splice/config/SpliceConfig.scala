@@ -129,6 +129,7 @@ case class SharedSpliceAppParameters(
 ) extends CantonNodeParameters {
   override def alphaVersionSupport: Boolean = false
   override def betaVersionSupport: Boolean = false
+  override def enableKeyDownload: Boolean = false
 
   override def tracing: TracingConfig = monitoringConfig.tracing
 

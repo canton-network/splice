@@ -38,6 +38,10 @@
       "type": "integer",
       "minimum": 1
     },
+    "missingSynchronizerGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
     "serviceAccountName": {
       "type": "string"
     },

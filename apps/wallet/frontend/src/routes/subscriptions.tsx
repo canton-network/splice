@@ -10,9 +10,7 @@ import {
   unitToCurrency,
 } from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
-import differenceInMilliseconds from 'date-fns/differenceInMilliseconds';
-import intlFormat from 'date-fns/intlFormat';
-import parseISO from 'date-fns/parseISO';
+import { differenceInMilliseconds, intlFormat, parseISO } from 'date-fns';
 
 import {
   Box,
@@ -48,8 +46,8 @@ const Subscriptions: React.FC = () => {
     subscriptionQuery.data === undefined || amuletPriceQuery.data === undefined;
 
   return (
-    <Stack marginY={10} spacing={2}>
-      <Typography variant="h6" fontWeight="bold">
+    <Stack spacing={2} sx={{ marginY: 10 }}>
+      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
         Your Subscriptions
       </Typography>
       {isLoading ? (
@@ -80,6 +78,7 @@ const Subscriptions: React.FC = () => {
                   <SubscriptionRow
                     key={subscription.subscription.contractId}
                     subscription={subscription}
+                    fetchedAt={new Date(subscriptionQuery.dataUpdatedAt)}
                     cancelSubscription={onCancel}
                     amuletPrice={amuletPriceQuery.data}
                   />
@@ -95,11 +94,14 @@ const Subscriptions: React.FC = () => {
 
 interface SubscriptionRowProps {
   subscription: WalletSubscription;
+  /** When the subscription was fetched; the time left until the payment is due is relative to it. */
+  fetchedAt: Date;
   cancelSubscription: () => void;
   amuletPrice: BigNumber;
 }
 const SubscriptionRow: React.FC<SubscriptionRowProps> = ({
   subscription,
+  fetchedAt,
   cancelSubscription,
   amuletPrice,
 }) => {
@@ -121,7 +123,7 @@ const SubscriptionRow: React.FC<SubscriptionRowProps> = ({
         <Price payData={subscription.state.value.payload.payData} amuletPrice={amuletPrice} />
       </TableCell>
       <TableCell>
-        <PaymentDue state={subscription.state} />
+        <PaymentDue state={subscription.state} now={fetchedAt} />
       </TableCell>
       <TableCell>
         <DisableConditionally
@@ -167,12 +169,14 @@ const Price: React.FC<PriceProps> = ({ payData, amuletPrice }) => {
   return (
     <Stack>
       <Box
-        display="flex"
-        flexDirection="row"
-        justifyContent="flex-end"
-        alignItems="baseline"
-        gap={1}
         className="sub-price"
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'baseline',
+          gap: 1,
+        }}
       >
         <Typography variant="h6">
           <AmountDisplay amount={amount} currency={currency} />
@@ -188,7 +192,7 @@ const Price: React.FC<PriceProps> = ({ payData, amuletPrice }) => {
   );
 };
 
-const PaymentDue: React.FC<{ state: SubscriptionState }> = ({ state }) => {
+const PaymentDue: React.FC<{ state: SubscriptionState; now: Date }> = ({ state, now }) => {
   let paymentDueAtString: string;
   switch (state.type) {
     case 'idle':
@@ -199,7 +203,6 @@ const PaymentDue: React.FC<{ state: SubscriptionState }> = ({ state }) => {
       break;
   }
   const paymentDueAt = parseISO(paymentDueAtString);
-  const now = new Date();
   const millisecondsLeft = differenceInMilliseconds(paymentDueAt, now);
   return (
     <Stack>

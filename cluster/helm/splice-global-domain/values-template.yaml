@@ -30,7 +30,7 @@ sequencer:
     secretName: "postgres-secrets"
     databaseName: cantonnet_sequencer
     port: 5432
-    initImageName: "postgres:14"
+    initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
 #    secretOverrides:
 #      postgresPassword: ""
   resources:
@@ -48,7 +48,7 @@ mediator:
     secretName: "postgres-secrets"
     databaseName: cantonnet_mediator
     port: 5432
-    initImageName: "postgres:14"
+    initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
 #    secretOverrides:
 #      postgresPassword: ""
 

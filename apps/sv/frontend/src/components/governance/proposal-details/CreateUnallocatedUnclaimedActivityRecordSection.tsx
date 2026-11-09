@@ -55,7 +55,7 @@ export const CreateUnallocatedUnclaimedActivityRecordSection: React.FC<
               {formatDatetimeWithOffset(mintBefore)}
             </Typography>
 
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {dayjs(mintBefore).fromNow()}
             </Typography>
           </>

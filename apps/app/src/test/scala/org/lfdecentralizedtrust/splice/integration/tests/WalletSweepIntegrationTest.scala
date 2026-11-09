@@ -6,6 +6,7 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
 import io.grpc.{Status, StatusRuntimeException}
 import org.lfdecentralizedtrust.splice.automation.Trigger
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -27,6 +28,7 @@ import org.lfdecentralizedtrust.splice.util.{SpliceUtil, TriggerTestUtil, Wallet
 import org.lfdecentralizedtrust.splice.wallet.automation.{
   AutoAcceptTransferOffersTrigger,
   WalletPreapprovalSweepTrigger,
+  WalletTokenStandardSweepTrigger,
 }
 import org.lfdecentralizedtrust.splice.wallet.config.{AutoAcceptTransfersConfig, WalletSweepConfig}
 import org.slf4j.event.Level
@@ -44,6 +46,64 @@ abstract class WalletSweepIntegrationTest
   val amuletPrice: BigDecimal = BigDecimal(1)
 
   val isSweepingToValidator: Boolean = true
+
+  // Second sweeping party on bob's validator, since bob's validator party already sweeps via preapproval
+  val bobTokenStandardSweeperHint: String = "bob-token-standard-sweeper"
+
+  protected def bobTokenStandardSweeperPartyId(
+      config: org.lfdecentralizedtrust.splice.config.SpliceConfig
+  ): PartyId = {
+    val bobParticipant =
+      ConfigTransforms.getParticipantIds(config.parameters.clock)("bob_validator_user")
+    PartyId.tryFromProtoPrimitive(
+      s"$bobTokenStandardSweeperHint::${bobParticipant.split("::").last}"
+    )
+  }
+
+  protected def bobWalletSweeps(
+      bobPartyId: PartyId,
+      alicePartyId: PartyId,
+      config: org.lfdecentralizedtrust.splice.config.SpliceConfig,
+  ): Map[String, WalletSweepConfig] = Map(
+    bobPartyId.toProtoPrimitive -> WalletSweepConfig(
+      NonNegativeNumeric.tryCreate(maxBalanceUsd),
+      NonNegativeNumeric.tryCreate(minBalanceUsd),
+      alicePartyId,
+      useTransferPreapproval = true,
+    ),
+    bobTokenStandardSweeperPartyId(config).toProtoPrimitive -> WalletSweepConfig(
+      NonNegativeNumeric.tryCreate(maxBalanceUsd),
+      NonNegativeNumeric.tryCreate(minBalanceUsd),
+      alicePartyId,
+      useTokenStandardTransfer = true,
+    ),
+  )
+
+  private def onboardBobTokenStandardSweeper()(implicit
+      env: SpliceTestConsoleEnvironment
+  ): PartyId = {
+    val partyId = bobTokenStandardSweeperPartyId(env.environment.config)
+    if (
+      !bobValidatorBackend.participantClientWithAdminToken.ledger_api.parties
+        .list()
+        .exists(_.party == partyId)
+    ) {
+      bobValidatorBackend.participantClientWithAdminToken.ledger_api.parties
+        .allocate(bobTokenStandardSweeperHint, synchronizerId = Some(decentralizedSynchronizerId))
+    }
+    val onboarded =
+      bobValidatorBackend.onboardUser(bobWalletClient.config.ledgerApiUser, Some(partyId))
+    waitForWalletUser(bobWalletClient)
+    onboarded
+  }
+
+  private def runTokenStandardSweep()(implicit env: SpliceTestConsoleEnvironment): Boolean =
+    bobValidatorBackend
+      .userWalletAutomation(bobWalletClient.config.ledgerApiUser)
+      .futureValue
+      .trigger[WalletTokenStandardSweepTrigger]
+      .runOnce()
+      .futureValue
 
   override def walletAmuletPrice = SpliceUtil.damlDecimal(amuletPrice.bigDecimal)
 
@@ -201,6 +261,43 @@ abstract class WalletSweepIntegrationTest
           .unlockedQty
           .longValue should be > aliceBalanceAtStart
       }
+    }
+  }
+
+  "sweep through token standard should work" in { implicit env =>
+    onboardBobTokenStandardSweeper()
+    onboard(walletClient, user, aliceValidatorBackend)
+
+    clue("Nothing to sweep below the max balance") {
+      runTokenStandardSweep() shouldBe false
+    }
+    actAndCheck("Bob's sweeper taps above the max balance", bobWalletClient.tap(20))(
+      "balance is updated",
+      _ => bobWalletClient.balance().unlockedQty should beAround(20.0),
+    )
+    val previousBalance = walletClient.balance().unlockedQty
+
+    val (_, instruction) = actAndCheck("Sweep kicks in", runTokenStandardSweep() shouldBe true)(
+      "sender is drained and receiver sees a pending transfer instruction (no preapproval yet)",
+      _ => {
+        bobWalletClient.balance().unlockedQty should beAround(minBalanceUsd)
+        inside(walletClient.listTokenStandardTransfers()) { case Seq(t) => t }
+      },
+    )
+    actAndCheck(
+      "Receiver accepts the transfer instruction",
+      walletClient.acceptTokenStandardTransfer(
+        new TransferInstruction.ContractId(instruction.contractId.contractId)
+      ),
+    )(
+      "Receiver got the funds",
+      _ => {
+        walletClient.listTokenStandardTransfers() shouldBe empty
+        walletClient.balance().unlockedQty should beAround(previousBalance + 18)
+      },
+    )
+    clue("No further sweep needed") {
+      runTokenStandardSweep() shouldBe false
     }
   }
 
@@ -379,16 +476,7 @@ class WalletSweepToValidatorOperatorIntegrationTest extends WalletSweepIntegrati
               )
             )
           } else if (name == "bobValidator") {
-            c.copy(
-              walletSweep = Map(
-                bobPartyId.toProtoPrimitive -> WalletSweepConfig(
-                  NonNegativeNumeric.tryCreate(maxBalanceUsd),
-                  NonNegativeNumeric.tryCreate(minBalanceUsd),
-                  alicePartyId,
-                  useTransferPreapproval = true,
-                )
-              )
-            )
+            c.copy(walletSweep = bobWalletSweeps(bobPartyId, alicePartyId, config))
           } else {
             c
           }
@@ -399,6 +487,7 @@ class WalletSweepToValidatorOperatorIntegrationTest extends WalletSweepIntegrati
         updateAutomationConfig(ConfigurableApp.Validator)(
           // Disable by default so we can explictly control when it runs
           _.withPausedTrigger[WalletPreapprovalSweepTrigger]
+            .withPausedTrigger[WalletTokenStandardSweepTrigger]
         )(config)
       )
       .withSequencerConnectionsFromScanDisabled()
@@ -494,16 +583,7 @@ class WalletSweepToEndUserIntegrationTest extends WalletSweepIntegrationTest {
               )
             )
           } else if (name == "bobValidator") {
-            c.copy(
-              walletSweep = Map(
-                bobPartyId.toProtoPrimitive -> WalletSweepConfig(
-                  NonNegativeNumeric.tryCreate(maxBalanceUsd),
-                  NonNegativeNumeric.tryCreate(minBalanceUsd),
-                  alicePartyId,
-                  useTransferPreapproval = true,
-                )
-              )
-            )
+            c.copy(walletSweep = bobWalletSweeps(bobPartyId, alicePartyId, config))
           } else {
             c
           }
@@ -514,7 +594,7 @@ class WalletSweepToEndUserIntegrationTest extends WalletSweepIntegrationTest {
         updateAutomationConfig(ConfigurableApp.Validator)(
           // Disable by default so we can explictly control when it runs
           _.withPausedTrigger[WalletPreapprovalSweepTrigger]
-          // .withPausedTrigger[WalletTransferOfferSweepTrigger]
+            .withPausedTrigger[WalletTokenStandardSweepTrigger]
         )(config)
       )
       .withSequencerConnectionsFromScanDisabled()

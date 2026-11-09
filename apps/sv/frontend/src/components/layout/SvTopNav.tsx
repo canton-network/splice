@@ -74,15 +74,16 @@ const SvTopNav: React.FC<SvTopNavProps> = ({ navLinks, onLogout }) => (
 
     <Stack
       direction="row"
-      flexWrap="wrap"
-      alignItems="center"
-      justifyContent="center"
       data-testid="sv-top-nav-links"
       sx={{
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'center',
         flexShrink: 0,
         gap: NAV_GAP,
         rowGap: NAV_GAP,
         minWidth: 0,
+
         '@media (max-width: 1400px)': {
           flex: '1 1 100%',
           order: 3,

@@ -57,12 +57,14 @@ const Login: React.FC<LoginProps> = ({
   return (
     <Container maxWidth="xs">
       {loginFailed && <LoginFailed message={failureMessage} />}
-      <Stack alignItems="center" paddingTop={16} spacing={4}>
+      <Stack spacing={4} sx={{ alignItems: 'center', paddingTop: 16 }}>
         <Typography
           variant="h5"
-          textTransform="uppercase"
-          fontFamily={theme.fonts.monospace.fontFamily}
-          fontWeight={theme.fonts.monospace.fontWeight}
+          sx={{
+            textTransform: 'uppercase',
+            fontFamily: theme.fonts.monospace.fontFamily,
+            fontWeight: theme.fonts.monospace.fontWeight,
+          }}
         >
           {title}
         </Typography>

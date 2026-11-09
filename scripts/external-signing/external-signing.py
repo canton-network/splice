@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import hashlib
 import os
+from typing import Any
 
 cli_log_handler = colorlog.StreamHandler()
 cli_log_handler.setFormatter(
@@ -40,7 +41,7 @@ class HttpException(Exception):
     cause: aiohttp.client_exceptions.ClientResponseError
 
 
-async def session_post(session: aiohttp.ClientSession, url, payload):
+async def session_post(session: aiohttp.ClientSession, url: str, payload: dict[str, Any]) -> aiohttp.ClientResponse:
     response = await session.post(url, json=payload)
     err = await response.text()
     try:
@@ -50,7 +51,7 @@ async def session_post(session: aiohttp.ClientSession, url, payload):
     return response
 
 
-async def session_get(session: aiohttp.ClientSession, url, payload):
+async def session_get(session: aiohttp.ClientSession, url: str, payload: dict[str, Any]) -> aiohttp.ClientResponse:
     response = await session.get(url, params=payload)
     err = await response.text()
     try:
@@ -65,7 +66,7 @@ class ScanClient:
     session: aiohttp.ClientSession
     url: str
 
-    async def lookup_transfer_command_status(self, sender, nonce):
+    async def lookup_transfer_command_status(self, sender: str, nonce: int) -> Any:
         payload = {"sender": sender, "nonce": nonce}
         response = await session_get(
             self.session,
@@ -74,12 +75,12 @@ class ScanClient:
         )
         return await response.json()
 
-    async def get_transfer_factory(self, choice_arguments):
+    async def get_transfer_factory(self, choice_arguments: Any) -> Any:
         payload={"choiceArguments": choice_arguments}
         response = await session_post(self.session, f"{self.url}/registry/transfer-instruction/transfer-factory", payload)
         return await response.json()
 
-    async def get_dso(self):
+    async def get_dso(self) -> Any:
         response = await session_get(self.session, f"{self.url}/api/scan/v0/dso", {})
         return await response.json()
 
@@ -89,7 +90,7 @@ class ValidatorClient:
     session: aiohttp.ClientSession
     url: str
 
-    async def generate_external_party_topology(self, party_hint, public_key):
+    async def generate_external_party_topology(self, party_hint: str, public_key: str) -> Any:
         payload = {"party_hint": party_hint, "public_key": public_key}
         response = await session_post(
             self.session,
@@ -98,7 +99,7 @@ class ValidatorClient:
         )
         return await response.json()
 
-    async def submit_external_party_topology(self, signed_topology_txs, public_key):
+    async def submit_external_party_topology(self, signed_topology_txs: list[dict[str, str]], public_key: str) -> Any:
         payload = {
             "signed_topology_txs": signed_topology_txs,
             "public_key": public_key,
@@ -110,7 +111,7 @@ class ValidatorClient:
         )
         return await response.json()
 
-    async def create_external_party_setup_proposal(self, party_id):
+    async def create_external_party_setup_proposal(self, party_id: str) -> Any:
         payload = {
             "user_party_id": party_id,
         }
@@ -121,7 +122,7 @@ class ValidatorClient:
         )
         return await response.json()
 
-    async def prepare_external_party_setup_proposal_accept(self, contract_id, party_id):
+    async def prepare_external_party_setup_proposal_accept(self, contract_id: str, party_id: str) -> Any:
         payload = {
             "contract_id": contract_id,
             "user_party_id": party_id,
@@ -134,8 +135,8 @@ class ValidatorClient:
         return await response.json()
 
     async def submit_external_party_setup_proposal_accept(
-        self, party_id, transaction, signed_tx_hash, public_key
-    ):
+        self, party_id: str, transaction: Any, signed_tx_hash: str, public_key: str
+    ) -> Any:
         payload = {
             "submission": {
                 "party_id": party_id,
@@ -153,12 +154,12 @@ class ValidatorClient:
 
     async def prepare_transfer_preapproval_send(
         self,
-        sender_party_id,
-        receiver_party_id,
-        amount,
-        expires_at,
-        nonce,
-    ):
+        sender_party_id: str,
+        receiver_party_id: str,
+        amount: str,
+        expires_at: str,
+        nonce: int,
+    ) -> Any:
         payload = {
             "sender_party_id": sender_party_id,
             "receiver_party_id": receiver_party_id,
@@ -174,8 +175,8 @@ class ValidatorClient:
         return await response.json()
 
     async def submit_transfer_preapproval_send(
-        self, party_id, transaction, signed_tx_hash, public_key
-    ):
+        self, party_id: str, transaction: Any, signed_tx_hash: str, public_key: str
+    ) -> None:
         payload = {
             "submission": {
                 "party_id": party_id,
@@ -191,7 +192,7 @@ class ValidatorClient:
         )
 
 
-async def handle_generate_key_pair(args):
+async def handle_generate_key_pair(args: argparse.Namespace) -> None:
     private_key = ECC.generate(curve="ed25519")
     public_key = private_key.public_key()
     [private_key_file, public_key_file] = key_names(args.key_directory, args.key_name)
@@ -205,13 +206,13 @@ async def handle_generate_key_pair(args):
         logger.debug(f"Wrote public key to {public_key_file}")
 
 
-def key_names(key_directory, key_name):
+def key_names(key_directory: str, key_name: str) -> list[str]:
     private_key_file = f"{key_directory}/{key_name}.priv"
     public_key_file = f"{key_directory}/{key_name}.pub"
     return [private_key_file, public_key_file]
 
 
-def read_key_pair(key_directory, key_name):
+def read_key_pair(key_directory: str, key_name: str) -> list[ECC.EccKey]:
     [private_key_file, public_key_file] = key_names(key_directory, key_name)
     with open(private_key_file, "rb") as f:
         data = f.read()
@@ -222,7 +223,7 @@ def read_key_pair(key_directory, key_name):
     return [private_key, public_key]
 
 
-async def handle_setup_party(args, validator_client):
+async def handle_setup_party(args: argparse.Namespace, validator_client: ValidatorClient) -> None:
     logger.debug(f"Setting up party {args.party_hint} with key {args.key_name}")
     [private_key, public_key] = read_key_pair(args.key_directory, args.key_name)
     public_key_hex = public_key.export_key(format="raw").hex()
@@ -251,17 +252,18 @@ async def handle_setup_party(args, validator_client):
     logger.debug(f"Completed party setup, party id is: {party_id}")
 
 
-async def lookup_transfer_command_status(party_id, nonce, contract_id_prefix, scan_client):
+async def lookup_transfer_command_status(party_id: str, nonce: int, contract_id_prefix: str, scan_client: ScanClient) -> Any:
     response = await scan_client.lookup_transfer_command_status(party_id, nonce)
     for contract_id, contract_with_status in response["transfer_commands_by_contract_id"].items():
         if contract_id.startswith(contract_id_prefix):
             return contract_with_status
+    return None
 
 
 async def poll_for_transfer_command_status(
-    party_id, nonce, contract_id_prefix,
-    scan_client, timeout=30, poll_interval=1
-):
+    party_id: str, nonce: int, contract_id_prefix: str,
+    scan_client: ScanClient, timeout: float = 30, poll_interval: float = 1
+) -> Any:
     async with asyncio.timeout(timeout):
         while True:
             try:
@@ -280,7 +282,7 @@ async def poll_for_transfer_command_status(
             await asyncio.sleep(poll_interval)
 
 
-async def handle_setup_transfer_preapproval(args, validator_client):
+async def handle_setup_transfer_preapproval(args: argparse.Namespace, validator_client: ValidatorClient) -> None:
     logger.debug(f"Setting up TransferPreapproval for {args.party_id}")
     [private_key, public_key] = read_key_pair(args.key_directory, args.key_name)
     public_key_hex = public_key.export_key(format="raw").hex()
@@ -301,12 +303,12 @@ async def handle_setup_transfer_preapproval(args, validator_client):
     )
 
 
-def signed_by_from_key(public_key):
+def signed_by_from_key(public_key: ECC.EccKey) -> str:
     fingerprint = hashlib.sha256(bytes.fromhex(f"0000000C{public_key.export_key(format="raw").hex()}")).hexdigest()
     return f"1220{fingerprint}"
 
 
-async def handle_transfer_preapproval_send(args, validator_client, scan_client):
+async def handle_transfer_preapproval_send(args: argparse.Namespace, validator_client: ValidatorClient, scan_client: ScanClient) -> None:
     logger.debug(
         f"Exercise choice TransferPreapproval_Send to transfer {args.amount} \
         from {args.sender_party_id} to {args.receiver_party_id}"
@@ -337,7 +339,7 @@ async def handle_transfer_preapproval_send(args, validator_client, scan_client):
     logger.debug("Transfer complete.")
 
 
-def parse_cli_args():
+def parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Utility script to interact with the external signing parts of the Validator and Scan APIs"
     )
@@ -382,7 +384,7 @@ def parse_cli_args():
     return parser.parse_args()
 
 
-async def main():
+async def main() -> None:
     args = parse_cli_args()
 
     token = os.environ["VALIDATOR_JWT_TOKEN"]

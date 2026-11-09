@@ -21,8 +21,9 @@ import os
 import shlex
 import subprocess
 from collections import defaultdict
+from typing import Any
 
-def get_package_dir(path, package_file = 'package.json'):
+def get_package_dir(path: str, package_file: str = 'package.json') -> str | None:
     """walk up the directory tree until we find a package.json file"""
 
     directory = os.path.dirname(path)
@@ -35,7 +36,7 @@ def get_package_dir(path, package_file = 'package.json'):
     else:
         return get_package_dir(directory)
 
-def strip_non_option_arguments(command):
+def strip_non_option_arguments(command: str) -> list[str]:
     split_command = shlex.split(command)
     try:
         dash_dash = split_command.index('--')
@@ -46,7 +47,7 @@ def strip_non_option_arguments(command):
         # formatting all files every time.
         raise ValueError(f'The command `{command}` does not include a `--` marker to end the option arguments')
 
-def get_command(package_json, scripts, cmd_name):
+def get_command(package_json: str, scripts: dict[str, Any], cmd_name: str) -> list[str] | None:
     command = scripts.get(cmd_name)
 
     if command:
@@ -55,21 +56,22 @@ def get_command(package_json, scripts, cmd_name):
         except ValueError as e:
             print(f'[error] `{package_json}` script entry `{cmd_name}` is invalid:\n   {e.args[0]}')
             sys.exit(1)
+    return None
 
-def npm_exec(command, files, cwd):
+def npm_exec(command: list[str] | None, files: list[str], cwd: str) -> None:
     if command:
         subprocess.check_call(['npm', 'exec', '--'] + command + files, cwd=cwd)
 
 
-def npm_install(cwd):
+def npm_install(cwd: str) -> None:
     # need to find the top-level worktree directory first
     toplevel = get_package_dir(cwd, 'package-lock.json') or cwd
 
     subprocess.check_call(['npm', 'install'], cwd=toplevel)
 
 
-def main():
-    runs = defaultdict(list)
+def main() -> None:
+    runs: defaultdict[str, list[str]] = defaultdict(list)
 
     for arg in sys.argv[1:]:
         package_dir = get_package_dir(arg)

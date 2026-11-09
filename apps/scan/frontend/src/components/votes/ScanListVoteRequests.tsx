@@ -22,7 +22,7 @@ const ScanListVoteRequests: React.FC = () => {
   }
   return (
     <Layout>
-      <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
+      <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
         <Container maxWidth="lg">
           <ListVoteRequests showActionNeeded={false} />
         </Container>

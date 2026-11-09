@@ -51,7 +51,7 @@ import scala.jdk.OptionConverters.*
 // - ExpireRewardCouponV2Trigger does expiry correctly in both vetting state scenarios
 // Also include a test for an additional scenario where the reward assignment is
 // done while the beneficiary is offline (but has already vetted).
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
+@org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
 class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext

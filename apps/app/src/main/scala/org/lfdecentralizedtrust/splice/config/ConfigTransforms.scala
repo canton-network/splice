@@ -203,7 +203,7 @@ object ConfigTransforms {
     Seq(
       makeAllTimeoutsBounded,
       ensureNovelDamlNames(testId),
-      useSelfSignedTokensForLedgerApiAuth("test"),
+      useSelfSignedTokensForAuth,
       reducePollingInterval,
       withPausedSvDomainComponentsOffboardingTriggers(),
       disableOnboardingParticipantPromotionDelay(),
@@ -753,7 +753,7 @@ object ConfigTransforms {
       mediator = portTransform(bump, c.mediator),
     )
 
-  private def portTransform(bump: Int, c: LedgerApiClientConfig): LedgerApiClientConfig =
+  private def portTransform(bump: Int, c: ClientConfigWithAuth): ClientConfigWithAuth =
     c.focus(_.clientConfig).modify(portTransform(bump, _))
 
   private def portTransform(
@@ -800,6 +800,12 @@ object ConfigTransforms {
       .focus(_.mediator)
       .modify(portTransform(bump, _))
 
+  def useSelfSignedTokensForAuth: ConfigTransform =
+    combineAllTransforms(
+      useSelfSignedTokensForLedgerApiAuth(AuthUtil.testSecret),
+      useSelfSignedTokensForParticipantAdminApiAuth(AuthUtil.CantonAdminApi.adminApiTestSecret),
+    )
+
   /** Auth-enabled Splice apps use self-signed tokens with the given secret for their ledger API connections.
     * Other Splice apps use canton admin tokens for their ledger API connections.
     */
@@ -810,7 +816,7 @@ object ConfigTransforms {
   }
 
   private def updateAllLedgerApiClientConfigs(
-      enableAuth: (String, LedgerApiClientConfig) => LedgerApiClientConfig
+      enableAuth: (String, ClientConfigWithAuth) => ClientConfigWithAuth
   ): ConfigTransform = {
     combineAllTransforms(
       updateAllValidatorConfigs_(c => {
@@ -836,8 +842,8 @@ object ConfigTransforms {
 
   def selfSignedTokenAuthSourceTransform(clockConfig: ClockConfig, secret: String)(
       user: String,
-      c: LedgerApiClientConfig,
-  ): LedgerApiClientConfig = {
+      c: ClientConfigWithAuth,
+  ): ClientConfigWithAuth = {
     val userToken = AuthUtil.LedgerApi.testToken(
       user = user,
       secret = secret,
@@ -849,6 +855,55 @@ object ConfigTransforms {
       )
     )
   }
+
+  def useSelfSignedTokensForParticipantAdminApiAuth(
+      secret: String
+  ): ConfigTransform =
+    updateAllParticipantAdminApiConfigs { adminApi =>
+      val token = AuthUtil.testToken(
+        AuthUtil.CantonAdminApi.testParticipantAdminApiAudience,
+        AuthUtil.CantonAdminApi.defaultParticipantAdminApiUser,
+        secret,
+      )
+      adminApi.copy(
+        authConfig = AuthTokenSourceConfig.Static(
+          token,
+          // We use a JWT instead of a Canton Admin token as port mapping for the token file seems broken in most tests.
+          adminToken = Some(token),
+        )
+      )
+    }
+
+  private def updateAllParticipantAdminApiConfigs(
+      modify: ClientConfigWithAuth => ClientConfigWithAuth
+  ): ConfigTransform =
+    combineAllTransforms(
+      updateAllValidatorConfigs_(
+        _.focus(_.participantClient).modify(participantClient =>
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
+        )
+      ),
+      updateAllSvAppConfigs_(
+        _.focus(_.participantClient).modify(participantClient =>
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
+        )
+      ),
+      updateAllScanAppConfigs_(
+        _.focus(_.participantClient).modify(participantClient =>
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
+        )
+      ),
+      updateAllSplitwellAppConfigs_(
+        _.focus(_.participantClient).modify(participantClient =>
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
+        )
+      ),
+      updateAllRemoteSplitwellAppConfigs_(
+        _.focus(_.participantClient).modify(participantClient =>
+          participantClient.copy(adminApi = modify(participantClient.adminApi))
+        )
+      ),
+    )
 
   def useSplitwellUpgradeDomain(): ConfigTransform =
     updateAllSplitwellAppConfigs_(c => {
