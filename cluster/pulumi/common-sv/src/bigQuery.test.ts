@@ -189,6 +189,98 @@ describe('configureScanBigQuery', () => {
     }
   });
 
+  test('appends copy the listed columns by name, checking production first if they change', async () => {
+    const resources = await installBigQuery(
+      true,
+      true,
+      'V082__tbar_v1_1_asset_activity_columns.sql'
+    );
+    const bodies = new Map<string, string>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
+    }
+    const appends = [...bodies].filter(([routineId]) => routineId.startsWith('sp_append_'));
+    expect(appends).toHaveLength(6);
+    const checking = new Set(['scan_verdict_store', 'app_activity_record_store']);
+    for (const [routineId, body] of appends) {
+      const tableName = routineId.replace('sp_append_', '');
+      expect(body).not.toContain('{{');
+      // an empty {{checkProdSchema}} leaves no blank lines behind
+      expect(body).not.toContain('\n\n\n');
+      expect(body).not.toContain('EXECUTE IMMEDIATE');
+      expect(body).not.toContain('ALTER TABLE');
+      expect(body).not.toContain('staging.*');
+      expect(body).not.toContain('SELECT *');
+      expect(body).toMatch(
+        /INSERT INTO `[\w.-]+` \([^)]*`datastream_metadata`,\s+record_date\s+\)/
+      );
+      expect(body.includes('sp_check_prod_schema`(')).toBe(checking.has(tableName));
+      if (checking.has(tableName)) {
+        expect(body).toMatch(
+          new RegExp(`sp_check_prod_schema\`\\('scan_sv_1_${tableName}', '${tableName}', \\[`)
+        );
+      }
+    }
+    expect(bodies.get('sp_append_scan_verdict_store')).toContain('`round_number`');
+    expect(bodies.get('sp_append_app_activity_record_store')).toContain(
+      '`asset_activity_weights`'
+    );
+  });
+
+  test('a routine fixes and another checks the schemas of production tables', async () => {
+    const resources = await installBigQuery(
+      true,
+      true,
+      'V082__tbar_v1_1_asset_activity_columns.sql'
+    );
+    const routines = new Map<string, gcp.bigquery.Routine>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      routines.set(await outputValue(routine.routineId), routine);
+    }
+    const check = routines.get('sp_check_prod_schema');
+    const fix = routines.get('sp_fix_prod_schema');
+    expect(check).toBeDefined();
+    expect(fix).toBeDefined();
+    for (const routine of [check!, fix!]) {
+      expect(await outputValue(routine.routineType)).toBe('PROCEDURE');
+      const args = await outputValue(routine.arguments);
+      expect(args?.map(arg => arg.name)).toEqual([
+        'staging_table_name',
+        'prod_table_name',
+        'columns',
+      ]);
+    }
+    const checkBody = await outputValue(check!.definitionBody);
+    expect(checkBody).toContain('sp_fix_prod_schema`');
+    expect(checkBody).toContain('RAISE USING MESSAGE');
+    const fixBody = await outputValue(fix!.definitionBody);
+    expect(fixBody.match(/EXECUTE IMMEDIATE/g)).toHaveLength(1);
+    expect(fixBody).toContain("'ALTER TABLE `%s.%s.%s` %s'");
+    expect(fixBody).toMatch(/STRING_AGG\(\s*FORMAT\('ADD COLUMN IF NOT EXISTS/);
+
+    const queries = new Map<string, [string, string | undefined]>();
+    for (const config of resources.filter(gcp.bigquery.DataTransferConfig.isInstance)) {
+      const params = await outputValue(config.params);
+      queries.set(await outputValue(config.displayName), [
+        params.query,
+        await outputValue(config.schedule),
+      ]);
+    }
+    const [fixQuery, fixSchedule] = queries.get('mock Production Schema Hourly Fix')!;
+    expect(
+      fixQuery
+        .split('\n')
+        .map(
+          call =>
+            /^CALL `[\w.-]+\.sp_fix_prod_schema`\('scan_sv_1_(\w+)', '\1', \[.*\]\);$/.exec(
+              call
+            )?.[1]
+        )
+    ).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
+    expect(fixSchedule).not.toBe(appendSchedule);
+  });
+
   test('neither Datastream backfills automatically', async () => {
     const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
     const streams = resources.filter(gcp.datastream.Stream.isInstance);
