@@ -39,3 +39,10 @@ Suggested actions (details and commands in the g* files):
 INDEX.tsv rows not merged yet: this round's rows are in g1-n1108-result.md, g2-n1109.md, g3-ingest-notes.md,
 g4-rl094.md (fix the date column of 11277-11279 to 2026-11-08 when merging); the 2026-11-07 round's rows for 11255,
 11256, 11258, 11274, 11275, 11276 are missing too.
+
+## 11274 + 11277 11278 11281 (presented 2026-11-09)
+
+PR canton-network/splice#8362 (author rautenrieth-da) is on auto-merge; its body names no issue and the issue
+lives in another org, so it will not close 11274: close by hand after merge. Assignee changed from adetokunbo
+(#8224 author) to rautenrieth-da (owns the fix PR). Comment body `comments/11274.md` (bft-round text plus PR and
+recurrence paragraphs). State: handed out.
