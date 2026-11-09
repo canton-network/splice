@@ -117,3 +117,16 @@ their own wording. State: ran. Next: 11279.
 |---|---|---|---|---|---|
 | g5-simtime-main | 11287 11288 | post-merge main simtime (3) run 42591855865 job 129076454622 (9dafafbece); simtime (4) run 42608940134 job 129132359292 (bd9953a523) | 11255 onboarding window | 1: simtime on main, 2 runs in 90 min | background agent |
 | - | 11286 | cni Mainnet Backup Status, backup_status_cluster, run 42590612787 (cni 36523d5) | 11117 / 10915 backup status family | 2: mainnet backup alert; cni log only via user | log request |
+
+## 11280 ran (2026-11-09)
+
+User: comment, retitle, Triaged, assignee jagathweerasinghe-da (live: 2 comments, assignee set; title without the
+"(#8269), every scheduled run fails" suffix). Main still has no Verdict rule at presentation time (thresholds file
+last changed by #7852), so 11-10 03:40 fails too. Next: 11231.
+
+## 11231 presented (2026-11-09)
+
+Checked: `Test/compile` step of #8319 (5c8e6ffcfa) is on main (action.yml:274) and on none of release-line-0.9.0..0.9.4,
+0.9.x, 0.10.0, 0.10.1 (grep of action.yml via contents API). Since 11-05 the only "Killed SBT after timeout"
+issues are 11208, 11212 (closed dup 10358) and 11231; all release-line runs before #8319 merged. Open sibling 11220
+(cache fallback, krzysztofczyz-da) names "compile in its own step" as the independent lever.
