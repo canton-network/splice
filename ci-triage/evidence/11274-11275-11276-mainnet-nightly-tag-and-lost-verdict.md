@@ -347,3 +347,66 @@ in known-families.md.
   not send a result for 00:00:00.236Z (it did for 00:00:00.236001Z); worth asking the DA BFT/Canton team since any
   lost verdict in simtime wedges the shard.
 - 11276: duplicate of 11275 (same run, same episode; exact stuck request not pinned).
+
+## Addendum 2026-11-09: why the second healthy mediator never sends (11275, 11284, 11258)
+
+The mediator that finalizes the request but does not send is held back by Canton's delayed verdict sender, and
+the delay is scheduled on the sequencer client clock, which is the sim clock in simtime tests:
+
+```
+sed -n 252,269p canton/community/synchronizer/src/main/scala/com/digitalasset/canton/synchronizer/mediator/VerdictSender.scala
+```
+```
+      // Delay the submission of the verdict to increase the chance that we don't have to process all mediator verdicts
+      val delay = sendVerdictWithDelay.getOrElse(Duration.ZERO)
+      ...
+        logger.debug(s"Delaying sending of verdict by ${delay.toMillis} ms")
+        EitherT
+          .right(
+            sequencerSend.clock
+              .scheduleAfterCancelledOnShutdown(_ => (), "delayed-send-verdict", delay)
+          )
+          .flatMap(_ => doSend())
+```
+Who is delayed (VerdictSender.scala:375): `position = ((index + requestId.toMicros) % group.active.size) - group.threshold - livenessMargin`;
+negative sends at once. Splice tests set `liveness-margin = 1` (apps/app/src/test/resources/include/mediators.conf,
+#6153), so with 4 active mediators and threshold 2, three send at once and one waits 3 s. With 3 active and
+threshold 2 nobody waits, so the delay lines below prove the group already had 4 members (sv3 added):
+
+```
+zcat log/11275/logs-simtime-4/canton-simtime.clog.gz | grep -a -o 'MediatorSynchronizerState[^"]\{0,400\}' | grep -o 'active = Seq([^)]*)\|threshold = [0-9]*' | sort | uniq -c
+```
+```
+    157 active = Seq(MED::sv1::1220e34a2dab..., MED::sv2::122021acce38...)
+    154 active = Seq(MED::sv1::1220e34a2dab..., MED::sv2::122021acce38..., MED::sv4::122054a12eb3...)
+    141 active = Seq(MED::sv1::1220e34a2dab..., MED::sv2::122021acce38..., MED::sv4::122054a12eb3..., MED::sv3::1220d9b2381d...)
+    388 threshold = 1
+    141 threshold = 2
+```
+(11284: the same three shapes, 240 lines with four members and 240 with threshold 2.)
+
+The delayed mediator, same trace id as its Finalized line (`jq 'select(.["trace-id"]==$t and (.logger_name|contains($m)))'`):
+```
+11275: 05:32:45.339 ConfirmationRequestAndResponseProcessor: Phase 6: Finalized request=RequestId(1970-01-01T00:00:00.236Z) with verdict Approve at 1970-01-01T00:01:00.236Z   (globalMediatorSv1)
+11275: 05:32:45.340 DefaultVerdictSender:mediator=globalMedi Delaying sending of verdict by 3000 ms   (globalMediatorSv1)
+11284: 05:34:12.277 DefaultVerdictSender:mediator=globalMedi Delaying sending of verdict by 3000 ms   (globalMediatorSv2, trace of its Finalized line for 03:03:00.303001Z)
+11258 (packet line 206): 2026-11-06T17:03:10.916Z mediator=globalMediatorSv1 Delaying sending of verdict by 3000 ms
+```
+No `Sent result` line for the stuck request follows from the delayed mediator in any of the three runs.
+
+The new sv3 mediator is in the group but its sequencer subscription starts after the request, so it never sees it:
+```
+zcat log/<ref>/<dir>/canton-simtime.clog.gz | jq -r 'select(.logger_name|test("DbCursorPreheadStore:mediator=globalMediatorSv3")) | ...' | head -2
+```
+```
+11275: 05:33:03.678 ...CursorPrehead(counter = 0, timestamp = 1970-01-01T00:00:00.238009Z)   (request 00:00:00.236Z)
+11284: 05:34:23.225 ...CursorPrehead(counter = 0, timestamp = 1970-01-01T03:03:00.305009Z)   (request 03:03:00.303001Z)
+```
+No globalMediatorSv3 line mentions either request.
+
+So of the three immediate senders one is sv3 (never saw the request), one is sv4 (refused by its blacklisted
+sequencer), and one sends: 1 of 2. The fourth, the fallback, waits 3 s of sim time, which never pass because the
+test waits on the ledger before it advances the clock. #8356 (open) removes the sv4 refusal; the sv3 gap and the
+sim-clock delay remain. Precedent for a simtime-only override: `simple-topology-canton-simtime.conf` already
+disables the sequencer circuit breaker because it is based on block time. Candidate fix (not tested):
+`_mediator_template.parameters.delayed-verdict-sender.enabled = false` in `simple-topology-canton-simtime.conf`.

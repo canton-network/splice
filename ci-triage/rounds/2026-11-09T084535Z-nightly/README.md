@@ -46,3 +46,14 @@ PR canton-network/splice#8362 (author rautenrieth-da) is on auto-merge; its body
 lives in another org, so it will not close 11274: close by hand after merge. Assignee changed from adetokunbo
 (#8224 author) to rautenrieth-da (owns the fix PR). Comment body `comments/11274.md` (bft-round text plus PR and
 recurrence paragraphs). State: handed out.
+
+## 11275 + 11258 11276 11284 (presented 2026-11-09)
+
+Cause revised in the main thread (packet addendum): the healthy mediator that never sends is the one held back by
+the delayed verdict sender, whose 3 s delay runs on the sim clock; the group has 4 active mediators (sv3 added,
+threshold 2, liveness-margin 1), sv3 joined after the request, sv4 was refused. So #8356 (still open, not merged)
+only removes one of the two missing sends; earlier text "removed by #8356" is superseded. Candidate fix:
+`_mediator_template.parameters.delayed-verdict-sender.enabled = false` in simple-topology-canton-simtime.conf.
+11258 becomes a duplicate of 11275 (bft-round comments/11258.md not posted). State: handed out.
+Lesson candidate: in simtime tests, any component that schedules on the sequencer clock waits forever while the
+test waits on the ledger; disable or zero such delays for the simtime instance.
