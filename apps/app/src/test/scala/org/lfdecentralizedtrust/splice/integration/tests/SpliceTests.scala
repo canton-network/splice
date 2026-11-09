@@ -124,7 +124,9 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     }
 
     registerPlugin(new WaitForPorts(extraPortsToWaitFor))
-    registerPlugin(new SequentialBftSequencerOnboarding())
+    if (sequentialBftSequencerOnboarding) {
+      registerPlugin(new SequentialBftSequencerOnboarding())
+    }
 
     if (resetRequiredTopologyState) {
       registerPlugin(new ResetDecentralizedNamespace())
@@ -176,7 +178,9 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
     protected lazy val resetRequiredTopologyState: Boolean = true
 
     registerPlugin(new WaitForPorts(extraPortsToWaitFor))
-    registerPlugin(new SequentialBftSequencerOnboarding())
+    if (sequentialBftSequencerOnboarding) {
+      registerPlugin(new SequentialBftSequencerOnboarding())
+    }
 
     protected def runTokenStandardCliSanityCheck: Boolean = true
     protected lazy val tokenStandardCliBehavior
@@ -302,6 +306,15 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       with BigDecimalMatchers
       with SequentialSvStartUtil {
 
+    /** Whether to start the SVs one at a time while their BFT sequencers are not all in the ordering topology
+      * (see [[SequentialSvStartUtil]]). Disable this for tests where the SV apps initialize fresh Canton nodes,
+      * as starting the SVs one at a time requires their participants to be initialized.
+      */
+    protected lazy val sequentialBftSequencerOnboarding: Boolean = true
+
+    private def startSvsOneAtATimeIfEnabled(nodes: Seq[AppBackendReference]): Unit =
+      if (sequentialBftSequencerOnboarding) startSvsOneAtATimeIfNeeded(nodes)
+
     val grpcClientMetrics: GrpcClientMetrics = testGrpcClientMetrics
 
     val scheduler: ScheduledExecutorService = testScheduler
@@ -317,7 +330,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
         includeLocal: Boolean = true
     )(implicit env: SpliceTestConsoleEnvironment): Unit = {
       val apps = env.fullDsoApps.local.filter(a => !a.name.endsWith("Local") || includeLocal)
-      startSvsOneAtATimeIfNeeded(apps)
+      startSvsOneAtATimeIfEnabled(apps)
       apps.foreach(_.start())
       apps.foreach(_.waitForInitialization())
     }
@@ -453,7 +466,7 @@ object SpliceTests extends LazyLogging with HasRetryProvider {
       LfContractId.assertFromString(cid.contractId)
 
     protected def startAllSync(nodes: AppBackendReference*): Unit = {
-      startSvsOneAtATimeIfNeeded(nodes)
+      startSvsOneAtATimeIfEnabled(nodes)
       nodes.foreach(_.start())
       nodes.foreach(_.waitForInitialization())
     }
