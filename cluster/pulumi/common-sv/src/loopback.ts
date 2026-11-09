@@ -15,6 +15,7 @@ import { allValidatorIngressNames } from '@canton-network/splice-pulumi-common-v
 import { coreSvsToDeploy, svRunbookConfig } from './svConfigs';
 import { cometBFTExternalPort } from './synchronizer/cometbftConfig';
 
+// TODO (#8263): remove the CometBFT loopback
 export function installSvLoopback(namespace: ExactNamespace, cometbft: boolean): pulumi.Resource[] {
   return installLoopback(namespace, cometbft);
 }

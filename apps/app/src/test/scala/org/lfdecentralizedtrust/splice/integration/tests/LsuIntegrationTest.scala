@@ -247,7 +247,6 @@ class LsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "cancel-global-synchronizer-upgrade",
       // LSU exports the sequencer and mediator keys
       enableKeyDownload = true,
@@ -362,7 +361,6 @@ class LsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "global-synchronizer-upgrade",
       // LSU exports the sequencer and mediator keys
       enableKeyDownload = true,

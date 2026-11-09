@@ -1413,6 +1413,7 @@ lazy val `apps-sv` =
         pekko_http_cors,
         scalapb_runtime,
       ),
+      // TODO (#8263): remove together with the CometBFT code in the SV app
       Compile / unmanagedJars := Attributed
         .blankSeq(Seq(file(s"${sys.env("COMETBFT_PROTO")}/canton-drivers-proto.jar"))),
       BuildCommon.sharedAppSettings,
@@ -2323,7 +2324,7 @@ checkErrors := {
     import better.files.File
     val logSpecificIgnores =
       if (File(ignorePatternsFilename(logName)).exists()) Seq(logName) else Seq.empty
-    // ideally we would add them only if dabft is enabled but it's too much of a pain to wire it in the github actions
+    // TODO (#8263): merge canton_log_bft into canton_log, DA BFT is always enabled now
     val bftIgnore = Seq("canton_log_bft")
 
     val simtimeIgnorePatterns = if (usesSimtime) Seq("canton_log_simtime_extra") else Seq.empty

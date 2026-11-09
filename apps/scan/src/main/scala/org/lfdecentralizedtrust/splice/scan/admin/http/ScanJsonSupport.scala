@@ -5,9 +5,9 @@ package org.lfdecentralizedtrust.splice.scan.admin.http
 
 import io.circe.Encoder
 import io.circe.syntax.*
-import org.lfdecentralizedtrust.splice.http.OmitNullString
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryItem,
+  EventHistoryResponse,
   GetImportUpdatesResponse,
   GetUpdatesBeforeResponse,
   UpdateHistoryItem,
@@ -19,17 +19,15 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryTransactionV2,
 }
 
-/** Provides implicit circe `Encoder` instances that omit `Option[OmitNullString]` fields when
-  * `None`.
-  *
-  * The `external_transaction_hash` field uses the
-  * [[org.lfdecentralizedtrust.splice.http.OmitNullString]] type in the OpenAPI spec (via
-  * `x-scala-type`), making it explicit in both the spec and the generated Scala code which fields
-  * receive this treatment.
+/** Provides implicit circe `Encoder` instances that omit `Option[_]` fields when `None`,
+  * for the sanctioned marker types [[org.lfdecentralizedtrust.splice.http.OmitNullString]]
+  * (via `x-scala-type`) and [[org.lfdecentralizedtrust.splice.http.OmitNullArray]]
+  * (via `x-scala-array-type`). Using these marker types makes it explicit in both the
+  * OpenAPI spec and the generated Scala code which fields receive this treatment.
   *
   * Because guardrail-generated `Encoder.AsObject` instances are compiled in the definitions files
   * (where custom imports are not in scope), we must re-define encoders for the types that contain
-  * `OmitNullString` fields '''and''' for the `oneOf` wrapper types whose generated encoders
+  * such marker-typed fields '''and''' for the `oneOf` wrapper types whose generated encoders
   * hard-wire the companion-object encoders at compile time.
   *
   * This object is imported by guardrail-generated route code via the `imports` configuration in
@@ -38,14 +36,14 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   */
 object ScanJsonSupport {
 
-  /** Wraps a guardrail-generated `Encoder.AsObject` to omit `Option[OmitNullString]` fields when
-    * `None`.  The field to omit is identified by its JSON key name, but the removal is only
-    * triggered when value equals `None` and of type `OmitNullString`.
+  /** Wraps a guardrail-generated `Encoder.AsObject` to omit an `Option[_]` field when `None`.
+    * The field to omit is identified by its JSON key name; removal is triggered whenever
+    * `accessor(a)` returns `None`, independent of the inner type.
     */
-  private def omitWhenNone[A](
+  private def omitWhenNone[A, B](
       underlying: Encoder.AsObject[A],
       jsonKey: String,
-      accessor: A => Option[OmitNullString],
+      accessor: A => Option[B],
   ): Encoder.AsObject[A] =
     Encoder.AsObject.instance[A] { a =>
       val obj = underlying.encodeObject(a)
@@ -122,10 +120,25 @@ object ScanJsonSupport {
     )
 
   implicit val encodeEventHistoryItem: Encoder.AsObject[EventHistoryItem] =
+    omitWhenNone(
+      omitWhenNone(
+        reEncode(
+          EventHistoryItem.encodeEventHistoryItem,
+          "update",
+          _.update,
+        ),
+        "submitting_app_provider",
+        _.submittingAppProvider,
+      ),
+      "asset_activity_records",
+      _.assetActivityRecords,
+    )
+
+  implicit val encodeEventHistoryResponse: Encoder.AsObject[EventHistoryResponse] =
     reEncode(
-      EventHistoryItem.encodeEventHistoryItem,
-      "update",
-      _.update,
+      EventHistoryResponse.encodeEventHistoryResponse,
+      "events",
+      _.events,
     )
 
   implicit val encodeGetUpdatesBeforeResponse: Encoder.AsObject[GetUpdatesBeforeResponse] =
