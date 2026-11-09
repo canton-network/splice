@@ -111,7 +111,7 @@ abstract class StoreReadPerformanceTest(
       ),
       metric(
         "allocated_bytes",
-        "Cumulative bytes allocated across all JVM threads during the read (GC-independent churn)",
+        "Total bytes allocated during the read. Process-wide for getUpdate, otherwise per-thread.",
         metrics.allocatedBytes,
       ),
       metric(

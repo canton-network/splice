@@ -74,7 +74,6 @@ abstract class BaseStorePerformanceTest(
   protected implicit val closeContext: CloseContext = CloseContext(this)
 
   type Store
-
   protected def mkStore(storage: DbStorage): Future[Store]
 
   /** Entry point for a perf test run. */
@@ -311,7 +310,6 @@ abstract class BaseStorePerformanceTest(
     BigDecimal(ManagementFactory.getMemoryMXBean.getHeapMemoryUsage.getUsed)
   }
 
-  /** The thread MX bean with per-thread allocation tracking enabled, if supported. */
   private lazy val allocatingThreadMXBean: Option[com.sun.management.ThreadMXBean] =
     ManagementFactory.getThreadMXBean match {
       case tb: com.sun.management.ThreadMXBean if tb.isThreadAllocatedMemorySupported =>
@@ -320,9 +318,6 @@ abstract class BaseStorePerformanceTest(
       case _ => None
     }
 
-  /** Cumulative bytes allocated across all live JVM threads since each thread started.
-    * Returns -1 if per-thread allocation tracking is not supported.
-    */
   protected def getAllocatedBytes: Long =
     allocatingThreadMXBean match {
       case Some(tb) =>
@@ -332,11 +327,6 @@ abstract class BaseStorePerformanceTest(
       case None => -1L
     }
 
-  /** Runs `body` synchronously on the calling thread and returns its result together with the
-    * bytes that thread allocated while running it.
-    *
-    * The second element is -1 if per-thread allocation tracking is not supported.
-    */
   protected def measuringCurrentThreadAllocatedBytes[T](body: => T): (T, Long) =
     allocatingThreadMXBean match {
       case Some(tb) =>
