@@ -86,3 +86,11 @@ ignored (11274); simtime and components scheduling on the sequencer clock (11255
 Plain duplicates of 11255 (first two shapes: rejected MED::sv4 proposal; lost batch for MED::sv2). Joined the 11255
 close command; paragraph listing both added to comments/11255.md. 11255 fold not yet run at this point (11255 had
 1 comment, the four dups still open), so the whole set is handed out again as one block. State: handed out.
+
+## 11255 body wording (2026-11-09, user question)
+
+User found the "third shape" opener confusing. comments/11255.md is a second comment (gh issue comment appends;
+the posted first comment, by rautenrieth-da 2026-11-08, stays unchanged). Opener rewritten to stand alone (names
+the four hits, says #8356 helps for them and why the first comment's "does not help" still holds for its hits);
+the 11282/11283 paragraph now says "shapes described in the comment above". Rule: a follow-up comment opens with
+what it adds, not with a count of shapes.
