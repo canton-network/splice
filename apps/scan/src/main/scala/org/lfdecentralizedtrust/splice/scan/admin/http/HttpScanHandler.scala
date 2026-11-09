@@ -66,6 +66,7 @@ import org.lfdecentralizedtrust.splice.http.{
   UrlValidator,
 }
 import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.DsoSequencerDeduplication
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequestV2,
@@ -639,11 +640,25 @@ class HttpScanHandler(
         }
         .map(list =>
           list.map { case (synchronizerId, sequencers) =>
-            synchronizerId -> sequencers.filter { sequencer =>
+            val (uniqueSequencers, duplicates) =
+              DsoSequencerDeduplication.partitionUniqueBy(sequencers)(sequencer =>
+                (sequencer.synchronizerSerial, sequencer.id)
+              )
+            duplicates.foreach { case ((serial, sequencerId), duplicatedSequencers) =>
+              // the duplicate sequencer ids are important because they are used as aliases for the sequencer connection
+              // in the validator and that does not support duplicates
+              logger.warn(
+                s"Not serving sequencer $sequencerId for synchronizer $synchronizerId and serial ${serial
+                    .getOrElse("<none>")} as it is claimed by multiple SVs: ${duplicatedSequencers
+                    .map(_.svName)
+                    .mkString(", ")}"
+              )
+            }
+            synchronizerId -> uniqueSequencers.filter { sequencer =>
               UrlValidator.isValid(sequencer.url) match {
                 case Left(failure) =>
                   logger.warn(
-                    s"Not serving sequencer $sequencer for domain $synchronizerId as it has an invalid url: $failure"
+                    s"Not serving sequencer $sequencer for synchronizer $synchronizerId as it has an invalid url: $failure"
                   )
                   false
                 case Right(_) => true
