@@ -9,7 +9,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
   RewardSharingConfig,
 }
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.config.{NonNegativeFiniteDuration, PositiveFiniteDuration}
 import com.digitalasset.canton.topology.PartyId
 
 class SpliceConfigTest extends AsyncWordSpec with BaseTest {
@@ -448,6 +448,10 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       syncOperator.synchronizerNodes.current.sequencer.adminApi.port.unwrap shouldBe 5709
       syncOperator.adminApi.port.unwrap shouldBe 5116
       syncOperator.operatorUser shouldBe "sync_operator_user"
+      syncOperator.trafficControl.readVsWriteScalingFactor.value shouldBe 4
+      syncOperator.trafficControl.setBalanceRequestSubmissionWindowSize shouldBe
+        PositiveFiniteDuration.ofMinutes(2)
+      syncOperator.trafficControl.baseEventCost.value shouldBe 0
     }
   }
 }

@@ -89,6 +89,9 @@ class SyncOperatorApp(
         config.automation,
         clock,
         retryProvider,
+        synchronizerId,
+        synchronizerNode,
+        config.trafficControl,
         loggerFactory,
       )
     } yield {
@@ -180,6 +183,10 @@ object SyncOperatorApp {
       timeouts: ProcessingTimeout,
   ) extends AutoCloseable
       with HasHealth {
+
+    /** The configured node's sequencer. */
+    def sequencerAdminConnection: SequencerAdminConnection =
+      synchronizerNode.sequencerAdminConnection
 
     override def isHealthy: Boolean = storage.isActive
 
