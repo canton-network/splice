@@ -70,7 +70,7 @@ export const OpsPartiesField: React.FC<OpsPartiesFieldProps> = props => {
               value={row}
               onChange={e => setRow(i, e.target.value)}
               onBlur={onBlur}
-              inputProps={{ 'data-testid': `${id}-row-${i}`, 'aria-label': `${title} ${i + 1}` }}
+              slotProps={{ htmlInput: { 'data-testid': `${id}-row-${i}`, 'aria-label': `${title} ${i + 1}` } }}
             />
             <IconButton
               aria-label="remove ops party"
