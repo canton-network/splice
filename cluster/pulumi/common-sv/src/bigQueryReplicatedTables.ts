@@ -51,6 +51,9 @@ export interface ReplicatedTableConfig {
   appendMode: AppendMode;
   // the columns copied to production, datastream_metadata last
   columns: string[];
+  // those of `columns` with a `since`, which a production table
+  // created before it lacks
+  sinceColumns: string[];
   // whether the columns depend on `flywayMigrationToWaitFor`, so
   // the production table may lack some of them; only then is its
   // schema checked and fixed
@@ -90,6 +93,9 @@ export function replicatedTablesFor(
               ),
               'datastream_metadata',
             ],
+            sinceColumns: columns.flatMap(column =>
+              typeof column !== 'string' && applied(column.since) ? [column.name] : []
+            ),
             migratesSchema: columns.some(column => typeof column !== 'string'),
           },
         ]

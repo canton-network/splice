@@ -222,9 +222,7 @@ describe('configureScanBigQuery', () => {
       }
     }
     expect(bodies.get('sp_append_scan_verdict_store')).toContain('`round_number`');
-    expect(bodies.get('sp_append_app_activity_record_store')).toContain(
-      '`asset_activity_weights`'
-    );
+    expect(bodies.get('sp_append_app_activity_record_store')).toContain('`asset_activity_weights`');
   });
 
   test('a routine fixes and another checks the schemas of production tables', async () => {
@@ -241,17 +239,19 @@ describe('configureScanBigQuery', () => {
     const fix = routines.get('sp_fix_prod_schema');
     expect(check).toBeDefined();
     expect(fix).toBeDefined();
-    for (const routine of [check!, fix!]) {
+    const argNames = ['staging_table_name', 'prod_table_name', 'columns'];
+    for (const [routine, names] of [
+      [check!, argNames],
+      [fix!, [...argNames, 'added']],
+    ] as const) {
       expect(await outputValue(routine.routineType)).toBe('PROCEDURE');
       const args = await outputValue(routine.arguments);
-      expect(args?.map(arg => arg.name)).toEqual([
-        'staging_table_name',
-        'prod_table_name',
-        'columns',
-      ]);
+      expect(args?.map(arg => arg.name)).toEqual(names);
     }
+    expect((await outputValue(fix!.arguments))?.[3]?.mode).toBe('OUT');
     const checkBody = await outputValue(check!.definitionBody);
-    expect(checkBody).toContain('sp_fix_prod_schema`');
+    // names the per-table fix routine
+    expect(checkBody).toContain("'sp_fix_prod_schema', prod_table_name");
     expect(checkBody).toContain('RAISE USING MESSAGE');
     const fixBody = await outputValue(fix!.definitionBody);
     expect(fixBody.match(/EXECUTE IMMEDIATE/g)).toHaveLength(1);
@@ -270,15 +270,60 @@ describe('configureScanBigQuery', () => {
     expect(
       fixQuery
         .split('\n')
-        .map(
-          call =>
-            /^CALL `[\w.-]+\.sp_fix_prod_schema`\('scan_sv_1_(\w+)', '\1', \[.*\]\);$/.exec(
-              call
-            )?.[1]
-        )
+        .map(call => /^CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
     ).toEqual(['scan_verdict_store', 'app_activity_record_store']);
     const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
     expect(fixSchedule).not.toBe(appendSchedule);
+  });
+
+  test.each([
+    ['V077__verdict_add_round_number.sql', true],
+    ['V074__string_interning.sql', false],
+  ] as const)(
+    'waiting for %s, the per-table fix fills added columns from staging: %s',
+    async (migration, fills) => {
+      const resources = await installBigQuery(true, true, migration);
+      const bodies = new Map<string, string>();
+      for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+        bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
+      }
+      const body = bodies.get('sp_fix_prod_schema_scan_verdict_store');
+      expect(body).toBeDefined();
+      expect(body).not.toContain('{{');
+      expect(body).toMatch(
+        /CALL `[\w.-]+\.sp_fix_prod_schema`\('scan_sv_1_scan_verdict_store', 'scan_verdict_store', \[.*\], added\);/
+      );
+      expect(body!.includes('UPDATE')).toBe(fills);
+      if (fills) {
+        expect(body).toContain('`round_number` = latest.`round_number`');
+        expect(body).toContain('WHERE prod.record_date >= oldest_record_date');
+        expect(body).toContain('AND prod.`row_id` = latest.`row_id`;');
+        expect(body).toContain('IF ARRAY_LENGTH(added) > 0 THEN');
+      }
+    }
+  );
+
+  test('the fill matches every column of a composite primary key', async () => {
+    const { fillAddedColumnsSql } = await import('./bigQuery');
+    const sql = fillAddedColumnsSql(
+      {
+        primaryKey: 'verdict_row_id, view_id',
+        datePartitionColumn: 'source_timestamp',
+        timeType: 'datastream_metadata',
+        appendMode: 'watermark',
+        columns: ['verdict_row_id', 'view_id', 'x', 'datastream_metadata'],
+        sinceColumns: ['x'],
+        migratesSchema: true,
+      },
+      '`p`',
+      '`s`'
+    );
+    expect(sql).toContain(
+      'prod.`verdict_row_id` = latest.`verdict_row_id` AND prod.`view_id` = latest.`view_id`'
+    );
+    expect(sql).toContain('PARTITION BY verdict_row_id, view_id');
+    expect(sql).toMatch(/staging\.`verdict_row_id`,\s+staging\.`view_id`,\s+staging\.`x`\n/);
+    expect(sql).toContain('TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)');
   });
 
   test('neither Datastream backfills automatically', async () => {

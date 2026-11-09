@@ -28,6 +28,7 @@ import {
 import { type FlywayMigrationToWaitFor } from './bigQueryFlywayMigration';
 import {
   type AppendMode,
+  type ReplicatedTableConfig,
   type ReplicatedTables,
   replicatedTablesFor,
 } from './bigQueryReplicatedTables';
@@ -386,6 +387,11 @@ const appendSqlTemplates: Record<AppendMode, string> = {
 // expanded into both append templates as {{createProdTable}}
 const createProdTableSqlTemplate = readSql('create_prod_table.sql');
 
+// the per-table routine that fixes a production table's schema, and
+// its {{fillAddedColumns}}
+const fixProdSchemaSqlTemplate = readSql('fix_prod_schema.sql');
+const fillAddedColumnsSqlTemplate = readSql('fill_added_columns.sql');
+
 // Replaces each `{{name}}` in `template` with `vars[name]`. A
 // multi-line value whose placeholder starts a line gets that line's
 // indentation on every line. An empty value whose placeholder is a
@@ -422,19 +428,28 @@ function expandSql(template: string, vars: Record<string, string>): string {
 // `flywayMigrationToWaitFor` reaches it, but production tables keep
 // the columns they were created with. For those tables, the append
 // first checks that production has every listed column, and a
-// separate hourly routine adds the missing ones.
+// separate hourly routine per table adds the missing ones, and fills
+// them in the rows that staging still has.
 
 const checkProdSchemaRoutineId = 'sp_check_prod_schema';
 const fixProdSchemaRoutineId = 'sp_fix_prod_schema';
 
-// the arguments of both routines
+// fixes production `tableName`, with sp_fix_prod_schema
+function fixTableSchemaRoutineId(tableName: string): string {
+  return `${fixProdSchemaRoutineId}_${tableName}`;
+}
+
+const stringType = JSON.stringify({ typeKind: 'STRING' });
+const stringArrayType = JSON.stringify({
+  typeKind: 'ARRAY',
+  arrayElementType: { typeKind: 'STRING' },
+});
+
+// the arguments of both shared routines
 const prodSchemaRoutineArguments = [
-  { name: 'staging_table_name', dataType: JSON.stringify({ typeKind: 'STRING' }) },
-  { name: 'prod_table_name', dataType: JSON.stringify({ typeKind: 'STRING' }) },
-  {
-    name: 'columns',
-    dataType: JSON.stringify({ typeKind: 'ARRAY', arrayElementType: { typeKind: 'STRING' } }),
-  },
+  { name: 'staging_table_name', dataType: stringType },
+  { name: 'prod_table_name', dataType: stringType },
+  { name: 'columns', dataType: stringArrayType },
 ];
 
 function stagingTableNameFor(namespace: ExactNamespace, tableName: string): string {
@@ -449,6 +464,48 @@ function prodSchemaRoutineArgs(
 ): string {
   const columnsArray = columns.map(column => `'${column}'`).join(', ');
   return `'${stagingTableNameFor(namespace, tableName)}', '${tableName}', [${columnsArray}]`;
+}
+
+function recordTimestampExprFor(tableConfig: ReplicatedTableConfig): string {
+  const colName = tableConfig.datePartitionColumn;
+  if (tableConfig.timeType === 'micros') {
+    return `TIMESTAMP_MICROS(staging.${colName})`;
+  } else if (tableConfig.timeType === 'datastream_metadata') {
+    return `TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)`;
+  } else {
+    const unreachable: never = tableConfig.timeType;
+    throw new Error(`impossible time config: ${unreachable}`);
+  }
+}
+
+// the production record_date of a staging row
+function recordDateExprFor(tableConfig: ReplicatedTableConfig): string {
+  return `CAST(${recordTimestampExprFor(tableConfig)} AS DATE)`;
+}
+
+// {{fillAddedColumns}} of fix_prod_schema.sql for `tableConfig`;
+// empty if it has no `since` columns yet. Exported for tests.
+export function fillAddedColumnsSql(
+  tableConfig: ReplicatedTableConfig,
+  prodTable: string,
+  stagingTable: string
+): string {
+  const { sinceColumns } = tableConfig;
+  if (sinceColumns.length === 0) {
+    return '';
+  }
+  const keys = tableConfig.primaryKey.split(',').map(key => key.trim());
+  return expandSql(fillAddedColumnsSqlTemplate, {
+    recordDateExpr: recordDateExprFor(tableConfig),
+    prodTable,
+    stagingTable,
+    primaryKeyExpr: tableConfig.primaryKey,
+    fillColumns: sinceColumns.map(column => `\`${column}\` = latest.\`${column}\``).join(',\n'),
+    fillSourceColumns: [...keys, ...sinceColumns]
+      .map(column => `staging.\`${column}\``)
+      .join(',\n'),
+    primaryKeyMatch: keys.map(key => `prod.\`${key}\` = latest.\`${key}\``).join(' AND '),
+  });
 }
 
 interface ProdSchemaMigration {
@@ -517,41 +574,52 @@ function installProdSchemaMigrationRoutines(
   );
   IF ARRAY_LENGTH(missing) > 0 THEN
     RAISE USING MESSAGE = FORMAT(
-      'Production %s lacks columns %s; CALL %s(%T, %T, %T), which also runs hourly, adds them',
-      prod_table_name, ARRAY_TO_STRING(missing, ', '), '${fixRoutineName}',
-      staging_table_name, prod_table_name, columns);
+      'Production %s lacks columns %s; CALL \`%s.%s.%s_%s\`(), which also runs hourly, adds and fills them',
+      prod_table_name, ARRAY_TO_STRING(missing, ', '), '${projectId}',
+      '${prodDataset.datasetId}', '${fixProdSchemaRoutineId}', prod_table_name);
   END IF;
 END`,
   });
 
   // Adds the listed columns missing from production, with their
-  // staging types, in one ALTER TABLE. The DDL is built as a string
-  // only because those types are read from staging.
+  // staging types, in one ALTER TABLE, and returns them as `added`.
+  // The DDL is built as a string only because those types are read
+  // from staging.
   const fixRoutine = new gcp.bigquery.Routine('prod-schema-fix-routine', {
     datasetId: prodDataset.datasetId,
     routineId: fixProdSchemaRoutineId,
     routineType: 'PROCEDURE',
     language: 'SQL',
-    arguments: prodSchemaRoutineArguments,
+    arguments: [
+      ...prodSchemaRoutineArguments,
+      { name: 'added', dataType: stringArrayType, mode: 'OUT' },
+    ],
     definitionBody: pulumi.interpolate`BEGIN
   DECLARE add_columns STRING;
 
+  SET added = [];
   -- the append creates production with every listed column
   IF EXISTS (
     SELECT 1 FROM ${prodTables}
     WHERE table_name = prod_table_name
   ) THEN
-    SET add_columns = (
-      SELECT STRING_AGG(
-        FORMAT('ADD COLUMN IF NOT EXISTS \`%s\` %s', column_name, data_type),
-        ', ' ORDER BY ordinal_position)
-      FROM ${stagingColumns}
+    SET added = ARRAY(
+      SELECT column_name FROM ${stagingColumns}
       WHERE table_name = staging_table_name
         AND column_name IN UNNEST(columns)
         AND column_name NOT IN (
           SELECT column_name FROM ${prodColumns}
           WHERE table_name = prod_table_name
         )
+      ORDER BY ordinal_position
+    );
+    SET add_columns = (
+      SELECT STRING_AGG(
+        FORMAT('ADD COLUMN IF NOT EXISTS \`%s\` %s', column_name, data_type),
+        ', ' ORDER BY ordinal_position)
+      FROM ${stagingColumns}
+      WHERE table_name = staging_table_name
+        AND column_name IN UNNEST(added)
     );
     IF add_columns IS NOT NULL THEN
       EXECUTE IMMEDIATE FORMAT(
@@ -560,6 +628,33 @@ END`,
     END IF;
   END IF;
 END`,
+  });
+
+  // Per table, so that the CALL that the check names also fills the
+  // added columns.
+  const tableFixRoutines = migratingTables.map(([tableName, tableConfig]) => {
+    const definitionBody = pulumi
+      .all([projectId, prodDataset.datasetId, stagingDataset.datasetId, fixRoutineName])
+      .apply(([proj, prodDs, stagingDs, fixRoutineQualified]) => {
+        const prodTable = `\`${proj}.${prodDs}.${tableName}\``;
+        const stagingTable = `\`${proj}.${stagingDs}.${stagingTableNameFor(namespace, tableName)}\``;
+        return expandSql(fixProdSchemaSqlTemplate, {
+          fixRoutineName: fixRoutineQualified,
+          fixRoutineArgs: prodSchemaRoutineArgs(namespace, tableName, tableConfig.columns),
+          fillAddedColumns: fillAddedColumnsSql(tableConfig, prodTable, stagingTable),
+        });
+      });
+    return new gcp.bigquery.Routine(
+      `${tableName}-prod-schema-fix-routine`,
+      {
+        datasetId: prodDataset.datasetId,
+        routineId: fixTableSchemaRoutineId(tableName),
+        routineType: 'PROCEDURE',
+        language: 'SQL',
+        definitionBody,
+      },
+      { dependsOn: [fixRoutine] }
+    );
   });
 
   // 5 minutes before the appends, so they rarely find a column
@@ -574,18 +669,20 @@ END`,
       schedule: 'every 1 hours from 00:02 to 23:02',
 
       params: {
-        query: fixRoutineName.apply(fixRoutine =>
-          migratingTables
-            .map(
-              ([tableName, { columns }]) =>
-                `CALL ${fixRoutine}(${prodSchemaRoutineArgs(namespace, tableName, columns)});`
-            )
-            .join('\n')
-        ),
+        query: pulumi
+          .all([projectId, prodDataset.datasetId])
+          .apply(([proj, prodDs]) =>
+            migratingTables
+              .map(
+                ([tableName]) =>
+                  `CALL \`${proj}.${prodDs}.${fixTableSchemaRoutineId(tableName)}\`();`
+              )
+              .join('\n')
+          ),
       },
     },
     {
-      dependsOn: [transferServiceAgentPermission, fixRoutine],
+      dependsOn: [transferServiceAgentPermission, ...tableFixRoutines],
     }
   );
 
@@ -605,23 +702,13 @@ function installHourlyScheduledQueries(
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const checkSchema = tableConfig.migratesSchema ? prodSchemaMigration : undefined;
     const primaryKeyExpr = tableConfig.primaryKey;
-    const colName = tableConfig.datePartitionColumn;
     const { appendMode } = tableConfig;
     if (appendMode === 'newKeys' && primaryKeyExpr.includes(',')) {
       throw new Error(`${tableName}: appendMode 'newKeys' needs a single-column primary key`);
     }
 
-    let recordTimestampExpr: string;
-    if (tableConfig.timeType === 'micros') {
-      recordTimestampExpr = `TIMESTAMP_MICROS(staging.${colName})`;
-    } else if (tableConfig.timeType === 'datastream_metadata') {
-      recordTimestampExpr = `TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)`;
-    } else {
-      const unreachable: never = tableConfig.timeType;
-      throw new Error(`impossible time config: ${unreachable}`);
-    }
-
-    const recordDateExpr = `CAST(${recordTimestampExpr} AS DATE)`;
+    const recordTimestampExpr = recordTimestampExprFor(tableConfig);
+    const recordDateExpr = recordDateExprFor(tableConfig);
 
     const procedureBody = pulumi
       .all([
