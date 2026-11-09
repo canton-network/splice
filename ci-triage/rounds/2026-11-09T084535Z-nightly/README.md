@@ -21,7 +21,7 @@ Waiting from earlier rounds (re-list, not re-triaged): 11238, 11256, 11258, 1127
 2026-11-07T155023Z-bft, actions not run; INDEX.tsv rows for 11256 11258 11274 11275 11276 not merged yet),
 11259 and 11194 (log requests), and the STATE.md list.
 
-## Resume state (2026-11-09, before sandbox restart)
+## Resume state (2026-11-09 morning, superseded below)
 
 All four groups landed and are verified; the overview went to the user. Nothing presented group by group yet,
 no commands handed out, nothing ran. Next: present groups in queue order (mainnet nightly first) with commands and
@@ -61,3 +61,22 @@ test waits on the ledger; disable or zero such delays for the simtime instance.
 User question 2026-11-09: sv4 blacklisted right after the 2 -> 4 switch in both runs (packet table), so this is the
 11255 onboarding window. Decision: fold into 11255; close 11275 11258 11276 11284 as duplicates of 11255, comment
 `comments/11255.md` (third shape, corrects "8356 does not help" for this shape). comments/11275.md dropped.
+
+## Resume state (2026-11-09, second sandbox restart)
+
+Mode: one group at a time (user wants to understand each item). Presented so far:
+- 11274 + dups 11277 11278 11281: user reported "handled" (comment, retitle, Triaged, dups closed). Close 11274 by
+  hand once splice#8362 (auto-merge) is merged.
+- 11275 11258 11276 11284: folded into 11255 (user decision). Commands and body (`comments/11255.md`) handed out in
+  chat; not yet reported as run.
+
+Next, in order: 11282 11283 (plain dups of 11255, can join the 11255 close command); 11279 (infra one-off,
+comments/11279.md); 11280 (ingestion perf, comments/11280.md, assignee jagathweerasinghe-da); 11231 (dup 10358,
+ask about a backport tracking issue); 11285 (log request); then the older waiting items (STATE.md, round
+2026-11-07T155023Z-bft: 11238, 11256 dup 10729, 11259 log, 11194 log, set-Triaged batch 10495 10496 11104 11105
+11140 11147 10728 10893; owner questions 10917-10919, suggested: Triaged with the question in the comment).
+New after the export: 11286 backup_status_cluster (09:06), untriaged, likely 11117 / 10915 family.
+
+Still to merge into shared files: INDEX.tsv rows (this round and the bft round), known-families text for the
+lost-verdict shape under the 11255 family, lessons/2026-W46.md candidates: scalatest tags on abstract base are
+ignored (11274); simtime and components scheduling on the sequencer clock (11255 verdict shape).
