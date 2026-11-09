@@ -25,10 +25,12 @@ import {
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
 
+import { type FlywayMigrationToWaitFor } from './bigQueryFlywayMigration';
 import {
-  type FlywayMigrationToWaitFor,
-  migrationIncludesInternedStrings,
-} from './bigQueryFlywayMigration';
+  type AppendMode,
+  type ReplicatedTables,
+  replicatedTablesFor,
+} from './bigQueryReplicatedTables';
 import { ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
@@ -55,84 +57,6 @@ const publicationName = 'update_history_datastream_pub';
 // Stream 2 (Stag-Prod) CDC Replication Configuration
 const replicationSlotNameStagProd = 'update_history_datastream_stag_prod_r_slot';
 const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
-
-// ============================================================================
-// SINGLE SOURCE OF TRUTH: REPLICATED TABLE CONFIGURATION
-// ============================================================================
-
-// How the hourly scheduled query appends staging rows to production:
-// - 'watermark': rows up to an hour before the newest staging row,
-//   past a watermark (hourly_append.sql); for tables written
-//   continuously
-// - 'newKeys': every row whose single-column primaryKey isn't in
-//   production yet (append_new_keys.sql); for insert-only tables
-//   written in bursts, whose last hour the watermark would leave in
-//   staging until the next burst
-type AppendMode = 'watermark' | 'newKeys';
-
-interface ReplicatedTableConfig {
-  primaryKey: string;
-  datePartitionColumn: string;
-  timeType: 'micros' | 'datastream_metadata';
-  appendMode: AppendMode;
-}
-
-type ReplicatedTables = Record<string, ReplicatedTableConfig>;
-
-const alwaysReplicatedTables: ReplicatedTables = {
-  update_history_creates: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
-    appendMode: 'watermark',
-  },
-  update_history_exercises: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
-    appendMode: 'watermark',
-  },
-  scan_verdict_store: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
-    appendMode: 'watermark',
-  },
-  scan_verdict_transaction_view_store: {
-    primaryKey: 'verdict_row_id, view_id',
-    datePartitionColumn: 'source_timestamp',
-    timeType: 'datastream_metadata',
-    appendMode: 'watermark',
-  },
-  app_activity_record_store: {
-    primaryKey: 'verdict_row_id',
-    datePartitionColumn: 'source_timestamp',
-    timeType: 'datastream_metadata',
-    appendMode: 'watermark',
-  },
-};
-
-const internedStringsTable: ReplicatedTables = {
-  interned_strings: {
-    primaryKey: 'id',
-    datePartitionColumn: 'source_timestamp',
-    timeType: 'datastream_metadata',
-    // new strings arrive in bursts, e.g. on package upgrades, and
-    // are never changed
-    appendMode: 'newKeys',
-  },
-};
-
-// What tables from Scan to replicate to BigQuery. All should exist once
-// `flywayMigrationToWaitFor` has been applied, so the publication, both
-// Datastreams and the scheduled queries always agree on the replicated
-// tables.
-function replicatedTablesFor(flywayMigrationToWaitFor: FlywayMigrationToWaitFor): ReplicatedTables {
-  return {
-    ...alwaysReplicatedTables,
-    ...(migrationIncludesInternedStrings(flywayMigrationToWaitFor) ? internedStringsTable : {}),
-  };
-}
 
 // ============================================================================
 // HELPER FUNCTIONS

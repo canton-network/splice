@@ -118,20 +118,22 @@ describe('configureScanBigQuery', () => {
     });
   });
 
-  test.each(['V068__app_activity_record_meta.sql', 'V074__string_interning.sql'] as const)(
-    'both publication and slot commands wait for %s',
-    async migration => {
-      const resources = await installBigQuery(true, true, migration);
-      const commands = resources.filter(command.local.Command.isInstance);
-      const scripts = await Promise.all(
-        commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
-      );
-      expect(scripts).toHaveLength(4);
-      for (const script of scripts) {
-        expect(script).toContain(`--flyway-migration-to-wait-for="${migration}"`);
-      }
+  test.each([
+    'V068__app_activity_record_meta.sql',
+    'V074__string_interning.sql',
+    'V077__verdict_add_round_number.sql',
+    'V082__tbar_v1_1_asset_activity_columns.sql',
+  ] as const)('both publication and slot commands wait for %s', async migration => {
+    const resources = await installBigQuery(true, true, migration);
+    const commands = resources.filter(command.local.Command.isInstance);
+    const scripts = await Promise.all(
+      commands.flatMap(c => [outputValue(c.create), outputValue(c.delete)])
+    );
+    expect(scripts).toHaveLength(4);
+    for (const script of scripts) {
+      expect(script).toContain(`--flyway-migration-to-wait-for="${migration}"`);
     }
-  );
+  });
 
   test.each([
     ['V068__app_activity_record_meta.sql', false],
@@ -199,32 +201,33 @@ describe('configureScanBigQuery', () => {
 });
 
 describe('flywayMigrationToWaitFor', () => {
-  test('waits for V068 by default and allows V074', async () => {
+  test('waits for V068 by default and allows V074, V077 and V082', async () => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
     );
-    expect(FlywayMigrationToWaitForSchema.parse('V074__string_interning.sql')).toBe(
-      'V074__string_interning.sql'
-    );
+    for (const migration of [
+      'V074__string_interning.sql',
+      'V077__verdict_add_round_number.sql',
+      'V082__tbar_v1_1_asset_activity_columns.sql',
+    ] as const) {
+      expect(FlywayMigrationToWaitForSchema.parse(migration)).toBe(migration);
+    }
   });
 
   test.each([
-    'V077__verdict_add_round_number.sql',
+    'V076__dso_unavailable_parties_store_id_pk.sql',
     'V074__string_interning',
-    'V081__partition_update_history.sql',
+    'V082__partition_update_history.sql',
   ])('rejects %s', async migration => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
   });
 
-  test('only migrations from V074 on include interned_strings', async () => {
-    const { flywayMigrationVersion, migrationIncludesInternedStrings } =
-      await import('./bigQueryFlywayMigration');
+  test('flywayMigrationVersion reads the version', async () => {
+    const { flywayMigrationVersion } = await import('./bigQueryFlywayMigration');
     expect(flywayMigrationVersion('V074__string_interning.sql')).toBe(74);
     expect(() => flywayMigrationVersion('R__repeatable.sql')).toThrow(/R__repeatable\.sql/);
-    expect(migrationIncludesInternedStrings('V068__app_activity_record_meta.sql')).toBe(false);
-    expect(migrationIncludesInternedStrings('V074__string_interning.sql')).toBe(true);
   });
 
   test('checkFlywayMigrationsExist names the missing migrations', async () => {
@@ -241,5 +244,60 @@ describe('flywayMigrationToWaitFor', () => {
     } finally {
       fs.rmSync(dir, { recursive: true });
     }
+  });
+});
+
+describe('replicatedTablesFor', () => {
+  test('replicates tables and copies columns from their `since` on', async () => {
+    const { replicatedTablesFor } = await import('./bigQueryReplicatedTables');
+    const v068 = replicatedTablesFor('V068__app_activity_record_meta.sql');
+    const v074 = replicatedTablesFor('V074__string_interning.sql');
+    const v077 = replicatedTablesFor('V077__verdict_add_round_number.sql');
+    const v082 = replicatedTablesFor('V082__tbar_v1_1_asset_activity_columns.sql');
+    expect(Object.keys(v068)).not.toContain('interned_strings');
+    expect(v074.interned_strings?.columns).toEqual(['id', 'value', 'datastream_metadata']);
+    for (const tables of [v074, v077, v082]) {
+      expect(Object.keys(tables)).toEqual([...Object.keys(v068), 'interned_strings']);
+    }
+    const verdicts = (tables: typeof v068) => tables.scan_verdict_store?.columns ?? [];
+    expect(verdicts(v074)).toContain('record_time');
+    expect(verdicts(v074)).not.toContain('round_number');
+    // added by V077, and in scan's database on 0.10.0 already
+    expect(verdicts(v077)).toContain('round_number');
+    expect(verdicts(v077).slice(-1)).toEqual(['datastream_metadata']);
+    const activity = (tables: typeof v068) => tables.app_activity_record_store?.columns ?? [];
+    expect(activity(v077)).not.toContain('asset_activity_weights');
+    expect(activity(v082)).toContain('asset_activity_weights');
+  });
+
+  test('only tables whose columns have a `since` migrate their schema', async () => {
+    const { replicatedTablesFor } = await import('./bigQueryReplicatedTables');
+    const migrating = Object.entries(replicatedTablesFor('V074__string_interning.sql'))
+      .filter(([, table]) => table.migratesSchema)
+      .map(([tableName]) => tableName);
+    expect(migrating).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+  });
+
+  test('rejects a `since` that is not an allowed migration', async () => {
+    const { ReplicatedTablesConfigSchema } = await import('./bigQueryReplicatedTables');
+    const table = {
+      primaryKey: 'id',
+      datePartitionColumn: 'source_timestamp',
+      timeType: 'datastream_metadata',
+      appendMode: 'newKeys',
+    };
+    expect(
+      ReplicatedTablesConfigSchema.safeParse({
+        t: { ...table, columns: ['id', { name: 'x', since: 'V074__string_interning.sql' }] },
+      }).success
+    ).toBe(true);
+    expect(
+      ReplicatedTablesConfigSchema.safeParse({
+        t: {
+          ...table,
+          columns: ['id', { name: 'x', since: 'V076__dso_unavailable_parties_store_id_pk.sql' }],
+        },
+      }).success
+    ).toBe(false);
   });
 });
