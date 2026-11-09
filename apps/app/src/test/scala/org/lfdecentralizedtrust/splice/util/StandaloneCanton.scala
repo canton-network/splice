@@ -4,7 +4,6 @@ import org.lfdecentralizedtrust.splice.console.SvAppBackendReference
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.IsTheCantonSequencerBFTEnabled
 import org.scalatest.Suite
 
 trait StandaloneCanton extends PostgresAroundEach with NamedLogging with ProcessTestUtil {
@@ -15,19 +14,21 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
 
   override def usesDbs = {
     Seq(
-      s"sequencer_driver_${dbsSuffix}",
       s"participant_extra_$dbsSuffix",
       s"participant_second_extra_$dbsSuffix",
-    ) ++
-      (1 to 4).flatMap(index =>
-        Seq(
-          s"participant_sv${index}_${dbsSuffix}",
-          s"sequencer_sv${index}_${dbsSuffix}",
-          s"sequencer_sv${index}_${dbsSuffix}_bft",
-          s"mediator_sv${index}_${dbsSuffix}",
-        )
-      )
+    ) ++ svDbs(dbsSuffix)
   }
+
+  // The SV node DBs used by withCantonSvNodes with the given suffix, see overrideSvDbsSuffix
+  def svDbs(suffix: String): Seq[String] =
+    (1 to 4).flatMap(index =>
+      Seq(
+        s"participant_sv${index}_${suffix}",
+        s"sequencer_sv${index}_${suffix}",
+        s"sequencer_sv${index}_${suffix}_bft",
+        s"mediator_sv${index}_${suffix}",
+      )
+    )
 
   def withCantonSvNodes[A](
       adminUsersFromSvBackends: (
@@ -42,11 +43,9 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       participants: Boolean = true,
       sequencersMediators: Boolean = true,
       overrideSvDbsSuffix: Option[String] = None,
-      overrideSequencerDriverDbSuffix: Option[String] = None,
       portsRange: Option[Int] = None,
       extraParticipantsConfigFileNames: Seq[String] = Seq.empty,
       extraParticipantsEnvMap: Map[String, String] = Map.empty,
-      enableBftSequencer: Boolean = IsTheCantonSequencerBFTEnabled,
       extraSequencerConfig: Seq[String] = Seq.empty,
       enableKeyDownload: Boolean = false,
   )(extraEnv: (String, String)*)(test: => A)(implicit tc: TraceContext): A = {
@@ -65,16 +64,8 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
           svs123 && sequencersMediators,
           "standalone-sequencers-mediators-sv123.conf",
         ) ++
-        conditionalConf(
-          svs123 && sequencersMediators && enableBftSequencer,
-          "standalone-sequencers-sv123-extra-enable-bft.conf",
-        ) ++
         conditionalConf(sv4 && participants, "standalone-participant-sv4.conf") ++
         conditionalConf(sv4 && sequencersMediators, "standalone-sequencer-mediator-sv4.conf") ++
-        conditionalConf(
-          sv4 && sequencersMediators && enableBftSequencer,
-          "standalone-sequencer-sv4-extra-enable-bft.conf",
-        ) ++
         extraParticipantsConfigFileNames.toList.map(testResourcesPath / _)
 
     def adminUserEnv(index: Integer) = {
@@ -86,7 +77,6 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
 
     val dbNamesEnv = {
       val svDbsSuffix = overrideSvDbsSuffix.getOrElse(dbsSuffix)
-      val sequencerDriverDbSuffix = overrideSequencerDriverDbSuffix.getOrElse(dbsSuffix)
       (1 to 4).flatMap(i =>
         Seq(
           s"SV${i}_PARTICIPANT_DB" -> s"participant_sv${i}_${svDbsSuffix}",
@@ -94,8 +84,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
           s"SV${i}_SEQUENCER_DB" -> s"sequencer_sv${i}_${svDbsSuffix}",
           s"SV${i}_MEDIATOR_DB" -> s"mediator_sv${i}_${svDbsSuffix}",
         )
-      ) :+
-        "SEQUENCER_DRIVER_DB" -> s"sequencer_driver_${sequencerDriverDbSuffix}"
+      )
     }
 
     val portsEnv = portsRange.fold(Seq(): Seq[(String, String)])(range =>

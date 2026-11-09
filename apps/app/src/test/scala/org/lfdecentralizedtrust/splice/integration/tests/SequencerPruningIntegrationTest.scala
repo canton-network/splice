@@ -37,7 +37,10 @@ class SequencerPruningIntegrationTest
                     Some(
                       SequencerPruningConfig(
                         pruningInterval = NonNegativeFiniteDuration(2.seconds),
-                        retentionPeriod = NonNegativeFiniteDuration(120.seconds),
+                        // Members that are behind the retention period get disabled. Healthy members acknowledge
+                        // every minute, but a slowly ordered acknowledgement makes the sequencer drop the next one
+                        // (conflation window), so their last acknowledgement can be over two minutes old.
+                        retentionPeriod = NonNegativeFiniteDuration(180.seconds),
                       )
                     )
                   )
@@ -142,7 +145,7 @@ class SequencerPruningIntegrationTest
           entry.message should include regex show"LaggingMember\\(member = $unavailableParticipantId"
         }
       },
-      timeUntilSuccess = 3.minutes,
+      timeUntilSuccess = 5.minutes,
     )
   }
 }

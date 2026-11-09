@@ -363,6 +363,9 @@ object ThreadingConfig {
   * @param failOnUnknownConfigKeys
   *   If set to true, config parsing fails when unknown keys are read provided that
   *   non-standard-config is enabled. Default: true. Should not be used in production.
+  * @param enableKeyDownload
+  *   If true, the node will allow downloading of keys from the vault. This should not be enabled in
+  *   production.
   */
 final case class CantonParameters(
     clock: ClockConfig = ClockConfig.WallClock(),
@@ -385,6 +388,7 @@ final case class CantonParameters(
     stateRefreshInterval: Option[config.NonNegativeFiniteDuration] = None,
     threading: ThreadingConfig = ThreadingConfig(),
     failOnUnknownConfigKeys: Boolean = true,
+    enableKeyDownload: Boolean = false,
 ) {
   def devOrAlphaVersionSupport: Boolean = devVersionSupport || alphaVersionSupport
 
@@ -530,6 +534,7 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
         validateLegacyContractsV11 = participantParameters.validateLegacyContractsV11,
         acsCommitments = participantParameters.acsCommitments,
         deprecatedApis = participantConfig.features.deprecated,
+        enableRepairService = features.enableRepairCommands,
       )
     }
 
@@ -765,6 +770,7 @@ private[canton] object CantonNodeParameterConverter {
       enableAdditionalConsistencyChecks = parent.parameters.enableAdditionalConsistencyChecks,
       enablePreviewFeatures = parent.features.enablePreviewCommands,
       enableTestingFeatures = parent.features.enableTestingCommands,
+      enableKeyDownload = parent.parameters.enableKeyDownload,
       processingTimeouts = parent.parameters.timeouts.processing,
       sequencerClient = node.sequencerClient,
       cachingConfigs = node.parameters.caching,
@@ -1346,10 +1352,6 @@ object CantonConfig {
     implicit val tracingConfigDisabledSpanExporterReader
         : ConfigReader[TracingConfig.Exporter.Disabled.type] =
       deriveReader[TracingConfig.Exporter.Disabled.type]
-    @nowarn("cat=deprecation")
-    implicit val tracingConfigZipkinSpanExporterReader
-        : ConfigReader[TracingConfig.Exporter.Zipkin] =
-      deriveReader[TracingConfig.Exporter.Zipkin]
     implicit val tracingConfigOtlpSpanExporterReader: ConfigReader[TracingConfig.Exporter.Otlp] =
       deriveReader[TracingConfig.Exporter.Otlp]
     implicit val tracingConfigSpanExporterReader: ConfigReader[TracingConfig.Exporter] =
@@ -2212,10 +2214,6 @@ object CantonConfig {
     implicit val tracingConfigDisabledSpanExporterWriter
         : ConfigWriter[TracingConfig.Exporter.Disabled.type] =
       deriveWriter[TracingConfig.Exporter.Disabled.type]
-    @nowarn("cat=deprecation")
-    implicit val tracingConfigZipkinSpanExporterWriter
-        : ConfigWriter[TracingConfig.Exporter.Zipkin] =
-      deriveWriter[TracingConfig.Exporter.Zipkin]
     implicit val tracingConfigOtlpSpanExporterWriter: ConfigWriter[TracingConfig.Exporter.Otlp] =
       deriveWriter[TracingConfig.Exporter.Otlp]
     implicit val tracingConfigSpanExporterWriter: ConfigWriter[TracingConfig.Exporter] =

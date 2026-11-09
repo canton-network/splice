@@ -310,6 +310,7 @@ class SvDsoAutomationService(
       )
     )
     // Register optional BFT triggers
+    // TODO (#8263): remove the CometBFT triggers
     if (triggerContext.config.enableCometbftReconciliation) {
       registerTrigger(
         new PublishLocalCometBftNodeConfigTrigger(
@@ -510,6 +511,7 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Medium),
         () => getOrCreateOwnScanConnection(),
         () => getOrCreatePeerScanConnection(),
+        packageVersionSupport,
       )
     )
     registerTrigger(

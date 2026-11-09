@@ -14,6 +14,7 @@ function get_top_base_layer() {
   base_image=$(cat<<EOF | python -
 from dockerfile_parse import DockerfileParser
 dfp = DockerfileParser(path = "Dockerfile")
+# TODO (#8263): drop the cometbft build args together with the CometBFT images
 dfp.build_args = {"base_version": "$(get-snapshot-version)", "cometbft_sha": "${COMETBFT_IMAGE_SHA256}", "cometbft_version": "${COMETBFT_RELEASE_VERSION}"}
 print(dfp.baseimage)
 EOF

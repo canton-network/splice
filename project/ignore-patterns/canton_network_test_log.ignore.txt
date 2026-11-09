@@ -151,11 +151,12 @@ Not publishing sequencer successor as we are past upgrade time.*LsuNodeInitializ
 Skipping processing of.*TOPOLOGY_INVALID_SYNCHRONIZER.*ReconcileSequencingParametersTrigger:LsuIntegrationTest
 The operation 'update sequencing parameters' failed with a non-retryable error.*TOPOLOGY_INVALID_SYNCHRONIZER.*ParticipantAdminConnection:LsuIntegrationTest
 The operation 'processTaskWithRetry' failed with a non-retryable error.*TOPOLOGY_INVALID_SYNCHRONIZER.*ReconcileSequencingParametersTrigger:LsuIntegrationTest
+# Scans probe the configured successor BFT sequencers before the test starts them
+Failed to get status of BFT sequencer with p2p url.*(RollForwardLsu.*|Lsu)IntegrationTest
 
 # Roll forward tests
 Failed to connect to scan of FAILED Seed URL.*RollForwardLsu.*IntegrationTest
 Found roll forward config.*but available sequencers.*is less than the trust threshold in the configuration.*RollForwardLsuIntegrationTest
-Failed to get status of BFT sequencer with p2p url*RollForwardLsu.*IntegrationTest
 
 # slow future supervision, ignore logs as we want them just for debugging
 Supervised futures for the following trace IDs have not completed

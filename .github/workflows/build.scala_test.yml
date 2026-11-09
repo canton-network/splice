@@ -83,11 +83,11 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           # Checkout the PR head commit to get the commit message
           ref: ${{ github.event.pull_request.head.sha }}
-          # Checkout with full history to get all commit messages on the branch
-          fetch-depth: 0
-          submodules: "recursive"
+          # Default depth 1: only the head commit's message and tree are needed;
+          # pre_scala_test's "Check if skip files changed" step fetches the release-line tip it diffs against.
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Split tests
@@ -100,6 +100,11 @@ jobs:
           skip_if_files_changed: ${{ inputs.skip_if_files_changed }}
           run_if_commit_tag: ${{ inputs.run_if_commit_tag }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report git size
+        if: always()
+        shell: bash
+        run: ./.github/actions/scripts/report_git_size.sh
 
   scala_test:
     runs-on: ${{ inputs.runs_on }}
@@ -120,7 +125,7 @@ jobs:
 
     services:
       postgres:
-        image: ${{ inputs.postgres_image }}
+        image: ${{ inputs.postgres_image }} # zizmor: ignore[unpinned-images]
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_INITDB_ARGS: ${{ inputs.postgres_init_args }} --data-checksums
@@ -130,6 +135,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -41,6 +41,7 @@ synchronizers:
     sequencerAddress: "global-domain-SERIAL_ID-sequencer"
     mediatorAddress: "global-domain-SERIAL_ID-mediator"
     sequencerPublicUrl: "https://sequencer-SERIAL_ID.sv.YOUR_HOSTNAME"
+    # TODO (#8263): remove the CometBFT config
     cometBFT:
       enabled: true
       connectionUri: "http://global-domain-SERIAL_ID-cometbft-cometbft-rpc:26657"

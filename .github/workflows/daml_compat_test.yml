@@ -8,11 +8,11 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  id-token: write # Required for GCP Workload Identity for failure notifications
+  id-token: write # Required for GCP Workload Identity for failure notifications # zizmor: ignore[excessive-permissions]
   contents: read
   pull-requests: read # Required for the static tests
   issues: read # Required for the static tests
-  actions: write # To cancel itself if not opted in
+  actions: write # To cancel itself if not opted in # zizmor: ignore[excessive-permissions]
 
 jobs:
   get_mainnet_version:

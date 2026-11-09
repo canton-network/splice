@@ -1660,7 +1660,6 @@ abstract class TopologyAdminConnection(
         BaseVaultRequest(clientVersion = ReleaseVersion.current),
         filterFingerprint = "",
         filterName = name,
-        serverVersion = None,
       )
     )
   }
@@ -1687,7 +1686,6 @@ abstract class TopologyAdminConnection(
         name,
         usage,
         None,
-        serverVersion = None,
       )
     )
   }
@@ -1707,7 +1705,6 @@ abstract class TopologyAdminConnection(
         kmsKeyId,
         usage,
         name,
-        serverVersion = None,
       )
     )
   }

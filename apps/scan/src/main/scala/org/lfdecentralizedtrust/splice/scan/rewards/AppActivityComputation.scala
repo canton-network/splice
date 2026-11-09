@@ -10,8 +10,11 @@ import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Numeric
 import com.digitalasset.daml.lf.data.assertRight as damlRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
+import org.lfdecentralizedtrust.splice.util.SwitchOverTimes
 
 import java.math.RoundingMode
 import scala.collection.immutable.SortedMap
@@ -32,6 +35,52 @@ object AppActivityComputation {
     * fallback as there is no node to fallback to.
     */
   val ActivityIngestionCodeVersion: Int = 1
+
+  private def floorMultiply(value: Long, weights: BigDecimal*): Long =
+    weights
+      .foldLeft(damlRight(Numeric.fromLong(scale, value))) { (acc, weight) =>
+        damlRight(Numeric.multiply(scale, acc, Numeric.assertFromBigDecimal(scale, weight)))
+      }
+      .setScale(0, RoundingMode.FLOOR)
+      .longValueExact()
+
+  // Whether to perform the CIP-104 amendment based calcs for FA submitted transactions.
+  // This guard exists to synchronize the round from which on the amended calcs become active among SVs.
+  def computeFASubmitted(roundOpensAt: CantonTimestamp, dsoRules: DsoRules): Boolean =
+    SwitchOverTimes.hasSwitchedOverAsOf(
+      roundOpensAt,
+      dsoRules,
+      SwitchOverTimes.UseCip104AmendedCalculationAfter,
+    )
+
+  /** The featured app provider that submitted a transaction, if any.
+    *
+    * A transaction is submitted by the featured app X if
+    * - X is a confirmer of the transaction,
+    * - X is a featured app, and
+    * - X or one of X's ops parties is included in `submitters`.
+    *
+    * Ties are broken by picking the app whose submitter appears earliest in `submitters`.
+    * A submitter that is a provider maps to itself, even if it is also an ops party of another provider.
+    * The tie-break on the lexicographically smallest app is already applied when building
+    * `opsPartyProviders`, as each ops party maps to a single provider,
+    * see [[org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore.lookupFeaturedAppPartiesAsOf]].
+    *
+    * @param submitters the submitting parties of the transaction, in order
+    * @param confirmers all confirming parties of the transaction
+    * @param featuredAppParties as returned by `lookupFeaturedAppPartiesAsOf` at the start of the round
+    */
+  def findFASubmitter(
+      submitters: Seq[String],
+      confirmers: Set[String],
+      featuredAppParties: ScanRewardsReferenceStore.FeaturedAppParties,
+  ): Option[String] =
+    submitters.iterator
+      .flatMap { submitter =>
+        if (featuredAppParties.providers.contains(submitter)) Some(submitter)
+        else featuredAppParties.opsPartyProviders.get(submitter)
+      }
+      .find(confirmers.contains)
 }
 
 class AppActivityComputation(
@@ -56,7 +105,7 @@ class AppActivityComputation(
   )(implicit tc: TraceContext): Future[Option[Long]] =
     rewardsReferenceStore
       .lookupActiveOpenMiningRounds(Seq(asOf))
-      .map(_.get(asOf).map { case (roundNumber, _) => roundNumber })
+      .map(_.get(asOf).map(_.roundNumber))
 
   /** Compute app activity records for a batch of verdicts.
     *
@@ -73,7 +122,7 @@ class AppActivityComputation(
     (
         DbScanVerdictStore.TrafficSummaryT,
         v30.Verdict,
-        Option[DbAppActivityRecordStore.AppActivityRecordT],
+        Option[DbAppActivityRecordStore.AppAndAssetActivityRecordT],
         Option[Long],
     )
   ]] = {
@@ -99,28 +148,41 @@ class AppActivityComputation(
       results <- Future.traverse(tagged) {
         case (summary, verdict, false) =>
           Future.successful(
-            (summary, verdict, None, roundInfoByTime.get(summary.sequencingTime).map(_._1))
+            (
+              summary,
+              verdict,
+              None,
+              roundInfoByTime.get(summary.sequencingTime).map(_.roundNumber),
+            )
           )
         case (summary, verdict, true) =>
           roundInfoByTime.get(summary.sequencingTime) match {
-            case Some((roundNumber, roundOpensAt)) =>
+            case Some(
+                  ScanRewardsReferenceStore.ActiveRoundInfo(
+                    roundNumber,
+                    roundOpensAt,
+                    assetActivityParams,
+                  )
+                ) =>
               for {
-                featuredAppWeights <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
+                featuredAppParties <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
                   roundOpensAt
                 )
-                svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
-                  roundOpensAt
-                )
+                dsoRulesO <- rewardsReferenceStore.lookupDsoRulesAsOf(roundOpensAt)
               } yield {
-                if (svParticipantIds.isEmpty) {
+                val dsoRules = dsoRulesO.getOrElse(
                   // We should never hit this; as we have round info in store and must have DsoRules also
                   throw Status.INTERNAL
                     .withDescription(
-                      s"Round info present as of roundOpensAt=$roundOpensAt, " +
-                        s"but no DsoRules/Sv participant found"
+                      s"Round info present as of roundOpensAt=$roundOpensAt, but no DsoRules found"
                     )
                     .asRuntimeException()
-                } else if (svParticipantIds.contains(verdict.submittingParticipantUid)) {
+                )
+                if (
+                  ScanRewardsReferenceStore
+                    .svParticipantIds(dsoRules)
+                    .contains(verdict.submittingParticipantUid)
+                ) {
                   // SV-submitted transactions don't burn traffic, so they
                   // must not contribute to app activity.
                   (summary, verdict, None, Some(roundNumber))
@@ -128,7 +190,14 @@ class AppActivityComputation(
                   (
                     summary,
                     verdict,
-                    computeForSingleVerdict(summary, verdict, roundNumber, featuredAppWeights),
+                    computeForSingleVerdict(
+                      summary,
+                      verdict,
+                      roundNumber,
+                      featuredAppParties,
+                      assetActivityParams,
+                      AppActivityComputation.computeFASubmitted(roundOpensAt, dsoRules),
+                    ),
                     Some(roundNumber),
                   )
                 }
@@ -154,13 +223,50 @@ class AppActivityComputation(
       summary: DbScanVerdictStore.TrafficSummaryT,
       verdict: v30.Verdict,
       roundNumber: Long,
-      featuredAppWeights: Map[String, BigDecimal],
-  ): Option[DbAppActivityRecordStore.AppActivityRecordT] = {
+      featuredAppParties: ScanRewardsReferenceStore.FeaturedAppParties,
+      assetActivityParams: AssetActivityParams,
+      computeFASubmitted: Boolean,
+  ): Option[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
+    val confirmers = verdict.getTransactionViews.views.values
+      .flatMap(_.confirmingParties.flatMap(_.parties))
+      .toSet
+    val faSubmitter =
+      if (computeFASubmitted)
+        AppActivityComputation.findFASubmitter(
+          verdict.submittingParties,
+          confirmers,
+          featuredAppParties,
+        )
+      else None
+    faSubmitter match {
+      case Some(submittingApp) =>
+        Some(
+          computeForFASubmitted(
+            summary,
+            verdict,
+            roundNumber,
+            submittingApp,
+            featuredAppParties.providers,
+            rewardsReferenceStore.key.dsoParty.toProtoPrimitive,
+            assetActivityParams,
+          )
+        )
+      case None =>
+        computeForUserSubmitted(summary, verdict, roundNumber, featuredAppParties.providers)
+    }
+  }
+
+  private[rewards] def computeForUserSubmitted(
+      summary: DbScanVerdictStore.TrafficSummaryT,
+      verdict: v30.Verdict,
+      roundNumber: Long,
+      featuredAppProviders: Map[String, (FeaturedAppKind, BigDecimal)],
+  ): Option[DbAppActivityRecordStore.AppAndAssetActivityRecordT] = {
     val envelopesWithFeaturedAppConfirmers =
       summary.envelopeTrafficSummarys.flatMap { envelope =>
         val envelopeConfirmers =
           computeEnvelopeConfirmers(envelope, verdict.getTransactionViews.views)
-        val featuredAppConfirmers = envelopeConfirmers.intersect(featuredAppWeights.keySet)
+        val featuredAppConfirmers = envelopeConfirmers.filter(featuredAppProviders.contains)
         Option.when(featuredAppConfirmers.nonEmpty)((envelope, featuredAppConfirmers))
       }
 
@@ -175,29 +281,138 @@ class AppActivityComputation(
         totalFeaturedAppEnvelopesTraffic,
       )
 
-      val aggregatedWeights = SortedMap.from(aggregatedBurn.map { case (party, burn) =>
-        val weight =
-          featuredAppWeights.getOrElse(
-            party,
-            throw new IllegalStateException(
-              s"No featured app weight found for party=$party"
-            ),
-          )
-        val weightNumeric = Numeric.assertFromBigDecimal(AppActivityComputation.scale, weight)
-        val burnNumeric = damlRight(Numeric.fromLong(AppActivityComputation.scale, burn))
-        val product =
-          damlRight(Numeric.multiply(AppActivityComputation.scale, burnNumeric, weightNumeric))
-        party -> product.setScale(0, RoundingMode.FLOOR).longValueExact()
-      })
-
       Some(
-        DbAppActivityRecordStore.AppActivityRecordT(
+        DbAppActivityRecordStore.AppAndAssetActivityRecordT(
           verdictRowId = DbAppActivityRecordStore.DUMMY_VERDICT_ROW_ID,
           roundNumber = roundNumber,
-          appProviderParties = aggregatedWeights.keys.toSeq,
-          appActivityWeights = aggregatedWeights.values.toSeq,
+          appProviderParties = aggregatedBurn.keys.toSeq,
+          appActivityWeights = aggregatedBurn.values.toSeq,
         )
       )
+    }
+  }
+
+  /** Compute the activity records of a transaction submitted by the featured app `submittingApp`,
+    * see [[AppActivityComputation.findFASubmitter]].
+    *
+    * The total burn is always attributed to the submitting app as app-activity.
+    *
+    * Additionally if the submitting app is a featured asset mover, then the extra
+    * burn is split among the asset confirmers as described in the
+    * "Splitting Extra Burn Among Assets" section of CIP-104.
+    * The asset confirmers are the dso party and the providers of featured assets.
+    */
+  private[rewards] def computeForFASubmitted(
+      summary: DbScanVerdictStore.TrafficSummaryT,
+      verdict: v30.Verdict,
+      roundNumber: Long,
+      submittingApp: String,
+      featuredAppProviders: Map[String, (FeaturedAppKind, BigDecimal)],
+      dsoParty: String,
+      params: AssetActivityParams,
+  ): DbAppActivityRecordStore.AppAndAssetActivityRecordT = {
+    val assetActivity = featuredAppProviders.get(submittingApp) match {
+      case Some((FeaturedAppKind.FAK_ASSETMOVING, submittingAppWeight)) =>
+        computeAssetActivity(
+          summary,
+          verdict,
+          submittingApp,
+          submittingAppWeight,
+          featuredAppProviders,
+          dsoParty,
+          params,
+        ).getOrElse(SortedMap.empty[String, Long])
+      case _ => SortedMap.empty[String, Long]
+    }
+
+    DbAppActivityRecordStore.AppAndAssetActivityRecordT(
+      verdictRowId = DbAppActivityRecordStore.DUMMY_VERDICT_ROW_ID,
+      roundNumber = roundNumber,
+      appProviderParties = Seq(submittingApp),
+      appActivityWeights = Seq(summary.totalTrafficCost),
+      submittingAppProvider = Some(submittingApp),
+      assetActivityProviderParties = assetActivity.keys.toSeq,
+      assetActivityWeights = assetActivity.values.toSeq,
+    )
+  }
+
+  private def computeAssetActivity(
+      summary: DbScanVerdictStore.TrafficSummaryT,
+      verdict: v30.Verdict,
+      submittingApp: String,
+      submittingAppWeight: BigDecimal,
+      featuredAppProviders: Map[String, (FeaturedAppKind, BigDecimal)],
+      dsoParty: String,
+      params: AssetActivityParams,
+  ): Option[SortedMap[String, Long]] = {
+    val totalBurn = summary.totalTrafficCost
+
+    // Step 1: the asset confirmers of each envelope, with their weights
+    val envelopesWithAssetConfirmers =
+      summary.envelopeTrafficSummarys.flatMap { envelope =>
+        val envelopeConfirmers =
+          computeEnvelopeConfirmers(envelope, verdict.getTransactionViews.views)
+        val assetConfirmers: Map[String, BigDecimal] = envelopeConfirmers.flatMap { party =>
+          if (party == dsoParty) Some(dsoParty -> params.dsoAppActivityWeight)
+          else
+            featuredAppProviders.get(party).collect { case (FeaturedAppKind.FAK_ASSET, weight) =>
+              party -> weight
+            }
+        }.toMap
+        Option.when(assetConfirmers.nonEmpty)((envelope, assetConfirmers))
+      }
+    val assetConfirmerWeights: Map[String, BigDecimal] =
+      envelopesWithAssetConfirmers.flatMap(_._2).toMap
+
+    // Step 3: the sum of assetEnvelopeBurn over all asset confirmers is the
+    // total traffic of the envelopes with asset confirmers
+    val totalAssetBurn: Long = envelopesWithAssetConfirmers.map(_._1.trafficCost).sum
+
+    if (totalAssetBurn == 0L) None
+    else {
+      // Steps 2 and 4
+      // Distribute activity for each envelope by doing the sum first, then divide by totalAssetBurn
+      val assetActivityUncapped = computeAggregatedBurn(
+        envelopesWithAssetConfirmers.map { case (envelope, confirmers) =>
+          (envelope, confirmers.keySet)
+        },
+        AppActivityComputation.floorMultiply(totalBurn, params.extraFeaturedAssetActivityWeight),
+        totalAssetBurn,
+      )
+
+      // Steps 5 and 6
+      val assetActivityCap = AppActivityComputation.floorMultiply(
+        totalBurn,
+        params.maxExtraFeaturedAssetActivityWeightPerAsset,
+      )
+      val assetActivityCapped = assetActivityUncapped.view.mapValues(_ min assetActivityCap)
+
+      // Step 7: redistribute the capped activity once among the uncapped assets
+      val totalCappedActivity =
+        assetActivityUncapped.values.map(_ - assetActivityCap).filter(_ > 0L).sum
+      val uncappedAssets = assetActivityUncapped.filter { case (_, a) => a < assetActivityCap }
+      val totalUncappedActivity = uncappedAssets.values.sum
+      val assetActivity =
+        if (totalUncappedActivity == 0L) SortedMap.from(assetActivityCapped)
+        else
+          SortedMap.from(assetActivityCapped) ++ uncappedAssets.map {
+            case (party, uncappedActivity) =>
+              val cappedActivityShare =
+                (totalCappedActivity * uncappedActivity) / totalUncappedActivity
+              party -> ((uncappedActivity + cappedActivityShare) min assetActivityCap)
+          }
+
+      // Steps 8 and 9: apply the app composition weights, and attribute the
+      // dso's asset activity to the submitting app.
+      // Because the submitting app is not an FAK_ASSET, the beneficiaries are guaranteed to be distinct.
+      Some(assetActivity.map { case (party, activity) =>
+        val weight = assetConfirmerWeights.getOrElse(
+          party,
+          throw new IllegalStateException(s"No asset weight found for party=$party"),
+        )
+        val beneficiary = if (party == dsoParty) submittingApp else party
+        beneficiary -> AppActivityComputation.floorMultiply(activity, submittingAppWeight, weight)
+      })
     }
   }
 

@@ -46,6 +46,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- end }}
+        {{- /* TODO (#8263): remove the CometBFT sequencer driver */}}
         {{- if eq .Values.sequencer.driver.type "cometbft"}}
           image: {{ .Values.imageRepo }}/{{ .Values.sequencer.cometbft.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_cometbft_sequencer) }}
         {{- else}}
@@ -71,6 +72,7 @@ spec:
             - name: CANTON_SEQUENCER_POSTGRES_DB
               value: {{ .Values.sequencer.persistence.databaseName }}
         {{- end }}
+        {{- /* TODO (#8263): remove the CometBFT sequencer driver */}}
         {{- if eq .Values.sequencer.driver.type "cometbft"}}
             - name: ADDITIONAL_CONFIG_SEQUENCER_DRIVER_COMETBFT
               value: |

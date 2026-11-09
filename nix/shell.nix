@@ -118,6 +118,7 @@ let
     which
     xxd
     zip
+    zizmor
 
     # Package required to install daml studio
     yq-go
@@ -144,6 +145,7 @@ let
     shellcheck
     skopeo
     which
+    zizmor
   ] ++ linuxOnly;
 
 in pkgs.mkShell {
@@ -159,6 +161,7 @@ in pkgs.mkShell {
   CANTON_MEDIATOR_IMAGE_SHA256 = "${sources.canton_mediator_image_sha256}";
   DPM_SDK_VERSION = "${dpmSdkSources.version}";
   DAML_COMPILER_VERSION = "${dpmSdkSources.version}";
+  # TODO (#8263): remove the CometBFT variables together with the CometBFT images and SV app code
   COMETBFT_RELEASE_VERSION = "${cometbftDriverSources.version}";
   COMETBFT_IMAGE_SHA256 = "${cometbftDriverSources.image_sha256}";
   COMETBFT_DRIVER = "${pkgs.cometbft_driver}";

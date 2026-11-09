@@ -233,6 +233,7 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
     }
   );
   [
+    // TODO (#8263): remove the CometBFT target
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-cometbft`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-mediator`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-sequencer`,

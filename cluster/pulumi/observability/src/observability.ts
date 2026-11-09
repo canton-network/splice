@@ -937,11 +937,22 @@ function createGrafanaAlerting(namespace: Input<string>) {
     .filter(e => e != undefined);
   const cantonBftEnabled =
     DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
+  // TODO (#8263): remove the CometBFT pruning and alerts
   const cometbftPruningHighestBlockRetain = allSvsConfiguration
     .map(sv => sv.pruning?.cometbft?.retainBlocks)
     .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
     .sort((a, b) => a - b)
     .pop();
+  const legacyMigrationIds = [
+    ...(DecentralizedSynchronizerUpgradeConfig.legacy
+      ? [DecentralizedSynchronizerUpgradeConfig.legacy]
+      : []),
+    ...DecentralizedSynchronizerUpgradeConfig.additionalLegacy,
+  ].map(m => m.id);
+  const legacyMigrationsJobFilter =
+    legacyMigrationIds.length > 0
+      ? `{job!~"global-domain-(${legacyMigrationIds.join('|')})-.*"}`
+      : '';
   new k8s.core.v1.ConfigMap(
     'grafana-alerting',
     {
@@ -1099,10 +1110,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'sequencer_client_delay_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_client_delay_alerts.yaml'
-            ).replaceAll(
-              '$SEQUENCER_CLIENT_DELAY_THRESHOLD_SECONDS',
-              monitoringConfig.alerting.alerts.sequencerClientDelay.seconds.toString()
-            ),
+            )
+              .replaceAll(
+                '$SEQUENCER_CLIENT_DELAY_THRESHOLD_SECONDS',
+                monitoringConfig.alerting.alerts.sequencerClientDelay.seconds.toString()
+              )
+              .replaceAll('$LEGACY_MIGRATIONS_JOB_FILTER', legacyMigrationsJobFilter),
             'acs_commitment_deleted_alerts.yaml': readGrafanaAlertingFile(
               'acs_commitment_deleted.yaml'
             ),

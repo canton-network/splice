@@ -1,0 +1,23 @@
+# Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+rules:
+  dependabot-cooldown:
+    config:
+      days: 5
+  # GitHub's $/ syntax is new; the repo standard is ./
+  self-repository:
+    disable: true
+
+  # Internal reusable workflows within this repository inherit secrets
+  secrets-inherit:
+    ignore:
+      - build.yml
+      - build.wallclock_pg14.yml
+      - cimain.yml
+      - daml_compat_test.yml
+      - post_merge.yml
+      - pr_auto_upgrade_test.yml
+      - pr_cluster_test.yml
+      - pr_contributors.yml
+      - pr_non_contributors.yml
