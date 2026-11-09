@@ -437,6 +437,29 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     assertRewardCalcs(aliceParty, venueParty)
 
+    clue("Issuing rounds have the expected issuancePerFeaturedAppRewardCoupon") {
+      eventually() {
+        val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+        issuingRounds should not be empty
+        issuingRounds.foreach { issuingRound =>
+          val round = issuingRound.contract.payload.round.number.toLong
+          val issuanceRatio =
+            BigDecimal(issuingRound.contract.payload.issuancePerFeaturedAppRewardCoupon)
+          if (mintingTrafficBased) {
+            val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+              case GetRewardAccountingActivityTotalsResponse.members
+                    .RewardAccountingActivityTotalsOk(t) =>
+                t
+            }
+            issuanceRatio shouldBe BigDecimal(totals.issuancePerFeaturedAppActivity) withClue
+              s"Round $round"
+          } else {
+            issuanceRatio should be > BigDecimal(0) withClue s"Round $round"
+          }
+        }
+      }
+    }
+
     // Other misc API tests
     clue("404 for non-existent batch data") {
       sv1ScanBackend.getRewardAccountingBatch(6L, "0" * 64) shouldBe None
