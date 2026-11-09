@@ -54,6 +54,10 @@ the delayed verdict sender, whose 3 s delay runs on the sim clock; the group has
 threshold 2, liveness-margin 1), sv3 joined after the request, sv4 was refused. So #8356 (still open, not merged)
 only removes one of the two missing sends; earlier text "removed by #8356" is superseded. Candidate fix:
 `_mediator_template.parameters.delayed-verdict-sender.enabled = false` in simple-topology-canton-simtime.conf.
-11258 becomes a duplicate of 11275 (bft-round comments/11258.md not posted). State: handed out.
+11258 becomes a duplicate of 11275 (bft-round comments/11258.md not posted). State: superseded, see below.
 Lesson candidate: in simtime tests, any component that schedules on the sequencer clock waits forever while the
 test waits on the ledger; disable or zero such delays for the simtime instance.
+
+User question 2026-11-09: sv4 blacklisted right after the 2 -> 4 switch in both runs (packet table), so this is the
+11255 onboarding window. Decision: fold into 11255; close 11275 11258 11276 11284 as duplicates of 11255, comment
+`comments/11255.md` (third shape, corrects "8356 does not help" for this shape). comments/11275.md dropped.
