@@ -74,13 +74,14 @@ abstract class BaseStorePerformanceTest(
   protected implicit val closeContext: CloseContext = CloseContext(this)
 
   type Store
+
   protected def mkStore(storage: DbStorage): Future[Store]
 
   /** Entry point for a perf test run. */
   def run(): Future[Unit]
 
   /** Metrics factory wired into the storage's [[DbStorageMetrics]].
-    *  The DB executor `exectime` timer is recorded and can be read back to measure DB time.
+    * The DB executor `exectime` timer is recorded and can be read back to measure DB time.
     */
   protected val dbMetricsFactory: NanoInMemoryMetricsFactory = new NanoInMemoryMetricsFactory
 
@@ -206,7 +207,9 @@ abstract class BaseStorePerformanceTest(
     val storage = initializeStorage()
     val started =
       try body(storage)
-      catch { case NonFatal(e) => Future.failed(e) }
+      catch {
+        case NonFatal(e) => Future.failed(e)
+      }
     started.transformWith { result =>
       storage.close()
       Future.fromTry(result)
@@ -308,6 +311,44 @@ abstract class BaseStorePerformanceTest(
     BigDecimal(ManagementFactory.getMemoryMXBean.getHeapMemoryUsage.getUsed)
   }
 
+  /** The thread MX bean with per-thread allocation tracking enabled, if supported. */
+  private lazy val allocatingThreadMXBean: Option[com.sun.management.ThreadMXBean] =
+    ManagementFactory.getThreadMXBean match {
+      case tb: com.sun.management.ThreadMXBean if tb.isThreadAllocatedMemorySupported =>
+        if (!tb.isThreadAllocatedMemoryEnabled) tb.setThreadAllocatedMemoryEnabled(true)
+        Some(tb)
+      case _ => None
+    }
+
+  /** Cumulative bytes allocated across all live JVM threads since each thread started.
+    * Returns -1 if per-thread allocation tracking is not supported.
+    */
+  protected def getAllocatedBytes: Long =
+    allocatingThreadMXBean match {
+      case Some(tb) =>
+        // Threads that die between getAllThreadIds and the read report -1 for their slot.
+        tb.getThreadAllocatedBytes(tb.getAllThreadIds)
+          .foldLeft(0L)((acc, bytes) => if (bytes > 0) acc + bytes else acc)
+      case None => -1L
+    }
+
+  /** Runs `body` synchronously on the calling thread and returns its result together with the
+    * bytes that thread allocated while running it.
+    *
+    * The second element is -1 if per-thread allocation tracking is not supported.
+    */
+  protected def measuringCurrentThreadAllocatedBytes[T](body: => T): (T, Long) =
+    allocatingThreadMXBean match {
+      case Some(tb) =>
+        val id = Thread.currentThread().threadId()
+        val before = tb.getThreadAllocatedBytes(id)
+        val result = body
+        val after = tb.getThreadAllocatedBytes(id)
+        (result, if (before >= 0 && after >= 0) math.max(after - before, 0L) else -1L)
+      case None =>
+        (body, -1L)
+    }
+
   protected def mkParticipantId(name: String): ParticipantId =
     ParticipantId.tryFromProtoPrimitive("PAR::" + name + "::dummy")
 
@@ -361,6 +402,7 @@ final case class DbQuerySample(timerName: String, callsite: String, nanos: Long,
   * that uses nanoseconds for higher precision
   */
 class NanoInMemoryMetricsFactory extends InMemoryMetricsFactory {
+
   import java.util.concurrent.atomic.AtomicLong
 
   private val samples = new java.util.concurrent.ConcurrentLinkedQueue[DbQuerySample]()
@@ -387,6 +429,7 @@ class NanoInMemoryMetricsFactory extends InMemoryMetricsFactory {
     */
   private final class NanoTimer(override val info: MetricInfo) extends Timer {
     private val name = info.name.toString
+
     private def callsiteOf(context: MetricsContext): String =
       context.labels.getOrElse("query", "<none>")
 
