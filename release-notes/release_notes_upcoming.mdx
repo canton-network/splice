@@ -30,10 +30,13 @@
     - Removed the remaining CometBFT support including the cometbft helm
       charts, docker images and unused `splice-info` values.
 
-    - `splice-participant`: `nodeIdentifier` is now a required value. Canton initializes the participant's identity itself,
-      so it must be given the node identifier that the controlling SV or validator app expects.
-
 ## Upcoming for next minor release (template):
+
+  - Helm charts and Docker images
+
+    - `splice-participant`: new value `enableAutoInit`, default `true`. Set it to `false` when the
+      participant's identity comes from elsewhere, e.g. while restoring from an identities dump or
+      when using an offline root namespace key.
 
 {/* If you introduce any breaking changes in the next minor release,
     then in addition to the release notes as above,
@@ -51,6 +54,11 @@
     - Breaking API Changes:
 
     - Breaking Deployment Changes:
+
+      - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
+        participant's identity itself, so the chart must be given the same node identifier that
+        the controlling SV or validator app expects, i.e. the `nodeIdentifier` of `splice-sv-node`
+        or `splice-validator`. Set it in `participant-values.yaml`.
 
     - Protocol Changes:
 
