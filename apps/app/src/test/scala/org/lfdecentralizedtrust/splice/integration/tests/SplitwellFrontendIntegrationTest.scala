@@ -287,7 +287,14 @@ class SplitwellFrontendIntegrationTest
       withFrontEndStep("bobSplitwell", "error-on-unknown-party") { implicit webDriver =>
         val errorMsg = "is not part of the group"
         loggerFactory.assertLoggedWarningsAndErrorsSeq(
-          enterSplitwellPayment("unknown::abc", PartyId.tryFromProtoPrimitive("unknown::abc"), 42),
+          {
+            enterSplitwellPayment("unknown::abc", PartyId.tryFromProtoPrimitive("unknown::abc"), 42)
+            // Browser console errors reach the test log asynchronously, so wait for the error to
+            // show up in the UI before the single check of the logs below.
+            eventually() {
+              find(id("error")).value.text should include(errorMsg)
+            }
+          },
           logs => forExactly(1, logs)(_.errorMessage should include(errorMsg)),
         )
         consumeError(errorMsg)
