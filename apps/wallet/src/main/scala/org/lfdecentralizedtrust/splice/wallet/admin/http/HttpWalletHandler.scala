@@ -65,6 +65,7 @@ import org.lfdecentralizedtrust.splice.util.ErrorUtilExtensions.*
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1.allocationinstructionresult_output as instructionresultv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.allocationinstructionresult_output as instructionresultv2
@@ -338,12 +339,9 @@ class HttpWalletHandler(
       val activityWeight =
         request.flatMap(_.activityWeight).map(Codec.tryDecode(Codec.JavaBigDecimal)(_))
       val opsParties = request.flatMap(_.opsPartyIds).map { partyIds =>
-        if (partyIds.size > 10) {
-          throw HttpErrorHandler.badRequest(
-            s"At most 10 ops parties are allowed, got ${partyIds.size}"
-          )
-        }
-        partyIds.map(Codec.tryDecode(Codec.Party)(_).toProtoPrimitive)
+        // Same limit as enforced by WalletAppInstall_FeaturedAppRights_SelfGrant
+        maxSizeOrFail("ops_party_ids", partyIds, 10)
+          .map(Codec.tryDecode(Codec.Party)(_).toProtoPrimitive)
       }
       for {
         amuletRules <- scanConnection.getAmuletRulesWithState()

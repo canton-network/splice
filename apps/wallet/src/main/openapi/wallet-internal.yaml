@@ -1444,6 +1444,7 @@ components:
             Operational parties of the featured app whose submissions are considered
             submissions by this featured app. At most 10 entries. Defaults to [] if not set.
           type: array
+          maxItems: 10
           items:
             type: string
 
