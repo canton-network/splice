@@ -52,6 +52,6 @@ export const useInFlightOpsPartiesOverlap = (opsParties: string[]): string | und
   );
   const overlap = opsParties.filter(p => inFlight.has(p));
   return overlap.length > 0
-    ? `These ops parties are already referenced by a pending vote request: ${overlap.join(', ')}`
+    ? `These app operations parties are already referenced by a pending vote request: ${overlap.join(', ')}`
     : undefined;
 };

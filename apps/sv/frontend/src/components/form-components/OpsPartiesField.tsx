@@ -75,7 +75,7 @@ export const OpsPartiesField: React.FC<OpsPartiesFieldProps> = props => {
               }}
             />
             <IconButton
-              aria-label="remove ops party"
+              aria-label="remove app operations party"
               data-testid={`${id}-remove-${i}`}
               onClick={() => removeRow(i)}
             >

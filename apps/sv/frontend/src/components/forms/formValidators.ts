@@ -222,11 +222,11 @@ export const validateOpsParties = (parties: string[], provider: string): string 
   }
 
   if (new Set(cleaned).size !== cleaned.length) {
-    return 'Duplicate ops parties are not allowed';
+    return 'Duplicate app operations parties are not allowed';
   }
 
   if (provider && cleaned.includes(provider)) {
-    return 'Provider cannot be its own ops party';
+    return 'Provider cannot be its own app operations party';
   }
 
   return false;
