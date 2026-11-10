@@ -827,6 +827,65 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
     return events
 
 
+def calendar_markdown(version: str, month: str, events: list[ScheduledEvent]) -> str:
+    first_monday = first_monday_in_month(month)
+
+    def week_of(event: ScheduledEvent) -> int:
+        return (event.date - first_monday).days // 7
+
+    def label(event: ScheduledEvent) -> str:
+        text = event.title.replace("|", "\\|")
+
+        if event.dev:
+            text = f"Dev: {text}"
+
+        if event.timed:
+            text += f" ({EVENT_TIME_LABEL} ET)"
+
+        return text
+
+    cells: dict[tuple[int, int], list[str]] = {}
+
+    for event in sorted(events, key=lambda e: e.date):
+        cells.setdefault((week_of(event), event.date.weekday()), []).append(label(event))
+
+    weeks = range(min(week for week, _ in cells), max(week for week, _ in cells) + 1)
+
+    weekdays = sorted({weekday for _, weekday in cells})
+
+    lines = [
+        f"## Splice {version}.x schedule for {month}",
+        "",
+        "Week 0 starts on the first Monday of the month. Times are US Eastern.",
+        "",
+        "| Week | " + " | ".join(calendar.day_abbr[weekday] for weekday in weekdays) + " |",
+        "|---" * (len(weekdays) + 1) + "|",
+    ]
+
+    for week in weeks:
+        monday = first_monday + datetime.timedelta(weeks=week)
+
+        row = [f"{week} ({monday:%b %d})"] + [
+            "<br>".join(cells.get((week, weekday), [])) for weekday in weekdays
+        ]
+
+        lines.append("| " + " | ".join(row) + " |")
+
+    return "\n".join(lines) + "\n"
+
+
+def write_calendar(version: str, month: str, events: list[ScheduledEvent]) -> None:
+    markdown = calendar_markdown(version, month, events)
+
+    print(markdown)
+
+    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as summary:
+            summary.write(markdown)
+
+
 def main() -> None:
     args = parse_args()
 
@@ -862,6 +921,9 @@ def main() -> None:
     print(f"Schedule events: {len(events)}")
 
     print()
+
+    if args.dry_run:
+        write_calendar(args.version, args.month, events)
 
     item_ids_by_title: dict[str, str] = {}
 
