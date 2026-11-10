@@ -83,6 +83,9 @@ class BftScanConnectionIntegrationTest
       {
         aliceValidatorBackend.startSync()
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
+        eventuallySucceeds() {
+          aliceAnsExternalClient.listAnsEntries()
+        }
       },
       forAll(_)(
         _.message should (include(
@@ -94,9 +97,9 @@ class BftScanConnectionIntegrationTest
       ),
     )
 
-    eventuallySucceeds() {
-      aliceAnsExternalClient.listAnsEntries()
-    }
+    // aliceValidator keeps retrying the stopped sv2Scan every 60 s, so stop it while the
+    // resulting warnings are still suppressed instead of leaving that to the teardown.
+    loggerFactory.suppressWarningsAndErrors(aliceValidatorBackend.stop())
   }
 
   "agree on failed HttpCommandException" in { implicit env =>
