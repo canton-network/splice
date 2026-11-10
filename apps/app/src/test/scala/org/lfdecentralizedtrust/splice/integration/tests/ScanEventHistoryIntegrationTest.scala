@@ -3,10 +3,15 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  updateAutomationConfig,
+}
 import org.lfdecentralizedtrust.splice.integration.plugins.toxiproxy.UseToxiproxy
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.util.*
+import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.{CompactJson, ProtobufJson}
 import definitions.EventHistoryItem
@@ -37,6 +42,13 @@ class ScanEventHistoryIntegrationTest
               .focus(_.current.mediator.port)
               .modify(p => Port.tryCreate(p.unwrap + 20000))
           )
+        )(config)
+      )
+      .addConfigTransforms((_, config) =>
+        // Faucet claims commit transactions in the background, which would otherwise land
+        // between the pre-tap cursor and the check that no events follow it.
+        updateAutomationConfig(ConfigurableApp.Validator)(
+          _.withPausedTrigger[ReceiveFaucetCouponTrigger]
         )(config)
       )
 
