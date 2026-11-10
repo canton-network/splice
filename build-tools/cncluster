@@ -1510,6 +1510,12 @@ function subcmd_deploy_basic() {
     _deploy_cluster_workflow "deploy_scratchnet_basic.yml" "Cluster test" "$@"
 }
 
+subcommand_whitelist[deploy_upgrade]='Trigger a scratchnet upgrade test deploy for a PR and post the run link back on the PR.'
+
+function subcmd_deploy_upgrade() {
+    _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "$@"
+}
+
 function _deploy_cluster_workflow() {
     local deploy_workflow="$1" label="$2"; shift 2
 
