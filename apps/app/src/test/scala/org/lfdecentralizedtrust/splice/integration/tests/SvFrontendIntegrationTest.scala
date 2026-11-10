@@ -802,8 +802,9 @@ class SvFrontendIntegrationTest
           )
         }
 
-        // Any SV can close the expired request, so pause the trigger on all of them. The trigger is
-        // resumed even if a step below fails, since the environment is shared with other test cases.
+        // Any SV can close the expired request, so pause the trigger on all of them. The trigger
+        // is resumed even if a step below fails, since the environment is shared with other test
+        // cases.
         val rejectedProposalCid = TriggerTestUtil.setTriggersWithin(
           triggersToPauseAtStart = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(
             _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger]
