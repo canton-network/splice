@@ -45,7 +45,6 @@ import TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingUnlimitedTrafficTrigger.UnlimitedTraffic
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
 import org.lfdecentralizedtrust.splice.sv.config.SvSynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
@@ -64,7 +63,6 @@ class LocalSynchronizerNode(
     override protected[this] val retryProvider: RetryProvider,
     sequencerConfig: SequencerConfig,
     val config: SvSynchronizerNodeConfig,
-    override val cometbftNode: Option[CometBftNode],
 )(implicit
     ec: ExecutionContextExecutor,
     httpClient: HttpClient,
@@ -79,7 +77,6 @@ class LocalSynchronizerNode(
       config.mediator.sequencerRequestAmplification,
       config.mediator.sequencerConnectionPoolDelays,
       config.mediator.subscriptionLivenessLimits,
-      cometbftNode,
     )
     with RetryProvider.Has
     with FlagCloseable

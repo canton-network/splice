@@ -25,6 +25,12 @@
 
     - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
 
+  - SV App
+
+    - Removed the remaining CometBFT support from the SV app and UI, including the
+      `/v0/admin/domain/cometbft/{status,json-rpc,debug}` endpoints, the
+      `splice_sv_cometbft_*` metrics and the CometBFT debug tab in the SV UI.
+
   - Helm charts and Docker images
 
     - Removed the remaining CometBFT support including the cometbft helm

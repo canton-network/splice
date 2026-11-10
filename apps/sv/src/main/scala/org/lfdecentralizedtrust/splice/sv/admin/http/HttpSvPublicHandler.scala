@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.sv.admin.http
 
 import cats.data.{EitherT, OptionT}
-import cats.syntax.applicative.*
 import cats.syntax.option.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -40,7 +39,6 @@ import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStoreWithInge
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
@@ -378,59 +376,6 @@ class HttpSvPublicHandler(
     }
   }
 
-  /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
-    *
-    * Protection: Endpoint is protected by IP allowlisting
-    */
-  override def getCometBftNodeStatus(
-      respond: r0.GetCometBftNodeStatusResponse.type
-  )()(extracted: TraceContext): Future[
-    r0.GetCometBftNodeStatusResponse
-  ] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.getCometBftNodeStatus") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) {
-        _.nodeStatus()
-          .map(status =>
-            definitions.CometBftNodeStatusOrErrorResponse(
-              definitions.CometBftNodeStatusResponse(
-                status.nodeInfo.id,
-                status.syncInfo.catchingUp,
-                BigDecimal(status.validatorInfo.votingPower),
-              )
-            )
-          )
-      }
-    }
-  }
-
-  /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
-    *
-    * Protection: Endpoint is protected by IP allowlisting
-    */
-  override def cometBftJsonRpcRequest(
-      respond: r0.CometBftJsonRpcRequestResponse.type
-  )(
-      body: definitions.CometBftJsonRpcRequest
-  )(extracted: TraceContext): Future[r0.CometBftJsonRpcRequestResponse] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.cometBftJsonRpcRequest") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) { client =>
-        client
-          .jsonRpcCall(body.id, body.method.value, body.params.getOrElse(Map.empty))
-          .map(res =>
-            r0.CometBftJsonRpcRequestResponse.OK(
-              definitions.CometBftJsonRpcResponse(
-                res.jsonrpc,
-                res.id,
-                res.result,
-              )
-            )
-          )
-      }
-    }
-  }
-
   /** Intended use: Used by other SV operators
     *
     * Protection: Endpoint is protected by IP allowlisting
@@ -543,22 +488,6 @@ class HttpSvPublicHandler(
       }
     }
   }
-
-  private def withClientOrNotFound[T](
-      notFound: definitions.ErrorResponse => T
-  )(call: CometBftClient => Future[T])(implicit tc: TraceContext) =
-    synchronizerNodeService
-      .activeSynchronizerNode()
-      .flatMap { node =>
-        node.cometbftNode
-          .map(_.cometBftClient)
-          .fold {
-            notFound(definitions.ErrorResponse("CometBFT is not configured."))
-              .pure[Future]
-          } {
-            call
-          }
-      }
 
   private def isOnboardingConfirmed(party: PartyId)(implicit tc: TraceContext): Future[Boolean] = {
     // wait for a bit as it is possible the store ingression is not complete
