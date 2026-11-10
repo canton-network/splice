@@ -1,5 +1,22 @@
 # CI triage state
 
+## Triage 2026-11-09 to 2026-11-10
+
+stephencompall-DA, explicit lists 11287-11345 plus a re-check of older inbox items. Packets in `evidence/`, rows in
+`evidence/INDEX.tsv`, families AJ-AT (no AO) in `known-families.md`. All comments, retitles and duplicate closes are posted; Status changes stay with the user.
+The sandbox posts with nix gh 2.101 (`direnv exec <repo root>`); the system gh 2.46 lacks `--duplicate-of`.
+Rule: parent comments stay brief, shape details go into the closing comments of the duplicates.
+
+Open as of 2026-11-10:
+- 11255 (rautenrieth-da): splice#8356 covers the lost-verdict and breaker shapes only, not rejected send; 7 of the 15
+  refs of 2026-11-10 (after the Canton bump to 3.7.3-snapshot.20261109, #8381) are 11255.
+- Fix PRs open (splice): 11333 #8411, 11313 #8412, 11226 #8413, 11301 #8414, 11238 #8416, 11186 #8417, 11187 #8418,
+  11140 #8419, 11147 #8420, 11305 #8421, 10893 #8422, 11192 #8423, 10912 #8424, 11211 #8425 (ignore pattern).
+- Test fixes proposed, not written: 11303 (AK), 11299 (AM).
+- 10332 (AN): splice fix, default `enableBftSequencer` to true in node-backup.sh:288 and utils.source:119.
+- Infra, need owners: 11233 (splice#8310 incomplete), 11170 (scratchnet reset ordering), 11194 (AQ), 11286.
+- 10918 (AT): stall origin unknown, Infrequent from 2026-11-12 if no recurrence; 11105 Infrequent from 2026-11-13.
+
 ## Handover 2026-11-09 afternoon
 
 Round `rounds/2026-11-09T084535Z-nightly/` done except 11286 (log request). Live state checked 2026-11-09 ~13:30 UTC.
