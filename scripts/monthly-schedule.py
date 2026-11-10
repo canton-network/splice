@@ -15,7 +15,8 @@ from typing import Any, Optional
 
 DEFAULT_GROUP_NAME = "Upcoming"
 
-DATE_COLUMN_NAME = "Date/Time US EST"
+DATE_COLUMN_NAME = "Date"
+TIME_COLUMN_NAME = "Time US Eastern"
 STATUS_COLUMN_NAME = "Submission Status"
 NETWORK_COLUMN_NAME = "Network"
 ACTIVITY_COLUMN_NAME = "Type of Activity"
@@ -24,6 +25,9 @@ DEPENDENCY_COLUMN_NAME = "Dependent On"
 DEV_COLUMN_NAME = "Dev"
 
 INITIAL_STATUS = "To Be Confirmed"
+
+# "Time US Eastern" label for events that have a time of day.
+EVENT_TIME_LABEL = "09:00 am"
 
 NETWORK_DEVNET = "DevNet"
 NETWORK_TESTNET = "TestNet"
@@ -46,7 +50,7 @@ class ScheduledEvent:
     network: str
     activity: str
     minor_version: str
-    time_utc: Optional[str] = None
+    timed: bool = False
     depends_on: Optional[str] = None
     dev: bool = False
 
@@ -339,6 +343,8 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
 
     date_col = get_column(board, DATE_COLUMN_NAME)
 
+    time_col = get_column(board, TIME_COLUMN_NAME)
+
     status_col = get_column(board, STATUS_COLUMN_NAME)
 
     network_col = get_column(board, NETWORK_COLUMN_NAME)
@@ -353,6 +359,8 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
 
     ensure_column_type(date_col, {"date"})
 
+    ensure_column_type(time_col, {"dropdown"})
+
     ensure_column_type(status_col, {"status", "color"})
 
     ensure_column_type(network_col, {"status", "color", "dropdown", "text"})
@@ -366,6 +374,8 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
     ensure_column_type(dev_col, {"checkbox"})
 
     require_label(status_col, INITIAL_STATUS)
+
+    require_label(time_col, EVENT_TIME_LABEL)
 
     for label in (NETWORK_DEVNET, NETWORK_TESTNET, NETWORK_MAINNET):
         require_label(network_col, label)
@@ -394,16 +404,8 @@ def choice_value(column: dict[str, Any], label: str | bool) -> dict[str, Any] | 
     raise RuntimeError(f"Unsupported choice column type {column_type!r} for {column['title']!r}")
 
 
-def date_value(event_date: datetime.date, time_utc: Optional[str]) -> dict[str, Any]:
-    value = {"date": event_date.isoformat()}
-
-    if time_utc is not None:
-        if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_utc) is None:
-            raise ValueError(f"Invalid UTC time {time_utc!r}; expected HH:MM")
-
-        value["time"] = f"{time_utc}:00"
-
-    return value
+def date_value(event_date: datetime.date) -> dict[str, Any]:
+    return {"date": event_date.isoformat()}
 
 
 def build_column_values(
@@ -420,12 +422,17 @@ def build_column_values(
     dev_col = get_column(board, DEV_COLUMN_NAME)
 
     values = {
-        str(date_col["id"]): date_value(event.date, event.time_utc),
+        str(date_col["id"]): date_value(event.date),
         str(network_col["id"]): choice_value(network_col, event.network),
         str(activity_col["id"]): choice_value(activity_col, event.activity),
         str(version_col["id"]): choice_value(version_col, event.minor_version),
         str(dev_col["id"]): choice_value(dev_col, event.dev),
     }
+
+    if event.timed:
+        time_col = get_column(board, TIME_COLUMN_NAME)
+
+        values[str(time_col["id"])] = choice_value(time_col, EVENT_TIME_LABEL)
 
     if include_submission_status:
         status_col = get_column(board, STATUS_COLUMN_NAME)
@@ -570,8 +577,8 @@ def update_item(
 def describe_event(event: ScheduledEvent) -> str:
     when = event.date.isoformat()
 
-    if event.time_utc:
-        when += f" {event.time_utc} UTC"
+    if event.timed:
+        when += f" {EVENT_TIME_LABEL} ET"
 
     return f"{when} | {event.network} | {event.activity} | {event.minor_version}" + (" (Dev)" if event.dev else "")
 
@@ -727,7 +734,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=str(spec["daml_title"]),
                     date=schedule_date(month, "tuesday", int(spec["daml_week"])),
-                    time_utc="12:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_DAML),
                     minor_version=(version),
@@ -735,7 +742,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=freeze_title,
                     date=schedule_date(month, str(spec["freeze_day"]), int(spec["freeze_week"])),
-                    time_utc="13:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_LSU),
                     minor_version=(version),
@@ -743,7 +750,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=lsu_title,
                     date=lsu_date,
-                    time_utc="13:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_LSU),
                     minor_version=(version),
@@ -752,7 +759,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=str(spec["config_title"]),
                     date=schedule_date(month, "tuesday", int(spec["config_week"])),
-                    time_utc="12:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_CONFIG),
                     minor_version=(version),
