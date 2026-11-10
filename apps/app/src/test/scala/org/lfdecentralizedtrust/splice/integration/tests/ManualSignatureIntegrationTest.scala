@@ -83,10 +83,10 @@ class ManualSignatureIntegrationTest
         initDsoWithSv1Only()
       }
       clue("Alice validator starts.") {
-        aliceValidatorBackend.startSync()
+        aliceValidatorBackend.start()
       }
 
-      eventuallySucceeds(40.seconds) {
+      eventuallySucceeds(90.seconds) {
         val synchronizerId =
           aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
             aliceValidatorBackend.config.domains.global.alias
