@@ -975,7 +975,7 @@ const AmendFeatureAppSection = ({ updates }: AmendFeatureAppSectionProps) => {
             />
           )}
           <DetailItem
-            label="Ops Parties Changes"
+            label="Changes to App Operations Parties"
             value={
               <OpsPartiesDiff
                 added={update.opsAdded}

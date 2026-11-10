@@ -263,7 +263,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             )}
             <ProposalReviewField
               id="amendOpsParties"
-              label="Ops Parties Changes"
+              label="Changes to App Operations Parties"
               value={
                 <OpsPartiesDiff
                   added={props.opsAdded}

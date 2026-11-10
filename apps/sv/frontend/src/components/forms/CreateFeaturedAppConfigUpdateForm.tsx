@@ -243,7 +243,7 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
             <form.AppField name="appKind">
               {field => (
                 <field.SelectField
-                  title="App Kind"
+                  title="App Category"
                   id={`${idPrefix}-appKind`}
                   options={appKindSelectOptions()}
                 />
@@ -276,7 +276,7 @@ export const CreateFeaturedAppConfigUpdateForm: React.FC = () => {
               {field => (
                 <OpsPartiesField
                   id={`${idPrefix}-opsParties`}
-                  title="Ops Parties"
+                  title="App Operations Parties"
                   subtitle="Optional. Parties whose submissions count as this app's activity."
                   value={field.state.value}
                   onChange={field.handleChange}

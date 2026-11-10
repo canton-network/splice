@@ -465,7 +465,7 @@ describe('Proposal Details Content', () => {
 
   test('should render amend featured app config proposal details', () => {
     const amendDetails = {
-      actionName: 'Update Featured Application Metadata (since Splice 0.10.0)',
+      actionName: 'Update Featured Application Metadata (use with Splice 0.10.0 and later)',
       action: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
       proposal: {
         updates: [
@@ -474,7 +474,7 @@ describe('Proposal Details Content', () => {
             scalarChanges: [
               {
                 fieldName: 'appKind',
-                label: 'App Kind',
+                label: 'App Category',
                 currentValue: 'Default (unset)',
                 newValue: 'Asset Moving',
               },
@@ -500,7 +500,7 @@ describe('Proposal Details Content', () => {
 
     const action = screen.getByTestId('proposal-details-action-value');
     expect(action.textContent).toMatch(
-      'Update Featured Application Metadata (since Splice 0.10.0)'
+      'Update Featured Application Metadata (use with Splice 0.10.0 and later)'
     );
 
     const amendSection = screen.getByTestId('proposal-details-amend-feature-app-section');
@@ -510,7 +510,7 @@ describe('Proposal Details Content', () => {
     expect(provider.textContent).toMatch('provider::1220aaaa');
 
     // scalar change (appKind) renders via ConfigValuesChanges
-    expect(screen.getByTestId('config-change-field-label').textContent).toBe('App Kind');
+    expect(screen.getByTestId('config-change-field-label').textContent).toBe('App Category');
     expect(screen.getByTestId('config-change-new-value').textContent).toMatch('Asset Moving');
 
     // opsParties diff: one added, one removed

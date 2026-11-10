@@ -60,7 +60,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
   SRARC_CreateFeaturedAppConfigUpdateInstruction:
-    'Update Featured Application Metadata (since Splice 0.10.0)',
+    'Update Featured Application Metadata (use with Splice 0.10.0 and later)',
 });
 
 export const createProposalActions: {
@@ -72,11 +72,11 @@ export const createProposalActions: {
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
   // TODO(#8058): remove this legacy option in Splice 0.11.0
   {
-    name: 'Update Featured Application Metadata (before Splice 0.10.0)',
+    name: 'Update Featured Application Metadata (use before Splice 0.10.0)',
     value: 'SRARC_UpdateFeaturedAppRight',
   },
   {
-    name: 'Update Featured Application Metadata (since Splice 0.10.0)',
+    name: 'Update Featured Application Metadata (use with Splice 0.10.0 and later)',
     value: 'SRARC_CreateFeaturedAppConfigUpdateInstruction',
   },
   {
@@ -482,7 +482,7 @@ export function buildFeaturedAppConfigUpdateEntry(
   if (baseKind !== newKind) {
     scalarChanges.push({
       fieldName: 'appKind',
-      label: 'App Kind',
+      label: 'App Category',
       currentValue: appKindLabel(baseKind),
       newValue: appKindLabel(newKind),
     });
@@ -493,7 +493,7 @@ export function buildFeaturedAppConfigUpdateEntry(
   if (baseWeight !== newWeight) {
     scalarChanges.push({
       fieldName: 'activityWeight',
-      label: 'Activity Weight',
+      label: 'App Composition Weight',
       currentValue: baseWeight || DEFAULT_APP_ACTIVITY_WEIGHT,
       newValue: newWeight || DEFAULT_APP_ACTIVITY_WEIGHT,
     });
