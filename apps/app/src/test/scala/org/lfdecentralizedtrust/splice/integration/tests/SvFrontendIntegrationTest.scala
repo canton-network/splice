@@ -802,63 +802,56 @@ class SvFrontendIntegrationTest
           )
         }
 
-        clue("Pausing vote request expiration automation") {
-          // Any SV can close the expired request, so pause the trigger on all of them.
-          Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach(
-            _.dsoDelegateBasedAutomation
-              .trigger[CloseVoteRequestTrigger]
-              .pause()
-              .futureValue
+        // Any SV can close the expired request, so pause the trigger on all of them. The trigger is
+        // resumed even if a step below fails, since the environment is shared with other test cases.
+        val rejectedProposalCid = TriggerTestUtil.setTriggersWithin(
+          triggersToPauseAtStart = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(
+            _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger]
           )
-        }
+        ) {
+          actAndCheck(
+            "sv1 creates a proposal with a short expiration time",
+            createShortLivedSetConfigProposal(),
+          )(
+            "the short-lived proposal exists",
+            _ => newVoteRequestWithReason(expiringProposalReason),
+          )
 
-        actAndCheck(
-          "sv1 creates a proposal with a short expiration time",
-          createShortLivedSetConfigProposal(),
-        )(
-          "the short-lived proposal exists",
-          _ => newVoteRequestWithReason(expiringProposalReason),
-        )
-
-        val rejectedProposalCid = clue("sv1 creates a proposal via the UI") {
-          withFrontEnd("sv1") { implicit webDriver =>
-            loginToGovernance(sv1UIPort, sv1Backend.config.ledgerApiUser)
-            selectActionAndNavigateToForm("SRARC_SetConfig", "set-dso-config-rules")
-            fillAndSubmitProposalForm(
-              "set-dso-config-rules",
-              rejectedProposalReason,
-              requestReasonUrl,
-              effectiveAtThreshold = true,
-              { implicit webDriver =>
-                eventually() {
-                  inside(find(testId("config-field-numMemberTrafficContractsThreshold"))) {
-                    case Some(element) => element.underlying.sendKeys("42")
+          val proposalCid = clue("sv1 creates a proposal via the UI") {
+            withFrontEnd("sv1") { implicit webDriver =>
+              loginToGovernance(sv1UIPort, sv1Backend.config.ledgerApiUser)
+              selectActionAndNavigateToForm("SRARC_SetConfig", "set-dso-config-rules")
+              fillAndSubmitProposalForm(
+                "set-dso-config-rules",
+                rejectedProposalReason,
+                requestReasonUrl,
+                effectiveAtThreshold = true,
+                { implicit webDriver =>
+                  eventually() {
+                    inside(find(testId("config-field-numMemberTrafficContractsThreshold"))) {
+                      case Some(element) => element.underlying.sendKeys("42")
+                    }
                   }
-                }
-              },
-            )
+                },
+              )
+            }
+            newVoteRequestWithReason(rejectedProposalReason)
           }
-          newVoteRequestWithReason(rejectedProposalReason)
-        }
 
-        withFrontEnd("sv1") { implicit webDriver =>
-          clue("sv1 sees both proposals in flight and neither in the vote history") {
-            go to s"http://localhost:$sv1UIPort/governance"
-            eventually() {
-              val inflight = rowDescriptions("inflight-proposals")
-              inflight should contain(expiringProposalReason)
-              inflight should contain(rejectedProposalReason)
-              val history = rowDescriptions("vote-history")
-              history should not contain expiringProposalReason
-              history should not contain rejectedProposalReason
+          withFrontEnd("sv1") { implicit webDriver =>
+            clue("sv1 sees both proposals in flight and neither in the vote history") {
+              go to s"http://localhost:$sv1UIPort/governance"
+              eventually() {
+                val inflight = rowDescriptions("inflight-proposals")
+                inflight should contain(expiringProposalReason)
+                inflight should contain(rejectedProposalReason)
+                val history = rowDescriptions("vote-history")
+                history should not contain expiringProposalReason
+                history should not contain rejectedProposalReason
+              }
             }
           }
-        }
-
-        clue("Resuming vote request expiration automation") {
-          Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach(
-            _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].resume()
-          )
+          proposalCid
         }
 
         withFrontEnd("sv2") { implicit webDriver =>
