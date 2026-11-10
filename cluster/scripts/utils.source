@@ -116,7 +116,7 @@ function canton_bft_db_enabled() {
       + (.synchronizerMigration.archived // []))
     | map(select(. != null and .id == ${migration_id}))
     | .[0]
-    | ((.sequencer.enableBftSequencer // false) and (.sequencer.dedicatedBftSequencerDb // true))
+    | (.sequencer.dedicatedBftSequencerDb // true)
   "
 }
 
