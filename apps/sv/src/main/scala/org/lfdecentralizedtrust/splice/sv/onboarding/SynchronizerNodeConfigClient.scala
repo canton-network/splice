@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.sv.onboarding
 
 import cats.data.OptionT
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.drivers.cometbft.SvNodeConfig
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -14,7 +15,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.{
   SequencingKeyConfig,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
+import org.lfdecentralizedtrust.splice.environment.{PackageVersionSupport, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.store.DsoRulesStore
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
@@ -79,20 +81,29 @@ trait SynchronizerNodeConfigClient {
       newSvNodeConfig: SynchronizerNodeConfig,
       store: SvDsoStore,
       connection: SpliceLedgerConnection,
+      packageVersionSupport: PackageVersionSupport,
+      now: CantonTimestamp,
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Unit] = {
     val synchronizerId = rulesAndState.dsoRules.domain
-    val cmd = rulesAndState.dsoRules.exercise(
-      _.exerciseDsoRules_SetSynchronizerNodeConfig(
-        store.key.svParty.toProtoPrimitive,
-        synchronizerId.toProtoPrimitive,
-        newSvNodeConfig,
-        rulesAndState.svNodeState.contractId,
-      )
-    )
     for {
+      otherSvNodeStateCids <- SynchronizerNodeConfigClient.otherSvNodeStateCids(
+        store,
+        store.key.svParty,
+        packageVersionSupport,
+        now,
+      )
+      cmd = rulesAndState.dsoRules.exercise(
+        _.exerciseDsoRules_SetSynchronizerNodeConfig(
+          store.key.svParty.toProtoPrimitive,
+          synchronizerId.toProtoPrimitive,
+          newSvNodeConfig,
+          rulesAndState.svNodeState.contractId,
+          otherSvNodeStateCids,
+        )
+      )
       _ <- connection
         .submit(Seq(store.key.svParty), Seq(store.key.dsoParty), cmd)
         .noDedup
@@ -100,4 +111,31 @@ trait SynchronizerNodeConfigClient {
     } yield ()
   }
 
+}
+
+object SynchronizerNodeConfigClient {
+
+  def otherSvNodeStateCids(
+      store: SvDsoStore,
+      svParty: PartyId,
+      packageVersionSupport: PackageVersionSupport,
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[java.util.Optional[java.util.Map[String, SvNodeState.ContractId]]] =
+    packageVersionSupport
+      .supportsSynchronizerNodeIdClaimsCheck(Seq(store.key.dsoParty), now)
+      .flatMap { featureSupport =>
+        if (featureSupport.supported)
+          store.getDsoRulesWithSvNodeStates().map { rulesAndStates =>
+            Some(
+              rulesAndStates.svNodeStates.collect {
+                case (otherSvParty, svNodeState) if otherSvParty != svParty =>
+                  otherSvParty.toProtoPrimitive -> svNodeState.contractId
+              }.asJava
+            ).toJava
+          }
+        else Future.successful(None.toJava)
+      }
 }

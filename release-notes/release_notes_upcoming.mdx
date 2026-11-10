@@ -1,6 +1,28 @@
 ## Upcoming for next patch release:
 
 {/* Add all release notes in this section */}
+  - Summary of Breaking Changes:
+
+    | Breaking API Changes | Protocol Changes  | Daml Model Changes |
+    | :------------------- | :---------------- | :----------------- |
+    | no                   | no                | yes                |
+
+    Details:
+
+    - Breaking API Changes:
+
+    - Breaking Deployment Changes:
+
+    - Protocol Changes:
+
+    - Daml Model Changes:
+
+        - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
+          that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
+          SV apps pass the node states once this version is vetted.
+
+          | dsoGovernance | 0.1.32 |
+
 
   - Scan App
 

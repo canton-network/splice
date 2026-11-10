@@ -19,7 +19,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   SequencerIdentityConfig,
   SynchronizerNodeConfig,
 }
-import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, SpliceLedgerConnection}
+import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
+  RetryFor,
+  RetryProvider,
+  SpliceLedgerConnection,
+}
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
 import org.lfdecentralizedtrust.splice.store.DsoRulesStore.DsoRulesWithSvNodeState
 import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
@@ -43,6 +48,7 @@ class SynchronizerNodeReconciler(
     retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
     scanConfig: SvScanConfig,
+    packageVersionSupport: PackageVersionSupport,
 ) extends NamedLogging {
 
   private val svParty = dsoStore.key.svParty
@@ -106,18 +112,27 @@ class SynchronizerNodeReconciler(
               nodeConfig: SynchronizerNodeConfig,
           )(implicit tc: TraceContext) = {
             logger.info(show"Setting domain node config to $nodeConfig")
-            val cmd = rulesAndState.dsoRules.exercise(
-              _.exerciseDsoRules_SetSynchronizerNodeConfig(
-                svParty.toProtoPrimitive,
-                synchronizerId.toProtoPrimitive,
-                nodeConfig,
-                rulesAndState.svNodeState.contractId,
+            for {
+              otherSvNodeStateCids <- SynchronizerNodeConfigClient.otherSvNodeStateCids(
+                dsoStore,
+                svParty,
+                packageVersionSupport,
+                clock.now,
               )
-            )
-            connection
-              .submit(Seq(svParty), Seq(dsoParty), cmd)
-              .noDedup
-              .yieldResult()
+              cmd = rulesAndState.dsoRules.exercise(
+                _.exerciseDsoRules_SetSynchronizerNodeConfig(
+                  svParty.toProtoPrimitive,
+                  synchronizerId.toProtoPrimitive,
+                  nodeConfig,
+                  rulesAndState.svNodeState.contractId,
+                  otherSvNodeStateCids,
+                )
+              )
+              _ <- connection
+                .submit(Seq(svParty), Seq(dsoParty), cmd)
+                .noDedup
+                .yieldResult()
+            } yield ()
           }
 
           val sequencerAvailableAfter: Option[Instant] = localSequencerConfig.flatMap { _ =>

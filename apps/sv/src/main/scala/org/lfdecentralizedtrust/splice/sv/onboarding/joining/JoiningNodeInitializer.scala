@@ -299,6 +299,7 @@ class JoiningNodeInitializer(
               retryProvider,
               loggerFactory,
               config.scan,
+              packageVersionSupport,
             )
             dsoAutomation <-
               newSvDsoAutomationService(
@@ -937,6 +938,7 @@ class JoiningNodeInitializer(
                   retryProvider,
                   loggerFactory,
                   config.scan,
+                  packageVersionSupport,
                 )
                 dsoAutomation <- newSvDsoAutomationService(
                   svStore,

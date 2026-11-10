@@ -136,6 +136,26 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  /** Whether DsoRules_SetSynchronizerNodeConfig takes the node states of the other SVs to check
+    * that an SV does not claim the sequencer or mediator id of another SV.
+    */
+  def supportsSynchronizerNodeIdClaimsCheck(
+      dsoGovernanceParties: Seq[PartyId],
+      now: CantonTimestamp,
+  )(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      Seq(
+        PackageIdResolver.Package.SpliceDsoGovernance -> dsoGovernanceParties
+      ),
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_32,
+      ignoreRedundantCheck = false,
+    )
+  }
+
   // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
 
   def supportsExpireTransferInstructions(
