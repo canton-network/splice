@@ -83,10 +83,6 @@ class BftScanConnectionIntegrationTest
       {
         aliceValidatorBackend.startSync()
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
-        // Disable suppressErrors to avoid nested loggerFactory suppression calls
-        eventuallySucceeds(suppressErrors = false) {
-          aliceAnsExternalClient.listAnsEntries()
-        }
       },
       forAll(_)(
         _.message should (include(
@@ -99,8 +95,15 @@ class BftScanConnectionIntegrationTest
     )
 
     // aliceValidator keeps retrying the stopped sv2Scan every 60 s, so stop it while the
-    // resulting warnings are still suppressed instead of leaving that to the teardown.
-    loggerFactory.suppressWarningsAndErrors(aliceValidatorBackend.stop())
+    // resulting warnings are still suppressed instead of leaving that to the teardown. The wallet
+    // of the onboarded user may not be usable immediately, so retry the call inside the same
+    // suppression (disabling suppressErrors of eventuallySucceeds to avoid nesting).
+    loggerFactory.suppressWarningsAndErrors {
+      eventuallySucceeds(suppressErrors = false) {
+        aliceAnsExternalClient.listAnsEntries()
+      }
+      aliceValidatorBackend.stop()
+    }
   }
 
   "agree on failed HttpCommandException" in { implicit env =>
