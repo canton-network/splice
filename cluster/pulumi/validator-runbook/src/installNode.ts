@@ -290,6 +290,11 @@ async function installValidator(
     additionalEnvVars: validatorConfig.validatorApp?.additionalEnvVars,
     additionalJvmOptions: validatorConfig.validatorApp?.additionalJvmOptions,
     resources: validatorConfig.validatorApp?.resources,
+    participantClient: {
+      adminApi: {
+        disableAuth: validatorConfig.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   const validatorValuesWithOnboardingOverride = onboardingSecret
