@@ -141,6 +141,21 @@ class AcsSnapshotStore(
       .value
   }
 
+  def lookupPerTableSnapshotsBefore(
+      before: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Seq[PerTableAcsSnapshot]] =
+    storage
+      .query(
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
+            from acs_snapshot
+            where snapshot_record_time < $before
+              and history_id = $historyId
+              and creates_table_name is not null
+            order by snapshot_record_time""".as[AcsSnapshot],
+        "lookupPerTableSnapshotsBefore",
+      )
+      .map(_.collect { case snapshot: PerTableAcsSnapshot => snapshot })
+
   /** *
     * TESTING ONLY
     * Creates a new ACS snapshot at time `until`.
@@ -215,7 +230,7 @@ class AcsSnapshotStore(
       case _: PerTableAcsSnapshot =>
         for {
           tableNames <-
-            sql"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime} returning creates_table_name, stakeholders_table_name"""
+            sql"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime} and history_id = $historyId returning creates_table_name, stakeholders_table_name"""
               .as[(String, String)]
               .headOption
           _ <- tableNames match {
