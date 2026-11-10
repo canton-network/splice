@@ -83,7 +83,7 @@ class ManualSignatureIntegrationTest
         initDsoWithSv1Only()
       }
       clue("Alice validator starts.") {
-        aliceValidatorBackend.start()
+        aliceValidatorBackend.startSync()
       }
 
       eventuallySucceeds(40.seconds) {
