@@ -59,6 +59,26 @@ class ValidatorLicenseMetadataTimeBasedIntegrationTest
       BuildInfo.compiledVersion,
       "alice@example.com",
     )
+    // Let the faucet trigger claim the coupons for the current round first, so that the
+    // metadata update below does not have to compete with a series of faucet claims for the
+    // license (as in the next test case).
+    advanceTimeForRewardAutomationToRunForCurrentRound
+    clue("faucet coupons for the current round get claimed") {
+      eventually() {
+        val licenseAfterClaim =
+          aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+            .awaitJava(ValidatorLicense.COMPANION)(aliceValidatorBackend.getValidatorPartyId())
+        licenseAfterClaim.data.faucetState.toScala.value.lastReceivedFor.number shouldBe sv1ScanBackend
+          .getOpenAndIssuingMiningRounds()
+          ._1
+          .filter(
+            _.payload.opensAt.isBefore(getLedgerTime.toInstant)
+          )
+          .map(_.payload.round.number)
+          .maxOption
+          .value
+      }
+    }
     aliceValidatorBackend.stop()
     aliceValidatorLocalBackend.start()
     actAndCheck(
