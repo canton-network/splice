@@ -49,7 +49,14 @@ export const configSchema = z
           parties: z.array(z.number().int().min(0)).max(10).optional(),
         }),
       )
-      .default([{}]),
+      // One right of each kind: user 0 gets a default (basic) right, user 1 an asset-moving right
+      // with user 3 as an ops party, and user 2 an asset right with a non-default weight.
+      // Keep in sync with the default in cluster/pulumi/common/src/config/loadTesterConfig.ts
+      .default([
+        {},
+        { kind: 'asset_moving', weight: 2, parties: [3] },
+        { kind: 'asset', weight: 0.5 },
+      ]),
     validators: z.array(validatorSchema).min(1),
     test: z.object({
       duration: z.string().min(1),

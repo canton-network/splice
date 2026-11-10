@@ -36,7 +36,12 @@ export const LoadTesterConfigSchema = z.object({
             parties: z.array(z.number()).optional(),
           })
         )
-        .default([{}]),
+        // Keep in sync with the default in load-tester/src/settings.ts
+        .default([
+          {},
+          { kind: 'asset_moving', weight: 2, parties: [3] },
+          { kind: 'asset', weight: 0.5 },
+        ]),
       resources: K8sResourceSchema.optional(),
     })
     .optional(),
