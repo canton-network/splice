@@ -83,7 +83,8 @@ class BftScanConnectionIntegrationTest
       {
         aliceValidatorBackend.startSync()
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
-        eventuallySucceeds() {
+        // Disable suppressErrors to avoid nested loggerFactory suppression calls
+        eventuallySucceeds(suppressErrors = false) {
           aliceAnsExternalClient.listAnsEntries()
         }
       },
