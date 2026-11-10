@@ -804,7 +804,18 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
 
     events.append(
         ScheduledEvent(
-            title=(f"Splice Upgrades to new Canton minor release Line (if applicable)"),
+            title=(f"CILR LSU for Splice {version}.0"),
+            date=schedule_date(month, "monday", -1),
+            network="",
+            activity=(ACTIVITY_RELEASE),
+            minor_version=(version),
+            dev=True,
+        )
+    )
+
+    events.append(
+        ScheduledEvent(
+            title=(f"Splice Upgrades to new Canton minor release Line for Splice {version}.0 (if applicable)"),
             date=schedule_date(month, "wednesday", -3),
             network="",
             activity=(ACTIVITY_RELEASE),
