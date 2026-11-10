@@ -27,10 +27,16 @@ export const LoadTesterConfigSchema = z.object({
       maxVUs: z.number().optional(),
       adaptiveScenario: LoadTesterAdaptiveScenarioConfigSchema.prefault({}),
       usersPerValidator: z.number().default(10),
-      // Number of users per validator with a basic featured app right
-      featuredUsersPerValidator: z.number().default(1),
-      assetMovingFeaturedUsersPerValidator: z.number().default(1),
-      assetFeaturedUsersPerValidator: z.number().default(1),
+      // Featured app rights of the users of each validator, see load-tester/src/settings.ts
+      featuredAppRights: z
+        .array(
+          z.object({
+            kind: z.enum(['basic', 'asset_moving', 'asset']).optional(),
+            weight: z.number().optional(),
+            parties: z.array(z.number()).optional(),
+          })
+        )
+        .default([{}]),
       resources: K8sResourceSchema.optional(),
     })
     .optional(),

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from 'zod';
 
+import { featuredAppKind } from './client/validator/models';
+
 const oAuthSchema = z.object({
   kind: z.literal('oauth'),
   oauthDomain: z.string().min(1),
@@ -36,13 +38,18 @@ export const configSchema = z
       .boolean()
       .or(z.enum(['true', 'false', '1', '0', '']).transform(val => val === 'true' || val === '1')),
     usersPerValidator: z.number().min(1),
-    // Number of users per validator with a featured app right of kind basic.
-    // The name predates the other kinds and is kept for backwards compatibility.
-    featuredUsersPerValidator: z.number().min(0),
-    // Number of users per validator with a featured app right of kind asset_moving
-    assetMovingFeaturedUsersPerValidator: z.number().min(0).default(0),
-    // Number of users per validator with a featured app right of kind asset
-    assetFeaturedUsersPerValidator: z.number().min(0).default(0),
+    // Featured app rights of the users of each validator: user i gets the right in entry i,
+    // users without an entry are not featured. Unset fields are left to the Daml defaults.
+    featuredAppRights: z
+      .array(
+        z.object({
+          kind: featuredAppKind.optional(),
+          weight: z.number().min(0).optional(),
+          // Ops parties, as indices of other users of the same validator
+          parties: z.array(z.number().int().min(0)).max(10).optional(),
+        }),
+      )
+      .default([{}]),
     validators: z.array(validatorSchema).min(1),
     test: z.object({
       duration: z.string().min(1),
@@ -55,14 +62,25 @@ export const configSchema = z
       maxVUs: z.number(),
     }),
   })
-  .refine(
-    c =>
-      c.featuredUsersPerValidator +
-        c.assetMovingFeaturedUsersPerValidator +
-        c.assetFeaturedUsersPerValidator <=
-      c.usersPerValidator,
-    { message: 'The total number of featured users per validator exceeds usersPerValidator' },
-  );
+  .superRefine((c, ctx) => {
+    if (c.featuredAppRights.length > c.usersPerValidator) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'featuredAppRights has more entries than usersPerValidator',
+      });
+    }
+    c.featuredAppRights.forEach(({ parties = [] }, i) => {
+      if (
+        new Set(parties).size !== parties.length ||
+        parties.some(p => p === i || p >= c.usersPerValidator)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `featuredAppRights[${i}].parties must be distinct indices of other users`,
+        });
+      }
+    });
+  });
 
 export type Config = z.infer<typeof configSchema>;
 

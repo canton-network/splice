@@ -48,8 +48,35 @@ export const userStatusResponse = z.object({
   user_onboarded: z.boolean(),
   user_wallet_installed: z.boolean(),
   has_featured_app_right: z.boolean(),
-  // Not returned by older validators
-  featured_app_kind: featuredAppKind.optional(),
 });
 
 export type UserStatusResponse = z.infer<typeof userStatusResponse>;
+
+// Only the fields we need of a Splice.Amulet:FeaturedAppRight contract, in the Daml JSON encoding.
+// Unset optional fields are null. Unknown values don't fail the decoding.
+export const lookupFeaturedAppRightResponse = z.object({
+  featured_app_right: z
+    .object({
+      payload: z.object({
+        appKind: z.string().nullish(),
+        activityWeight: z.string().nullish(),
+        opsParties: z.array(z.string()).nullish(),
+      }),
+    })
+    .optional(),
+});
+
+export type LookupFeaturedAppRightResponse = z.infer<typeof lookupFeaturedAppRightResponse>;
+
+export const damlFeaturedAppKinds: Record<FeaturedAppKind, string> = {
+  basic: 'FAK_Basic',
+  asset_moving: 'FAK_AssetMoving',
+  asset: 'FAK_Asset',
+};
+
+/** The wanted configuration of a featured app right, unset fields are left to the Daml defaults */
+export type FeaturedAppRightSpec = {
+  kind?: FeaturedAppKind;
+  weight?: number;
+  opsParties?: string[];
+};

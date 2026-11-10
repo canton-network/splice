@@ -1,8 +1,6 @@
 {
   "usersPerValidator": 10,
-  "featuredUsersPerValidator": 1,
-  "assetMovingFeaturedUsersPerValidator": 1,
-  "assetFeaturedUsersPerValidator": 1,
+  "featuredAppRights": [{}],
   "isDevNet": "$IS_DEVNET",
   "validators": [
     {
