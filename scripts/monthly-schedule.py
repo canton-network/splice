@@ -70,6 +70,12 @@ def parse_args() -> argparse.Namespace:
         help="Validate and show changes without modifying monday.com.",
     )
 
+    parser.add_argument(
+        "--dev-only",
+        action="store_true",
+        help="Only create/update dev events.",
+    )
+
     args = parser.parse_args()
 
     if re.fullmatch(r"\d+\.\d+", args.version) is None:
@@ -932,6 +938,9 @@ def main() -> None:
     if args.dry_run:
         print("DRY RUN — validating the board and showing changes only.")
 
+    if args.dev_only:
+        print("DEV ONLY — only dev events are created/updated.")
+
     board, group_id = preflight(token, board_id, group_name)
 
     print(f"Board name: {board.get('name', '')}")
@@ -939,6 +948,9 @@ def main() -> None:
     print("Preflight validation: OK")
 
     events = make_schedule(args.version, args.month)
+
+    if args.dev_only:
+        events = [event for event in events if event.dev]
 
     print(f"Schedule events: {len(events)}")
 
