@@ -12,7 +12,7 @@ import ProposalSearch from '../components/governance/ProposalSearch';
 import { Loading, useVotesHooks } from '@canton-network/splice-common-frontend';
 import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { useSvConfig } from '../utils';
+import { useDappModeConfig, useSvConfig } from '../utils';
 import { PageHeader } from '../components/ui';
 import {
   actionTagToTitle,
@@ -31,6 +31,7 @@ import { usePaginatedVoteRequestResultsByContractId } from '../hooks/useListVote
 
 export const Governance: React.FC = () => {
   const svConfig = useSvConfig();
+  const dappMode = useDappModeConfig();
   const amuletName = svConfig.spliceInstanceNames.amuletName;
   const [searchParams] = useSearchParams();
   const initialSearchQuery = searchParams.get('q') ?? '';
@@ -209,14 +210,16 @@ export const Governance: React.FC = () => {
       <PageHeader
         title="Governance"
         actionElement={
-          <Button
-            id="initiate-proposal-button"
-            variant="pill"
-            component={RouterLink}
-            to={`/governance/proposals/create`}
-          >
-            Initiate Proposal
-          </Button>
+          dappMode ? undefined : (
+            <Button
+              id="initiate-proposal-button"
+              variant="pill"
+              component={RouterLink}
+              to={`/governance/proposals/create`}
+            >
+              Initiate Proposal
+            </Button>
+          )
         }
         data-testid="governance-page-header"
       />

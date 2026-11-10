@@ -1,13 +1,13 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as React from 'react';
-import { Loading, useUserState, useVotesHooks } from '@canton-network/splice-common-frontend';
+import { Loading, UserContext, useVotesHooks } from '@canton-network/splice-common-frontend';
 
-import { Box, Container, GlobalStyles } from '@mui/material';
+import { Alert, AlertTitle, Box, Container, GlobalStyles } from '@mui/material';
 import { useLocation } from 'react-router';
 
 import { useFeatureSupport } from '../contexts/SvContext';
-import { useSvConfig } from '../utils';
+import { useDappModeConfig, useSvConfig } from '../utils';
 import { partyIdScrollGlobalStyles } from './ui/identifierStyles';
 import PartyIdScrollTracks from './PartyIdScrollTracks';
 import SvNavigationShell from './layout/SvNavigationShell';
@@ -40,9 +40,18 @@ const contentShellSx = {
   width: '100%',
 };
 
+const pageSx = {
+  bgcolor: layoutTokens.page,
+  display: 'flex',
+  flexDirection: 'column' as const,
+  minHeight: '100vh',
+};
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const config = useSvConfig();
-  const { logout } = useUserState();
+  const dappMode = useDappModeConfig();
+  // undefined in dApp mode, which mounts no UserProvider
+  const logout = React.useContext(UserContext)?.logout;
   const location = useLocation();
   const featureSupport = useFeatureSupport();
 
@@ -54,33 +63,49 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     vr => vr.payload.votes.entriesArray().find(e => e[1].sv === svPartyId) === undefined
   );
 
+  // dApp mode has no auth flow that would surface a failing backend, so show Scan errors explicitly.
+  // react-query resets a query that never had data back to 'pending' on every poll refetch, so
+  // isError alone would flip back to the spinner; errorUpdateCount survives that reset. Checked
+  // before isLoading; once a refetch succeeds, data is defined and the shell renders.
+  const scanFailed =
+    dappMode &&
+    (featureSupport.isError ||
+      (featureSupport.errorUpdateCount > 0 && featureSupport.data === undefined));
+  if (scanFailed) {
+    return (
+      <Box sx={pageSx}>
+        <Alert severity="error" sx={{ m: PAGE_PX }}>
+          <AlertTitle>Cannot reach Scan</AlertTitle>
+          The SV UI could not load data from Scan at {dappMode.scanUrl}. Check that the URL is
+          correct and reachable from your browser.
+        </Alert>
+      </Box>
+    );
+  }
+
   if (featureSupport.isLoading) {
     return <Loading />;
   }
 
-  const navLinks: SvNavLinkItem[] = [
-    { name: 'Global Synchronizer Information', path: '/dso', alsoActiveFor: ['/'] },
-    {
-      name: 'Governance',
-      path: '/governance',
-      end: false,
-      badgeCount: actionsPending?.length,
-    },
-    { name: `${config.spliceInstanceNames.amuletName} Price`, path: '/amulet-price' },
-    { name: 'Validators', path: '/validator-onboarding' },
-  ];
+  const governanceLink: SvNavLinkItem = {
+    name: 'Governance',
+    path: '/governance',
+    end: false,
+    badgeCount: actionsPending?.length,
+  };
+  const navLinks: SvNavLinkItem[] = dappMode
+    ? [governanceLink]
+    : [
+        { name: 'Global Synchronizer Information', path: '/dso', alsoActiveFor: ['/'] },
+        governanceLink,
+        { name: `${config.spliceInstanceNames.amuletName} Price`, path: '/amulet-price' },
+        { name: 'Validators', path: '/validator-onboarding' },
+      ];
 
   const pageName = pathnameToPageName(location.pathname, config.spliceInstanceNames.amuletName);
 
   return (
-    <Box
-      sx={{
-        bgcolor: layoutTokens.page,
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh',
-      }}
-    >
+    <Box sx={pageSx}>
       <GlobalStyles styles={partyIdScrollGlobalStyles} />
       <PartyIdScrollTracks />
       <NetworkBanner />
