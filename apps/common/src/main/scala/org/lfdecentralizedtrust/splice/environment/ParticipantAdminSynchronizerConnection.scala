@@ -204,7 +204,7 @@ trait ParticipantAdminSynchronizerConnection {
               s"Connection for ${config.synchronizerAlias} with psid ${config.psid} is no longer active (status: ${existing.status}), skipping update of the connection config"
             )
             Right(())
-          // We don't set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
+          // We don't always set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
           case Some(existingConfig)
               if ParticipantAdminConnection.dropSequencerId(
                 existingConfig.config.toInternal
