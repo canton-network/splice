@@ -476,7 +476,7 @@ describe('Proposal Details Content', () => {
                 fieldName: 'appKind',
                 label: 'App Category',
                 currentValue: 'Default (unset)',
-                newValue: 'Asset Moving',
+                newValue: 'Featured Asset-Moving App',
               },
             ],
             opsAdded: ['ops-carol::1220dddd'],
@@ -511,7 +511,9 @@ describe('Proposal Details Content', () => {
 
     // scalar change (appKind) renders via ConfigValuesChanges
     expect(screen.getByTestId('config-change-field-label').textContent).toBe('App Category');
-    expect(screen.getByTestId('config-change-new-value').textContent).toMatch('Asset Moving');
+    expect(screen.getByTestId('config-change-new-value').textContent).toMatch(
+      'Featured Asset-Moving App'
+    );
 
     // opsParties diff: one added, one removed
     expect(screen.getByTestId('proposal-details-amend-ops-0-added-0').textContent).toMatch(

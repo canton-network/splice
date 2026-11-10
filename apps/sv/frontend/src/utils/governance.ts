@@ -445,9 +445,9 @@ export function diffOpsParties(
 // Friendly display labels for the FeaturedAppKind constructors; the raw DAML
 // names (FAK_Basic, …) leak internals, so mirror how proposal actions are labeled.
 const APP_KIND_LABELS: Record<string, string> = {
-  FAK_Basic: 'Basic',
-  FAK_AssetMoving: 'Asset Moving',
-  FAK_Asset: 'Asset',
+  FAK_Basic: 'Basic Featured App',
+  FAK_AssetMoving: 'Featured Asset-Moving App',
+  FAK_Asset: 'Featured Asset',
 };
 
 // Label shown for an unset (None) appKind in change/diff displays.
