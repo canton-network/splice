@@ -321,7 +321,8 @@ abstract class BaseStorePerformanceTest(
   protected def getAllocatedBytes: Long =
     allocatingThreadMXBean match {
       case Some(tb) =>
-        // Threads that die between getAllThreadIds and the read report -1 for their slot.
+        // getThreadAllocatedBytes returns -1 for threads that exited after getAllThreadIds was called
+        // those are ignored so they don't reduce the total at least
         tb.getThreadAllocatedBytes(tb.getAllThreadIds)
           .foldLeft(0L)((acc, bytes) => if (bytes > 0) acc + bytes else acc)
       case None => -1L
