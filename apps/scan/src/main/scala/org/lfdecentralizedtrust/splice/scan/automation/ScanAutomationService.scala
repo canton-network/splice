@@ -161,6 +161,15 @@ class ScanAutomationService(
       )
     )
   }
+  if (config.pruning.snapshots.enabled) {
+    registerTrigger(
+      new PruneAcsSnapshotsTrigger(
+        snapshotStore,
+        scanStorageConfigV1,
+        triggerContext,
+      )
+    )
+  }
   // The acs snapshot backfilling trigger should not attempt to backfill snapshots unless the
   // backfilling UpdateHistory is fully enabled and complete.
   if (config.updateHistoryBackfillEnabled && config.updateHistoryBackfillImportUpdatesEnabled) {
