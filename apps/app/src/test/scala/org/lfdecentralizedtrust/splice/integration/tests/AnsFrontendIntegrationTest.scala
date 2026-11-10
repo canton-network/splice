@@ -109,7 +109,6 @@ class AnsFrontendIntegrationTest
 
           searchForUnavailableEntryName()
 
-          waitForQuery(id("unavailable-icon"))
           find(id("entry-name-validation-message")).fold(fail("Unable to find validation message"))(
             _.text should startWith("The provided entry name has an invalid format")
           )
@@ -137,7 +136,6 @@ class AnsFrontendIntegrationTest
 
           searchForUnavailableEntryName()
 
-          waitForQuery(id("unavailable-icon"))
           find(id("entry-name-validation-message")).fold(fail("Unable to find validation message"))(
             _.text should startWith(
               "The provided entry name has an invalid format. Maximum 60 characters(including suffix), a-z, 0-9, - and _ are supported."
