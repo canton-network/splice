@@ -775,10 +775,12 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
 
     # Dev events
     for patch in range(patch_count):
+        splice_cut_date = schedule_date(month, "thursday", patch - 1)
+
         events.append(
             ScheduledEvent(
                 title=(f"Cut Splice {version}.{patch}"),
-                date=schedule_date(month, "thursday", patch-1),
+                date=splice_cut_date,
                 network="",
                 activity=(ACTIVITY_RELEASE),
                 minor_version=(version),
@@ -786,16 +788,17 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
             )
         )
 
-    events.append(
-        ScheduledEvent(
-            title=(f"Cut Canton & WG releases for Splice {version}.0"),
-            date=schedule_date(month, "wednesday", -1),
-            network="",
-            activity=(ACTIVITY_RELEASE),
-            minor_version=(version),
-            dev=True,
+        # Canton & WG releases are cut the day before the Splice release.
+        events.append(
+            ScheduledEvent(
+                title=(f"Cut Canton & WG releases for Splice {version}.{patch}"),
+                date=splice_cut_date - datetime.timedelta(days=1),
+                network="",
+                activity=(ACTIVITY_RELEASE),
+                minor_version=(version),
+                dev=True,
+            )
         )
-    )
 
     events.append(
         ScheduledEvent(
