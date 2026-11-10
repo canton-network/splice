@@ -156,66 +156,73 @@ class ValidatorSequencerConnectionIntegrationTest
       )
       // From splice-dso-governance 0.1.32 on, DsoRules rejects a sequencer id claimed by another SV,
       // so duplicate claims can only be set up when an older version is vetted.
-      assume(
-        !sv4Backend.appState.dsoAutomation.packageVersionSupport
-          .supportsSynchronizerNodeIdClaimsCheck(Seq(dsoParty), env.environment.clock.now)
-          .futureValue
-          .supported,
-        "DsoRules rejects duplicate sequencer id claims",
-      )
-      waitForAllSequencersAvailable()
+      val duplicateClaimsRejected = sv4Backend.appState.dsoAutomation.packageVersionSupport
+        .supportsSynchronizerNodeIdClaimsCheck(Seq(dsoParty), env.environment.clock.now)
+        .futureValue
+        .supported
+      if (duplicateClaimsRejected) {
+        logger.info("Skipping: DsoRules rejects duplicate sequencer id claims")
+      } else {
+        waitForAllSequencersAvailable()
 
-      val initialSequencers = sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers)
-      val sv2SequencerId = initialSequencers.find(_.svName == getSvName(2)).value.id
-      val sv4SequencerId = initialSequencers.find(_.svName == getSvName(4)).value.id
+        val initialSequencers = sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers)
+        val sv2SequencerId = initialSequencers.find(_.svName == getSvName(2)).value.id
+        val sv4SequencerId = initialSequencers.find(_.svName == getSvName(4)).value.id
 
-      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-        {
-          // sv4 claims sv2's sequencer id while publishing its own url
-          setSequencerId(sv4Backend, sv2SequencerId.toProtoPrimitive).futureValue
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          {
+            // sv4 claims sv2's sequencer id while publishing its own url
+            setSequencerId(sv4Backend, sv2SequencerId.toProtoPrimitive).futureValue
 
-          withClue("Scan should serve neither of the entries claiming sv2's sequencer id") {
-            eventually() {
-              val servedSequencers = sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers)
-              servedSequencers.map(_.svName).toSet shouldBe Set(getSvName(1), getSvName(3))
-              servedSequencers.map(_.id) should not contain sv2SequencerId
-            }
-          }
-
-          bobValidatorBackend.startSync()
-
-          withClue("Validator should connect to the sequencers with a unique id") {
-            eventually(120.seconds, 1.second) {
-              getSequencerPublicUrls(
-                bobValidatorBackend.participantClientWithAdminToken,
-                globalSyncAlias,
-              ) shouldBe Set(getPublicSequencerUrl(sv1Backend), getPublicSequencerUrl(sv3Backend))
-            }
-          }
-
-          withClue("Restoring sv4's sequencer id makes scan serve all sequencers again") {
-            setSequencerId(sv4Backend, sv4SequencerId.toProtoPrimitive).futureValue
-            eventually() {
-              forAll(Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend)) {
-                scanBackend =>
-                  scanBackend.listDsoSequencers().flatMap(_.sequencers).map(_.svName).toSet shouldBe
-                    Set(getSvName(1), getSvName(2), getSvName(3), getSvName(4))
+            withClue("Scan should serve neither of the entries claiming sv2's sequencer id") {
+              eventually() {
+                val servedSequencers = sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers)
+                servedSequencers.map(_.svName).toSet shouldBe Set(getSvName(1), getSvName(3))
+                servedSequencers.map(_.id) should not contain sv2SequencerId
               }
             }
-          }
-        },
-        entries => {
-          entries should not be empty
-          forAll(entries)(_.warningMessage should include("as it is claimed by multiple SVs"))
-        },
-      )
 
-      withClue("Validator should reconcile to all sequencers once the duplicate is gone") {
-        eventually(120.seconds, 1.second) {
-          getSequencerPublicUrls(
-            bobValidatorBackend.participantClientWithAdminToken,
-            globalSyncAlias,
-          ) shouldBe Set(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(getPublicSequencerUrl)
+            bobValidatorBackend.startSync()
+
+            withClue("Validator should connect to the sequencers with a unique id") {
+              eventually(120.seconds, 1.second) {
+                getSequencerPublicUrls(
+                  bobValidatorBackend.participantClientWithAdminToken,
+                  globalSyncAlias,
+                ) shouldBe Set(getPublicSequencerUrl(sv1Backend), getPublicSequencerUrl(sv3Backend))
+              }
+            }
+
+            withClue("Restoring sv4's sequencer id makes scan serve all sequencers again") {
+              setSequencerId(sv4Backend, sv4SequencerId.toProtoPrimitive).futureValue
+              eventually() {
+                forAll(Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend)) {
+                  scanBackend =>
+                    scanBackend
+                      .listDsoSequencers()
+                      .flatMap(_.sequencers)
+                      .map(_.svName)
+                      .toSet shouldBe
+                      Set(getSvName(1), getSvName(2), getSvName(3), getSvName(4))
+                }
+              }
+            }
+          },
+          entries => {
+            entries should not be empty
+            forAll(entries)(_.warningMessage should include("as it is claimed by multiple SVs"))
+          },
+        )
+
+        withClue("Validator should reconcile to all sequencers once the duplicate is gone") {
+          eventually(120.seconds, 1.second) {
+            getSequencerPublicUrls(
+              bobValidatorBackend.participantClientWithAdminToken,
+              globalSyncAlias,
+            ) shouldBe Set(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(
+              getPublicSequencerUrl
+            )
+          }
         }
       }
   }
