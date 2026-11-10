@@ -25,10 +25,13 @@
 
     - changed `/v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals` to include additional fields
 
-  - Helm Charts
+  - Helm charts and Docker images
 
-      - `splice-participant`: `nodeIdentifier` is now a required value. Canton initializes the participant's identity itself,
-        so it must be given the node identifier that the controlling SV or validator app expects.
+    - Removed the remaining CometBFT support including the cometbft helm
+      charts, docker images and unused `splice-info` values.
+
+    - `splice-participant`: `nodeIdentifier` is now a required value. Canton initializes the participant's identity itself,
+      so it must be given the node identifier that the controlling SV or validator app expects.
 
 ## Upcoming for next minor release (template):
 

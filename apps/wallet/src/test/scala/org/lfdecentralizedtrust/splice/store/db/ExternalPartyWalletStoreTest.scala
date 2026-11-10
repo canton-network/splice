@@ -215,13 +215,14 @@ class DbExternalPartyWalletStoreTest
         retryProvider =
           RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         migrationId,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("ExternalPartyWalletStoreTest"),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       )
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
-        .ingestAcs(acsOffset, Seq.empty, Seq.empty, Seq.empty)
+        .ingestAcs(acsOffset, Seq.empty)
       _ <- store.domains.ingestionSink.ingestConnectedDomains(
         Map(synchronizerAlias -> dummyDomain)
       )

@@ -37,9 +37,6 @@ import {
   DecentralizedSynchronizerUpgradeConfig,
   ansDomainPrefix,
   svUserIds,
-  SvCometBftGovernanceKey,
-  svCometBftGovernanceKeySecret,
-  svCometBftGovernanceKeyFromSecret,
   failOnAppVersionMismatch,
   networkWideConfig,
   getAdditionalJvmOptions,
@@ -57,10 +54,7 @@ import {
   approvedSvIdentitiesFile,
   CantonBftSynchronizerNode,
   configForSv,
-  DecentralizedSynchronizerNode,
-  getChainIdSuffix,
-  installSvLoopback,
-  sv1Config,
+  installLoopback,
   svsConfig,
   svRunbookConfig,
   SynchronizerNodes,
@@ -120,15 +114,11 @@ export async function installNode(
       bootstrappingConfig,
     });
 
-  const loopback = installSvLoopback(xns, decentralizedSynchronizerMigrationConfig.usesCometbft());
+  const loopback = installLoopback(xns);
 
   const imagePullDeps = imagePullSecret(xns);
 
   const svKey = svKeyFromSecret(svAppConfig.svIdKeyGcpSecret);
-
-  const cometBftGovernanceKey = svAppConfig.externalGovernanceKeyGcpSecret
-    ? svCometBftGovernanceKeyFromSecret(svAppConfig.externalGovernanceKeyGcpSecret)
-    : undefined;
 
   await installSvAndValidator(
     {
@@ -146,7 +136,6 @@ export async function installNode(
       validatorWalletUserName: validatorAppConfig.walletUserName,
       disableOnboardingParticipantPromotionDelay:
         svAppConfig.disableOnboardingParticipantPromotionDelay,
-      cometBftGovernanceKey,
     },
     resolveValidator1PartyId
   );
@@ -203,7 +192,6 @@ type SvConfig = {
   onboardingName: string;
   validatorWalletUserName: string;
   disableOnboardingParticipantPromotionDelay: boolean;
-  cometBftGovernanceKey?: CnInput<SvCometBftGovernanceKey>;
 };
 
 function persistenceForPostgres(pg: SplicePostgres | CloudPostgres, values: ChartValues) {
@@ -235,7 +223,6 @@ async function installSvAndValidator(
     onboardingName,
     validatorWalletUserName,
     disableOnboardingParticipantPromotionDelay,
-    cometBftGovernanceKey,
   } = config;
 
   const svConfig = configForSv('sv');
@@ -247,11 +234,6 @@ async function installSvAndValidator(
 
   const canton = new SynchronizerNodes(
     decentralizedSynchronizerMigrationConfig,
-    {
-      self: { ...svRunbookConfig.cometBft, nodeName: onboardingName },
-      sv1: { ...sv1Config.cometBft, nodeName: sv1Config.nodeName },
-      peers: [],
-    },
     svRunbookConfig.ingressName
   );
 
@@ -281,7 +263,6 @@ async function installSvAndValidator(
     decentralizedSynchronizerMigrationConfig,
     {
       ...svConfig,
-      cometBftGovernanceKey,
       skipInitialization:
         svsConfig?.synchronizer?.skipInitialization &&
         !svsConfig?.synchronizer.forceSvRunbookInitialization,
@@ -298,7 +279,6 @@ async function installSvAndValidator(
         },
       ]
     : [];
-  const useCantonBft = decentralizedSynchronizerMigrationConfig.active.sequencer.enableBftSequencer;
   const svValues: ChartValues = {
     ...valuesFromYamlFile,
     ...commonSvAppValues,
@@ -360,10 +340,7 @@ async function installSvAndValidator(
         .concat(canton.active.dependencies)
         .concat(svAppSecrets)
         .concat([appsPg])
-        .concat(participantBootstrapDumpSecret ? [participantBootstrapDumpSecret] : [])
-        .concat(
-          cometBftGovernanceKey ? svCometBftGovernanceKeySecret(xns, cometBftGovernanceKey) : []
-        ),
+        .concat(participantBootstrapDumpSecret ? [participantBootstrapDumpSecret] : []),
     }
   );
 
@@ -374,10 +351,10 @@ async function installSvAndValidator(
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
-  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: CantonBftSynchronizerNode) => {
     return {
       cantonBft: {
-        p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
+        p2pUrl: node.externalSequencerP2pAddress,
       },
     };
   };
@@ -386,16 +363,14 @@ async function installSvAndValidator(
     synchronizers: {
       current: {
         ...defaultScanValues.synchronizers.current,
-        ...(useCantonBft ? cantonBftConfigFor(canton.active) : {}),
+        ...cantonBftConfigFor(canton.active),
       },
       ...(canton.upgrade
         ? {
             successor: {
               sequencer: canton.upgrade.namespaceInternalSequencerAddress,
               mediator: canton.upgrade.namespaceInternalMediatorAddress,
-              ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? cantonBftConfigFor(canton.upgrade)
-                : {}),
+              ...cantonBftConfigFor(canton.upgrade),
             },
           }
         : {}),
@@ -404,9 +379,7 @@ async function installSvAndValidator(
             legacy: {
               sequencer: canton.legacy.namespaceInternalSequencerAddress,
               mediator: canton.legacy.namespaceInternalMediatorAddress,
-              ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? cantonBftConfigFor(canton.legacy)
-                : {}),
+              ...cantonBftConfigFor(canton.legacy),
             },
           }
         : {}),
@@ -545,7 +518,6 @@ function installInfoEndpoint(
       MD5_HASH_OF_APPROVED_SV_IDENTITIES: `"${createHash('md5')
         .update(readFileOrEmptyString(approvedSvIdentitiesFile()))
         .digest('hex')}"`,
-      CHAIN_ID_SUFFIX: `"${getChainIdSuffix()}"`,
     }
   );
 

@@ -132,13 +132,24 @@ class AppUpgradeIntegrationTest
           ).foreach { case (conf, apps) =>
             val version = getBaseVersion()
             val bundledConfig = getConfigFileFromBundle(version, conf)
-            val suffix = apps
+            val dbSuffix = apps
               .flatMap(app =>
                 Seq(
                   s"canton.$app.storage.config.properties.databaseName = ${conf.replace("-", "").toLowerCase}"
                 ) ++ bundledBftConfig(app)
               )
-              .mkString("\n")
+            // Like ConfigTransforms.useDecentralizedSynchronizerSplitwell for the upgraded apps,
+            // run splitwell on the global synchronizer also on the base version.
+            val splitwellSuffix =
+              if (conf == "bobSplitwellValidators")
+                Seq(
+                  """canton.splitwell-apps.providerSplitwellBackend.domains.splitwell.preferred.alias = "global"""",
+                  "canton.splitwell-apps.providerSplitwellBackend.domains.splitwell.others = []",
+                  "canton.validator-apps.bobValidator.domains.extra = []",
+                  "canton.validator-apps.splitwellValidator.domains.extra = []",
+                )
+              else Seq.empty
+            val suffix = (dbSuffix ++ splitwellSuffix).mkString("\n")
             val inputConfig = generateConfig(bundledConfig, version, testId, Some(suffix))
             spliceProcs.startBundledSplice(conf, inputConfig)
           }

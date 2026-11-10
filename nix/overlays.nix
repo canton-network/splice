@@ -7,7 +7,6 @@
   lnav = super.callPackage ./lnav.nix {};
   canton = super.callPackage ./canton.nix {};
   dpm-sdk = super.callPackage ./dpm-sdk.nix {};
-  cometbft_driver = super.callPackage ./cometbft-driver.nix {};
   python3 = super.python3.override {
     packageOverrides = pySelf : pySuper : rec {
       sphinx-reredirects = pySelf.callPackage ./sphinx-reredirects.nix { };

@@ -2,7 +2,6 @@
 let
   inherit (pkgs) stdenv fetchzip;
   sources = builtins.fromJSON (builtins.readFile ./canton-sources.json);
-  cometbftDriverSources = builtins.fromJSON (builtins.readFile ./cometbft-driver-sources.json);
   dpmSdkSources = builtins.fromJSON (builtins.readFile ./dpm-sdk-sources.json);
   ghaRunnerSources = builtins.fromJSON (builtins.readFile ./gha-runner-sources.json);
 
@@ -161,10 +160,6 @@ in pkgs.mkShell {
   CANTON_MEDIATOR_IMAGE_SHA256 = "${sources.canton_mediator_image_sha256}";
   DPM_SDK_VERSION = "${dpmSdkSources.version}";
   DAML_COMPILER_VERSION = "${dpmSdkSources.version}";
-  # TODO (#8263): remove the CometBFT variables together with the CometBFT images and SV app code
-  COMETBFT_RELEASE_VERSION = "${cometbftDriverSources.version}";
-  COMETBFT_IMAGE_SHA256 = "${cometbftDriverSources.image_sha256}";
-  COMETBFT_DRIVER = "${pkgs.cometbft_driver}";
   GHA_RUNNER_VERSION = "${ghaRunnerSources.version}";
   GHA_RUNNER_DIGEST = "${ghaRunnerSources.digest}";
   PULUMI_HOME = "${pkgs.pulumi-bin}";

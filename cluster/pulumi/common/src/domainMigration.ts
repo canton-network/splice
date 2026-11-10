@@ -44,11 +44,6 @@ export class DecentralizedSynchronizerMigrationConfig {
       .concat(this.upgrade ? [this.upgrade] : []);
   }
 
-  // TODO (#8263): remove, all synchronizers use DA BFT
-  usesCometbft(): boolean {
-    return !this.runningMigrations().every(x => x.sequencer.enableBftSequencer);
-  }
-
   isStillRunning(id: DomainMigrationIndex): boolean {
     return this.runningMigrations().some(info => info.id == id);
   }

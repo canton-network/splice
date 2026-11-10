@@ -40,31 +40,6 @@ spec:
     - "{{ (.Values.cluster).daHostname }}"
     - "*.{{ (.Values.cluster).daHostname }}"
 ---
-{{- /* TODO (#8263): remove this gateway, it only serves the CometBFT p2p ports */}}
-apiVersion: networking.istio.io/v1alpha3
-kind: Gateway
-metadata:
-  name: cn-apps-gateway
-  namespace: {{ .Release.Namespace }}
-spec:
-  selector:
-    app: istio-ingress-cometbft
-    istio: ingress-cometbft
-  servers:
-  {{- $domains := untilStep 0 (int .Values.cometbftPorts.domains) 1 -}}
-  {{- $synchronizerNodes := untilStep 0 (int .Values.cometbftPorts.nodes) 1 -}}
-  {{- range $index, $domain := $domains }}
-  {{- range $index, $synchronizerNode := $synchronizerNodes }}
-  - port:
-      number: 26{{ $domain }}{{ $synchronizerNode }}6
-      name: cometbft-{{ $domain }}-{{ $synchronizerNode }}-gw
-      protocol: TCP
-    hosts:
-      # We cannot really distinguish TCP traffic by hostname, so configuring to "*" to be explicit about that
-      - "*"
-  {{- end }}
-  {{- end }}
----
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:

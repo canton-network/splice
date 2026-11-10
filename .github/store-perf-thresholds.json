@@ -19,6 +19,16 @@
       "max": 600000000000
     }
   },
+  "VerdictStoreIngestionPerformanceTest": {
+    "_comment_avg_item_time_ns": "newly added test with no 30d history yet; seeded conservatively from sibling ingestion tests. Need to recalculate as median*(1+ noise_margin + safety_margin) of last 30d once data is collected.",
+    "splice_perf_ingestion_avg_item_time_ns": {
+      "max": 3700000
+    },
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 10m to detect the trends earlier",
+    "splice_perf_ingestion_total_time_ns": {
+      "max": 600000000000
+    }
+  },
   "UpdateHistoryIngestionPerformanceTest": {
     "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-Oct-20",
     "splice_perf_ingestion_avg_item_time_ns": {
