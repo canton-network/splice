@@ -164,8 +164,7 @@ SEQUENCER_SUBMISSION_REQUEST_REFUSED.* The estimated sequencing time .* is alrea
 
 # Sometimes the CI executor seems to take a break, which leads to spurious failed DB activeness checks
 DB_CONNECTION_LOST.*Database health check failed to establish a valid connection.*Connection is not available, request timed out
-Sequencer is unhealthy, so disconnecting all members. Can't connect to database
-Sequencer is unhealthy, so disconnecting all members. BFT orderer can't connect to database
+Sequencer is unhealthy, so disconnecting all members. (Can't|BFT orderer can't) connect to database
 
 # Likely a race in the shutdown of the actor system vs us scheduling something else on it
 java.lang.IllegalStateException: cannot enqueue after timer shutdown
