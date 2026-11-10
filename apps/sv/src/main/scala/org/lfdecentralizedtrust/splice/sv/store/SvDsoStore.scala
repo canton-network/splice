@@ -603,15 +603,14 @@ trait SvDsoStore
     splice.amulet.RewardCouponV2,
   ]]]
 
-  /** Returns a random sample of up to `limit` `FeaturedAppConfigUpdateInstruction` contracts, drawn from an
-    * arbitrary (unordered) subset of up to 1000 contracts.
+  /** Returns a random sample of up to `limit` `FeaturedAppConfigUpdateInstruction`,
+    * drawn from an arbitrary (unordered) subset of up to 1000 contracts.
+    * Only instructions whose provider has an active FeaturedAppRight,
+    * each paired with that right's contract ID are fetched.
     */
   def listFeaturedAppConfigUpdateInstructionSample(
       limit: Limit = defaultLimit
-  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
-    FeaturedAppConfigUpdateInstruction.ContractId,
-    FeaturedAppConfigUpdateInstruction,
-  ]]]
+  )(implicit tc: TraceContext): Future[Seq[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight]]
 
   /** Returns the histogram for the remaining age (i.e., difference between now and the
     * contract creation time) of all active RewardCouponV2 contracts.
@@ -854,14 +853,14 @@ trait SvDsoStore
     splice.amulet.RewardCouponV2,
   ]
 
-  /** Lists expired `FeaturedAppConfigUpdateInstruction` contracts whose provider no longer has a
-    * `FeaturedAppRight`. Instructions whose provider still has a right are excluded via an anti-join
-    * so the SVs' voted-on config update is not discarded; those get executed instead.
+  /** Lists all expired `FeaturedAppConfigUpdateInstruction` contracts, regardless of whether their
+    * provider has a `FeaturedAppRight`.
     */
   def listExpiredFeaturedAppConfigUpdateInstruction: ListExpiredContracts[
     FeaturedAppConfigUpdateInstruction.ContractId,
     FeaturedAppConfigUpdateInstruction,
-  ]
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(FeaturedAppConfigUpdateInstruction.COMPANION)
 
   /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
     * Returns only the parties, not the coupons, to keep the query index-only.
@@ -1813,6 +1812,14 @@ object SvDsoStore {
     override def pretty: Pretty[this.type] =
       prettyOfClass(param("state", _.state), param("context", _.context))
   }
+
+  case class FeaturedAppConfigUpdateInstructionWithRight(
+      instruction: AssignedContract[
+        FeaturedAppConfigUpdateInstruction.ContractId,
+        FeaturedAppConfigUpdateInstruction,
+      ],
+      featuredAppRightCid: splice.amulet.FeaturedAppRight.ContractId,
+  )
 
   case class RoundBatch[+T](
       roundNumber: Long,

@@ -925,22 +925,30 @@ class DbSvDsoStore private (
 
   override def listFeaturedAppConfigUpdateInstructionSample(limit: Limit)(implicit
       tc: TraceContext
-  ): Future[Seq[
-    AssignedContract[
-      FeaturedAppConfigUpdateInstruction.ContractId,
-      FeaturedAppConfigUpdateInstruction,
-    ]
-  ]] =
+  ): Future[Seq[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight]] =
     for {
       result <- storage
         .query(
           (sql"""
              select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
               "sample."
-            )}
+            )}, sample.fa_right_cid
              from (
-               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
+               select distinct on (acs.contract_id)
+                      #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+              "acs."
+            )},
+                      fa_right.contract_id as fa_right_cid
                from #${DsoTables.acsTableName} acs
+               join #${DsoTables.acsTableName} fa_right
+               on fa_right.store_id = acs.store_id
+                    and fa_right.migration_id = acs.migration_id
+                    and fa_right.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+                    and fa_right.template_id_qualified_name = ${QualifiedName(
+              FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                    and fa_right.assigned_domain is not null
+                    and fa_right.featured_app_right_provider = acs.create_arguments->>'provider'
                where acs.store_id = $acsStoreId
                  and acs.migration_id = $domainMigrationId
                  and acs.package_name = ${FeaturedAppConfigUpdateInstruction.PACKAGE_NAME}
@@ -951,13 +959,16 @@ class DbSvDsoStore private (
              ) sample
              order by random()
              limit ${sqlLimit(limit)}
-           """).as[AcsQueries.SelectFromAcsTableWithStateResult],
+           """).as[(AcsQueries.SelectFromAcsTableWithStateResult, String)],
           "listFeaturedAppConfigUpdateInstructionSample",
         )
       limited = applyLimit("listFeaturedAppConfigUpdateInstructionSample", limit, result)
-    } yield limited.map(
-      assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(_)
-    )
+    } yield limited.map { case (row, rightCid) =>
+      SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight(
+        assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(row),
+        new FeaturedAppRight.ContractId(rightCid),
+      )
+    }
 
   override def getRewardCouponsV2AgeHistogram(
       t1: FiniteDuration,
@@ -1633,42 +1644,6 @@ class DbSvDsoStore private (
           limited = applyLimit("listExpiredRewardCouponsV2", limit, result)
         } yield limited.map(assignedContractFromRow(RewardCouponV2.COMPANION)(_))
       }
-  }
-
-  override def listExpiredFeaturedAppConfigUpdateInstruction: ListExpiredContracts[
-    FeaturedAppConfigUpdateInstruction.ContractId,
-    FeaturedAppConfigUpdateInstruction,
-  ] = { (now, limit) => implicit tc =>
-    waitUntilAcsIngested {
-      for {
-        result <- storage.query(
-          selectFromAcsTableWithState(
-            DsoTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            FeaturedAppConfigUpdateInstruction.COMPANION,
-            additionalWhere = sql"""and acs.contract_expires_at < $now
-              and not exists (
-                select 1
-                from #${DsoTables.acsTableName} fa_right
-                where fa_right.store_id = acs.store_id
-                  and fa_right.migration_id = acs.migration_id
-                  and fa_right.package_name = ${FeaturedAppRight.PACKAGE_NAME}
-                  and fa_right.template_id_qualified_name = ${QualifiedName(
-                FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
-              )}
-                  and fa_right.assigned_domain is not null
-                  and fa_right.featured_app_right_provider = acs.create_arguments->>'provider'
-              )""",
-            orderLimit = sql"""limit ${sqlLimit(limit)}""",
-          ),
-          "listExpiredFeaturedAppConfigUpdateInstruction",
-        )
-        limited = applyLimit("listExpiredFeaturedAppConfigUpdateInstruction", limit, result)
-      } yield limited.map(
-        assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(_)
-      )
-    }
   }
 
   override def listMemberTrafficContracts(

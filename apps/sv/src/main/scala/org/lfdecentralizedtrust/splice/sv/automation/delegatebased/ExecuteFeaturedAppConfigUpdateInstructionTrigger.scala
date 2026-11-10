@@ -9,17 +9,15 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
-  TaskFailed,
   TaskOutcome,
   TaskSuccess,
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.FeaturedAppConfigUpdateInstruction
-import org.lfdecentralizedtrust.splice.util.AssignedContract
 import ExecuteFeaturedAppConfigUpdateInstructionTrigger.*
-import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -44,34 +42,26 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
   override protected def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val provider = PartyId.tryFromProtoPrimitive(task.instruction.payload.provider)
     for {
-      featuredAppRight <- store.lookupFeaturedAppRight(provider)
-      result <- featuredAppRight match {
-        case None => Future.successful(TaskFailed(s"no FeaturedAppRight for provider $provider"))
-        case Some(right) =>
-          for {
-            dsoRules <- store.getDsoRules()
-            cmd = dsoRules.exercise(
-              _.exerciseDsoRules_ExecuteFeaturedAppConfigUpdateInstruction(
-                task.instruction.contractId,
-                right.contractId,
-                controller,
-              )
-            )
-            _ <- svTaskContext
-              .connection(SpliceLedgerConnectionPriority.Low)
-              .submit(
-                Seq(store.key.svParty),
-                Seq(store.key.dsoParty),
-                cmd,
-              )
-              .noDedup
-              .withSynchronizerId(dsoRules.domain)
-              .yieldUnit()
-          } yield TaskSuccess(s"Executed update for provider $provider")
-      }
-    } yield result
+      dsoRules <- store.getDsoRules()
+      cmd = dsoRules.exercise(
+        _.exerciseDsoRules_ExecuteFeaturedAppConfigUpdateInstruction(
+          task.data.instruction.contractId,
+          task.data.featuredAppRightCid,
+          controller,
+        )
+      )
+      _ <- svTaskContext
+        .connection(SpliceLedgerConnectionPriority.Low)
+        .submit(
+          Seq(store.key.svParty),
+          Seq(store.key.dsoParty),
+          cmd,
+        )
+        .noDedup
+        .withSynchronizerId(dsoRules.domain)
+        .yieldUnit()
+    } yield TaskSuccess(s"Executed update for provider ${task.data.instruction.payload.provider}")
   }
 
   /** Check whether a task has become stale and can be skipped.
@@ -82,18 +72,20 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
     */
   override protected def isStaleTask(task: Task)(implicit tc: TraceContext): Future[Boolean] =
     store.multiDomainAcsStore
-      .lookupContractById(FeaturedAppConfigUpdateInstruction.COMPANION)(task.instruction.contractId)
+      .lookupContractById(FeaturedAppConfigUpdateInstruction.COMPANION)(
+        task.data.instruction.contractId
+      )
       .map(_.isEmpty)
 }
 
 object ExecuteFeaturedAppConfigUpdateInstructionTrigger {
   final case class Task(
-      instruction: AssignedContract[
-        FeaturedAppConfigUpdateInstruction.ContractId,
-        FeaturedAppConfigUpdateInstruction,
-      ]
+      data: SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
-      prettyOfClass(param("instruction", _.instruction.contractId.contractId.singleQuoted))
+      prettyOfClass(
+        param("instruction", _.data.instruction.contractId.contractId.singleQuoted),
+        param("featuredAppRight", _.data.featuredAppRightCid.contractId.singleQuoted),
+      )
   }
 }

@@ -20,12 +20,12 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 
 import scala.concurrent.{ExecutionContext, Future}
 
-// This trigger expires FeaturedAppConfigUpdateInstructions whose provider no longer has a
-// FeaturedAppRight. It can fire under normal circumstances when a config update races the revocation
-// of a provider's featured app right (more likely with automatic FA underlocking enforcement, see
-// CIP-0127). It can likewise fire when the provider's right becomes absent due to vetting-state
-// issues affecting the provider. Instructions whose provider still has a right are excluded from expiry by
-// listExpiredFeaturedAppConfigUpdateInstruction so the SVs' voted-on config update is not discarded.
+// This trigger expires every FeaturedAppConfigUpdateInstruction that was not executed before its
+// expiresAt. In practice that is an instruction whose provider had no FeaturedAppRight for the whole
+// period, since ExecuteFeaturedAppConfigUpdateInstructionTrigger skips those. This can happen when a
+// config update races the revocation of a provider's featured app right (more likely with automatic
+// FA underlocking enforcement, see CIP-0127). Other execution failures surface as Daml errors in the
+// execute trigger, which are reported to operators after repeated retries.
 class ExpireFeaturedAppConfigUpdateInstructionTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
