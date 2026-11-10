@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponT
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 
+import scala.concurrent.duration.*
 import scala.jdk.OptionConverters.*
 
 class ValidatorLicenseMetadataTimeBasedIntegrationTest
@@ -67,7 +68,7 @@ class ValidatorLicenseMetadataTimeBasedIntegrationTest
         val licenseAfterClaim =
           aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
             .awaitJava(ValidatorLicense.COMPANION)(aliceValidatorBackend.getValidatorPartyId())
-        licenseAfterClaim.data.faucetState.toScala.value.lastReceivedFor.number shouldBe sv1ScanBackend
+        val latestOpenedRound = sv1ScanBackend
           .getOpenAndIssuingMiningRounds()
           ._1
           .filter(
@@ -76,11 +77,15 @@ class ValidatorLicenseMetadataTimeBasedIntegrationTest
           .map(_.payload.round.number)
           .maxOption
           .value
+        val claimedRound = licenseAfterClaim.data.faucetState.toScala.value.lastReceivedFor.number
+        claimedRound shouldBe latestOpenedRound
       }
     }
     aliceValidatorBackend.stop()
     aliceValidatorLocalBackend.start()
-    actAndCheck(
+    // The faucet trigger of aliceValidatorLocal can still claim the rounds that open during the
+    // jump against the same license, so leave room for a few lost races.
+    actAndCheck(timeUntilSuccess = 60.seconds)(
       "Advance time past minMetadataUpdateInterval",
       advanceTime(java.time.Duration.ofHours(2)),
     )(
