@@ -131,7 +131,6 @@ object HttpWalletAppClient {
       userOnboarded: Boolean,
       userWalletInstalled: Boolean,
       hasFeaturedAppRight: Boolean,
-      featuredAppKind: Option[amuletCodegen.FeaturedAppKind],
   )
   sealed trait SubscriptionStateContract
   final case class SubscriptionStateIdleContract(contract: definitions.Contract)
@@ -945,7 +944,6 @@ object HttpWalletAppClient {
             response.userOnboarded,
             response.userWalletInstalled,
             response.hasFeaturedAppRight,
-            response.featuredAppKind.map(FeaturedAppKindUtil.toDaml),
           )
         )
     }

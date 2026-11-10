@@ -7,7 +7,6 @@ import org.lfdecentralizedtrust.splice.environment.PackageVersionSupport
 import org.lfdecentralizedtrust.splice.http.v0.status.wallet.WalletResource as r0
 import org.lfdecentralizedtrust.splice.http.v0.{status, definitions as d0}
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
-import org.lfdecentralizedtrust.splice.wallet.util.FeaturedAppKindUtil
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import io.opentelemetry.api.trace.Tracer
@@ -36,10 +35,10 @@ class HttpStatusWalletHandler(
     withSpan(s"$workflowId.userStatus") { implicit traceContext => _ =>
       for {
         optWallet <- walletManager.lookupUserWallet(user)
-        featuredAppRight <- optWallet match {
-          case None => Future(None)
+        hasFeaturedAppRight <- optWallet match {
+          case None => Future(false)
           case Some(wallet) =>
-            wallet.store.lookupFeaturedAppRight()
+            wallet.store.lookupFeaturedAppRight().map(_.isDefined)
         }
         optInstall <- optWallet match {
           case None =>
@@ -51,8 +50,7 @@ class HttpStatusWalletHandler(
           partyId = optWallet.fold("")(_.store.key.endUserParty.toProtoPrimitive),
           userOnboarded = optWallet.isDefined,
           userWalletInstalled = optInstall.isDefined,
-          hasFeaturedAppRight = featuredAppRight.isDefined,
-          featuredAppKind = featuredAppRight.map(r => FeaturedAppKindUtil.effectiveKind(r.payload)),
+          hasFeaturedAppRight = hasFeaturedAppRight,
         )
       }
     }

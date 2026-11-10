@@ -1372,9 +1372,6 @@ components:
           type: boolean
         has_featured_app_right:
           type: boolean
-        featured_app_kind:
-          # Only set if has_featured_app_right is true.
-          $ref: "#/components/schemas/FeaturedAppKind"
 
     ListResponse:
       type: object
@@ -1432,14 +1429,15 @@ components:
       type: object
       nullable: true
       description: |
-        Configuration of the self-granted featured app right. All fields are optional;
-        setting any of them requires splice-wallet >= 0.1.26 to be vetted.
-        `app_kind` defaults to `basic`.
+        Configuration of the self-granted featured app right. All fields are optional,
+        unset fields are defaulted by the Daml code (`app_kind` defaults to `basic`).
+        Setting any of the fields requires splice-wallet >= 0.1.26 to be vetted,
+        otherwise the request fails.
       properties:
         app_kind:
           $ref: "#/components/schemas/FeaturedAppKind"
         activity_weight:
-          description: Decimal weight of this provider's app activity. Defaults to 1.0 if not set.
+          description: Decimal specifying this provider's app composition weight. Defaults to 1.0 if not set.
           type: string
         ops_party_ids:
           description: |

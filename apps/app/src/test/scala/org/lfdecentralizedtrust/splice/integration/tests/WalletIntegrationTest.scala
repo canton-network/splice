@@ -347,9 +347,7 @@ class WalletIntegrationTest
             inside(sv1ScanBackend.listFeaturedAppRights()) { case Seq(r) =>
               r.contractId shouldBe featuredAppRight
             }
-            val status = splitwellWalletClient.userStatus()
-            status.hasFeaturedAppRight shouldBe true
-            status.featuredAppKind shouldBe Some(amuletCodegen.FeaturedAppKind.FAK_BASIC)
+            splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe true
           }
         },
       )
@@ -390,9 +388,7 @@ class WalletIntegrationTest
                 Seq(alice.toProtoPrimitive)
               )
             }
-            val status = splitwellWalletClient.userStatus()
-            status.hasFeaturedAppRight shouldBe true
-            status.featuredAppKind shouldBe Some(amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING)
+            splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe true
           },
         )
     }

@@ -20,8 +20,4 @@ object FeaturedAppKindUtil {
     case amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING => d0.FeaturedAppKind.AssetMoving
     case amuletCodegen.FeaturedAppKind.FAK_ASSET => d0.FeaturedAppKind.Asset
   }
-
-  /** The effective kind of a featured app right, applying the Daml default (FAK_Basic) if unset. */
-  def effectiveKind(right: amuletCodegen.FeaturedAppRight): d0.FeaturedAppKind =
-    right.appKind.map[d0.FeaturedAppKind](fromDaml).orElse(d0.FeaturedAppKind.Basic)
 }

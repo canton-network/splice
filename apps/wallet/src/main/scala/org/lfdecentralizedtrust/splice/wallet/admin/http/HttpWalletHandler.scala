@@ -334,7 +334,6 @@ class HttpWalletHandler(
   ): Future[r0.SelfGrantFeatureAppRightResponse] = {
     implicit val WalletUserRequest(_, userWallet, traceContext) = tuser
     withSpan(s"$workflowId.selfGrantFeatureAppRight") { implicit traceContext => _ =>
-      // TODO(#8057): allow setting these fields from the wallet UI
       val appKind = request.flatMap(_.appKind).map(FeaturedAppKindUtil.toDaml)
       val activityWeight =
         request.flatMap(_.activityWeight).map(Codec.tryDecode(Codec.JavaBigDecimal)(_))
@@ -346,28 +345,15 @@ class HttpWalletHandler(
         }
         partyIds.map(Codec.tryDecode(Codec.Party)(_).toProtoPrimitive)
       }
-      val anyConfigSet = appKind.isDefined || activityWeight.isDefined || opsParties.isDefined
       for {
-        _ <-
-          if (anyConfigSet)
-            packageVersionSupport
-              .supportsFeaturedAppConfigInSelfGrant(
-                Seq(userWallet.store.key.validatorParty, userWallet.store.key.endUserParty),
-                walletManager.clock.now,
-              )
-              .map(support =>
-                if (!support.supported)
-                  throw HttpErrorHandler.badRequest(
-                    "Setting app_kind, activity_weight or ops_party_ids requires a newer splice-wallet package version to be vetted"
-                  )
-              )
-          else Future.unit
         amuletRules <- scanConnection.getAmuletRulesWithState()
         result <- exerciseWalletAction((installCid, _) =>
           Future.successful(
             installCid
               .exerciseWalletAppInstall_FeaturedAppRights_SelfGrant(
                 amuletRules.contractId,
+                // Unset fields are defaulted by the Daml code. Setting any of them fails
+                // command submission as long as splice-wallet < 0.1.26 is vetted.
                 activityWeight.toJava,
                 appKind.toJava,
                 opsParties.map(_.asJava).toJava,
