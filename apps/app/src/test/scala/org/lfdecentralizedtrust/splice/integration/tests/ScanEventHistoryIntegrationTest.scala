@@ -64,7 +64,7 @@ class ScanEventHistoryIntegrationTest
 
     // Before doing tap, using the cursor should be empty. Take a fresh cursor on every attempt, so
     // that a background transaction landing in between only costs a retry.
-    val cursorBeforeTap = eventually() {
+    val cursorBeforeTap = eventuallySucceeds() {
       val cursor = latestEventHistoryCursor(sv1ScanBackend)
       val eventHistoryAfterCursor = sv1ScanBackend.getEventHistory(
         count = pageLimit,
