@@ -86,9 +86,8 @@ export function scheduleLoadGenerator(auth0Client: Auth0Client, dependencies: Re
           isDevNet,
           usersPerValidator: loadTesterConfig.usersPerValidator,
           featuredAppRights: loadTesterConfig.featuredAppRights,
-          // Ignored by the load tester, which uses featuredAppRights instead. Only passed for load
-          // tester images that predate featuredAppRights (e.g., if loadTester.chartVersion pins an
-          // older version), which feature that many users with basic rights.
+          // Ignored by the load tester, which uses featuredAppRights instead.
+          // Only passed for load tester images that predate featuredAppRights.
           featuredUsersPerValidator: loadTesterConfig.featuredAppRights.length,
           validators,
           test: {
