@@ -803,10 +803,13 @@ class SvFrontendIntegrationTest
         }
 
         clue("Pausing vote request expiration automation") {
-          sv1Backend.dsoDelegateBasedAutomation
-            .trigger[CloseVoteRequestTrigger]
-            .pause()
-            .futureValue
+          // Any SV can close the expired request, so pause the trigger on all of them.
+          Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach(
+            _.dsoDelegateBasedAutomation
+              .trigger[CloseVoteRequestTrigger]
+              .pause()
+              .futureValue
+          )
         }
 
         actAndCheck(
@@ -853,7 +856,9 @@ class SvFrontendIntegrationTest
         }
 
         clue("Resuming vote request expiration automation") {
-          sv1Backend.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].resume()
+          Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).foreach(
+            _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].resume()
+          )
         }
 
         withFrontEnd("sv2") { implicit webDriver =>
