@@ -2268,7 +2268,9 @@ class HttpScanHandler(
     withSpan(s"$workflowId.getMigrationInfo") { _ => _ =>
       val sourceHistory = updateHistory.sourceHistory
       for {
-        infoO <- sourceHistory.migrationInfo(body.migrationId)
+        infoO <- updateHistory.lastLegacyRecordTime
+          .map(_ => Future.successful(None))
+          .getOrElse(sourceHistory.migrationInfo(body.migrationId))
       } yield infoO match {
         case Some(info) =>
           ScanResource.GetMigrationInfoResponse.OK(
