@@ -22,8 +22,6 @@ function component_to_deployments() {
     echo "global-domain-$migration_id-mediator"
   elif [[ "$component" == "participant" && "$namespace" == sv* ]]; then
     echo "participant"
-  elif [[ "$component" == "cometbft" ]]; then
-    echo "global-domain-$migration_id-cometbft"
   elif [[ "$component" == "cn-apps" ]]; then
     echo "validator-app scan-app sv-app"
   elif [[ "$component" == "validator" ]]; then
@@ -286,41 +284,24 @@ function restore_component() {
   local -r migration_id=$3
   local -r run_id=$4
   local -r restore_cluster=$5 # cluster to restore into (if different from current)
-  local -r deployment_names=$(component_to_deployments "$component" "$migration_id" "$namespace")
   local stack
 
   stack=$(get_stack_for_namespace_component "$namespace" "$component")
 
-  if [ "$component" == "cometbft" ]; then
-    _info "Restoring cometbft"
-    kubectl scale deployment -n "$namespace" "${deployment_names}" --replicas=0
-
-    local cometbft_pvc_name
-    local cometbft_snapshot_name
-    cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
-    cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
-
-    local cometbft_storage_class
-    cometbft_storage_class="hyperdisk-standard-rwo"
-
-    restore_pvc_from_snapshot "$namespace" "$cometbft_snapshot_name" "$cometbft_pvc_name" "$cometbft_storage_class"
-    kubectl scale deployment -n "$namespace" "${deployment_names}" --replicas=1
-  else
-    _info "Restoring $component"
-    instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
-    type=$(get_postgres_type "$namespace-$instance-pg" "$stack")
-    case "$type" in
-      "canton:network:postgres")
-        restore_pvc_postgres "$namespace" "$instance" "$run_id"
-        ;;
-      "canton:cloud:postgres")
-        restore_cloudsql_postgres "$namespace" "$component" "$run_id" "$migration_id" "$restore_cluster"
-        ;;
-      *)
-        _error "Unknown postgres type: $type"
-        ;;
-    esac
-  fi
+  _info "Restoring $component"
+  instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
+  type=$(get_postgres_type "$namespace-$instance-pg" "$stack")
+  case "$type" in
+    "canton:network:postgres")
+      restore_pvc_postgres "$namespace" "$instance" "$run_id"
+      ;;
+    "canton:cloud:postgres")
+      restore_cloudsql_postgres "$namespace" "$component" "$run_id" "$migration_id" "$restore_cluster"
+      ;;
+    *)
+      _error "Unknown postgres type: $type"
+      ;;
+  esac
 }
 
 function wait_cloudsql_restore() {
@@ -373,23 +354,19 @@ function wait_restore_component() {
   local stack
   stack=$(get_stack_for_namespace_component "$namespace" "$component")
 
-  if [ "$component" == "cometbft" ]; then
-    _info "Nothing to do, cometbft restore is currently synchronous"
-  else
-    instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
-    type=$(get_postgres_type "$namespace-$instance-pg" "$stack")
-    case "$type" in
-      "canton:network:postgres")
-        _info "Nothing to do, self-hosted postgres restore is currently synchronous"
-        ;;
-      "canton:cloud:postgres")
-        wait_cloudsql_restore "$namespace" "$component"
-        ;;
-      *)
-        _error "Unknown postgres type: $type"
-        ;;
-    esac
-  fi
+  instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
+  type=$(get_postgres_type "$namespace-$instance-pg" "$stack")
+  case "$type" in
+    "canton:network:postgres")
+      _info "Nothing to do, self-hosted postgres restore is currently synchronous"
+      ;;
+    "canton:cloud:postgres")
+      wait_cloudsql_restore "$namespace" "$component"
+      ;;
+    *)
+      _error "Unknown postgres type: $type"
+      ;;
+  esac
 }
 
 function get_component_run_id() {
@@ -412,7 +389,7 @@ function get_component_run_id() {
 function usage() {
   echo "Usage: $0 [-r <restore_cluster>] <namespace> <migration_id> <component1:backup_id1,component2:backup_id2,...|run_id> <component1> <component2>..."
   echo " Examples: "
-  echo "  $0 sv-2 0 1780988400000 cometbft sequencer participant mediator cn-apps"
+  echo "  $0 sv-2 0 1780988400000 cantonBft sequencer participant mediator cn-apps"
   echo "  $0 sv-2 0 \"cn-apps:42,sequencer:51,participant:63,mediator:71\" sequencer participant mediator cn-apps"
 }
 
@@ -453,25 +430,11 @@ function main() {
   local config
   config=$(get_resolved_config)
 
-  # Determine whether the BFT sequencer is enabled for the migration being restored.
-  # When it is, CometBFT is not used and there is nothing to restore for it.
-  local bft_sequencer_enabled
-  bft_sequencer_enabled=$(echo "$config" | yq "
-    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
-      + (.synchronizerMigration.archived // [])
-      + (.synchronizerMigration.additionalLegacy // []))
-    | map(select(.id == $migration_id))
-    | .[0].sequencer.enableBftSequencer // false")
-
   local bft_db_enabled
   bft_db_enabled=$(canton_bft_db_enabled "$migration_id" "$config")
 
   local -a components=()
   for component in "${@:4}"; do
-    if [ "$component" == "cometbft" ] && [ "$bft_sequencer_enabled" == "true" ]; then
-      _info "BFT sequencer is enabled for migration $migration_id, skipping CometBFT restore"
-      continue
-    fi
     if [ "$component" == "cantonBft" ] && [ "$bft_db_enabled" != "true" ]; then
       _info "Dedicated CantonBFT sequencer DB is not enabled for migration $migration_id, skipping CantonBFT restore"
       continue
