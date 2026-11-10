@@ -3,10 +3,10 @@
 
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 
 export const useVoteRequestResultsCount = (): UseQueryResult<number> => {
-  const { countVoteRequestResults } = useSvAdminClient();
+  const { countVoteRequestResults } = useGovernanceReadClient();
   return useQuery({
     queryKey: ['voteRequestResultsCount'],
     queryFn: async () => {

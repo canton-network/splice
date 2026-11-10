@@ -49,7 +49,7 @@ import { DetailItem } from './proposal-details/DetailItem';
 import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-details/CreateUnallocatedUnclaimedActivityRecordSection';
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../ui';
 import { useQuery } from '@tanstack/react-query';
-import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../../contexts/GovernanceReadClientContext';
 import {
   DEFAULT_APP_ACTIVITY_WEIGHT,
   EFFECTIVE_AT_LABEL,
@@ -62,6 +62,7 @@ import {
   VOTE_REASON_URL_LABEL,
 } from '../../utils/constants';
 import { formatDatetimeWithOffset } from '../../utils/dateFormat';
+import { useDappModeConfig } from '../../utils';
 
 /** True when a proposal changed fields that are locked/disabled in the create UI (e.g. emergency API). */
 export function hasAlteredDisabledFields(changes: ConfigChange[]): boolean {
@@ -85,6 +86,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
   const votesHooks = useVotesHooks();
   const dsoInfoQuery = useDsoInfos();
+  const dappMode = useDappModeConfig();
 
   const isClosed = !proposalDetails.isVoteRequest || votingInformation.status === 'Rejected';
 
@@ -158,8 +160,11 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
   const yourVote = votes.find(vote => vote.sv === currentSvPartyId);
   const hasVoted = yourVote?.vote === 'accepted' || yourVote?.vote === 'rejected';
   const isEditingVote = editFormKey > 0;
-  const showVoteForm =
-    proposalDetails.isVoteRequest && !isClosed && (!hasVoted || isEditingVote || voteSubmitted);
+  const isOpen = proposalDetails.isVoteRequest && !isClosed;
+  // dApp mode: keep the section visible for open proposals, but never mount the form.
+  const showYourVoteSection = dappMode
+    ? isOpen
+    : isOpen && (!hasVoted || isEditingVote || voteSubmitted);
 
   const { acceptedVotes, rejectedVotes, awaitingVotes } = votes.reduce(
     (acc, vote) => {
@@ -490,7 +495,9 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 isYou={vote.isYou}
                 isClosed={isClosed}
                 onEdit={
-                  vote.isYou && hasVoted && !isClosed ? () => setEditFormKey(k => k + 1) : undefined
+                  !dappMode && vote.isYou && hasVoted && !isClosed
+                    ? () => setEditFormKey(k => k + 1)
+                    : undefined
                 }
               />
             ))}
@@ -504,7 +511,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           </Box>
         </VoteSection>
 
-        {showVoteForm && (
+        {showYourVoteSection && (
           <VoteSection
             title="Your Vote"
             data-testid="proposal-details-your-vote"
@@ -512,13 +519,17 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             centered
             ref={yourVoteSectionRef}
           >
-            <ProposalVoteForm
-              key={editFormKey}
-              voteRequestContractId={contractId}
-              currentSvPartyId={currentSvPartyId}
-              onSubmissionStart={() => setVoteSubmitted(true)}
-              votes={votes}
-            />
+            {dappMode ? (
+              <Typography>Voting is read-only in this view.</Typography>
+            ) : (
+              <ProposalVoteForm
+                key={editFormKey}
+                voteRequestContractId={contractId}
+                currentSvPartyId={currentSvPartyId}
+                onSubmissionStart={() => setVoteSubmitted(true)}
+                votes={votes}
+              />
+            )}
           </VoteSection>
         )}
       </Stack>
@@ -850,11 +861,12 @@ interface UnfeatureAppSectionProps {
 }
 
 const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
-  const svAdminClient = useSvAdminClient();
+  const governanceReadClient = useGovernanceReadClient();
   const providerQuery = useQuery({
     queryKey: ['featuredAppRightProvider', rightContractId],
     queryFn: async () => {
-      const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
+      const response =
+        await governanceReadClient.lookupFeaturedAppRightByContractId(rightContractId);
       const contract = response.featured_app_right;
       return (contract?.payload as { provider?: string } | undefined)?.provider ?? null;
     },
@@ -903,11 +915,12 @@ const UpdateFeatureAppSection = ({
   rightContractId,
   newActivityWeight,
 }: UpdateFeatureAppSectionProps) => {
-  const svAdminClient = useSvAdminClient();
+  const governanceReadClient = useGovernanceReadClient();
   const providerQuery = useQuery({
     queryKey: ['featuredAppRightProviderAndWeight', rightContractId],
     queryFn: async () => {
-      const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
+      const response =
+        await governanceReadClient.lookupFeaturedAppRightByContractId(rightContractId);
       const contract = response.featured_app_right;
       const payload = contract?.payload as
         { provider?: string; activityWeight?: string | null } | undefined;
