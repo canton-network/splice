@@ -78,7 +78,6 @@ fi
 node_images=(
   canton-participant
   canton-sequencer
-  canton-cometbft-sequencer
   canton-mediator
   sv-app
   validator-app

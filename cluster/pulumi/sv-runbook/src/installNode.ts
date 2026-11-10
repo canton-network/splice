@@ -518,7 +518,6 @@ function installInfoEndpoint(
       MD5_HASH_OF_APPROVED_SV_IDENTITIES: `"${createHash('md5')
         .update(readFileOrEmptyString(approvedSvIdentitiesFile()))
         .digest('hex')}"`,
-      CHAIN_ID_SUFFIX: `"0"`,
     }
   );
 

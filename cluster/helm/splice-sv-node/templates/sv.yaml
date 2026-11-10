@@ -202,9 +202,7 @@ spec:
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.current {
                   sequencer {
-                    {{- if .Values.domain.enableBftSequencer }}
                     is-canton-bft-sequencer = true
-                    {{- end }}
                     admin-api {
                       address = {{ .Values.domain.sequencerAddress | quote }}
                       port = 5009
@@ -236,9 +234,7 @@ spec:
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.{{ $syncName }} {
                   sequencer {
-                    {{- if (index $sync "enableBftSequencer") }}
                     is-canton-bft-sequencer = true
-                    {{- end }}
                     admin-api {
                       address = {{ $sync.sequencerAddress | quote }}
                       port = 5009
@@ -261,21 +257,6 @@ spec:
                       port = 5007
                     }
                   }
-                  {{- /* TODO (#8263): remove the CometBFT config */}}
-                  {{- with $sync.cometBFT }}
-                  comet-bft-config {
-                    enabled = {{ .enabled }}
-                    {{- if .connectionUri }}
-                    connection-uri = {{ .connectionUri | quote }}
-                    {{- end }}
-                    {{- if .externalGovernanceKey }}
-                    governance-key {
-                      public-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY}
-                      private-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY}
-                    }
-                    {{- end }}
-                  }
-                  {{- end }}
                 }
             {{- end }}
             {{- end }}
@@ -285,9 +266,7 @@ spec:
               value: |
                 canton.sv-apps.sv.local-synchronizer-nodes.additional-legacy.{{ $i }} {
                   sequencer {
-                    {{- if (index $sync "enableBftSequencer") }}
                     is-canton-bft-sequencer = true
-                    {{- end }}
                     admin-api {
                       address = {{ $sync.sequencerAddress | quote }}
                       port = 5009
@@ -310,88 +289,12 @@ spec:
                       port = 5007
                     }
                   }
-                  {{- /* TODO (#8263): remove the CometBFT config */}}
-                  {{- with $sync.cometBFT }}
-                  comet-bft-config {
-                    enabled = {{ .enabled }}
-                    {{- if .connectionUri }}
-                    connection-uri = {{ .connectionUri | quote }}
-                    {{- end }}
-                    {{- if .externalGovernanceKey }}
-                    governance-key {
-                      public-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY}
-                      private-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY}
-                    }
-                    {{- end }}
-                  }
-                  {{- end }}
                 }
             {{- end }}
             {{- end }}
             {{- if .Values.decentralizedSynchronizerUrl }}
             - name: SPLICE_APP_SV_GLOBAL_DOMAIN_URL
               value: {{ .Values.decentralizedSynchronizerUrl | quote }}
-            {{- end }}
-            {{- /* TODO (#8263): remove the CometBFT config */}}
-            {{- if (.Values.cometBFT).enabled }}
-            - name: ADDITIONAL_CONFIG_SV_COMETBFT
-              value: |
-                canton.sv-apps.sv.local-synchronizer-nodes.current.comet-bft-config {
-                  enabled = {{ (.Values.cometBFT).enabled }}
-                  {{- if (.Values.cometBFT).connectionUri }}
-                  connection-uri = "{{ (.Values.cometBFT).connectionUri }}"
-                  {{- end }}
-                }
-            {{- end }}
-            {{- if (.Values.cometBFT).externalGovernanceKey }}
-            - name: ADDITIONAL_CONFIG_SV_COMETBFT_GOVERNANCE_KEY
-              value: |
-                canton.sv-apps.sv.local-synchronizer-nodes.current.comet-bft-config {
-                  governance-key {
-                    public-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY}
-                    private-key = ${?SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY}
-                  }
-                }
-            {{- end }}
-            {{- $anyGovernanceKey := false }}
-            {{- if (.Values.cometBFT).externalGovernanceKey }}
-              {{- $anyGovernanceKey = true }}
-            {{- end }}
-            {{- range $syncName, $sync := .Values.synchronizers }}
-              {{- if kindIs "map" $sync }}
-              {{- if ($sync.cometBFT).externalGovernanceKey }}
-                {{- $anyGovernanceKey = true }}
-              {{- end }}
-              {{- end }}
-            {{- end }}
-            {{- if .Values.synchronizers }}
-              {{- range $i, $sync := .Values.synchronizers.additionalLegacy }}
-                {{- if ($sync.cometBFT).externalGovernanceKey }}
-                  {{- $anyGovernanceKey = true }}
-                {{- end }}
-              {{- end }}
-            {{- end }}
-            {{- if $anyGovernanceKey }}
-            - name: SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY
-              {{- if ((.Values.cometBFT).secretOverrides).governancePublicKey }}
-              value: {{ .Values.cometBFT.secretOverrides.governancePublicKey | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  key: public
-                  name: "splice-app-sv-cometbft-governance-key"
-                  optional: false
-              {{- end }}
-            - name: SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY
-              {{- if ((.Values.cometBFT).secretOverrides).governancePrivateKey }}
-              value: {{ .Values.cometBFT.secretOverrides.governancePrivateKey | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  key: private
-                  name: "splice-app-sv-cometbft-governance-key"
-                  optional: false
-              {{- end }}
             {{- end }}
             - name: SPLICE_APP_UI_NETWORK_NAME
               value: {{ .Values.spliceInstanceNames.networkName | quote }}
