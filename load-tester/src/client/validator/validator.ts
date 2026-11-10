@@ -9,12 +9,14 @@ import {
   AcceptTransferOfferResponse,
   CreateTransferOfferResponse,
   FeaturedAppRightSpec,
+  GetAmuletRulesProxyResponse,
   GetBalanceResponse,
   ListTransferOffersResponse,
   LookupFeaturedAppRightResponse,
   UserStatusResponse,
   acceptTransferOfferResponse,
   createTransferOfferResponse,
+  getAmuletRulesProxyResponse,
   getBalanceResponse,
   listTransferOffersResponse,
   lookupFeaturedAppRightResponse,
@@ -76,6 +78,13 @@ export class ValidatorClient {
 
     // -*--- SCAN PROXY APIS ------------------------------------------------------*-
     scanProxy: {
+      getAmuletRules: (): GetAmuletRulesProxyResponse | undefined => {
+        return this.http.get
+          .success(`${this.validatorBaseUrl}/api/validator/v0/scan-proxy/amulet-rules`, null, {
+            headers: this.headers(),
+          })
+          .then(resp => jsonStringDecoder(getAmuletRulesProxyResponse, resp.body));
+      },
       lookupFeaturedAppRight: (
         providerPartyId: string,
       ): LookupFeaturedAppRightResponse | undefined => {

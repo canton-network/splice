@@ -68,6 +68,25 @@ export const lookupFeaturedAppRightResponse = z.object({
 
 export type LookupFeaturedAppRightResponse = z.infer<typeof lookupFeaturedAppRightResponse>;
 
+// Only the fields we need of the Splice.AmuletRules:AmuletRules contract
+export const getAmuletRulesProxyResponse = z.object({
+  amulet_rules: z.object({
+    contract: z.object({
+      payload: z.object({
+        configSchedule: z.object({
+          initialValue: z.object({
+            packageConfig: z.object({
+              wallet: z.string(),
+            }),
+          }),
+        }),
+      }),
+    }),
+  }),
+});
+
+export type GetAmuletRulesProxyResponse = z.infer<typeof getAmuletRulesProxyResponse>;
+
 export const damlFeaturedAppKinds: Record<FeaturedAppKind, string> = {
   basic: 'FAK_Basic',
   asset_moving: 'FAK_AssetMoving',

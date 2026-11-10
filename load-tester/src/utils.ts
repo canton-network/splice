@@ -95,9 +95,58 @@ export function pickTwoRandomUsers(validators: ValidatorConf[]): {
   }
 }
 
+// Setting any field of a self-granted featured app right requires splice-wallet >= 0.1.26
+const minWalletVersionForFeaturedAppConfig = [0, 1, 26];
+const walletVersionCacheMs = 10 * 60 * 1000;
+// Per walletBaseUrl, cached per VU
+const featuredAppConfigSupportCache: Map<string, { supported: boolean; checkedAt: number }> =
+  new Map();
+
+function isVersionAtLeast(version: string, minVersion: number[]): boolean {
+  const parts = version.split('.').map(Number);
+  for (let i = 0; i < minVersion.length; i++) {
+    const part = parts[i] ?? 0;
+    if (Number.isNaN(part)) {
+      console.warn(`Cannot parse package version ${version}`);
+      return false;
+    }
+    if (part !== minVersion[i]) {
+      return part > minVersion[i];
+    }
+  }
+  return true;
+}
+
+// Whether the network's voted splice-wallet version supports configuring featured app rights.
+// Returns undefined if that can't be determined right now.
+function supportsFeaturedAppConfig(validator: ValidatorConf): boolean | undefined {
+  const cached = featuredAppConfigSupportCache.get(validator.walletBaseUrl);
+  if (cached && Date.now() - cached.checkedAt < walletVersionCacheMs) {
+    return cached.supported;
+  }
+  const walletVersion = new ValidatorClient(
+    validator.walletBaseUrl,
+    validator.adminToken,
+    undefined,
+  ).v0.scanProxy.getAmuletRules()?.amulet_rules.contract.payload.configSchedule.initialValue
+    .packageConfig.wallet;
+  if (walletVersion === undefined) {
+    return undefined;
+  }
+  const supported = isVersionAtLeast(walletVersion, minWalletVersionForFeaturedAppConfig);
+  if (!supported) {
+    console.log(
+      `splice-wallet ${walletVersion} doesn't support configuring featured app rights, falling back to default rights`,
+    );
+  }
+  featuredAppConfigSupportCache.set(validator.walletBaseUrl, { supported, checkedAt: Date.now() });
+  return supported;
+}
+
 // The wanted featured app status of the given user, see ValidatorClient.featured.
-// Returns undefined (don't touch the featured app status) if an ops party can't be resolved yet,
-// because that user hasn't been onboarded.
+// Configured rights fall back to a default (basic) right on networks that don't support
+// configuring them. Returns undefined (don't touch the featured app status) if that can't be
+// determined, or if an ops party can't be resolved yet because that user hasn't been onboarded.
 function featuredAppRightSpec(
   validator: ValidatorConf,
   userIndex: number,
@@ -107,6 +156,15 @@ function featuredAppRightSpec(
     return false;
   }
   const { kind, weight, parties } = config;
+  if (kind === undefined && weight === undefined && parties === undefined) {
+    return {};
+  }
+  const supported = supportsFeaturedAppConfig(validator);
+  if (supported === undefined) {
+    return undefined;
+  } else if (!supported) {
+    return {};
+  }
   if (parties === undefined) {
     return { kind, weight };
   }

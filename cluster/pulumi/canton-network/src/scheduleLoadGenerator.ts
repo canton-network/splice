@@ -86,8 +86,9 @@ export function scheduleLoadGenerator(auth0Client: Auth0Client, dependencies: Re
           isDevNet,
           usersPerValidator: loadTesterConfig.usersPerValidator,
           featuredAppRights: loadTesterConfig.featuredAppRights,
-          // Replaced by featuredAppRights, only passed as a best-effort value for load tester
-          // images that predate it (e.g., if loadTester.chartVersion pins an older version).
+          // Ignored by the load tester, which uses featuredAppRights instead. Only passed for load
+          // tester images that predate featuredAppRights (e.g., if loadTester.chartVersion pins an
+          // older version), which feature that many users with basic rights.
           featuredUsersPerValidator: loadTesterConfig.featuredAppRights.length,
           validators,
           test: {

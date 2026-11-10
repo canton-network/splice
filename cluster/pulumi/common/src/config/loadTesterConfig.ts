@@ -27,6 +27,9 @@ export const LoadTesterConfigSchema = z.object({
       maxVUs: z.number().optional(),
       adaptiveScenario: LoadTesterAdaptiveScenarioConfigSchema.prefault({}),
       usersPerValidator: z.number().default(10),
+      // Number of users per validator with a default featured app right.
+      // Superseded by featuredAppRights, cannot be combined with it.
+      featuredUsersPerValidator: z.number().optional(),
       // Featured app rights of the users of each validator, see load-tester/src/settings.ts
       featuredAppRights: z
         .array(
@@ -36,14 +39,26 @@ export const LoadTesterConfigSchema = z.object({
             parties: z.array(z.number()).optional(),
           })
         )
-        // Keep in sync with the default in load-tester/src/settings.ts
-        .default([
-          {},
-          { kind: 'asset_moving', weight: 2, parties: [3] },
-          { kind: 'asset', weight: 0.5 },
-        ]),
+        .optional(),
       resources: K8sResourceSchema.optional(),
     })
+    .refine(c => c.featuredUsersPerValidator === undefined || c.featuredAppRights === undefined, {
+      message: 'Set at most one of featuredUsersPerValidator and featuredAppRights',
+    })
+    .transform(({ featuredUsersPerValidator, featuredAppRights, ...rest }) => ({
+      ...rest,
+      featuredAppRights:
+        featuredAppRights ??
+        (featuredUsersPerValidator !== undefined
+          ? Array.from({ length: featuredUsersPerValidator }, () => ({}))
+          : // One right of each kind: user 0 gets a default (basic) right, user 1 an asset-moving
+            // right with user 3 as an ops party, and user 2 an asset right with a non-default weight.
+            [
+              {},
+              { kind: 'asset_moving' as const, weight: 2, parties: [3] },
+              { kind: 'asset' as const, weight: 0.5 },
+            ]),
+    }))
     .optional(),
 });
 

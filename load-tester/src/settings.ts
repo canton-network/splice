@@ -40,23 +40,14 @@ export const configSchema = z
     usersPerValidator: z.number().min(1),
     // Featured app rights of the users of each validator: user i gets the right in entry i,
     // users without an entry are not featured. Unset fields are left to the Daml defaults.
-    featuredAppRights: z
-      .array(
-        z.object({
-          kind: featuredAppKind.optional(),
-          weight: z.number().min(0).optional(),
-          // Ops parties, as indices of other users of the same validator
-          parties: z.array(z.number().int().min(0)).max(10).optional(),
-        }),
-      )
-      // One right of each kind: user 0 gets a default (basic) right, user 1 an asset-moving right
-      // with user 3 as an ops party, and user 2 an asset right with a non-default weight.
-      // Keep in sync with the default in cluster/pulumi/common/src/config/loadTesterConfig.ts
-      .default([
-        {},
-        { kind: 'asset_moving', weight: 2, parties: [3] },
-        { kind: 'asset', weight: 0.5 },
-      ]),
+    featuredAppRights: z.array(
+      z.object({
+        kind: featuredAppKind.optional(),
+        weight: z.number().min(0).optional(),
+        // Ops parties, as indices of other users of the same validator
+        parties: z.array(z.number().int().min(0)).max(10).optional(),
+      }),
+    ),
     validators: z.array(validatorSchema).min(1),
     test: z.object({
       duration: z.string().min(1),
