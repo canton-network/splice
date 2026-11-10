@@ -16,17 +16,14 @@ deploymentDetails:  # optional, exposes static configuration under path /
       value: MD5_HASH_OF_APPROVED_SV_IDENTITIES
   synchronizer:
     current:
-      chainIdSuffix: CHAIN_ID_SUFFIX
       migrationId: MIGRATION_ID  # DevNet: 1, TestNet: 1, MainNet: 4
       synchronizerSerialId: SERIAL_ID
       #version: SYNCHRONIZER_VERSION
     #successor:  # Configure this when successor synchronizer is enabled
-    #  chainIdSuffix: STAGING_SYNCHRONIZER_CHAIN_ID_SUFFIX
     #  migrationId: MIGRATION_ID  # DevNet: 1, TestNet: 1, MainNet: 4
     #  synchronizerSerialId: STAGING_SYNCHRONIZER_SERIAL_ID
     #  version: STAGING_SYNCHRONIZER_VERSION
     #legacy:  # Configure this when legacy synchronizer is enabled
-    #  chainIdSuffix: LEGACY_SYNCHRONIZER_CHAIN_ID_SUFFIX
     #  migrationId: MIGRATION_ID  # DevNet: 1, TestNet: 1, MainNet: 4
     #  synchronizerSerialId: LEGACY_SYNCHRONIZER_SERIAL_ID
     #  version: LEGACY_SYNCHRONIZER_VERSION

@@ -99,6 +99,15 @@ export const WalletGatewayConfigSchema = z.object({
 
 export type WalletGatewayConfig = z.infer<typeof WalletGatewayConfigSchema>;
 
+export const SweepConfigSchema = z.object({
+  fromParty: z.string(),
+  toParty: z.string(),
+  maxBalance: z.number(),
+  minBalance: z.number(),
+  useTransferPreapproval: z.boolean().optional(),
+  useTokenStandardTransfer: z.boolean().optional(),
+});
+
 export const ValidatorNodeConfigSchema = z.object({
   logging: z
     .object({
@@ -149,6 +158,7 @@ export const ValidatorConfigSchema = z
     onboardingSecret: z.string().optional(),
     partyAllocator: PartyAllocatorConfigSchema.prefault({ enable: false }),
     version: z.string().optional(),
+    sweep: SweepConfigSchema.optional(),
   })
   .and(ValidatorNodeConfigSchema);
 

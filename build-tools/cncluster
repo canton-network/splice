@@ -1510,6 +1510,12 @@ function subcmd_deploy_basic() {
     _deploy_cluster_workflow "deploy_scratchnet_basic.yml" "Cluster test" "$@"
 }
 
+subcommand_whitelist[deploy_upgrade]='Trigger a scratchnet upgrade test deploy for a PR and post the run link back on the PR.'
+
+function subcmd_deploy_upgrade() {
+    _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "$@"
+}
+
 function _deploy_cluster_workflow() {
     local deploy_workflow="$1" label="$2"; shift 2
 
@@ -2078,7 +2084,7 @@ function subcmd_restore_node() {
             _info "Silencing SV report creation alerts for $sv_name for 1 hour"
             subcmd_silence_grafana_alerts "1 hour" "alertname=Report Creation Time Lag" "report_publisher=$sv_name"
             _info "Restoring sv node $node"
-            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cometbft cantonBft sequencer participant mediator cn-apps
+            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cantonBft sequencer participant mediator cn-apps
             ;;
         validator1|splitwell)
             _info "Restoring validator node $node"

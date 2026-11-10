@@ -94,6 +94,7 @@ abstract class SvAppReference(
       httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }
 
+  // TODO (#8263): remove together with the CometBFT API endpoints
   @Help.Summary("Make a CometBFT Json RPC request")
   def cometBftJsonRpcRequest(
       id: definitions.CometBftJsonRpcRequestId,

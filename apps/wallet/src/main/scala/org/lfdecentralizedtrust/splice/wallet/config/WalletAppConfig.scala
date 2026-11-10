@@ -40,6 +40,9 @@ final case class WalletSweepConfig(
     // If set to true we use the transfer preapproval of the receiver to transfer
     // directly instead of creating a transfer offer.
     useTransferPreapproval: Boolean = false,
+    // If set to true (and useTransferPreapproval is false) we transfer through the
+    // token standard transfer factory instead of creating a transfer offer.
+    useTokenStandardTransfer: Boolean = false,
 )
 
 final case class AutoAcceptTransfersConfig(

@@ -1,6 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
-import com.daml.ledger.javaapi.data.{DamlRecord, Identifier, OffsetCheckpoint}
+import com.daml.ledger.javaapi.data.{DamlRecord, Identifier, OffsetCheckpoint, Transaction}
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AppRewardCoupon
 import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection.IMPORT_ACS_WORKFLOW_ID_PREFIX
@@ -15,20 +15,24 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
 }
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.testTxLogConfig
 import org.lfdecentralizedtrust.splice.store.{
+  AdditionalIngestionSink,
   HardLimit,
+  IngestionSummary,
   Limit,
   MultiDomainAcsStore,
   MultiDomainAcsStoreTest,
+  PreparedIngestionAction,
   StoreTestBase,
   TestTxLogEntry,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, TemplateJsonDecoder}
 import com.digitalasset.canton.concurrent.FutureSupervisor
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.ParticipantId
+import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
@@ -43,6 +47,8 @@ import org.slf4j.event.Level
 import slick.jdbc.JdbcProfile
 
 import java.time.Instant
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.jdk.CollectionConverters.*
 import scala.concurrent.{Future, Promise}
 import StoreTestBase.*
 import cats.data.NonEmptyList
@@ -60,6 +66,41 @@ class DbMultiDomainAcsStoreTest
   override lazy val profile: JdbcProfile = storage.api.jdbcProfile
 
   "DbMultiDomainAcsStore" should {
+    "track assigns separately from creates in the ingestion summary" in {
+      val summaries = new ConcurrentLinkedQueue[IngestionSummary]()
+      implicit val store: Store = mkStoreWithAcsRowDataF(
+        0,
+        Some(1),
+        0L,
+        ParticipantId("DbMultiDomainAcsStoreTest"),
+        defaultContractFilter,
+        "acs_store_template",
+        Some("txlog_store_template"),
+        Some("interface_views_template"),
+        handleIngestionSummary = summaries.add(_).discard,
+      )
+      val coupon1 = c(1)
+      val coupon2 = c(2)
+      for {
+        _ <- initWithAcs()
+        _ <- d1.create(coupon1)
+        _ <- d1.unassign(coupon1 -> d2, nextReassignmentId, 1)
+        _ <- d1.assign(coupon2 -> d2, nextReassignmentId, 1)
+      } yield {
+        val all = summaries.asScala.toSeq
+        all.flatMap(_.ingestedCreatedEvents.map(_.getContractId)) shouldBe Seq(
+          coupon1.contractId.contractId
+        )
+        all.flatMap(_.ingestedAssignEvents.map(_.getContractId)) shouldBe Seq(
+          coupon2.contractId.contractId
+        )
+        all.flatMap(_.ingestedUnassignEvents.map(_.contractId)) shouldBe Seq(
+          coupon1.contractId.contractId
+        )
+        all.map(_.acsSizeDiff).sum shouldBe 1
+      }
+    }
+
     "allow creating & deleting same contract id in different stores" in {
       val store1 = mkStore(acsId = 1, txLogId = Some(1))
       val store1MigrationId1 = mkStore(acsId = 1, txLogId = Some(1), migrationId = 1L)
@@ -630,6 +671,60 @@ class DbMultiDomainAcsStoreTest
       }
     }
 
+    "only pass transactions on the store's synchronizer to additional ingestion sinks" in {
+      val prepared = new ConcurrentLinkedQueue[Seq[String]]()
+      val committed = new ConcurrentLinkedQueue[Seq[String]]()
+      val sink = new AdditionalIngestionSink {
+        override def prepareBatch(
+            txLogStoreId: TxLogQueries.TxLogStoreId,
+            transactions: NonEmptyList[Transaction],
+        )(implicit tc: TraceContext): Seq[PreparedIngestionAction] = {
+          prepared.add(transactions.toList.map(_.getUpdateId)).discard
+          Seq.empty
+        }
+        override def onTransactionCommitted(transactions: NonEmptyList[Transaction])(implicit
+            tc: TraceContext
+        ): Unit = committed.add(transactions.toList.map(_.getUpdateId)).discard
+      }
+      implicit val store: Store = mkStoreWithAcsRowDataF(
+        0,
+        Some(1),
+        0L,
+        ParticipantId("DbMultiDomainAcsStoreTest"),
+        defaultContractFilter,
+        "acs_store_template",
+        Some("txlog_store_template"),
+        Some("interface_views_template"),
+        additionalIngestionSinks = Seq(sink),
+      )
+      def createTx(coupon: Int, synchronizerId: SynchronizerId, workflowId: String = "") = {
+        val tx = mkCreateTx(
+          nextOffset(),
+          Seq(c(coupon)),
+          defaultEffectiveAt,
+          Seq(dsoParty),
+          synchronizerId,
+          workflowId,
+        )
+        tx -> TreeUpdateOrOffsetCheckpoint.Update(TransactionTreeUpdate(tx), synchronizerId)
+      }
+      for {
+        _ <- initWithAcs()
+        (onD1, onD1Update) = createTx(1, d1)
+        (_, onD2Update) = createTx(2, d2)
+        (_, importedOnD1Update) = createTx(3, d1, workflowId = IMPORT_ACS_WORKFLOW_ID_PREFIX)
+        (onD1Again, onD1AgainUpdate) = createTx(4, d1)
+        // A single batch, so the filter has to drop transactions from within the batch.
+        _ <- store.testIngestionSink.ingestUpdateBatch(
+          NonEmptyList.of(onD1Update, onD2Update, importedOnD1Update, onD1AgainUpdate)
+        )
+      } yield {
+        val expected = Seq(onD1.getUpdateId, onD1Again.getUpdateId)
+        prepared.asScala.toSeq.flatten shouldBe expected
+        committed.asScala.toSeq.flatten shouldBe expected
+      }
+    }
+
     "can ingest large batches" in {
       implicit val store = mkStore()
       // 100 txs of 1000 CreatedEvents each
@@ -763,6 +858,8 @@ class DbMultiDomainAcsStoreTest
       acsTableName: String,
       txLogTableName: Option[String],
       interfaceViewsTableNameOpt: Option[String],
+      handleIngestionSummary: IngestionSummary => Unit = _ => (),
+      additionalIngestionSinks: Seq[AdditionalIngestionSink] = Seq.empty,
   ) = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
@@ -783,9 +880,12 @@ class DbMultiDomainAcsStoreTest
         filter,
         testTxLogConfig,
         migrationId,
+        d1,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         IngestionConfig(),
+        handleIngestionSummary = handleIngestionSummary,
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+        additionalIngestionSinks = additionalIngestionSinks,
       )
       .futureValue
   }

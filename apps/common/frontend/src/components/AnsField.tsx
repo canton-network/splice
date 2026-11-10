@@ -49,11 +49,11 @@ export const BaseAnsField: React.FC<BaseAnsFieldProps> = propas => {
 
   const resolvedPartyId = ansEntry.data?.user || userInput.value;
 
-  const lastNotifiedPartyId = useRef<string>('');
+  const lastNotifiedPartyIdRef = useRef<string>('');
   const notifyPartyChanged = useCallback(
     (party: string) => {
-      if (lastNotifiedPartyId.current !== party) {
-        lastNotifiedPartyId.current = party;
+      if (lastNotifiedPartyIdRef.current !== party) {
+        lastNotifiedPartyIdRef.current = party;
         onPartyChanged(party);
       }
     },

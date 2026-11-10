@@ -349,7 +349,7 @@ tests:
   - it: "allows overriding imageName and persistence.initImage"
     set:
       imageName: "validator-2"
-      persistence.initImageName: "secure-registry.com/postgres:14"
+      persistence.initImageName: "secure-registry.com/postgres:18"
       persistence.enablePgInitContainer: true
     documentSelector:
       path: kind
@@ -360,7 +360,7 @@ tests:
           pattern: "validator-2:0\\.1\\.0$"
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='mock-validator-init')].image
-          pattern: "secure-registry.com/postgres:14"
+          pattern: "secure-registry.com/postgres:18"
 
   - it: "allows overriding nested persistence and bucket secret env vars with raw strings"
     set:

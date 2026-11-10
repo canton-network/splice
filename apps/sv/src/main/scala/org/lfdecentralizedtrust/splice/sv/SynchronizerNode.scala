@@ -33,6 +33,7 @@ object SequencerConfig {
       sequencerConfig: SvSequencerConfig,
       cometbftConfig: Option[SvCometBftConfig],
   ): SequencerConfig = {
+    // TODO (#8263): remove the CometBFT and reference sequencer cases, DA BFT is the only supported sequencer
     if (sequencerConfig.isCantonBftSequencer) {
       CantonBftSequencerConfig()
     } else if (cometbftConfig.exists(_.enabled)) {
