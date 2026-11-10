@@ -180,15 +180,6 @@ class ScanAutomationService(
       )
     )
   }
-  if (config.updateHistoryBackfillImportUpdatesEnabled) {
-    registerTrigger(
-      new DeleteCorruptAcsSnapshotTrigger(
-        snapshotStore,
-        updateHistory,
-        triggerContext,
-      )
-    )
-  }
   if (config.txLogBackfillEnabled) {
     registerTrigger(
       new TxLogBackfillingTrigger(

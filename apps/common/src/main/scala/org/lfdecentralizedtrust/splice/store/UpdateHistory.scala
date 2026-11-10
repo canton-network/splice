@@ -94,11 +94,6 @@ import scala.util.Try
   * The following triggers perform long-running background tasks related to [[UpdateHistory]],
   * and must complete in the following order:
   *
-  *   1. [[DeleteCorruptAcsSnapshotTrigger]] deletes all ACS snapshots that were computed from this UpdateHistory while
-  *      it was missing import updates. Such snapshots are easily identified by the trigger.
-  *      UpdateHistory has an in-memory flag (as part of [[UpdateHistory.State]]) that stores
-  *      whether all corrupt updates have been deleted.
-  *      See [[corruptAcsSnapshotsDeleted]] and [[markCorruptAcsSnapshotsDeleted]].
   *   1. [[ScanHistoryBackfillingTrigger]] backfills missing updates from peer scan applications.
   *      Information on the progress of this backfilling process is stored in the database.
   *      See [[destinationHistory.markBackfillingComplete]] and [[destinationHistory.markImportUpdatesBackfillingComplete]].
@@ -890,67 +885,6 @@ class UpdateHistory private (
       )
     """
     } yield result
-  }
-
-  def migrationsWithCorruptSnapshots()(implicit tc: TraceContext): Future[Set[Long]] = {
-    for {
-      migrationsWithImportUpdates <- storage
-        .query(
-          // The following is equivalent to:
-          //    """select distinct migration_id
-          //    from update_history_transactions
-          //    where history_id = $historyId
-          //    and record_time = ${CantonTimestamp.MinValue}"""
-          // but it uses a recursive CTE to implement a loose index scan
-          sql"""
-              with recursive t as (
-                (
-                  select migration_id
-                  from update_history_transactions_legacy
-                  where history_id = $historyId and record_time = ${CantonTimestamp.MinValue}
-                  order by migration_id limit 1
-                )
-                union all
-                select (
-                  select migration_id
-                  from update_history_transactions_legacy
-                  where migration_id > t.migration_id and history_id = $historyId and record_time = ${CantonTimestamp.MinValue}
-                  order by migration_id limit 1
-                )
-                from t
-                where t.migration_id is not null
-              )
-              select migration_id from t where migration_id is not null
-             """.as[Long],
-          "deleteInvalidAcsSnapshots.1",
-        )
-      firstMigrationIdO <- getFirstMigrationId(historyId)
-      migrationsWithSnapshots <- storage
-        .query(
-          // acs_snapshot_pkey
-          sql"""
-               select distinct migration_id
-               from acs_snapshot
-               where history_id = $historyId
-             """.as[Long],
-          "deleteInvalidAcsSnapshots.2",
-        )
-    } yield {
-      firstMigrationIdO match {
-        case None =>
-          Set.empty
-        case Some(firstMigrationId) =>
-          val migrationsThatNeedImportUpdates: Set[Long] =
-            migrationsWithSnapshots.toSet - firstMigrationId
-          migrationsThatNeedImportUpdates -- migrationsWithImportUpdates.toSet
-      }
-    }
-  }
-
-  def corruptAcsSnapshotsDeleted: Boolean = state.get.corruptSnapshotsDeleted
-  def markCorruptAcsSnapshotsDeleted(): Unit = {
-    state.updateAndGet(_.copy(corruptSnapshotsDeleted = true))
-    ()
   }
 
   /** Deletes all ACS snapshots with a record time after the given time.
@@ -2833,14 +2767,12 @@ object UpdateHistory {
 
   case class State(
       initialized: Promise[Unit],
-      corruptSnapshotsDeleted: Boolean,
       lastIngestedRecordTime: Option[CantonTimestamp],
   ) {}
 
   object State {
     def empty(): State = State(
       initialized = Promise[Unit](),
-      corruptSnapshotsDeleted = false,
       lastIngestedRecordTime = None,
     )
   }
