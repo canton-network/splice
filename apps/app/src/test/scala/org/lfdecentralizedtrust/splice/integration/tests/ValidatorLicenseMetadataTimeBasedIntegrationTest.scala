@@ -60,8 +60,7 @@ class ValidatorLicenseMetadataTimeBasedIntegrationTest
       "alice@example.com",
     )
     // Let the faucet trigger claim the coupons for the current round first, so that the
-    // metadata update below does not have to compete with a series of faucet claims for the
-    // license (as in the next test case).
+    // metadata update below competes with fewer faucet claims for the license.
     advanceTimeForRewardAutomationToRunForCurrentRound
     clue("faucet coupons for the current round get claimed") {
       eventually() {
