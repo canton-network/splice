@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.syncoperator
 
 import cats.data.EitherT
 import cats.syntax.either.*
-import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.concurrent.{
   ExecutionContextIdlenessExecutorService,
   FutureSupervisor,
@@ -48,7 +47,6 @@ class SyncOperatorAppBootstrap(
     executionContext: ExecutionContextIdlenessExecutorService,
     scheduler: ScheduledExecutorService,
     actorSystem: ActorSystem,
-    executionSequencerFactory: ExecutionSequencerFactory,
 ) extends NodeBootstrapBase[
       SyncOperatorApp,
       SyncOperatorAppBackendConfig,
@@ -75,7 +73,6 @@ class SyncOperatorAppBootstrap(
         storage,
         clock,
         loggerFactory,
-        tracerProvider,
         futureSupervisor,
         metrics,
       )
@@ -102,7 +99,6 @@ object SyncOperatorAppBootstrap {
       executionContext: ExecutionContextIdlenessExecutorService,
       scheduler: ScheduledExecutorService,
       actorSystem: ActorSystem,
-      executionSequencerFactory: ExecutionSequencerFactory,
   ): Either[String, SyncOperatorAppBootstrap] =
     SpliceStorageFactory.createWithDeferredClose(
       storage = withConfiguredPostgresConnectionSettings(

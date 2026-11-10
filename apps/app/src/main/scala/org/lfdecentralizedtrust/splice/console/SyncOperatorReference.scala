@@ -39,7 +39,7 @@ final class SyncOperatorAppBackendReference(
     override val consoleEnvironment: SpliceConsoleEnvironment,
     name: String,
 ) extends SyncOperatorAppReference(consoleEnvironment, name)
-    with AppBackendReference
+    with NodeBackendReference
     with BaseInspection[SyncOperatorApp] {
 
   override def runningNode: Option[SyncOperatorAppBootstrap] =

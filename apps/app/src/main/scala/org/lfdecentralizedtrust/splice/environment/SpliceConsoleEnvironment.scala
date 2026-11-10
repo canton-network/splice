@@ -64,8 +64,8 @@ class SpliceConsoleEnvironment(
   )(this.tracer, templateDecoder, httpClient, environment.executionContext, actorSystem)
 
   def mergeLocalSpliceInstances(
-      locals: Seq[AppBackendReference]*
-  ): Seq[AppBackendReference] =
+      locals: Seq[NodeBackendReference]*
+  ): Seq[NodeBackendReference] =
     locals.flatten
 
   def mergeRemoteSpliceInstances(remotes: Seq[AppReference]*): Seq[AppReference] =
@@ -80,7 +80,7 @@ class SpliceConsoleEnvironment(
   lazy val amuletNodes: NodeReferences[
     AppReference,
     AppReference,
-    AppBackendReference,
+    NodeBackendReference,
   ] = {
     NodeReferences(
       mergeLocalSpliceInstances(

@@ -18,7 +18,7 @@ import io.opentelemetry.api.trace.Tracer
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-/** Subclass of NodeBase that provides default initialization for most apps */
+/** Subclass of SpliceNodeWithParticipantBase that provides default initialization for most apps */
 abstract class Node[State <: AutoCloseable & HasHealth, PreInitializeState](
     serviceUser: String,
     participantClient: ParticipantClientConfig,
@@ -32,7 +32,7 @@ abstract class Node[State <: AutoCloseable & HasHealth, PreInitializeState](
     ec: ExecutionContextExecutor,
     esf: ExecutionSequencerFactory,
     tracer: Tracer,
-) extends NodeBase[State](
+) extends SpliceNodeWithParticipantBase[State](
       serviceUser,
       participantClient,
       parameters,

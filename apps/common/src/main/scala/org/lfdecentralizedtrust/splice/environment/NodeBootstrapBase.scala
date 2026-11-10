@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.{blocking, Future}
 import scala.util.{Failure, Success}
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpAdminService}
-import org.lfdecentralizedtrust.splice.config.SpliceBackendConfig
+import org.lfdecentralizedtrust.splice.config.SpliceNodeConfig
 
 /** Modelled after CantonNodeBootstrap
   */
@@ -68,7 +68,7 @@ trait NodeBootstrap[+N <: CantonNode]
   */
 abstract class NodeBootstrapBase[
     T <: CantonNode,
-    NodeConfig <: SpliceBackendConfig,
+    NodeConfig <: SpliceNodeConfig,
     ParameterConfig <: CantonNodeParameters,
 ](
     nodeConfig: NodeConfig,

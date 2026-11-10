@@ -12,7 +12,7 @@ import com.digitalasset.canton.tracing.TracingConfig
 /** Abstraction to remove code duplication when implementing Canton traits and specifying parameters we don't use
   * anyway.
   */
-abstract class SpliceBackendConfig extends LocalNodeConfig {
+abstract class SpliceNodeConfig extends LocalNodeConfig {
   override val init: InitConfig = InitConfig()
   override val sequencerClient: SequencerClientConfig = SequencerClientConfig()
 
@@ -22,10 +22,14 @@ abstract class SpliceBackendConfig extends LocalNodeConfig {
 
   override val monitoring: NodeMonitoringConfig = NodeMonitoringConfig()
 
-  def participantClient: BaseParticipantClientConfig
   def automation: AutomationConfig
   def parameters: SpliceParametersConfig
 
+}
+
+/** Config of an app that connects to a participant. */
+abstract class SpliceBackendConfig extends SpliceNodeConfig {
+  def participantClient: BaseParticipantClientConfig
 }
 
 abstract class HttpClientConfig extends NetworkAppNodeConfig {}

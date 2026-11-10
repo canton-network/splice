@@ -110,7 +110,7 @@ class SvApp(
     ec: ExecutionContextExecutor,
     esf: ExecutionSequencerFactory,
     tracer: Tracer,
-) extends NodeBase[SvApp.State](
+) extends SpliceNodeWithParticipantBase[SvApp.State](
       config.ledgerApiUser,
       config.participantClient,
       amuletAppParameters,

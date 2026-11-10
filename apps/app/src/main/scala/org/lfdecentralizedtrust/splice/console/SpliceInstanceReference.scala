@@ -15,10 +15,11 @@ import org.lfdecentralizedtrust.splice.config.{
   BaseParticipantClientConfig,
   NetworkAppClientConfig,
   SpliceBackendConfig,
+  SpliceNodeConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.{
-  NodeBase,
   SpliceConsoleEnvironment,
+  SpliceNodeBase,
   SpliceStatus,
 }
 import org.lfdecentralizedtrust.splice.util.HasHealth
@@ -209,8 +210,8 @@ trait HttpAppReference extends AppReference with HttpCommandRunner {
     }
 }
 
-trait AppBackendReference extends AppReference with LocalInstanceReference {
-  override def config: SpliceBackendConfig
+trait NodeBackendReference extends AppReference with LocalInstanceReference {
+  override def config: SpliceNodeConfig
 
   @Help.Summary("Start node and wait for initialization to complete")
   def startSync(): Unit = {
@@ -221,7 +222,7 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
   @Help.Summary(
     "Returns the state of this app. May only be called while the app is running."
   )
-  protected def _appState[S <: AutoCloseable & HasHealth, NB <: NodeBase[S]](implicit
+  protected def _appState[S <: AutoCloseable & HasHealth, NB <: SpliceNodeBase[S]](implicit
       tag: ClassTag[NB]
   ): S = {
     (for {
@@ -246,6 +247,13 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
       x => x,
     )
   }
+
+  override def adminApiToken: Option[String] = super.adminApiToken
+}
+
+/** Reference to an app that connects to a participant. */
+trait AppBackendReference extends NodeBackendReference {
+  override def config: SpliceBackendConfig
 
   protected def getParticipantClient()(implicit
       ec: ExecutionContext
@@ -288,8 +296,6 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
 
   /** Remote participant this splitwell app is configured to interact with. */
   lazy val participantClient = getParticipantClient()
-
-  override def adminApiToken: Option[String] = super.adminApiToken
 }
 
 /** Subclass of participantClient that takes the config as an argument

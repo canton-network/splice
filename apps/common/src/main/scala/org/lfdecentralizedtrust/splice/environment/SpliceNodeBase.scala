@@ -52,19 +52,15 @@ import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
-/** A running instance of a canton node. See Node for the subclass that provides the default initialization for most apps. */
-abstract class NodeBase[State <: AutoCloseable & HasHealth](
-    serviceUser: String,
-    participantClient: BaseParticipantClientConfig,
+/** A running instance of a canton node that needs no participant. See SpliceNodeWithParticipantBase for apps that connect to a participant. */
+abstract class SpliceNodeBase[State <: AutoCloseable & HasHealth](
     parameters: SharedSpliceAppParameters,
     loggerFactory: NamedLoggerFactory,
-    tracerProvider: TracerProvider,
     futureSupervisor: FutureSupervisor,
     nodeMetrics: SpliceMetrics,
 )(implicit
     ac: ActorSystem,
     ec: ExecutionContextExecutor,
-    esf: ExecutionSequencerFactory,
     tracer: Tracer,
 ) extends CantonNode
     with FlagCloseableAsync
@@ -89,15 +85,6 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
   override val timeouts = parameters.processingTimeouts
 
   private val wallClock: WallClock = new WallClock(timeouts, loggerFactory)
-
-  private val participantAdminApiTokenProvider: AuthTokenProvider =
-    createManagedTokenProviderWithRetries(
-      tokenSource = AuthTokenSource.fromConfig(
-        participantClient.adminApi.authConfig,
-        nodeMetrics.httpClientMetrics,
-        loggerFactory,
-      )
-    )(TraceContext.empty)
 
   private val isInitializedVar: AtomicReference[Boolean] = new AtomicReference(false)
 
@@ -132,11 +119,11 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
 
   protected def ports: Map[String, Port]
 
-  override type Status = NodeBase.NodeStatus
+  override type Status = SpliceNodeBase.NodeStatus
 
   // TODO(DACH-NY/canton-network-node#736): fork or generalize status definition.
   override final def status = {
-    NodeBase.NodeStatus(
+    SpliceNodeBase.NodeStatus(
       uid = UniqueIdentifier.tryFromProtoPrimitive(s"amulet::$name"),
       uptime = uptime(),
       ports = ports,
@@ -144,54 +131,6 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
       version = ReleaseVersion.tryCreate(BuildInfo.compiledVersion),
     )
   }
-
-  private def createLedgerClient()(implicit tc: TraceContext): Future[SpliceLedgerClient] = for {
-    _ <- Future.successful(())
-    _ = logger.info("Creating ledger API auth token source")
-    authTokenSource = AuthTokenSource.fromConfig(
-      participantClient.ledgerApi.authConfig,
-      nodeMetrics.httpClientMetrics,
-      loggerFactory,
-    )
-  } yield {
-    val tokenProvider = createManagedTokenProviderWithRetries(authTokenSource)
-    new SpliceLedgerClient(
-      participantClient.ledgerApi.clientConfig,
-      // Note: When ledger API auth is enabled, application ID must be equal to user ID
-      serviceUser,
-      tokenProvider,
-      parameters.loggingConfig.api,
-      loggerFactory,
-      tracerProvider,
-      retryProvider,
-      nodeMetrics.grpcClientMetrics,
-    )
-  }
-
-  private def waitForUser(
-      connection: BaseLedgerConnection
-  )(implicit tc: TraceContext): Future[Unit] = {
-    logger.info(s"Waiting for user $serviceUser")
-    retryProvider.getValueWithRetries(
-      RetryFor.WaitingOnInitDependency,
-      "wait_user",
-      s"user $serviceUser",
-      connection.getUser(serviceUser).map(_ => ()),
-      logger,
-      additionalCodes = Seq(Status.Code.PERMISSION_DENIED),
-    )
-  }
-
-  // Code that is run before a ledger connection becomes available.
-  // This can be used for helping the participant initialize.
-  protected def preInitializeBeforeLedgerConnection()(implicit
-      @nowarn("cat=unused") tc: TraceContext
-  ): Future[Unit] =
-    Future.unit
-
-  protected def initializeNode(
-      ledgerClient: SpliceLedgerClient
-  )(implicit tc: TraceContext): Future[State]
 
   private lazy val appInitMessage = s"$name app initialization"
 
@@ -241,27 +180,17 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
     }
   })
 
-  private lazy val ledgerClientF = appInitStep("create ledger client") {
-    createLedgerClient()(TraceContext.empty)
-  }(TraceContext.empty)
+  /** Builds the app state. Called from this class's constructor, so it runs before vals in the subclass body are initialized. */
+  protected def initializeApp()(implicit tc: TraceContext): Future[State]
+
+  /** Closed after the retry provider and before the HTTP pool and the app state. */
+  protected def connectionCloseables(
+      @nowarn("cat=unused") timeout: NonNegativeDuration
+  )(implicit @nowarn("cat=unused") tc: TraceContext): Seq[AsyncOrSyncCloseable] = Seq.empty
 
   private val initializeF = withNewTrace("app_init") { implicit tc => _ =>
     logger.info(s"$appInitMessage: Starting initialization")
-    val preInitialize1F = preInitializeBeforeLedgerConnection()
-    val ledgerClient = preInitialize1F.flatMap { _ =>
-      ledgerClientF
-    }
-    appInitStep("Initialize app") {
-      ledgerClient.flatMap { client =>
-        val initConnection = client.readOnlyConnection(
-          this.getClass.getSimpleName,
-          loggerFactory,
-        )
-        appInitStep("Wait for user") { waitForUser(initConnection) }.flatMap(_ =>
-          appInitStep("Initialize node") { initializeNode(client) }
-        )
-      }
-    }
+    initializeApp()
       // TODO(tech-debt): Handle cleanup in case some initialization failed mid-way.
       // For example, if we fail to get the service party we won't close the ledger client.
       // Note that we have a similar issue in app-initialization, so this should be handled
@@ -306,48 +235,35 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
         SyncCloseable(
           s"$name retry provider",
           retryProvider.close(),
-        ),
+        )
+      ) ++
         // By shutting down gRPC (ledger) and HTTP connections before the app state, any in-flight connections will be cancelled.
         // This prevents requests that take longer than the shutdown wait from blocking the shutdown process.
         // See #9851 and #10167.
-        AsyncCloseable(
-          s"$name Ledger API connection",
-          ledgerClientF.map(_.close()),
-          nonNegativeDuration,
-        ),
-        AsyncCloseable(
-          "http pool",
-          httpExt.shutdownAllConnectionPools(),
-          nonNegativeDuration,
-        ),
-        AsyncCloseable(
-          s"$name App state",
-          initializeF.transform {
-            case Failure(_) if this.isClosing => Success(())
-            case Failure(e) => Failure(e)
-            case Success(node) => Success(node.close())
-          },
-          nonNegativeDuration,
-        ),
-      )
+        connectionCloseables(nonNegativeDuration) ++
+        Seq(
+          AsyncCloseable(
+            "http pool",
+            httpExt.shutdownAllConnectionPools(),
+            nonNegativeDuration,
+          ),
+          AsyncCloseable(
+            s"$name App state",
+            initializeF.transform {
+              case Failure(_) if this.isClosing => Success(())
+              case Failure(e) => Failure(e)
+              case Success(node) => Success(node.close())
+            },
+            nonNegativeDuration,
+          ),
+        )
     }
-  }
-
-  protected def createParticipantAdminConnection(): ParticipantAdminConnection = {
-    new ParticipantAdminConnection(
-      participantClient.adminApi.clientConfig,
-      parameters.loggingConfig.api,
-      loggerFactory,
-      nodeMetrics.grpcClientMetrics,
-      retryProvider,
-      participantAdminApiTokenProvider,
-    )
   }
 
   /** The lifetime of the resulting token provider is bound to the node lifetime so this method is not suitable for
     * shorter-lived scopes.
     */
-  private def createManagedTokenProviderWithRetries(
+  protected def createManagedTokenProviderWithRetries(
       tokenSource: AuthTokenSource
   )(implicit tc: TraceContext): AuthTokenProvider =
     tokenSource match {
@@ -373,7 +289,131 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
     }
 }
 
-object NodeBase {
+/** A running instance of a canton node that connects to a participant. See Node for the subclass that provides the default initialization for most apps. */
+abstract class SpliceNodeWithParticipantBase[State <: AutoCloseable & HasHealth](
+    serviceUser: String,
+    participantClient: BaseParticipantClientConfig,
+    parameters: SharedSpliceAppParameters,
+    loggerFactory: NamedLoggerFactory,
+    tracerProvider: TracerProvider,
+    futureSupervisor: FutureSupervisor,
+    nodeMetrics: SpliceMetrics,
+)(implicit
+    ac: ActorSystem,
+    ec: ExecutionContextExecutor,
+    esf: ExecutionSequencerFactory,
+    tracer: Tracer,
+) extends SpliceNodeBase[State](
+      parameters,
+      loggerFactory,
+      futureSupervisor,
+      nodeMetrics,
+    ) {
+
+  // Lazy because initialization starts in the parent's constructor, before vals in this body are set.
+  private lazy val participantAdminApiTokenProvider: AuthTokenProvider =
+    createManagedTokenProviderWithRetries(
+      tokenSource = AuthTokenSource.fromConfig(
+        participantClient.adminApi.authConfig,
+        nodeMetrics.httpClientMetrics,
+        loggerFactory,
+      )
+    )(TraceContext.empty)
+
+  private def createLedgerClient()(implicit tc: TraceContext): Future[SpliceLedgerClient] = for {
+    _ <- Future.successful(())
+    _ = logger.info("Creating ledger API auth token source")
+    authTokenSource = AuthTokenSource.fromConfig(
+      participantClient.ledgerApi.authConfig,
+      nodeMetrics.httpClientMetrics,
+      loggerFactory,
+    )
+  } yield {
+    val tokenProvider = createManagedTokenProviderWithRetries(authTokenSource)
+    new SpliceLedgerClient(
+      participantClient.ledgerApi.clientConfig,
+      // Note: When ledger API auth is enabled, application ID must be equal to user ID
+      serviceUser,
+      tokenProvider,
+      parameters.loggingConfig.api,
+      loggerFactory,
+      tracerProvider,
+      retryProvider,
+      nodeMetrics.grpcClientMetrics,
+    )
+  }
+
+  private def waitForUser(
+      connection: BaseLedgerConnection
+  )(implicit tc: TraceContext): Future[Unit] = {
+    logger.info(s"Waiting for user $serviceUser")
+    retryProvider.getValueWithRetries(
+      RetryFor.WaitingOnInitDependency,
+      "wait_user",
+      s"user $serviceUser",
+      connection.getUser(serviceUser).map(_ => ()),
+      logger,
+      additionalCodes = Seq(Status.Code.PERMISSION_DENIED),
+    )
+  }
+
+  // Code that is run before a ledger connection becomes available.
+  // This can be used for helping the participant initialize.
+  protected def preInitializeBeforeLedgerConnection()(implicit
+      @nowarn("cat=unused") tc: TraceContext
+  ): Future[Unit] =
+    Future.unit
+
+  protected def initializeNode(
+      ledgerClient: SpliceLedgerClient
+  )(implicit tc: TraceContext): Future[State]
+
+  private lazy val ledgerClientF = appInitStep("create ledger client") {
+    createLedgerClient()(TraceContext.empty)
+  }(TraceContext.empty)
+
+  override protected def initializeApp()(implicit tc: TraceContext): Future[State] = {
+    val preInitialize1F = preInitializeBeforeLedgerConnection()
+    val ledgerClient = preInitialize1F.flatMap { _ =>
+      ledgerClientF
+    }
+    appInitStep("Initialize app") {
+      ledgerClient.flatMap { client =>
+        val initConnection = client.readOnlyConnection(
+          this.getClass.getSimpleName,
+          loggerFactory,
+        )
+        appInitStep("Wait for user") { waitForUser(initConnection) }.flatMap(_ =>
+          appInitStep("Initialize node") { initializeNode(client) }
+        )
+      }
+    }
+  }
+
+  override protected def connectionCloseables(
+      timeout: NonNegativeDuration
+  )(implicit tc: TraceContext): Seq[AsyncOrSyncCloseable] =
+    Seq(
+      AsyncCloseable(
+        s"$name Ledger API connection",
+        ledgerClientF.map(_.close()),
+        timeout,
+      )
+    )
+
+  protected def createParticipantAdminConnection(): ParticipantAdminConnection = {
+    new ParticipantAdminConnection(
+      participantClient.adminApi.clientConfig,
+      parameters.loggingConfig.api,
+      loggerFactory,
+      nodeMetrics.grpcClientMetrics,
+      retryProvider,
+      participantAdminApiTokenProvider,
+    )
+  }
+}
+
+object SpliceNodeBase {
   final case class NodeStatus(
       uid: UniqueIdentifier,
       uptime: Duration,

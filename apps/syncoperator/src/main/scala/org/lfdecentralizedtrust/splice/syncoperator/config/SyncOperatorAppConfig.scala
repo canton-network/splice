@@ -9,8 +9,7 @@ import org.lfdecentralizedtrust.splice.config.{
   AutomationConfig,
   HttpClientConfig,
   NetworkAppClientConfig,
-  ParticipantClientConfig,
-  SpliceBackendConfig,
+  SpliceNodeConfig,
   SpliceParametersConfig,
   SplicePostgresConfig,
 }
@@ -45,9 +44,6 @@ case class SyncOperatorAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
     postgres: SplicePostgresConfig = SplicePostgresConfig(),
-    // Ledger API user of the operator party.
-    operatorUser: String,
-    participantClient: ParticipantClientConfig,
     synchronizerNodes: SyncOperatorSynchronizerNodesConfig,
     trafficControl: SyncOperatorTrafficControlConfig = SyncOperatorTrafficControlConfig(),
     override val automation: AutomationConfig = AutomationConfig(),
@@ -56,7 +52,7 @@ case class SyncOperatorAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
-) extends SpliceBackendConfig {
+) extends SpliceNodeConfig {
   override val nodeTypeName: String = "syncoperator"
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig
