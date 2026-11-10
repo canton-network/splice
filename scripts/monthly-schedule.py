@@ -27,7 +27,7 @@ DEV_COLUMN_NAME = "Dev"
 INITIAL_STATUS = "To Be Confirmed"
 
 # "Time US Eastern" label for events that have a time of day.
-EVENT_TIME_LABEL = "09:00 am"
+EVENT_TIME_LABEL = "9:00 am"
 
 NETWORK_DEVNET = "DevNet"
 NETWORK_TESTNET = "TestNet"
