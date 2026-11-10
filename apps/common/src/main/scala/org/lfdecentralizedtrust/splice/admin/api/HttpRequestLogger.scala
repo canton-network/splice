@@ -93,7 +93,6 @@ final class HttpRequestLogger(
           val rateLimited = response
             .attribute(HttpRateLimiter.RejectedByRateLimiter)
             .fold("")(limiter => s", rejected by the '$limiter' rate limiter")
-          // Time until the response is produced; a streamed entity may still be sent after this.
           val durationMs = (System.nanoTime() - startNanos) / 1000000L
           logger.debug(
             msg(s"Responding with status code: ${response.status}$rateLimited, took $durationMs ms")

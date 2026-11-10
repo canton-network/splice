@@ -105,7 +105,7 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
     }
 
     "log the request duration with the response" in {
-      val delayMs = 50L
+      val delayMs = 300L
       val slowRoute: Route =
         loggerDirective(RateLimitersConfig.DefaultClientIpHeaders) {
           path("api" / "slow") {
@@ -119,6 +119,7 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
         {
           Get("/api/slow") ~> slowRoute ~> check {
             status shouldBe StatusCodes.OK
+            responseAs[String] shouldBe "slow"
           }
         },
         { logEntries =>
