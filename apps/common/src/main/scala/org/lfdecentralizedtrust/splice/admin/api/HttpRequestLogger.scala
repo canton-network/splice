@@ -71,6 +71,7 @@ final class HttpRequestLogger(
   private def directive(implicit traceContext: TraceContext): Directive0 = {
     extractConfiguredClientIp.flatMap { remoteAddress =>
       extractRequestContext.flatMap { ctx =>
+        val startNanos = System.nanoTime()
         val msg = createLogMessage(ctx, remoteAddress)
         logger.debug(msg("received request."))
 
@@ -92,7 +93,11 @@ final class HttpRequestLogger(
           val rateLimited = response
             .attribute(HttpRateLimiter.RejectedByRateLimiter)
             .fold("")(limiter => s", rejected by the '$limiter' rate limiter")
-          logger.debug(msg(s"Responding with status code: ${response.status}$rateLimited"))
+          // Time until the response is produced; a streamed entity may still be sent after this.
+          val durationMs = (System.nanoTime() - startNanos) / 1000000L
+          logger.debug(
+            msg(s"Responding with status code: ${response.status}$rateLimited, took $durationMs ms")
+          )
           if (messagePayloads) {
             response.entity match {
               // Only logging strict messages which are already in memory, not attempting to log streams
