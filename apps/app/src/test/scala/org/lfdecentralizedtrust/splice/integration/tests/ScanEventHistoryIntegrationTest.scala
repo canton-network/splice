@@ -62,19 +62,22 @@ class ScanEventHistoryIntegrationTest
 
     onboardAliceAndBob()
 
-    val cursorBeforeTap = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
+    // Before doing tap, using the cursor should be empty. Take a fresh cursor on every attempt, so
+    // that a background transaction landing in between only costs a retry.
+    val cursorBeforeTap = eventually() {
+      val cursor = latestEventHistoryCursor(sv1ScanBackend)
+      val eventHistoryAfterCursor = sv1ScanBackend.getEventHistory(
+        count = pageLimit,
+        after = Some(cursor),
+        encoding = CompactJson,
+      )
+      eventHistoryAfterCursor shouldBe empty withClue "EventHistory after pre-tap cursor"
+      cursor
+    }
 
     val countBefore = scanVerdictCountMetric()
     val lastRtBefore = scanVerdictLastRecordTimeUsMetric()
     val errorsBefore = scanVerdictErrorsMetric()
-
-    // Before doing tap, using the cursor should be empty
-    val eventHistoryAfterLastCursor = sv1ScanBackend.getEventHistory(
-      count = pageLimit,
-      after = Some(cursorBeforeTap),
-      encoding = CompactJson,
-    )
-    eventHistoryAfterLastCursor shouldBe empty withClue "EventHistory after pre-tap cursor"
 
     aliceWalletClient.tap(1)
 
