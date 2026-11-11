@@ -45,3 +45,14 @@ Ran 2026-11-11 (user, before the 22:xx export): all duplicate closes (11358 1136
 
 Rule (user, 2026-11-11): refer to other issues as `#NNNN` in comments (and `canton-network/splice#N` for splice PRs) so
 GitHub links them; plain numbers do not link.
+
+State 2026-11-11 ~23:00 UTC:
+- 11375: ran (user posted the cause comment without the fix, moved to Triaged; user keeps the original agent title).
+  Cause: three large CI workflow pods on one 32 vCPU fallback node, VM CPU 79-93% 18:46-18:48 (packet sections 8-11).
+  User: the team that maintains splice also runs the runner cluster; an owner is found once cause and fix idea are solid.
+- 11377: closed by the user (completed) as a GitHub incident: `curl: (22) The requested URL returned error: 502` in
+  the step `Display GCloud logs link`; github_incidents.py: critical Actions incident 2026-11-11 20:48-21:21 UTC.
+  11378 (same run 43074272995) already closed as duplicate.
+- Still open from this round: 11363, 11373 (comment, retitle, Triaged), 11303 (recurrence comment and assignee,
+  optional), 11366, 11367 (comment and close), 11365 owner question (#8319 backport), 11369, 11370 (cni, log request),
+  10479, 10919 leftovers; 11354 from the previous round.
