@@ -19,7 +19,11 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice as daml
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
-import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerConnection, SynchronizerNodeService}
+import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
+  SpliceLedgerConnection,
+  SynchronizerNodeService,
+}
 import org.lfdecentralizedtrust.splice.store.DsoRulesStore.DsoRulesWithSvNodeState
 import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeConfigClient
@@ -36,6 +40,7 @@ class PublishLocalCometBftNodeConfigTrigger(
     store: SvDsoStore,
     connection: SpliceLedgerConnection,
     synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -81,6 +86,8 @@ class PublishLocalCometBftNodeConfigTrigger(
         task.damlSvNodeConfig,
         store,
         connection,
+        packageVersionSupport,
+        context.clock.now,
       )
     } yield TaskSuccess(show"Updated DSO-wide CometBFT node configuration for ${store.key.svParty}")
   }

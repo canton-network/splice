@@ -740,6 +740,9 @@ template DsoRules with
         synchronizerId : Text
         newNodeConfig : SynchronizerNodeConfig
         nodeStateCid : ContractId SvNodeState
+        otherSvNodeStateCids : Optional (Map.Map Party (ContractId SvNodeState))
+          -- ^ The node states of all other SVs, used to check that the sequencer and mediator ids in
+          -- `newNodeConfig` are not already claimed by another SV. Required, optional only for upgrading.
       controller sv
       do
         -- check that the synchronizer is known
@@ -753,6 +756,25 @@ template DsoRules with
         let svName = info.name
         nodeState <- fetchAndArchive (ForSvNode with dso; sv; svName) nodeStateCid
         let state = nodeState.state
+        -- check that no other SV claims the same sequencer or mediator ids.
+        -- Every current SV has exactly one active SvNodeState, so requiring the states of exactly all other SVs
+        -- ensures none of them can be left out.
+        otherNodeStateCids <- case otherSvNodeStateCids of
+          None -> fail "The node states of all other SVs must be provided"
+          Some cids -> pure cids
+        let otherSvs = Map.delete sv svs
+        require "The node states of exactly all other SVs are provided" (Map.keys otherNodeStateCids == Map.keys otherSvs)
+        otherSvsSynchronizerNodes <- forA (Map.toList otherSvs) $ \(otherSv, otherSvInfo) ->
+          case Map.lookup otherSv otherNodeStateCids of
+            None -> fail ("No node state provided for SV " <> show otherSv)
+            Some otherNodeStateCid -> do
+              otherNodeState <- fetchChecked (ForSvNode with dso; sv = otherSv; svName = otherSvInfo.name) otherNodeStateCid
+              pure otherNodeState.state.synchronizerNodes
+        requireNoNodeIdsClaimedByOtherSvs
+          synchronizerId
+          (Map.lookup synchronizerId state.synchronizerNodes)
+          newNodeConfig
+          otherSvsSynchronizerNodes
         svNodeState <- create nodeState with
           state = state with
             synchronizerNodes = Map.insert synchronizerId newNodeConfig state.synchronizerNodes

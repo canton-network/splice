@@ -268,21 +268,24 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
               governanceKeyNotUpdatedInDsoState = governanceKeysPubKey.contains(
                 genesisKeysPubKey
               )
-              _ = if (governanceKeyNotUpdatedInDsoState) {
-                for {
-                  localSvNodeConfig <- cometBftNode.getLocalNodeConfig()
-                  newSvNodeConfig = getNewSynchronizerNodeConfig(
-                    synchronizerNodeConfig,
-                    localSvNodeConfig,
-                  )
-                  _ <- updateSynchronizerNodeConfig(
-                    rulesAndState,
-                    newSvNodeConfig,
-                    dsoStore,
-                    dsoAutomation.connection(SpliceLedgerConnectionPriority.High),
-                  )
-                } yield ()
-              }
+              _ <-
+                if (governanceKeyNotUpdatedInDsoState) {
+                  for {
+                    localSvNodeConfig <- cometBftNode.getLocalNodeConfig()
+                    newSvNodeConfig = getNewSynchronizerNodeConfig(
+                      synchronizerNodeConfig,
+                      localSvNodeConfig,
+                    )
+                    _ <- updateSynchronizerNodeConfig(
+                      rulesAndState,
+                      newSvNodeConfig,
+                      dsoStore,
+                      dsoAutomation.connection(SpliceLedgerConnectionPriority.High),
+                      dsoAutomation.packageVersionSupport,
+                      clock.now,
+                    )
+                  } yield ()
+                } else Future.unit
             } yield {
               if (governanceKeyNotUpdatedInDsoState)
                 throw Status.FAILED_PRECONDITION
