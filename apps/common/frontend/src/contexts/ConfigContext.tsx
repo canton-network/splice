@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { ConfigReader } from '../config';
 
-export class ConfigProvider<T extends z.ZodObject> extends Component<{
+export class ConfigProvider<T extends z.ZodType> extends Component<{
   children: React.ReactNode;
   configScheme: T;
   configContext: Context<z.infer<T> | undefined>;

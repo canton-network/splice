@@ -43,7 +43,9 @@ import Root from './routes/root';
 import ValidatorOnboarding from './routes/validatorOnboarding';
 import {
   DappModeConfig,
-  requireOperatorAuth,
+  getDappModeConfig,
+  requireOperatorConfig,
+  SvConfig,
   useConfigPollInterval,
   useDappModeConfig,
   useSvConfig,
@@ -71,14 +73,14 @@ const OperatorProviders: React.FC<React.PropsWithChildren> = ({ children }) => {
   const navigate = useNavigate();
   // refetchInterval comes from config and does not change at runtime, so create the client once.
   const [queryClient] = useState(() => makeQueryClient(refetchInterval));
-  const auth = requireOperatorAuth(config);
+  const { auth, testAuth } = requireOperatorConfig(config);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <AuthProvider authConf={auth} redirect={(path: string) => navigate(path)}>
         <QueryClientProvider client={queryClient}>
           <QueryDevtools />
-          <UserProvider authConf={auth} testAuthConf={config.testAuth}>
+          <UserProvider authConf={auth} testAuthConf={testAuth}>
             <SvClientProvider url={config.services.sv.url}>
               <SvAppVotesHooksProvider>
                 <SvAdminClientProvider url={config.services.sv.url}>
@@ -131,71 +133,54 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
   );
 };
 
-const App: React.FC = () => {
-  const config = useSvConfig();
-  const dappMode = useDappModeConfig();
+const createRouter = (config: SvConfig) => {
+  const dappMode = getDappModeConfig(config);
+  const operator = dappMode ? undefined : requireOperatorConfig(config);
   const toGovernance = <Navigate to="/governance/proposals" replace />;
-  const router = createBrowserRouter(
+  // dApp mode serves only the read-only governance pages; every operator-only page redirects there.
+  const operatorOnly = (page: React.ReactElement) => (dappMode ? toGovernance : page);
+
+  return createBrowserRouter(
     createRoutesFromElements(
-      dappMode ? (
-        <Route
-          errorElement={<ErrorRouterPage />}
-          element={
-            <Providers>
-              <ThemeProvider theme={theme}>
-                <CssBaseline />
+      <Route
+        errorElement={<ErrorRouterPage />}
+        element={
+          <Providers>
+            <ThemeProvider theme={theme}>
+              <CssBaseline />
+              {operator ? (
+                <AuthCheck authConfig={operator.auth} testAuthConfig={operator.testAuth} />
+              ) : (
                 <Outlet />
-              </ThemeProvider>
-            </Providers>
-          }
-        >
-          <Route path="/" element={<Root />}>
-            <Route index element={toGovernance} />
-            <Route path="dso" element={toGovernance} />
-            <Route path="validator-onboarding" element={toGovernance} />
-            <Route path="amulet-price" element={toGovernance} />
-            <Route path="delegate-election" element={toGovernance} />
-            <Route path="votes" element={toGovernance} />
+              )}
+            </ThemeProvider>
+          </Providers>
+        }
+      >
+        <Route path="/" element={<Root />}>
+          <Route index element={operatorOnly(<Dso />)} />
+          <Route path="dso" element={operatorOnly(<Dso />)} />
+          <Route path="validator-onboarding" element={operatorOnly(<ValidatorOnboarding />)} />
+          <Route path="amulet-price" element={operatorOnly(<AmuletPrice />)} />
+          <Route path="delegate-election" element={operatorOnly(<DelegateElection />)} />
+          <Route path="votes" element={toGovernance} />
 
-            <Route path="governance" element={toGovernance} />
-            <Route path="governance/proposals" element={<Governance />} />
-            <Route path="governance/proposals/create" element={toGovernance} />
-            <Route path="governance/proposals/:contractId" element={<VoteRequestDetails />} />
-            <Route path="*" element={toGovernance} />
-          </Route>
+          <Route path="governance" element={toGovernance} />
+          <Route path="governance/proposals" element={<Governance />} />
+          <Route path="governance/proposals/create" element={operatorOnly(<CreateProposal />)} />
+          <Route path="governance/proposals/:contractId" element={<VoteRequestDetails />} />
+          {/* Operator mode keeps the router's default not-found error page for unknown paths. */}
+          {dappMode && <Route path="*" element={toGovernance} />}
         </Route>
-      ) : (
-        <Route
-          errorElement={<ErrorRouterPage />}
-          element={
-            <Providers>
-              <ThemeProvider theme={theme}>
-                <CssBaseline />
-                <AuthCheck
-                  authConfig={requireOperatorAuth(config)}
-                  testAuthConfig={config.testAuth}
-                />
-              </ThemeProvider>
-            </Providers>
-          }
-        >
-          <Route path="/" element={<Root />}>
-            <Route index element={<Dso />} />
-            <Route path="dso" element={<Dso />} />
-            <Route path="validator-onboarding" element={<ValidatorOnboarding />} />
-            <Route path="amulet-price" element={<AmuletPrice />} />
-            <Route path="delegate-election" element={<DelegateElection />} />
-            <Route path="votes" element={<Navigate to="/governance/proposals" replace />} />
-
-            <Route path="governance" element={<Navigate to="/governance/proposals" replace />} />
-            <Route path="governance/proposals" element={<Governance />} />
-            <Route path="governance/proposals/create" element={<CreateProposal />} />
-            <Route path="governance/proposals/:contractId" element={<VoteRequestDetails />} />
-          </Route>
-        </Route>
-      )
+      </Route>
     )
   );
+};
+
+const App: React.FC = () => {
+  const config = useSvConfig();
+  // The parsed config does not change at runtime, so the router is only rebuilt if the config object does.
+  const router = useMemo(() => createRouter(config), [config]);
 
   return (
     <ErrorBoundary>

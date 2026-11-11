@@ -7,9 +7,6 @@ import {
 import { http, HttpHandler, HttpResponse } from 'msw';
 import { FeatureSupportResponse, SuccessStatusResponse } from '@canton-network/scan-openapi';
 import {
-  CountVoteResultsRequest,
-  CountVoteResultsResponse,
-  ErrorResponse,
   ListDsoRulesVoteRequestsResponse,
   ListFeaturedAppRightsByProviderResponse,
   ListOngoingValidatorOnboardingsResponse,

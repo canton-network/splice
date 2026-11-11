@@ -1,10 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { dsoInfo, dsoInfoHandler } from '@canton-network/splice-common-test-handlers';
+import { dsoInfoHandler } from '@canton-network/splice-common-test-handlers';
 import { http, HttpHandler, HttpResponse } from 'msw';
 import {
   FeatureSupportResponse,
-  GetSvInfoResponse,
   ListAmuletPriceVotesResponse,
   ListDsoRulesVoteRequestsResponse,
   ListVoteRequestByTrackingCidResponse,
@@ -19,13 +18,6 @@ import { voteResultsHandlers } from './vote-results';
 /** Scan-side counterparts of the governance read endpoints mocked in `sv-api.ts`, serving the same data. */
 export const buildScanMock = (scanUrl: string): HttpHandler[] => [
   dsoInfoHandler(scanUrl),
-
-  http.get(`${scanUrl}/v0/sv-info`, () => {
-    return HttpResponse.json<GetSvInfoResponse>({
-      sv_user: 'scan-sv',
-      sv_party_id: dsoInfo.sv_party_id,
-    });
-  }),
 
   http.get(`${scanUrl}/v0/feature-support`, () => {
     return HttpResponse.json<FeatureSupportResponse>({});

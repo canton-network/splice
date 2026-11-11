@@ -40,9 +40,7 @@ export const scanGovernanceReadClient = (scan: openapi.ScanApi): GovernanceReadC
     scan.lookupFeaturedAppRightByContractId(contractId),
   listAmuletPriceVotes: () => scan.listAmuletPriceVotes(),
   featureSupport: () => scan.featureSupport(),
-  // TODO(#8296): sv_party_id is the Scan host's SV; replace it with the SV chosen from the voter's delegations.
-  getDsoInfo: async () => {
-    const [dso, svInfo] = await Promise.all([scan.getDsoInfoV1(), scan.getSvInfo()]);
-    return { ...dso, sv_user: svInfo.sv_user, sv_party_id: svInfo.sv_party_id };
-  },
+  // TODO(#8296): add the viewer's SV identity (sv_user, sv_party_id): the SV the wallet user
+  // chose from their delegations. Until then there is no viewer and no "you" in the UI.
+  getDsoInfo: () => scan.getDsoInfoV1(),
 });

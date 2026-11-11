@@ -4,12 +4,7 @@ import * as openapi from '@canton-network/scan-openapi';
 import { describe, expect, test } from 'vitest';
 import { scanGovernanceReadClient } from '../../dapp/scanGovernanceReadClient';
 import { scanUrl } from '../setup/setup';
-import {
-  activeProposalCid,
-  svPartyId,
-  voteResultsAmuletRules,
-  voteResultsDsoRules,
-} from '../mocks/constants';
+import { activeProposalCid, voteResultsAmuletRules, voteResultsDsoRules } from '../mocks/constants';
 
 const client = scanGovernanceReadClient(
   new openapi.ScanApi(
@@ -18,10 +13,11 @@ const client = scanGovernanceReadClient(
 );
 
 describe('scanGovernanceReadClient', () => {
-  test('scan client dsoInfo merges dso and sv info', async () => {
+  test('dsoInfo has no viewer SV identity', async () => {
     const info = await client.getDsoInfo();
-    expect(info.sv_party_id).toBe(svPartyId);
-    expect(info.sv_user).toBe('scan-sv');
+    // The mocked /v1/dso response carries the SV app's identity; the client must not pass it on.
+    expect(info.sv_party_id).toBeUndefined();
+    expect(info.sv_user).toBeUndefined();
     expect(info.dso_rules.contract.template_id).toContain('DsoRules');
   });
   test('lists vote requests', async () => {
