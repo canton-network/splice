@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{ if .Values.validatorWebUi.enabled }}
-{{- $walletWebUiLabel :=  "wallet-web-ui" }}
+{{- $walletWebUiLabel := .Values.appLabels.walletWebUi | default "wallet-web-ui" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -67,7 +67,7 @@ spec:
           valueFrom:
             secretKeyRef:
               key: url
-              name: splice-app-wallet-ui-auth
+              name: {{ .Values.validatorWebUi.secretName | default "splice-app-wallet-ui-auth" }}
               optional: false
           {{- end }}
         - name: SPLICE_APP_UI_AUTH_AUDIENCE
@@ -83,7 +83,7 @@ spec:
           valueFrom:
             secretKeyRef:
               key: client-id
-              name: splice-app-wallet-ui-auth
+              name: {{ .Values.validatorWebUi.secretName | default "splice-app-wallet-ui-auth" }}
               optional: false
           {{- end }}
         {{- end }}
@@ -108,6 +108,9 @@ spec:
             memory: 240Mi
           limits:
             memory: 1536Mi
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

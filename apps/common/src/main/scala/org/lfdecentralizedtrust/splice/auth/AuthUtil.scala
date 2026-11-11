@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.auth
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.digitalasset.canton.user.store.UserManagementStore
 
 // See also: com.daml.ledger.api.auth.Main from the Daml SDK contains utils for generating ledger API access tokens
 object AuthUtil {
@@ -64,6 +65,20 @@ object AuthUtil {
         .withAudience(testAudience)
         .sign(Algorithm.HMAC256(secret))
     }
+  }
+
+  object CantonAdminApi {
+
+    val adminApiTestSecret: String = "admin-test"
+    val testParticipantAdminApiAudience: String = "participant"
+    val defaultParticipantAdminApiUser: String = UserManagementStore.DefaultParticipantAdminUserId
+
+    def participantAdminApiTestToken: String =
+      testToken(
+        audience = testParticipantAdminApiAudience,
+        user = defaultParticipantAdminApiUser,
+        secret = adminApiTestSecret,
+      )
   }
 
   @SuppressWarnings(Array("org.lfdecentralizedtrust.splice.wart.Println"))

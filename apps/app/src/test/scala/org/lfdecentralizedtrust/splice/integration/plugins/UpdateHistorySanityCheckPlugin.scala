@@ -5,23 +5,22 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppC
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV1, UpdateHistoryItemV2}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV2, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassignment.Event.members as reassignmentMembers
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTrigger
 import org.lfdecentralizedtrust.splice.util.TriggerTestUtil
-import com.digitalasset.canton.ScalaFuturesWithPatience
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressingLogger
+import com.digitalasset.canton.scalatest.ScalaFuturesWithPatience
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.scalatest.{Inspectors, LoneElement}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.time.{Millis, Span}
+import org.scalatest.time.{Millis, Minute, Span}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.*
@@ -54,21 +53,24 @@ class UpdateHistorySanityCheckPlugin(
 
       TriggerTestUtil
         .setTriggersWithin(
-          triggersToPauseAtStart = initializedScans.map(scan =>
+          triggersToPauseAtStart = initializedScans.flatMap { scan =>
             // prevent races with the trigger when taking the forced manual snapshot
-            scan.automation.trigger[AcsSnapshotTrigger]
-          ),
+            val trigger = scan.automation.trigger[AcsSnapshotTrigger]
+            // If the test already paused the trigger, this block will resume it, which we don't want.
+            // Particularly in simtime tests that may cause the trigger to fail after resuming.
+            if (trigger.isPaused) None else Some(trigger)
+          },
           triggersToResumeAtStart = Seq(),
+          pauseTimeout = timeout(Span(1, Minute)),
         ) {
           // This flag should have the same value on all scans
           if (initializedScans.exists(_.config.updateHistoryBackfillEnabled)) {
             initializedScans.foreach(waitUntilBackfillingComplete)
             val (founders, others) = initializedScans.partition(_.config.isFirstSv)
             val founder = founders.loneElement
-            val dsoRules =
-              DsoRules.fromJson(founder.getDsoInfo().dsoRules.contract.payload.noSpaces)
+            val dsoRules = founder.getDsoInfo().dsoRules.payload
             val (scansInDsoRules, scansNotInDsoRules) = others.partition { otherScan =>
-              val svPartyId = otherScan.getDsoInfo().svPartyId
+              val svPartyId = otherScan.getSvInfo().svParty.toProtoPrimitive
               dsoRules.svs.containsKey(svPartyId)
             }
             scansNotInDsoRules.foreach { notInDso =>
@@ -78,7 +80,7 @@ class UpdateHistorySanityCheckPlugin(
               //  - U2: Involves SV
               // founder sees U1, U2 but otherScan only U2
               logger.info(
-                s"The SV party of Scan ${notInDso.name} (partyId=${notInDso.getDsoInfo().svPartyId}) is not in DsoRules. Ignoring."
+                s"The SV party of Scan ${notInDso.name} (partyId=${notInDso.getSvInfo().svParty}) is not in DsoRules. Ignoring."
               )
             }
             compareHistories(founder, scansInDsoRules)
@@ -217,14 +219,14 @@ class UpdateHistorySanityCheckPlugin(
   private def getAllSnapshots(
       scan: ScanAppBackendReference,
       before: CantonTimestamp,
-      acc: List[AcsResponseV1],
-  ): List[AcsResponseV1] = {
+      acc: List[AcsResponseV2],
+  ): List[AcsResponseV2] = {
     val acsSnapshotPeriodHours = scanStorageConfigV1.dbAcsSnapshotPeriodHours
     val migrationId = scan.getMigrationId()
     scan.getDateOfMostRecentSnapshotBefore(before, migrationId) match {
       case Some(snapshotDate) =>
         val snapshot = scan
-          .getAcsSnapshotAtV1(
+          .getAcsSnapshotAtV2(
             CantonTimestamp.assertFromInstant(snapshotDate.toInstant),
             migrationId,
             pageSize = 1000,

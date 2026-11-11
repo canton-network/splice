@@ -14,6 +14,11 @@ from com.daml.ledger.api.v2.interactive import interactive_submission_service_pb
 from com.daml.ledger.api.v2.interactive import interactive_submission_service_pb2
 from com.daml.ledger.api.v2 import commands_pb2, value_pb2, completion_pb2, crypto_pb2
 from external_party_onboarding import onboard_external_party
+from interactive_topology_util import (
+    DEFAULT_PROTOCOL_VERSION,
+    PROTOCOL_VERSION_HELP,
+    check_protocol_version_argument,
+)
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -401,15 +406,20 @@ def exercise_respond_choice(
 
 
 def demo_interactive_submissions(
-    participant_id: str, synchronizer_id: str, auto_accept: bool, hashing_scheme_version=interactive_submission_service_pb2.HashingSchemeVersion.HASHING_SCHEME_VERSION_V2,
+    participant_id: str,
+    synchronizer_id: str,
+    auto_accept: bool,
+    hashing_scheme_version=interactive_submission_service_pb2.HashingSchemeVersion.HASHING_SCHEME_VERSION_V2,
+    *,
+    protocol_version: str = DEFAULT_PROTOCOL_VERSION,
 ):
     alice_pk, alice_pub_fingerprint = onboard_external_party(
-        "alice", [participant_id], 1, synchronizer_id, lapi_channel
+        "alice", [participant_id], 1, synchronizer_id, lapi_channel, protocol_version=protocol_version
     )
     print("Alice onboarded successfully")
     alice = "alice::" + alice_pub_fingerprint
     bob_pk, bob_pub_fingerprint = onboard_external_party(
-        "bob", [participant_id], 1, synchronizer_id, lapi_channel
+        "bob", [participant_id], 1, synchronizer_id, lapi_channel, protocol_version=protocol_version
     )
     print("Bob onboarded successfully")
     bob = "bob::" + bob_pub_fingerprint
@@ -455,6 +465,12 @@ if __name__ == "__main__":
         help="Synchronizer ID",
         default=read_id_from_file("synchronizer_id"),
     )
+    parser.add_argument(
+        "--protocol-version",
+        type=str,
+        help=PROTOCOL_VERSION_HELP,
+        default=DEFAULT_PROTOCOL_VERSION,
+    )
 
     subparsers = parser.add_subparsers(required=True, dest="subcommand")
     parser_run_demo = subparsers.add_parser("run-demo", help="Run the ping demo")
@@ -494,6 +510,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    check_protocol_version_argument(parser, args.protocol_version)
 
     if args.subcommand == "run-demo":
         if args.accept_all_transactions:
@@ -506,11 +523,15 @@ if __name__ == "__main__":
         }
         hashing_scheme_version = hashing_version_map[args.hashing_scheme_version]
         demo_interactive_submissions(
-            args.participant_id, args.synchronizer_id, args.accept_all_transactions, hashing_scheme_version
+            args.participant_id,
+            args.synchronizer_id,
+            args.accept_all_transactions,
+            hashing_scheme_version,
+            protocol_version=args.protocol_version,
         )
     elif args.subcommand == "create-party":
         party_private_key, party_fingerprint = onboard_external_party(
-            args.name, [args.participant_id], 1, args.synchronizer_id, lapi_channel
+            args.name, [args.participant_id], 1, args.synchronizer_id, lapi_channel, protocol_version=args.protocol_version
         )
         private_key_file = (
             args.private_key_file or f"{args.name}::{party_fingerprint}-private-key.der"

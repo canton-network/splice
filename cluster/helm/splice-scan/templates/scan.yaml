@@ -97,6 +97,13 @@ spec:
               tx-log-backfill-batch-size = "{{ .batchSize }}"
             }
         {{- end }}
+        {{- with .Values.analyzableTimeWindowDuration }}
+        - name: ADDITIONAL_CONFIG_ANALYZABLE_TIME_WINDOW_DURATION
+          value: |
+            canton.scan-apps.scan-app {
+              analyzable-time-window.duration = "{{ . }}"
+            }
+        {{- end }}
         {{- with .Values.sponsorScanUrl }}
         - name: ADDITIONAL_CONFIG_SPONSOR_SCAN_URL
           value: |
@@ -335,6 +342,9 @@ spec:
                 echo "trying to create postgres database {{ .Values.persistence.databaseName }}, last error: $errmsg";
                 sleep 2;
               done
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -466,6 +476,9 @@ spec:
             memory: 240Mi
           limits:
             memory: 1536Mi
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -505,5 +518,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence  "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence  "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "priorityClassName" .Values.priorityClassName "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

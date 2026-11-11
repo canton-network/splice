@@ -52,10 +52,6 @@ trait DsoRulesStore extends AppStore {
       )
     )
 
-  def getDsoRulesWithOffset()(implicit tc: TraceContext): Future[QueryResult[
-    ContractWithState[splice.dsorules.DsoRules.ContractId, splice.dsorules.DsoRules]
-  ]] = lookupDsoRulesWithStateWithOffset().map(_.sequence getOrElse (throw noActiveDsoRules))
-
   def getDsoRulesWithSvNodeState(svParty: PartyId)(implicit
       tc: TraceContext
   ): Future[DsoRulesStore.DsoRulesWithSvNodeState] = {
@@ -146,8 +142,6 @@ trait DsoRulesStore extends AppStore {
     } yield DsoRulesStore.DsoRulesWithStateWithSvNodeStates(dsoRules, svNodeStates)
   }
 
-  private def noActiveDsoRules =
-    Status.NOT_FOUND.withDescription("No active DsoRules contract").asRuntimeException()
 }
 
 object DsoRulesStore {
@@ -257,18 +251,12 @@ object DsoRulesStore {
     def lookupActiveSequencerIdConfigFor(
         decentralizedSynchronizerId: SynchronizerId,
         domainTimeLowerBound: Instant,
-        migrationId: Long,
     ): Option[String] = {
       for {
         synchronizerNodeConfig <- svNodeState.payload.state.synchronizerNodes.asScala
           .get(decentralizedSynchronizerId.toProtoPrimitive)
         (identity, availableAfter) <- synchronizerNodeConfig.sequencerIdentity.toScala
           .map(identity => identity.sequencerId -> identity.availableAfter.toScala)
-          .orElse(
-            synchronizerNodeConfig.sequencer.toScala
-              .filter(config => config.migrationId == migrationId && config.url.nonEmpty)
-              .map(config => config.sequencerId -> config.availableAfter.toScala)
-          )
         if availableAfter.exists(availableAfter => domainTimeLowerBound.isAfter(availableAfter))
       } yield identity
     }

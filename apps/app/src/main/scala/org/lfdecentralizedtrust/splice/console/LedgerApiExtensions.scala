@@ -15,7 +15,9 @@ import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.digitalasset.canton.console.LedgerApiCommandRunnerAccess.*
 import com.digitalasset.canton.console.commands.BaseLedgerApiAdministration
+import com.digitalasset.canton.console.commands.BaseLedgerApiAdministrationAccess.*
 import com.digitalasset.canton.console.{
   ConsoleCommandResult,
   ConsoleMacros,
@@ -24,6 +26,7 @@ import com.digitalasset.canton.console.{
   LedgerApiCommandRunner,
 }
 import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
+import com.digitalasset.canton.crypto.provider.jce.JcePureCryptoAccess.*
 import com.digitalasset.canton.crypto.{SigningKeyUsage, SigningPrivateKey}
 import com.digitalasset.canton.data.{CantonTimestamp, DeduplicationPeriod}
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
@@ -32,7 +35,7 @@ import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.util.{Contract, JavaDecodeUtil, PackageQualifiedName}
 
-import java.time.{Duration, Instant}
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import org.scalatest.AppendedClues
@@ -127,12 +130,12 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             userId: String = LedgerApiCommands.defaultUserId,
             disclosedContracts: Seq[CommandsOuterClass.DisclosedContract] = Seq.empty,
             expectedTimeBounds: Option[(CantonTimestamp, CantonTimestamp)] = None,
-            advanceTimeBeforeExecute: Option[Duration] = None,
+            beforeExecute: Option[() => Unit] = None,
         )(implicit tc: TraceContext): Unit = {
           actingParty.externalSigningInfo match {
             case None =>
               expectedTimeBounds shouldBe None withClue ("Time bounds should not be set for local submissions as they are ignored")
-              advanceTimeBeforeExecute shouldBe None withClue ("advanceTimeBeforeExecute should not be set for local submissions as it is ignored")
+              beforeExecute shouldBe None withClue ("beforeExecute should not be set for local submissions as it is ignored")
               val _ = submitJava(
                 actAs = Seq(actingParty.partyId),
                 commands = commands,
@@ -159,7 +162,7 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
                 userId = userId,
                 disclosedContracts = disclosedContracts,
                 expectedTimeBounds = expectedTimeBounds,
-                advanceTimeBeforeExecute = advanceTimeBeforeExecute,
+                beforeExecute = beforeExecute,
               )
           }
         }
@@ -181,7 +184,7 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             userId: String = LedgerApiCommands.defaultUserId,
             disclosedContracts: Seq[CommandsOuterClass.DisclosedContract] = Seq.empty,
             expectedTimeBounds: Option[(CantonTimestamp, CantonTimestamp)] = None,
-            advanceTimeBeforeExecute: Option[Duration] = None,
+            beforeExecute: Option[() => Unit] = None,
         )(implicit tc: TraceContext): Unit = {
           val preparedTx =
             ledgerApi.ledger_api.interactive_submission.prepare(
@@ -215,10 +218,7 @@ trait LedgerApiExtensions extends AppendedClues with Matchers {
             ) shouldBe (min, max)
           }
 
-          advanceTimeBeforeExecute.foreach { duration =>
-            val now = ledgerApi.ledger_api.time.get()
-            ledgerApi.ledger_api.time.set(now, now.plus(duration))
-          }
+          beforeExecute.foreach(_())
 
           val _ = ledgerApi.ledger_api.interactive_submission.execute(
             preparedTransaction = preparedTx.getPreparedTransaction,

@@ -6,24 +6,33 @@ package com.digitalasset.canton.protocol
 import cats.instances.option.*
 import cats.syntax.either.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.ProtoDeserializationError.InvariantViolation
+import com.digitalasset.canton.ProtoDeserializationError.{InvariantViolation, OtherError}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.crypto.*
+import com.digitalasset.canton.crypto.v30 as cryptoV30
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters.InvalidDynamicSynchronizerParameters
+import com.digitalasset.canton.protocol.StaticSynchronizerParameters.InvalidStaticSynchronizerParameters
 import com.digitalasset.canton.protocol.SynchronizerParameters.MaxRequestSize
-import com.digitalasset.canton.protocol.v30
+import com.digitalasset.canton.protocol.{v30, v31}
 import com.digitalasset.canton.sequencing.TrafficControlParameters
 import com.digitalasset.canton.serialization.ProtoConverter
-import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
+import com.digitalasset.canton.serialization.ProtoConverter.{ParsingResult, parseRequired}
 import com.digitalasset.canton.time.{NonNegativeFiniteDuration, PositiveSeconds}
 import com.digitalasset.canton.topology.transaction.ParticipantSynchronizerLimits
+import com.digitalasset.canton.util.EitherUtil
 import com.digitalasset.canton.util.EitherUtil.RichEither
+import com.digitalasset.canton.validation.{ProtoUnvalidatedSeq, ProtoValidation}
 import com.digitalasset.canton.version.*
 import com.digitalasset.canton.{ProtoDeserializationError, checked}
+import com.digitalasset.nonempty.NonEmpty
+import com.google.protobuf.duration.Duration as ProtoDuration
 
 import scala.concurrent.Future
 
@@ -55,7 +64,32 @@ object SynchronizerParameters {
   }
 }
 
-final case class StaticSynchronizerParameters(
+/** @param requiredSigningSpecs
+  *   Required signing algorithms and keys specifications to be supported by all synchronizer
+  *   members.
+  * @param requiredEncryptionSpecs
+  *   Required encryption algorithms and keys specifications for asymmetric/hybrid encryption to be
+  *   supported by all synchronizer members.
+  * @param requiredSymmetricKeySchemes
+  *   Required key schemes for symmetric encryption to be supported by all synchronizer members.
+  * @param requiredHashAlgorithms
+  *   Required hash algorithms to be supported by all synchronizer members.
+  * @param requiredCryptoKeyFormats
+  *   Required key formats to be supported by all synchronizer members.
+  * @param requiredSignatureFormats
+  *   Required signature formats to be supported by all synchronizer members.
+  * @param topologyChangeDelay
+  *   Delay between the time a topology transaction is sequenced until it becomes effective.
+  * @param enableTransparencyChecks
+  *   Flag to enable transparency checks.
+  * @param protocolVersion
+  *   Protocol version of the synchronizer.
+  * @param serial
+  *   Serial of the synchronizer.
+  * @param synchronizerLimits
+  *   Size limits on various collections, globally enforced on this synchronizer.
+  */
+final case class StaticSynchronizerParameters private (
     requiredSigningSpecs: RequiredSigningSpecs,
     requiredEncryptionSpecs: RequiredEncryptionSpecs,
     requiredSymmetricKeySchemes: NonEmpty[Set[SymmetricKeyScheme]],
@@ -66,12 +100,20 @@ final case class StaticSynchronizerParameters(
     enableTransparencyChecks: Boolean,
     protocolVersion: ProtocolVersion,
     serial: NonNegativeInt,
+    synchronizerLimits: SynchronizerLimits,
 ) extends HasProtocolVersionedWrapper[StaticSynchronizerParameters]
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
 
   override val representativeProtocolVersion: RepresentativeProtocolVersion[
     StaticSynchronizerParameters.type
   ] = StaticSynchronizerParameters.protocolVersionRepresentativeFor(protocolVersion)
+
+  // Ensure the invariant related to default values holds
+  validateInstance().valueOr(err =>
+    throw new InvalidStaticSynchronizerParameters(
+      s"Invalid static synchronizer parameters for protocol version $protocolVersion: $err"
+    )
+  )
 
   @transient override protected lazy val companionObj: StaticSynchronizerParameters.type =
     StaticSynchronizerParameters
@@ -90,7 +132,46 @@ final case class StaticSynchronizerParameters(
       serial = serial.value,
     )
 
-  override protected def pretty: Pretty[StaticSynchronizerParameters] = prettyOfClass(
+  def toProtoV31: v31.StaticSynchronizerParameters =
+    v31.StaticSynchronizerParameters(
+      requiredSigningSpecs = Some(requiredSigningSpecs.toProtoV30),
+      requiredEncryptionSpecs = Some(requiredEncryptionSpecs.toProtoV30),
+      requiredSymmetricKeySchemes = requiredSymmetricKeySchemes.toSeq.map(_.toProtoEnum),
+      requiredHashAlgorithms = requiredHashAlgorithms.toSeq.map(_.toProtoEnum),
+      requiredCryptoKeyFormats = requiredCryptoKeyFormats.toSeq.map(_.toProtoEnum),
+      requiredSignatureFormats = requiredSignatureFormats.toSeq.map(_.toProtoEnum),
+      topologyChangeDelay = Some(topologyChangeDelay.toProtoPrimitive),
+      enableTransparencyChecks = enableTransparencyChecks,
+      protocolVersion = protocolVersion.toProtoPrimitive,
+      serial = serial.value,
+      synchronizerLimits = Some(synchronizerLimits.toProtoV31),
+    )
+
+  def toProtoV32: v32.StaticSynchronizerParameters =
+    v32.StaticSynchronizerParameters(
+      requiredSigningSpecs = Some(requiredSigningSpecs.toProtoV30),
+      requiredEncryptionSpecs = Some(requiredEncryptionSpecs.toProtoV30),
+      requiredSymmetricKeySchemes = requiredSymmetricKeySchemes.toSeq.map(_.toProtoEnum),
+      requiredHashAlgorithms = requiredHashAlgorithms.toSeq.map(_.toProtoEnum),
+      requiredCryptoKeyFormats = requiredCryptoKeyFormats.toSeq.map(_.toProtoEnum),
+      requiredSignatureFormats = requiredSignatureFormats.toSeq.map(_.toProtoEnum),
+      topologyChangeDelay = Some(topologyChangeDelay.toProtoPrimitive),
+      enableTransparencyChecks = enableTransparencyChecks,
+      protocolVersion = protocolVersion.toProtoPrimitive,
+      serial = serial.value,
+      synchronizerLimits = Some(synchronizerLimits.toProtoV32),
+    )
+
+  override def prettyCompanion: PrettyPrintingCompanion[StaticSynchronizerParameters] =
+    StaticSynchronizerParameters
+}
+
+object StaticSynchronizerParameters
+    extends VersioningCompanion[StaticSynchronizerParameters]
+    with ProtocolVersionedCompanionDbHelpers[StaticSynchronizerParameters]
+    with PrettyPrintingCompanion[StaticSynchronizerParameters] {
+
+  override protected val pretty: Pretty[StaticSynchronizerParameters] = prettyOfClass(
     param("required signing specs", _.requiredSigningSpecs),
     param("required encryption specs", _.requiredEncryptionSpecs),
     param("required symmetric key schemes", _.requiredSymmetricKeySchemes),
@@ -100,12 +181,8 @@ final case class StaticSynchronizerParameters(
     param("enable transparency checks", _.enableTransparencyChecks),
     param("protocol version", _.protocolVersion),
     param("serial", _.serial),
+    param("synchronizer limits", _.synchronizerLimits),
   )
-}
-
-object StaticSynchronizerParameters
-    extends VersioningCompanion[StaticSynchronizerParameters]
-    with ProtocolVersionedCompanionDbHelpers[StaticSynchronizerParameters] {
 
   // Note: if you need static synchronizer parameters for testing, look at BaseTest.defaultStaticSynchronizerParametersWith
 
@@ -114,69 +191,199 @@ object StaticSynchronizerParameters
   val defaultTopologyChangeDelayNonStandardClock: NonNegativeFiniteDuration =
     NonNegativeFiniteDuration.Zero // SimClock, RemoteClock
 
-  val versioningTable: VersioningTable = VersioningTable(
+  // TODO(#36696): Only needed to read the static parameters of pv34 predecessors
+  val versioningTable: VersioningTable = VersioningTable.withMinimumPvOverride(
+    minimumPvOverride = ProtocolVersion.v34,
     ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
       v30.StaticSynchronizerParameters
     )(
       supportedProtoVersion(_)(fromProtoV30),
       _.toProtoV30,
-    )
+    ),
+    ProtoVersion(31) -> VersionedProtoCodec(ProtocolVersion.v36)(
+      v31.StaticSynchronizerParameters
+    )(
+      supportedProtoVersion(_)(fromProtoV31),
+      _.toProtoV31,
+    ),
+    ProtoVersion(32) -> VersionedProtoCodec(ProtocolVersion.v37)(
+      v32.StaticSynchronizerParameters
+    )(
+      supportedProtoVersion(_)(fromProtoV32),
+      _.toProtoV32,
+    ),
+  )
+
+  private lazy val rpvForPv36: RepresentativeProtocolVersion[StaticSynchronizerParameters.type] =
+    protocolVersionRepresentativeFor(ProtocolVersion.v36)
+
+  private lazy val rpvForNewBoundsOnPV37
+      : RepresentativeProtocolVersion[StaticSynchronizerParameters.type] =
+    protocolVersionRepresentativeFor(ProtocolVersion.newBoundsOnPV37)
+
+  // Proto v30 carries no limits: before PV36 they are the default that fromProtoV30 fills in,
+  // so a configured value cannot be silently dropped.
+  private[protocol] val defaultSynchronizerLimitsUntil = DefaultValueUntilExclusive[
+    StaticSynchronizerParameters,
+    StaticSynchronizerParameters.type,
+    SynchronizerLimits,
+  ](_.synchronizerLimits, "synchronizerLimits", rpvForPv36, SynchronizerLimits.default)
+
+  // Only v32 of the proto carries topology_limits and acs_commitment_limits, so before they cannot be configured. Pinning
+  // them to the default keeps a configured value from being silently dropped on the way to the wire.
+  private[protocol] val defaultTopologyLimitsUntil = DefaultValueUntilExclusive[
+    StaticSynchronizerParameters,
+    StaticSynchronizerParameters.type,
+    TopologyLimits,
+  ](
+    _.synchronizerLimits.topologyLimits,
+    "synchronizerLimits.topologyLimits",
+    rpvForNewBoundsOnPV37,
+    TopologyLimits.default,
+  )
+
+  private[protocol] val defaultAcsCommitmentLimitsUntil = DefaultValueUntilExclusive[
+    StaticSynchronizerParameters,
+    StaticSynchronizerParameters.type,
+    AcsCommitmentLimits,
+  ](
+    _.synchronizerLimits.acsCommitmentLimits,
+    "acsCommitmentLimits",
+    rpvForNewBoundsOnPV37,
+    AcsCommitmentLimits.default,
+  )
+
+  // Only v32 of the proto carries max_signatures_per_envelope
+  private[protocol] val defaultMaxSignaturesPerEnvelopeLimitUntil = DefaultValueUntilExclusive[
+    StaticSynchronizerParameters,
+    StaticSynchronizerParameters.type,
+    PositiveInt,
+  ](
+    _.synchronizerLimits.transactionProtocolLimits.maxSignaturesPerEnvelope,
+    "synchronizerLimits.transactionProtocolLimits.maxSignaturesPerEnvelope",
+    rpvForNewBoundsOnPV37,
+    TransactionProtocolLimits.default.maxSignaturesPerEnvelope,
+  )
+
+  // Only v32 of the proto carries max_quorum_size
+  private[protocol] val defaultMaxQuorumSizeUntil = DefaultValueUntilExclusive[
+    StaticSynchronizerParameters,
+    StaticSynchronizerParameters.type,
+    PositiveInt,
+  ](
+    _.synchronizerLimits.transactionProtocolLimits.maxQuorumSize,
+    "synchronizerLimits.transactionProtocolLimits.maxQuorumSize",
+    rpvForNewBoundsOnPV37,
+    TransactionProtocolLimits.default.maxQuorumSize,
+  )
+
+  override val invariants = Seq(
+    defaultSynchronizerLimitsUntil,
+    defaultTopologyLimitsUntil,
+    defaultAcsCommitmentLimitsUntil,
+    defaultMaxSignaturesPerEnvelopeLimitUntil,
+    defaultMaxQuorumSizeUntil,
   )
 
   override def name: String = "static synchronizer parameters"
 
-  private def parseRequiredSet[P, A](
-      field: String,
-      content: Seq[P],
-      parse: (String, P) => ParsingResult[A],
-  ): ParsingResult[NonEmpty[Set[A]]] =
-    ProtoConverter.parseRequiredNonEmpty(parse(field, _), field, content).map(_.toSet)
+  private[canton] def create(
+      requiredSigningSpecs: RequiredSigningSpecs,
+      requiredEncryptionSpecs: RequiredEncryptionSpecs,
+      requiredSymmetricKeySchemes: NonEmpty[Set[SymmetricKeyScheme]],
+      requiredHashAlgorithms: NonEmpty[Set[HashAlgorithm]],
+      requiredCryptoKeyFormats: NonEmpty[Set[CryptoKeyFormat]],
+      requiredSignatureFormats: NonEmpty[Set[SignatureFormat]],
+      topologyChangeDelay: NonNegativeFiniteDuration,
+      enableTransparencyChecks: Boolean,
+      protocolVersion: ProtocolVersion,
+      serial: NonNegativeInt,
+      synchronizerLimits: SynchronizerLimits,
+  ): Either[InvalidStaticSynchronizerParameters, StaticSynchronizerParameters] =
+    Either.catchOnly[InvalidStaticSynchronizerParameters](
+      StaticSynchronizerParameters(
+        requiredSigningSpecs,
+        requiredEncryptionSpecs,
+        requiredSymmetricKeySchemes,
+        requiredHashAlgorithms,
+        requiredCryptoKeyFormats,
+        requiredSignatureFormats,
+        topologyChangeDelay,
+        enableTransparencyChecks,
+        protocolVersion,
+        serial,
+        synchronizerLimits,
+      )
+    )
 
-  def fromProtoV30(
-      synchronizerParametersP: v30.StaticSynchronizerParameters
+  private def parseRequiredSet[P, A](
+      pvv: ProtocolVersionValidation,
+      field: String,
+      content: ProtoUnvalidatedSeq[P],
+      parse: (P, String) => ParsingResult[A],
+  ): ParsingResult[NonEmpty[Set[A]]] =
+    ProtoValidation
+      .validateLength(content, field, pvv, ProtoValidation.MaxCollectionSize)
+      .flatMap(ProtoConverter.parseRequiredNonEmpty(parse(_, field), field, _))
+      .map(_.toSet)
+
+  /** Common parsing logic for all proto versions, which only differ in the way the synchronizer
+    * limits are obtained.
+    */
+  private def fromProtoCommon(
+      protoVersion: ProtoVersion,
+      requiredSigningSpecsOP: Option[cryptoV30.RequiredSigningSpecs],
+      requiredEncryptionSpecsOP: Option[cryptoV30.RequiredEncryptionSpecs],
+      requiredSymmetricKeySchemesP: ProtoUnvalidatedSeq[cryptoV30.SymmetricKeyScheme],
+      requiredHashAlgorithmsP: ProtoUnvalidatedSeq[cryptoV30.HashAlgorithm],
+      requiredCryptoKeyFormatsP: ProtoUnvalidatedSeq[cryptoV30.CryptoKeyFormat],
+      requiredSignatureFormatsP: ProtoUnvalidatedSeq[cryptoV30.SignatureFormat],
+      protocolVersionP: Int,
+      serialP: Int,
+      enableTransparencyChecks: Boolean,
+      topologyChangeDelayP: Option[ProtoDuration],
+      synchronizerLimitsP: => ParsingResult[SynchronizerLimits],
   ): ParsingResult[StaticSynchronizerParameters] = {
-    val v30.StaticSynchronizerParameters(
-      requiredSigningSpecsOP,
-      requiredEncryptionSpecsOP,
-      requiredSymmetricKeySchemesP,
-      requiredHashAlgorithmsP,
-      requiredCryptoKeyFormatsP,
-      requiredSignatureFormatsP,
-      protocolVersionP,
-      serialP,
-      enableTransparencyChecks,
-      topologyChangeDelayP,
-    ) = synchronizerParametersP
+
+    // The declared protocol version is itself untrusted here, so bound unconditionally.
+    val pvv = ProtocolVersionValidation.AlwaysValidation
 
     for {
+      protocolVersion <- ProtocolVersion.fromProtoPrimitive(protocolVersionP, allowDeleted = true)
+      _ <- checkProtoVersionCompatibility(protocolVersion, protoVersion)
+
       requiredSigningSpecsP <- requiredSigningSpecsOP.toRight(
         ProtoDeserializationError.FieldNotSet(
           "required_signing_specs"
         )
       )
-      requiredSigningSpecs <- RequiredSigningSpecs.fromProtoV30(requiredSigningSpecsP)
+      requiredSigningSpecs <- RequiredSigningSpecs.fromProtoV30(pvv, requiredSigningSpecsP)
       requiredEncryptionSpecsP <- requiredEncryptionSpecsOP.toRight(
         ProtoDeserializationError.FieldNotSet(
           "required_encryption_specs"
         )
       )
-      requiredEncryptionSpecs <- RequiredEncryptionSpecs.fromProtoV30(requiredEncryptionSpecsP)
+      requiredEncryptionSpecs <- RequiredEncryptionSpecs.fromProtoV30(pvv, requiredEncryptionSpecsP)
       requiredSymmetricKeySchemes <- parseRequiredSet(
+        pvv,
         "required_symmetric_key_schemes",
         requiredSymmetricKeySchemesP,
         SymmetricKeyScheme.fromProtoEnum,
       )
       requiredHashAlgorithms <- parseRequiredSet(
+        pvv,
         "required_hash_algorithms",
         requiredHashAlgorithmsP,
         HashAlgorithm.fromProtoEnum,
       )
       requiredCryptoKeyFormats <- parseRequiredSet(
+        pvv,
         "required_crypto_key_formats",
         requiredCryptoKeyFormatsP,
         CryptoKeyFormat.fromProtoEnum,
       )
       requiredSignatureFormats <- parseRequiredSet(
+        pvv,
         "required_signature_formats",
         requiredSignatureFormatsP,
         SignatureFormat.fromProtoEnum,
@@ -186,20 +393,106 @@ object StaticSynchronizerParameters
         "topology_change_delay",
         topologyChangeDelayP,
       )
-      protocolVersion <- ProtocolVersion.fromProtoPrimitive(protocolVersionP)
       serial <- ProtoConverter.parseNonNegativeInt("serial", serialP)
-    } yield StaticSynchronizerParameters(
-      requiredSigningSpecs,
-      requiredEncryptionSpecs,
-      requiredSymmetricKeySchemes,
-      requiredHashAlgorithms,
-      requiredCryptoKeyFormats,
-      requiredSignatureFormats,
-      topologyChangeDelay,
-      enableTransparencyChecks,
-      protocolVersion,
-      serial,
+      synchronizerLimits <- synchronizerLimitsP
+
+      staticSynchronizerParameters <- create(
+        requiredSigningSpecs,
+        requiredEncryptionSpecs,
+        requiredSymmetricKeySchemes,
+        requiredHashAlgorithms,
+        requiredCryptoKeyFormats,
+        requiredSignatureFormats,
+        topologyChangeDelay,
+        enableTransparencyChecks,
+        protocolVersion,
+        serial,
+        synchronizerLimits,
+      ).leftMap(_.toProtoDeserializationError)
+    } yield staticSynchronizerParameters
+  }
+
+  def fromProtoV30(
+      synchronizerParametersP: v30.StaticSynchronizerParameters
+  ): ParsingResult[StaticSynchronizerParameters] =
+    fromProtoCommon(
+      ProtoVersion(30),
+      synchronizerParametersP.requiredSigningSpecs,
+      synchronizerParametersP.requiredEncryptionSpecs,
+      synchronizerParametersP.requiredSymmetricKeySchemes,
+      synchronizerParametersP.requiredHashAlgorithms,
+      synchronizerParametersP.requiredCryptoKeyFormats,
+      synchronizerParametersP.requiredSignatureFormats,
+      synchronizerParametersP.protocolVersion,
+      synchronizerParametersP.serial,
+      synchronizerParametersP.enableTransparencyChecks,
+      synchronizerParametersP.topologyChangeDelay,
+      Right(SynchronizerLimits.default),
     )
+
+  def fromProtoV31(
+      synchronizerParametersP: v31.StaticSynchronizerParameters
+  ): ParsingResult[StaticSynchronizerParameters] =
+    fromProtoCommon(
+      ProtoVersion(31),
+      synchronizerParametersP.requiredSigningSpecs,
+      synchronizerParametersP.requiredEncryptionSpecs,
+      synchronizerParametersP.requiredSymmetricKeySchemes,
+      synchronizerParametersP.requiredHashAlgorithms,
+      synchronizerParametersP.requiredCryptoKeyFormats,
+      synchronizerParametersP.requiredSignatureFormats,
+      synchronizerParametersP.protocolVersion,
+      synchronizerParametersP.serial,
+      synchronizerParametersP.enableTransparencyChecks,
+      synchronizerParametersP.topologyChangeDelay,
+      parseRequired(
+        SynchronizerLimits.fromProtoV31,
+        "synchronizer_limits",
+        synchronizerParametersP.synchronizerLimits,
+      ),
+    )
+
+  def fromProtoV32(
+      synchronizerParametersP: v32.StaticSynchronizerParameters
+  ): ParsingResult[StaticSynchronizerParameters] =
+    fromProtoCommon(
+      ProtoVersion(32),
+      synchronizerParametersP.requiredSigningSpecs,
+      synchronizerParametersP.requiredEncryptionSpecs,
+      synchronizerParametersP.requiredSymmetricKeySchemes,
+      synchronizerParametersP.requiredHashAlgorithms,
+      synchronizerParametersP.requiredCryptoKeyFormats,
+      synchronizerParametersP.requiredSignatureFormats,
+      synchronizerParametersP.protocolVersion,
+      synchronizerParametersP.serial,
+      synchronizerParametersP.enableTransparencyChecks,
+      synchronizerParametersP.topologyChangeDelay,
+      parseRequired(
+        SynchronizerLimits.fromProtoV32,
+        "synchronizer_limits",
+        synchronizerParametersP.synchronizerLimits,
+      ),
+    )
+
+  private def checkProtoVersionCompatibility(
+      protocolVersion: ProtocolVersion,
+      protoVersion: ProtoVersion,
+  ): ParsingResult[Unit] =
+    for {
+      expectedProtoVersion <- protoVersionFor(protocolVersion).leftMap(OtherError(_))
+
+      _ <- EitherUtil.condUnit(
+        expectedProtoVersion == protoVersion,
+        InvariantViolation(
+          "protocol_version",
+          s"Synchronizer parameters with PV $protocolVersion cannot be deserialized from $protoVersion",
+        ),
+      )
+    } yield ()
+
+  class InvalidStaticSynchronizerParameters(message: String) extends RuntimeException(message) {
+    lazy val toProtoDeserializationError: ProtoDeserializationError.InvariantViolation =
+      ProtoDeserializationError.InvariantViolation(field = None, error = message)
   }
 }
 
@@ -208,7 +501,10 @@ object StaticSynchronizerParameters
   * The synchronizer administrators can set onboarding restrictions to control which participant can
   * join the synchronizer.
   */
-sealed trait OnboardingRestriction extends Product with Serializable with PrettyPrinting {
+sealed trait OnboardingRestriction
+    extends Product
+    with Serializable
+    with PrettyPrintingFromCompanion {
   def toProtoV30: v30.OnboardingRestriction
   def isLocked: Boolean
   def isRestricted: Boolean
@@ -217,9 +513,13 @@ sealed trait OnboardingRestriction extends Product with Serializable with Pretty
 
   def name: String
 
-  override protected def pretty: Pretty[OnboardingRestriction.this.type] = prettyOfString(_.name)
+  override def prettyCompanion: PrettyPrintingCompanion[OnboardingRestriction] =
+    OnboardingRestriction
 }
-object OnboardingRestriction {
+object OnboardingRestriction extends PrettyPrintingCompanion[OnboardingRestriction] {
+
+  override protected val pretty: Pretty[OnboardingRestriction] = prettyOfString(_.name)
+
   def fromProtoV30(
       onboardingRestrictionP: v30.OnboardingRestriction
   ): ParsingResult[OnboardingRestriction] = onboardingRestrictionP match {
@@ -309,8 +609,9 @@ object OnboardingRestriction {
   *   stakeholder of the contract can initiate the assignment, if it has not yet happened. Moreover,
   *   if this timeout is zero, no automatic assignments will occur. Choose a low value, if you want
   *   to lower the time that contracts can be inactive due to ongoing reassignments. Choosing a high
-  *   value currently has no practical benefit, but will have benefits in a future version.
-  *   TODO(M41): Document those benefits
+  *   value currently has no practical benefit. This timeout only applies up to protocol version 36:
+  *   from protocol version 37, every stakeholder can initiate the assignment as soon as the
+  *   unassignment is completed, and automatic assignments are configured on the participant.
   * @param topologyChangeDelay
   *   determines the offset applied to the topology transactions before they become active, in order
   *   to support parallel transaction processing
@@ -370,7 +671,7 @@ final case class DynamicSynchronizerParameters private (
       DynamicSynchronizerParameters.type
     ]
 ) extends HasProtocolVersionedWrapper[DynamicSynchronizerParameters]
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
 
   @transient override protected lazy val companionObj: DynamicSynchronizerParameters.type =
     DynamicSynchronizerParameters
@@ -492,7 +793,15 @@ final case class DynamicSynchronizerParameters private (
     preparationTimeRecordTimeTolerance = Some(preparationTimeRecordTimeTolerance.toProtoPrimitive),
   )
 
-  override protected def pretty: Pretty[DynamicSynchronizerParameters] =
+  override def prettyCompanion: PrettyPrintingCompanion[DynamicSynchronizerParameters] =
+    DynamicSynchronizerParameters
+}
+
+object DynamicSynchronizerParameters
+    extends VersioningCompanion[DynamicSynchronizerParameters]
+    with PrettyPrintingCompanion[DynamicSynchronizerParameters] {
+
+  override protected val pretty: Pretty[DynamicSynchronizerParameters] =
     prettyOfClass(
       param("confirmation response timeout", _.confirmationResponseTimeout),
       param("mediator reaction timeout", _.mediatorReactionTimeout),
@@ -509,12 +818,9 @@ final case class DynamicSynchronizerParameters private (
       param("preparation time record time tolerance", _.preparationTimeRecordTimeTolerance),
       param("onboarding restriction", _.onboardingRestriction),
     )
-}
-
-object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchronizerParameters] {
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.DynamicSynchronizerParameters
     )(
       supportedProtoVersion(_)(fromProtoV30),
@@ -533,10 +839,9 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
   lazy val defaultMaxRequestSize: MaxRequestSize = MaxRequestSize(
     NonNegativeInt.tryCreate(10 * 1024 * 1024)
   )
-
-  val defaultConfirmationResponseTimeout: NonNegativeFiniteDuration =
+  private val defaultConfirmationResponseTimeout: NonNegativeFiniteDuration =
     NonNegativeFiniteDuration.tryOfSeconds(30)
-  val defaultMediatorReactionTimeout: NonNegativeFiniteDuration =
+  private val defaultMediatorReactionTimeout: NonNegativeFiniteDuration =
     NonNegativeFiniteDuration.tryOfSeconds(30)
 
   private val defaultAssignmentExclusivityTimeout: NonNegativeFiniteDuration =
@@ -562,7 +867,9 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
     OnboardingRestriction.UnrestrictedOpen
 
   private val defaultAcsCommitmentsCatchUp: Option[AcsCommitmentsCatchUpParameters] = Some(
-    AcsCommitmentsCatchUpParameters(PositiveInt.tryCreate(5), PositiveInt.tryCreate(2))
+    AcsCommitmentsCatchUpParameters
+      .create(PositiveInt.tryCreate(5), PositiveInt.tryCreate(2))
+      .valueOr(err => throw new IllegalArgumentException(s"requirement failed: $err"))
   )
 
   val confirmationResponseTimeoutBounds =
@@ -577,7 +884,7 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
     *   `Left(...)` if `mediatorDeduplicationTimeout` is less than twice of
     *   `preparationTimeRecordTimeTolerance`.
     */
-  private def create(
+  private[canton] def create(
       confirmationResponseTimeout: NonNegativeFiniteDuration,
       mediatorReactionTimeout: NonNegativeFiniteDuration,
       assignmentExclusivityTimeout: NonNegativeFiniteDuration,
@@ -588,7 +895,7 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
       sequencerAggregateSubmissionTimeout: NonNegativeFiniteDuration,
       trafficControl: Option[TrafficControlParameters],
       onboardingRestriction: OnboardingRestriction,
-      acsCommitmentsCatchUp: Option[AcsCommitmentsCatchUpParameters],
+      acsCommitmentsCatchUpParameters: Option[AcsCommitmentsCatchUpParameters],
       participantSynchronizerLimits: ParticipantSynchronizerLimits,
       preparationTimeRecordTimeTolerance: NonNegativeFiniteDuration,
   )(
@@ -608,7 +915,7 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
         sequencerAggregateSubmissionTimeout,
         trafficControl,
         onboardingRestriction,
-        acsCommitmentsCatchUp,
+        acsCommitmentsCatchUpParameters,
         participantSynchronizerLimits,
         preparationTimeRecordTimeTolerance,
       )(representativeProtocolVersion)
@@ -714,9 +1021,6 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
       protocolVersionRepresentativeFor(protocolVersion)
     )
 
-  // if there is no topology change delay defined (or not yet propagated), we'll use this one
-  val topologyChangeDelayIfAbsent: NonNegativeFiniteDuration = NonNegativeFiniteDuration.Zero
-
   def fromProtoV30(
       synchronizerParametersP: v30.DynamicSynchronizerParameters
   ): ParsingResult[DynamicSynchronizerParameters] = {
@@ -735,8 +1039,8 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
       acsCommitmentCatchupConfigP,
       preparationTimeRecordTimeToleranceP,
     ) = synchronizerParametersP
-    for {
 
+    for {
       confirmationResponseTimeout <- NonNegativeFiniteDuration.fromProtoPrimitiveO(
         "confirmationResponseTimeout"
       )(
@@ -799,7 +1103,6 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
             "preparationTimeRecordTimeTolerance"
           )
         )
-        // TODO(i16458) enforce this field is always set when 3.x is stable
         .map(_.getOrElse(ledgerTimeRecordTimeTolerance))
 
       synchronizerParameters <-
@@ -814,7 +1117,7 @@ object DynamicSynchronizerParameters extends VersioningCompanion[DynamicSynchron
           sequencerAggregateSubmissionTimeout = sequencerAggregateSubmissionTimeout,
           trafficControl = trafficControlConfig,
           onboardingRestriction = onboardingRestriction,
-          acsCommitmentsCatchUp = acsCommitmentCatchupConfig,
+          acsCommitmentsCatchUpParameters = acsCommitmentCatchupConfig,
           participantSynchronizerLimits = participantSynchronizerLimits,
           preparationTimeRecordTimeTolerance = preparationTimeRecordTimeTolerance,
         )(rpv).leftMap(_.toProtoDeserializationError)
@@ -846,11 +1149,11 @@ final case class DynamicSynchronizerParametersWithValidity(
   def isValidAt(ts: CantonTimestamp): Boolean =
     validFrom < ts && validUntil.forall(ts <= _)
 
-  private def checkValidity(ts: CantonTimestamp, goal: String): Either[String, Unit] = Either.cond(
-    isValidAt(ts),
-    (),
-    s"Cannot compute $goal for `$ts` because validity of parameters is ($validFrom, $validUntil]",
-  )
+  private def checkValidity(ts: CantonTimestamp, goal: String): Either[String, Unit] =
+    EitherUtil.condUnit(
+      isValidAt(ts),
+      s"Cannot compute $goal for `$ts` because validity of parameters is ($validFrom, $validUntil]",
+    )
 
   /** Computes the decision time for the given activeness time.
     *
@@ -878,8 +1181,8 @@ final case class DynamicSynchronizerParametersWithValidity(
     )
 
   def assignmentExclusivityLimitFor(baseline: CantonTimestamp): Either[String, CantonTimestamp] =
-    checkValidity(baseline, "assignment exclusivity limit").map(_ =>
-      baseline.add(assignmentExclusivityTimeout.unwrap)
+    checkValidity(baseline, "assignment exclusivity limit").flatMap(_ =>
+      baseline.safeAdd(assignmentExclusivityTimeout)
     )
 
   /** Computes the participant response time for the given timestamp.
@@ -1016,31 +1319,17 @@ object DynamicSynchronizerParametersHistory {
   * @throws java.lang.IllegalArgumentException
   *   when [[catchUpIntervalSkip]] * [[nrIntervalsToTriggerCatchUp]] overflows.
   */
-final case class AcsCommitmentsCatchUpParameters(
+final case class AcsCommitmentsCatchUpParameters private (
     catchUpIntervalSkip: PositiveInt,
     nrIntervalsToTriggerCatchUp: PositiveInt,
-) extends PrettyPrinting {
+) extends PrettyPrintingFromCompanion {
 
-  require(
-    Either
-      .catchOnly[ArithmeticException](
-        Math.multiplyExact(catchUpIntervalSkip.value, nrIntervalsToTriggerCatchUp.value)
-      )
-      .isRight,
-    s"Catch up parameters ($catchUpIntervalSkip, $nrIntervalsToTriggerCatchUp) are too large and cause overflow when computing the catch-up interval",
-  )
+  AcsCommitmentsCatchUpParameters
+    .validate(catchUpIntervalSkip, nrIntervalsToTriggerCatchUp)
+    .valueOr(err => throw new IllegalArgumentException(s"requirement failed: $err"))
 
-  require(
-    catchUpIntervalSkip.value != 1 || nrIntervalsToTriggerCatchUp.value != 1,
-    s"Catch up config ($catchUpIntervalSkip, $nrIntervalsToTriggerCatchUp) is ambiguous. " +
-      s"It is not possible to catch up with a single interval. Did you intend to disable catch-up " +
-      s"(please use AcsCommitmentsCatchUpConfig.disabledCatchUp()) or did you intend a different config?",
-  )
-
-  override protected def pretty: Pretty[AcsCommitmentsCatchUpParameters] = prettyOfClass(
-    param("catchUpIntervalSkip", _.catchUpIntervalSkip),
-    param("nrIntervalsToTriggerCatchUp", _.nrIntervalsToTriggerCatchUp),
-  )
+  override def prettyCompanion: PrettyPrintingCompanion[AcsCommitmentsCatchUpParameters] =
+    AcsCommitmentsCatchUpParameters
 
   def toProtoV30: v30.AcsCommitmentsCatchUpConfig = v30.AcsCommitmentsCatchUpConfig(
     catchUpIntervalSkip.value,
@@ -1052,7 +1341,48 @@ final case class AcsCommitmentsCatchUpParameters(
     !(catchUpIntervalSkip.value == 1 && nrIntervalsToTriggerCatchUp.value == Int.MaxValue)
 }
 
-object AcsCommitmentsCatchUpParameters {
+object AcsCommitmentsCatchUpParameters
+    extends PrettyPrintingCompanion[AcsCommitmentsCatchUpParameters] {
+
+  override protected val pretty: Pretty[AcsCommitmentsCatchUpParameters] = prettyOfClass(
+    param("catchUpIntervalSkip", _.catchUpIntervalSkip),
+    param("nrIntervalsToTriggerCatchUp", _.nrIntervalsToTriggerCatchUp),
+  )
+
+  /** Checks the invariants of the catch-up parameters, returning errors as a Left.
+    */
+  private[protocol] def validate(
+      catchUpIntervalSkip: PositiveInt,
+      nrIntervalsToTriggerCatchUp: PositiveInt,
+  ): Either[String, Unit] =
+    for {
+      _ <- Either.cond(
+        Either
+          .catchOnly[ArithmeticException](
+            Math.multiplyExact(catchUpIntervalSkip.value, nrIntervalsToTriggerCatchUp.value)
+          )
+          .isRight,
+        (),
+        s"Catch up parameters ($catchUpIntervalSkip, $nrIntervalsToTriggerCatchUp) are too large and cause overflow when computing the catch-up interval",
+      )
+      _ <- Either.cond(
+        catchUpIntervalSkip.value != 1 || nrIntervalsToTriggerCatchUp.value != 1,
+        (),
+        s"Catch up config ($catchUpIntervalSkip, $nrIntervalsToTriggerCatchUp) is ambiguous. " +
+          s"It is not possible to catch up with a single interval. Did you intend to disable catch-up " +
+          s"(please use AcsCommitmentsCatchUpConfig.disabledCatchUp()) or did you intend a different config?",
+      )
+    } yield ()
+
+  /** Safely creates catch-up parameters, returning invariant violations as a Left. */
+  def create(
+      catchUpIntervalSkip: PositiveInt,
+      nrIntervalsToTriggerCatchUp: PositiveInt,
+  ): Either[String, AcsCommitmentsCatchUpParameters] =
+    validate(catchUpIntervalSkip, nrIntervalsToTriggerCatchUp).map(_ =>
+      AcsCommitmentsCatchUpParameters(catchUpIntervalSkip, nrIntervalsToTriggerCatchUp)
+    )
+
   def fromProtoV30(
       value: v30.AcsCommitmentsCatchUpConfig
   ): ParsingResult[AcsCommitmentsCatchUpParameters] = {
@@ -1066,7 +1396,15 @@ object AcsCommitmentsCatchUpParameters {
         "nr_intervals_to_trigger_catch_up",
         nrIntervalsToTriggerCatchUpP,
       )
-    } yield AcsCommitmentsCatchUpParameters(catchUpIntervalSkip, nrIntervalsToTriggerCatchUp)
+      parameters <- create(catchUpIntervalSkip, nrIntervalsToTriggerCatchUp)
+        .leftMap[ProtoDeserializationError](err =>
+          ProtoDeserializationError
+            .InvariantViolation(
+              field = Some("acs_commitments_catchup"),
+              error = err,
+            )
+        )
+    } yield parameters
   }
 
   def disabledCatchUp(): AcsCommitmentsCatchUpParameters =

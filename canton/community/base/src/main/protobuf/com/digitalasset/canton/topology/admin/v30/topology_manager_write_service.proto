@@ -6,6 +6,7 @@ syntax = "proto3";
 package com.digitalasset.canton.topology.admin.v30;
 
 import "com/digitalasset/canton/protocol/v30/topology.proto";
+import "com/digitalasset/canton/protocol/v31/topology.proto";
 import "com/digitalasset/canton/topology/admin/v30/common.proto";
 import "google/protobuf/duration.proto";
 
@@ -41,6 +42,11 @@ service TopologyManagerWriteService {
   rpc DropTemporaryTopologyStore(DropTemporaryTopologyStoreRequest) returns (DropTemporaryTopologyStoreResponse);
 }
 
+message BaseWriteRequest {
+  // The canton version of the client issuing the request, e.g. "3.5.0-rc3"
+  optional string client_version = 1;
+}
+
 message GenerateTransactionsRequest {
   message Proposal {
     /** Replace / Remove */
@@ -54,18 +60,28 @@ message GenerateTransactionsRequest {
     uint32 serial = 2;
 
     /** The mapping to be authorized */
-    com.digitalasset.canton.protocol.v30.TopologyMapping mapping = 3;
+    oneof mapping {
+      com.digitalasset.canton.protocol.v30.TopologyMapping v30 = 3;
+      com.digitalasset.canton.protocol.v31.TopologyMapping v31 = 5;
+    }
 
     // Target store
-    StoreId store = 4;
+    v30.StoreId store = 4;
   }
   // transaction proposals for which to generate topology transactions
   repeated Proposal proposals = 1;
+
+  optional BaseWriteRequest base_request = 2;
 }
 
 message GenerateTransactionsResponse {
   message GeneratedTransaction {
-    // Serialized com.digitalasset.canton.protocol.v30.TopologyTransaction
+    // Serialized com.digitalasset.canton.version.v1.UntypedVersionedMessage with a TopologyTransaction whose version
+    // depends on the target store's protocol version:
+    // - 30 (com.digitalasset.canton.protocol.v30.TopologyTransaction) for protocol version 36
+    // - 31 (com.digitalasset.canton.protocol.v31.TopologyTransaction) for protocol version 37
+    // Decode the data with the schema of its version. Decoding a v31 transaction with the v30 schema can be lossy,
+    // so avoid it.
     bytes serialized_transaction = 1;
     // Hash of the transaction - this should be signed by the submitter to authorize the transaction
     bytes transaction_hash = 2;
@@ -83,7 +99,19 @@ message AuthorizeRequest {
     uint32 serial = 2;
 
     /** The mapping to be authorized */
-    com.digitalasset.canton.protocol.v30.TopologyMapping mapping = 3;
+    oneof mapping {
+      com.digitalasset.canton.protocol.v30.TopologyMapping v30 = 3;
+      com.digitalasset.canton.protocol.v31.TopologyMapping v31 = 4;
+    }
+
+    /**
+     * Optional: the protocol version to create the topology transaction for, so that clients that only read
+     * topology transactions of an older protocol version can read it, e.g. 36 on a synchronizer with protocol version 37.
+     * Must be the target store's protocol version or a lower one whose topology transactions the store admits:
+     * from protocol version 37 on, a store admits those of protocol version 36.
+     * Defaults to the target store's protocol version.
+     */
+    optional uint32 protocol_version = 5;
   }
 
   oneof type {
@@ -128,7 +156,7 @@ message AuthorizeRequest {
    * Selecting a specific synchronizers store might be necessary, if the transaction to authorize by hash or the previous
    * generation of the submitted proposal is only available on the synchronizers store and not in the authorized store.
    */
-  StoreId store = 6;
+  v30.StoreId store = 6;
 
   /** Optional timeout to wait for the transaction to become effective in the store. */
   google.protobuf.Duration wait_to_become_effective = 7;
@@ -157,7 +185,7 @@ message AddTransactionsRequest {
    * Selecting a specific synchronizers store might be necessary, if the transaction to authorize by hash or the previous
    * generation of the submitted proposal is only available on the synchronizers store and not in the authorized store.
    */
-  StoreId store = 3;
+  v30.StoreId store = 3;
 
   /** Optional timeout to wait for the transaction to become effective in the store. */
   google.protobuf.Duration wait_to_become_effective = 7;
@@ -169,7 +197,7 @@ message AddTransactionsResponse {}
  */
 message ImportTopologySnapshotRequest {
   bytes topology_snapshot = 1;
-  StoreId store = 2;
+  v30.StoreId store = 2;
   /** Optional timeout to wait for the transaction to become effective in the store. */
   google.protobuf.Duration wait_to_become_effective = 3;
 }
@@ -180,7 +208,7 @@ message ImportTopologySnapshotResponse {}
  */
 message ImportTopologySnapshotV2Request {
   bytes topology_snapshot = 1;
-  StoreId store = 2;
+  v30.StoreId store = 2;
   /** Optional timeout to wait for the transaction to become effective in the store. */
   google.protobuf.Duration wait_to_become_effective = 3;
 }
@@ -199,7 +227,7 @@ message SignTransactionsRequest {
   repeated string signed_by = 2;
 
   // Target store
-  StoreId store = 3;
+  v30.StoreId store = 3;
 
   /** Force specific changes even if dangerous */
   repeated ForceFlag force_flags = 4;
@@ -219,12 +247,12 @@ message CreateTemporaryTopologyStoreRequest {
 
 message CreateTemporaryTopologyStoreResponse {
   /** The identifier of the topology store that should be used as a store filter string */
-  StoreId.Temporary store_id = 1;
+  v30.StoreId.Temporary store_id = 1;
 }
 
 message DropTemporaryTopologyStoreRequest {
   /** The identifier of the topology store that should be dropped */
-  StoreId.Temporary store_id = 1;
+  v30.StoreId.Temporary store_id = 1;
 }
 
 message DropTemporaryTopologyStoreResponse {}
@@ -266,4 +294,9 @@ enum ForceFlag {
   FORCE_FLAG_ALLOW_OUT_OF_BOUNDS_VALUE = 13;
   /** Required when changing the confirming threshold to a value higher than the number of confirming participants */
   FORCE_FLAG_ALLOW_CONFIRMING_THRESHOLD_CANNOT_BE_MET = 14;
+  /**
+   * Required when replacing a party-to-participant mapping that has a participant in the Nominated or Freezing
+   * hosting state with a topology transaction of protocol version 36, which cannot express these states.
+   */
+  FORCE_FLAG_ALLOW_V30_PARTY_TO_PARTICIPANT_AFTER_HOSTING_STATES = 15;
 }

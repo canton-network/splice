@@ -27,7 +27,7 @@ CODEOWNERS @DACH-NY/canton-change-owners
 /shared_dependencies.json @DACH-NY/canton-change-owners
 
 # Triggering a recompile on a branch does not require change owners approval
-/.circleci/branches_to_be_fully_recompiled_in_ci.txt
+/.ci/branches_to_be_fully_recompiled_in_ci.txt
 
 # changes to the sequencer driver API should be reviewed by the change owners
 # because the canton-drivers repository depends on it
@@ -37,7 +37,7 @@ CODEOWNERS @DACH-NY/canton-change-owners
 /community/kms-driver-api @DACH-NY/canton-change-owners @soren-da
 
 # Crypto changes need to be explicitly reviewed
-/community/base/src/main/scala/com/digitalasset/canton/crypto @soren-da @JoaoSa-da @andreaslochbihler-da
+/community/base/src/main/scala/com/digitalasset/canton/crypto @soren-da @JoaoSa-da @andreaslochbihler-da @simran-da
 
 # Changes to SHA256 checksum files must be flagged
 *.sha256          @DACH-NY/canton-change-owners

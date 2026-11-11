@@ -4,8 +4,6 @@
 package com.digitalasset.canton.topology.store.memory
 
 import cats.syntax.functorFilter.*
-import com.daml.nonempty.NonEmpty
-import com.daml.nonempty.NonEmptyReturningOps.`NE Iterable Ops`
 import com.digitalasset.canton.config.CantonRequireTypes.{String185, String300}
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
@@ -14,6 +12,7 @@ import com.digitalasset.canton.crypto.topology.TopologyStateHash
 import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerPredecessor}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.processing.{EffectiveTime, SequencedTime}
@@ -41,6 +40,8 @@ import com.digitalasset.canton.topology.transaction.TopologyTransaction.{
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.{ErrorUtil, Mutex, PekkoUtil}
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmptyReturningOps.`NE Iterable Ops`
 import com.google.common.annotations.VisibleForTesting
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
@@ -203,53 +204,56 @@ class InMemoryTopologyStore[+StoreId <: TopologyStoreId](
       items: Seq[StateKeyFetch]
   )(implicit
       traceContext: TraceContext
-  ): FutureUnlessShutdown[GenericStoredTopologyTransactions] = lock.exclusive {
-    val itemsMap =
-      items
-        .groupMap1(key => (key.code, key.namespace, key.identifier))(_.validUntilCutoff)
-        .view
-        .mapValues(_.min1)
-        .toMap
-    val found = lock.exclusive {
-      topologyTransactionStore
-        .filter { entry =>
-          itemsMap.get(entry.indexKey).exists { validUntil =>
-            entry.rejected.isEmpty && entry.until.forall(ts => ts >= validUntil)
+  ): FutureUnlessShutdown[GenericStoredTopologyTransactions] = {
+    val itemsMap = items
+      .groupMap1(key => (key.code, key.namespace, key.identifier))(_.validUntilCutoff)
+      .view
+      .mapValues(_.min1)
+      .toMap
+    val found = lock
+      .exclusive {
+        topologyTransactionStore
+          .filter { entry =>
+            itemsMap.get(entry.indexKey).exists { validUntil =>
+              entry.rejected.isEmpty
+              && entry.until.forall(ts => ts >= validUntil)
+            }
           }
-        }
-        .sortBy(c => (c.until.map(_.value).getOrElse(CantonTimestamp.MaxValue), c.batchIdx))
-        .reverse
-        .map(_.toStoredTransaction)
-        .toSeq
-    }
+      }
+      .sortBy(c => (c.until.map(_.value).getOrElse(CantonTimestamp.MaxValue), c.batchIdx))
+      .reverse
+      .map(_.toStoredTransaction)
+      .toSeq
     FutureUnlessShutdown.pure(StoredTopologyTransactions(found))
   }
 
   override def bulkInsert(
       initialSnapshot: GenericStoredTopologyTransactions
-  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] = lock.exclusive {
-    initialSnapshot.result
-      .foldLeft((CantonTimestamp.MinValue, -1)) { case ((prevTs, prevBatch), tx) =>
-        val batchIdx = if (prevTs < tx.validFrom.value || prevBatch == -1) 0 else prevBatch + 1
-        val uniqueKey = (
-          tx.validFrom,
-          batchIdx,
-        )
-        if (topologyTransactionsStoreUniqueIndex.add(uniqueKey)) {
-          topologyTransactionStore.append(
-            TopologyStoreEntry(
-              tx.transaction,
-              tx.sequenced,
-              from = tx.validFrom,
-              batchIdx = batchIdx,
-              until = tx.validUntil,
-              rejected = tx.rejectionReason,
-            )
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] = {
+    lock.exclusive {
+      initialSnapshot.result
+        .foldLeft((CantonTimestamp.MinValue, -1)) { case ((prevTs, prevBatch), tx) =>
+          val batchIdx = if (prevTs < tx.validFrom.value || prevBatch == -1) 0 else prevBatch + 1
+          val uniqueKey = (
+            tx.validFrom,
+            batchIdx,
           )
+          if (topologyTransactionsStoreUniqueIndex.add(uniqueKey)) {
+            topologyTransactionStore.append(
+              TopologyStoreEntry(
+                tx.transaction,
+                tx.sequenced,
+                from = tx.validFrom,
+                batchIdx = batchIdx,
+                until = tx.validUntil,
+                rejected = tx.rejectionReason,
+              )
+            )
+          }
+          (tx.validFrom.value, batchIdx)
         }
-        (tx.validFrom.value, batchIdx)
-      }
-      .discard
+        .discard
+    }
     FutureUnlessShutdown.unit
   }
 
@@ -591,6 +595,25 @@ class InMemoryTopologyStore[+StoreId <: TopologyStoreId](
     PekkoUtil.futureSourceUS(dataF)
   }
 
+  override def findEssentialStateInInterval(
+      fromExclusiveO: Option[SequencedTime],
+      toInclusive: SequencedTime,
+      includeRejected: Boolean,
+  )(implicit traceContext: TraceContext): Source[GenericStoredTopologyTransaction, NotUsed] = {
+    // 1. load all transactions with a sequenced time <= asOfInclusive, including proposals
+    val dataF = filteredState(
+      (lock.exclusive {
+        topologyTransactionStore.toSeq
+      }),
+      entry => fromExclusiveO.forall(entry.sequenced > _) && entry.sequenced <= toInclusive,
+      includeRejected = includeRejected,
+    ).map(
+      // 2. transform the result such that the validUntil fields are set as they were at maxEffective time of the snapshot
+      _.asSnapshotAtMaxEffectiveTime
+    ).map(stored => Source(stored.result))
+    PekkoUtil.futureSourceUS(dataF)
+  }
+
   override def findEssentialStateHashAtSequencedTime(
       asOfInclusive: SequencedTime
   )(implicit materializer: Materializer, traceContext: TraceContext): FutureUnlessShutdown[Hash] =
@@ -599,6 +622,29 @@ class InMemoryTopologyStore[+StoreId <: TopologyStoreId](
         .runFold(TopologyStateHash.build())(_.add(_))
         .map(_.finish().hash)
     )
+
+  override def filterProvidesAdditionalSignatures(
+      transactions: Seq[GenericSignedTopologyTransaction]
+  )(implicit
+      traceContext: TraceContext
+  ): FutureUnlessShutdown[Seq[GenericSignedTopologyTransaction]] =
+    FutureUnlessShutdown.wrap {
+      lock.exclusive {
+        transactions.filter { tx =>
+          val inStoreOpt = topologyTransactionStore
+            .findLast { entry =>
+              entry.transaction.hash == tx.hash &&
+              entry.from.value < CantonTimestamp.MaxValue &&
+              entry.rejected.isEmpty
+            }
+            .map(_.toStoredTransaction)
+
+          inStoreOpt.forall { inStore =>
+            TopologyStore.providesAdditionalSignatures(tx, inStore)
+          }
+        }
+      }
+    }
 
   override def findUpcomingEffectiveChanges(asOfInclusive: CantonTimestamp)(implicit
       traceContext: TraceContext
@@ -677,18 +723,39 @@ class InMemoryTopologyStore[+StoreId <: TopologyStoreId](
       _.result.findLast(tx => tx.hash == transaction.hash && tx.validFrom.value < asOfExclusive)
     )
 
+  override def findStoredByHashes(
+      asOfExclusive: CantonTimestamp,
+      hashes: Set[TxHash],
+      includeRejected: Boolean = false,
+  )(implicit
+      traceContext: TraceContext
+  ): FutureUnlessShutdown[Map[TxHash, GenericStoredTopologyTransaction]] =
+    FutureUnlessShutdown.wrap {
+      lock.exclusive {
+        topologyTransactionStore.iterator
+          .filter(entry =>
+            hashes.contains(entry.transaction.hash) &&
+              entry.from.value < asOfExclusive &&
+              (includeRejected || entry.rejected.isEmpty)
+          )
+          .map(entry => entry.transaction.hash -> entry.toStoredTransaction)
+          .toMap
+      }
+    }
+
   override def findStoredForVersion(
       asOfExclusive: CantonTimestamp,
       transaction: GenericTopologyTransaction,
-      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[Option[GenericStoredTopologyTransaction]] = {
-    val rpv = TopologyTransaction.protocolVersionRepresentativeFor(protocolVersion)
+    val rpv = transaction.representativeProtocolVersion
 
     allTransactions().map(
       _.result.findLast(tx =>
-        tx.transaction.transaction == transaction && tx.transaction.representativeProtocolVersion == rpv && tx.validFrom.value < asOfExclusive
+        // Comparison is done against the stored INNER payload (tx.transaction.transaction),
+        // not the wrapper (tx.transaction), bringing this in line with DbTopologyStore.
+        tx.transaction.transaction == transaction && tx.transaction.transaction.representativeProtocolVersion == rpv && tx.validFrom.value < asOfExclusive
       )
     )
   }

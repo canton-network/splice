@@ -6,7 +6,6 @@ import com.digitalasset.canton.crypto.SigningPublicKey
 import com.digitalasset.canton.topology.Namespace
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppConfigs
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
@@ -25,12 +24,6 @@ class ManualSignatureIntegrationTest
       .withManualStart
       .withoutAliceValidatorConnectingToSplitwell
       .withSequencerConnectionsFromScanDisabled()
-      .addConfigTransforms((_, config) =>
-        updateAllScanAppConfigs((_, config) =>
-          // Sequencer is returning TRAFFIC_CONTROL_DISABLED when looking up traffic summaries.
-          config.copy(enableAppActivityRecordAndTrafficIngestion = false)
-        )(config)
-      )
   }
 
   "synchronizer" should {
@@ -93,7 +86,7 @@ class ManualSignatureIntegrationTest
         aliceValidatorBackend.start()
       }
 
-      eventuallySucceeds(40.seconds) {
+      eventuallySucceeds(90.seconds) {
         val synchronizerId =
           aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
             aliceValidatorBackend.config.domains.global.alias

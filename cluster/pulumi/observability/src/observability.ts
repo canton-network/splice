@@ -6,6 +6,8 @@ import * as grafana from '@pulumiverse/grafana';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import {
+  CLOUD_ARMOR_POLICY_NAME,
+  cloudArmorRulePriorityRegex,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
   CLUSTER_NAME,
@@ -16,21 +18,24 @@ import {
   GCP_PROJECT,
   GrafanaKeys,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   infraPremiumStorageClassName,
   infraStandardStorageClassName,
   loadTesterConfig,
   ObservabilityReleaseName,
   SPLICE_ROOT,
 } from '@canton-network/splice-pulumi-common';
-import { allSvsConfiguration } from '@canton-network/splice-pulumi-common-sv/src/singleSvConfig';
 import {
   extraSvConfigsBasic,
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
-import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
-import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
+import {
+  allValidatorsConfig,
+  deployedValidators,
+  SweepConfig,
+} from '@canton-network/splice-pulumi-common-validator';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
@@ -47,15 +52,54 @@ import {
   slackToken,
   supportTeamEmail,
 } from './alertings';
-import { monitoringConfig, prometheusConfig } from './config';
+import {
+  type CloudArmorAlertConfig,
+  cloudArmorConfig,
+  monitoringConfig,
+  prometheusConfig,
+} from './config';
+import { createGrafanaGcpDatasources, grafanaGcpLoggingPlugin } from './gcpGrafanaDatasources';
 import { createGrafanaDashboards } from './grafana-dashboards';
 
 function istioVirtualService(
   ns: k8s.core.v1.Namespace,
   name: string,
   serviceName: string,
-  servicePort: number
+  servicePort: number,
+  opts: {
+    uriPrefix?: string;
+  } = {}
 ) {
+  const host = pulumi.interpolate`${serviceName}.${ns.metadata.name}.svc.cluster.local`;
+  new k8s.apiextensions.CustomResource(
+    `${name}-destination-rule`,
+    {
+      apiVersion: 'networking.istio.io/v1beta1',
+      kind: 'DestinationRule',
+      metadata: {
+        name: name,
+        namespace: ns.metadata.name,
+      },
+      spec: {
+        host: host,
+        trafficPolicy: {
+          connectionPool: {
+            http: {
+              idleTimeout: '30s',
+            },
+            tcp: {
+              tcpKeepalive: {
+                time: '30s',
+                interval: '10s',
+                probes: 3,
+              },
+            },
+          },
+        },
+      },
+    },
+    { deleteBeforeReplace: true }
+  );
   new k8s.apiextensions.CustomResource(
     `${name}-virtual-service`,
     {
@@ -70,17 +114,32 @@ function istioVirtualService(
         gateways: ['cluster-ingress/cn-http-gateway'],
         http: [
           {
-            match: [{ port: 443 }, { port: 80 }],
+            match: [{ port: 443 }, { port: 80 }].map(match => ({
+              ...match,
+              ...(opts.uriPrefix ? { uri: { prefix: opts.uriPrefix } } : {}),
+            })),
             route: [
               {
                 destination: {
-                  host: pulumi.interpolate`${serviceName}.${ns.metadata.name}.svc.cluster.local`,
+                  host: host,
                   port: {
                     number: servicePort,
                   },
                 },
               },
             ],
+            // Istio's automatic retries are globally disabled (see defaultHttpRetryPolicy in
+            // infra/src/istio.ts) because our app clients retry themselves. The observability
+            // UIs are browser-facing, so there is no client-side retry and a transient upstream
+            // connection drop shows up as "upstream connect error or disconnect/reset before
+            // headers. reset reason: connection termination". We only retry failures that happen
+            // before the request was handed to the upstream, so this stays safe for non-idempotent
+            // requests.
+            retries: {
+              attempts: 3,
+              perTryTimeout: '30s',
+              retryOn: 'connect-failure,refused-stream,reset-before-request',
+            },
           },
         ],
       },
@@ -89,19 +148,31 @@ function istioVirtualService(
   );
 }
 
+// Exposes the pushgateway through the cluster ingress.
+// Access is governed by the gateway default policies.
+// Pushes from inside the cluster bypass the ingress gateway, so they keep
+// working without any change.
+function exposePushgatewayExternally(ns: k8s.core.v1.Namespace) {
+  istioVirtualService(ns, 'pushgateway', pushgatewayServiceName, pushgatewayServicePort, {
+    uriPrefix: '/metrics',
+  });
+}
+
 const grafanaExternalUrl = `https://grafana.${CLUSTER_HOSTNAME}`;
 const alertManagerExternalUrl = `https://alertmanager.${CLUSTER_HOSTNAME}`;
 const prometheusExternalUrl = `https://prometheus.${CLUSTER_HOSTNAME}`;
+const pushgatewayServiceName = 'prometheus-pushgateway';
+const pushgatewayServicePort = 9091;
 const shouldIgnoreNoDataOrDataSourceError = clusterIsResetPeriodically;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const istioDashboardVersions: pulumi.Output<any> =
-  infraStack.requireOutput('istioDashboardVersions');
+  StackReferences.infra.requireOutput('istioDashboardVersions');
 
 export function configureObservability(namespace: ExactNamespace): pulumi.Resource {
   // If the stack version is updated the crd version might need to be upgraded as well, check the release notes https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
-  const stackVersion = '82.9.0';
-  const prometheusStackCrdVersion = '0.89.0';
+  const stackVersion = '91.4.1';
+  const prometheusStackCrdVersion = '0.94.0';
   const namespaceName = namespace.logicalName;
   const postgres = installPostgres(namespace);
   const adminPassword = grafanaKeysFromSecret().adminPassword;
@@ -205,7 +276,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                 },
               },
             },
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
           templateFiles: {
             'template.tmpl': substituteSlackNotificationTemplate(
@@ -224,7 +295,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           tls: {
             enabled: false, // because `admissionWebhooks` are disabled, see: https://github.com/prometheus-community/helm-charts/issues/418
           },
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         prometheus: {
           prometheusSpec: {
@@ -265,12 +336,13 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
               },
             },
             externalUrl: prometheusExternalUrl,
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         grafana: {
           fullnameOverride: 'grafana',
           envFromSecret: postgres.secretName,
+          plugins: [grafanaGcpLoggingPlugin],
           ingress: {
             enabled: false,
           },
@@ -394,7 +466,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           },
           adminUser: 'cn-admin',
           adminPassword: adminPassword,
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         'kube-state-metrics': {
           fullnameOverride: 'ksm',
@@ -499,7 +571,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
               },
             ],
           },
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         'prometheus-node-exporter': {
           fullnameOverride: 'node-exporter',
@@ -528,6 +600,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   // In the observability cluster, we install a version of the dashboards with a filter
   // that prevents running expensive queries when the dashboard just loads
   createGrafanaDashboards(namespaceName);
+  createGrafanaGcpDatasources(namespaceName);
   // enable the slack alerts only for "prod" clusters
   const slackAccessToken = enableAlerts ? slackToken() : 'None';
   const slackNotificationChannel = (enableAlerts && slackAlertNotificationChannel) || 'None';
@@ -547,7 +620,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   );
   createGrafanaAlerting(namespaceName);
   if (monitoringConfig.enableGrafanaServiceAccountToken) {
-    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.pg]);
+    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.database]);
   }
   createGrafanaEnvoyFilter(namespaceName, [prometheusStack]);
 
@@ -566,10 +639,13 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           namespace: namespaceName,
           additionalLabels: { release: 'prometheus-grafana-monitoring' },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
       },
       maxHistory: HELM_MAX_HISTORY_SIZE,
     });
+    if (prometheusConfig.pushgatewayExternalAccess.enabled) {
+      exposePushgatewayExternally(namespace.ns);
+    }
   }
 
   return prometheusStack;
@@ -647,7 +723,7 @@ function createGrafanaServiceAccount(
     url: grafanaExternalUrl,
   });
 
-  const serviceAccountResource = new grafana.ServiceAccount(
+  const serviceAccountResource = new grafana.oss.ServiceAccount(
     'grafanaSA',
     {
       role: 'Editor',
@@ -657,7 +733,7 @@ function createGrafanaServiceAccount(
       dependsOn: [...dependsOn, grafanaProvider],
     }
   );
-  const serviceAccountToken = new grafana.ServiceAccountToken(
+  const serviceAccountToken = new grafana.oss.ServiceAccountToken(
     'grafanaSAToken',
     {
       serviceAccountId: serviceAccountResource.id,
@@ -769,6 +845,77 @@ function substituteDsoMissedConfirmationsAlerts(alert: string): string {
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
 }
 
+function substituteSpliceRateLimitsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.spliceRateLimits;
+  const bareFilter =
+    config.excludedLimiters.length > 0 ? `limiter!~"${config.excludedLimiters.join('|')}"` : '';
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  return alert
+    .replaceAll('$SPLICE_RATE_LIMITS_USAGE_THRESHOLD', config.usageThreshold.toString())
+    .replaceAll(
+      '$SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD',
+      config.rejectionCountThreshold.toString()
+    )
+    .replaceAll('$SPLICE_RATE_LIMITS_FILTER', filter);
+}
+
+function substituteCloudArmorAlerts(alerts: string): string {
+  const { deniedRequests, wafRejections, throttleRejections } =
+    monitoringConfig.alerting.alerts.cloudArmor;
+  const hasPreviewOnlyRules =
+    cloudArmorConfig.allRulesPreviewOnly ||
+    (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.wafRules.previewOnly);
+  // Rules in preview mode do not actually deny anything, so we also alert on the requests
+  // they would have denied. The rule specific alerts rely on the log based metrics, as the
+  // Cloud Armor metrics only expose whether a request was blocked, not by which rule.
+  // Each rule group has its own priority prefix, so the rule specific alerts just match
+  // on it. The public endpoint rules only ever deny when throttling, so any rejection
+  // with that prefix is a throttle rejection.
+  const enabledRules: { [uid: string]: boolean } = {
+    'cloud-armor-denied': true,
+    'cloud-armor-previewed-denied': hasPreviewOnlyRules,
+    'cloud-armor-waf-rejections':
+      cloudArmorConfig.logging.enabled && cloudArmorConfig.wafRules.enabled,
+    'cloud-armor-throttle-rejections': cloudArmorConfig.logging.enabled,
+  };
+  const windowSubstitutions = (name: string, config: CloudArmorAlertConfig) => (s: string) =>
+    s
+      .replaceAll(`$CLOUD_ARMOR_${name}_THRESHOLD`, config.threshold.toString())
+      .replaceAll(`$CLOUD_ARMOR_${name}_WINDOW`, `${config.alignmentPeriodSeconds}s`)
+      .replaceAll(`$CLOUD_ARMOR_${name}_FOR`, `${config.durationSeconds}s`)
+      // leave some room for the ingestion delay of the GCP metrics
+      .replaceAll(
+        `$CLOUD_ARMOR_${name}_RANGE_SECONDS`,
+        (config.alignmentPeriodSeconds + 600).toString()
+      );
+  const substituted = [
+    windowSubstitutions('DENIED', deniedRequests),
+    windowSubstitutions('WAF', wafRejections),
+    windowSubstitutions('THROTTLE', throttleRejections),
+  ].reduce(
+    (s, substitute) => substitute(s),
+    alerts
+      .replaceAll('$CLOUD_ARMOR_WAF_RULE_PRIORITY_REGEX', cloudArmorRulePriorityRegex('waf'))
+      .replaceAll(
+        '$CLOUD_ARMOR_THROTTLE_RULE_PRIORITY_REGEX',
+        cloudArmorRulePriorityRegex('publicEndpoints')
+      )
+      .replaceAll('$CLOUD_ARMOR_POLICY_NAME', CLOUD_ARMOR_POLICY_NAME)
+      .replaceAll('$CLUSTER_BASENAME', CLUSTER_BASENAME)
+      .replaceAll('$GCP_PROJECT', GCP_PROJECT)
+  );
+  const content = yaml.load(substituted) as GrafanaRuleFile;
+  content.groups.forEach(group => {
+    group.rules = group.rules.filter(rule => {
+      if (!(rule.uid in enabledRules)) {
+        throw new Error(`Unknown Cloud Armor alert rule ${rule.uid}`);
+      }
+      return enabledRules[rule.uid];
+    });
+  });
+  return yaml.dump(content, { lineWidth: -1 });
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -785,14 +932,18 @@ function createGrafanaAlerting(namespace: Input<string>) {
   const sweepConfigs: SweepConfig[] = extraSvConfigsBasic
     .concat(standardSvConfigsBasic)
     .map(sv => sv.sweep!)
+    .concat(deployedValidators.map(validator => allValidatorsConfig[validator].sweep!))
     .filter(e => e != undefined);
-  const cantonBftEnabled =
-    DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
-  const cometbftPruningHighestBlockRetain = allSvsConfiguration
-    .map(sv => sv.pruning?.cometbft?.retainBlocks)
-    .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
-    .sort((a, b) => a - b)
-    .pop();
+  const legacyMigrationIds = [
+    ...(DecentralizedSynchronizerUpgradeConfig.legacy
+      ? [DecentralizedSynchronizerUpgradeConfig.legacy]
+      : []),
+    ...DecentralizedSynchronizerUpgradeConfig.additionalLegacy,
+  ].map(m => m.id);
+  const legacyMigrationsJobFilter =
+    legacyMigrationIds.length > 0
+      ? `{job!~"global-domain-(${legacyMigrationIds.join('|')})-.*"}`
+      : '';
   new k8s.core.v1.ConfigMap(
     'grafana-alerting',
     {
@@ -869,25 +1020,6 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 loadTesterConfig?.minRate ? loadTesterConfig?.minRate.toString() : '1.0'
               )
               .replaceAll('$NODATA', loadTesterConfig?.enable ? 'Alerting' : 'OK'),
-            ...(cantonBftEnabled
-              ? {
-                  'cometbft_deleted_alerts.yaml': readGrafanaAlertingFile('cometbft_deleted.yaml'),
-                }
-              : {
-                  'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
-                    .replaceAll(
-                      '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
-                      monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
-                    )
-                    .replaceAll(
-                      '$COMETBFT_PRUNING_DISABLED',
-                      (cometbftPruningHighestBlockRetain === undefined).toString()
-                    )
-                    .replaceAll(
-                      '$COMETBFT_RETAIN_BLOCKS',
-                      String((cometbftPruningHighestBlockRetain || 0) * 1.05)
-                    ),
-                }),
             'automation_alerts.yaml': readGrafanaAlertingFile('automation_alerts.yaml')
               .replaceAll(
                 '$CONTENTION_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
@@ -919,6 +1051,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   teamLabel: 'canton-network',
                   subtitle: 'internal SVs 5m',
                   uid: 'adlmhpz5iv4sgc',
+                  priority: monitoringConfig.alerting.enableExtraHighPrioAlerts ? 'high' : 'medium',
                 },
                 {
                   reportPublisherFormula: '=~"Digital-Asset-1|Digital-Asset-2|DA-Helm-Test-Node"',
@@ -949,11 +1082,18 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'sequencer_client_delay_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_client_delay_alerts.yaml'
-            ).replaceAll(
-              '$SEQUENCER_CLIENT_DELAY_THRESHOLD_SECONDS',
-              monitoringConfig.alerting.alerts.sequencerClientDelay.seconds.toString()
+            )
+              .replaceAll(
+                '$SEQUENCER_CLIENT_DELAY_THRESHOLD_SECONDS',
+                monitoringConfig.alerting.alerts.sequencerClientDelay.seconds.toString()
+              )
+              .replaceAll('$LEGACY_MIGRATIONS_JOB_FILTER', legacyMigrationsJobFilter),
+            'acs_commitment_deleted_alerts.yaml': readGrafanaAlertingFile(
+              'acs_commitment_deleted.yaml'
             ),
-            'acs_commitment_alerts.yaml': readGrafanaAlertingFile('acs_commitment_alerts.yaml')
+            'acs_commitment_pv36_alerts.yaml': readGrafanaAlertingFile(
+              'acs_commitment_pv36_alerts.yaml'
+            )
               .replaceAll(
                 '$ACS_COMMITMENT_CHECKPOINT_DELAY_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.checkpointDelay.seconds.toString()
@@ -961,10 +1101,6 @@ function createGrafanaAlerting(namespace: Input<string>) {
               .replaceAll(
                 '$ACS_COMMITMENT_DELAY_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.completedDelay.seconds.toString()
-              )
-              .replaceAll(
-                '$ACS_COMMITMENT_COMPUTE_DURATION_THRESHOLD_SECONDS',
-                monitoringConfig.alerting.alerts.acsCommitments.computeDuration.seconds.toString()
               ),
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
@@ -975,6 +1111,28 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
               readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
+            'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
+              'scan_bft_sequencers_alerts.yaml'
+            ),
+            'global-sync-health_alerts.yaml': readGrafanaAlertingFile(
+              'global-sync-health_alerts.yaml'
+            )
+              .replaceAll(
+                '$DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.discardedConfirmationRequestsThreshold.toString()
+              )
+              .replaceAll(
+                '$FAILED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequestsThreshold.toString()
+              )
+              .replaceAll(
+                '$TPS_DROP_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDropThreshold.toString()
+              )
+              .replaceAll(
+                '$PRIORITY',
+                monitoringConfig.alerting.enableExtraHighPrioAlerts ? 'high' : 'medium'
+              ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -984,19 +1142,17 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 monitoringConfig.alerting.alerts.sequencerRateLimits.rejectionRateThreshold.toString()
               )
               .replaceAll(
+                '$SEQUENCER_RATE_LIMIT_REJECTION_RATE_PRIORITY',
+                monitoringConfig.alerting.enableExtraHighPrioAlerts ? 'high' : 'medium'
+              )
+              .replaceAll(
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
-            ...(cantonBftEnabled
-              ? {
-                  'cantonbft_alerts.yaml': readGrafanaAlertingFile(
-                    'cantonbft_alerts.yaml'
-                  ).replaceAll(
-                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
-                    monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
-                  ),
-                }
-              : {}),
+            'cantonbft_alerts.yaml': readGrafanaAlertingFile('cantonbft_alerts.yaml').replaceAll(
+              '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
+              monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
+            ),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),
             'templates.yaml': substituteSlackNotificationTemplate(
               readGrafanaAlertingFile('templates.yaml')
@@ -1030,6 +1186,19 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
               ),
+            'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'istio-rate-limiting_alerts.yaml'
+            ),
+            'splice-rate-limiting_alerts.yaml': substituteSpliceRateLimitsAlerts(
+              readGrafanaAlertingFile('splice-rate-limiting_alerts.yaml')
+            ),
+            ...(cloudArmorConfig.enabled
+              ? {
+                  'cloud-armor_alerts.yaml': substituteCloudArmorAlerts(
+                    readGrafanaAlertingFile('cloud-armor_alerts.yaml')
+                  ),
+                }
+              : {}),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1091,10 +1260,14 @@ function readGrafanaAlertingFile(file: string) {
     `${SPLICE_ROOT}/cluster/pulumi/observability/grafana-alerting/${file}`,
     'utf-8'
   );
-  // Ignore no data or data source error if the cluster is reset periodically
+  return ignoreNoDataOrDataSourceErrorIfNeeded(fileContent);
+}
+
+// Ignore no data or data source error if the cluster is reset periodically
+function ignoreNoDataOrDataSourceErrorIfNeeded(alerts: string): string {
   return shouldIgnoreNoDataOrDataSourceError
-    ? fileContent.replace(/(execErrState|noDataState): .+/g, '$1: OK')
-    : fileContent;
+    ? alerts.replace(/(execErrState|noDataState): .+/g, '$1: OK')
+    : alerts;
 }
 
 type ReportMatchOperator = '=~' | '!~';
@@ -1112,6 +1285,7 @@ interface AlertRulesConfig {
   uid?: RulesUID;
   ownerPrefixRegex?: string;
   maxBalanceThreshold?: string;
+  priority?: 'high' | 'medium' | 'low';
 }
 
 interface GrafanaRule {
@@ -1154,15 +1328,13 @@ function readAndSetAlertRulesGrafanaAlertingFile(file: string, rules: AlertRules
       .replaceAll('$SUB_TITLE', rule.subtitle ?? 'NOT_REPLACED')
       .replaceAll('$RULE_UID', rule.uid ?? 'NOT_REPLACED')
       .replaceAll('$OWNER_PREFIX_REGEX', rule.ownerPrefixRegex ?? 'NOT_REPLACED')
-      .replaceAll('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED');
+      .replaceAll('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED')
+      .replaceAll('$PRIORITY', rule.priority ?? 'medium');
     return yaml.load(newRuleString) as GrafanaRule;
   });
   const newFileContent = yaml.dump(content);
 
-  // Ignore no data or data source error if the cluster is reset periodically
-  return shouldIgnoreNoDataOrDataSourceError
-    ? newFileContent.replace(/(execErrState|noDataState): .+/g, '$1: OK')
-    : newFileContent;
+  return ignoreNoDataOrDataSourceErrorIfNeeded(newFileContent);
 }
 
 function readAlertingManagerFile(file: string) {
@@ -1184,16 +1356,17 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
   });
 }
 
-function installPostgres(namespace: ExactNamespace): SplicePostgres {
-  return new SplicePostgres(
+function installPostgres(namespace: ExactNamespace): Postgres {
+  const instanceName = 'grafana-postgres';
+  return installSplicePostgres(
     namespace,
-    'grafana-postgres',
-    'grafana-postgres',
+    instanceName,
     'grafana-postgres-secret',
+    monitoringConfig.grafanaPostgres,
+    undefined, // chart version
+    { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true, // disableProtection
-    undefined, // chart version
-    true // useInfraAffinityAndTolerations
+    true // useinfraKubernetesScheduling
   );
 }

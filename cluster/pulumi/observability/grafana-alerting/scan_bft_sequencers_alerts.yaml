@@ -1,0 +1,79 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: scan bft sequencer reads
+    folder: canton-network
+    interval: 10m
+    rules:
+      - uid: aesvbftscanreadfail1
+        title: SV failing to read BFT sequencer list from a scan
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: |-
+                sum by (namespace, job, target_host) (
+                  histogram_count(increase(daml_http_client_requests_duration_seconds{http_client="HttpScanAppClient", operation="ListBftSequencers", status_code!~"2.."}[30m]))
+                )
+                /
+                sum by (namespace, job, target_host) (
+                  histogram_count(increase(daml_http_client_requests_duration_seconds{http_client="HttpScanAppClient", operation="ListBftSequencers"}[30m]))
+                )
+              instant: true
+              intervalMs: 1000
+              legendFormat: '{{namespace}}:{{job}}:{{target_host}}'
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.5
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+                  unloadEvaluator:
+                    params:
+                      - 0.5
+                      - 0
+                    type: lte
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: a8a3113a-bccf-4728-b752-dd7a5d6f9bda
+        panelId: 2
+        noDataState: OK
+        execErrState: OK
+        for: 0m
+        annotations:
+          __dashboardUid__: a8a3113a-bccf-4728-b752-dd7a5d6f9bda
+          __panelId__: "2"
+          description: More than 50% of this SV's reads of the BFT sequencer list (/v0/sv-bft-sequencers) from this scan failed (non-2xx response, timeout, or connection error) over the last 30 minutes. The BFT peer reconciler tolerates individual failures safely, but while this scan is unreachable the SV cannot pick up BFT sequencer endpoint changes published by that scan's SV.
+          severity: warning
+          summary: SV {{ $labels.job }} in namespace {{ $labels.namespace }} failed {{ index $values "A" }} of its BFT sequencer list reads from scan {{ $labels.target_host }} in the last 30m.
+        labels: {}
+        isPaused: false

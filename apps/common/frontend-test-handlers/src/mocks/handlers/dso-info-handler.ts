@@ -594,7 +594,7 @@ export const dsoInfo = {
 };
 
 export function dsoInfoHandler(baseUrl: string): HttpHandler {
-  return http.get(`${baseUrl}/v0/dso`, () => {
+  return http.get(`${baseUrl}/v1/dso`, () => {
     return HttpResponse.json(dsoInfo);
   });
 }

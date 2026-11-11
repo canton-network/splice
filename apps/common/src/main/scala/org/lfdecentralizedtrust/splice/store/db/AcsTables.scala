@@ -4,8 +4,7 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
-import com.digitalasset.canton.config.CantonRequireTypes.String255
-import com.digitalasset.canton.topology.{SynchronizerId, PartyId}
+import com.digitalasset.canton.topology.SynchronizerId
 import io.circe.Json
 import slick.jdbc.{GetResult, PostgresProfile}
 
@@ -14,15 +13,12 @@ trait AcsTables extends AcsJdbcTypes {
 
   import profile.api.*
 
-  lazy val acsBaseSchema: profile.SchemaDescription =
-    StoreDescriptors.schema
-
   case class StoreDescriptorsRow(id: Int, descriptor: Json)
 
   class StoreDescriptors(_tableTag: Tag)
       extends profile.api.Table[StoreDescriptorsRow](_tableTag, "store_descriptors") {
     def * = (id, descriptor).<>(
-      StoreDescriptorsRow.tupled,
+      (StoreDescriptorsRow.apply _).tupled,
       StoreDescriptorsRow.unapply,
     )
 
@@ -31,20 +27,9 @@ trait AcsTables extends AcsJdbcTypes {
     val descriptor: Rep[Json] = column[Json]("descriptor")
   }
 
-  lazy val StoreDescriptors = new TableQuery(tag => new StoreDescriptors(tag))
-
 }
 
 object AcsTables extends AcsTables {
-
-  case class ContractStateRowData(
-      assignedDomain: Option[SynchronizerId],
-      reassignmentCounter: Long,
-      reassignmentTargetDomain: Option[SynchronizerId],
-      reassignmentSourceDomain: Option[SynchronizerId],
-      reassignmentSubmitter: Option[PartyId],
-      reassignmentUnassignId: Option[String255],
-  )
 
   case class TxLogStoreRowTemplate(
       storeId: Int,

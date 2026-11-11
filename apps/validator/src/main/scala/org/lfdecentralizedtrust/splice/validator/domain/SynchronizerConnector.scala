@@ -4,7 +4,9 @@
 package org.lfdecentralizedtrust.splice.validator.domain
 
 import cats.implicits.catsSyntaxApplicativeId
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.{SequencerAlias, SynchronizerAlias}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.SynchronizerTimeTrackerConfig
@@ -37,7 +39,6 @@ class SynchronizerConnector(
     config: ValidatorAppBackendConfig,
     participantAdminConnection: ParticipantAdminConnection,
     scanConnection: BftScanConnection,
-    migrationId: Long,
     retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
@@ -139,6 +140,7 @@ class SynchronizerConnector(
                 config.sequencerRequestAmplificationPatience.toInternal,
               ),
               sequencerConnectionPoolDelays = config.sequencerConnectionPoolDelays.toInternal,
+              subscriptionLivenessLimits = config.subscriptionLivenessLimits.toInternal,
             ),
         ).pure[Future]
     }
@@ -214,7 +216,7 @@ class SynchronizerConnector(
           if (connections.isEmpty) {
             throw Status.NOT_FOUND
               .withDescription(
-                s"sequencer connections for migration id $migrationId and serial $synchronizerSerial is empty at $time, validate with your SV sponsor that your migration id is correct"
+                s"sequencer connections for serial $synchronizerSerial is empty at $time"
               )
               .asRuntimeException()
           } else {
@@ -222,7 +224,7 @@ class SynchronizerConnector(
               case None =>
                 throw Status.NOT_FOUND
                   .withDescription(
-                    s"sequencer connections for migration id $migrationId and serial $synchronizerSerial is empty at $time, validate with your SV sponsor that your migration id is correct"
+                    s"sequencer connections for serial $synchronizerSerial is empty at $time"
                   )
                   .asRuntimeException()
               case Some(nonEmptyConnections) =>
@@ -255,6 +257,7 @@ class SynchronizerConnector(
                   sequencerLivenessMargin =
                     Thresholds.sequencerConnectionsLivenessMargin(nonEmptyConnections.size),
                   sequencerConnectionPoolDelays = config.sequencerConnectionPoolDelays.toInternal,
+                  subscriptionLivenessLimits = config.subscriptionLivenessLimits.toInternal,
                 )
             }
           }
@@ -286,40 +289,33 @@ class SynchronizerConnector(
             sequencers.synchronizerId == decentralizedSynchronizerId
           )
           .flatMap { sequencers =>
-            val serialOrMigrationSequencers =
+            val serialSequencers =
               sequencers.sequencers
-                .groupBy(_.id)
-                .view
-                .mapValues { sequencersForId =>
-                  val serialMatch =
-                    sequencersForId.find(_.serial.contains(synchronizerSerial.unwrap.toLong))
-                  // it might be that some SV did not update the url for the latest serial
-                  // in that case we don't want to fallback to the migration id one
-                  // the migration id fallback is valid only if the SV did not sync the per serial urls yet for the first time
-                  val sequencerHasAnyEntryWithSerial = sequencersForId.exists(_.serial.nonEmpty)
-                  if (sequencerHasAnyEntryWithSerial) serialMatch
-                  else
-                    serialMatch.orElse(
-                      sequencersForId.find(s => s.serial.isEmpty && s.migrationId == migrationId)
-                    )
-                }
-                .values
-                .flatten
-                .toSeq
+                .filter(_.serial == synchronizerSerial.unwrap.toLong)
             val svFilteredSequencers = config.domains.global.trustedSynchronizerConfig match {
               case Some(config) =>
                 val allowedNamesSet = config.svNames.toList.toSet
                 logger.debug(
                   s"Filtering sequencers to only include: ${allowedNamesSet.toList.mkString(", ")}"
                 )
-                serialOrMigrationSequencers.filter(s => allowedNamesSet.contains(s.svName))
+                serialSequencers.filter(s => allowedNamesSet.contains(s.svName))
               case None =>
-                serialOrMigrationSequencers
+                serialSequencers
             }
-            val validConnections = extractValidConnections(
+            val validConnections = SynchronizerConnector.extractValidConnections(
               svFilteredSequencers,
               domainTime,
             )
+            val sequencerIdsPublishedBySeveralSvs = validConnections
+              .groupBy(_.sequencerId)
+              .collect {
+                case (Some(sequencerId), connections) if connections.sizeIs > 1 => sequencerId
+              }
+            if (sequencerIdsPublishedBySeveralSvs.nonEmpty) {
+              logger.warn(
+                s"Sequencer ids $sequencerIdsPublishedBySeveralSvs are published by several SVs, connecting to each published url with the published id as expected sequencer id"
+              )
+            }
             logger.debug(
               s"For synchronizer ${config.domains.global.alias} at time $domainTime using $validConnections from scan"
             )
@@ -330,27 +326,40 @@ class SynchronizerConnector(
     }
   }
 
-  private def extractValidConnections(
+}
+
+object SynchronizerConnector {
+
+  private[domain] def extractValidConnections(
       sequencers: Seq[DsoSequencer],
       domainTime: CantonTimestamp,
   ): Seq[GrpcSequencerConnection] = {
-    // sequencer connections will be ignore if they are with a invalid Alias, empty url or not yet available (`before availableAfter`)
-    sequencers
-      .collect {
-        case DsoSequencer(_, _, id, url, _, availableAfter)
-            if url.nonEmpty && !domainTime.toInstant
-              .isBefore(availableAfter) =>
-          for {
-            sequencerAlias <- SequencerAlias.create(id.toProtoPrimitive)
-            grpcSequencerConnection <- GrpcSequencerConnection.create(
-              url,
-              None,
-              sequencerAlias,
-            )
-          } yield grpcSequencerConnection
-      }
-      .collect { case Right(conn) =>
-        conn
+    // sequencers are ignored if they have an empty url or are not yet available (`before availableAfter`)
+    val availableSequencers = sequencers
+      .filter(sequencer =>
+        sequencer.url.nonEmpty && !domainTime.toInstant.isBefore(sequencer.availableAfter)
+      )
+      .distinctBy(sequencer => (sequencer.id, sequencer.url))
+    val publishersPerSequencerId =
+      availableSequencers.groupMapReduce(_.id)(_ => 1)(_ + _)
+    availableSequencers
+      .flatMap { sequencer =>
+        // alias must be unique so if we have duplicates we add the sv name
+        val aliasName =
+          if (publishersPerSequencerId.getOrElse(sequencer.id, 0) > 1)
+            s"${sequencer.id.toProtoPrimitive}-${sequencer.svName}"
+          else sequencer.id.toProtoPrimitive
+        // connections with an invalid alias or url are ignored
+        (for {
+          sequencerAlias <- SequencerAlias.create(aliasName)
+          grpcSequencerConnection <- GrpcSequencerConnection.create(
+            sequencer.url,
+            None,
+            sequencerAlias,
+            sequencerId = Some(sequencer.id),
+          )
+        } yield grpcSequencerConnection).toOption
       }
   }
+
 }

@@ -7,26 +7,22 @@ import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
-import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
-  AcsStoreId,
-  SelectFromAcsTableResult,
-  SelectFromAcsTableWithStateResult,
-}
+import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{AcsStoreId, SelectFromAcsTableResult}
 import slick.dbio.Effect
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.canton.SQLActionBuilder
 import slick.jdbc.{GetResult, PositionedResult}
 import slick.sql.SqlStreamingAction
 
-trait TcsQueries extends AcsQueries {
+trait TcsQueries extends SingleSynchronizerAcsQueries {
 
   implicit val GetResultSelectFromTcsTableRangeResult
       : GetResult[TcsQueries.SelectFromTcsTableRangeResult] =
     GetResult { (prs: PositionedResult) =>
-      val withStateRow = prs.<<[SelectFromAcsTableWithStateResult]
+      val acsRow = prs.<<[SelectFromAcsTableResult]
       val archivedAtMicros = prs.<<[Option[Long]]
       TcsQueries.SelectFromTcsTableRangeResult(
-        withStateRow,
+        acsRow,
         archivedAtMicros.map(CantonTimestamp.assertFromLong),
       )
     }
@@ -44,7 +40,7 @@ trait TcsQueries extends AcsQueries {
       companion: C,
       asOf: CantonTimestamp,
       additionalWhere: SQLActionBuilder,
-      limit: Option[Int] = None,
+      limit: Option[Int],
   )(implicit companionClass: ContractCompanion[C, TCid, T]): SQLActionBuilder = {
     val packageQualifiedName = companionClass.packageQualifiedName(companion)
     val limitClause = limit.fold(sql"")(n => sql" limit $n")
@@ -73,27 +69,6 @@ trait TcsQueries extends AcsQueries {
        """ ++ limitClause).toActionBuilder
   }
 
-  protected def selectFromTcsTableAsOf[C, TCid <: ContractId[?], T](
-      acsTableName: String,
-      archiveTableName: String,
-      storeId: AcsStoreId,
-      migrationId: Long,
-      companion: C,
-      asOf: CantonTimestamp,
-      additionalWhere: SQLActionBuilder = sql"",
-  )(implicit companionClass: ContractCompanion[C, TCid, T]) = {
-    tcsUnionAll(
-      SelectFromAcsTableResult.sqlColumnsCommaSeparated(),
-      acsTableName,
-      archiveTableName,
-      storeId,
-      migrationId,
-      companion,
-      asOf,
-      additionalWhere,
-    ).as[SelectFromAcsTableResult]
-  }
-
   protected def selectFromTcsTableWithStateAsOf[C, TCid <: ContractId[?], T](
       acsTableName: String,
       archiveTableName: String,
@@ -104,10 +79,10 @@ trait TcsQueries extends AcsQueries {
       additionalWhere: SQLActionBuilder = sql"",
       limit: Option[Int] = None,
   )(implicit companionClass: ContractCompanion[C, TCid, T]): SqlStreamingAction[Vector[
-    SelectFromAcsTableWithStateResult
-  ], SelectFromAcsTableWithStateResult, Effect.Read] = {
+    SelectFromAcsTableResult
+  ], SelectFromAcsTableResult, Effect.Read] = {
     tcsUnionAll(
-      SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(),
+      SelectFromAcsTableResult.sqlColumnsCommaSeparated(),
       acsTableName,
       archiveTableName,
       storeId,
@@ -116,7 +91,7 @@ trait TcsQueries extends AcsQueries {
       asOf,
       additionalWhere,
       limit,
-    ).as[SelectFromAcsTableWithStateResult]
+    ).as[SelectFromAcsTableResult]
   }
 
   /** Builds a UNION ALL query across live and archive tables for range queries.
@@ -135,7 +110,7 @@ trait TcsQueries extends AcsQueries {
     TcsQueries.SelectFromTcsTableRangeResult
   ], TcsQueries.SelectFromTcsTableRangeResult, Effect.Read] = {
     val packageQualifiedName = companionClass.packageQualifiedName(companion)
-    val columns = SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()
+    val columns = SelectFromAcsTableResult.sqlColumnsCommaSeparated()
     sql"""(
        select #$columns, null::bigint as archived_at
        from #$acsTableName acs
@@ -162,7 +137,7 @@ trait TcsQueries extends AcsQueries {
 
 object TcsQueries {
   case class SelectFromTcsTableRangeResult(
-      withStateRow: SelectFromAcsTableWithStateResult,
+      acsRow: SelectFromAcsTableResult,
       archivedAt: Option[CantonTimestamp],
   )
 }

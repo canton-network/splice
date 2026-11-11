@@ -6,8 +6,16 @@ package org.lfdecentralizedtrust.splice.sv.automation
 import cats.implicits.catsSyntaxOptionId
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.config.ClientConfig
-import com.digitalasset.canton.lifecycle.{AsyncCloseable, AsyncOrSyncCloseable}
+import com.digitalasset.canton.lifecycle.{
+  AsyncCloseable,
+  AsyncOrSyncCloseable,
+  LifeCycle,
+  SyncCloseable,
+}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.{Clock, WallClock}
 import com.digitalasset.canton.topology.SynchronizerId
@@ -39,14 +47,15 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UnavailablePartiesStore}
 import org.lfdecentralizedtrust.splice.sv.{CantonBftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientConfig,
   LocalSequencerClientContext,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.*
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.SvTaskBasedTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.*
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.{
   SvOffboardingMediatorTrigger,
@@ -86,6 +95,7 @@ class SvDsoAutomationService(
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
     val synchronizerNodeReconciler: SynchronizerNodeReconciler,
+    unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -210,7 +220,10 @@ class SvDsoAutomationService(
     }
 
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
-    super.closeAsync() ++
+    SyncCloseable(
+      "dso-delegate-based-automation",
+      LifeCycle.close(dsoDelegateBasedAutomation)(logger),
+    ) +: (super.closeAsync() ++
       // super.closeAsync() waits for all triggers to close, so we do not need to worry
       // about synchronization when closing the scan connections here.
       ownScanConnectionF
@@ -235,7 +248,7 @@ class SvDsoAutomationService(
             timeouts.shutdownNetwork,
           )
         )
-        .toList
+        .toList)
 
   private val packageVettingService = new PackageVettingLookupService(
     config.packageVettingCache,
@@ -251,19 +264,25 @@ class SvDsoAutomationService(
 
   // notice the absence of UpdateHistory: the history for the dso party is duplicate with Scan
 
-  private[splice] val restartDsoDelegateBasedAutomationTrigger =
-    new RestartDsoDelegateBasedAutomationTrigger(
-      triggerContext,
-      domainTimeSync,
-      dsoStore,
-      connection,
+  private[splice] val dsoDelegateBasedAutomation =
+    new DsoDelegateBasedAutomationService(
       clock,
+      domainTimeSync,
       config,
-      retryProvider,
-      packageVersionSupport,
-      packageVettingService,
+      SvTaskBasedTrigger.Context(
+        dsoStore,
+        connection,
+        config.delegatelessAutomationExpectedTaskDuration,
+        config.delegatelessAutomationExpiredRewardCouponBatchSize,
+        config.delegatelessAutomationExpiredRewardCouponNumBatches,
+        packageVersionSupport,
+        packageVettingService,
+      ),
       () => getOrCreateOwnScanConnection(),
       () => getOrCreatePeerScanConnection(),
+      retryProvider,
+      loggerFactory,
+      unavailablePartiesStore,
     )
 
   // required for triggers that must run in sim time as well
@@ -290,24 +309,6 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.High),
       )
     )
-    // Register optional BFT triggers
-    if (triggerContext.config.enableCometbftReconciliation) {
-      registerTrigger(
-        new PublishLocalCometBftNodeConfigTrigger(
-          triggerContext,
-          dsoStore,
-          connection(SpliceLedgerConnectionPriority.High),
-          synchronizerNodeService,
-        )
-      )
-      registerTrigger(
-        new ReconcileCometBftNetworkConfigWithDsoRulesTrigger(
-          triggerContext,
-          dsoStore,
-          synchronizerNodeService,
-        )
-      )
-    }
     registerTrigger(
       new SvOffboardingPartyToParticipantProposalTrigger(
         triggerContext,
@@ -438,7 +439,6 @@ class SvDsoAutomationService(
             synchronizerNodeService.nodes,
             successorSynchronizerNode,
             participantAdminConnection,
-            store,
             config.domainMigrationDumpPath.getOrElse(
               throw new IllegalArgumentException("Domain migration dump path must be set for LSU")
             ),
@@ -491,6 +491,7 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Medium),
         () => getOrCreateOwnScanConnection(),
         () => getOrCreatePeerScanConnection(),
+        packageVersionSupport,
       )
     )
     registerTrigger(
@@ -538,7 +539,7 @@ class SvDsoAutomationService(
       )
     )
 
-    registerTrigger(restartDsoDelegateBasedAutomationTrigger)
+    dsoDelegateBasedAutomation.start()
 
     registerTrigger(
       new AnsSubscriptionInitialPaymentTrigger(
@@ -575,7 +576,6 @@ class SvDsoAutomationService(
       new ReportSvStatusMetricsExportTrigger(
         triggerContext,
         dsoStore,
-        synchronizerNodeService,
       )
     )
     registerTrigger(
@@ -593,6 +593,12 @@ class SvDsoAutomationService(
     )
     registerTrigger(
       new AmuletPriceMetricsTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
+    registerTrigger(
+      new VoteRequestMetricsTrigger(
         triggerContext,
         dsoStore,
       )
@@ -668,7 +674,7 @@ class SvDsoAutomationService(
         synchronizerNodeService,
         config.participantClient.sequencerRequestAmplification.toInternal,
         config.participantClient.sequencerConnectionPoolDelays.toInternal,
-        dsoStore.domainMigrationId,
+        config.participantClient.subscriptionLivenessLimits.toInternal,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
         useInternalSequencerApi = config.useInternalSequencerApi,
@@ -706,7 +712,6 @@ class SvDsoAutomationService(
   registerTrigger(
     new CreateBootstrapExternalPartyConfigStateInstructionTrigger(
       triggerContext,
-      packageVersionSupport,
       dsoStore,
       connection(SpliceLedgerConnectionPriority.Low),
     )
@@ -737,7 +742,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[CalculateRewardsTrigger],
       aTrigger[CalculateRewardsDryRunTrigger],
       aTrigger[ConfirmationMismatchReportTrigger],
-      aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],
       aTrigger[SvOffboardingPartyToParticipantProposalTrigger],
@@ -750,9 +754,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[SvOnboardingPartyToParticipantProposalTrigger],
       aTrigger[SvOnboardingSequencerTrigger],
       aTrigger[SvOnboardingMediatorProposalTrigger],
-      aTrigger[PublishLocalCometBftNodeConfigTrigger],
       aTrigger[PublishScanConfigTrigger],
-      aTrigger[ReconcileCometBftNetworkConfigWithDsoRulesTrigger],
       aTrigger[LocalSequencerConnectionsTrigger],
       aTrigger[SequencerPruningTrigger],
       aTrigger[SubmitSvStatusReportTrigger],
@@ -765,6 +767,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[FollowAmuletConversionRateFeedTrigger],
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
+      aTrigger[VoteRequestMetricsTrigger],
       aTrigger[RewardMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
       aTrigger[LsuTrigger],

@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@canton-network/splice-pulumi-common';
+import { clusterSubConfig, SplicePostgresSchema } from '@canton-network/splice-pulumi-common';
+import { CloudArmorConfigSchema } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -33,6 +34,45 @@ const NatPortUsageConfigSchema = z.object({
 
 export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
+// Threshold based alert on a request count: the requests are summed over windows of
+// `alignmentPeriodSeconds` and the alert fires once such a window exceeds `threshold`
+// for `durationSeconds` in a row.
+const CloudArmorAlertConfigSchema = z
+  .object({
+    // Number of requests within one alignment period above which the alert fires;
+    // 0 means a single request already alerts.
+    threshold: z.number().min(0),
+    // Length of the window the requests are summed over (GCP `alignmentPeriod`).
+    alignmentPeriodSeconds: z
+      .number()
+      .int()
+      .min(60)
+      .refine(v => v % 60 === 0, { message: 'must be a multiple of 60s' })
+      .default(300),
+    // Retest window (GCP `duration`): how long the threshold has to be exceeded before
+    // the alert fires. 0 fires on the first violating alignment period.
+    durationSeconds: z.number().int().min(0).default(0),
+  })
+  .refine(c => c.durationSeconds % c.alignmentPeriodSeconds === 0, {
+    // GCP requires the retest window to be a multiple of the alignment period
+    message: 'durationSeconds must be 0 or a multiple of alignmentPeriodSeconds',
+    path: ['durationSeconds'],
+  });
+
+export type CloudArmorAlertConfig = z.infer<typeof CloudArmorAlertConfigSchema>;
+
+// Grafana alerts on the requests rejected by the Cloud Armor policy.
+const CloudArmorAlertsConfigSchema = z.object({
+  // Requests denied by any rule of the Cloud Armor policy (metric based).
+  deniedRequests: CloudArmorAlertConfigSchema,
+  // Requests matching a WAF (OWASP CRS) rule (log based).
+  wafRejections: CloudArmorAlertConfigSchema.prefault({ threshold: 0 }),
+  // Requests rejected by a per endpoint throttle rule (log based).
+  throttleRejections: CloudArmorAlertConfigSchema.prefault({ threshold: 0 }),
+});
+
+export const cloudArmorConfig = CloudArmorConfigSchema.parse(clusterSubConfig('cloudArmor'));
+
 const MuteTimeWindowSchema = z.object({
   times: z.array(
     z.object({
@@ -42,7 +82,6 @@ const MuteTimeWindowSchema = z.object({
   ),
   weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
 });
-export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
 
 const MuteTimeIntervalSchema = z.array(
   z.object({
@@ -51,13 +90,15 @@ const MuteTimeIntervalSchema = z.array(
     timeWindows: z.array(MuteTimeWindowSchema),
   })
 );
-export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
 
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
+    grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
+      // routes more alerts than just "mining rounds are not advancing" to #team-canton-network-high-prio-prod-alerts
+      enableExtraHighPrioAlerts: z.boolean().default(false),
       alerts: z.object({
         pruning: z.object({
           participantRetentionDays: z.number(),
@@ -93,11 +134,15 @@ const MonitoringConfigSchema = z
           // rate is computed.
           windowMinutes: z.number(),
         }),
+        spliceRateLimits: z.object({
+          // Fraction (0-1) of a rate limiter's configured maximum rate above which the alert fires
+          usageThreshold: z.number(),
+          // Rejected requests per second, above which the rejection alert fires
+          rejectionCountThreshold: z.number(),
+          excludedLimiters: z.array(z.string()).default([]),
+        }),
         cloudSql: z.object({
           maintenance: z.boolean(),
-        }),
-        cometbft: z.object({
-          expectedMaxBlocksPerSecond: z.number(),
         }),
         loadTester: z.object({
           minRate: z.number(),
@@ -156,11 +201,30 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        cloudArmor: CloudArmorAlertsConfigSchema.prefault({ deniedRequests: { threshold: 0 } }),
         natPortUsage: NatPortUsageConfigSchema.default({
           thresholdPercent: 80,
           // `default 30` because every once in a while (likely due to dynamic port allocation),
           // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
           droppedSentPacketsThreshold: 30,
+        }),
+        // Notifies on every new participant
+        sequencerParticipantRegistration: z
+          .object({
+            enabled: z.boolean(),
+          })
+          .default({ enabled: false }),
+        globalSynchronizerHealth: z.object({
+          // Fraction (0-1) of sequenced confirmation requests that were discarded
+          // (i.e., never processed by the mediator)
+          // above which the alert fires.
+          discardedConfirmationRequestsThreshold: z.number(),
+          // Fraction (0-1) of confirmation requests that failed (as observed by the
+          // mediator, over the last 30m) above which the alert fires.
+          failedConfirmationRequestsThreshold: z.number(),
+          // Fire when TPS (approved confirmation requests per second) over the last
+          // 30m drops below this fraction of the previous 30m.
+          tpsDropThreshold: z.number(),
         }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
@@ -179,13 +243,28 @@ export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('m
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
 
-const PrometheusConfigSchema = z.object({
-  prometheus: z.object({
-    storageSize: z.string(),
-    retentionDuration: z.string(),
-    retentionSize: z.string(),
-    installPrometheusPushgateway: z.boolean().default(false),
-  }),
+const PrometheusPushgatewayExternalAccessSchema = z.object({
+  enabled: z.boolean().default(false),
 });
 
-export const prometheusConfig = PrometheusConfigSchema.parse(clusterSubConfig('infra')).prometheus;
+const PrometheusConfigSchema = z.object({
+  prometheus: z
+    .object({
+      storageSize: z.string(),
+      retentionDuration: z.string(),
+      retentionSize: z.string(),
+      installPrometheusPushgateway: z.boolean().default(false),
+      pushgatewayExternalAccess: PrometheusPushgatewayExternalAccessSchema.prefault({}),
+    })
+    .refine(
+      access => !access.pushgatewayExternalAccess.enabled || access.installPrometheusPushgateway,
+      {
+        message: 'pushgatewayExternalAccess.enabled requires installPrometheusPushgateway',
+        path: ['pushgatewayExternalAccess', 'enabled'],
+      }
+    ),
+});
+
+const infraSubConfig = PrometheusConfigSchema.parse(clusterSubConfig('infra'));
+
+export const prometheusConfig = infraSubConfig.prometheus;

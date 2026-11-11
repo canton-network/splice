@@ -88,6 +88,7 @@ initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice o
         nextScheduledSynchronizerUpgrade = None
         voteCooldownTime = None -- use default value of 1 minute
         nextScheduledLogicalSynchronizerUpgrade = None
+        svOperationsSwitchOverTimes = None
   let amuletConfig = fromOptional defaultAmuletConfig optAmuletConfig
   let ansRulesConfig = defaultAnsRulesConfig
 
@@ -290,6 +291,10 @@ runNextIssuanceD app amuletPrice appActivityRoundTotal = do
           totalUnfeaturedAppRewardCoupons = totalUnfeaturedCoupons
           totalSvRewardWeight = sum [ c.weight | (_, c) <- svRewardCoupons]
           optTotalValidatorFaucetCoupons = Some (length validatorFaucetCoupons + length validatorLivenessActivityRecords)
+          optTotalFeaturedAssetRewardCoupons = None
+          optIssuancePerFeaturedAssetRewardCoupon = None
+          optIssuancePerFeaturedAppRewardCoupon = None
+          optUnclaimedAppRewards = None
 
     -- create issuing mining round
     submitExerciseAmuletRulesByKey app [app.dso] [] AmuletRules_MiningRound_StartIssuing with

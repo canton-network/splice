@@ -69,7 +69,7 @@ class DockerComposeFullNetworkFrontendIntegrationTest
           withFrontEnd("frontend") { implicit webDriver =>
             actAndCheck(
               "Open the Scan UI",
-              go to "scan.localhost:8080",
+              go to "http://scan.localhost:8080",
             )(
               "Open rounds should be listed",
               _ => findAll(className("open-mining-round-row")) should have length 2,
@@ -100,9 +100,9 @@ class DockerComposeFullNetworkFrontendIntegrationTest
         }
         clue("full network (SV) stack should bind to localhost by default") {
           withComposeFullNetwork() { () =>
-            var binding = getPortBinding("splice-sv-nginx-1", "80")
+            var binding = getPortBinding("splice-sv-nginx-1", "8080")
             binding should startWith("127.0.0.1")
-            binding = getPortBinding("splice-validator-nginx-1", "80")
+            binding = getPortBinding("splice-validator-nginx-1", "8080")
             binding should startWith("127.0.0.1")
           }
         }
@@ -147,9 +147,9 @@ class DockerComposeFullNetworkFrontendIntegrationTest
 
     clue("full network (SV) stack should bind to 0.0.0.0 with -E flag") {
       withComposeFullNetwork(startFlags = Seq("-E")) { () =>
-        var binding = getPortBinding("splice-sv-nginx-1", "80")
+        var binding = getPortBinding("splice-sv-nginx-1", "8080")
         binding should startWith("0.0.0.0")
-        binding = getPortBinding("splice-validator-nginx-1", "80")
+        binding = getPortBinding("splice-validator-nginx-1", "8080")
         binding should startWith("0.0.0.0")
       }
     }

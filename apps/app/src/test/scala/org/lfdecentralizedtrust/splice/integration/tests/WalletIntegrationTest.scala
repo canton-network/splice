@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
-import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TapRequest
@@ -11,12 +10,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.Integration
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.BracketSynchronous.bracket
 import org.lfdecentralizedtrust.splice.integration.tests.WalletTxLogTestUtil
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
-import org.lfdecentralizedtrust.splice.util.{
-  SpliceUtil,
-  WalletTestUtil,
-  JavaDecodeUtil as DecodeUtil,
-}
+import org.lfdecentralizedtrust.splice.util.{WalletTestUtil, JavaDecodeUtil as DecodeUtil}
 import org.lfdecentralizedtrust.splice.validator.automation.AcceptTransferPreapprovalProposalTrigger
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.CreateTransferPreapprovalResponse
 import org.lfdecentralizedtrust.splice.wallet.store.{
@@ -28,8 +22,8 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
+import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
@@ -42,6 +36,8 @@ import java.time.Duration
 import java.util.UUID
 import scala.concurrent.Future
 import scala.util.Try
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
 import com.digitalasset.canton.util.MonadUtil
 
@@ -60,41 +56,37 @@ class WalletIntegrationTest
 
   "A wallet" should {
 
-    // TODO (#2336): unignore this test
-    "tap stupid amount" ignore { implicit env =>
+    val tapLimit = 100000000
+
+    s"tap $tapLimit amount" in { implicit env =>
       import com.digitalasset.daml.lf.data.Numeric
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val round = sv1ScanBackend.getLatestOpenMiningRound(env.environment.clock.now)
       val price = round.contract.payload.amuletPrice
       val decimalScale = Numeric.Scale.assertFromInt(10)
-      // We subtract one to allow some slack in back/forth conversions from CC to USD. Otherwise,
-      // the command gets rejected by the participant and we test nothing.
-      val maxDecimal = Numeric
-        .subtract(Numeric.maxValue(decimalScale), Numeric.assertFromBigDecimal(decimalScale, 1))
-        .value
       val maxUsd = Numeric
-        .multiply(decimalScale, maxDecimal, Numeric.assertFromBigDecimal(decimalScale, price))
+        .multiply(
+          decimalScale,
+          Numeric.assertFromBigDecimal(decimalScale, tapLimit),
+          Numeric.assertFromBigDecimal(decimalScale, price),
+        )
         .value
       // Integration test that the tap goes through
       aliceWalletClient.tap(maxUsd)
       val amulet = aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(amuletCodegen.Amulet.COMPANION)(aliceParty, _ => true)
         .loneElement
-      // Unit test that expiry does the right thing
-      SpliceUtil.amuletExpiresAt(amulet.data) shouldBe new Round(Long.MaxValue)
-      // Test that the USD/CC conversions get us to the max Decimal value ignoring decimal points
+      // Test that the USD/CC conversions get us to the limit ignoring decimal points
       amulet.data.amount.initialAmount.setScale(0, java.math.RoundingMode.DOWN) shouldBe Numeric
-        .maxValue(decimalScale)
+        .assertFromBigDecimal(decimalScale, tapLimit)
         .setScale(0, java.math.RoundingMode.DOWN)
     }
 
     "tap deduplicates" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(50.0, Some("dedup-test"))
-      assertThrowsAndLogsCommandFailures(
-        aliceWalletClient.tap(50.0, Some("dedup-test")),
-        _.errorMessage should include("409 Conflict"),
-      )
+      // Duplicate tap with the same command id returns the original result idempotently (200, not 409).
+      aliceWalletClient.tap(50.0, Some("dedup-test"))
     }
 
     "allow two wallet app users to connect to one wallet backend and tap" in { implicit env =>
@@ -361,53 +353,44 @@ class WalletIntegrationTest
       )
     }
 
-    "accept AppPaymentRequest created on 3rdparty synchronizer" in { implicit env =>
-      val splitwellSynchronizerId =
-        aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
-          SynchronizerAlias.tryCreate("splitwell")
+    "support self-granting featured app rights with a custom config" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_25) in {
+      implicit env =>
+        onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
+        val alice = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+
+        actAndCheck(
+          "splitwell cancels any existing featured app right",
+          splitwellWalletClient.cancelFeaturedAppRight(),
+        )(
+          "splitwell provider is not featured",
+          _ => splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe false,
         )
-      val decentralizedSynchronizerId =
-        aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
-          SynchronizerAlias.tryCreate("global")
-        )
-      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
-      aliceWalletClient.tap(50)
-      val (_, requestId) = actAndCheck(
-        "Create payment request on private domain",
-        createSelfPaymentRequest(
-          aliceValidatorBackend.participantClientWithAdminToken,
-          aliceWalletClient.config.ledgerApiUser,
-          aliceParty,
-          synchronizerId = Some(splitwellSynchronizerId),
-        ),
-      )(
-        "request and delivery are created on splitwell domain id",
-        { case (request, _) =>
-          val domains =
-            aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .lookup_contract_domain(aliceParty, Set(request.contractId))
-          domains shouldBe Map[String, SynchronizerId](
-            request.contractId -> splitwellSynchronizerId
-          )
-          request
-        },
-      )
-      val request = eventually() {
-        inside(aliceWalletClient.listAppPaymentRequests()) { case Seq(req) =>
-          req
-        }
-      }
-      request.contractId shouldBe requestId
-      actAndCheck(
-        "Accept payment request",
-        aliceWalletClient.acceptAppPaymentRequest(request.contractId),
-      )(
-        "wait for the accepted payment to appear",
-        _ =>
-          inside(aliceWalletClient.listAcceptedAppPayments()) { case Seq(accepted) =>
-            accepted.state shouldBe ContractState.Assigned(decentralizedSynchronizerId)
+
+        actAndCheck(
+          "Splitwell provider grants itself an asset-moving featured app right",
+          retryCommandSubmission(
+            splitwellWalletClient.selfGrantFeaturedAppRight(
+              appKind = Some(amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING),
+              activityWeight = Some(BigDecimal("2.5")),
+              opsParties = Some(Seq(alice)),
+            )
+          ),
+        )(
+          "splitwell provider is featured with the requested config",
+          { featuredAppRight =>
+            inside(sv1ScanBackend.listFeaturedAppRights()) { case Seq(r) =>
+              r.contractId shouldBe featuredAppRight
+              r.payload.appKind.toScala shouldBe Some(
+                amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING
+              )
+              r.payload.activityWeight.toScala.map(BigDecimal(_)) shouldBe Some(BigDecimal("2.5"))
+              r.payload.opsParties.toScala.map(_.asScala.toSeq) shouldBe Some(
+                Seq(alice.toProtoPrimitive)
+              )
+            }
+            splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe true
           },
-      )
+        )
     }
 
     "automation and offboarding work even if the recipient user does not exist" in { implicit env =>
@@ -548,10 +531,11 @@ class WalletIntegrationTest
             aliceWalletClient.balance().unlockedQty should be(40.0)
           },
         )
-        assertThrowsAndLogsCommandFailures(
-          bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId),
-          _.errorMessage should include("409 Conflict"),
-        )
+        // Duplicate send with same deduplication id returns the original result idempotently (200, not 409).
+        bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId)
+        // Balance is unchanged — idempotent
+        bobWalletClient.balance().unlockedQty should be(60.0)
+        aliceWalletClient.balance().unlockedQty should be(40.0)
 
         clue("Preapproval sends work if provider has a featured app right") {
           // Feature alice validator to test a transfer with a featured preapproval provider

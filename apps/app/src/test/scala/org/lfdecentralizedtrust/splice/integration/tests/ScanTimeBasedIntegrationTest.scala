@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.javaapi.data.codegen.json.JsonLfReader
+import org.lfdecentralizedtrust.splice.data.CantonTimestampExtensions.*
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
@@ -18,11 +19,10 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
-import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
-import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
@@ -71,6 +71,8 @@ class ScanTimeBasedIntegrationTest
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               staging = Some(s3ConfigMock("staging")),
               committed = Some(s3ConfigMock("committed")),
+              bftCheckEnabled =
+                false, // bft checks don't work with a single scan. The bft functionality is tested in the unit test.
             ),
             publicUrl = Some(Uri("http://foo.bar.com")),
           )
@@ -177,18 +179,18 @@ class ScanTimeBasedIntegrationTest
     ansRules.payload.config shouldBe defaultAnsConfig()
   }
 
-  def compareAcsV0V1(
-      v0: Vector[definitions.CreatedEvent],
-      v1: Vector[definitions.ActiveContract],
+  def compareAcsV2(
+      a: Vector[definitions.ActiveContract],
+      b: Vector[definitions.ActiveContract],
   ): Unit = {
-    v0.zip(v1).foreach { case (c0, c1) =>
-      c0.contractId shouldBe c1.contractId
-      c0.templateId shouldBe c1.templateId
-      c0.packageName shouldBe c1.packageName
-      c0.createArguments shouldBe c1.createArguments
-      c0.createdAt shouldBe c1.createdAt
-      c0.signatories should contain theSameElementsInOrderAs c1.signatories
-      c0.observers should contain theSameElementsInOrderAs c1.observers
+    a.zip(b).foreach { case (a, b) =>
+      a.contractId shouldBe b.contractId
+      a.templateId shouldBe b.templateId
+      a.packageName shouldBe b.packageName
+      a.createArguments shouldBe b.createArguments
+      a.createdAt shouldBe b.createdAt
+      a.signatories should contain theSameElementsInOrderAs b.signatories
+      a.observers should contain theSameElementsInOrderAs b.observers
     }
   }
 
@@ -252,7 +254,7 @@ class ScanTimeBasedIntegrationTest
       .getDateOfFirstSnapshotAfter(CantonTimestamp.tryFromInstant(snapshot1.value.toInstant), 0)
       .value shouldBe snapshotAfter.value
 
-    val snapshotAfterData = sv1ScanBackend.getAcsSnapshotAtV1(
+    val snapshotAfterData = sv1ScanBackend.getAcsSnapshotAtV2(
       CantonTimestamp.assertFromInstant(snapshotAfter.value.toInstant),
       migrationId,
       templates = Some(
@@ -269,10 +271,10 @@ class ScanTimeBasedIntegrationTest
     val atOrBefore = getLedgerTime
 
     // afOrBefore should return the same ACS snapshot as the exact time given by snapshotAfter
-    val snapshotAtOrBeforeAfterData = sv1ScanBackend.getAcsSnapshotAtV1(
+    val snapshotAtOrBeforeAfterData = sv1ScanBackend.getAcsSnapshotAtV2(
       CantonTimestamp.assertFromInstant(atOrBefore.toInstant),
       migrationId,
-      recordTimeMatch = Some(definitions.AcsRequest.RecordTimeMatch.AtOrBefore),
+      recordTimeMatch = Some(definitions.AcsRequestV2.RecordTimeMatch.AtOrBefore),
       templates = Some(
         Vector(
           PackageQualifiedName.fromJavaCodegenCompanion(Amulet.COMPANION),
@@ -285,10 +287,10 @@ class ScanTimeBasedIntegrationTest
     snapshotAfterData shouldBe snapshotAtOrBeforeAfterData
     snapshotAtOrBeforeAfterData.value.recordTime shouldBe snapshotAfter.value
 
-    sv1ScanBackend.getAcsSnapshotAtV1(
+    sv1ScanBackend.getAcsSnapshotAtV2(
       CantonTimestamp.assertFromInstant(atOrBefore.toInstant),
       migrationId,
-      recordTimeMatch = Some(definitions.AcsRequest.RecordTimeMatch.Exact),
+      recordTimeMatch = Some(definitions.AcsRequestV2.RecordTimeMatch.Exact),
       templates = Some(
         Vector(
           PackageQualifiedName.fromJavaCodegenCompanion(Amulet.COMPANION),
@@ -314,18 +316,12 @@ class ScanTimeBasedIntegrationTest
           .owner should be(aliceUserParty.toProtoPrimitive)
       }
       val snapshotAfterCts = CantonTimestamp.assertFromInstant(snapshotAfter.value.toInstant)
-      val holdingsStateV0 = sv1ScanBackend.getHoldingsStateAt(
+      val holdingsStateV2 = sv1ScanBackend.getHoldingsStateAtV2(
         snapshotAfterCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
       )
-      val holdingsStateV1 = sv1ScanBackend.getHoldingsStateAtV1(
-        snapshotAfterCts,
-        migrationId,
-        partyIds = Vector(aliceUserParty),
-      )
-      compareAcsV0V1(holdingsStateV0.value.createdEvents, holdingsStateV1.value.createdEvents)
-      inside(holdingsStateV1) { case Some(holdings) =>
+      inside(holdingsStateV2) { case Some(holdings) =>
         holdings.createdEvents should be(coins)
       }
 
@@ -389,22 +385,22 @@ class ScanTimeBasedIntegrationTest
       advanceTime(java.time.Duration.ofMinutes(10))
       val atOrBefore = getLedgerTime
       val atOrBeforeCts = CantonTimestamp.assertFromInstant(atOrBefore.toInstant)
-      val holdingsStateAtOrBefore = sv1ScanBackend.getHoldingsStateAtV1(
+      val holdingsStateAtOrBefore = sv1ScanBackend.getHoldingsStateAtV2(
         atOrBeforeCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
-        recordTimeMatch = Some(definitions.HoldingsStateRequest.RecordTimeMatch.AtOrBefore),
+        recordTimeMatch = Some(definitions.HoldingsStateRequestV2.RecordTimeMatch.AtOrBefore),
       )
       inside(holdingsStateAtOrBefore) { case Some(holdings) =>
         holdings.createdEvents should be(coins)
         holdings.recordTime shouldBe snapshotAfter.value
       }
 
-      sv1ScanBackend.getHoldingsStateAtV1(
+      sv1ScanBackend.getHoldingsStateAtV2(
         atOrBeforeCts,
         migrationId,
         partyIds = Vector(aliceUserParty),
-        recordTimeMatch = Some(definitions.HoldingsStateRequest.RecordTimeMatch.Exact),
+        recordTimeMatch = Some(definitions.HoldingsStateRequestV2.RecordTimeMatch.Exact),
       ) shouldBe None
 
       val holdingsSummaryAtOrBefore = sv1ScanBackend.getHoldingsSummaryAt(
@@ -412,6 +408,10 @@ class ScanTimeBasedIntegrationTest
         migrationId,
         ownerPartyIds = Vector(aliceUserParty),
         recordTimeMatch = Some(definitions.HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
+        // as_of_round defaults to the earliest open mining round at request time, and the
+        // advanceTime above lets the rounds advance, so pin it to the round the exact query
+        // resolved. Otherwise the holding fees derived from it differ by one round's worth.
+        asOfRound = holdingsSummary.map(_.computedAsOfRound),
       )
       holdingsSummaryAtOrBefore shouldBe holdingsSummary
 
@@ -442,7 +442,6 @@ class ScanTimeBasedIntegrationTest
     val endTime = getLedgerTime
     val lastMidnight = endTime.toInstant.truncatedTo(ChronoUnit.DAYS);
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
-    val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
 
     val committedBucketConnection =
       new S3BucketConnectionForTests(s3ConfigMock("committed"), loggerFactory)
@@ -454,87 +453,106 @@ class ScanTimeBasedIntegrationTest
         .value
         .toInstant shouldBe >=(lastMidnight)
 
-      val getSnapshotResponse = eventuallySucceeds() {
-        val getSnapshotResponse = sv1ScanBackend
-          .getBulkAcsSnapshot(CantonTimestamp.assertFromInstant(lastMidnight))
-        getSnapshotResponse.recordTime should be(lastMidnight.atOffset(java.time.ZoneOffset.UTC))
-        getSnapshotResponse
-      }
       val committedS3Objs = committedBucketConnection.listObjects.futureValue.contents().asScala
 
-      // Wait for bulk storage objects to be created
-      committedS3Objs.map(_.key()) should contain(expectedAcsSnapshotKey)
+      def checkAcsSnapshotEncoding(encoding: ScanStorageConfig.Encoding) = {
+        val expectedAcsSnapshotKey =
+          s"$lastMidnight~$nextMidnight/${encoding.storageKey("ACS", 0)}"
+        val getSnapshotResponse = eventuallySucceeds() {
+          val getSnapshotResponse = sv1ScanBackend.listBulkAcsSnapshotObjects(
+            CantonTimestamp.assertFromInstant(lastMidnight),
+            Some(encoding.damlValueEncoding),
+          )
+          getSnapshotResponse.recordTime should be(lastMidnight.atOffset(java.time.ZoneOffset.UTC))
+          getSnapshotResponse
+        }
 
-      // Depending on how the days are split exactly (based on the exact simtime when the test was started),
-      // the updates may be in one or two segments, so we only assert that there exists a segment that ends
-      // at last midnight
-      committedS3Objs
-        .map(_.key())
-        .filter(_.endsWith(s"~$lastMidnight/updates_0.zstd")) should not be empty
+        // Wait for bulk storage objects to be created
+        committedS3Objs.map(_.key()) should contain(expectedAcsSnapshotKey)
+
+        // Depending on how the days are split exactly (based on the exact simtime when the test was started),
+        // the updates may be in one or two segments, so we only assert that there exists a segment that ends
+        // at last midnight
+        committedS3Objs
+          .map(_.key())
+          .filter(
+            _.endsWith(s"~$lastMidnight/${encoding.storageKey("updates", 0)}")
+          ) should not be empty
+
+        val acsObjUrl = getSnapshotResponse.objectRefs.head.url
+        acsObjUrl should startWith("http://foo.bar.com/api/scan/v0/history/bulk/download/")
+        val acsObjKey = URLDecoder.decode(
+          acsObjUrl.stripPrefix("http://foo.bar.com/api/scan/v0/history/bulk/download/"),
+          StandardCharsets.UTF_8,
+        )
+
+        val out = new ByteArrayOutputStream()
+        sv1ScanBackend.bulkStorageDownload(acsObjKey, out).futureValue
+        val acsAtMidnightFromS3 = uncompressAndDecode(
+          ByteString(out.toByteArray),
+          io.circe.parser.decode[definitions.ActiveContract],
+        )
+
+        acsAtMidnightFromS3
+      }
+
+      val acsAtMidnightFromS3 = checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.CompactJson)
+      val protobufAcsAtMidnightFromS3 =
+        checkAcsSnapshotEncoding(ScanStorageConfig.Encoding.ProtobufJson)
+      protobufAcsAtMidnightFromS3.map(_.contractId) shouldBe acsAtMidnightFromS3.map(_.contractId)
 
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well
       val acsAtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAtV1(CantonTimestamp.assertFromInstant(lastMidnight), 0)
+        .getAcsSnapshotAtV2(CantonTimestamp.assertFromInstant(lastMidnight), 0)
         .value
         .createdEvents
-      val acsObjUrl = getSnapshotResponse.objectRefs.head.url
-      acsObjUrl should startWith("http://foo.bar.com/api/scan/v0/history/bulk/download/")
-      val acsObjKey = URLDecoder.decode(
-        acsObjUrl.stripPrefix("http://foo.bar.com/api/scan/v0/history/bulk/download/"),
-        StandardCharsets.UTF_8,
-      )
-      val out = new ByteArrayOutputStream()
-      sv1ScanBackend.bulkStorageDownload(acsObjKey, out).futureValue
-      val acsAtMidnightFromS3 = uncompressAndDecode(
-        ByteString(out.toByteArray),
-        io.circe.parser.decode[definitions.ActiveContract],
-      )
       acsAtMidnightFromScan should contain theSameElementsInOrderAs acsAtMidnightFromS3
 
-      def isInTimeRange(u: definitions.UpdateHistoryItemV2) = {
-        val recordTime = CompactJsonScanHttpEncodings()
-          .httpToLapiUpdate(u)
-          .update
-          .update
-          .recordTime
-        recordTime <= CantonTimestamp.assertFromInstant(lastMidnight)
+      def checkUpdateEncoding(encoding: ScanStorageConfig.Encoding) = {
+        def isInTimeRange(u: definitions.UpdateHistoryItemV2) = {
+          val recordTime = ScanHttpEncodings
+            .fromDamlValueEncoding(encoding.damlValueEncoding)
+            .httpToLapiUpdate(u)
+            .update
+            .update
+            .recordTime
+          recordTime <= CantonTimestamp.assertFromInstant(lastMidnight)
+        }
+
+        val updateObjsResponse = sv1ScanBackend.listBulkUpdateHistoryObjects(
+          startTime,
+          CantonTimestamp.assertFromInstant(lastMidnight),
+          None,
+          100,
+          Some(encoding.damlValueEncoding),
+        )
+        val updateObjsUrls = updateObjsResponse.objectRefs.map(_.url)
+        val updateObjsKeys = updateObjsUrls.map(url =>
+          URLDecoder.decode(
+            url.stripPrefix("http://foo.bar.com/api/scan/v0/history/bulk/download/"),
+            StandardCharsets.UTF_8,
+          )
+        )
+        val updatesFromS3 = updateObjsKeys
+          .flatMap { key =>
+            val out = new ByteArrayOutputStream()
+            sv1ScanBackend.bulkStorageDownload(key, out).futureValue
+            uncompressAndDecode(
+              ByteString(out.toByteArray),
+              io.circe.parser.decode[definitions.UpdateHistoryItemV2],
+            )
+          }
+        val updatesFromScan = sv1ScanBackend
+          .getUpdateHistory(1000, None, encoding.damlValueEncoding)
+          .filter(isInTimeRange)
+        updatesFromScan should contain theSameElementsAs updatesFromS3
       }
 
-      val updateObjsResponse = sv1ScanBackend.getBulkUpdateHistory(
-        startTime,
-        CantonTimestamp.assertFromInstant(lastMidnight),
-        None,
-        100,
-      )
-      val updateObjsUrls = updateObjsResponse.objectRefs.map(_.url)
-      val updateObjsKeys = updateObjsUrls.map(url =>
-        URLDecoder.decode(
-          url.stripPrefix("http://foo.bar.com/api/scan/v0/history/bulk/download/"),
-          StandardCharsets.UTF_8,
-        )
-      )
-      val updatesFromS3 = updateObjsKeys
-        .flatMap { key =>
-          val out = new ByteArrayOutputStream()
-          sv1ScanBackend.bulkStorageDownload(key, out).futureValue
-          uncompressAndDecode(
-            ByteString(out.toByteArray),
-            io.circe.parser.decode[definitions.UpdateHistoryItemV2],
-          )
-        }
-      val updatesFromScan = sv1ScanBackend
-        .getUpdateHistory(1000, None, CompactJson)
-        .filter(isInTimeRange)
-      updatesFromScan should contain theSameElementsAs updatesFromS3
+      checkUpdateEncoding(ScanStorageConfig.Encoding.CompactJson)
+      checkUpdateEncoding(ScanStorageConfig.Encoding.ProtobufJson)
 
-      // Compare acs v0 and v1 endpoints
-      val acsV0AtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAt(CantonTimestamp.assertFromInstant(lastMidnight), 0)
-        .value
-        .createdEvents
-
-      compareAcsV0V1(acsV0AtMidnightFromScan, acsAtMidnightFromScan)
+      compareAcsV2(acsAtMidnightFromScan, acsAtMidnightFromScan)
     }
   }
 }

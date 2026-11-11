@@ -69,10 +69,9 @@ case class EnvironmentDefinition(
 
   override def loggerFactory: SuppressingLogger = SuppressingLogger(getClass)
   override val configTransforms: Seq[SpliceConfig => SpliceConfig] = {
-    // add the BFT sequencers config transform to the front if enabled to ensure that it modifies the ports before any other transforms updates the ports
-    if (ConfigTransforms.IsTheCantonSequencerBFTEnabled)
-      ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
-    else configTransformsWithContext(context)
+    // TODO (#8263): enable DA BFT in the test app configs instead of through this config transform
+    // add the BFT sequencers config transform to the front to ensure that it modifies the ports before any other transforms updates the ports
+    ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
   }
   def updateTestingConfig(
       update: TestingConfigInternal => TestingConfigInternal
@@ -94,7 +93,7 @@ case class EnvironmentDefinition(
       .withMultiSyncFeatureFlag()
       .withTrafficTopupsEnabled
       .withInitialPackageVersions
-      .withProtocolVersion(ProtocolVersion.v35)
+      .withProtocolVersion(ProtocolVersion.v37)
       .withProtocolVersionFromEnv
       .withEagerAppActivityMarkerConversion
 
@@ -178,10 +177,8 @@ case class EnvironmentDefinition(
 
   def withProtocolVersion(protocolVersion: ProtocolVersion): EnvironmentDefinition =
     addConfigTransforms((_, config) =>
-      ConfigTransforms.updateAllSvAppConfigs_(
-        updateAllSynchronizerNodeConfigs(
-          _.focus(_.protocolVersion).replace(protocolVersion)
-        )
+      ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
+        _.focus(_.initialProtocolVersion).replace(protocolVersion)
       )(config)
     )
 
@@ -248,6 +245,7 @@ case class EnvironmentDefinition(
     copy(
       preAppStart = implicit env => {
         participants(env).foreach { p =>
+          p.synchronizers.reconnect_all(ignoreFailures = false)
           p.synchronizers.list_connected().foreach { connected =>
             val currentVettedPackages = p.topology.vetted_packages.list(
               store = Some(TopologyStoreId.Synchronizer(connected.synchronizerId)),
@@ -357,6 +355,7 @@ case class EnvironmentDefinition(
       )(config)
     )
 
+  // TODO (#8263): remove, DA BFT is always enabled (see configTransforms)
   def withBftSequencers(namePredicate: String => Boolean = _ => true): EnvironmentDefinition =
     addConfigTransformToFront((_, config) =>
       ConfigTransforms.withBftSequencers(namePredicate)(config)
@@ -504,13 +503,6 @@ case class EnvironmentDefinition(
       )
   }
 
-  def withTransferCommandSupport: EnvironmentDefinition =
-    this.addConfigTransform((_, conf) =>
-      ConfigTransforms.updateAllValidatorAppConfigs_(
-        _.copy(enableDeprecatedTransferCommandSupport = true)
-      )(conf)
-    )
-
   def clearConfigTransforms(): EnvironmentDefinition =
     copy(configTransformsWithContext = _ => Seq())
 
@@ -574,6 +566,7 @@ case class EnvironmentDefinition(
           )(conf)
       )
       .withSequencerConnectionsFromScanDisabled(10_000)
+      .addConfigTransform((_, conf) => ConfigTransforms.disableBftBlacklisting()(conf))
 
   override def createTestConsole(
       environment: SpliceEnvironment,
@@ -647,13 +640,23 @@ object EnvironmentDefinition extends CommonAppInstanceReferences {
 
   private def loadConfigFromResources(paths: String*): SpliceConfig = {
     val rawConfig = ConfigFactory.parseString(paths.map(Resource.getAsString(_)).mkString("\n"))
-    SpliceConfig.loadOrThrow(rawConfig)
+    withConsolePreviewAndRepairCommands(SpliceConfig.loadOrThrow(rawConfig))
   }
 
   def fromFiles(testName: String, files: File*): EnvironmentDefinition = {
     val config = SpliceConfig.parseAndLoadOrThrow(files.map(_.toJava))
-    EnvironmentDefinition(baseConfig = config, context = testName)
+    EnvironmentDefinition(
+      baseConfig = withConsolePreviewAndRepairCommands(config),
+      context = testName,
+    )
   }
+
+  private def withConsolePreviewAndRepairCommands(config: SpliceConfig): SpliceConfig =
+    config
+      .focus(_.features.enablePreviewCommands)
+      .replace(true)
+      .focus(_.features.enableRepairCommands)
+      .replace(true)
 
   def empty(testName: String): EnvironmentDefinition =
     EnvironmentDefinition(SpliceConfig.empty, context = testName)

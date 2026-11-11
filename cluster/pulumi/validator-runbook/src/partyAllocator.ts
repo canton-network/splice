@@ -5,8 +5,8 @@ import {
   activeVersion,
   CnInput,
   createVolumeSnapshot,
-  DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
+  fixedTokens,
   InstalledHelmChart,
   installSpliceHelmChart,
   standardStorageClassName,
@@ -24,9 +24,21 @@ export function installPartyAllocator(
     'splice-party-allocator',
     {
       config: {
-        token: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_TOKEN}',
+        auth: fixedTokens()
+          ? {
+              type: 'static',
+              token: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_TOKEN}',
+            }
+          : {
+              type: 'client-credentials',
+              wellKnownConfigUrl: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_URL}',
+              clientId: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_ID}',
+              clientSecret: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_SECRET}',
+              audience: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_AUDIENCE}',
+              scope: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_SCOPE}',
+            },
         userId: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME}',
-        jsonLedgerApiUrl: `http://participant-${DecentralizedSynchronizerUpgradeConfig.activeMigrationId}:7575`,
+        jsonLedgerApiUrl: `http://participant:7575`,
         scanApiUrl: 'http://scan-app.sv-1:5012',
         validatorApiUrl: 'http://validator-app:5003',
         maxParties: config.maxParties,
@@ -41,7 +53,7 @@ export function installPartyAllocator(
         name: 'party-allocator-keys-hd-pvc',
       },
     },
-    activeVersion,
+    config.version || activeVersion,
     { dependsOn }
   );
 }

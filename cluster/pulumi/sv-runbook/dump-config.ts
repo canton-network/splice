@@ -9,11 +9,6 @@ import {
 async function main() {
   await initDumpConfig();
 
-  /* eslint-disable no-process-env */
-  process.env.ARTIFACTORY_USER = 'artie';
-  /* eslint-disable no-process-env */
-  process.env.ARTIFACTORY_PASSWORD = 's3cr3t';
-
   const installNode = await import('./src/installNode');
   const secrets = new SecretsFixtureMap();
   // Need to import this directly to avoid initializing any configs before the mocks are initialized
@@ -21,11 +16,10 @@ async function main() {
 
   const authOClient = {
     getSecrets: () => Promise.resolve(secrets),
-    /* eslint-disable @typescript-eslint/no-unused-vars */
+
     getClientAccessToken: (clientId: string, clientSecret: string, audience: string) =>
       Promise.resolve('access_token'),
     getCfg: () => svRunbookAuth0Config,
-    reuseNamespaceConfig: (fromNamespace: string, toNamespace: string) => {},
   };
   const buildSvAppConfig = (await import('./src/config')).buildSvAppConfig;
   const svAppConfig = buildSvAppConfig(false);

@@ -3,6 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.validator.store.db
 
+import com.digitalasset.canton.tracing.TraceContext
+
+import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
+
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   ExternalPartySetupProposal,
@@ -21,7 +25,7 @@ import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
-  AcsQueries,
+  SingleSynchronizerAcsQueries,
   AcsTables,
   DbAppStore,
 }
@@ -34,7 +38,6 @@ import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
@@ -42,15 +45,85 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class DbValidatorStore(
+object DbValidatorStore {
+
+  /** Looks up the store ids, and creates the store. */
+  def create(
+      key: ValidatorStore.Key,
+      storage: DbStorage,
+      loggerFactory: NamedLoggerFactory,
+      retryProvider: RetryProvider,
+      domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
+      participantId: ParticipantId,
+      ingestionConfig: IngestionConfig,
+      acsStoreDescriptorUserVersion: Option[Long] = None,
+      defaultLimit: Limit,
+  )(implicit
+      ec: ExecutionContext,
+      templateJsonDecoder: TemplateJsonDecoder,
+      closeContext: CloseContext,
+      tc: TraceContext,
+  ): Future[DbValidatorStore] =
+    DbMultiDomainAcsStore
+      .lookupStoreIds(
+        storage,
+        acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
+        None,
+      )
+      .map { storeIds =>
+        new DbValidatorStore(
+          key = key,
+          storage = storage,
+          loggerFactory = loggerFactory,
+          retryProvider = retryProvider,
+          domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
+          participantId = participantId,
+          ingestionConfig = ingestionConfig,
+          storeIds,
+          acsStoreDescriptorUserVersion = acsStoreDescriptorUserVersion,
+          defaultLimit = defaultLimit,
+        )
+      }
+
+  // Any change in the store descriptor will lead to previously deployed applications
+  // forgetting all persisted data once they upgrade to the new version.
+  // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+  // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+  // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+  // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+  // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+  // and notify the person coordinating the deployment.
+  def acsStoreDescriptor(
+      key: ValidatorStore.Key,
+      participantId: ParticipantId,
+      acsStoreDescriptorUserVersion: Option[Long],
+  ): StoreDescriptor =
+    StoreDescriptor(
+      version = 2,
+      name = "DbValidatorStore",
+      party = key.validatorParty,
+      participant = participantId,
+      key = Map(
+        "validatorParty" -> key.validatorParty.toProtoPrimitive,
+        "dsoParty" -> key.dsoParty.toProtoPrimitive,
+      ),
+      userVersion = acsStoreDescriptorUserVersion,
+    )
+}
+
+class DbValidatorStore private (
     override val key: ValidatorStore.Key,
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
-    acsStoreDescriptorUserVersion: Option[Long] = None,
+    storeIds: DbMultiDomainAcsStore.StoreIds,
+    acsStoreDescriptorUserVersion: Option[Long],
     override val defaultLimit: Limit,
 )(implicit
     override protected val ec: ExecutionContext,
@@ -60,31 +133,16 @@ class DbValidatorStore(
       storage = storage,
       acsTableName = ValidatorTables.acsTableName,
       interfaceViewsTableNameOpt = None,
-      // Any change in the store descriptor will lead to previously deployed applications
-      // forgetting all persisted data once they upgrade to the new version.
-      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
-      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
-      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
-      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
-      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
-      // and notify the person coordinating the deployment.
-      acsStoreDescriptor = StoreDescriptor(
-        version = 2,
-        name = "DbValidatorStore",
-        party = key.validatorParty,
-        participant = participantId,
-        key = Map(
-          "validatorParty" -> key.validatorParty.toProtoPrimitive,
-          "dsoParty" -> key.dsoParty.toProtoPrimitive,
-        ),
-        userVersion = acsStoreDescriptorUserVersion,
-      ),
+      acsStoreDescriptor =
+        DbValidatorStore.acsStoreDescriptor(key, participantId, acsStoreDescriptorUserVersion),
+      storeIds = storeIds,
       migrationId = domainMigrationId,
-      ingestionConfig,
+      synchronizerId = synchronizerId,
+      ingestionConfig = ingestionConfig,
     )
     with ValidatorStore
     with AcsTables
-    with AcsQueries
+    with SingleSynchronizerAcsQueries
     with LimitHelpers {
 
   override val walletKey = WalletStore.Key(
@@ -173,7 +231,7 @@ class DbValidatorStore(
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -227,7 +285,7 @@ class DbValidatorStore(
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -257,7 +315,7 @@ class DbValidatorStore(
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -286,7 +344,7 @@ class DbValidatorStore(
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,
@@ -317,7 +375,7 @@ class DbValidatorStore(
     for {
       resultWithOffset <- storage
         .querySingle(
-          selectFromAcsTableWithStateAndOffset(
+          selectFromAcsTableWithOffset(
             ValidatorTables.acsTableName,
             acsStoreId,
             domainMigrationId,

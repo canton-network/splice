@@ -3,16 +3,19 @@
 
 package com.digitalasset.canton.tea.projection
 
-import cats.data.OptionT
+import cats.data.EitherT
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.tea.TrafficEnforcementErrors.TrafficEnforcementError
 import com.digitalasset.canton.tracing.TraceContext
+
+final case class PruneCounts(events: Int, correlations: Int)
 
 /** Persistence store for the TEA. Provides methods to update and retrieve traffic for accounts.
   */
 trait TeaTrafficStore {
 
-  /** Return the current balance for an account
+  /** Return the current balance for an account and traffic type
     * @param accountId
     *   account to retrieve
     * @return
@@ -20,10 +23,11 @@ trait TeaTrafficStore {
     */
   def getBalance(accountId: AccountId)(implicit
       traceContext: TraceContext
-  ): OptionT[FutureUnlessShutdown, AccountState]
+  ): EitherT[FutureUnlessShutdown, TrafficEnforcementError, Option[AccountState]]
 
-  /** Insert a new event into the event table, and updates the corresponding account state. The new
-    * balance be current balance + delta. Delta is positive for credits and negative for debits.
+  /** Insert a new event into the event table, and updates the corresponding credit account state.
+    * The new total credit will be existing + delta. The total debit stays unchanged. Delta may be a
+    * negative value. This means the total credit value may be negative.
     *
     * Note: the account state returned may have a timestamp higher than this timestamp. That's
     * because events can arrive out of order from different sources from different clocks. To avoid
@@ -32,24 +36,50 @@ trait TeaTrafficStore {
     *
     * @param accountId
     *   account to update
-    * @param delta
-    *   delta to apply
     * @param timestamp
     *   timestamp of the update. There's no guarantee that the timestamp is strictly higher than
     *   previous entries.
+    * @param eventId
+    *   eventId uniquely identifying this update
+    * @param eventSource
+    *   source of the event
     * @return
-    *   optional account state
+    *   a `Left` if the delta would push the running total negative or overflow it, otherwise a
+    *   `Right` with an optional account state: `None` means the (event_source, event_id) pair was
+    *   already seen.
     */
-  def persistDelta(
+  def persistTrafficDelta(
       accountId: AccountId,
       eventId: EventId,
       eventSource: EventSource,
-      eventType: EventType,
-      delta: Long,
+      trafficDelta: TrafficDelta,
       timestamp: CantonTimestamp,
   )(implicit
       traceContext: TraceContext
-  ): OptionT[FutureUnlessShutdown, AccountState]
+  ): EitherT[FutureUnlessShutdown, TrafficEnforcementError, Option[AccountState]]
+
+  /** Insert a correlation. An existing key returns CorrelationConflict without overwriting it. */
+  def insertCorrelation(correlation: SubmissionCorrelation)(implicit
+      traceContext: TraceContext
+  ): EitherT[FutureUnlessShutdown, TrafficEnforcementError, Unit]
+
+  def lookupCorrelation(key: CorrelationKey)(implicit
+      traceContext: TraceContext
+  ): EitherT[FutureUnlessShutdown, TrafficEnforcementError, Option[SubmissionCorrelation]]
+
+  /** Prune events and correlations at the given timestamp in one transaction. This is used to keep
+    * the tables from growing indefinitely. This does not affect the account balance.
+    *
+    * @param beforeInclusive
+    *   timestamp to prune events and correlations before (inclusive)
+    * @return
+    *   the number of events and correlations pruned
+    */
+  def prune(
+      beforeInclusive: CantonTimestamp
+  )(implicit
+      traceContext: TraceContext
+  ): EitherT[FutureUnlessShutdown, TrafficEnforcementError, PruneCounts]
 
   // Note: only used internally for testing, need to add pagination and / or streaming when exposed
   /** Return events, ordered by timestamp, for an account from the given timestamp forward

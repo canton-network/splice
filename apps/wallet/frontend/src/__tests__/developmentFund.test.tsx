@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, test, vi } from 'vitest';
@@ -50,6 +50,12 @@ const buildAllocationFormMock = (
   setAmount: vi.fn(),
   expiresAt: dayjs().add(2, 'day'),
   setExpiresAt: vi.fn(),
+  mintAfter: dayjs().add(1, 'hour'),
+  setMintAfter: vi.fn(),
+  minMintAfter: dayjs(),
+  isMintAfterRequired: true,
+  isMintAfterValid: true,
+  mintAfterError: undefined,
   reason: 'Valid allocation',
   setReason: vi.fn(),
   amountNum: new BigNumber(1),
@@ -219,11 +225,11 @@ describe('Development Fund page', () => {
     ).toBeDefined();
 
     const invalidExpirationDate = dayjs().subtract(2, 'day').format('MM/DD/YYYY hh:mm A');
-    const expiresAtInput = screen.getByRole('textbox', { name: /expires at/i });
-    await user.type(expiresAtInput, invalidExpirationDate);
+    const expiresAtInput = screen.getByLabelText('Expires At', { selector: 'input' });
+    fireEvent.change(expiresAtInput, { target: { value: invalidExpirationDate } });
     await user.tab();
 
-    await waitFor(() => expect(expiresAtInput).toHaveAttribute('aria-invalid', 'true'));
+    expect(await screen.findByText('Expiry must be in the future')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Allocate' })).toBeDisabled();
   });
 
@@ -558,6 +564,7 @@ describe('Development Fund page', () => {
   test('triggers allocation request on allocate click', async () => {
     const mutate = vi.fn();
     const expiresAt = dayjs().add(2, 'day');
+    const mintAfter = dayjs().add(1, 'hour');
 
     const hookSpy = vi
       .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
@@ -570,6 +577,12 @@ describe('Development Fund page', () => {
         setAmount: vi.fn(),
         expiresAt,
         setExpiresAt: vi.fn(),
+        mintAfter,
+        setMintAfter: vi.fn(),
+        minMintAfter: dayjs(),
+        isMintAfterRequired: true,
+        isMintAfterValid: true,
+        mintAfterError: undefined,
         reason: 'Valid allocation',
         setReason: vi.fn(),
         amountNum: new BigNumber(1),
@@ -599,7 +612,84 @@ describe('Development Fund page', () => {
       amount: new BigNumber(1),
       expiresAt: expiresAt.toDate(),
       reason: 'Valid allocation',
+      mintAfter: mintAfter.toDate(),
     });
+
+    hookSpy.mockRestore();
+  });
+
+  test('sends the chosen mintAfter with the allocation', async () => {
+    const mutate = vi.fn();
+    const expiresAt = dayjs().add(2, 'day');
+    const mintAfter = dayjs().add(1, 'day');
+
+    const hookSpy = vi
+      .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
+      .mockReturnValue(
+        buildAllocationFormMock({
+          expiresAt,
+          mintAfter,
+          allocateMutation: {
+            mutate,
+            isPending: false,
+          } as unknown as ReturnType<
+            typeof developmentFundAllocationFormHook.useDevelopmentFundAllocationForm
+          >['allocateMutation'],
+        })
+      );
+
+    const { user } = await loginAndOpenDevelopmentFund();
+    await user.click(await screen.findByRole('button', { name: 'Allocate' }));
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ mintAfter: mintAfter.toDate() }));
+
+    hookSpy.mockRestore();
+  });
+
+  test('disables Allocate button when mintAfter is invalid', async () => {
+    const hookSpy = vi
+      .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
+      .mockReturnValue(
+        buildAllocationFormMock({
+          mintAfter: null,
+          isMintAfterValid: false,
+          mintAfterError: 'Mint after is required',
+          isValid: false,
+        })
+      );
+
+    await loginAndOpenDevelopmentFund();
+
+    expect(await screen.findByRole('button', { name: 'Allocate' })).toBeDisabled();
+    expect(screen.getByText('Mint after is required')).toBeDefined();
+
+    hookSpy.mockRestore();
+  });
+
+  test('marks Mint After optional and stays submittable when no delay is configured', async () => {
+    const mutate = vi.fn();
+    const hookSpy = vi
+      .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
+      .mockReturnValue(
+        buildAllocationFormMock({
+          mintAfter: null,
+          minMintAfter: null,
+          isMintAfterRequired: false,
+          allocateMutation: {
+            mutate,
+            isPending: false,
+          } as unknown as ReturnType<
+            typeof developmentFundAllocationFormHook.useDevelopmentFundAllocationForm
+          >['allocateMutation'],
+        })
+      );
+
+    const { user } = await loginAndOpenDevelopmentFund();
+    expect(screen.getByRole('group', { name: 'Mint After (optional)' })).toBeDefined();
+
+    await user.click(await screen.findByRole('button', { name: 'Allocate' }));
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ mintAfter: undefined }));
 
     hookSpy.mockRestore();
   });

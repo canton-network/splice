@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferi
   InputAppRewardCoupon,
   InputDevelopmentFundCoupon,
   InputRewardCouponV2,
+  InputSvRewardCoupon,
   InputUnclaimedActivityRecord,
   InputValidatorLivenessActivityRecord,
   InputValidatorRewardCoupon,
@@ -23,6 +24,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   DevelopmentFundCoupon,
   RewardCouponV2,
+  SvRewardCoupon,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -53,6 +55,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
+import org.lfdecentralizedtrust.splice.wallet.util.DevelopmentFundCouponUtil
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
@@ -79,6 +82,8 @@ class MintingDelegationCollectRewardsTrigger(
     override val tracer: Tracer,
     materializer: Materializer,
 ) extends PollingTrigger {
+
+  import MintingDelegationCollectRewardsTrigger.*
 
   private def externalParty = store.key.externalParty
 
@@ -149,6 +154,20 @@ class MintingDelegationCollectRewardsTrigger(
     }
   }
 
+  // Handling of unassigned V2 coupons (no beneficiary yet) depends on the sharing mode:
+  //   - No sharing (no beneficiaries, not external): mint them directly to ourselves.
+  //   - InternalSharing (beneficiaries set): hold them back, assign to the configured
+  //     beneficiaries first, then mint; already-assigned coupons mint directly.
+  //   - ExternalSharing: hold them back and leave them untouched, so the
+  //     off-node automation owns their assignment; only already-assigned coupons mint here.
+  private val mode: SharingMode =
+    rewardSharingConfig match {
+      case RewardSharingConfig.External(_) => ExternalSharing
+      case builtIn: RewardSharingConfig.BuiltIn if builtIn.automateRewardSharing =>
+        InternalSharing(builtIn)
+      case _: RewardSharingConfig.BuiltIn => NoSharing
+    }
+
   private def performMintIfNeeded(
       mintInputs: MintInputs,
       couponsData: CouponsData,
@@ -162,30 +181,29 @@ class MintingDelegationCollectRewardsTrigger(
     val amuletsToMerge = selectAmuletsToMerge(amulets, mintInputs.delegation)
     val shouldMergeAmulets = amuletsToMerge.nonEmpty
 
-    // Without sharing config, all V2 coupons are mintable directly.
-    // With sharing config, only assigned-to-us V2 coupons are mintable;
-    // unassigned ones need sharing first.
-    val hasBeneficiaries = rewardSharingConfig.beneficiaries.nonEmpty
-    val (unassignedV2, mintableV2) =
-      if (hasBeneficiaries)
+    val (unassignedV2, mintableV2) = mode match {
+      case NoSharing => (Seq.empty, filteredCouponsData.rewardCouponsV2)
+      case InternalSharing(_) | ExternalSharing =>
         filteredCouponsData.rewardCouponsV2.partition(_.payload.beneficiary.isEmpty)
-      else
-        (Seq.empty, filteredCouponsData.rewardCouponsV2)
+    }
     val couponsToMint = filteredCouponsData.copy(rewardCouponsV2 = mintableV2)
 
+    val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
     // Share when the TTL threshold is reached, or batch sharing with
     // amulet merging to reduce traffic costs by combining both in one transaction.
-    val shouldAssign = unassignedV2.nonEmpty &&
-      (shouldShareNow(unassignedV2, rewardSharingConfig) || shouldMergeAmulets)
-
-    val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
-    if (shouldAssign) {
-      performAssignAndMint(submission, unassignedV2.toList, rewardSharingConfig)
-    } else if (couponsToMint.hasRewards || shouldMergeAmulets) {
-      performMint(submission)
-    } else {
-      // Nothing to do: no rewards to mint, coupons to assign, or amulets to merge
-      Future.successful(false)
+    val hasSomethingToMint = couponsToMint.hasRewards || shouldMergeAmulets
+    mode match {
+      case InternalSharing(config) =>
+        val shouldAssignAndMint = unassignedV2.nonEmpty && (shouldShareNow(
+          unassignedV2,
+          config,
+        ) || shouldMergeAmulets)
+        if (shouldAssignAndMint) performAssignAndMint(submission, unassignedV2.toList, config)
+        else if (hasSomethingToMint) performMint(submission)
+        else Future.successful(false)
+      case NoSharing | ExternalSharing =>
+        if (hasSomethingToMint) performMint(submission)
+        else Future.successful(false)
     }
   }
 
@@ -213,7 +231,7 @@ class MintingDelegationCollectRewardsTrigger(
   private def performAssignAndMint(
       submission: MintSubmissionData,
       unassignedV2: List[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
-      config: RewardSharingConfig,
+      config: RewardSharingConfig.BuiltIn,
   )(implicit tc: TraceContext): Future[Boolean] = {
     unassignedV2 match {
       case Nil =>
@@ -307,6 +325,10 @@ class MintingDelegationCollectRewardsTrigger(
         RewardCouponV2.ContractId,
         RewardCouponV2,
       ]],
+      svRewardCoupons: Seq[Contract[
+        SvRewardCoupon.ContractId,
+        SvRewardCoupon,
+      ]],
   ) extends PrettyPrinting {
     def hasRewards: Boolean =
       livenessActivityRecords.nonEmpty ||
@@ -314,7 +336,8 @@ class MintingDelegationCollectRewardsTrigger(
         appRewardCoupons.nonEmpty ||
         rewardCouponsV2.nonEmpty ||
         unclaimedActivityRecords.nonEmpty ||
-        developmentFundCoupons.nonEmpty
+        developmentFundCoupons.nonEmpty ||
+        svRewardCoupons.nonEmpty
 
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("livenessActivityRecords", _.livenessActivityRecords.size),
@@ -323,6 +346,7 @@ class MintingDelegationCollectRewardsTrigger(
       param("rewardCouponsV2", _.rewardCouponsV2.size),
       param("unclaimedActivityRecords", _.unclaimedActivityRecords.size),
       param("developmentFundCoupons", _.developmentFundCoupons.size),
+      param("svRewardCoupons", _.svRewardCoupons.size),
     )
   }
 
@@ -345,15 +369,20 @@ class MintingDelegationCollectRewardsTrigger(
         includeAssigned = true,
         limit = HardLimit.tryCreate(rewardSharingConfig.batchSize),
       )
+      svRewardCouponsWithQuantity <- store.listSortedSvRewardCoupons(issuingRoundsMap)
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
-      developmentFundCoupons <- store.listDevelopmentFundCoupons()
+      allDevelopmentFundCoupons <- store.listDevelopmentFundCoupons()
+      mintableDevelopmentFundCoupons = allDevelopmentFundCoupons.filter(
+        DevelopmentFundCouponUtil.isMintable(_, context.clock.now.toInstant)
+      )
     } yield CouponsData(
       livenessActivityRecordsWithQuantity.map(_._1),
       validatorRewardCoupons,
       appRewardCouponsWithQuantity.map(_._1),
       unclaimedActivityRecords,
-      developmentFundCoupons,
+      mintableDevelopmentFundCoupons,
       rewardCouponsV2.map(_.contract),
+      svRewardCouponsWithQuantity.map(_._1),
     )
   }
 
@@ -396,8 +425,13 @@ class MintingDelegationCollectRewardsTrigger(
       new InputRewardCouponV2(coupon.contractId): TransferInput
     }
 
-    val allInputs = livenessInputs ++ validatorCouponInputs ++ appCouponInputs ++
-      rewardCouponV2Inputs ++ unclaimedActivityRecordInputs ++ developmentFundCouponInputs ++ amuletInputs
+    val svRewardCouponInputs: Seq[TransferInput] = couponsData.svRewardCoupons.map { coupon =>
+      new InputSvRewardCoupon(coupon.contractId): TransferInput
+    }
+
+    val allInputs = livenessInputs ++ validatorCouponInputs ++ svRewardCouponInputs ++
+      appCouponInputs ++ rewardCouponV2Inputs ++ unclaimedActivityRecordInputs ++
+      developmentFundCouponInputs ++ amuletInputs
     allInputs.take(maxNumInputs)
   }
 
@@ -421,7 +455,8 @@ class MintingDelegationCollectRewardsTrigger(
           couponsData.livenessActivityRecords.exists(_.payload.round == r.payload.round) ||
             couponsData.validatorRewardCoupons.exists(_.payload.round == r.payload.round) ||
             couponsData.appRewardCoupons.exists(_.payload.round == r.payload.round) ||
-            couponsData.rewardCouponsV2.exists(_.payload.round == r.payload.round)
+            couponsData.rewardCouponsV2.exists(_.payload.round == r.payload.round) ||
+            couponsData.svRewardCoupons.exists(_.payload.round == r.payload.round)
         )
         .map(r => (r.payload.round, r.contractId))
         .toMap[
@@ -436,7 +471,7 @@ class MintingDelegationCollectRewardsTrigger(
 
   private def shouldShareNow(
       coupons: Seq[Contract[RewardCouponV2.ContractId, RewardCouponV2]],
-      config: RewardSharingConfig,
+      config: RewardSharingConfig.BuiltIn,
   ): Boolean = {
     val now = context.clock.now.toInstant
     val minTtl = config.minTtlAfterSharing.asJava
@@ -507,4 +542,11 @@ class MintingDelegationCollectRewardsTrigger(
       delegateParty = PartyId.tryFromProtoPrimitive(mintInputs.delegation.payload.delegate),
     )
   }
+}
+
+object MintingDelegationCollectRewardsTrigger {
+  private sealed trait SharingMode
+  private case object NoSharing extends SharingMode
+  private final case class InternalSharing(config: RewardSharingConfig.BuiltIn) extends SharingMode
+  private case object ExternalSharing extends SharingMode
 }

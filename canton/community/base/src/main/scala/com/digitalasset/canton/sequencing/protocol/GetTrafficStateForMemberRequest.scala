@@ -7,6 +7,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.sequencer.api.v30
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.Member
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
 
 /** A request to receive the topology state for initialization
@@ -35,10 +36,10 @@ object GetTrafficStateForMemberRequest
   override val name: String = "GetTrafficStateForMemberRequest"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.GetTrafficStateForMemberRequest
     )(
-      supportedProtoVersion(_)(fromProtoV30),
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -53,11 +54,14 @@ object GetTrafficStateForMemberRequest
     )
 
   def fromProtoV30(
-      getTrafficStateForMemberRequestP: v30.GetTrafficStateForMemberRequest
+      pvv: ProtocolVersionValidation,
+      getTrafficStateForMemberRequestP: v30.GetTrafficStateForMemberRequest,
   ): ParsingResult[GetTrafficStateForMemberRequest] = {
     val v30.GetTrafficStateForMemberRequest(memberP, timestampP) = getTrafficStateForMemberRequestP
     for {
-      member <- Member.fromProtoPrimitive(memberP, "member")
+      member <- ProtoValidation.validateThen(memberP, "member", pvv)(
+        Member.fromProtoPrimitive
+      )
       timestamp <- CantonTimestamp.fromProtoPrimitive(timestampP)
       rpv <- protocolVersionRepresentativeFor(ProtoVersion(30))
     } yield GetTrafficStateForMemberRequest(member, timestamp)(rpv)

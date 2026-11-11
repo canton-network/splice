@@ -61,7 +61,8 @@ private[grpc] class SequencerClientTokenAuthentication(
         appExecutor: Executor,
         applier: CallCredentials.MetadataApplier,
     ): Unit = {
-      implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
+      implicit val traceContext: TraceContext =
+        TraceContextGrpc.inferCallerTraceContext(requestInfo.getCallOptions)
       getToken(tokenManager)
         .fold(
           applier.fail,

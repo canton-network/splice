@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useSvClient, DsoInfo } from '@canton-network/splice-common-frontend';
+import { useSvClient, useUserState, DsoInfo, SvInfo } from '@canton-network/splice-common-frontend';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 
@@ -10,9 +10,12 @@ import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
 import { useSvAdminClient } from './SvAdminServiceContext';
 
-export const useDsoInfos = (): UseQueryResult<DsoInfo> => {
+export const useDsoInfos = (): UseQueryResult<DsoInfo & SvInfo> => {
   const { getDsoInfo } = useSvClient();
+  // The SV app's /v1/dso endpoint requires authentication
+  const { userAccessToken } = useUserState();
   return useQuery({
+    enabled: !!userAccessToken,
     queryKey: ['getDsoInfo', DsoRules, AmuletRules],
     queryFn: async () => {
       const resp = await getDsoInfo();

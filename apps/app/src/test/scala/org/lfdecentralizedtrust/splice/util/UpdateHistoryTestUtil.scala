@@ -33,7 +33,12 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistoryTestBase.{
   LostInScanApi,
   LostInStoreIngestion,
 }
-import org.lfdecentralizedtrust.splice.store.{PageLimit, UpdateHistory, UpdateHistoryTestBase}
+import org.lfdecentralizedtrust.splice.store.{
+  PageLimit,
+  TimestampWithMigrationId,
+  UpdateHistory,
+  UpdateHistoryTestBase,
+}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import com.daml.ledger.api.v2.transaction_filter
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands.UpdateService.{
@@ -115,11 +120,11 @@ trait UpdateHistoryTestUtil extends TestCommon {
     val recordedUpdates = updateHistory
       .getAllUpdates(
         Some(
-          (
-            0L,
+          TimestampWithMigrationId(
             // The after0 argument to getUpdates() is exclusive, so we need to subtract a small value
             // to include the first element
             actualUpdates.head.update.recordTime.addMicros(-1L),
+            0L,
           )
         ),
         PageLimit.tryCreate(actualUpdates.size),
@@ -140,11 +145,11 @@ trait UpdateHistoryTestUtil extends TestCommon {
     val recordedUpdates = updateHistory
       .getAllUpdates(
         Some(
-          (
-            0L,
+          TimestampWithMigrationId(
             // The after0 argument to getUpdates() is exclusive, so we need to subtract a small value
             // to include the first element
             actualUpdates.head.update.recordTime.addMicros(-1L),
+            0L,
           )
         ),
         PageLimit.tryCreate(actualUpdates.size),
@@ -186,9 +191,8 @@ trait UpdateHistoryTestUtil extends TestCommon {
     // Ensure at least one transaction with external hash is available
     // and that all expected hashes are present in the recorded updates
     val recordedExtTxnHashes = recordedUpdates.collect {
-      case UpdateHistoryResponse(TransactionTreeUpdate(tx), _)
-          if !tx.getExternalTransactionHash.isEmpty =>
-        HexString.toHexString(tx.getExternalTransactionHash)
+      case UpdateHistoryResponse(TransactionTreeUpdate(tx), _) if !tx.getTransactionHash.isEmpty =>
+        HexString.toHexString(tx.getTransactionHash)
     }
 
     recordedExtTxnHashes should not be empty
@@ -209,7 +213,7 @@ trait UpdateHistoryTestUtil extends TestCommon {
             TransactionTreeUpdate(actualTx),
             TransactionTreeUpdate(recordedTx),
           ) =>
-        actualTx.getExternalTransactionHash shouldBe recordedTx.getExternalTransactionHash
+        actualTx.getTransactionHash shouldBe recordedTx.getTransactionHash
 
       case _ =>
         succeed
@@ -269,7 +273,7 @@ trait UpdateHistoryTestUtil extends TestCommon {
     val recordedExtTxnHashes = historyThroughApi.flatMap { update =>
       update.update.update match {
         case TransactionTreeUpdate(tx) =>
-          val hash = tx.getExternalTransactionHash
+          val hash = tx.getTransactionHash
           if (hash.isEmpty) None else Some(HexString.toHexString(hash))
         case _ => None
       }
@@ -356,7 +360,7 @@ trait UpdateHistoryTestUtil extends TestCommon {
       )
     val extractedHash = treeUpdate.update.update match {
       case TransactionTreeUpdate(tx) =>
-        Option(tx.getExternalTransactionHash)
+        Option(tx.getTransactionHash)
           .filterNot(_.isEmpty)
           .map(com.digitalasset.canton.util.HexString.toHexString)
       case _ => None
@@ -384,7 +388,7 @@ trait UpdateHistoryTestUtil extends TestCommon {
       case TransactionTreeUpdate(tx) =>
         (
           Some(tx.getUpdateId),
-          Some(tx.getExternalTransactionHash)
+          Some(tx.getTransactionHash)
             .filterNot(_.isEmpty)
             .map(HexString.toHexString),
         )
@@ -463,7 +467,7 @@ trait UpdateHistoryTestUtil extends TestCommon {
       t.getSynchronizerId,
       t.getTraceContext,
       t.getRecordTime,
-      t.getExternalTransactionHash,
+      t.getTransactionHash,
       t.getPaidTrafficCost,
     )
 

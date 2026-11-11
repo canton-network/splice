@@ -1,16 +1,5 @@
 # Bumping External Dependencies
 
-## Bumping CometBFT
-
-1. Update the version in the `nix/cometbft-driver-sources.json` file
-2. Download the corresponding `canton-drivers-proto-<version>.jar` file from
-   JFrog, at `https://digitalasset.jfrog.io/ui/native/canton-drivers/com/digitalasset/canton/drivers/canton-drivers-proto/<version>/canton-drivers-proto-<version>.jar`,
-   and save it under `nix/vendored`.
-3. Update the symlink from `nix/vendored/canton-drivers-proto.jar` to point to the newly downloaded jar.
-4. Delete the older `canton-drivers-proto-<old-version>.jar` file from `nix/vendored`.
-
-// TODO(#1296): once we pull the file from s3 in nix instead of vendoring it in this repo, update the section above (should be just step 1).
-
 ## Bumping Canton
 
 1. Choose the Canton version you wish to upgrade to.
@@ -46,7 +35,7 @@ Initial setup:
 1. Check out the [Canton **Open Source** repo](https://github.com/digital-asset/canton)
 2. Define the environment variable used in the commands below using `export PATH_TO_CANTON_OSS=<your-canton-oss-repo-path>`. This can be added to your private env vars.
 
-Current Canton commit: `2fc931e1c8c4e7743e69f966d7c1b72f2373b3ff`
+Current Canton commit: `b71386ee517c6640d5ab5a8138f1436454c53380`
 
 1. Checkout the **current Canton commit listed above** in the Canton open source repo from above, so we can diff our current fork against this checkout.
 2. Change to your checkout of the Splice repo and execute the following steps:
@@ -57,7 +46,10 @@ Current Canton commit: `2fc931e1c8c4e7743e69f966d7c1b72f2373b3ff`
    4. Create a commit to ease review, `git add canton/ && git commit -s -m"Undo our changes" --no-verify`
 3. Checkout the commit of the Canton OSS repo to which you have decided to upgrade in Step 1.1
    1. Learn the Daml SDK version used by Canton from `head -n15 $PATH_TO_CANTON_OSS/project/project/DamlVersions.scala`.
-   2. The OSS repo commit will mention a "Reference commit". In Splice repo run `scripts/search-canton-snapshot.py` with this hash.
+   2. The OSS repo commit will mention a "Reference commit" and a release line such as `[release-line-3.6]`. In Splice repo run `scripts/find-canton-release.py --closed-canton <path-to-closed-canton-checkout> --oss-canton $PATH_TO_CANTON_OSS <reference-commit> <release-line>`
+      to find the closest release containing it, and use that release's version.
+      If there is none, it suggests an older OSS commit that has one. To accept that suggestion, run `git -C "$PATH_TO_CANTON_OSS" checkout <suggested-oss-commit>` and repeat the Daml SDK version lookup above before continuing.
+      Alternatively, run `scripts/search-canton-snapshot.py` with the hash to find a snapshot version.
 5. Execute the following steps in your Splice repo:
    1. Copy the Canton changes: `./scripts/copy-canton.sh $PATH_TO_CANTON_OSS`
    2. Create a commit to ease review, `git add canton/ && git commit -s -m"Bump Canton commit" --no-verify`
@@ -65,7 +57,7 @@ Current Canton commit: `2fc931e1c8c4e7743e69f966d7c1b72f2373b3ff`
    4. Create a commit to ease review `git add canton/ && git reset '*.rej' && git commit -s -m"Reapply our changes" --no-verify`
    5. Bump the SDK/Canton versions in the following places:
       1. The current Canton OSS commit in this `README.md`
-      2. The `canton_library_version` in `CantonDependencies.scala` to the value produced by `search-canton-snapshot.py` above
+      2. The `canton_library_version` in `CantonDependencies.scala` to the version found in the previous step
    6. Create another commit, `git add -A && git reset '*.rej' && git commit -s -m"Bump Canton commit" --no-verify`
 6. Check if the `protocolVersions` in our `BuildInfoKeys` in `BuildCommon.scala` needs to be bumped.
    - One way to do this is to run `start-canton.sh -w` with an updated Canton binary, and check `ProtocolVersion.latest` in the console.

@@ -35,7 +35,7 @@ object LsuTrafficState extends VersioningCompanion[LsuTrafficState] {
   override def name: String = "lsu traffic state"
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(v30.LsuTrafficState)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(v30.LsuTrafficState)(
       supportedProtoVersion(_)(fromProtoV30),
       _.toProtoV30,
     )
@@ -43,15 +43,14 @@ object LsuTrafficState extends VersioningCompanion[LsuTrafficState] {
 
   def fromProtoV30(
       request: v30.LsuTrafficState
-  ): ParsingResult[LsuTrafficState] =
-    request.lsuTrafficStates.toList
+  ): ParsingResult[LsuTrafficState] = for {
+    trafficState <- request.lsuTrafficStates.toList
       .traverse { case (memberP, stateP) =>
         for {
           member <- Member.fromProtoPrimitive(memberP, "member")
           state <- TrafficState.fromProtoV30(stateP)
         } yield member -> state
       }
-      .map(trafficState =>
-        LsuTrafficState(trafficState.toMap)(versioningTable.table(ProtoVersion(30)))
-      )
+    rpv <- LsuTrafficState.protocolVersionRepresentativeFor(ProtoVersion(30))
+  } yield LsuTrafficState(trafficState.toMap)(rpv)
 }

@@ -7,6 +7,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, UnlessShutdown}
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.sequencing.protocol.{
+  Batch,
   Deliver,
   DeliverError,
   Envelope,
@@ -26,7 +27,7 @@ object SendResult {
     * are delivered. Accordingly, the [[com.digitalasset.canton.sequencing.protocol.Deliver]] event
     * may contain an empty batch.
     */
-  final case class Success(deliver: Deliver[Envelope[?]]) extends SendResult
+  final case class Success(deliver: Deliver[Batch[Envelope[?]]]) extends SendResult
 
   /** Send caused an event that indicates that the submission was not and never will be sequenced */
   sealed trait NotSequenced extends SendResult
@@ -43,25 +44,26 @@ object SendResult {
     */
   def log(sendDescription: String, logger: TracedLogger)(
       result: UnlessShutdown[SendResult]
-  )(implicit traceContext: TraceContext): Unit = result match {
-    case UnlessShutdown.Outcome(SendResult.Success(deliver)) =>
-      logger.trace(s"$sendDescription was sequenced at ${deliver.timestamp}")
-    case UnlessShutdown.Outcome(SendResult.Error(error)) =>
-      error match {
-        case DeliverError(_, _, _, _, SequencerErrors.AggregateSubmissionAlreadySent(_), _) =>
-          logger.info(
-            s"$sendDescription was rejected by the sequencer at ${error.timestamp} because [${error.reason}]"
-          )
-        case _ =>
-          logger.warn(
-            s"$sendDescription was rejected by the sequencer at ${error.timestamp} because [${error.reason}]"
-          )
-      }
-    case UnlessShutdown.Outcome(SendResult.Timeout(sequencerTime)) =>
-      logger.warn(s"$sendDescription timed out at $sequencerTime")
-    case UnlessShutdown.AbortedDueToShutdown =>
-      logger.debug(s"$sendDescription aborted due to shutdown")
-  }
+  )(implicit traceContext: TraceContext): Unit =
+    result match {
+      case UnlessShutdown.Outcome(SendResult.Success(deliver)) =>
+        logger.trace(s"$sendDescription was sequenced at ${deliver.timestamp}")
+      case UnlessShutdown.Outcome(SendResult.Error(error)) =>
+        error match {
+          case DeliverError(_, _, _, _, SequencerErrors.AggregateSubmissionAlreadySent(_), _) =>
+            logger.info(
+              s"$sendDescription was rejected by the sequencer at ${error.timestamp} because [${error.reason}]"
+            )
+          case _ =>
+            logger.warn(
+              s"$sendDescription was rejected by the sequencer at ${error.timestamp} because [${error.reason}]"
+            )
+        }
+      case UnlessShutdown.Outcome(SendResult.Timeout(sequencerTime)) =>
+        logger.warn(s"$sendDescription timed out at $sequencerTime")
+      case UnlessShutdown.AbortedDueToShutdown =>
+        logger.debug(s"$sendDescription aborted due to shutdown")
+    }
 
   def toFutureUnlessShutdown(
       sendDescription: String

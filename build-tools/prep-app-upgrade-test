@@ -7,6 +7,9 @@ source "${TOOLS_LIB}/libcli.source"
 
 _info "Re-versioning local Daml models from x.y.z to x.y.z.123"
 find "daml"  -name '*-api-*' -prune -o -name "daml.yaml" -print -exec sed -i 's/^version: \([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)/version: \1.123/g' {} \;
+# Point the TS codegen aliases at the re-versioned packages, otherwise the npm postinstall
+# link step fails on the missing x.y.z directories. API packages are not re-versioned.
+sed -i '/"splice-api-/! s/^\(\s*"[^"]*": "[^"]*-[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)"/\1.123"/' apps/generated-packages.json
 find . -name "*.dar" -not -path "*/test/resources/daml/*" -not -path "*-current.dar" -not -path "./daml/dars/*" -exec rm {} \;
 
 base_version=$(cat LATEST_RELEASE)

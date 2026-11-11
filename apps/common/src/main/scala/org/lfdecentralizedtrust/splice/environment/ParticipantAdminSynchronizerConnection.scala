@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.environment
 
 import cats.data.OptionT
 import com.digitalasset.canton.admin.api.client.commands.ParticipantAdminCommands
+import com.digitalasset.canton.admin.api.client.data.SynchronizerConnectionConfigAccess.*
 import com.digitalasset.canton.admin.api.client.data.{
   ListConnectedSynchronizersResult,
   RegisteredSynchronizer,
@@ -12,6 +13,7 @@ import com.digitalasset.canton.admin.api.client.data.{
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data
+import com.digitalasset.canton.logging.pretty.Pretty
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.SequencerConnectionValidation
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
@@ -160,6 +162,9 @@ trait ParticipantAdminSynchronizerConnection {
   ): Future[Unit] =
     runCmd(ParticipantAdminCommands.SynchronizerConnectivity.DisconnectSynchronizer(alias))
 
+  private implicit val prettyRegisteredSynchronizer: Pretty[RegisteredSynchronizer] =
+    Pretty.adHocPrettyInstance
+
   def ensureSynchronizerRegisteredWithManualConnect(
       config: SynchronizerConnectionConfig,
       retryFor: RetryFor,
@@ -169,15 +174,14 @@ trait ParticipantAdminSynchronizerConnection {
       "manualConnect must be true when trying to register only",
     )
     retryProvider
-      .ensureThat(
+      .ensureThatO(
         retryFor,
         "synchronizer_registered_no_handshake",
         s"participant registered ${config.synchronizerAlias}",
-        isSynchronizerRegistered(config.synchronizerAlias).map(Either.cond(_, (), ())),
-        (_: Unit) => registerSynchronizer(config),
+        listSynchronizerConnectionConfig(config.synchronizerAlias).map(_.headOption),
+        registerSynchronizer(config),
         logger,
       )
-      .flatMap(_ => getRegisteredSynchronizer(config.synchronizerAlias))
   }
 
   def ensureSynchronizerRegisteredAndConnected(
@@ -193,7 +197,14 @@ trait ParticipantAdminSynchronizerConnection {
         s"participant registered ${config.synchronizerAlias} with config $config",
         lookupRegisteredSynchronizer(config.synchronizerAlias, config.psid).map {
           case Some(_) if !overwriteExistingConnection => Right(())
-          // We don't set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
+          // Canton rejects modifications of non-active connections and the connection will never become active again.
+          // Not hard-crashing as the connect might still work and reconciliation automation will eventually fix the config.
+          case Some(existing) if existing.status != data.RegisteredSynchronizer.Status.Active =>
+            logger.warn(
+              s"Connection for ${config.synchronizerAlias} with psid ${config.psid} is no longer active (status: ${existing.status}), skipping update of the connection config"
+            )
+            Right(())
+          // We don't always set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
           case Some(existingConfig)
               if ParticipantAdminConnection.dropSequencerId(
                 existingConfig.config.toInternal
@@ -229,6 +240,7 @@ trait ParticipantAdminSynchronizerConnection {
         config,
         performHandshake = false,
         SequencerConnectionValidation.ThresholdActive,
+        onboardingTransactions = Seq.empty,
       )
     )
 

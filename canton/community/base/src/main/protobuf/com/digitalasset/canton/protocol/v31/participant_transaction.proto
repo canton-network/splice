@@ -7,51 +7,12 @@ package com.digitalasset.canton.protocol.v31;
 
 import "com/digitalasset/canton/crypto/v30/crypto.proto";
 import "com/digitalasset/canton/protocol/v30/common.proto";
+import "com/digitalasset/canton/protocol/v30/merkle.proto";
 import "com/digitalasset/canton/protocol/v30/participant_transaction.proto";
 import "com/digitalasset/canton/protocol/v31/common_stable.proto";
 import "scalapb/scalapb.proto";
 
 // Messages sent by a participant as part of the transaction protocol
-
-// Compared to v30: ExternalAuthorization updated to v31
-message SubmitterMetadata {
-  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
-
-  com.digitalasset.canton.crypto.v30.Salt salt = 1;
-  repeated string act_as = 2;
-  string user_id = 3;
-  string command_id = 4;
-  string submitting_participant_uid = 5;
-  string submission_id = 6; // optional; absent if not specified by submitter
-  v30.DeduplicationPeriod dedup_period = 7;
-
-  // Max sequencing time is the time allowed for a submitted transaction to be sequenced. Typically
-  // seconds or minutes in the future.
-  int64 max_sequencing_time = 8; // in microseconds of UTC time since Unix epoch
-
-  ExternalAuthorization external_authorization = 9; // optional
-}
-
-// Compared to v30: HashingSchemeVersion V3 enum added
-message ExternalAuthorization {
-  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
-
-  // The hashing scheme version used when building the hash
-  enum HashingSchemeVersion {
-    HASHING_SCHEME_VERSION_UNSPECIFIED = 0;
-    reserved 1; // Hashing Scheme V1 - unsupported
-    HASHING_SCHEME_VERSION_V2 = 2;
-    HASHING_SCHEME_VERSION_V3 = 3;
-  }
-
-  repeated v30.ExternalPartyAuthorization authentications = 1;
-  HashingSchemeVersion hashing_scheme_version = 2;
-
-  // Max record time is an optional bit of signed metadata the allows an external signer to
-  // know an upper limit on when it must be processed by the executing participant node to be
-  // valid. Typically hours or days in the future.
-  optional int64 max_record_time = 3;
-}
 
 // Compared to v30: No LookupByKeyActionDescription
 message ActionDescription {
@@ -84,6 +45,30 @@ message ViewParticipantData {
   v30.ViewParticipantData.RollbackContext rollback_context = 7; // optional; defaults to the empty RollbackContext if omitted.
 }
 
+// Compared to v30:
+// - We no longer use v30.ViewHashAndKey (which contained view_hash + key fields).
+// - Instead, we introduce CiphertextIdAndKey, which pairs a ciphertext ID (hash), the relative position of the view
+//   inside the encrypted view array, and the corresponding session key.
+// - The view_hash is replaced by ciphertext_id + index.
+message LightTransactionViewTree {
+  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.AlphaProtoVersion";
+
+  v30.GenTransactionTree tree = 1;
+  repeated CiphertextIdAndKey subview_keys_by_ciphertext_id = 2;
+}
+
+// A ciphertext ID (hash) + index that uniquely identifies a view, together with the
+// session key randomness used to encrypt the view.
+message CiphertextIdAndKey {
+  // Hash of the ciphertext that contains the view.
+  bytes ciphertext_id = 1;
+  // Position of the view within the encrypted views array (0-based index).
+  // Together with ciphertext_hash, this forms the ciphertext ID and uniquely identifies a view.
+  int32 index = 2;
+  // The randomness used to derive the encryption key for the view
+  bytes view_encryption_key_randomness = 3;
+}
+
 // Compared to v30: Added this class
 message EncryptedMultipleViewsMessage {
   option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
@@ -106,4 +91,11 @@ message EncryptedMultipleViewsMessage {
   repeated com.digitalasset.canton.crypto.v30.AsymmetricEncrypted session_key_lookup = 5;
   string physical_synchronizer_id = 6;
   v30.ViewType view_type = 7;
+}
+
+// Compared to v30: rolled_back removed
+message CreatedContract {
+  bytes contract = 1; // Encoded ContractInstance
+  bool consumed_in_core = 2;
+  reserved 3; // was rolled_back
 }

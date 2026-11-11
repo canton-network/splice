@@ -7,8 +7,6 @@ import cats.Applicative
 import cats.data.EitherT
 import cats.syntax.either.*
 import cats.syntax.parallel.*
-import com.daml.nonempty.NonEmpty
-import com.daml.nonempty.catsinstances.*
 import com.digitalasset.canton.admin.api.client.data.{
   KnownPhysicalSynchronizerId,
   ListPartiesResult,
@@ -23,6 +21,7 @@ import com.digitalasset.canton.console.{
 import com.digitalasset.canton.crypto.{Fingerprint, SigningKeyUsage, SigningKeysWithThreshold}
 import com.digitalasset.canton.data.OnboardingTransactions
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.topology.transaction.DelegationRestriction.CanSignAllMappings
 import com.digitalasset.canton.topology.transaction.{
@@ -49,6 +48,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.EitherTUtil
 import com.digitalasset.canton.version.{HashingSchemeVersion, ProtocolVersion}
 import com.digitalasset.canton.{SynchronizerAlias, config}
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 
 import java.time.Instant
@@ -198,16 +198,18 @@ private[canton] class ExternalPartiesTestingAdministration(
     val decentralizedNamespace =
       DecentralizedNamespaceDefinition.computeNamespace(namespaceOwners.forgetNE)
     val partyId = PartyId.tryCreate(name, decentralizedNamespace.fingerprint)
-    val namespaceTx = TopologyTransaction(
-      TopologyChangeOp.Replace,
-      serial = PositiveInt.one,
-      DecentralizedNamespaceDefinition.tryCreate(
-        decentralizedNamespace,
-        namespaceThreshold,
-        namespaceOwners,
-      ),
-      protocolVersion,
-    )
+    val namespaceTx = TopologyTransaction
+      .create(
+        TopologyChangeOp.Replace,
+        serial = PositiveInt.one,
+        DecentralizedNamespaceDefinition.tryCreate(
+          decentralizedNamespace,
+          namespaceThreshold,
+          namespaceOwners,
+        ),
+        protocolVersion,
+      )
+      .valueOr(consoleEnvironment.raiseError)
     (partyId, namespaceTx)
   }
 
@@ -237,16 +239,18 @@ private[canton] class ExternalPartiesTestingAdministration(
 
       namespace = Namespace(namespaceKey.fingerprint)
 
-      namespaceTx = TopologyTransaction(
-        TopologyChangeOp.Replace,
-        serial = PositiveInt.one,
-        NamespaceDelegation.tryCreate(
-          namespace = namespace,
-          target = namespaceKey,
-          CanSignAllMappings,
-        ),
-        psid.protocolVersion,
-      )
+      namespaceTx = TopologyTransaction
+        .create(
+          TopologyChangeOp.Replace,
+          serial = PositiveInt.one,
+          NamespaceDelegation.tryCreate(
+            namespace = namespace,
+            target = namespaceKey,
+            CanSignAllMappings,
+          ),
+          psid.protocolVersion,
+        )
+        .valueOr(consoleEnvironment.raiseError)
 
       signature <- consoleEnvironment.tryGlobalCrypto.privateCrypto
         .sign(
@@ -289,6 +293,9 @@ private[canton] class ExternalPartiesTestingAdministration(
     * @param namespaceThreshold
     *   Threshold of the decentralized namespace. Only used when decentralizedNamespaceOwners is non
     *   empty.
+    * @param protocolVersion
+    *   The protocol version to create the topology transactions for, if not the synchronizer's.
+    *   Only for a party with a single key and no decentralized namespace.
     */
   @VisibleForTesting // Ensures external parties are created only in tests
   private[canton] def onboarding_transactions(
@@ -302,6 +309,7 @@ private[canton] class ExternalPartiesTestingAdministration(
       decentralizedNamespaceOwners: Set[Namespace] = Set.empty,
       namespaceThreshold: PositiveInt = PositiveInt.one,
       preferredHashingSchemeVersion: HashingSchemeVersion = HashingSchemeVersion.V2,
+      protocolVersion: Option[ProtocolVersion] = None,
   ): EitherT[FutureUnlessShutdown, String, (OnboardingTransactions, ExternalParty)] = {
     // In the simple case of a non-decentralized party with a single key we can use the generate endpoint
     if (decentralizedNamespaceOwners.isEmpty && keysCount == PositiveInt.one) {
@@ -324,6 +332,7 @@ private[canton] class ExternalPartiesTestingAdministration(
           otherConfirmingParticipantIds = additionalConfirming,
           confirmationThreshold = confirmationThreshold.toNonNegative,
           observingParticipantIds = observing,
+          protocolVersion = protocolVersion,
         )
         centralizedPTP <- EitherT.fromOption[FutureUnlessShutdown](
           onboardingTransactions.topologyTransactions.flatMap {
@@ -350,6 +359,11 @@ private[canton] class ExternalPartiesTestingAdministration(
       )
     } else {
       for {
+        _ <- EitherT.cond[FutureUnlessShutdown](
+          protocolVersion.isEmpty,
+          (),
+          "A protocol version can only be requested for a party with a single key and namespace",
+        )
         synchronizerId <- EitherT
           .fromEither[FutureUnlessShutdown](
             lookupOrDetectActivePsid(synchronizer)
@@ -421,22 +435,24 @@ private[canton] class ExternalPartiesTestingAdministration(
           HostingParticipant(_, ParticipantPermission.Observation)
         )
 
-        partyToParticipantTx = TopologyTransaction(
-          TopologyChangeOp.Replace,
-          serial = PositiveInt.one,
-          PartyToParticipant.tryCreate(
-            partyId = partyId,
-            threshold = confirmationThreshold,
-            participants = hostingConfirming ++ hostingObserving,
-            partySigningKeysWithThreshold = Some(
-              SigningKeysWithThreshold.tryCreate(
-                threshold = keysThreshold,
-                keys = protocolSigningKeys,
-              )
+        partyToParticipantTx = TopologyTransaction
+          .create(
+            TopologyChangeOp.Replace,
+            serial = PositiveInt.one,
+            PartyToParticipant.tryCreate(
+              partyId = partyId,
+              threshold = confirmationThreshold,
+              participants = hostingConfirming ++ hostingObserving,
+              partySigningKeysWithThreshold = Some(
+                SigningKeysWithThreshold.tryCreate(
+                  threshold = keysThreshold,
+                  keys = protocolSigningKeys,
+                )
+              ),
             ),
-          ),
-          protocolVersion,
-        )
+            protocolVersion,
+          )
+          .valueOr(consoleEnvironment.raiseError)
 
         onboardingTransactions <- bundle_onboarding_transactions(
           partyId = partyId,
@@ -578,17 +594,19 @@ private[canton] class ExternalPartiesTestingAdministration(
         HostingParticipant(_, ParticipantPermission.Observation)
       )
 
-      partyToParticipantTx = TopologyTransaction(
-        TopologyChangeOp.Replace,
-        serial = PositiveInt.one,
-        PartyToParticipant.tryCreate(
-          partyId = party.partyId,
-          threshold = confirmationThreshold,
-          participants = hostingConfirming ++ hostingObserving,
-          partySigningKeysWithThreshold = Some(signingKeys),
-        ),
-        protocolVersion,
-      )
+      partyToParticipantTx = TopologyTransaction
+        .create(
+          TopologyChangeOp.Replace,
+          serial = PositiveInt.one,
+          PartyToParticipant.tryCreate(
+            partyId = party.partyId,
+            threshold = confirmationThreshold,
+            participants = hostingConfirming ++ hostingObserving,
+            partySigningKeysWithThreshold = Some(signingKeys),
+          ),
+          protocolVersion,
+        )
+        .valueOr(consoleEnvironment.raiseError)
 
       onboardingTransactions <- bundle_onboarding_transactions(
         partyId = party.partyId,

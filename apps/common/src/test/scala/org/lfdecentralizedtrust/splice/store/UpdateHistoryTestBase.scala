@@ -27,6 +27,8 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import UpdateHistory.UpdateHistoryResponse
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.digitalasset.canton.config.NonNegativeDuration
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
 abstract class UpdateHistoryTestBase
     extends StoreTestBase
@@ -238,19 +240,24 @@ abstract class UpdateHistoryTestBase
       participantId: ParticipantId = participant1,
       storeName: String = storeName1,
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.NeedsBackfilling,
+      analyzableTimeWindowDuration: NonNegativeDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
   ): UpdateHistory = {
-    new UpdateHistory(
-      storage,
-      domainMigrationId,
-      storeName,
-      participantId,
-      updateStreamParty,
-      backfillingRequired,
-      loggerFactory,
-      enableissue12777Workaround = true,
-      enableImportUpdateBackfill = true,
-      HistoryMetrics.apply(NoOpMetricsFactory, domainMigrationId),
-    )
+    UpdateHistory
+      .create(
+        storage,
+        domainMigrationId,
+        storeName,
+        StoreMemberId(participantId),
+        updateStreamParty,
+        backfillingRequired,
+        internedStringStore(storage),
+        analyzableTimeWindowDuration,
+        loggerFactory,
+        enableImportUpdateBackfill = true,
+        HistoryMetrics.apply(NoOpMetricsFactory, domainMigrationId),
+      )
+      .futureValue
   }
 
   override def cleanDb(
@@ -372,7 +379,7 @@ object UpdateHistoryTestBase {
       /*traceContext = */ TraceContextOuterClass.TraceContext.getDefaultInstance, // Not preserved
 
       /*recordTime = */ tree.getRecordTime,
-      /*externalTransactionHash = */ tree.getExternalTransactionHash,
+      /*externalTransactionHash = */ tree.getTransactionHash,
       /*paidTrafficCost = */ 0L,
     )
   }
@@ -414,7 +421,8 @@ object UpdateHistoryTestBase {
       /*interfaceViews = */ java.util.Collections.emptyMap(), // Not preserved
       /*failedInterfaceViews = */ java.util.Collections.emptyMap(), // Not preserved
 
-      /*contractKey = */ created.getContractKey,
+      // Contract keys can be computed from the contract payload if you know the daml model.
+      /*contractKey = */ java.util.Optional.empty(), // Not preserved
       /*signatories = */ created.getSignatories,
       /*observers = */ created.getObservers,
       /*createdAt = */ created.getCreatedAt,

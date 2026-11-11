@@ -7,7 +7,7 @@ import {
   config,
   HELM_MAX_HISTORY_SIZE,
   imagePullSecret,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 import { local } from '@pulumi/command';
 
@@ -23,8 +23,8 @@ const secretName = (
 ).metadata.name;
 
 // If the operator version is updated the crd version might need to be upgraded as well, check the release notes https://github.com/pulumi/pulumi-kubernetes-operator/releases
-const operatorVersion = '2.6.0';
-const operatorCrdVersion = '2.6.0';
+const operatorVersion = '2.10.0';
+const operatorCrdVersion = '2.10.0';
 
 export const operator = new k8s.helm.v3.Release(
   'pulumi-kubernetes-operator',
@@ -56,7 +56,11 @@ export const operator = new k8s.helm.v3.Release(
       serviceMonitor: {
         enabled: true,
       },
-      ...infraAffinityAndTolerations,
+      flux: {
+        // The default limit of 100 MiB is too low
+        maxUntarSizeBytes: `${256 * 1024 * 1024}`,
+      },
+      ...infraKubernetesScheduling,
       maxHistory: HELM_MAX_HISTORY_SIZE,
     },
   },

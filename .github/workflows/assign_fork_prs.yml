@@ -1,11 +1,12 @@
 name: Auto-assign PRs from forks
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] needed to assign PRs from forks without running PR code
     types: [opened, reopened, edited]
 
 jobs:
   assign:
+    permissions: {}
     runs-on: ubuntu-24.04
     if: github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:

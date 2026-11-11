@@ -4,7 +4,7 @@ import cats.syntax.either._
 import cats.syntax.functorFilter._
 import java.nio.file.{Paths, Files}
 import java.nio.charset.StandardCharsets
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.console.{
   LocalInstanceReference,
   LocalMediatorReference,
@@ -23,6 +23,7 @@ import com.digitalasset.canton.topology.store.{
 }
 import com.digitalasset.canton.topology.processing.{EffectiveTime, SequencedTime}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 
 println("Running canton bootstrap script...")
 
@@ -46,7 +47,7 @@ def staticParameters(sequencer: LocalInstanceReference) =
   domainParametersConfig
     .toStaticSynchronizerParameters(
       sequencer.config.crypto,
-      ProtocolVersion.v35,
+      ProtocolVersion.v36,
       NonNegativeInt.zero,
     )
     .map(StaticSynchronizerParameters(_))
@@ -77,7 +78,7 @@ def bootstrapDomainWithUnsignedKeys(
     UniqueIdentifier.tryCreate(synchronizerName, synchronizerNamespace)
   )
   val physicalSynchronizerId =
-    PhysicalSynchronizerId(synchronizerId, NonNegativeInt.zero, ProtocolVersion.v35)
+    PhysicalSynchronizerId(synchronizerId, NonNegativeInt.zero, ProtocolVersion.v36)
 
   val tempStoreForBootstrap = synchronizerOwners
     .map(
@@ -89,12 +90,26 @@ def bootstrapDomainWithUnsignedKeys(
     .headOption
     .getOrElse(sys.error("No synchronizer owners specified."))
 
-  val identityTransactions =
+  val identityTransactionsByNode =
     ((sequencers: Seq[
       com.digitalasset.canton.console.InstanceReference
-    ]) ++ mediators ++ synchronizerOwners ++ Seq(extraParticipant)).flatMap(
-      _.topology.transactions.identity_transactions()
+    ]) ++ mediators ++ synchronizerOwners ++ Seq(extraParticipant)).map(node =>
+      node -> node.topology.transactions.generate_onboarding_transactions(
+        staticSynchronizerParameters.protocolVersion
+      )
     )
+  val identityTransactions = identityTransactionsByNode.flatMap(_._2)
+
+  // generate_onboarding_transactions does not persist the identity transactions in the node's
+  // authorized store. Sequencers and mediators initialized from the genesis state would otherwise
+  // lack their own namespace delegation there, making later OTK rotations unauthorized.
+  identityTransactionsByNode
+    .filter { case (node, _) =>
+      (sequencers ++ mediators).exists(_.id == node.id)
+    }
+    .foreach { case (node, txs) =>
+      node.topology.transactions.load(txs, store = TopologyStoreId.Authorized)
+    }
 
   synchronizerOwners.foreach(
     _.topology.transactions.load(
@@ -109,6 +124,8 @@ def bootstrapDomainWithUnsignedKeys(
       synchronizerOwners,
       synchronizerThreshold,
       store = tempStoreForBootstrap,
+      protocolVersion = staticSynchronizerParameters.protocolVersion,
+      identityTransactions = Some(identityTransactions),
     )
 
   val synchronizerGenesisTxs = synchronizerOwners.flatMap(
@@ -165,6 +182,7 @@ def bootstrapDomainWithUnsignedKeys(
             NonNegativeFiniteDuration.ofSeconds(10),
           ),
           SequencerConnectionPoolDelays.default,
+          SubscriptionLivenessLimits.default,
         ),
         // if we run bootstrap ourselves, we should have been able to reach the nodes
         // so we don't want the bootstrapping to fail spuriously here in the middle of

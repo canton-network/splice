@@ -3,17 +3,27 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.DbConfig.Postgres
 import com.digitalasset.canton.config.DbParametersConfig
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.store.db.DbStorageSetup.DbBasicConfig
-import com.digitalasset.canton.store.db.{DbStorageSetup, DbTest}
+import com.digitalasset.canton.store.db.{
+  DbStorageSetup,
+  DbTest,
+  MigrationMode,
+  PostgresCISetup,
+  PostgresDbStorageSetup,
+}
 import com.digitalasset.canton.tracing.TraceContext
 import org.scalatest.*
 import org.scalatest.exceptions.TestFailedException
+import org.testcontainers.postgresql.PostgreSQLContainer
 import slick.dbio.SuccessAction
 import slick.lifted.{Rep, TableQuery}
 
 import java.net.ServerSocket
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
@@ -74,7 +84,6 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
                 acs_store_template,
                 txlog_store_template,
                 interface_views_template,
-                incomplete_reassignments,
                 store_descriptors,
                 store_last_ingested_offsets,
                 update_history_descriptors,
@@ -101,8 +110,12 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
                 app_activity_record_meta,
                 key_value_store,
                 acs_incremental_snapshot_data_next,
+                acs_incremental_snapshot_data_next_v2,
                 acs_incremental_snapshot_data_backfill,
-                acs_incremental_snapshot
+                acs_incremental_snapshot,
+                dso_unavailable_parties,
+                votes_store_results,
+                interned_strings
             RESTART IDENTITY CASCADE""".asUpdate
           _ <- debugPrintPgActivity()
         } yield (),
@@ -162,9 +175,39 @@ trait SplicePostgresTest extends SpliceDbTest { this: Suite =>
   ): com.digitalasset.canton.config.DbConfig.Postgres =
     Postgres(
       basicConfig.toPostgresConfig,
-      parameters = DbParametersConfig(unsafeCleanOnValidationError = true),
+      parameters = DbParametersConfig(
+        unsafeCleanOnValidationError = true,
+        maxConnections = Some(PositiveInt.tryCreate(30)),
+      ),
     )
 
+  // Adapted from Canton's DbStorageSetup.postgres, which hardcodes pg17 for the testcontainers setup,
+  // but we want to use pg18 instead.
   override protected def createSetup(): DbStorageSetup =
-    DbStorageSetup.postgres(loggerFactory, migrationMode, mkDbConfig)
+    if (DbStorageSetup.useTestContainer())
+      new SplicePostgresTestContainerSetup(migrationMode, mkDbConfig, loggerFactory).initialized()
+    else new PostgresCISetup(migrationMode, mkDbConfig, None, loggerFactory).initialized()
+}
+
+// Adapted from SplicePostgresTestContainerSetup to use pg18 and removing unused command parts.
+class SplicePostgresTestContainerSetup(
+    override val migrationMode: MigrationMode,
+    override val mkDbConfig: DbBasicConfig => Postgres,
+    loggerFactory: NamedLoggerFactory,
+)(implicit override val executionContext: ExecutionContext)
+    extends PostgresDbStorageSetup(loggerFactory) {
+
+  private lazy val postgresContainer = {
+    val container = new PostgreSQLContainer("postgres:18")
+    container.setCommandParts(container.getCommandParts :+ "-c" :+ "max_connections=500")
+    container
+  }
+
+  override protected def prepareDatabase(): Unit =
+    dbStartupTimeout.await_("startup of postgres container")(Future(postgresContainer.start()))
+
+  override lazy val basicConfig: DbBasicConfig =
+    DbStorageSetup.containerBasicConfig(postgresContainer)
+
+  override protected def destroyDatabase(): Unit = postgresContainer.close()
 }

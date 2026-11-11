@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.sv.admin.http
 
 import cats.data.{EitherT, OptionT}
-import cats.syntax.applicative.*
 import cats.syntax.option.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -17,6 +16,9 @@ import com.google.protobuf.ByteString
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.Status.Code
 import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity}
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString as PekkoByteString
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingRequest
@@ -26,13 +28,17 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyResult
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.http.HttpVotesHandler
-import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_public as v0}
+import org.lfdecentralizedtrust.splice.http.v0.{
+  definitions,
+  sv_public as v0,
+  sv_public_stream as v0Stream,
+}
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource as r0
+import org.lfdecentralizedtrust.splice.http.v0.sv_public_stream.SvPublicStreamResource as rStream
 import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStoreWithIngestion}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
@@ -41,13 +47,11 @@ import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
 
-import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
 class HttpSvPublicHandler(
-    svUserName: String,
     svStoreWithIngestion: AppStoreWithIngestion[SvSvStore],
     dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
     isDevNet: Boolean,
@@ -58,11 +62,11 @@ class HttpSvPublicHandler(
     retryProvider: RetryProvider,
     dsoPartyMigration: DsoPartyMigration,
     protected val loggerFactory: NamedLoggerFactory,
-    initialRound: String,
 )(implicit
     ec: ExecutionContext,
     protected val tracer: Tracer,
 ) extends v0.SvPublicHandler[TraceContext]
+    with v0Stream.SvPublicStreamHandler[TraceContext]
     with Spanning
     with NamedLogging
     with HttpVotesHandler {
@@ -72,7 +76,7 @@ class HttpSvPublicHandler(
   private val svParty = dsoStore.key.svParty
   private val dsoParty = dsoStore.key.dsoParty
 
-  override protected val votesStore: ActiveVotesStore = dsoStore
+  override protected val activeVotesStore: ActiveVotesStore = dsoStore
   override protected val workflowId: String = this.getClass.getSimpleName
 
   /** Intended use: Other validators call this endpoint to onboard themselves,
@@ -354,35 +358,6 @@ class HttpSvPublicHandler(
     }
   }
 
-  /** Intended use: The SV app UI.
-    *
-    * Protection: None for backwards compatibility reasons
-    * TODO(DACH-NY/canton-network-internal#2106): Move to HttpSvOperatorHandler
-    */
-  override def getDsoInfo(
-      respond: r0.GetDsoInfoResponse.type
-  )()(extracted: TraceContext): Future[r0.GetDsoInfoResponse] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.getDsoInfo") { _ => _ =>
-      for {
-        latestOpenMiningRound <- dsoStore.getLatestActiveOpenMiningRound()
-        amuletRules <- dsoStore.getAssignedAmuletRules()
-        rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
-        dsoRules = rulesAndStates.dsoRules
-      } yield definitions.GetDsoInfoResponse(
-        svUser = svUserName,
-        svPartyId = svParty.toProtoPrimitive,
-        dsoPartyId = dsoParty.toProtoPrimitive,
-        votingThreshold = Thresholds.requiredNumVotes(dsoRules),
-        latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
-        amuletRules = amuletRules.toContractWithState.toHttp,
-        dsoRules = dsoRules.toHttp,
-        svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
-        initialRound = Some(initialRound),
-      )
-    }
-  }
-
   /** Intended use: A joining SV node calls this on its sponsoring SV to learn the
     * synchronizer migration id to use)
     *
@@ -401,70 +376,17 @@ class HttpSvPublicHandler(
     }
   }
 
-  /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
-    *
-    * Protection: Endpoint is protected by IP allowlisting
-    */
-  override def getCometBftNodeStatus(
-      respond: r0.GetCometBftNodeStatusResponse.type
-  )()(extracted: TraceContext): Future[
-    r0.GetCometBftNodeStatusResponse
-  ] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.getCometBftNodeStatus") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) {
-        _.nodeStatus()
-          .map(status =>
-            definitions.CometBftNodeStatusOrErrorResponse(
-              definitions.CometBftNodeStatusResponse(
-                status.nodeInfo.id,
-                status.syncInfo.catchingUp,
-                BigDecimal(status.validatorInfo.votingPower),
-              )
-            )
-          )
-      }
-    }
-  }
-
-  /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
-    *
-    * Protection: Endpoint is protected by IP allowlisting
-    */
-  override def cometBftJsonRpcRequest(
-      respond: r0.CometBftJsonRpcRequestResponse.type
-  )(
-      body: definitions.CometBftJsonRpcRequest
-  )(extracted: TraceContext): Future[r0.CometBftJsonRpcRequestResponse] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.cometBftJsonRpcRequest") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) { client =>
-        client
-          .jsonRpcCall(body.id, body.method.value, body.params.getOrElse(Map.empty))
-          .map(res =>
-            r0.CometBftJsonRpcRequestResponse.OK(
-              definitions.CometBftJsonRpcResponse(
-                res.jsonrpc,
-                res.id,
-                res.result,
-              )
-            )
-          )
-      }
-    }
-  }
-
   /** Intended use: Used by other SV operators
     *
     * Protection: Endpoint is protected by IP allowlisting
     */
   override def onboardSvPartyMigrationAuthorize(
-      respond: r0.OnboardSvPartyMigrationAuthorizeResponse.type
+      respond: rStream.OnboardSvPartyMigrationAuthorizeResponse.type
   )(
       body: definitions.OnboardSvPartyMigrationAuthorizeRequest
   )(
       extracted: TraceContext
-  ): Future[r0.OnboardSvPartyMigrationAuthorizeResponse] = {
+  ): Future[rStream.OnboardSvPartyMigrationAuthorizeResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.onboardSvPartyMigrationAuthorize") { _ => _ =>
       (for {
@@ -501,7 +423,7 @@ class HttpSvPublicHandler(
 
   private def authorizeParticipantForHostingDsoParty(
       participantId: ParticipantId
-  )(implicit tc: TraceContext): Future[r0.OnboardSvPartyMigrationAuthorizeResponse] = {
+  )(implicit tc: TraceContext): Future[rStream.OnboardSvPartyMigrationAuthorizeResponse] = {
     dsoPartyMigration
       .authorizeParticipantForHostingDsoParty(participantId)
       .fold(
@@ -510,7 +432,7 @@ class HttpSvPublicHandler(
                 .RequiredProposalNotFound(
                   partyToParticipantSerial
                 ) =>
-            r0.OnboardSvPartyMigrationAuthorizeResponseBadRequest(
+            rStream.OnboardSvPartyMigrationAuthorizeResponseBadRequest(
               definitions.ProposalNotFoundErrorResponse(
                 proposalNotFound = definitions.ProposalNotFoundErrorResponse.ProposalNotFound(
                   BigInt(partyToParticipantSerial.value)
@@ -518,12 +440,11 @@ class HttpSvPublicHandler(
               )
             )
         },
-        { acsBytes =>
-          // TODO(M3-57) consider if a more space-efficient encoding is necessary
-          val encoded = Base64.getEncoder.encodeToString(acsBytes.toByteArray)
-          r0.OnboardSvPartyMigrationAuthorizeResponseOK(
-            definitions.OnboardSvPartyMigrationAuthorizeResponse(
-              encoded
+        { acsChunks =>
+          rStream.OnboardSvPartyMigrationAuthorizeResponseOK(
+            HttpEntity(
+              ContentTypes.`application/octet-stream`,
+              Source(acsChunks.map(chunk => PekkoByteString(chunk.asReadOnlyByteBuffer()))),
             )
           )
         },
@@ -535,10 +456,10 @@ class HttpSvPublicHandler(
     * Protection: Endpoint is protected by IP allowlisting
     */
   override def onboardSvSequencer(
-      respond: r0.OnboardSvSequencerResponse.type
+      respond: rStream.OnboardSvSequencerResponse.type
   )(
       body: definitions.OnboardSvSequencerRequest
-  )(extracted: TraceContext): Future[r0.OnboardSvSequencerResponse] = {
+  )(extracted: TraceContext): Future[rStream.OnboardSvSequencerResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.onboardSvSequencer") { _ => _ =>
       Codec.decode(Codec.Sequencer)(body.sequencerId) match {
@@ -553,32 +474,20 @@ class HttpSvPublicHandler(
                 sequencerId,
               )
             )
-            .map(onboardingState =>
-              r0.OnboardSvSequencerResponseOK(
-                definitions.OnboardSvSequencerResponse(
-                  Base64.getEncoder.encodeToString(onboardingState.toByteArray)
+            .map(onboardingStateChunks =>
+              rStream.OnboardSvSequencerResponseOK(
+                HttpEntity(
+                  ContentTypes.`application/octet-stream`,
+                  Source(
+                    onboardingStateChunks
+                      .map(chunk => PekkoByteString(chunk.asReadOnlyByteBuffer()))
+                  ),
                 )
               )
             )
       }
     }
   }
-
-  private def withClientOrNotFound[T](
-      notFound: definitions.ErrorResponse => T
-  )(call: CometBftClient => Future[T])(implicit tc: TraceContext) =
-    synchronizerNodeService
-      .activeSynchronizerNode()
-      .flatMap { node =>
-        node.cometbftNode
-          .map(_.cometBftClient)
-          .fold {
-            notFound(definitions.ErrorResponse("CometBFT is not configured."))
-              .pure[Future]
-          } {
-            call
-          }
-      }
 
   private def isOnboardingConfirmed(party: PartyId)(implicit tc: TraceContext): Future[Boolean] = {
     // wait for a bit as it is possible the store ingression is not complete
@@ -677,7 +586,7 @@ class HttpSvPublicHandler(
       isCantonBftSequencer: Boolean,
       sequencerAdminConnection: SequencerAdminConnection,
       sequencerId: SequencerId,
-  )(implicit traceContext: TraceContext): Future[ByteString] = {
+  )(implicit traceContext: TraceContext): Future[Seq[ByteString]] = {
     logger.info(
       s"Waiting for sequencer $sequencerId to be onboarded before querying its onboarding state"
     )
@@ -880,6 +789,7 @@ class HttpSvPublicHandler(
                     ),
                     deduplicationOffset = offset,
                   )
+                  .recoveringAcceptedDuplicates()
                   .yieldUnit()
               }
               .value

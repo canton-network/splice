@@ -181,6 +181,11 @@ case "$SUBCOMMAND" in
               migration_complete := FALSE;
           END;
 
+          -- No history row yet: the migration hasn't been applied
+          IF migration_complete IS NULL THEN
+            migration_complete := FALSE;
+          END IF;
+
           IF NOT migration_complete THEN
             RAISE NOTICE 'Waiting for flyway migration (attempt %/%), sleeping 10s...', attempt + 1, max_attempts;
             PERFORM pg_sleep(10);
@@ -200,9 +205,11 @@ case "$SUBCOMMAND" in
         IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '$PUBLICATION_NAME') THEN
           ALTER PUBLICATION $PUBLICATION_NAME
             SET TABLE $TABLES_TO_REPLICATE_JOINED;
+           
         ELSE
           CREATE PUBLICATION $PUBLICATION_NAME
-            FOR TABLE $TABLES_TO_REPLICATE_JOINED;
+            FOR TABLE $TABLES_TO_REPLICATE_JOINED
+            WITH (publish_via_partition_root = true);
         END IF;
       END \$\$;
       COMMIT; -- otherwise fails with "cannot create logical replication slot
@@ -246,8 +253,41 @@ esac
 echo 'Uploading SQL to temporary bucket'
 gcloud storage cp "$TMP_SQL_FILE" "$GCS_URI"
 
+# Whether the instance still exists; if we can't tell, assume it does.
+instance_exists() {
+  local names
+  names=$(gcloud sql instances list --filter="name=$POSTGRES_INSTANCE_NAME" \
+    --format='value(name)') || return 0
+  grep -qFx "$POSTGRES_INSTANCE_NAME" <<<"$names"
+}
+
 echo 'Importing into CloudSQL'
-gcloud sql import sql "$POSTGRES_INSTANCE_NAME" "$GCS_URI" \
-  --database="$SCAN_APP_DATABASE_NAME" \
-  --user="$POSTGRES_USER_NAME" \
-  --quiet
+# CloudSQL runs one operation per instance at a time and rejects the
+# rest with HTTP 409. The legacy and stag-prod publications run this
+# script concurrently against the same instance, and a flag change may
+# be restarting it, so retry the import until the instance is free.
+#
+# When the whole SV is torn down, as on `cncluster reset`, the instance
+# is deleted concurrently, taking the publication and slot with it; a
+# delete then succeeds once the instance is gone.
+IMPORT_ATTEMPTS=36 # with the 15s retries, about 9 minutes
+IMPORT_RETRY_SECONDS=15
+for ((attempt = 1; ; attempt++)); do
+  if import_output=$(gcloud sql import sql "$POSTGRES_INSTANCE_NAME" "$GCS_URI" \
+    --database="$SCAN_APP_DATABASE_NAME" \
+    --user="$POSTGRES_USER_NAME" \
+    --quiet 2>&1); then
+    echo "$import_output"
+    break
+  fi
+  echo "$import_output" >&2
+  if [[ $SUBCOMMAND == delete-pub-rep-slot ]] && ! instance_exists; then
+    echo "$POSTGRES_INSTANCE_NAME no longer exists, nor its publication and slot"
+    exit 0
+  fi
+  if [[ $import_output != *'HTTPError 409'* ]] || ((attempt >= IMPORT_ATTEMPTS)); then
+    exit 1
+  fi
+  echo "Another operation is running on $POSTGRES_INSTANCE_NAME; retrying in ${IMPORT_RETRY_SECONDS}s (attempt $attempt of $IMPORT_ATTEMPTS)"
+  sleep "$IMPORT_RETRY_SECONDS"
+done

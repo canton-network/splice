@@ -3,7 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.digitalasset.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -30,12 +32,19 @@ object DbAppActivityRecordStore {
     * @param appProviderParties app providers for which app activity should be recorded
     * @param appActivityWeights activity weight (in bytes of traffic) for each app provider,
     *                           in one-to-one correspondence with appProviderParties
+    * @param submittingAppProvider the featured app that submitted the transaction, if any
+    * @param assetActivityProviderParties featured asset providers for which asset activity should be recorded
+    * @param assetActivityWeights asset activity weight (in bytes of traffic) for each asset provider,
+    *                             in one-to-one correspondence with assetActivityProviderParties
     */
-  final case class AppActivityRecordT(
+  final case class AppAndAssetActivityRecordT(
       verdictRowId: Long,
       roundNumber: Long,
       appProviderParties: Seq[String],
       appActivityWeights: Seq[Long],
+      submittingAppProvider: Option[String] = None,
+      assetActivityProviderParties: Seq[String] = Seq.empty,
+      assetActivityWeights: Seq[Long] = Seq.empty,
   )
 
   val DUMMY_VERDICT_ROW_ID: Long = -123456789L
@@ -93,6 +102,7 @@ class DbAppActivityRecordStore(
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
     isFirstSv: Boolean,
+    initialRound: Long,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -103,6 +113,7 @@ class DbAppActivityRecordStore(
     with HasCloseContext
     with org.lfdecentralizedtrust.splice.store.db.AcsQueries { self =>
 
+  private implicit val dbProfile: DbStorage.Profile = storage.profile
   val profile: slick.jdbc.JdbcProfile = PostgresProfile
 
   override protected def timeouts = new ProcessingTimeout
@@ -131,17 +142,20 @@ class DbAppActivityRecordStore(
 
   private def historyId = updateHistory.historyId
 
-  type AppActivityRecordT = DbAppActivityRecordStore.AppActivityRecordT
+  type AppAndAssetActivityRecordT = DbAppActivityRecordStore.AppAndAssetActivityRecordT
 
-  private implicit val getResultAppActivityRecord: GetResult[AppActivityRecordT] = GetResult {
-    prs =>
-      DbAppActivityRecordStore.AppActivityRecordT(
+  private implicit val getResultAppActivityRecord: GetResult[AppAndAssetActivityRecordT] =
+    GetResult { prs =>
+      DbAppActivityRecordStore.AppAndAssetActivityRecordT(
         verdictRowId = prs.<<[Long],
         roundNumber = prs.<<[Long],
         appProviderParties = stringArrayGetResult(prs).toSeq,
         appActivityWeights = longArrayGetResult(prs).toSeq,
+        submittingAppProvider = prs.<<[Option[String]],
+        assetActivityProviderParties = stringSeqGetResult(prs),
+        assetActivityWeights = longSeqGetResult(prs),
       )
-  }
+    }
 
   /** Find the earliest round with complete app activity.
     * The first ingested round may be partial, so the earliest complete round
@@ -171,7 +185,7 @@ class DbAppActivityRecordStore(
     * This round may not have all app activity records ingested.
     * Returns None if no app activity records have been ingested, ie meta row does not exist.
     */
-  def earliestIngestedRound()(implicit
+  private[store] def earliestIngestedRound()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
     val codeVersion = ingestionVersions.code
@@ -186,6 +200,32 @@ class DbAppActivityRecordStore(
       "appActivity.earliestIngestedRound",
     )
   }
+
+  override def ingestionStatusForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[RoundIngestionStatus] =
+    earliestIngestedRound().map {
+      case Some(earliestIngested) if roundNumber <= earliestIngested =>
+        // We should have data for this round but no root hash exists:
+        // a peer likely does, so delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case Some(_) =>
+        // Meta row present but round is beyond our ingested boundary —
+        // ingestion is still catching up; retry.
+        RoundIngestionStatus.Undetermined
+
+      case None if !isFirstSv =>
+        // Late-joining Scan with no ingestion boundary of its own —
+        // it might seem Undetermined is right, but peers do have one,
+        // so we delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case None =>
+        // firstSV during initial ingestion (brief startup window before
+        // the meta row is inserted) — retry.
+        RoundIngestionStatus.Undetermined
+    }
 
   /** Find the latest round with complete app activity.
     * A round is complete once the verdict ingestion has moved passed its archival.
@@ -244,56 +284,63 @@ class DbAppActivityRecordStore(
   @VisibleForTesting
   def getRecordByVerdictRowIdForTesting(verdictRowId: Long)(implicit
       tc: TraceContext
-  ): Future[Option[AppActivityRecordT]] = {
+  ): Future[Option[AppAndAssetActivityRecordT]] = {
     runQuerySingle(
       sql"""
-        select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+        select verdict_row_id, round_number, app_provider_parties, app_activity_weights,
+               submitting_app_provider, asset_activity_provider_parties, asset_activity_weights
         from #${Tables.appActivityRecords}
         where history_id = $historyId and verdict_row_id = $verdictRowId
         limit 1
-      """.as[AppActivityRecordT].headOption,
+      """.as[AppAndAssetActivityRecordT].headOption,
       "appActivity.getRecordByVerdictRowIdForTesting",
     )
   }
 
   def getRecordsByVerdictRowIds(
       verdictRowIds: Seq[Long]
-  )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
-    if (verdictRowIds.isEmpty) Future.successful(Map.empty)
-    else {
-      startedIngestingAt.flatMap {
-        case None => Future.successful(Map.empty)
-        case Some(_) =>
-          storage
-            .query(
-              (sql"""
-              select verdict_row_id, round_number, app_provider_parties, app_activity_weights
-              from #${Tables.appActivityRecords}
-              where history_id = $historyId and """ ++ inClause("verdict_row_id", verdictRowIds))
-                .as[AppActivityRecordT],
-              "appActivity.getRecordsByVerdictRowIds",
-            )
-            .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
-      }
+  )(implicit tc: TraceContext): Future[Map[Long, AppAndAssetActivityRecordT]] = {
+    NonEmpty.from(verdictRowIds) match {
+      case None => Future.successful(Map.empty)
+      case Some(verdictRowIds) =>
+        startedIngestingAt.flatMap {
+          case None => Future.successful(Map.empty)
+          case Some(_) =>
+            storage
+              .query(
+                (sql"""
+                select verdict_row_id, round_number, app_provider_parties, app_activity_weights,
+                       submitting_app_provider, asset_activity_provider_parties, asset_activity_weights
+                from #${Tables.appActivityRecords}
+                where history_id = $historyId and """ ++ DbStorage
+                  .toInClause("verdict_row_id", verdictRowIds))
+                  .as[AppAndAssetActivityRecordT],
+                "appActivity.getRecordsByVerdictRowIds",
+              )
+              .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+        }
     }
   }
 
   /** Batch insert app activity records using multi-row INSERT. */
-  private def batchInsertAppActivityRecords(items: Seq[AppActivityRecordT]) = {
+  private def batchInsertAppActivityRecords(items: Seq[AppAndAssetActivityRecordT]) = {
     if (items.isEmpty) {
       DBIO.successful(0)
     } else {
       val values = sqlCommaSeparated(
         items.map { row =>
           sql"""($historyId, ${row.verdictRowId},
-                ${row.roundNumber}, ${row.appProviderParties}, ${row.appActivityWeights})"""
+                ${row.roundNumber}, ${row.appProviderParties}, ${row.appActivityWeights},
+                ${row.submittingAppProvider},
+                ${row.assetActivityProviderParties}, ${row.assetActivityWeights})"""
         }
       )
 
       (sql"""
         insert into #${Tables.appActivityRecords}(
-          history_id, verdict_row_id, round_number, app_provider_parties, app_activity_weights
-        ) values """ ++ values).asUpdate
+          history_id, verdict_row_id, round_number, app_provider_parties, app_activity_weights,
+          submitting_app_provider, asset_activity_provider_parties, asset_activity_weights
+        ) values """ ++ values ++ sql" ON CONFLICT DO NOTHING").asUpdate
     }
   }
 
@@ -306,7 +353,7 @@ class DbAppActivityRecordStore(
     * as complete.
     */
   def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT],
+      items: Seq[AppAndAssetActivityRecordT],
       firstRecordTimeMicros: Long,
       hasTrafficSummaries: Boolean,
       firstActiveRoundO: Option[Long] = None,
@@ -320,16 +367,16 @@ class DbAppActivityRecordStore(
         }
 
     // earliestRound: the oldest round open at the earliest record_time of this batch.
-    // or (-1) on firstSV, as it is expected to have complete data for the first round.
-    val earliestRound = if (isFirstSv) Some(-1L) else firstActiveRoundO
+    // or (initialRound - 1) on firstSV, so earliestRoundWithCompleteAppActivity()
+    // returns initialRound (correct for non-zero-round bootstrap).
+    val earliestRound = if (isFirstSv) Some(initialRound - 1) else firstActiveRoundO
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available
-    //   - Bootstrapped to 0 on a fresh firstSV because
-    //     lookupLatestArchivedOpenMiningRound may not yet reflect
-    //     round 0's archival due to ingestion delay.
+    //   - Bootstrapped to initialRound on a fresh firstSV so the
+    //     complete-activity window covers the first TBAR round
     val lastArchived = lastArchivedRoundO
-      .orElse(if (isFirstSv) Some(0L) else None)
+      .orElse(if (isFirstSv) Some(initialRound) else None)
 
     for {
       _ <- insertRecords
@@ -356,7 +403,7 @@ class DbAppActivityRecordStore(
     */
   @VisibleForTesting
   def insertAppActivityRecordsForTesting(
-      items: Seq[AppActivityRecordT]
+      items: Seq[AppAndAssetActivityRecordT]
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
@@ -415,6 +462,7 @@ class DbAppActivityRecordStore(
              earliest_ingested_round, last_archived_round)
           values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
                   $earliestIngestedRound, $lastArchivedRound)
+          ON CONFLICT DO NOTHING
     """.asUpdate
 
   private def updateLastArchivedRoundDBIO(round: Long) =

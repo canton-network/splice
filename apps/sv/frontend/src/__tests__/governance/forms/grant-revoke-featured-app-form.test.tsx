@@ -13,7 +13,12 @@ import dayjs from 'dayjs';
 import { GrantRevokeFeaturedAppForm } from '../../../components/forms/GrantRevokeFeaturedAppForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -45,7 +50,7 @@ describe('Grant Featured App Form', () => {
     );
 
     expect(screen.getByTestId('grant-featured-app-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('grant-featured-app-action');
     expect(actionInput).toBeInTheDocument();
@@ -69,7 +74,7 @@ describe('Grant Featured App Form', () => {
 
     const providerInput = screen.getByTestId('grant-featured-app-idValue-title');
     expect(providerInput).toBeInTheDocument();
-    expect(providerInput.textContent).toBe('Provider Party ID');
+    expect(providerInput.textContent).toBe(CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });
@@ -112,7 +117,9 @@ describe('Grant Featured App Form', () => {
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-    expect(submitButton).not.toBeDisabled();
+    await waitFor(() => {
+      expect(submitButton).not.toBeDisabled();
+    });
   });
 
   test('expiry date must be in the future', async () => {
@@ -212,7 +219,7 @@ describe('Grant Featured App Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('activity weight is optional and is sent to backend as null when left blank', async () => {
@@ -320,6 +327,73 @@ describe('Grant Featured App Form', () => {
     });
   });
 
+  test('includes opsParties in the GrantFeaturedAppRight vote action', async () => {
+    let requestBody = '';
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        requestBody = await request.text();
+        return HttpResponse.json({});
+      })
+    );
+
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <GrantRevokeFeaturedAppForm selectedAction="SRARC_GrantFeaturedAppRight" />
+      </Wrapper>
+    );
+
+    const actionInput = screen.getByTestId('grant-featured-app-action');
+    const submitButton = screen.getByTestId('submit-button');
+
+    await user.type(screen.getByTestId('grant-featured-app-summary'), 'Summary of the proposal');
+    await user.type(screen.getByTestId('grant-featured-app-url'), 'https://example.com');
+    await user.type(screen.getByTestId('grant-featured-app-idValue'), 'a-party-id::1014912492');
+
+    // add one app operations party
+    await user.click(screen.getByTestId('grant-featured-app-opsParties-add'));
+    await user.type(
+      screen.getByTestId('grant-featured-app-opsParties-row-0'),
+      'ops-alice::1014912493'
+    );
+
+    await user.click(actionInput); // trigger provider onBlur validation
+
+    await waitFor(() => {
+      expect(screen.queryByText('Validating provider...')).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(submitButton).not.toBeDisabled();
+    });
+
+    await user.click(submitButton); // review proposal
+    await user.click(submitButton); // submit proposal
+
+    await waitFor(() => {
+      expect(requestBody).toContain('"opsParties":["ops-alice::1014912493"]');
+    });
+  });
+
+  test('warns when the provider already has a featured app right', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <GrantRevokeFeaturedAppForm selectedAction="SRARC_GrantFeaturedAppRight" />
+      </Wrapper>
+    );
+
+    // the mock returns an existing right for this provider party id
+    await user.type(screen.getByTestId('grant-featured-app-idValue'), 'a-party-id::1014912492');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('grant-featured-app-provider-warning').textContent).toMatch(
+        /already has a featured app right/
+      );
+    });
+  });
+
   test('activity weight rejects negative numbers and more than 10 decimal places', async () => {
     const user = userEvent.setup();
 
@@ -364,7 +438,9 @@ describe('Revoke Featured App Form', () => {
     fireEvent.blur(partyIdInput);
 
     await waitFor(() => {
-      expect(screen.queryByText('Loading featured app rights...')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Loading Featured Application Contract IDs...')
+      ).not.toBeInTheDocument();
     });
 
     const rightCidDropdown = screen.getByTestId('revoke-featured-app-rightCid-dropdown');
@@ -389,7 +465,7 @@ describe('Revoke Featured App Form', () => {
     );
 
     expect(screen.getByTestId('revoke-featured-app-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('revoke-featured-app-action');
     expect(actionInput).toBeInTheDocument();
@@ -409,7 +485,7 @@ describe('Revoke Featured App Form', () => {
 
     const partyIdTitle = screen.getByTestId('revoke-featured-app-partyId-title');
     expect(partyIdTitle).toBeInTheDocument();
-    expect(partyIdTitle.textContent).toBe('Provider Party ID');
+    expect(partyIdTitle.textContent).toBe(CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID);
 
     const rightCidDropdown = screen.getByTestId('revoke-featured-app-rightCid-dropdown');
     expect(rightCidDropdown).toBeInTheDocument();
@@ -431,12 +507,12 @@ describe('Revoke Featured App Form', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('revoke-featured-app-rightCid')).toHaveTextContent(
-        'No featured application rights found for this provider'
+        'No Featured Application Contract IDs found for this provider'
       );
     });
 
     expect(screen.getByTestId('revoke-featured-app-rightCid-error')).not.toHaveTextContent(
-      'No featured application rights found for this provider'
+      'No Featured Application Contract IDs found for this provider'
     );
 
     expect(screen.getByTestId('revoke-featured-app-rightCid-dropdown')).toBeDisabled();
@@ -542,7 +618,7 @@ describe('Revoke Featured App Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
     expect(screen.getByTestId('revokeProviderPartyId-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('revokeProviderPartyId-field').textContent).toBe(
       'a-party-id::1014912492'

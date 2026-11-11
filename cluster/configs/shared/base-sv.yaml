@@ -4,7 +4,6 @@ logging:
   cantonLogLevel: DEBUG
   apiRequestLogLevel: DEBUG
   cantonAsync: false
-  cometbftLogLevel: debug
 pruning:
   sequencer:
     enabled: false
@@ -23,13 +22,15 @@ participant:
   additionalEnvVars:
     - !include(./participant_pruning.yaml)
 validatorApp:
-  additionalEnvVars:
-    # enable https://github.com/canton-network/splice/pull/2499
-    - name: ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT
-      value: |
-        canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m
   resources:
     requests:
       memory: '2Gi'
     limits:
       memory: '4Gi'
+# cantonBft must be backed up before the sequencer each day (restore needs cantonBft backup <= sequencer backup)
+sequencer:
+  cloudSql:
+    backupStartTime: '02:00'
+cantonBft:
+  cloudSql:
+    backupStartTime: '00:00'

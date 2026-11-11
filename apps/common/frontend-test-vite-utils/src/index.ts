@@ -1,10 +1,13 @@
+const cacheDir = process.env.PORT ? `node_modules/.vite-${process.env.PORT}` : 'node_modules/.vite';
+
 export default {
+  cacheDir,
   test: {
     disableConsoleIntercept: true,
     environment: 'happy-dom',
     exclude: ['../lib/**'],
     silent: false,
-    testTimeout: 15000,
+    testTimeout: 30000,
     typecheck: {
       include: ['**/*.{test,spec}-d.?(c|m)[jt]s?(x)', '**/*.{test,spec}.?(c|m)[jt]s?(x)'],
     },

@@ -22,11 +22,17 @@
     "serviceAccountName": {
       "type": "string"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "ansWebUi": {
       "type": "object",
       "required": ["imageName"],
       "properties": {
         "imageName": {
+          "type": "string"
+        },
+        "secretName": {
           "type": "string"
         },
         "secretOverrides": {
@@ -146,6 +152,9 @@
         "enabled": {
           "type": "boolean"
         },
+        "secretName": {
+          "type": "string"
+        },
         "secretOverrides": {
           "type": "object",
           "properties": {
@@ -157,6 +166,14 @@
             }
           }
         }
+      }
+    },
+    "appLabels": {
+      "type": "object",
+      "properties": {
+        "validatorApp": { "type": "string" },
+        "walletWebUi": { "type": "string" },
+        "ansWebUi": { "type": "string" }
       }
     }
   },
@@ -362,6 +379,9 @@
             "secretName": {
               "type": "string"
             },
+            "bootstrapDatabaseName": {
+              "type": "string"
+            },
             "initImageName": {
               "type": "string"
             },
@@ -418,6 +438,9 @@
         "tolerations": {
           "type": "array"
         },
+        "priorityClassName": {
+          "type": "string"
+        },
         "auth": {
           "type": "object",
           "required": ["audience", "jwksUrl"],
@@ -430,6 +453,9 @@
               "type": "string",
               "pattern": "^http[s]?://.+$",
               "description": "The URL for the JWKS endpoint for the validator app API"
+            },
+            "secretName": {
+              "type": "string"
             },
             "secretOverrides": {
               "type": "object",
@@ -461,6 +487,12 @@
         },
         "disableAuth": {
           "type": "boolean"
+        },
+        "allowedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "if": {
           "properties": {

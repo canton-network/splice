@@ -9,9 +9,10 @@ import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.data.CantonTimestampExtensions.*
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
-import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.sequencing.traffic.TrafficControlErrors
 import com.digitalasset.canton.time.Clock
@@ -64,6 +65,40 @@ object ScanVerdictIngestionService {
         .filter(_ >= start)
         .filterNot(summaryTimes.contains)
   }
+
+  /** Groups a batch of verdicts by update id and returns only the update ids that
+    * appear more than once within the batch.
+    */
+  def findDuplicateUpdateIds(batch: Seq[v30.Verdict]): Map[String, Seq[(v30.Verdict, Int)]] =
+    batch.zipWithIndex.groupBy(_._1.updateId).filter(_._2.size > 1)
+
+  /** True if any verdict in the duplicate groups has an accept after another verdict. */
+  def duplicatesContainSubsequentAccept(duplicates: Map[String, Seq[(v30.Verdict, Int)]]): Boolean =
+    duplicates.exists { case (_, group) =>
+      group.drop(1).exists(_._1.verdict == v30.VerdictResult.VERDICT_RESULT_ACCEPTED)
+    }
+
+  /** Finds and logs when duplicate verdicts exist in a batch.
+    * Logs at WARN level when any duplicate is an accept, otherwise at INFO level.
+    */
+  def logDuplicateUpdateIds(batch: Seq[v30.Verdict], logger: TracedLogger)(implicit
+      tc: TraceContext
+  ): Unit = {
+    val duplicates = findDuplicateUpdateIds(batch)
+    if (duplicates.nonEmpty) {
+      val message = s"Received multiple verdicts with the same update id in the same batch. " +
+        s"Batch: ${batch.size} verdicts with record times ${batch.map(_.getRecordTime).map(CantonTimestamp.tryFromProtoTimestamp).mkString("[", ",", "]")}. " +
+        s"Duplicate verdicts: ${duplicates.values.flatten
+            .map { case (verdict, index) =>
+              s"${index} => ${verdict}"
+            }
+            .mkString("[\n", ",\n", "\n]")}"
+
+      if (duplicatesContainSubsequentAccept(duplicates))
+        logger.warn(s"$message Duplicate verdicts contains a subsequent accept.")
+      else logger.info(message)
+    }
+  }
 }
 
 class ScanVerdictIngestionService(
@@ -74,7 +109,7 @@ class ScanVerdictIngestionService(
     migrationId: Long,
     synchronizerId: SynchronizerId,
     ingestionMetrics: ScanMediatorVerdictIngestionMetrics,
-    appActivityComputationO: Option[AppActivityComputation],
+    appActivityComputation: AppActivityComputation,
     backoffClock: Clock,
     override protected val retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
@@ -107,10 +142,7 @@ class ScanVerdictIngestionService(
   private def waitForStores(): Future[Unit] =
     for {
       _ <- store.waitUntilInitialized
-      _ <- appActivityComputationO match {
-        case Some(appActivityComputation) => appActivityComputation.waitUntilInitialized
-        case None => Future.unit
-      }
+      _ <- appActivityComputation.waitUntilInitialized
     } yield ()
 
   /** When starting a fresh stream, the record time from which to start streaming */
@@ -130,7 +162,7 @@ class ScanVerdictIngestionService(
         streamVerdictsAndBatchWithTraffic(
           ingestionStart,
           currentMediatorClient,
-          synchronizerNodes.current.sequencerTrafficClient,
+          Some(synchronizerNodes.current.sequencerTrafficClient),
         )
       val completedWithCompleteF = Promise[Option[v30.VerdictsResponse.Complete]]()
       val source = currentSource
@@ -157,7 +189,7 @@ class ScanVerdictIngestionService(
                         streamVerdictsAndBatchWithTraffic(
                           successorIngestionStart,
                           successorMediatorClient,
-                          synchronizerNodes.successor.flatMap(_.sequencerTrafficClient),
+                          synchronizerNodes.successor.map(_.sequencerTrafficClient),
                         )
                           .mapMaterializedValue(_ => NotUsed)
                       case None =>
@@ -243,34 +275,38 @@ class ScanVerdictIngestionService(
           // Compute app activity records (before DB transaction).
           // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
           // the store resolves actual row_ids during insertion.
-          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO) <-
-            appActivityComputationO match {
-              case Some(appActivityComputation) =>
-                val recordTimes =
-                  verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
-                for {
-                  records <- appActivityComputation.computeActivities(summariesWithVerdicts).map {
-                    _.flatMap { case (summary, _, recordO) =>
-                      recordO.map(summary.sequencingTime -> _)
-                    }
-                  }
-                  firstActiveRoundO <- recordTimes.minOption match {
-                    case Some(minRecordTime) =>
-                      appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
-                    case None => Future.successful(None)
-                  }
-                  lastArchivedRoundO <- recordTimes.maxOption match {
-                    case Some(maxRecordTime) =>
-                      appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
-                    case None => Future.successful(None)
-                  }
-                } yield (records, firstActiveRoundO, lastArchivedRoundO)
-              case None => Future.successful((Seq.empty, None, None))
-            }
+          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO, roundByTime) <- {
+            val recordTimes =
+              verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
+            for {
+              computed <- appActivityComputation.computeActivities(summariesWithVerdicts)
+              records = computed.flatMap { case (summary, _, recordO, _) =>
+                recordO.map(summary.sequencingTime -> _)
+              }
+              roundByTime = computed.collect { case (summary, _, _, Some(round)) =>
+                summary.sequencingTime -> round
+              }.toMap
+              firstActiveRoundO <- recordTimes.minOption match {
+                case Some(minRecordTime) =>
+                  appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
+                case None => Future.successful(None)
+              }
+              lastArchivedRoundO <- recordTimes.maxOption match {
+                case Some(maxRecordTime) =>
+                  appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
+                case None => Future.successful(None)
+              }
+            } yield (records, firstActiveRoundO, lastArchivedRoundO, roundByTime)
+          }
 
           _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
+
+          itemsWithRounds = items.map { case (v, mkViews) =>
+            (v.copy(roundNumber = roundByTime.get(v.recordTime)), mkViews)
+          }
+
           _ <- store.insertVerdictsWithAppActivityRecords(
-            items,
+            itemsWithRounds,
             appActivityRecords,
             hasTrafficSummaries = summaryByTime.nonEmpty,
             firstActiveRoundO = firstActiveRoundO,
@@ -362,10 +398,7 @@ class ScanVerdictIngestionService(
       verdicts: Seq[v30.Verdict],
       summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
   )(implicit tc: TraceContext): Future[Unit] =
-    (store.appActivityRecordStoreO match {
-      case None => Future.successful(None)
-      case Some(s) => s.startedIngestingAt
-    }).map { startO =>
+    store.appActivityRecordStore.startedIngestingAt.map { startO =>
       val missingTimes = ScanVerdictIngestionService.findMissingTrafficSummaries(
         verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime)),
         summaryByTime.keySet,
@@ -396,22 +429,7 @@ class ScanVerdictIngestionService(
       .batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(_ :+ _)
       // TODO(DACH-NY/cn-test-failures#8281): Remove once we have figured out why we're getting duplicate data.
       .map(batch => {
-        val duplicates = batch.zipWithIndex
-          .groupBy(_._1.updateId)
-          .filter(_._2.size > 1)
-
-        if (duplicates.nonEmpty) {
-          logger.info(
-            s"Received multiple verdicts with the same update id in the same batch. " +
-              s"Batch: ${batch.size} verdicts with record times ${batch.map(_.getRecordTime).map(CantonTimestamp.tryFromProtoTimestamp).mkString("[", ",", "]")}. " +
-              s"Duplicate verdicts: ${duplicates.values.flatten
-                  .map { case (verdict, index) =>
-                    s"${index} => ${verdict}"
-                  }
-                  .mkString("[\n", ",\n", "\n]")}"
-          )
-        }
-
+        ScanVerdictIngestionService.logDuplicateUpdateIds(batch, logger)
         batch
       })
 

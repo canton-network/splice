@@ -36,6 +36,8 @@ import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.wallet.util.{TopupUtil, ValidatorTopupConfig}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -47,6 +49,8 @@ class AcceptTransferPreapprovalProposalTrigger(
     clock: Clock,
     participantAdminConnection: ParticipantAdminConnection,
     globalSynchronizerAlias: SynchronizerAlias,
+    scanConnection: BftScanConnection,
+    validatorTopupConfig: ValidatorTopupConfig,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -109,15 +113,31 @@ class AcceptTransferPreapprovalProposalTrigger(
       )
       for {
         validatorWallet <- ValidatorUtil.getValidatorWallet(store, walletManager)
+        commandPriority <- TopupUtil.highPriorityIncreaseBalanceForTopup(
+          scanConnection,
+          validatorWallet.store,
+          validatorTopupConfig,
+          clock,
+        )
         result <- store.lookupTransferPreapprovalByReceiverPartyWithOffset(receiverParty) flatMap {
-          case QueryResult(_, Some(_)) =>
+          // Expired pre-approvals are ignored: the receiver cannot be paid through them anymore
+          // and they may stick around for a while until the SV automation archives them.
+          case QueryResult(_, Some(existing))
+              if existing.payload.expiresAt.isAfter(clock.now.toInstant) =>
             Future.successful(
               TaskSuccess(show"TransferPreapproval for receiver $receiverParty already exists")
             )
-          case QueryResult(offset, None) =>
+          case QueryResult(offset, existing) =>
+            existing.foreach(expired =>
+              logger.info(
+                s"Accepting proposal for receiver $receiverParty as its existing TransferPreapproval " +
+                  s"${expired.contractId.contractId} expired at ${expired.payload.expiresAt}"
+              )
+            )
             validatorWallet.treasury
               .enqueueAmuletOperation(
                 operation,
+                priority = commandPriority,
                 dedup = Some(AmuletOperationDedupConfig(commandId, DedupOffset(offset))).filter(_ =>
                   transferPreapprovalConfig.proposalAcceptanceDeduplication
                 ),

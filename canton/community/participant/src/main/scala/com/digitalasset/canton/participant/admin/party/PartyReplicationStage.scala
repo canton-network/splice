@@ -4,11 +4,14 @@
 package com.digitalasset.canton.participant.admin.party
 
 import com.digitalasset.canton.participant.admin.party.PartyReplicationStatus.{
-  AcsReplicationProgress,
   Disconnected,
+  PartyReplicationError,
   PartyReplicationFailed,
+  ReplicationMode,
   ReplicationParams,
 }
+import com.digitalasset.canton.participant.admin.party.acsreplication.AcsReplicationStatus
+import com.digitalasset.canton.participant.admin.party.acsreplication.AcsReplicationStatus.AcsReplicationProgress
 
 /** The party replication stage describes the same information as the [[PartyReplicationStatus]],
   * but in a form that describes the "next action" to be taken to advance an Online Party
@@ -21,32 +24,25 @@ import com.digitalasset.canton.participant.admin.party.PartyReplicationStatus.{
 sealed trait PartyReplicationStage
 
 object PartyReplicationStage {
-
-  /** No agreement has been reached yet on the sequencer channel to be used for party replication.
-    * Stage applies to SP and TP only when a sequencer channel is to be used for party replication.
+  // Stages listed in order of occurrence
+  /** The first step of the online party replication. The PartyToParticipant topology transaction
+    * with the TP-side onboarding flag needs to be authorized by the party and TP and become visible
+    * on the Ledger API on the SP and TP.
     */
-  final case class NeedSequencerChannelAgreement(params: ReplicationParams)
+  final case class ObtainingOnboardingTopologyAuthorization(params: ReplicationParams)
       extends PartyReplicationStage
 
-  /** The sequencer channel agreement exists, but the PartyToParticipant topology transaction with
-    * the TP-side onboarding flag needs to be authorized by the party and TP and become visible on
-    * the Ledger API on the SP and TP.
-    */
-  final case object NeedToObtainOnboardingTopologyAuthorization extends PartyReplicationStage
+  final case class NeedsToReplicatePartyAcs(
+      params: ReplicationParams,
+      replicationAuthorization: PartyReplicationStatus.PartyReplicationAuthorization,
+  ) extends PartyReplicationStage
 
-  /** The sequencer-channel agreement exists and the PartyToParticipant topology transaction with
-    * the TP-side onboarding flag is authorized, but the SP and TP still need to request building
-    * and connect to the sequencer channel.
+  /** ACS replication via sequencer channel has been triggered but is not running yet because the
+    * channel negotiation hasn't been finished yet.
     */
-  final case object NeedToConnectToSequencerChannel extends PartyReplicationStage
-
-  /** The SP or TP is currently disconnected from the sequencer channel
-    *
-    * @param message
-    *   message upon disconnecting used for logging
-    */
-  final case class NeedToReconnectToDisconnectedSequencerChannel(message: String)
-      extends PartyReplicationStage
+  final case class TriggeredPartyAcsReplication(
+      params: ReplicationParams
+  ) extends PartyReplicationStage
 
   /** The party's ACS is being replicated via file import (stage applies to TP) or sequencer channel
     * (applies to SP export and TP import).
@@ -55,15 +51,18 @@ object PartyReplicationStage {
     *   party replication progress state (persisted and ephemeral, e.g. protocol processor or file
     *   importer)
     */
-  final case class ReplicatingPartyAcs(params: ReplicationParams, progress: AcsReplicationProgress)
-      extends PartyReplicationStage
+  final case class AcsReplicationInProgress(
+      params: ReplicationParams,
+      progress: AcsReplicationProgress,
+  ) extends PartyReplicationStage
 
   /** The party's ACS and concurrent contract activations are being fed to the indexer for
     * visibility via the Ledger API. This stage ends when all contract activation changes have been
     * indexed and the PartyToParticipant topology transactions with the TP-side onboarding flag
     * cleared is authorized and effective.
     */
-  final case object IndexingContractActivationChanges extends PartyReplicationStage
+  final case class IndexingContractActivationChanges(params: ReplicationParams)
+      extends PartyReplicationStage
 
   /** Party replication is finished except that any of the following pieces of state need to be
     * removed:
@@ -71,7 +70,14 @@ object PartyReplicationStage {
     *   - If exists, archive the sequencer channel agreement.
     *   - If possible, delete the activation changes for indexing.
     */
-  final case object CleaningUp extends PartyReplicationStage
+  final case class CleaningUp(params: ReplicationParams) extends PartyReplicationStage
+
+  /** Party replication is in an invalid state and cannot be recovered. If this happens, it's
+    * probably a bug.
+    * @param error
+    *   cause of the invalid state
+    */
+  final case class IsInInvalidState(error: PartyReplicationError) extends PartyReplicationStage
 
   /** Helper that determines what OnPR needs to do next or what OnPR is waiting for to advance party
     * replication.
@@ -80,42 +86,77 @@ object PartyReplicationStage {
     * @return
     *   If OnPR is still in progress and can be advanced, returns the OnPR stage.
     */
-  def fromPartyReplicationStatus(status: PartyReplicationStatus): Option[PartyReplicationStage] = {
-    def ifHaveSequencerChannelAgreement(
-        agreementO: Option[PartyReplicationStatus.SequencerChannelAgreement],
-        stage: => PartyReplicationStage,
-    ): Option[PartyReplicationStage] = agreementO.map(_ => stage)
-
+  def fromPartyReplicationStatus(status: PartyReplicationStatus): Option[PartyReplicationStage] =
     (status match {
-      case status @ PartyReplicationStatus(p, agO, auO, reO, inO, _, errO) =>
+      case status @ PartyReplicationStatus(
+            p,
+            auO,
+            reO,
+            acsReplicationO,
+            inO,
+            _,
+            replicationMode,
+            errO,
+          ) =>
         errO match {
-          case None => Option.when(status.isProgressExpected)((p, agO, auO, reO, inO, None))
+          case None =>
+            Option.when(status.isProgressExpected)(
+              (p, auO, reO, acsReplicationO, inO, replicationMode, None)
+            )
           case Some(d: Disconnected) =>
-            Option.when(status.isProgressExpected)((p, agO, auO, reO, inO, Some(d)))
+            Option.when(status.isProgressExpected)(
+              (p, auO, reO, acsReplicationO, inO, replicationMode, Some(d))
+            )
           case Some(PartyReplicationFailed(_)) => None
         }
     }).flatMap {
-      case (params, agreementO, None, None, _, None) =>
+      case (params, None, None, None, None, _, _) =>
+        Some(ObtainingOnboardingTopologyAuthorization(params))
+      // File-based replication only
+      case (
+            params,
+            Some(_),
+            Some(replicationProgress),
+            None,
+            None,
+            ReplicationMode.File,
+            None,
+          ) =>
+        Some(AcsReplicationInProgress(params, replicationProgress))
+      case (params, Some(authorization), _, None, _, ReplicationMode.SequencerChannel, None) =>
+        Some(NeedsToReplicatePartyAcs(params, authorization))
+      case (
+            params,
+            Some(_),
+            _,
+            Some(AcsReplicationStatus(_, _, _, None, false, _)),
+            None,
+            ReplicationMode.SequencerChannel,
+            None,
+          ) =>
+        Some(TriggeredPartyAcsReplication(params))
+      case (
+            params,
+            Some(_),
+            _,
+            Some(AcsReplicationStatus(_, _, Some(_), Some(replicationProgress), _, _)),
+            None,
+            ReplicationMode.SequencerChannel,
+            None,
+          ) =>
+        Some(AcsReplicationInProgress(params, replicationProgress))
+      case (params, Some(_), _, _, Some(indexingProgress), _, None) =>
         Some(
-          ifHaveSequencerChannelAgreement(
-            agreementO,
-            NeedToObtainOnboardingTopologyAuthorization,
-          ).getOrElse(NeedSequencerChannelAgreement(params))
+          if (!indexingProgress.isIndexingCurrentlyAlmostDone)
+            IndexingContractActivationChanges(params)
+          else CleaningUp(params)
         )
-      case (_, agreementO, Some(_authorization), None, _, None) =>
-        ifHaveSequencerChannelAgreement(agreementO, NeedToConnectToSequencerChannel)
-      case (_, agreementO, _, _, _, Some(Disconnected(message))) =>
-        ifHaveSequencerChannelAgreement(
-          agreementO,
-          NeedToReconnectToDisconnectedSequencerChannel(message),
-        )
-      case (params, _, _, Some(replicationProgress), None, None) =>
-        Some(ReplicatingPartyAcs(params, replicationProgress))
-      case (_, _, _, _, Some(indexingProgress), None) =>
+      case _ =>
         Some(
-          if (!indexingProgress.isIndexingCurrentlyAlmostDone) IndexingContractActivationChanges
-          else CleaningUp
+          IsInInvalidState(
+            PartyReplicationFailed(s"Party replication is in invalid state: $status")
+          )
         )
+
     }
-  }
 }

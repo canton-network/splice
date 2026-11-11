@@ -5,13 +5,13 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   CLUSTER_BASENAME,
   config,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   isMainNet,
 } from '@canton-network/splice-pulumi-common';
 import { CustomResource } from '@pulumi/kubernetes/apiextensions';
 
 import { spliceEnvConfig } from '../config/envConfig';
-import { configForStack, PulumiOperatorGracePeriod } from './config';
+import { configForStack, deploymentConf, PulumiOperatorGracePeriod } from './config';
 import { GitFluxRef } from './flux-source';
 
 export type EnvRefs = { [key: string]: unknown };
@@ -24,7 +24,9 @@ export function createEnvRefs(envSecretName: string, namespaceName: string): Env
     'AUTH0_SV_MANAGEMENT_API_CLIENT_SECRET',
     'AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID',
     'AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET',
-  ]);
+  ]).concat(
+    deploymentConf.projectsToDeploy.has('gha') ? ['GHA_RUNNER_VERSION', 'GHA_RUNNER_DIGEST'] : []
+  );
 
   const optionalEnvs = Array.from([
     'K6_USERS_PASSWORD',
@@ -75,7 +77,6 @@ export function createStackCR(
   name: string,
   projectName: string,
   namespaceName: string,
-  supportsResetOnSameCommit: boolean,
   ref: GitFluxRef,
   envRefs: EnvRefs,
   gcpSecret: k8s.core.v1.Secret,
@@ -198,14 +199,15 @@ export function createStackCR(
             },
             dir: `${ref.config.pulumiBaseDir}/${projectName}`,
           },
-          // Do not resync the stack when the commit hash matches the last one
+          // Do not resync the stack when the commit hash matches the last one.
+          // Resets force a resync by annotating the stack (see requestOperatorStackReconciliation).
           continueResyncOnCommitMatch: false,
           destroyOnFinalize: false,
           // Enforce that the stack already exists
           useLocalStackOnly: true,
           // retry if the stack is locked by another operation
           retryOnUpdateConflict: true,
-          retryMaxBackoffDurationSeconds: 600,
+          retryMaxBackoffDurationSeconds: stackConfig.retryMaxBackoffDurationSeconds,
           updateTemplate: {
             spec: {
               parallel: stackConfig.parallelism || 64,
@@ -265,7 +267,7 @@ export function createStackCR(
               resources: stackConfig.resources,
               podTemplate: {
                 spec: {
-                  ...infraAffinityAndTolerations,
+                  ...infraKubernetesScheduling,
                   terminationGracePeriodSeconds: PulumiOperatorGracePeriod,
                   volumes: [
                     {
@@ -295,14 +297,6 @@ export function createStackCR(
             },
           },
         },
-        ...(supportsResetOnSameCommit
-          ? {
-              continueResyncOnCommitMatch: true,
-              resyncFrequencySeconds: 300,
-              // TODO(#16186): consider scaling down the operator instead
-              refresh: true,
-            }
-          : {}),
       },
     },
     {

@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.environment
 
 import cats.data.EitherT
+import com.daml.grpc.AuthCallCredentials
 import org.lfdecentralizedtrust.splice.admin.api.client.TraceContextPropagation.*
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
 import org.lfdecentralizedtrust.splice.admin.api.client.{
@@ -15,6 +16,7 @@ import org.lfdecentralizedtrust.splice.admin.api.client.{
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import com.digitalasset.canton.admin.api.client.commands.AdminCommandAccess.*
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand
 import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   CustomClientTimeout,
@@ -23,6 +25,7 @@ import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.{
   ServerEnforcedTimeout,
   TimeoutType,
 }
+import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommandAccess.*
 import com.digitalasset.canton.config.{ApiLoggingConfig, ClientConfig}
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.lifecycle.LifeCycle.CloseableChannel
@@ -32,13 +35,13 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.ClientChannelBuilder
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
 import com.digitalasset.canton.util.EitherTUtil
-import com.digitalasset.canton.util.ShowUtil.*
 import io.circe.Json
-import io.grpc.{CallCredentials, Deadline, Status}
+import io.grpc.{Deadline, Status}
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, MediaTypes, StatusCode, Uri}
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.util.ByteString
+import org.lfdecentralizedtrust.splice.auth.AuthTokenProvider
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -173,6 +176,7 @@ abstract class AppConnection(
     apiLoggingConfig: ApiLoggingConfig,
     override val loggerFactory: NamedLoggerFactory,
     grpcClientMetrics: GrpcClientMetrics,
+    tokenProvider: AuthTokenProvider,
 )(implicit ec: ExecutionContextExecutor)
     extends BaseAppConnection(loggerFactory)
     with FlagCloseableAsync
@@ -196,7 +200,6 @@ abstract class AppConnection(
   // instead of turning everything into a String.
   protected def runCmd[Req, Res, Result](
       cmd: GrpcAdminCommand[Req, Res, Result],
-      credentials: Option[CallCredentials] = None,
       timeoutOverride: Option[TimeoutType] = None,
   )(implicit traceContext: TraceContext): Future[Result] = {
     val dso =
@@ -210,28 +213,27 @@ abstract class AppConnection(
           new GrpcMetricsClientInterceptor(grpcClientMetrics),
         )
 
-    val dsoAuth = credentials match {
-      case Some(creds) => dso.withCallCredentials(creds)
-      case None => dso
-    }
-
-    val timeout = timeoutOverride.getOrElse(cmd.timeoutType) match {
-      case ServerEnforcedTimeout =>
-        None
-      case CustomClientTimeout(timeout) =>
-        Some(timeout)
-      case DefaultBoundedTimeout =>
-        Some(timeouts.default)
-      case DefaultUnboundedTimeout =>
-        Some(timeouts.unbounded)
-    }
-    val withDeadline = timeout.map(_.duration) match {
-      case Some(finite: FiniteDuration) =>
-        dsoAuth.withDeadline(Deadline.after(finite.length, finite.unit))
-      case _ => dsoAuth
-    }
-
     for {
+      maybeToken <- tokenProvider.getToken
+      dsoAuth = maybeToken match {
+        case Some(token) => dso.withCallCredentials(new AuthCallCredentials(token.accessToken))
+        case None => dso
+      }
+      timeout = timeoutOverride.getOrElse(cmd.timeoutType) match {
+        case ServerEnforcedTimeout =>
+          None
+        case CustomClientTimeout(timeout) =>
+          Some(timeout)
+        case DefaultBoundedTimeout =>
+          Some(timeouts.default)
+        case DefaultUnboundedTimeout =>
+          Some(timeouts.unbounded)
+      }
+      withDeadline = timeout.map(_.duration) match {
+        case Some(finite: FiniteDuration) =>
+          dsoAuth.withDeadline(Deadline.after(finite.length, finite.unit))
+        case _ => dsoAuth
+      }
       req <- toFuture(cmd.createRequestInternal())
       response <- TraceContextGrpc.withGrpcContext(traceContext)(
         cmd.submitRequestInternal(withDeadline, req)
@@ -272,16 +274,6 @@ abstract class HttpAppConnection(
       config.url,
       HttpAdminAppClient.GetHealthStatus[SpliceStatus](basePath, SpliceStatus.fromHttp),
     )
-
-  // Fails the future if the node is not active for easy use in waitUntil
-  def checkActive(): Future[Unit] =
-    getStatus().map { status =>
-      if (!status.isActive.getOrElse(false)) {
-        throw Status.FAILED_PRECONDITION
-          .withDescription(show"Node is not active, current status $status")
-          .asRuntimeException()
-      }
-    }
 
   private def getHttpAppVersionInfo(): Future[HttpAdminAppClient.VersionInfo] = {
     runHttpCmd(

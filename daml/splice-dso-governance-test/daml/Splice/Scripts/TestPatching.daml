@@ -12,6 +12,7 @@ import DA.Set()
 import DA.Set qualified as Set
 import DA.Map()
 import qualified DA.Map as Map
+import DA.TextMap qualified as TextMap
 
 import Splice.Util
 
@@ -81,6 +82,23 @@ testPatchMap = script do
   where
     test new base current = do
       patch (Map.fromList [("a", new)]) (Map.fromList [("a", base)]) (Map.fromList [("a", current), ("b", base)]) === (Map.fromList [("a", patch new base current), ("b", base)])
+
+testPatchTextMap : Script ()
+testPatchTextMap = script do
+    -- no change applied
+    patch (TextMap.fromList [("a", 1)]) (TextMap.fromList [("a", 1)]) (TextMap.fromList [("a", 1), ("b", 2)]) === (TextMap.fromList [("a", 1), ("b", 2)])
+    -- addition of new (key, value)
+    patch (TextMap.fromList [("a", 1), ("c", 3)]) (TextMap.fromList [("a", 1)]) (TextMap.fromList [("a", 1), ("b", 2)]) === (TextMap.fromList [("a", 1), ("b", 2), ("c", 3)])
+    -- removal of existing (key, value)
+    patch (TextMap.fromList []) (TextMap.fromList [("a", 1)]) (TextMap.fromList [("a", 1), ("b", 2)]) === (TextMap.fromList [("b", 2)])
+    -- change of value for existing key
+    test 1 10 2
+    test "a" "b" "c"
+    test (TextMap.fromList [("a", 1), ("b", 2)]) (TextMap.fromList [("b", 2), ("c", 3)]) (TextMap.fromList [("b", 2), ("d", 4)])
+    test (RecordValue 2 2) (RecordValue 2 3) (RecordValue 5 4)
+  where
+    test new base current = do
+      patch (TextMap.fromList [("a", new)]) (TextMap.fromList [("a", base)]) (TextMap.fromList [("a", current), ("b", base)]) === (TextMap.fromList [("a", patch new base current), ("b", base)])
 
 testPatchOptional : Script ()
 testPatchOptional = script do

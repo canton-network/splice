@@ -18,7 +18,7 @@
     - [Running The Preflight Check](#running-the-preflight-check)
       - [Configure Auth0 Environment](#configure-auth0-environment)
       - [Configure SV Web UI Password](#configure-sv-web-ui-password)
-    - [Setting up `lnav` to Inspect Canton and CometBFT logs](#setting-up-lnav-to-inspect-canton-and-cometbft-logs)
+    - [Setting up `lnav` to Inspect Canton logs](#setting-up-lnav-to-inspect-canton-logs)
       - [Using `lnav` to inspect logs from Docker compose containers](#using-lnav-to-inspect-logs-from-docker-compose-containers)
     - [Handling Errors in Integration Tests](#handling-errors-in-integration-tests)
     - [Connecting external tools to the shared Canton instances](#connecting-external-tools-to-the-shared-canton-instances)
@@ -80,14 +80,11 @@ There are two types of cluster tests that can be requested on a PR:
 - A basic cluster test, which deploys a scratch cluster, and runs the test suite against it.
 - A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
 
-To request a cluster test to be run on your PR, comment on your pr `/cluster_test`, `/upgrade_test`, `/hdm_test` or `/lsu_test`
-for a basic test, a hard-migration test or a logical synchronizer upgrade test respectively. After commenting,
-the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
+To request a cluster test to be run on your PR, comment `/cluster_test` on the PR. The job will paste a comment with instructions for
+maintainers.
+To request an `/upgrade_test`, `/hdm_test` or `/lsu_test`,
+comment on your PR. After commenting, the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
 contact an existing maintainer to approve it.
-
-### Enabling the new Canton bft ordering layer
-
-If you want to run the integration tests with the new Canton bft, you can do so by including the message `[bft]` in your commit message.
 
 ## Running Tests Locally
 
@@ -103,6 +100,9 @@ There are 3 tmux windows open in the tmux session for Canton in wallclock time, 
 toxyproxy. You can switch between those with `Ctrl-b w`.
 
 We recommend including a mode flag (`-w` for wallclock tests or `-s` for simtime tests); running `./start-canton.sh` without one will double what is needed. In that case, you will end up with 2 tmux windows.
+
+Like our participant images, Canton started this way does not allow downloading private keys by default.
+Tests that need to do such things need Canton to be started with `-k`, e.g., `./start-canton.sh -wk`.
 
 You should only need to restart it if you change
 `apps/app/src/test/resources/simple-topology-canton.conf`. If you
@@ -236,17 +236,6 @@ If you run integration tests using sbt, we recommend running them within `apps-a
 Documentation about common pitfalls when writing new integration tests and debugging existing ones can be found [here](/apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration/tests/README.md).
 If you wish to extend our testing topology please also consult [this README](/apps/app/src/test/resources/README.md) about name and port allocation.
 
-### Enabling the new Canton bft ordering layer
-
-If you want to run the integration tests locally with the new Canton bft, canton must be started with the `-e` flag.
-This can be done by running `./start-canton.sh -we`.
-Furthermore the integration test must run with the `SPLICE_USE_CANTON_BFT_SEQUENCER` environment variable set to `true`.
-Eg of test run:
-
-```bash
- SPLICE_USE_CANTON_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
-```
-
 ### Testing App Behaviour Outside of Tests Without Running Bundle
 
 Sometimes, you may need to debug startup behaviour of the Splice apps that is causing issues for the
@@ -339,16 +328,15 @@ For testing that we can interact with the web UIs of our own SVs (sv1-4), the pr
 At the moment all 4 SVs share the same password, which needs to be configured via the `SV_DEV_NET_WEB_UI_PASSWORD` environment variable.
 Contact the Maintainers for the currently used password.
 
-### Setting up `lnav` to Inspect Canton and CometBFT logs
+### Setting up `lnav` to Inspect Canton logs
 
-If you have never used `lnav` to inspect Canton or CometBFT logs, then we recommend:
+If you have never used `lnav` to inspect Canton logs, then we recommend:
 
 1. Call `lnav --help` to determine the configuration directory. It should be something like `~/.lnav` or `~/.config/lnav`.
 2. Set `export LNAV_CONFIG_DIR=<the directory output by the help text above>`
-3. Create the following symlinks to automatically keep the format definitions up to date:
+3. Create the following symlink to automatically keep the format definition up to date:
    ```
    ln -sf $PWD/canton/canton-json.lnav.json $LNAV_CONFIG_DIR/formats/installed/canton_logstash_json.json
-   ln -sf $PWD/network-health/cometbft-json.lnav.json $LNAV_CONFIG_DIR/formats/installed/cometbft-json.json
    ```
 4. Type `lnav log/canton_network_test.clog` to inspect the test logs.
 5. Take the time to familiarize yourself with docs for the `lnav` [UI](https://docs.lnav.org/en/latest/ui.html#ui)

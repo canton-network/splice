@@ -53,9 +53,20 @@ class HttpScanProxyHandler(
       for {
         dsoInfo <- scanConnection.getDsoInfo()
       } yield {
-        respond.OK(
-          dsoInfo
-        )
+        respond.OK(dsoInfo.toHttp)
+      }
+    }
+  }
+
+  override def getDsoInfoV1(
+      respond: v0.ScanproxyResource.GetDsoInfoV1Response.type
+  )()(tUser: AuthenticatedRequest): Future[v0.ScanproxyResource.GetDsoInfoV1Response] = {
+    implicit val AuthenticatedRequest(_, traceContext) = tUser
+    withSpan(s"$workflowId.getDsoInfoV1") { implicit traceContext => _ =>
+      for {
+        dsoInfo <- scanConnection.getDsoInfoV1()
+      } yield {
+        respond.OK(dsoInfo.toHttp)
       }
     }
   }

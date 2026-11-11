@@ -11,6 +11,7 @@ import com.digitalasset.canton.connection.GrpcApiInfoService
 import com.digitalasset.canton.connection.v30.ApiInfoServiceGrpc
 import com.digitalasset.canton.crypto.SynchronizerCryptoClient
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30.{
@@ -104,7 +105,7 @@ final class MediatorRuntime(
       // the future returned by startup will not be complete, because any topology transactions pushed to the
       // synchronizer aren't actually processed until after the runtime is up and ... running
       _ <- synchronizerOutbox.startup()
-      _ <- EitherT.right(FutureUnlessShutdown.outcomeF(pruningScheduler.start()))
+      _ <- EitherT.right(pruningScheduler.start())
     } yield ()
 
   override protected def onClosed(): Unit =

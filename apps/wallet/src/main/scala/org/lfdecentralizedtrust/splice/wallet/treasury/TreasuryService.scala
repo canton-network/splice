@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.wallet.treasury
 
 import com.daml.ledger.javaapi.data.codegen.{Exercised, Update}
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.ValidatorRight
@@ -62,7 +63,9 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
 import org.lfdecentralizedtrust.splice.wallet.config.TreasuryConfig
+import org.lfdecentralizedtrust.splice.wallet.metrics.TreasuryMetrics
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
+import org.lfdecentralizedtrust.splice.wallet.util.DevelopmentFundCouponUtil
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService.*
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.base.error.utils.ErrorDetails.ErrorInfoDetail
@@ -72,6 +75,7 @@ import com.digitalasset.canton.lifecycle.{
   AsyncOrSyncCloseable,
   FlagCloseableAsync,
   RunOnClosing,
+  SyncCloseable,
 }
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{
@@ -108,7 +112,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   transferinstructionv2,
 }
 
-import java.time.Instant
+import java.time.{Duration, Instant}
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters.*
@@ -145,61 +149,72 @@ class TreasuryService(
   // Setting the weight > batch size ensures they go in a batch of their own
   private val BatchWithOneOperation = treasuryConfig.batchSize.toLong + 1L
 
-  private val queue: BoundedSourceQueue[EnqueuedOperation] = {
+  private val queue: BoundedSourceQueue[QueuedOperation] = {
     val queue = Source
-      .queue[EnqueuedOperation](treasuryConfig.queueSize)
-      .batchWeighted[OperationBatch](
+      .queue[QueuedOperation](treasuryConfig.queueSize)
+      .batchWeighted[QueuedBatch](
         treasuryConfig.batchSize.toLong,
-        {
-          case amuletOp: EnqueuedAmuletOperation =>
-            if (amuletOp.priority == CommandPriority.High || amuletOp.dedup.isDefined) {
+        queued =>
+          queued.operation match {
+            case amuletOp: EnqueuedAmuletOperation =>
+              if (amuletOp.priority == CommandPriority.High || amuletOp.dedup.isDefined) {
+                BatchWithOneOperation
+              } else 1L
+            case _: EnqueuedTokenStandardTransferOperationV1 =>
               BatchWithOneOperation
-            } else 1L
-          case _: EnqueuedTokenStandardTransferOperationV1 =>
-            BatchWithOneOperation
-          case _: EnqueuedTokenStandardTransferOperationV2 =>
-            BatchWithOneOperation
-          case _: EnqueuedAmuletAllocationOperation =>
-            BatchWithOneOperation
-          case _: EnqueuedAmuletAllocationV2Operation =>
-            BatchWithOneOperation
-        },
-        {
-          case amuletOp: EnqueuedAmuletOperation =>
-            AmuletOperationBatch(amuletOp)
-          case tsOp: EnqueuedTokenStandardTransferOperationV1 =>
-            TokenStandardOperationV1Batch(tsOp)
-          case tsOp: EnqueuedTokenStandardTransferOperationV2 =>
-            TokenStandardOperationV2Batch(tsOp)
-          case allOp: EnqueuedAmuletAllocationOperation =>
-            AmuletAllocationOperationBatch(allOp)
-          case allOp: EnqueuedAmuletAllocationV2Operation =>
-            AmuletAllocationV2OperationBatch(allOp)
-        },
-      ) {
-        case (batch: AmuletOperationBatch, operation: EnqueuedAmuletOperation) =>
-          batch.addCOToBatch(operation)
-        case (_: TokenStandardOperationV1Batch, _: EnqueuedTokenStandardTransferOperationV1) |
-            (_: TokenStandardOperationV2Batch, _: EnqueuedTokenStandardTransferOperationV2) =>
-          throw new IllegalStateException(
-            "Token standard batches cannot contain more than one element. This is a bug."
-          )
-        case (batch, operation) =>
-          throw new IllegalStateException(
-            s"Batch is ${batch.getClass.getName} while operation is ${operation.getClass.getName}. This is a bug."
-          )
+            case _: EnqueuedTokenStandardTransferOperationV2 =>
+              BatchWithOneOperation
+            case _: EnqueuedAmuletAllocationOperation =>
+              BatchWithOneOperation
+            case _: EnqueuedAmuletAllocationV2Operation =>
+              BatchWithOneOperation
+          },
+        queued =>
+          QueuedBatch(
+            queued.operation match {
+              case amuletOp: EnqueuedAmuletOperation =>
+                AmuletOperationBatch(amuletOp)
+              case tsOp: EnqueuedTokenStandardTransferOperationV1 =>
+                TokenStandardOperationV1Batch(tsOp)
+              case tsOp: EnqueuedTokenStandardTransferOperationV2 =>
+                TokenStandardOperationV2Batch(tsOp)
+              case allOp: EnqueuedAmuletAllocationOperation =>
+                AmuletAllocationOperationBatch(allOp)
+              case allOp: EnqueuedAmuletAllocationV2Operation =>
+                AmuletAllocationV2OperationBatch(allOp)
+            },
+            Vector(queued.enqueuedAt),
+          ),
+      ) { (queuedBatch, queued) =>
+        val batch = (queuedBatch.batch, queued.operation) match {
+          case (batch: AmuletOperationBatch, operation: EnqueuedAmuletOperation) =>
+            batch.addCOToBatch(operation)
+          case (_: TokenStandardOperationV1Batch, _: EnqueuedTokenStandardTransferOperationV1) |
+              (_: TokenStandardOperationV2Batch, _: EnqueuedTokenStandardTransferOperationV2) =>
+            throw new IllegalStateException(
+              "Token standard batches cannot contain more than one element. This is a bug."
+            )
+          case (batch, operation) =>
+            throw new IllegalStateException(
+              s"Batch is ${batch.getClass.getName} while operation is ${operation.getClass.getName}. This is a bug."
+            )
+        }
+        QueuedBatch(batch, queuedBatch.enqueuedAts :+ queued.enqueuedAt)
       }
-      // Execute the batches sequentially to avoid contention
-      .mapAsync(1) {
-        case amuletBatch: AmuletOperationBatch => filterAndExecuteBatch(amuletBatch)
-        case TokenStandardOperationV1Batch(operation) =>
-          executeTokenStandardTransferOperationV1(operation)
-        case TokenStandardOperationV2Batch(operation) =>
-          executeTokenStandardTransferOperationV2(operation)
-        case AmuletAllocationOperationBatch(operation) =>
-          executeAmuletAllocationOperation(operation)
-        case AmuletAllocationV2OperationBatch(operation) =>
-          executeAmuletAllocationV2Operation(operation)
+      .mapAsync(1) { queuedBatch =>
+        recordQueueLatencies(queuedBatch)
+        metrics.batchSize.update(queuedBatch.enqueuedAts.size)(MetricsContext.Empty)
+        queuedBatch.batch match {
+          case amuletBatch: AmuletOperationBatch => filterAndExecuteBatch(amuletBatch)
+          case TokenStandardOperationV1Batch(operation) =>
+            executeTokenStandardTransferOperationV1(operation)
+          case TokenStandardOperationV2Batch(operation) =>
+            executeTokenStandardTransferOperationV2(operation)
+          case AmuletAllocationOperationBatch(operation) =>
+            executeAmuletAllocationOperation(operation)
+          case AmuletAllocationV2OperationBatch(operation) =>
+            executeAmuletAllocationV2Operation(operation)
+        }
       }
       .toMat(
         Sink.onComplete(result0 => {
@@ -217,6 +232,12 @@ class TreasuryService(
     )(TraceContext.empty)
     queue
   }
+
+  private val metrics: TreasuryMetrics = new TreasuryMetrics(
+    userStore.key.endUserParty,
+    retryProvider.metricsFactory,
+    () => queue.size().toLong,
+  )
 
   retryProvider.runOnOrAfterClose_(new RunOnClosing {
     override def name: String = s"terminate amulet operation batch executor"
@@ -239,7 +260,8 @@ class TreasuryService(
         "waiting for amulet operation batch executor shutdown",
         queueTerminationResult.future,
         timeouts.shutdownShort,
-      )
+      ),
+      SyncCloseable("treasury metrics", metrics.close()),
     )
 
   override def isHealthy: Boolean = !queueTerminationResult.isCompleted
@@ -409,7 +431,7 @@ class TreasuryService(
       show"Received operation (queue size before adding this: ${queue.size()}): $operation"
     )
     queue.offer(
-      operation
+      QueuedOperation(operation, clock.now)
     ) match {
       case Enqueued =>
         logger.debug(show"Operation $operation enqueued successfully")
@@ -429,6 +451,13 @@ class TreasuryService(
           closingException(operation)
         )
     }
+  }
+
+  private def recordQueueLatencies(queuedBatch: QueuedBatch): Unit = {
+    val now = clock.now.toInstant
+    queuedBatch.enqueuedAts.foreach(enqueuedAt =>
+      metrics.recordQueueLatency(Duration.between(enqueuedAt.toInstant, now))
+    )
   }
 
   private def closingException(operation: EnqueuedOperation) =
@@ -648,7 +677,10 @@ class TreasuryService(
       (offset, result) <- batch.dedup match {
         case None => baseSubmission.noDedup.yieldResultAndOffset()
         case Some(dedup) =>
-          baseSubmission.withDedup(dedup.commandId, dedup.config).yieldResultAndOffset()
+          baseSubmission
+            .withDedup(dedup.commandId, dedup.config)
+            .recoveringAcceptedDuplicates(dedup.recoverAcceptedDuplicates)
+            .yieldResultAndOffset()
       }
 
       // wait for store to ingest the new amulet holdings, then return all outcomes to the callers
@@ -813,7 +845,10 @@ class TreasuryService(
       (offset, result) <- operation.dedup match {
         case None => baseSubmission.noDedup.yieldResultAndOffset()
         case Some(dedup) =>
-          baseSubmission.withDedup(dedup.commandId, dedup.config).yieldResultAndOffset()
+          baseSubmission
+            .withDedup(dedup.commandId, dedup.config)
+            .recoveringAcceptedDuplicates(dedup.recoverAcceptedDuplicates)
+            .yieldResultAndOffset()
       }
       _ <- userStore.signalWhenIngestedOrShutdown(offset)
     } yield {
@@ -1264,9 +1299,10 @@ class TreasuryService(
       tc: TraceContext
   ): Future[(BigDecimal, Seq[(BigDecimal, InputDevelopmentFundCoupon)])] =
     for {
-      developmentFundCouponsInputs <- userStore.listDevelopmentFundCoupons(
-        PageLimit.tryCreate(maxNumInputs)
-      )
+      allDevelopmentFundCoupons <- userStore.listDevelopmentFundCoupons()
+      developmentFundCouponsInputs = allDevelopmentFundCoupons
+        .filter(DevelopmentFundCouponUtil.isMintable(_, clock.now.toInstant))
+        .take(maxNumInputs)
       developmentFundCouponsQuantity = developmentFundCouponsInputs
         .map(coupon => scala.math.BigDecimal(coupon.payload.amount))
         .sum
@@ -1443,6 +1479,11 @@ object TreasuryService {
     )
   }
 
+  private case class QueuedOperation(operation: EnqueuedOperation, enqueuedAt: CantonTimestamp)
+
+  /** A batch together with the times at which its operations were put on the treasury queue. */
+  private case class QueuedBatch(batch: OperationBatch, enqueuedAts: Vector[CantonTimestamp])
+
   private sealed trait EnqueuedOperation extends PrettyPrinting {
     type Result
     val outcomePromise: Promise[Result]
@@ -1559,9 +1600,14 @@ object TreasuryService {
       }
   }
 
+  /** @param recoverAcceptedDuplicates
+    *   set by client calls, so that a duplicate of an already-accepted submission returns the
+    *   original result. Automation leaves it off and lets its own retry handle the duplicate.
+    */
   final case class AmuletOperationDedupConfig(
       commandId: CommandId,
       config: DedupConfig,
+      recoverAcceptedDuplicates: Boolean = false,
   ) extends PrettyPrinting {
     override def pretty: Pretty[AmuletOperationDedupConfig.this.type] =
       prettyNode("DedupConfig", param("commandId", _.commandId), param("config", _.config))

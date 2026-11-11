@@ -36,32 +36,49 @@ testAllocateDevelopmentFundCoupon = do
     reason = "Bob fixed issue XXX"
     firstAllocationAmount = 10.0
     secondAllocationAmount = totalAmount - firstAllocationAmount
+    -- Kept far shorter than the delay used on production, so that the coupons allocated
+    -- below stay mintable well before they expire.
+    minMintingDelay = minutes 1
+    mintAfter = addRelTime now (minutes 2)
 
   -- Unhappy - DevelopmentFundCoupon cannot be allocated without a Development Fund manager configured
   allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty firstAllocationAmount
-    expiresAt reason unclaimedDevelopmentFundCouponCids
+    expiresAt reason unclaimedDevelopmentFundCouponCids (Some mintAfter)
 
   -- Set 5% and Alice as the fund manager
   replaceDevelopmentFundConfig app baseConfig (Some alice.primaryParty) (Some 0.05)
+  setMinDevelopmentFundMintingDelay app minMintingDelay
 
   -- Unhappy - expiresAt is in the past
   let invalidExpiresAt = addRelTime now (minutes (-1))
   allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty firstAllocationAmount
-    invalidExpiresAt reason unclaimedDevelopmentFundCouponCids
+    invalidExpiresAt reason unclaimedDevelopmentFundCouponCids (Some mintAfter)
 
   -- Unhappy - controller must be the configured Development Fund manager (alice)
   allocateDevelopmentFundCouponMustFail app bob.primaryParty bob.primaryParty firstAllocationAmount
-    expiresAt reason unclaimedDevelopmentFundCouponCids
+    expiresAt reason unclaimedDevelopmentFundCouponCids (Some mintAfter)
+
+  -- Unhappy - a mintAfter time is required once a minimum minting delay is configured
+  allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty firstAllocationAmount
+    expiresAt reason unclaimedDevelopmentFundCouponCids None
+
+  -- Unhappy - mintAfter is not at least minDevelopmentFundMintingDelay in the future
+  allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty firstAllocationAmount
+    expiresAt reason unclaimedDevelopmentFundCouponCids (Some (addRelTime now (seconds 30)))
+
+  -- Unhappy - mintAfter is not before expiresAt
+  allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty firstAllocationAmount
+    expiresAt reason unclaimedDevelopmentFundCouponCids (Some expiresAt)
 
   -- Unhappy - insufficient amount to cover the requested allocation
   allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty (totalAmount + 1.0)
-    expiresAt reason unclaimedDevelopmentFundCouponCids
+    expiresAt reason unclaimedDevelopmentFundCouponCids (Some mintAfter)
 
   -- Happy - Development Fund coupon allocated with UnclaimedDevelopmentFundCoupon leftover
   AmuletRules_AllocateDevelopmentFundCouponResult
     { developmentFundCouponCid, optUnclaimedDevelopmentFundCouponCid = Some leftOverUnclaimedDevelopmentFundCouponCid } <-
     allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty firstAllocationAmount
-      expiresAt reason unclaimedDevelopmentFundCouponCids
+      expiresAt reason unclaimedDevelopmentFundCouponCids (Some mintAfter)
   Some developmentFundCoupon <- queryContractId bob.primaryParty developmentFundCouponCid
   Some leftOverUnclaimedDevelopmentFundCoupon <- queryContractId app.dso leftOverUnclaimedDevelopmentFundCouponCid
   developmentFundCoupon === DevelopmentFundCoupon with
@@ -71,6 +88,7 @@ testAllocateDevelopmentFundCoupon = do
     amount = firstAllocationAmount
     expiresAt
     reason
+    mintAfter = Some mintAfter
   leftOverUnclaimedDevelopmentFundCoupon === UnclaimedDevelopmentFundCoupon with
     dso = app.dso
     amount = secondAllocationAmount
@@ -78,7 +96,7 @@ testAllocateDevelopmentFundCoupon = do
   -- Happy - Development Fund coupon allocated with no UnclaimedDevelopmentFundCoupon leftover
   AmuletRules_AllocateDevelopmentFundCouponResult { developmentFundCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
     allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty secondAllocationAmount
-      expiresAt reason [leftOverUnclaimedDevelopmentFundCouponCid]
+      expiresAt reason [leftOverUnclaimedDevelopmentFundCouponCid] (Some mintAfter)
   Some developmentFundCoupon <- queryContractId bob.primaryParty developmentFundCouponCid
   developmentFundCoupon === DevelopmentFundCoupon with
     dso = app.dso
@@ -87,6 +105,7 @@ testAllocateDevelopmentFundCoupon = do
     amount = secondAllocationAmount
     expiresAt
     reason
+    mintAfter = Some mintAfter
 
   pure ()
 
@@ -185,14 +204,208 @@ testExpiryOfDevelopmentFundCoupon = do
 
   pure ()
 
+testDevelopmentFundCouponMintingDelay : Script ()
+testDevelopmentFundCouponMintingDelay = do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  baseConfig <- getAmuletConfig app
+  replaceDevelopmentFundConfig app baseConfig (Some alice.primaryParty) (Some 0.05)
+  setMinDevelopmentFundMintingDelay app (minutes 1)
+
+  -- Run 3 issuances for the already open rounds without the development fund configuration.
+  replicateA_ 3 $ runNextIssuance app
+  -- Mint one development fund coupon per issuance (two total).
+  runNextIssuance app
+  runNextIssuance app
+
+  [(cid1, coupon1), (cid2, coupon2)] <- query @UnclaimedDevelopmentFundCoupon app.dso
+  now <- getTime
+  let
+    totalAmount = coupon1.amount + coupon2.amount
+    unclaimedDevelopmentFundCouponCids = [cid1, cid2]
+    expiresAt = addRelTime now (days 2)
+    reason = "Bob fixed issue XXX"
+    mintAfter = addRelTime now (minutes 2)
+
+  AmuletRules_AllocateDevelopmentFundCouponResult
+    { developmentFundCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
+      allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty totalAmount
+        expiresAt reason unclaimedDevelopmentFundCouponCids (Some mintAfter)
+  Some developmentFundCoupon <- queryContractId bob.primaryParty developmentFundCouponCid
+  developmentFundCoupon.mintAfter === Some mintAfter
+
+  -- Unhappy - the coupon cannot be minted before mintAfter
+  mintDevelopmentFundCouponMustFail app bob developmentFundCouponCid
+
+  -- Happy - the coupon can be minted once mintAfter has passed
+  passTime (minutes 3)
+  transferResult <- mintDevelopmentFundCoupon app bob developmentFundCouponCid
+  transferResult.summary.inputDevelopmentFundAmount === Some totalAmount
+
+  pure ()
+
+-- | Coupons allocated with no `mintAfter` prior to we introduce minimum minting delay stay
+-- immediately mintable. 
+testDevelopmentFundCouponWithoutMintingDelay : Script ()
+testDevelopmentFundCouponWithoutMintingDelay = do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  baseConfig <- getAmuletConfig app
+  replaceDevelopmentFundConfig app baseConfig (Some alice.primaryParty) (Some 0.05)
+
+  -- Run 3 issuances for the already open rounds without the development fund configuration.
+  replicateA_ 3 $ runNextIssuance app
+  -- Mint one development fund coupon.
+  runNextIssuance app
+
+  [(cid1, coupon1)] <- query @UnclaimedDevelopmentFundCoupon app.dso
+  now <- getTime
+  let
+    expiresAt = addRelTime now (days 2)
+    reason = "Bob fixed issue XXX"
+
+  -- Unhappy - a mintAfter in the past is rejected even with no minimum minting delay configured
+  allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty coupon1.amount
+    expiresAt reason [cid1] (Some (addRelTime now (minutes (-1))))
+
+  AmuletRules_AllocateDevelopmentFundCouponResult
+    { developmentFundCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
+      allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon1.amount
+        expiresAt reason [cid1] None
+  Some developmentFundCoupon <- queryContractId bob.primaryParty developmentFundCouponCid
+  developmentFundCoupon.mintAfter === None
+
+  -- Happy - and the coupon mints immediately, even after a delay has been configured
+  setMinDevelopmentFundMintingDelay app (days 7)
+  transferResult <- mintDevelopmentFundCoupon app bob developmentFundCouponCid
+  transferResult.summary.inputDevelopmentFundAmount === Some coupon1.amount
+
+  pure ()
+
+testDevelopmentFundManagerBlacklist : Script ()
+testDevelopmentFundManagerBlacklist = do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  baseConfig <- getAmuletConfig app
+  replaceDevelopmentFundConfig app baseConfig (Some alice.primaryParty) (Some 0.05)
+
+  -- Run 3 issuances for the already open rounds without the development fund configuration.
+  replicateA_ 3 $ runNextIssuance app
+  -- Mint one development fund coupon per issuance (three total).
+  replicateA_ 3 $ runNextIssuance app
+
+  [(cid1, coupon1), (cid2, coupon2), (cid3, coupon3)] <- query @UnclaimedDevelopmentFundCoupon app.dso
+  now <- getTime
+  let
+    expiresAt = addRelTime now (days 2)
+    reason = "Bob fixed issue XXX"
+    -- Must exceed `transferPreapprovalBaseDuration` so creating the pre-approval
+    -- burns amulet via `splitAndBurn`.
+    preapprovalExpiresAt = addRelTime now (days 100)
+
+  AmuletRules_AllocateDevelopmentFundCouponResult
+    { developmentFundCouponCid = transferCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
+      allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon1.amount
+        expiresAt reason [cid1] None
+  AmuletRules_AllocateDevelopmentFundCouponResult
+    { developmentFundCouponCid = preapprovalCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
+      allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon2.amount
+        expiresAt reason [cid2] None
+
+  setDevelopmentFundManagerBlacklist app [alice.primaryParty]
+
+  -- Unhappy - a blacklisted fund manager cannot allocate further coupons
+  allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty coupon3.amount
+    expiresAt reason [cid3] None
+
+  -- Unhappy - an already allocated coupon cannot be minted through AmuletRules_Transfer
+  mintDevelopmentFundCouponMustFail app bob transferCouponCid
+
+  -- Unhappy - nor through the splitAndBurn path used to pay for a transfer pre-approval
+  context <- getPaymentTransferContext app bob
+  submitMustFail (actAs bob.primaryParty <> readAs app.dso) $
+    exerciseCmd context.amuletRules AmuletRules_CreateTransferPreapproval with
+      context
+      inputs = [InputDevelopmentFundCoupon preapprovalCouponCid]
+      receiver = bob.primaryParty
+      provider = bob.primaryParty
+      expiresAt = preapprovalExpiresAt
+      expectedDso = Some app.dso
+      optCreatedAt = None
+
+  setDevelopmentFundManagerBlacklist app []
+
+  -- Happy - coupon allocated
+  AmuletRules_AllocateDevelopmentFundCouponResult
+    { developmentFundCouponCid = expiringCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
+      allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon3.amount
+        expiresAt reason [cid3] None
+
+  -- Happy - coupon minted
+  transferResult <- mintDevelopmentFundCoupon app bob transferCouponCid
+  transferResult.summary.inputDevelopmentFundAmount === Some coupon1.amount
+
+  -- Happy - pre-approval coupon minted
+  context <- getPaymentTransferContext app bob
+  _ <- submit (actAs bob.primaryParty <> readAs app.dso) $
+    exerciseCmd context.amuletRules AmuletRules_CreateTransferPreapproval with
+      context
+      inputs = [InputDevelopmentFundCoupon preapprovalCouponCid]
+      receiver = bob.primaryParty
+      provider = bob.primaryParty
+      expiresAt = preapprovalExpiresAt
+      expectedDso = Some app.dso
+      optCreatedAt = None
+
+  -- Happy - the DSO party reclaims an expired coupon from a blacklisted manager
+  setDevelopmentFundManagerBlacklist app [alice.primaryParty]
+  passTime (days 3)
+  _ <- expiresDevelopmentFundCoupon app.dso expiringCouponCid
+
+  pure ()
+
+-- | External party context cannot be used with `DevelopmentFundCoupon` as of now. The test will
+-- pass once we add the support for external party context and configure the blacklisted fund managers.
+testDevelopmentFundCouponRejectedForExternalParty : Script ()
+testDevelopmentFundCouponRejectedForExternalParty = do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+  now <- getTime
+  let
+    expiresAt = addRelTime now (days 1)
+    transferAmount = 10.0
+
+  setDevelopmentFundManagerBlacklist app [alice.primaryParty]
+  developmentFundCouponCid <- createDevelopmentFundCoupon app alice.primaryParty bob.primaryParty 50.0
+    expiresAt "Bob fixed issue XXX"
+
+  transferPreapprovalCid <- submit
+    (actAs alice.primaryParty <> actAs aliceValidator.primaryParty <> actAs app.dso) $
+      createCmd TransferPreapproval with
+        receiver = alice.primaryParty
+        provider = aliceValidator.primaryParty
+        dso = app.dso
+        validFrom = now
+        lastRenewedAt = now
+        expiresAt
+  externalContext <- getExternalPartyTransferContext app
+
+  -- Unhappy - the coupon cannot be minted where the blacklist is unknown
+  submitMustFail (actAs bob.primaryParty <> readAs app.dso) $
+    exerciseCmd transferPreapprovalCid TransferPreapproval_SendV2 with
+      sender = bob.primaryParty
+      context = externalContext
+      inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
+      amount = transferAmount
+      description = None
+      meta = None
+
+  pure ()
+
 
 -- Helpers
 ----------
 
 allocateDevelopmentFundCouponMustFail
   : AmuletApp -> Party -> Party -> Decimal -> Time -> Text -> [ContractId UnclaimedDevelopmentFundCoupon]
-  -> Script ()
-allocateDevelopmentFundCouponMustFail app fundManager beneficiary amount expiresAt reason unclaimedDevelopmentFundCouponCids = do
+  -> Optional Time -> Script ()
+allocateDevelopmentFundCouponMustFail app fundManager beneficiary amount expiresAt reason unclaimedDevelopmentFundCouponCids mintAfter = do
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
   submitMustFail (actAs fundManager <> readAs app.dso) do
     exerciseCmd amuletRulesCid AmuletRules_AllocateDevelopmentFundCoupon with
@@ -202,6 +415,32 @@ allocateDevelopmentFundCouponMustFail app fundManager beneficiary amount expires
       expiresAt
       reason
       fundManager
+      mintAfter
+
+mintDevelopmentFundCoupon : AmuletApp -> AmuletUser -> ContractId DevelopmentFundCoupon -> Script TransferResult
+mintDevelopmentFundCoupon app beneficiary developmentFundCouponCid = do
+  context <- getPaymentTransferContext app beneficiary
+  submit (actAs beneficiary.primaryParty <> readAs app.dso) $
+    exerciseCmd context.amuletRules (mintDevelopmentFundCouponTransfer app beneficiary context developmentFundCouponCid)
+
+mintDevelopmentFundCouponMustFail : AmuletApp -> AmuletUser -> ContractId DevelopmentFundCoupon -> Script ()
+mintDevelopmentFundCouponMustFail app beneficiary developmentFundCouponCid = do
+  context <- getPaymentTransferContext app beneficiary
+  submitMustFail (actAs beneficiary.primaryParty <> readAs app.dso) $
+    exerciseCmd context.amuletRules (mintDevelopmentFundCouponTransfer app beneficiary context developmentFundCouponCid)
+
+mintDevelopmentFundCouponTransfer
+  : AmuletApp -> AmuletUser -> PaymentTransferContext -> ContractId DevelopmentFundCoupon -> AmuletRules_Transfer
+mintDevelopmentFundCouponTransfer app beneficiary context developmentFundCouponCid =
+  AmuletRules_Transfer with
+    transfer = Transfer with
+      sender = beneficiary.primaryParty
+      provider = beneficiary.primaryParty
+      inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
+      outputs = []
+      beneficiaries = None
+    context = context.context
+    expectedDso = Some app.dso
 
 createDevelopmentFundCoupon : AmuletApp -> Party -> Party -> Decimal -> Time -> Text -> Script (ContractId DevelopmentFundCoupon)
 createDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reason =
@@ -213,6 +452,7 @@ createDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reason 
       amount
       expiresAt
       reason
+      mintAfter = None
 
 rejectDevelopmentFundCoupon : Party -> Text -> ContractId DevelopmentFundCoupon -> Script (ContractId UnclaimedDevelopmentFundCoupon)
 rejectDevelopmentFundCoupon fundManager reason developmentFundCouponCid =

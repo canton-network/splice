@@ -40,6 +40,10 @@ export function installClusterVersion(): k8s.apiextensions.CustomResource {
                 port: 443,
                 uri: { exact: '/version' },
               },
+              {
+                port: 80,
+                uri: { exact: '/version' },
+              },
             ],
             directResponse: {
               status: 200,

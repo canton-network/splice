@@ -4,10 +4,10 @@ import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   ChartValues,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 import { Namespace } from '@pulumi/kubernetes/core/v1';
@@ -166,7 +166,7 @@ function resourceClass(
           },
         },
       ],
-      ...appsAffinityAndTolerations,
+      ...appsKubernetesScheduling,
     },
   };
 }
@@ -221,7 +221,7 @@ new k8s.helm.v3.Release('container-agent', {
           memory: '512Mi',
         },
       },
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
       maxHistory: HELM_MAX_HISTORY_SIZE,
     },
   },

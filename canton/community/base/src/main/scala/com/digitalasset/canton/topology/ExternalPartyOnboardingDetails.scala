@@ -7,7 +7,6 @@ import cats.data.Ior
 import cats.syntax.alternative.*
 import cats.syntax.option.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.{Signature, SigningKeyUsage}
 import com.digitalasset.canton.topology.ExternalPartyOnboardingDetails.{
@@ -18,6 +17,7 @@ import com.digitalasset.canton.topology.ExternalPartyOnboardingDetails.{
   SignedPartyToKeyMapping,
 }
 import com.digitalasset.canton.topology.transaction.*
+import com.digitalasset.canton.topology.transaction.HostingParticipant.HostingState
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.{
   GenericSignedTopologyTransaction,
   PositiveSignedTopologyTransaction,
@@ -25,6 +25,7 @@ import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.{
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp.Replace
 import com.digitalasset.canton.topology.transaction.TopologyTransaction.PositiveTopologyTransaction
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.reflect.ClassTag
 
@@ -391,8 +392,21 @@ object ExternalPartyOnboardingDetails {
         s"The PartyToParticipant transaction must not contain any node with Submission permission. Nodes with submission permission: ${nodesWithSubmissionPermission
             .mkString(", ")}",
       )
+      // Checks every entry, not only this node's: the party alone may add a node as Nominated.
+      nodesNominatedOrFreezing = hostingParticipants.filter(participant =>
+        participant.state == HostingState.Nominated || participant.state == HostingState.Freezing
+      )
+      _ <- Either.cond(
+        nodesNominatedOrFreezing.isEmpty,
+        (),
+        "The PartyToParticipant transaction must not contain any node in hosting state Nominated or Freezing: " +
+          "these states are only for adding a node to an existing party. Nodes in these states: " +
+          nodesNominatedOrFreezing
+            .map(participant => s"${participant.participantId} (${participant.state})")
+            .mkString(", "),
+      )
       _ <- hostingParticipants.toList match {
-        case HostingParticipant(hosting, permission, _onboarding) :: Nil =>
+        case HostingParticipant(hosting, permission, _state) :: Nil =>
           Either.cond(
             hosting == participantId && permission == ParticipantPermission.Confirmation,
             (),

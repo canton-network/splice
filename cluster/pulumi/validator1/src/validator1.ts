@@ -21,7 +21,9 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
+  checkValidatorKeyDownloadForPeriodicBackups,
   installParticipant,
+  installWalletGateway,
   splitwellDarPaths,
 } from '@canton-network/splice-pulumi-common-validator';
 import {
@@ -60,6 +62,7 @@ export async function installValidator1(
         'postgres',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false
       )
     : undefined;
@@ -72,15 +75,16 @@ export async function installValidator1(
       `validator-pg`,
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const validatorDbName = `validator1`;
 
   const participantDependsOn: CnInput<pulumi.Resource>[] = imagePullDeps.concat(loopback);
 
+  checkValidatorKeyDownloadForPeriodicBackups('validator1', validator1Config, backupConfig);
   const participant = await installParticipant(
     validator1Config,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     validator1Config?.disableAuth,
@@ -130,7 +134,20 @@ export async function installValidator1(
     version: activeVersion,
     additionalEnvVars: validator1Config?.validatorApp?.additionalEnvVars,
   });
-  installIngress(xns, installSplitwell, decentralizedSynchronizerMigrationConfig);
+  const walletGatewayConfig = validator1Config.walletGateway;
+  if (walletGatewayConfig.enabled) {
+    await installWalletGateway(
+      auth0Client,
+      xns,
+      walletGatewayConfig,
+      participant.participantAddress,
+      validatorPostgres,
+      validator1Config?.logging?.level,
+      [validator]
+    );
+  }
+
+  installIngress(xns, installSplitwell, walletGatewayConfig.enabled);
 
   if (installSplitwell) {
     installSpliceHelmChart(
@@ -156,11 +173,7 @@ export async function installValidator1(
   return validator;
 }
 
-function installIngress(
-  xns: ExactNamespace,
-  splitwell: boolean,
-  decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig
-) {
+function installIngress(xns: ExactNamespace, splitwell: boolean, walletGateway: boolean) {
   installSpliceHelmChart(
     xns,
     `cluster-ingress-${xns.logicalName}`,
@@ -176,9 +189,8 @@ function installIngress(
       },
       ingress: {
         splitwell: splitwell,
-        decentralizedSynchronizer: {
-          activeMigrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
-        },
+        walletGateway: walletGateway,
+        decentralizedSynchronizer: {},
       },
     }
   );

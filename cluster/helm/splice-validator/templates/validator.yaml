@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-{{- $validatorAppLabel := "validator-app" }}
+{{- $validatorAppLabel := .Values.appLabels.validatorApp | default "validator-app" }}
 {{- $requiresMigrationPvc := and (not .Values.svValidator) (.Values.migration.attachPvc) }}
 apiVersion: apps/v1
 kind: Deployment
@@ -92,12 +92,12 @@ spec:
           value: {{ .Values.scanAddress | quote }}
         {{ if .Values.validatorWalletUser }}
         - name: SPLICE_APP_VALIDATOR_WALLET_USER_NAME
-          value: {{ .Values.validatorWalletUser }}
+          value: {{ .Values.validatorWalletUser | quote }}
         {{ end }}
         {{- range $ii, $user := .Values.validatorWalletUsers }}
         - name: ADDITIONAL_CONFIG_VALIDATOR_WALLET_USER_{{ $ii }}
           value: |
-            canton.validator-apps.validator_backend.validator-wallet-users.{{ $ii }} = {{ $user }}
+            canton.validator-apps.validator_backend.validator-wallet-users.{{ $ii }} = {{ $user | quote }}
         {{- end }}
         {{ if .Values.validatorPartyHint }}
         - name: SPLICE_APP_VALIDATOR_PARTY_HINT
@@ -265,6 +265,7 @@ spec:
                 min-balance-usd = {{ $v.minBalanceUSD }}
                 receiver = {{ $v.receiver | quote }}
                 use-transfer-preapproval = {{ $v.useTransferPreapproval | default false }}
+                use-token-standard-transfer = {{ $v.useTokenStandardTransfer | default false }}
               }
               {{- end }}
             }
@@ -314,7 +315,15 @@ spec:
         - name: ADDITIONAL_CONFIG_MAX_VETTING_DELAY
           value: canton.validator-apps.validator_backend.max-vetting-delay = "{{ . }}"
         {{- end }}
+        {{- if .Values.allowedOrigins }}
+        - name: ADDITIONAL_CONFIG_ALLOWED_ORIGINS
+          value: |
+            canton.validator-apps.validator_backend.allowed-origins = {{ .Values.allowedOrigins | toJson }}
+        {{- end }}
         {{- if .Values.disableAuth }}
+        {{- if not .Values.allowedOrigins }}
+        {{- fail "allowedOrigins must be set when disableAuth is true" }}
+        {{- end }}
         - name: ADDITIONAL_CONFIG_DISABLE_AUTH
           value: |
             canton.validator-apps.validator_backend {
@@ -351,7 +360,7 @@ spec:
         - name: SPLICE_APP_VALIDATOR_AUTH_JWKS_READ_TIMEOUT
           value: {{ .Values.auth.jwks.readTimeout | quote }}
         {{ end }}
-        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 8}}
+        {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides "secretName" (.Values.auth).secretName) | indent 8}}
         {{- end }}
         ports:
         - containerPort: 5003
@@ -443,7 +452,7 @@ spec:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.persistence.databaseName }}' 2>&1); do
+              until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username={{ .Values.persistence.user | default "cnadmin" }} --dbname={{ .Values.persistence.bootstrapDatabaseName | default "cantonnet" }} -c 'create database {{ .Values.persistence.databaseName }}' 2>&1); do
                 if [[ $errmsg == *"already exists"* ]]; then
                   echo "Database {{ .Values.persistence.databaseName }} already exists. Done."
                   break
@@ -456,6 +465,9 @@ spec:
         {{- if .Values.extraInitContainers }}
         {{ .Values.extraInitContainers | toYaml | nindent 8 }}
         {{- end }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -535,5 +547,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "priorityClassName" .Values.priorityClassName "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

@@ -12,7 +12,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, TokenStandardMetadata}
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -21,13 +20,14 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import cats.implicits.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_Bool
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 
 class ExpiredAmuletAllocationV2Trigger(
     override protected val svConfig: SvAppBackendConfig,
     clock: Clock,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -38,14 +38,14 @@ class ExpiredAmuletAllocationV2Trigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletAllocationBatchSize,
-      svTaskContext.dsoStore.listExpiredAmuletAllocationsV2(ignoredPartiesStore.getAll),
+      svTaskContext.dsoStore.listExpiredAmuletAllocationsV2(Some(unavailablePartiesStore)),
       splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       ExpiredAmuletAllocationV2Trigger.getStakeholders,
     )
     with SvTaskBasedTrigger[ExpiredAmuletAllocationV2Trigger.Task]
-    with IgnoredAmuletVersionGuard {
+    with UnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 
@@ -55,11 +55,10 @@ class ExpiredAmuletAllocationV2Trigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeWithIgnoredAmuletVersionCheck(
+    completeUnlessAmuletVersionIgnored(
       task.work.vettedVersion.toString,
       task.work.stakeholders,
-      store.key.dsoParty,
-      enableUnresponsivePartiesAutoIgnore = true,
+      ignoreUnresponsiveParties = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

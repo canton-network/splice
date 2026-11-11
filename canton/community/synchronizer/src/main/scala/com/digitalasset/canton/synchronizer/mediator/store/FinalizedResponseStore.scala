@@ -6,13 +6,13 @@ package com.digitalasset.canton.synchronizer.mediator.store
 import cats.data.OptionT
 import cats.syntax.either.*
 import com.daml.nameof.NameOf.functionFullName
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.concurrent.DirectExecutionContext
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{BatchAggregatorConfig, CacheConfig, ProcessingTimeout}
 import com.digitalasset.canton.crypto.CryptoPureApi
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyUtil}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
@@ -28,6 +28,7 @@ import com.digitalasset.canton.synchronizer.mediator.FinalizedResponse
 import com.digitalasset.canton.tracing.{SerializableTraceContext, TraceContext, Traced}
 import com.digitalasset.canton.util.BatchAggregator
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.nonempty.NonEmpty
 import slick.jdbc.{GetResult, PositionedParameters, SetParameter}
 
 import java.util.concurrent.ConcurrentHashMap
@@ -244,7 +245,7 @@ private[mediator] class DbFinalizedResponseStore(
   implicit val getResultMediatorConfirmationRequest: GetResult[MediatorConfirmationRequest] =
     GetResult(r =>
       EnvelopeContent
-        .messageFromByteArray[MediatorConfirmationRequest](protocolVersion, cryptoApi)(
+        .messageFromTrustedByteArray[MediatorConfirmationRequest](protocolVersion, cryptoApi)(
           r.<<[Array[Byte]]
         )
         .valueOr(error =>
@@ -302,7 +303,7 @@ private[mediator] class DbFinalizedResponseStore(
         storage.queryAndUpdate(
           DbStorage.bulkOperation_(insert, responses, storage.profile)(setData),
           operationName = s"store ${responses.size} batched responses",
-        )(traceContext, closeContext, implicitly)
+        )(traceContext, closeContext)
       }
       .map { _ =>
         // keep the request around for a while to avoid a database lookup under contention
@@ -387,7 +388,13 @@ private[mediator] class DbFinalizedResponseStore(
                       verdict,
                       requestTraceContext,
                     ) =>
-                  FinalizedResponse(reqId, mediatorConfirmationRequest, finalizationTime, verdict)(
+                  FinalizedResponse(
+                    reqId,
+                    mediatorConfirmationRequest,
+                    finalizationTime,
+                    verdict,
+                    firstResponseReceived = None,
+                  )(
                     requestTraceContext.unwrap
                   )
               }
@@ -442,7 +449,13 @@ private[mediator] class DbFinalizedResponseStore(
                     verdict,
                     requestTraceContext,
                   ) =>
-                FinalizedResponse(reqId, mediatorConfirmationRequest, finalization_time, verdict)(
+                FinalizedResponse(
+                  reqId,
+                  mediatorConfirmationRequest,
+                  finalization_time,
+                  verdict,
+                  firstResponseReceived = None,
+                )(
                   requestTraceContext.unwrap
                 )
             }
@@ -463,7 +476,7 @@ private[mediator] class DbFinalizedResponseStore(
           removedCount <- storage.update(
             sqlu"delete from med_response_aggregations where request_id <= $timestamp",
             functionFullName,
-          )(traceContext, closeContext, implicitly)
+          )(traceContext, closeContext)
         } yield {
           finishedRequests.invalidateAll()
           logger.debug(s"Removed at least $removedCount finalized responses")

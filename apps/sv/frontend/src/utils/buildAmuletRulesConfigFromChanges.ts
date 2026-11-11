@@ -8,12 +8,21 @@ import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Ty
 import { IssuanceConfig } from '@daml.js/splice-amulet/lib/Splice/Issuance';
 import { ConfigChange } from './types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
+import { configValueToSwitchOverMap } from '../components/forms/formValidators';
 
 function lsToSet<T>(ls: T[]): DamlSet<T> {
   return {
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- This is actually representing Unit in Daml
     map: ls.reduce((acc, v) => acc.set(v, {}), damlTypes.emptyMap<T, {}>()),
   };
+}
+
+function wrapMicroseconds(microseconds: string | null): { microseconds: string } | null {
+  return microseconds !== null && microseconds !== '' ? { microseconds } : null;
+}
+
+function nullIfAllNull<A extends Record<string, unknown>>(a: A): A | null {
+  return Object.values(a).some(v => v !== null) ? a : null;
 }
 
 /**
@@ -93,17 +102,30 @@ export function buildAmuletRulesConfigFromChanges(
     true
   );
   const transferConfigTokenStandardMaxTTL = getValue('transferConfigTokenStandardMaxTTL', true);
+  const developmentFundManagerBlacklistParties =
+    getValue('developmentFundManagerBlacklist', true)
+      ?.split(',')
+      .map(party => party.trim())
+      .filter(party => party !== '') ?? [];
+  const developmentFundManagerBlacklist =
+    developmentFundManagerBlacklistParties.length > 0
+      ? developmentFundManagerBlacklistParties
+      : null;
+  const minDevelopmentFundMintingDelay = getValue('minDevelopmentFundMintingDelay', true);
   const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
+
+  const amuletSwitchOverTimes = configValueToSwitchOverMap(getValue('amuletSwitchOverTimes', true));
+
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },
     transferPreapprovalFee: getValue('transferPreapprovalFee', true),
     featuredAppActivityMarkerAmount: getValue('featuredAppActivityMarkerAmount', true),
     optDevelopmentFundManager: getValue('optDevelopmentFundManager', true),
-    externalPartyConfigStateTickDuration:
-      externalPartyConfigStateTickDuration === null
-        ? null
-        : { microseconds: externalPartyConfigStateTickDuration },
+    externalPartyConfigStateTickDuration: wrapMicroseconds(externalPartyConfigStateTickDuration),
     transferPreapprovalBaseDuration: null,
+    developmentFundManagerBlacklist,
+    minDevelopmentFundMintingDelay: wrapMicroseconds(minDevelopmentFundMintingDelay),
+    amuletSwitchOverTimes: amuletSwitchOverTimes,
     transferConfig: {
       createFee: { fee: getValue('transferConfigCreateFee', false) },
       holdingFee: { rate: getValue('transferConfigHoldingFeeRate', false) },
@@ -116,10 +138,7 @@ export function buildAmuletRulesConfigFromChanges(
       maxNumInputs: getValue('transferConfigMaxNumInputs', false),
       maxNumOutputs: getValue('transferConfigMaxNumOutputs', false),
       maxNumLockHolders: getValue('transferConfigMaxNumLockHolders', false),
-      tokenStandardMaxTTL:
-        transferConfigTokenStandardMaxTTL && transferConfigTokenStandardMaxTTL !== ''
-          ? { microseconds: transferConfigTokenStandardMaxTTL }
-          : null,
+      tokenStandardMaxTTL: wrapMicroseconds(transferConfigTokenStandardMaxTTL),
     },
 
     issuanceCurve: {
@@ -187,7 +206,28 @@ export function buildAmuletRulesConfigFromChanges(
               microseconds: getValue('rewardConfigRewardCouponTimeToLive', false),
             },
             appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold', false),
+            // Optional Decimal fields: a blank input maps to null (None), which the protocol
+            // interprets as "use the default". Hence getValue(..., true), mirroring dryRunVersion.
+            extraFeaturedAssetActivityWeight: getValue(
+              'rewardConfigExtraFeaturedAssetActivityWeight',
+              true
+            ),
+            maxExtraFeaturedAssetActivityWeightPerAsset: getValue(
+              'rewardConfigMaxExtraFeaturedAssetActivityWeightPerAsset',
+              true
+            ),
+            dsoAppActivityWeight: getValue('rewardConfigDsoAppActivityWeight', true),
           },
+
+    governanceLockConfig: nullIfAllNull({
+      minimumLockAmount: getValue('governanceLockConfigMinimumLockAmount', true),
+      superValidatorLockVestingDuration: wrapMicroseconds(
+        getValue('governanceLockConfigSuperValidatorLockVestingDuration', true)
+      ),
+      featuredAppLockVestingDuration: wrapMicroseconds(
+        getValue('governanceLockConfigFeaturedAppLockVestingDuration', true)
+      ),
+    }),
   };
 
   return amuletConfig;

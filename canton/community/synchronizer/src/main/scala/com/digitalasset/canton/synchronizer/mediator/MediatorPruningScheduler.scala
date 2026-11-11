@@ -5,6 +5,7 @@ package com.digitalasset.canton.synchronizer.mediator
 
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, HasCloseContext}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.Storage
@@ -15,7 +16,7 @@ import com.digitalasset.canton.time.{Clock, PositiveSeconds}
 import com.digitalasset.canton.topology.MediatorId
 import com.digitalasset.canton.tracing.TraceContext
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 class MediatorPruningScheduler(
     clock: Clock,
@@ -89,15 +90,14 @@ class MediatorPruningScheduler(
 
   override def initializeSchedule()(implicit
       traceContext: TraceContext
-  ): Future[Option[JobSchedule]] =
+  ): FutureUnlessShutdown[Option[JobSchedule]] =
     getSchedule().map(
-      JobSchedule
-        .fromPruningSchedule(
-          _,
-          config.pruningMetricUpdateInterval.map(PositiveSeconds.fromConfig),
-          clock,
-          logger,
-        )
+      JobSchedule.fromPruningSchedule(
+        _,
+        config.pruningMetricUpdateInterval.map(PositiveSeconds.fromConfig),
+        clock,
+        logger,
+      )
     )
 
   override def onClosed(): Unit = {

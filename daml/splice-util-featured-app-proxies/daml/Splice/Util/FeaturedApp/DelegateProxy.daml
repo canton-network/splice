@@ -49,7 +49,8 @@ template DelegateProxy with
         proxyArg : ProxyArg TransferFactory_Transfer
       controller delegate
       do
-        exerciseProxyChoice this cid proxyArg
+        exerciseProxyChoice this cid proxyArg $ \_ ->
+          pure proxyArg.choiceArg.transfer.sender
 
     nonconsuming choice DelegateProxy_TransferInstruction_Accept
       : ProxyResult TransferInstructionResult
@@ -58,7 +59,9 @@ template DelegateProxy with
         proxyArg : ProxyArg TransferInstruction_Accept
       controller delegate
       do
-        exerciseProxyChoice this cid proxyArg
+        exerciseProxyChoice this cid proxyArg $ \cid -> do
+          instr <- fetch cid
+          pure (view instr).transfer.receiver
 
     nonconsuming choice DelegateProxy_TransferInstruction_Reject
       : ProxyResult TransferInstructionResult
@@ -67,7 +70,9 @@ template DelegateProxy with
         proxyArg : ProxyArg TransferInstruction_Reject
       controller delegate
       do
-        exerciseProxyChoice this cid proxyArg
+        exerciseProxyChoice this cid proxyArg $ \cid -> do
+          instr <- fetch cid
+          pure (view instr).transfer.receiver
 
     nonconsuming choice DelegateProxy_TransferInstruction_Withdraw
       : ProxyResult TransferInstructionResult
@@ -76,7 +81,9 @@ template DelegateProxy with
         proxyArg : ProxyArg TransferInstruction_Withdraw
       controller delegate
       do
-        exerciseProxyChoice this cid proxyArg
+        exerciseProxyChoice this cid proxyArg $ \cid -> do
+          instr <- fetch cid
+          pure (view instr).transfer.sender
 
     nonconsuming choice DelegateProxy_AllocationFactory_Allocate
       : ProxyResult AllocationInstructionResult
@@ -85,7 +92,8 @@ template DelegateProxy with
         proxyArg : ProxyArg AllocationFactory_Allocate
       controller delegate
       do
-        exerciseProxyChoice this cid proxyArg
+        exerciseProxyChoice this cid proxyArg $ \_ ->
+          pure proxyArg.choiceArg.allocation.transferLeg.sender
 
     nonconsuming choice DelegateProxy_Allocation_Withdraw
       : ProxyResult Allocation_WithdrawResult
@@ -94,7 +102,9 @@ template DelegateProxy with
         proxyArg : ProxyArg Allocation_Withdraw
       controller delegate
       do
-        exerciseProxyChoice this cid proxyArg
+        exerciseProxyChoice this cid proxyArg $ \cid -> do
+          allocation <- fetch cid
+          pure (view allocation).allocation.transferLeg.sender
 
 
 -- Utilities
@@ -103,11 +113,13 @@ template DelegateProxy with
 -- | Shared code to execute the proxied choice.
 exerciseProxyChoice
   : forall t ch r. HasExercise t ch r =>
-  DelegateProxy -> ContractId t -> ProxyArg ch -> Update (ProxyResult r)
-exerciseProxyChoice proxy cid proxyArg = do
+  DelegateProxy -> ContractId t -> ProxyArg ch -> (ContractId t -> Update Party) -> Update (ProxyResult r)
+exerciseProxyChoice proxy cid proxyArg getExpectedDelegate = do
   let ProxyArg{..} = proxyArg
   appRight <- fetch featuredAppRightCid
   require "App right matches expected provider" ((view appRight).provider == proxy.provider)
+  expectedDelegate <- getExpectedDelegate cid
+  require "Acting party matches delegate" (expectedDelegate == proxy.delegate)
   -- create marker
   markerResult <- exercise featuredAppRightCid FeaturedAppRight_CreateActivityMarker with
     beneficiaries = proxyArg.beneficiaries

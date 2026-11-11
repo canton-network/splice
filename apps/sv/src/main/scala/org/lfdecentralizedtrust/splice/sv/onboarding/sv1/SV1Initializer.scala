@@ -4,15 +4,16 @@
 package org.lfdecentralizedtrust.splice.sv.onboarding.sv1
 
 import cats.implicits.{
-  catsSyntaxOptionId,
   catsSyntaxTuple2Semigroupal,
   catsSyntaxTuple3Semigroupal,
   catsSyntaxTuple4Semigroupal,
-  toTraverseOps,
 }
 import cats.syntax.functorFilter.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubmissionRequestAmplificationAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.SynchronizerTimeTrackerConfig
 import com.digitalasset.canton.data.CantonTimestamp
@@ -45,7 +46,6 @@ import com.digitalasset.canton.topology.transaction.{
 }
 import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
@@ -133,16 +133,14 @@ class SV1Initializer(
         SvDsoAutomationService,
     )
   ] = {
+    val initConnection = ledgerClient.readOnlyConnection(
+      this.getClass.getSimpleName,
+      loggerFactory,
+    )
+    val cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
+      SvCantonIdentifierConfig.default(config)
+    )
     for {
-      _ <- synchronizerNodeService.nodes.current.cometbftNode
-        .traverse(_.rotateGenesisGovernanceKeyForSV1(sv1Config.name))
-      initConnection = ledgerClient.readOnlyConnection(
-        this.getClass.getSimpleName,
-        loggerFactory,
-      )
-      cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
-        SvCantonIdentifierConfig.default(config)
-      )
       _ <-
         if (!config.shouldSkipSynchronizerInitialization) {
           SynchronizerNodeInitializer.initializeLocalCantonNodesWithNewIdentities(
@@ -179,6 +177,8 @@ class SV1Initializer(
             config.participantClient.sequencerRequestAmplification.toInternal,
             sequencerConnectionPoolDelays =
               config.participantClient.sequencerConnectionPoolDelays.toInternal,
+            subscriptionLivenessLimits =
+              config.participantClient.subscriptionLivenessLimits.toInternal,
           ),
           psid = Some(psid),
           timeTracker = SynchronizerTimeTrackerConfig(
@@ -248,19 +248,21 @@ class SV1Initializer(
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
       domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
-      svStore = newSvStore(
+      synchronizerId = psid.logical
+      svStore <- newSvStore(
         storeKey,
         domainMigrationId,
+        synchronizerId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
-      dsoStore = newDsoStore(
+      dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
+        synchronizerId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
-      synchronizerId <- participantAdminConnection.getSynchronizerId(config.domains.global.alias)
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
         synchronizerId,
         initConnection,
@@ -289,7 +291,7 @@ class SV1Initializer(
         connection,
         upgradesConfig,
       )
-      // NOTE: we assume that DSO party, cometBft node, sequencer, and mediator nodes are initialized as
+      // NOTE: we assume that DSO party, sequencer, and mediator nodes are initialized as
       // part of deployment and the running of bootstrap scripts. Here we just check that the DSO party
       // is allocated, as a stand-in for all of these actions.
       _ <- retryProvider.waitUntil(
@@ -313,7 +315,7 @@ class SV1Initializer(
         },
         logger,
       )
-      dsoAutomation = newSvDsoAutomationService(
+      dsoAutomation <- newSvDsoAutomationService(
         svStore,
         dsoStore,
         synchronizerNodeService,
@@ -324,11 +326,9 @@ class SV1Initializer(
         new SynchronizerNodeReconciler(
           dsoStore,
           connection,
-          packageVersionSupport,
           clock,
           retryProvider,
           loggerFactory,
-          domainMigrationId,
           config.scan,
         ),
       )
@@ -336,9 +336,7 @@ class SV1Initializer(
       _ <- dsoStore.domains.waitForDomainConnection(config.domains.global.alias)
       withDsoStore = new WithDsoStore(
         dsoAutomation,
-        decentralizedSynchronizer,
-        packageVersionSupport,
-        domainMigrationId,
+        psid,
       )
       _ <- retryProvider.ensureThatB(
         RetryFor.WaitingOnInitDependency,
@@ -348,12 +346,6 @@ class SV1Initializer(
           withDsoStore.foundDso(initialRound)
         },
         logger,
-      )
-      _ <- ensureCometBftGovernanceKeysAreSet(
-        synchronizerNodeService.nodes.current.cometbftNode,
-        svParty,
-        dsoStore,
-        dsoAutomation,
       )
       // Only start the triggers once DsoRules and AmuletRules have been bootstrapped
       _ = dsoAutomation.registerPostOnboardingTriggers()
@@ -457,7 +449,7 @@ class SV1Initializer(
           )
         )
         val initialValues =
-          DynamicSynchronizerParameters.initialValues(synchronizerNode.config.protocolVersion)
+          DynamicSynchronizerParameters.initialValues(sv1Config.initialProtocolVersion)
         val values = initialValues.tryUpdate(
           trafficControlParameters = Some(initialTrafficControlParameters),
           reconciliationInterval =
@@ -481,91 +473,108 @@ class SV1Initializer(
             "sequencer is initialized",
             synchronizerNode.sequencerAdminConnection.getStatus
               .map(_.successOption.map(_.synchronizerId)),
-            for {
-              // must be done before the other topology transaction as the decentralize namespace is used for authorization
-              decentralizedNamespace <- participantAdminConnection
-                .proposeInitialDecentralizedNamespaceDefinition(
-                  namespace,
-                  NonEmpty.mk(Set, participantId.uid.namespace),
-                  threshold = PositiveInt.one,
+            participantAdminConnection.withTemporaryTopologyStore(
+              s"${synchronizerId.identifier.unwrap}-sv1-bootstrap",
+              sv1Config.initialProtocolVersion,
+            ) { tempStore =>
+              for {
+                participantIdentityTransactions <- participantAdminConnection
+                  .getIdentityTransactions(participantId.uid, TopologyStoreId.Authorized)
+                participantIdentity <- participantAdminConnection.reauthorizeTransactions(
+                  tempStore,
+                  sv1Config.initialProtocolVersion,
+                  participantIdentityTransactions,
                 )
-              sv1PermissionTx <-
-                if (config.permissionedSynchronizer) {
-                  logger.debug(
-                    "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
+                (mediatorIdentity, sequencerIdentity) <- (
+                  synchronizerNode.mediatorAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion),
+                  synchronizerNode.sequencerAdminConnection
+                    .generateOnboardingTopologyTransactions(sv1Config.initialProtocolVersion),
+                ).tupled
+                _ <- participantAdminConnection.addTopologyTransactions(
+                  tempStore,
+                  mediatorIdentity ++ sequencerIdentity,
+                  ForceFlag.AlienMember,
+                )
+                // must be done before the other topology transaction as the decentralize namespace is used for authorization
+                decentralizedNamespace <- participantAdminConnection
+                  .proposeInitialDecentralizedNamespaceDefinition(
+                    tempStore,
+                    namespace,
+                    NonEmpty.mk(Set, participantId.uid.namespace),
+                    threshold = PositiveInt.one,
                   )
-                  participantAdminConnection
-                    .proposeMapping(
-                      TopologyStoreId.Authorized,
-                      transaction.ParticipantSynchronizerPermission(
-                        synchronizerId,
-                        participantId,
-                        ParticipantPermission.Submission,
-                        None,
-                        None,
-                      ),
-                      serial = PositiveInt.one,
-                      isProposal = false,
+                sv1PermissionTx <-
+                  if (config.permissionedSynchronizer) {
+                    logger.debug(
+                      "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
                     )
-                    .map(Some(_))
-                } else Future.successful(None)
-              (
-                identityTransactions,
-                synchronizerParametersState,
-                sequencerState,
-                mediatorState,
-              ) <- (
-                MonadUtil
-                  .sequentialTraverse(
-                    List(
-                      participantAdminConnection,
-                      synchronizerNode.mediatorAdminConnection,
-                      synchronizerNode.sequencerAdminConnection,
-                    )
-                  ) { con =>
-                    con
-                      .getId()
-                      .flatMap(con.getIdentityTransactions(_, TopologyStoreId.Authorized))
-                  }
-                  .map(_.flatten),
-                participantAdminConnection.proposeInitialDomainParameters(
-                  synchronizerId,
-                  values,
-                ),
-                participantAdminConnection.proposeInitialSequencerSynchronizerState(
-                  synchronizerId,
-                  active = Seq(sequencerId),
-                  observers = Seq.empty,
-                ),
-                participantAdminConnection.proposeInitialMediatorSynchronizerState(
-                  synchronizerId,
-                  group = NonNegativeInt.zero,
-                  active = Seq(mediatorId),
-                  observers = Seq.empty,
-                ),
-              ).tupled
-              bootstrapTransactions =
-                (Seq(
-                  decentralizedNamespace,
+                    participantAdminConnection
+                      .proposeMapping(
+                        tempStore,
+                        transaction.ParticipantSynchronizerPermission(
+                          synchronizerId,
+                          participantId,
+                          ParticipantPermission.Submission,
+                          None,
+                          None,
+                        ),
+                        serial = PositiveInt.one,
+                        isProposal = false,
+                      )
+                      .map(Some(_))
+                  } else Future.successful(None)
+                (
                   synchronizerParametersState,
                   sequencerState,
                   mediatorState,
-                ) ++ sv1PermissionTx.toList ++ identityTransactions).sorted
-                  .mapFilter(_.selectOp[TopologyChangeOp.Replace])
-                  .map(signed =>
-                    StoredTopologyTransaction(
-                      SequencedTime(CantonTimestamp.MinValue.immediateSuccessor),
-                      EffectiveTime(CantonTimestamp.MinValue.immediateSuccessor),
-                      None,
-                      signed.copy(isProposal = false),
-                      None,
+                ) <- (
+                  participantAdminConnection.proposeInitialDomainParameters(
+                    tempStore,
+                    synchronizerId,
+                    values,
+                  ),
+                  participantAdminConnection.proposeInitialSequencerSynchronizerState(
+                    tempStore,
+                    synchronizerId,
+                    active = Seq(sequencerId),
+                    observers = Seq.empty,
+                  ),
+                  participantAdminConnection.proposeInitialMediatorSynchronizerState(
+                    tempStore,
+                    synchronizerId,
+                    group = NonNegativeInt.zero,
+                    active = Seq(mediatorId),
+                    observers = Seq.empty,
+                  ),
+                ).tupled
+                identityTransactions = participantIdentity ++ mediatorIdentity ++ sequencerIdentity
+                bootstrapTransactions =
+                  (Seq(
+                    decentralizedNamespace,
+                    synchronizerParametersState,
+                    sequencerState,
+                    mediatorState,
+                  ) ++ sv1PermissionTx.toList ++ identityTransactions).sorted
+                    .mapFilter(_.selectOp[TopologyChangeOp.Replace])
+                    .map(signed =>
+                      StoredTopologyTransaction(
+                        SequencedTime(CantonTimestamp.MinValue.immediateSuccessor),
+                        EffectiveTime(CantonTimestamp.MinValue.immediateSuccessor),
+                        None,
+                        signed.copy(isProposal = false),
+                        None,
+                      )
                     )
-                  )
-              _ <- synchronizerNode.sequencerAdminConnection.initializeFromBeginning(
-                StoredTopologyTransactions(bootstrapTransactions),
-                synchronizerNode.staticSynchronizerParameters(NonNegativeInt.zero),
-              )
-            } yield (),
+                _ <- synchronizerNode.sequencerAdminConnection.initializeFromBeginning(
+                  StoredTopologyTransactions(bootstrapTransactions),
+                  synchronizerNode.staticSynchronizerParameters(
+                    NonNegativeInt.zero,
+                    sv1Config.initialProtocolVersion,
+                  ),
+                )
+              } yield ()
+            },
             logger,
           )
           _ <- retryProvider.ensureThatB(
@@ -578,6 +587,7 @@ class SV1Initializer(
               synchronizerNode.internalSequencerConnection,
               synchronizerNode.mediatorSequencerAmplification.toInternal,
               synchronizerNode.mediatorSequencerConnectionPoolDelays.toInternal,
+              synchronizerNode.mediatorSubscriptionLivenessLimits.toInternal,
             ),
             logger,
           )
@@ -591,11 +601,10 @@ class SV1Initializer(
     */
   private class WithDsoStore(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
-      synchronizerId: SynchronizerId,
-      packageVersionSupport: PackageVersionSupport,
-      domainMigrationId: Long,
+      psid: PhysicalSynchronizerId,
   ) {
 
+    private val synchronizerId = psid.logical
     private val dsoStore = dsoStoreWithIngestion.store
     private val dsoParty = dsoStore.key.dsoParty
     private val svParty = dsoStore.key.svParty
@@ -604,8 +613,6 @@ class SV1Initializer(
       dsoStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
       clock = clock,
       retryProvider = retryProvider,
-      versionSupport = packageVersionSupport,
-      migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
     )
@@ -627,7 +634,7 @@ class SV1Initializer(
         tc: TraceContext
     ): Future[Unit] = {
       synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
-        synchronizerNodeService.nodes.some,
+        synchronizerNodeService.nodes,
         synchronizerId,
         SynchronizerNodeState.OnboardedImmediately,
       )
@@ -641,6 +648,8 @@ class SV1Initializer(
         synchronizerId,
         sv1Config.voteCooldownTime,
         sv1Config.acsCommitmentReconciliationInterval,
+        sv1Config.initialSvOperationsSwitchOverTimes,
+        sv1Config.initialPackageConfig,
       )
       for {
         (participantId, trafficStateForAllMembers, amuletRules, dsoRules) <- (
@@ -681,15 +690,15 @@ class SV1Initializer(
                     sv1Config.initialExternalPartyConfigStateTickDuration,
                   optValidatorFaucetCap = sv1Config.optValidatorFaucetCap,
                   initialRewardConfig = sv1Config.initialRewardConfig.map(_.toRewardConfig),
+                  initialGovernanceLockConfig =
+                    sv1Config.initialGovernanceLockConfig.map(_.toGovernanceLockConfig),
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(
-                    synchronizerNodeService.nodes.current.cometbftNode,
                     synchronizerNodeService.nodes.current,
                     config.scan,
-                    synchronizerId,
+                    psid,
                     clock,
-                    domainMigrationId,
                   )
                   _ = logger
                     .info(

@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.lsu
 
-import cats.implicits.{catsSyntaxOptionId, showInterpolator, toTraverseOps}
+import cats.implicits.showInterpolator
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -28,7 +28,6 @@ import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.lsu.LsuTrigger.LsuTransferTask
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler
 import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.SynchronizerNodeState.OnboardedImmediately
-import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import java.nio.file.Path
 import scala.concurrent.{ExecutionContext, Future}
@@ -39,7 +38,6 @@ class LsuTrigger(
     localSynchronizerNodes: LocalSynchronizerNodes[LocalSynchronizerNode],
     successorSynchronizerNode: LocalSynchronizerNode,
     participantAdminConnection: ParticipantAdminConnection,
-    store: SvDsoStore,
     dumpPath: Path,
     hasBftSequencerConnections: Boolean,
 )(implicit
@@ -118,20 +116,12 @@ class LsuTrigger(
       tc: TraceContext
   ): Future[TaskOutcome] = {
     for {
-      rulesAndState <- store.getDsoRulesWithSvNodeStates()
-      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
-      _ <- successorSynchronizerNode.cometbftNode.traverse(
-        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
-      )
-      _ <- successorSynchronizerNode.cometbftNode.traverse(
-        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
-      )
       state <- exporter.exportLSUState(
         topologyExportTime = None
       )
       parameters <- initializer.initializeSynchronizer(
         state,
-        task.work.announcement.successorSynchronizerId,
+        task.work.announcement.successorSynchronizerId.tryAsPhysical,
         task.readyAt,
         Some(task.work.announcement.upgradeTime),
         ignorePsidCheck = false,
@@ -157,7 +147,7 @@ class LsuTrigger(
             _ <- participantAdminConnection
               .performManualLsu(
                 currentPsid,
-                task.work.announcement.successorSynchronizerId,
+                task.work.announcement.successorSynchronizerId.tryAsPhysical,
                 Some(task.work.announcement.upgradeTime),
                 Map(
                   successorSequencerId -> initializer.successorConnection
@@ -170,7 +160,7 @@ class LsuTrigger(
           Future.unit
         }
       _ <- reconciler.reconcileSynchronizerNodeConfigIfRequired(
-        localSynchronizerNodes.some,
+        localSynchronizerNodes,
         currentPsid.logical,
         OnboardedImmediately,
       )
@@ -214,14 +204,14 @@ class LsuTrigger(
               .lookupSequencerSuccessors(
                 announcement.successorSynchronizerId.logical,
                 sequencerId,
-                Some(announcement.successorSynchronizerId),
+                Some(announcement.successorSynchronizerId.tryAsPhysical),
                 Some(TopologyChangeOp.Replace),
               )
               .map(_.isEmpty)
             participantPsid <- participantAdminConnection
               .getPhysicalSynchronizerId(currentPsid.logical)
           } yield {
-            hasNoSuccessor && !hasBftSequencerConnections && participantPsid != announcement.successorSynchronizerId
+            hasNoSuccessor && !hasBftSequencerConnections && participantPsid.opaque != announcement.successorSynchronizerId
           }
         case None => Future.successful(false)
       }

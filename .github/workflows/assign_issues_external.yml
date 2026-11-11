@@ -6,6 +6,8 @@ on:
 
 jobs:
   assign:
+    permissions:
+      issues: write
     runs-on: ubuntu-24.04
     steps:
       - name: Assign issue from external contributors

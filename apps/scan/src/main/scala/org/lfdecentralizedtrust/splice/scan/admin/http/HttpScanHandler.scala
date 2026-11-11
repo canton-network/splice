@@ -3,12 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
-import cats.data.{NonEmptyVector, OptionT}
+import cats.data.{NonEmptyList, NonEmptyVector, OptionT}
 import cats.implicits.catsSyntaxOptionId
 import cats.syntax.either.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.daml.lf.value.json.ApiCodecCompressed
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.data.CantonTimestampExtensions.*
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.admin.data.ActiveContract
@@ -64,15 +65,18 @@ import org.lfdecentralizedtrust.splice.http.{
   HttpVotesHandler,
   UrlValidator,
 }
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.DsoSequencerDeduplication
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  AcsRequest,
+  AcsRequestV2,
   BatchListVotesByVoteRequestsRequest,
-  DamlValueEncoding,
   CountVoteResultsRequest,
+  DamlValueEncoding,
   ErrorResponse,
   EventHistoryRequest,
-  HoldingsStateRequest,
+  GetBulkObjectChecksumsRequest,
+  HoldingsStateRequestV2,
   HoldingsSummaryRequest,
   HoldingsSummaryRequestV1,
   ListBulkUpdateHistoryObjectsRequest,
@@ -88,8 +92,18 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
-import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
+import org.lfdecentralizedtrust.splice.scan.config.{
+  CantonBftPeerConfig,
+  ScanRollForwardLsuConfig,
+  ScanStorageConfig,
+}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
+import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics
+import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics.{
+  AsOfRound,
+  Presence,
+  SnapshotQueryLabels,
+}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
@@ -97,30 +111,43 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanStore,
   TxLogEntry,
 }
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.bulk.{
+  BulkObjectKind,
+  BulkObjectsAvailability,
+  BulkStorageReader,
+}
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
+  IncrementalAcsSnapshotTable,
+  QueryAcsSnapshotResult,
+}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.{
+  ActiveVotesStore,
   AppStore,
   AppStoreWithIngestion,
+  HistoricalVotesStore,
   PageLimit,
+  TimestampWithMigrationId,
+  UpdateHistory,
   VoteResultsFilters,
-  VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
+import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 
-import java.lang.IllegalStateException
 import scala.collection.immutable.SortedMap
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
   Contract,
   ContractWithState,
+  DsoInfo,
   PackageQualifiedName,
   QualifiedName,
 }
@@ -147,15 +174,17 @@ class HttpScanHandler(
     synchronizerNodeService: SynchronizerNodeService[ScanSynchronizerNode],
     protected val storeWithIngestion: AppStoreWithIngestion[ScanStore],
     updateHistory: UpdateHistory,
-    appRewardsStoreO: Option[DbScanAppRewardsStore],
-    appActivityStoreO: Option[AppActivityStore],
+    appRewardsStore: DbScanAppRewardsStore,
+    appActivityStore: AppActivityStore,
     snapshotStore: AcsSnapshotStore,
     eventStore: ScanEventStore,
+    historicalVotesStore: HistoricalVotesStore,
     bulkStorage: Option[BulkStorageReader],
+    scanApiMetrics: ScanHttpApiMetrics,
     dsoAnsResolver: DsoAnsResolver,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration],
     enableForcedAcsSnapshots: Boolean,
-    serveAppActivityRecordsAndTraffic: Boolean,
+    perAcsSnapshotTablesEnabled: Boolean,
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
     protected val packageVersionSupport: PackageVersionSupport,
@@ -178,7 +207,7 @@ class HttpScanHandler(
   private val store = storeWithIngestion.store
 
   override protected val workflowId: String = this.getClass.getSimpleName
-  override protected val votesStore: VotesStore = store
+  override protected val activeVotesStore: ActiveVotesStore = store
   override protected val validatorLicensesStore: AppStore = store
 
   private val initializedBftSequencersCache
@@ -205,24 +234,45 @@ class HttpScanHandler(
   )()(extracted: TraceContext): Future[v0.ScanResource.GetDsoInfoResponse] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getDsoInfo") { _ => _ =>
-      for {
-        latestOpenMiningRound <- store.getLatestActiveOpenMiningRound()
-        amuletRules <- store.getAmuletRulesWithState()
-        rulesAndStates <- store.getDsoRulesWithStateWithSvNodeStates()
-        dsoRules = rulesAndStates.dsoRules
-      } yield definitions.GetDsoInfoResponse(
-        svUser = svUserName,
-        svPartyId = svParty.toProtoPrimitive,
-        dsoPartyId = store.key.dsoParty.toProtoPrimitive,
-        votingThreshold = Thresholds.requiredNumVotes(dsoRules),
-        latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
-        amuletRules = amuletRules.toHttp,
-        dsoRules = dsoRules.toHttp,
-        svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
-        initialRound = Some(initialRound),
-      )
+      lookupDsoInfo().map(_.toHttp)
     }
   }
+
+  def getDsoInfoV1(
+      respond: v0.ScanResource.GetDsoInfoV1Response.type
+  )()(extracted: TraceContext): Future[v0.ScanResource.GetDsoInfoV1Response] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getDsoInfoV1") { _ => _ =>
+      lookupDsoInfo().map(_.toV1.toHttp)
+    }
+  }
+
+  def getSvInfo(
+      respond: v0.ScanResource.GetSvInfoResponse.type
+  )()(extracted: TraceContext): Future[v0.ScanResource.GetSvInfoResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getSvInfo") { _ => _ =>
+      Future.successful(definitions.GetSvInfoResponse(svUserName, svParty.toProtoPrimitive))
+    }
+  }
+
+  private def lookupDsoInfo()(implicit tc: TraceContext): Future[DsoInfo] =
+    for {
+      latestOpenMiningRound <- store.getLatestActiveOpenMiningRound()
+      amuletRules <- store.getAmuletRulesWithState()
+      rulesAndStates <- store.getDsoRulesWithStateWithSvNodeStates()
+      dsoRules = rulesAndStates.dsoRules
+    } yield DsoInfo(
+      svUser = svUserName,
+      svParty = svParty,
+      dsoParty = store.key.dsoParty,
+      votingThreshold = Thresholds.requiredNumVotes(dsoRules),
+      latestMiningRound = latestOpenMiningRound.toContractWithState,
+      amuletRules = amuletRules,
+      dsoRules = dsoRules,
+      svNodeStates = rulesAndStates.svNodeStates,
+      initialRound = Some(initialRound),
+    )
 
   def getOpenAndIssuingMiningRounds(
       response: v0.ScanResource.GetOpenAndIssuingMiningRoundsResponse.type
@@ -231,6 +281,12 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[v0.ScanResource.GetOpenAndIssuingMiningRoundsResponse] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getOpenAndIssuingMiningRounds") { _ => _ =>
+      val cachedOpenMiningRoundContractIds = maxSizeOrFail(
+        "cached_open_mining_round_contract_ids",
+        body.cachedOpenMiningRoundContractIds,
+      )
+      val cachedIssuingRoundContractIds =
+        maxSizeOrFail("cached_issuing_round_contract_ids", body.cachedIssuingRoundContractIds)
       for {
         issuingRounds <- store.multiDomainAcsStore
           .listContracts(IssuingMiningRound.COMPANION)
@@ -238,8 +294,8 @@ class HttpScanHandler(
           .listContracts(OpenMiningRound.COMPANION)
         summarizingRounds <- store.multiDomainAcsStore
           .listContracts(SummarizingMiningRound.COMPANION)
-        issuingRoundsCachedByClient = body.cachedIssuingRoundContractIds.toSet
-        openRoundsCachedByClient = body.cachedOpenMiningRoundContractIds.toSet
+        issuingRoundsCachedByClient = cachedIssuingRoundContractIds.toSet
+        openRoundsCachedByClient = cachedOpenMiningRoundContractIds.toSet
         issuingRoundsResponseMap = selectRoundsToRespondWith(
           issuingRounds,
           issuingRoundsCachedByClient,
@@ -470,7 +526,8 @@ class HttpScanHandler(
     withSpan(s"$workflowId.listFeaturedAppRightsByProvider") { _ => _ =>
       for {
         rights <- store.listFeaturedAppRightsByProvider(
-          PartyId.tryFromProtoPrimitive(providerPartyId)
+          PartyId.tryFromProtoPrimitive(providerPartyId),
+          store.defaultLimit,
         )
       } yield {
         definitions.ListFeaturedAppRightsResponse(
@@ -494,6 +551,33 @@ class HttpScanHandler(
       } yield {
         definitions.LookupFeaturedAppRightResponse(right.map(_.contract.toHttp))
       }
+    }
+  }
+
+  override def getRewardCouponsV2Disclosures(
+      respond: ScanResource.GetRewardCouponsV2DisclosuresResponse.type
+  )(
+      body: definitions.GetRewardCouponsV2DisclosuresRequest
+  )(extracted: TraceContext): Future[ScanResource.GetRewardCouponsV2DisclosuresResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getRewardCouponsV2Disclosures") { _ => _ =>
+      store.multiDomainAcsStore
+        .lookupContractsById(amulet.RewardCouponV2.COMPANION)(
+          maxSizeOrFail("contract_ids", body.contractIds, 100)
+            .map(new amulet.RewardCouponV2.ContractId(_))
+        )
+        .map { contracts =>
+          ScanResource.GetRewardCouponsV2DisclosuresResponseOK(
+            definitions.GetRewardCouponsV2DisclosuresResponse(
+              createdEventBlobs = contracts.view
+                .map(c =>
+                  c.contract.contractId.contractId -> Base64.getEncoder
+                    .encodeToString(c.contract.createdEventBlob.toByteArray)
+                )
+                .toMap
+            )
+          )
+        }
     }
   }
 
@@ -543,34 +627,6 @@ class HttpScanHandler(
   )()(extracted: TraceContext): Future[v0.ScanResource.ListDsoSequencersResponse] = {
     implicit val tc = extracted
 
-    def extractSequencersForSynchronizersFromLegacyState(
-        nodeName: String,
-        synchronizerConfig: SynchronizerNodeConfig,
-    ) = {
-      val sequencers = for {
-        sequencer <- synchronizerConfig.sequencer.toScala
-        availableAfter <- sequencer.availableAfter.toScala
-      } yield definitions.DsoSequencer(
-        sequencer.migrationId,
-        None,
-        sequencer.sequencerId,
-        sequencer.url,
-        nodeName,
-        OffsetDateTime.ofInstant(availableAfter, ZoneOffset.UTC),
-      )
-      val legacySequencers = for {
-        legacyConfig <- synchronizerConfig.legacySequencerConfig.toScala.toList
-      } yield definitions.DsoSequencer(
-        legacyConfig.migrationId,
-        None,
-        legacyConfig.sequencerId,
-        legacyConfig.url,
-        nodeName,
-        OffsetDateTime.MIN,
-      )
-      (legacySequencers ++ sequencers).distinct
-    }
-
     def extractSequencersForSynchronizers(
         nodeName: String,
         synchronizerConfig: SynchronizerNodeConfig,
@@ -597,15 +653,10 @@ class HttpScanHandler(
     def extractSequencersFromNodeState(nodeState: SvNodeState) = {
       nodeState.state.synchronizerNodes.asScala.toVector
         .flatMap { case (synchronizerId, domainConfig) =>
-          val legacyConfig = extractSequencersForSynchronizersFromLegacyState(
+          extractSequencersForSynchronizers(
             nodeState.svName,
             domainConfig,
-          )
-          val physicalSequencers = extractSequencersForSynchronizers(
-            nodeState.svName,
-            domainConfig,
-          )
-          (legacyConfig ++ physicalSequencers).map(synchronizerId -> _)
+          ).map(synchronizerId -> _)
         }
     }
 
@@ -616,11 +667,25 @@ class HttpScanHandler(
         }
         .map(list =>
           list.map { case (synchronizerId, sequencers) =>
-            synchronizerId -> sequencers.filter { sequencer =>
+            val (uniqueSequencers, duplicates) =
+              DsoSequencerDeduplication.partitionUniqueBy(sequencers)(sequencer =>
+                (sequencer.synchronizerSerial, sequencer.id)
+              )
+            duplicates.foreach { case ((serial, sequencerId), duplicatedSequencers) =>
+              // the duplicate sequencer ids are important because they are used as aliases for the sequencer connection
+              // in the validator and that does not support duplicates
+              logger.warn(
+                s"Not serving sequencer $sequencerId for synchronizer $synchronizerId and serial ${serial
+                    .getOrElse("<none>")} as it is claimed by multiple SVs: ${duplicatedSequencers
+                    .map(_.svName)
+                    .mkString(", ")}"
+              )
+            }
+            synchronizerId -> uniqueSequencers.filter { sequencer =>
               UrlValidator.isValid(sequencer.url) match {
                 case Left(failure) =>
                   logger.warn(
-                    s"Not serving sequencer $sequencer for domain $synchronizerId as it has an invalid url: $failure"
+                    s"Not serving sequencer $sequencer for synchronizer $synchronizerId as it has an invalid url: $failure"
                   )
                   false
                 case Right(_) => true
@@ -704,9 +769,9 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     val afterO = after.map { after =>
       val afterRecordTime = parseTimestamp(after.afterRecordTime)
-      (
-        after.afterMigrationId,
+      TimestampWithMigrationId(
         afterRecordTime,
+        after.afterMigrationId,
       )
     }
     confirmBackfillingIsCompleteThen(updateHistory) {
@@ -812,6 +877,41 @@ class HttpScanHandler(
     }
   }
 
+  private def buildEventHistoryItem(
+      verdictWithViewsO: Option[eventStore.Verdict],
+      updateO: Option[TreeUpdateWithMigrationId],
+      appAndAssetActivityRecordO: Option[AppAndAssetActivityRecordT],
+      encoding: definitions.DamlValueEncoding,
+  )(implicit tc: TraceContext): definitions.EventHistoryItem = {
+    val encodedUpdateV2 = updateO.map(
+      ScanHttpEncodings.encodeUpdateV2(
+        _,
+        encoding,
+        ScanHttpEncodings.V1,
+        hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
+        externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
+      )
+    )
+    val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
+      ScanHttpEncodings.encodeVerdict(v, views)
+    }
+    val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
+      v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
+    }
+    val appActivityRecordEncoded =
+      appAndAssetActivityRecordO.map(ScanHttpEncodings.encodeAppActivityRecord)
+    definitions.EventHistoryItem(
+      update = encodedUpdateV2,
+      verdict = verdictEncoded,
+      trafficSummary = trafficSummaryEncoded,
+      appActivityRecords = appActivityRecordEncoded,
+      assetActivityRecords =
+        ScanHttpEncodings.encodeAssetActivityRecord(appAndAssetActivityRecordO),
+      submittingAppProvider =
+        ScanHttpEncodings.encodeSubmittingAppProvider(appAndAssetActivityRecordO),
+    )
+  }
+
   def getEventById(
       updateId: String,
       encoding: definitions.DamlValueEncoding,
@@ -831,46 +931,19 @@ class HttpScanHandler(
         case Some((verdictWithViewsO, updateO)) =>
           val verdictRowIdO = verdictWithViewsO.map { case (v, _) => v.rowId }
           for {
-            appActivityRecordO <-
-              if (serveAppActivityRecordsAndTraffic)
-                verdictRowIdO match {
-                  case Some(rowId) =>
-                    eventStore.getAppActivityRecords(Seq(rowId)).map(_.get(rowId))
-                  case None => Future.successful(None)
-                }
-              else Future.successful(None)
-          } yield {
-            val encodedUpdateV2 = updateO
-              .map(
-                ScanHttpEncodings.encodeUpdateV2(
-                  _,
-                  encoding,
-                  ScanHttpEncodings.V1,
-                  hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
-                  externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
-                )
-              )
-            val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-              ScanHttpEncodings.encodeVerdict(v, views)
+            appAndAssetActivityRecordO <- verdictRowIdO match {
+              case Some(rowId) =>
+                eventStore.getAppAndAssetActivityRecords(Seq(rowId)).map(_.get(rowId))
+              case None => Future.successful(None)
             }
-            val trafficSummaryEncoded =
-              if (serveAppActivityRecordsAndTraffic)
-                verdictWithViewsO.flatMap { case (v, _) =>
-                  v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
-                }
-              else None
-            val appActivityRecordEncoded = appActivityRecordO.map(
-              ScanHttpEncodings.encodeAppActivityRecord
+          } yield Right(
+            buildEventHistoryItem(
+              verdictWithViewsO,
+              updateO,
+              appAndAssetActivityRecordO,
+              encoding,
             )
-            Right(
-              definitions.EventHistoryItem(
-                encodedUpdateV2,
-                verdictEncoded,
-                trafficSummaryEncoded,
-                appActivityRecordEncoded,
-              )
-            )
-          }
+          )
       }
     } yield result
   }
@@ -902,7 +975,7 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     val afterO = after.map { a =>
       val afterRecordTime = parseTimestamp(a.afterRecordTime)
-      (a.afterMigrationId, afterRecordTime)
+      TimestampWithMigrationId(afterRecordTime, a.afterMigrationId)
     }
 
     confirmBackfillingIsCompleteThen(updateHistory) {
@@ -915,37 +988,16 @@ class HttpScanHandler(
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
           verdictWithViewsO.map { case (v, _) => v.rowId }
         }
-        appActivityRecordMap <-
-          if (serveAppActivityRecordsAndTraffic) eventStore.getAppActivityRecords(verdictRowIds)
-          else Future.successful(Map.empty[Long, eventStore.AppActivityRecordT])
+        appAndAssetActivityRecordMap <- eventStore.getAppAndAssetActivityRecords(verdictRowIds)
       } yield events.map { case (verdictWithViewsO, updateO) =>
-        val encodedUpdateV2 = updateO
-          .map(
-            ScanHttpEncodings.encodeUpdateV2(
-              _,
-              encoding,
-              ScanHttpEncodings.V1,
-              hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
-              externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
-            )
-          )
-        val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-          ScanHttpEncodings.encodeVerdict(v, views)
+        val appAndAssetActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
+          appAndAssetActivityRecordMap.get(v.rowId)
         }
-        val trafficSummaryEncoded =
-          if (serveAppActivityRecordsAndTraffic)
-            verdictWithViewsO.flatMap { case (v, _) =>
-              v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
-            }
-          else None
-        val appActivityRecordEncoded = verdictWithViewsO.flatMap { case (v, _) =>
-          appActivityRecordMap.get(v.rowId).map(ScanHttpEncodings.encodeAppActivityRecord)
-        }
-        definitions.EventHistoryItem(
-          encodedUpdateV2,
-          verdictEncoded,
-          trafficSummaryEncoded,
-          appActivityRecordEncoded,
+        buildEventHistoryItem(
+          verdictWithViewsO,
+          updateO,
+          appAndAssetActivityRecordForEvent,
+          encoding,
         )
       }.toVector
     }
@@ -963,6 +1015,24 @@ class HttpScanHandler(
         extracted,
       )
         .map(items => definitions.EventHistoryResponse(items))
+    }
+  }
+
+  override def getLatestEventRecordTime(
+      respond: ScanResource.GetLatestEventRecordTimeResponse.type
+  )()(extracted: TraceContext): Future[ScanResource.GetLatestEventRecordTimeResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getLatestEventRecordTime") { _ => _ =>
+      eventStore.getLatestEventRecordTime(updateHistory.domainMigrationId).map {
+        case Some(timestamp) =>
+          ScanResource.GetLatestEventRecordTimeResponse.OK(
+            definitions.EventLatestRecordTimeResponse(Codec.encode(timestamp))
+          )
+        case None =>
+          ScanResource.GetLatestEventRecordTimeResponse.NotFound(
+            definitions.ErrorResponse("No events found")
+          )
+      }
     }
   }
 
@@ -1354,12 +1424,12 @@ class HttpScanHandler(
     }
   }
 
-  private def getRecordTimeAtOrBefore(migrationId: Long, before: CantonTimestamp)(implicit
+  private def getSnapshotRecordTimeAtOrBefore(migrationId: Long, before: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[Option[CantonTimestamp]] =
     OptionT(
       snapshotStore
-        .lookupSnapshotAtOrBefore(migrationId, before)
+        .lookupSnapshotAtOrBefore(migrationId, before, onlyIndexed = true)
     ).map {
       _.snapshotRecordTime
     }.value
@@ -1370,20 +1440,26 @@ class HttpScanHandler(
       extracted: TraceContext
   ): Future[ScanResource.GetDateOfMostRecentSnapshotBeforeResponse] = {
     implicit val tc: TraceContext = extracted
+
+    def notFound = ScanResource.GetDateOfMostRecentSnapshotBeforeResponseNotFound(
+      definitions.ErrorResponse(s"No snapshots found before $before")
+    )
+
     withSpan(s"$workflowId.getDateOfMostRecentSnapshotBefore") { _ => _ =>
       snapshotStore
-        .lookupSnapshotAtOrBefore(migrationId, Codec.tryDecode(Codec.OffsetDateTime)(before))
+        .lookupSnapshotAtOrBefore(
+          migrationId,
+          Codec.tryDecode(Codec.OffsetDateTime)(before),
+          onlyIndexed = true,
+        )
         .map {
+          case None => notFound
           case Some(snapshot) =>
             ScanResource.GetDateOfMostRecentSnapshotBeforeResponseOK(
               definitions
                 .AcsSnapshotTimestampResponse(
                   Codec.encode(snapshot.snapshotRecordTime)
                 )
-            )
-          case None =>
-            ScanResource.GetDateOfMostRecentSnapshotBeforeResponseNotFound(
-              definitions.ErrorResponse(s"No snapshots found before $before")
             )
         }
     }
@@ -1396,19 +1472,21 @@ class HttpScanHandler(
   ): Future[ScanResource.GetDateOfFirstSnapshotAfterResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getDateOfFirstSnapshotAfter") { _ => _ =>
+      def notFound = ScanResource.GetDateOfFirstSnapshotAfterResponseNotFound(
+        definitions.ErrorResponse(s"No snapshots found after $after")
+      )
+
       snapshotStore
         .lookupSnapshotAfter(migrationId, Codec.tryDecode(Codec.OffsetDateTime)(after))
         .map {
+          case None => notFound
+          case Some(snapshot) if !snapshot.indexesCreated => notFound
           case Some(snapshot) =>
             ScanResource.GetDateOfFirstSnapshotAfterResponseOK(
               definitions
                 .AcsSnapshotTimestampResponse(
                   Codec.encode(snapshot.snapshotRecordTime)
                 )
-            )
-          case None =>
-            ScanResource.GetDateOfFirstSnapshotAfterResponseNotFound(
-              definitions.ErrorResponse(s"No snapshots found after $after")
             )
         }
     }
@@ -1426,6 +1504,12 @@ class HttpScanHandler(
           )
         )
       } else {
+        val snapshotTable: IncrementalAcsSnapshotTable =
+          if (perAcsSnapshotTablesEnabled) {
+            AcsSnapshotStore.IncrementalAcsSnapshotTable.NextV2
+          } else {
+            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+          }
         for {
           synchronizerId <- store
             .lookupAmuletRules()
@@ -1478,7 +1562,7 @@ class HttpScanHandler(
               // - wall clock tests must take manual snapshots anyway, because they can't wait
               // - simtime tests will advanceTime(N.hours)
               snapshotStore.insertNewSnapshot(
-                lastSnapshot,
+                snapshotTable,
                 snapshotStore.currentMigrationId,
                 snapshotTime,
               )
@@ -1499,46 +1583,73 @@ class HttpScanHandler(
       recordTimeIsAtOrBefore: Boolean,
       exactQuery: CantonTimestamp => Future[S],
       toResponse: S => T,
+      labels: SnapshotQueryLabels,
   )(implicit tc: TraceContext): Future[Either[String, T]] = {
+    // Track use of optional filters.
+    scanApiMetrics.snapshotQueryRequests.inc()(labels.context)
     val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(recordTime)
     if (recordTimeIsAtOrBefore) {
       val snapshotQueryResult = for {
-        recordTime <- OptionT(getRecordTimeAtOrBefore(migrationId, recordTimeTs))
-        snapshotQueryResult <- OptionT.liftF(exactQuery(recordTime))
+        resolvedRecordTime <- OptionT(getSnapshotRecordTimeAtOrBefore(migrationId, recordTimeTs))
+        _ = logSnapshotAccess(labels, resolvedRecordTime)
+        snapshotQueryResult <- OptionT.liftF(exactQuery(resolvedRecordTime))
       } yield snapshotQueryResult
       snapshotQueryResult.fold[Either[String, T]](
         Left(s"No snapshots found before $recordTime")
       )(res => Right(toResponse(res)))
     } else {
+      logSnapshotAccess(labels, recordTimeTs)
       exactQuery(recordTimeTs).map(res => Right(toResponse(res)))
     }
   }
 
-  // Shared between /v0/state/acs and /v1/state/acs. The only difference between them is in `toResponse`.
-  private def acsSnapshotQuery[T](request: AcsRequest, toResponse: QueryAcsSnapshotResult => T)(
-      implicit tc: TraceContext
-  ): Future[Either[String, T]] = {
-    val AcsRequest(
-      migrationId,
-      recordTime,
-      recordTimeMatch,
-      after,
-      pageSize,
-      partyIds,
-      templates,
-    ) = request
+  private def logSnapshotAccess(
+      labels: SnapshotQueryLabels,
+      servedRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Unit = {
+    val servedInstant = servedRecordTime.toInstant
+    val age = java.time.Duration.between(servedInstant, clock.now.toInstant)
+    val requestedSnapshotAge =
+      if (age.compareTo(java.time.Duration.ofHours(3)) <= 0) "less_equal_3h"
+      else if (age.compareTo(java.time.Duration.ofHours(24)) <= 0) "less_equal_24h"
+      else if (age.compareTo(java.time.Duration.ofDays(7)) <= 0) "less_equal_7d"
+      else "greater_than_7d"
+    val slotStartHour = (servedInstant.atOffset(java.time.ZoneOffset.UTC).getHour / 3) * 3
+    val snapshotSlot = f"$slotStartHour%02d:00"
+    logger.debug(
+      s"snapshot_access" +
+        s" operation=${labels.operation}" +
+        s" record_time_match=${if (labels.atOrBefore) "at_or_before" else "exact"}" +
+        s" served_record_time=$servedRecordTime" +
+        s" requested_snapshot_age=$requestedSnapshotAge" +
+        s" snapshot_slot=$snapshotSlot"
+    )
+  }
 
+  private def acsSnapshotQuery[T](
+      operation: String,
+      migrationId: Long,
+      recordTime: java.time.OffsetDateTime,
+      recordTimeIsAtOrBefore: Boolean,
+      after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
+      pageSize: Int,
+      partyIds: Option[Vector[String]],
+      templates: Option[Vector[String]],
+      toResponse: QueryAcsSnapshotResult => T,
+  )(implicit
+      tc: TraceContext
+  ): Future[Either[String, T]] = {
+    val boundedPartyIds = maxSizeOrFail("party_ids", partyIds getOrElse Vector.empty)
+    val boundedTemplates = maxSizeOrFail("templates", templates getOrElse Vector.empty)
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .queryAcsSnapshot(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        partyIds
-          .getOrElse(Seq.empty)
+        boundedPartyIds
           .map(PartyId.tryFromProtoPrimitive),
-        templates
-          .getOrElse(Seq.empty)
+        boundedTemplates
           .map(_.split(":") match {
             case Array(packageName, moduleName, entityName) =>
               PackageQualifiedName(packageName, QualifiedName(moduleName, entityName))
@@ -1552,34 +1663,24 @@ class HttpScanHandler(
     queryWithOptionalAtOrBefore(
       migrationId,
       recordTime,
-      recordTimeMatch.contains(AcsRequest.RecordTimeMatch.AtOrBefore),
+      recordTimeIsAtOrBefore,
       exactQuery,
       toResponse,
+      SnapshotQueryLabels(
+        operation = operation,
+        partyFilter = Presence(boundedPartyIds.nonEmpty),
+        templateFilter = Presence(boundedTemplates.nonEmpty),
+        atOrBefore = recordTimeIsAtOrBefore,
+        asOfRound = AsOfRound.NotApplicable,
+      ),
     )
 
   }
 
-  private def toAcsV0Response(migrationId: Long, result: QueryAcsSnapshotResult)(implicit
-      tc: TraceContext
-  ) = {
-    definitions.AcsResponse(
-      Codec.encode(result.snapshotRecordTime),
-      migrationId,
-      result.createdEventsInPage
-        .map(event =>
-          CompactJsonScanHttpEncodings().javaToHttpCreatedEvent(
-            event.eventId,
-            event.event,
-          )
-        ),
-      result.afterToken,
-    )
-  }
-
-  private def toAcsV1Response(migrationId: Long, result: QueryAcsSnapshotResult)(implicit
+  private def toAcsV2Response(migrationId: Long, result: QueryAcsSnapshotResult)(implicit
       tc: TraceContext
   ) =
-    definitions.AcsResponseV1(
+    definitions.AcsResponseV2(
       Codec.encode(result.snapshotRecordTime),
       migrationId,
       result.createdEventsInPage
@@ -1590,46 +1691,37 @@ class HttpScanHandler(
             event.event,
           )
         ),
-      result.afterToken,
+      result.afterToken.map(_.encodeToBase64),
     )
 
-  override def getAcsSnapshotAt(respond: ScanResource.GetAcsSnapshotAtResponse.type)(
-      body: AcsRequest
-  )(extracted: TraceContext): Future[ScanResource.GetAcsSnapshotAtResponse] = {
-    implicit val tc: TraceContext = extracted
-
-    def toResponse(result: QueryAcsSnapshotResult) =
-      ScanResource.GetAcsSnapshotAtResponseOK(
-        toAcsV0Response(body.migrationId, result)
-      )
-
-    withSpan(s"$workflowId.getAcsSnapshotAt") { _ => _ =>
-      acsSnapshotQuery(body, toResponse).map {
-        case Right(response) => response
-        case Left(errorMessage) =>
-          ScanResource.GetAcsSnapshotAtResponseNotFound(
-            ErrorResponse(errorMessage)
-          )
-      }
-    }
-  }
-
-  override def getAcsSnapshotAtV1(respond: ScanResource.GetAcsSnapshotAtV1Response.type)(
-      body: AcsRequest
-  )(extracted: TraceContext): Future[ScanResource.GetAcsSnapshotAtV1Response] = {
+  override def getAcsSnapshotAtV2(respond: ScanResource.GetAcsSnapshotAtV2Response.type)(
+      body: AcsRequestV2
+  )(extracted: TraceContext): Future[ScanResource.GetAcsSnapshotAtV2Response] = {
     implicit val tc: TraceContext = extracted
 
     def toResponse(result: QueryAcsSnapshotResult) = {
-      ScanResource.GetAcsSnapshotAtV1ResponseOK(
-        toAcsV1Response(body.migrationId, result)
+      ScanResource.GetAcsSnapshotAtV2ResponseOK(
+        toAcsV2Response(body.migrationId, result)
       )
     }
-
-    withSpan(s"$workflowId.getAcsSnapshotAtV1") { _ => _ =>
-      acsSnapshotQuery(body, toResponse).map {
+    val opId = "getAcsSnapshotAtV2"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
+      acsSnapshotQuery(
+        operation = opId,
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(AcsRequestV2.RecordTimeMatch.AtOrBefore),
+        after =
+          body.after.map(AcsSnapshotStore.QueryAcsSnapshotPaginationToken.tryDecodeFromBase64),
+        pageSize = body.pageSize,
+        partyIds = body.partyIds,
+        templates = body.templates,
+        toResponse = toResponse,
+      ).map {
         case Right(response) => response
         case Left(errorMessage) =>
-          ScanResource.GetAcsSnapshotAtV1ResponseNotFound(
+          ScanResource.GetAcsSnapshotAtV2ResponseNotFound(
             ErrorResponse(errorMessage)
           )
       }
@@ -1637,68 +1729,69 @@ class HttpScanHandler(
   }
 
   private def holdingStateQuery[T](
-      request: HoldingsStateRequest,
+      operation: String,
+      migrationId: Long,
+      recordTime: java.time.OffsetDateTime,
+      recordTimeIsAtOrBefore: Boolean,
+      after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
+      pageSize: Int,
+      ownerPartyIds: Vector[String],
       toResponse: QueryAcsSnapshotResult => T,
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
-    val HoldingsStateRequest(
-      migrationId,
-      recordTime,
-      recordTimeMatch,
-      after,
-      pageSize,
-      ownerPartyIds,
-    ) = request
-
+    val boundedOwnerPartyIds =
+      nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", ownerPartyIds))
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .getHoldingsState(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        nonEmptyOrFail("ownerPartyIds", ownerPartyIds).map(PartyId.tryFromProtoPrimitive),
+        boundedOwnerPartyIds.map(PartyId.tryFromProtoPrimitive),
       )
 
     queryWithOptionalAtOrBefore(
       migrationId,
       recordTime,
-      recordTimeMatch.contains(HoldingsStateRequest.RecordTimeMatch.AtOrBefore),
+      recordTimeIsAtOrBefore,
       exactQuery,
       toResponse,
+      SnapshotQueryLabels(
+        operation = operation,
+        // owner_party_ids is required on holdings/state.
+        partyFilter = Presence.Present,
+        // fixed to holding templates.
+        templateFilter = Presence.NotApplicable,
+        atOrBefore = recordTimeIsAtOrBefore,
+        asOfRound = AsOfRound.NotApplicable,
+      ),
     )
   }
 
-  override def getHoldingsStateAt(respond: ScanResource.GetHoldingsStateAtResponse.type)(
-      body: HoldingsStateRequest
-  )(extracted: TraceContext): Future[ScanResource.GetHoldingsStateAtResponse] = {
+  override def getHoldingsStateAtV2(respond: ScanResource.GetHoldingsStateAtV2Response.type)(
+      body: HoldingsStateRequestV2
+  )(extracted: TraceContext): Future[ScanResource.GetHoldingsStateAtV2Response] = {
     implicit val tc: TraceContext = extracted
     def toResponse(result: QueryAcsSnapshotResult) =
-      ScanResource.GetHoldingsStateAtResponseOK(toAcsV0Response(body.migrationId, result))
-
-    withSpan(s"$workflowId.getHoldingsStateAt") { _ => _ =>
-      holdingStateQuery(body, toResponse).map {
+      ScanResource.GetHoldingsStateAtV2ResponseOK(toAcsV2Response(body.migrationId, result))
+    val opId = "getHoldingsStateAtV2"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
+      holdingStateQuery(
+        operation = opId,
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(HoldingsStateRequestV2.RecordTimeMatch.AtOrBefore),
+        after =
+          body.after.map(AcsSnapshotStore.QueryAcsSnapshotPaginationToken.tryDecodeFromBase64),
+        pageSize = body.pageSize,
+        ownerPartyIds = body.ownerPartyIds,
+        toResponse,
+      ).map {
         case Right(response) => response
         case Left(errorMessage) =>
-          ScanResource.GetHoldingsStateAtResponseNotFound(
-            ErrorResponse(errorMessage)
-          )
-      }
-    }
-  }
-
-  override def getHoldingsStateAtV1(respond: ScanResource.GetHoldingsStateAtV1Response.type)(
-      body: HoldingsStateRequest
-  )(extracted: TraceContext): Future[ScanResource.GetHoldingsStateAtV1Response] = {
-    implicit val tc: TraceContext = extracted
-    def toResponse(result: QueryAcsSnapshotResult) =
-      ScanResource.GetHoldingsStateAtV1ResponseOK(toAcsV1Response(body.migrationId, result))
-
-    withSpan(s"$workflowId.getHoldingsStateAtV1") { _ => _ =>
-      holdingStateQuery(body, toResponse).map {
-        case Right(response) => response
-        case Left(errorMessage) =>
-          ScanResource.GetHoldingsStateAtV1ResponseNotFound(
+          ScanResource.GetHoldingsStateAtV2ResponseNotFound(
             ErrorResponse(errorMessage)
           )
       }
@@ -1717,6 +1810,8 @@ class HttpScanHandler(
         partyIds,
         asOfRound,
       ) = body
+      val boundedPartyIds =
+        nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", partyIds))
 
       def exactQuery(recordTimeTs: CantonTimestamp) = for {
         round <- asOfRound match {
@@ -1738,7 +1833,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            boundedPartyIds.map(PartyId.tryFromProtoPrimitive),
             round,
           )
       } yield result
@@ -1771,6 +1866,13 @@ class HttpScanHandler(
         recordTimeMatch.contains(HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
         exactQuery,
         toResponse,
+        SnapshotQueryLabels(
+          operation = "getHoldingsSummaryAt",
+          partyFilter = Presence.Present,
+          templateFilter = Presence.NotApplicable,
+          atOrBefore = recordTimeMatch.contains(HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
+          asOfRound = if (asOfRound.isDefined) AsOfRound.Explicit else AsOfRound.Default,
+        ),
       ).map {
         case Right(response) => response
         case Left(errorMessage) =>
@@ -1794,6 +1896,8 @@ class HttpScanHandler(
         recordTimeMatch,
         partyIds,
       ) = body
+      val boundedPartyIds =
+        nonEmptyOrFail("owner_party_ids", maxSizeOrFail("owner_party_ids", partyIds))
 
       // The asOfRound parameter is only consumed by SpliceUtil.holdingFee, which feeds the
       // accumulated*HoldingFees* and totalAvailableCoin fields on HoldingsSummary. The v1
@@ -1805,7 +1909,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            boundedPartyIds.map(PartyId.tryFromProtoPrimitive),
             0L,
           )
 
@@ -1831,6 +1935,15 @@ class HttpScanHandler(
         recordTimeMatch.contains(HoldingsSummaryRequestV1.RecordTimeMatch.AtOrBefore),
         exactQuery,
         toResponse,
+        SnapshotQueryLabels(
+          operation = "getHoldingsSummaryAtV1",
+          partyFilter = Presence.Present,
+          templateFilter = Presence.NotApplicable,
+          atOrBefore =
+            recordTimeMatch.contains(HoldingsSummaryRequestV1.RecordTimeMatch.AtOrBefore),
+          // v1 has no as_of_round field.
+          asOfRound = AsOfRound.NotApplicable,
+        ),
       ).map {
         case Right(response) => response
         case Left(errorMessage) =>
@@ -2064,7 +2177,7 @@ class HttpScanHandler(
     implicit val tc = extracted
     withSpan(s"$workflowId.listAmuletPriceVotes") { _ => _ =>
       for {
-        amuletPriceVotes <- votesStore.listAmuletPriceVotes()
+        amuletPriceVotes <- activeVotesStore.listAmuletPriceVotes()
       } yield ScanResource.ListAmuletPriceVotesResponse.OK(
         definitions.ListAmuletPriceVotesResponse(
           amuletPriceVotes.map(_.toHttp).toVector
@@ -2091,7 +2204,7 @@ class HttpScanHandler(
       val limit = PageLimit.tryCreate(body.limit.intValue)
       val after = body.pageToken.map(_.longValue)
       for {
-        page <- votesStore.listVoteRequestResults(
+        page <- historicalVotesStore.listVoteRequestResults(
           VoteResultsFilters(
             body.actionName,
             body.accepted,
@@ -2133,7 +2246,7 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
       for {
-        count <- votesStore.countVoteRequestResults(
+        count <- historicalVotesStore.countVoteRequestResults(
           VoteResultsFilters(
             body.actionName,
             body.accepted,
@@ -2311,7 +2424,7 @@ class HttpScanHandler(
           .flatMap(_.getSequencerTrafficControlState(member))
         actualConsumed = actual.extraTrafficConsumed.value
         actualLimit = actual.extraTrafficLimit.value
-        targetTotalPurchased <- store.getTotalPurchasedMemberTraffic(member, domain)
+        targetTotalPurchased <- store.getTotalPurchasedMemberTraffic(StoreMemberId(member), domain)
       } yield {
         definitions.GetMemberTrafficStatusResponse(
           definitions.MemberTrafficStatus(
@@ -2428,7 +2541,9 @@ class HttpScanHandler(
     implicit val tc = extracted
     withSpan(s"$workflowId.getValidatorFaucetsByValidator") { _ => _ =>
       store
-        .getValidatorLicenseByValidator(validators.map(v => PartyId.tryFromProtoPrimitive(v)))
+        .getValidatorLicenseByValidator(
+          maxSizeOrFail("validator_ids", validators).map(v => PartyId.tryFromProtoPrimitive(v))
+        )
         .map(licenses =>
           ScanResource.GetValidatorFaucetsByValidatorResponse.OK(
             definitions
@@ -2546,6 +2661,14 @@ class HttpScanHandler(
     }
   }
 
+  private def getStorageEncodings(
+      damlValueEncoding: Option[DamlValueEncoding]
+  ): NonEmptyList[ScanStorageConfig.Encoding] =
+    NonEmptyList.one(
+      ScanStorageConfig.Encoding
+        .fromDamlValueEncoding(damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson))
+    )
+
   private def encodeBulkStorageObjects(objects: Seq[ObjectKeyAndChecksum], publicUrl: Uri) =
     objects.map { case ObjectKeyAndChecksum(key, digest) =>
       val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
@@ -2558,7 +2681,8 @@ class HttpScanHandler(
   override def listBulkAcsSnapshotObjects(
       respond: ScanResource.ListBulkAcsSnapshotObjectsResponse.type
   )(
-      atOrBeforeRecordTime: OffsetDateTime
+      atOrBeforeRecordTime: OffsetDateTime,
+      damlValueEncoding: Option[DamlValueEncoding],
   )(extracted: TraceContext): Future[ScanResource.ListBulkAcsSnapshotObjectsResponse] = {
     implicit val tc = extracted
     import cats.implicits.*
@@ -2571,15 +2695,19 @@ class HttpScanHandler(
         )
       ) { case (bulkStorage, publicUrl) =>
         val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
-          case AcsSnapshotObjects(ts, objects) =>
+        bulkStorage
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(
+            recordTimeTs,
+            getStorageEncodings(damlValueEncoding),
+          )
+          .map { case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
               definitions.ListBulkAcsSnapshotObjectsResponse(
                 Codec.encode(ts),
                 encodeBulkStorageObjects(objects, publicUrl),
               )
             )
-        }
+          }
       }
 
     }
@@ -2608,6 +2736,7 @@ class HttpScanHandler(
             upToTs,
             PageLimit.tryCreate(body.pageSize),
             body.nextPageToken,
+            getStorageEncodings(body.damlValueEncoding),
           )
           .map { case UpdateHistoryObjectsResponse(objects, nextPageToken) =>
             ScanResource.ListBulkUpdateHistoryObjectsResponse.OK(
@@ -2617,6 +2746,70 @@ class HttpScanHandler(
               )
             )
           }
+      }
+    }
+  }
+
+  override def getBulkObjectChecksums(respond: ScanResource.GetBulkObjectChecksumsResponse.type)(
+      body: GetBulkObjectChecksumsRequest
+  )(extracted: TraceContext): Future[ScanResource.GetBulkObjectChecksumsResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getBulkObjectChecksums") { _ => _ =>
+      bulkStorage.fold(
+        Future.failed[ScanResource.GetBulkObjectChecksumsResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage is not configured")
+            .asRuntimeException()
+        )
+      ) { bulkStorage =>
+        for {
+          checksums <- bulkStorage.getObjectChecksums(maxSizeOrFail("object_keys", body.objectKeys))
+        } yield {
+          ScanResource.GetBulkObjectChecksumsResponse.OK(
+            definitions.GetBulkObjectChecksumsResponse(
+              checksums.map(definitions.GetBulkObjectChecksumsResponse.Checksums(_)).toVector
+            )
+          )
+        }
+      }
+    }
+  }
+
+  override def getBulkObjectsProgress(respond: ScanResource.GetBulkObjectsProgressResponse.type)(
+      atOrBeforeRecordTime: java.time.OffsetDateTime,
+      bucket: definitions.BulkStorageBucket,
+      kind: Option[definitions.BulkObjectKind],
+  )(
+      extracted: TraceContext
+  ): scala.concurrent.Future[ScanResource.GetBulkObjectsProgressResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getBulkObjectProgress") { _ => _ =>
+      bulkStorage.fold(
+        Future.failed[ScanResource.GetBulkObjectsProgressResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage is not configured")
+            .asRuntimeException()
+        )
+      ) { bulkStorage =>
+        val requested = CantonTimestamp.tryFromInstant(atOrBeforeRecordTime.toInstant)
+        val objectKind = kind.map(HttpScanHandler.fromHttpObjectKind)
+        for {
+          progress <- bucket match {
+            case definitions.BulkStorageBucket.members.Committed =>
+              bulkStorage.getCommittedProgressTimestamp(objectKind)
+            case definitions.BulkStorageBucket.members.Staging =>
+              bulkStorage.getStagingProgressTimestamp(objectKind)
+          }
+          firstOwnSegmentStart <- bulkStorage.getFirstOwnSegmentStart()
+        } yield {
+          ScanResource.GetBulkObjectsProgressResponse.OK(
+            definitions.GetBulkObjectsProgressResponse(
+              HttpScanHandler.toHttpAvailability(
+                BulkObjectsAvailability.of(progress, requested, firstOwnSegmentStart)
+              )
+            )
+          )
+        }
       }
     }
   }
@@ -2706,23 +2899,14 @@ class HttpScanHandler(
   ] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getRewardAccountingEarliestAvailableRound") { _ => _ =>
-      appActivityStoreO match {
-        case Some(appActivityStore) =>
-          appActivityStore.earliestRoundWithCompleteAppActivity().map {
-            case Some(round) =>
-              ScanResource.GetRewardAccountingEarliestAvailableRoundResponse.OK(
-                definitions.GetRewardAccountingEarliestAvailableRoundResponse(round)
-              )
-            case None =>
-              ScanResource.GetRewardAccountingEarliestAvailableRoundResponse.NotFound(
-                ErrorResponse("No reward accounting data available yet")
-              )
-          }
+      appActivityStore.earliestRoundWithCompleteAppActivity().map {
+        case Some(round) =>
+          ScanResource.GetRewardAccountingEarliestAvailableRoundResponse.OK(
+            definitions.GetRewardAccountingEarliestAvailableRoundResponse(round)
+          )
         case None =>
-          Future.successful(
-            ScanResource.GetRewardAccountingEarliestAvailableRoundResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled")
-            )
+          ScanResource.GetRewardAccountingEarliestAvailableRoundResponse.NotFound(
+            ErrorResponse("No reward accounting data available yet")
           )
       }
     }
@@ -2745,44 +2929,45 @@ class HttpScanHandler(
       )
     )
     withSpan(s"$workflowId.getRewardAccountingActivityTotals") { _ => _ =>
-      (appRewardsStoreO, appActivityStoreO) match {
-        case (Some(appRewardsStore), Some(appActivityStore)) =>
-          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).flatMap {
-            case Some(activityTotal) =>
-              appRewardsStore.getAppRewardRoundTotalByRound(roundNumber).map {
-                case Some(rewardTotal) =>
-                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                    definitions.GetRewardAccountingActivityTotalsResponse(
-                      definitions.RewardAccountingActivityTotalsOk(
-                        status = "Ok",
-                        roundNumber = activityTotal.roundNumber,
-                        totalAppActivityWeight = activityTotal.totalRoundAppActivityWeight,
-                        activePartiesCount = activityTotal.activeAppProviderPartiesCount,
-                        activityRecordsCount = activityTotal.activityRecordsCount,
-                        totalAppRewardMintingAllowance =
-                          rewardTotal.totalAppRewardMintingAllowance.toString,
-                        totalAppRewardThresholded = rewardTotal.totalAppRewardThresholded.toString,
-                        totalAppRewardUnclaimed = rewardTotal.totalAppRewardUnclaimed.toString,
-                        rewardedAppProviderPartiesCount =
-                          rewardTotal.rewardedAppProviderPartiesCount,
-                      )
-                    )
+      appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).flatMap {
+        case Some(activityTotal) =>
+          appRewardsStore.getAppRewardRoundTotalByRound(roundNumber).map {
+            case Some(rewardTotal) =>
+              ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                definitions.GetRewardAccountingActivityTotalsResponse(
+                  definitions.RewardAccountingActivityTotalsOk(
+                    status = "Ok",
+                    roundNumber = activityTotal.roundNumber,
+                    totalAppActivityWeight = activityTotal.totalRoundAppActivityWeight,
+                    totalAssetActivityWeight = activityTotal.totalRoundAssetActivityWeight,
+                    activePartiesCount = activityTotal.activeAppProviderPartiesCount,
+                    activityRecordsCount = activityTotal.activityRecordsCount,
+                    totalAppRewardFromAppActivity =
+                      rewardTotal.totalAppRewardFromAppActivity.toString,
+                    totalAppRewardFromAssetActivity =
+                      rewardTotal.totalAppRewardFromAssetActivity.toString,
+                    issuancePerFeaturedAppActivity =
+                      rewardTotal.issuancePerFeaturedAppActivity.toString,
+                    issuancePerFeaturedAssetActivity =
+                      rewardTotal.issuancePerFeaturedAssetActivity.toString,
+                    totalAppRewardMintingAllowance =
+                      rewardTotal.totalAppRewardMintingAllowance.toString,
+                    totalAppRewardThresholded = rewardTotal.totalAppRewardThresholded.toString,
+                    totalAppRewardUnclaimed = rewardTotal.totalAppRewardUnclaimed.toString,
+                    rewardedAppProviderPartiesCount = rewardTotal.rewardedAppProviderPartiesCount,
                   )
-                case None =>
-                  // We should never hit this, as both activity totals and round
-                  // totals are added in a single DB Tx
-                  undetermined
-              }
+                )
+              )
             case None =>
-              appActivityStore.earliestIngestedRound().map {
-                case Some(earliestIngested) if roundNumber <= earliestIngested =>
-                  cannotProvide
-                case _ =>
-                  undetermined
-              }
+              // We should never hit this, as both activity totals and round
+              // totals are added in a single DB Tx
+              undetermined
           }
-        case _ =>
-          Future.successful(cannotProvide)
+        case None =>
+          appActivityStore.ingestionStatusForRound(roundNumber).map {
+            case RoundIngestionStatus.CannotProvide => cannotProvide
+            case RoundIngestionStatus.Undetermined => undetermined
+          }
       }
     }
   }
@@ -2804,31 +2989,24 @@ class HttpScanHandler(
       )
     )
     withSpan(s"$workflowId.getRewardAccountingRootHash") { _ => _ =>
-      (appRewardsStoreO, appActivityStoreO) match {
-        case (Some(appRewardsStore), Some(appActivityStore)) =>
-          appRewardsStore.getAppRewardRootHashByRound(roundNumber).flatMap {
-            case Some(rootHash) =>
-              Future.successful(
-                ScanResource.GetRewardAccountingRootHashResponse.OK(
-                  definitions.GetRewardAccountingRootHashResponse(
-                    definitions.RewardAccountingRootHashOk(
-                      status = "Ok",
-                      roundNumber = rootHash.roundNumber,
-                      rootHash = rootHash.rootHash.toHex,
-                    )
-                  )
+      appRewardsStore.getAppRewardRootHashByRound(roundNumber).flatMap {
+        case Some(rootHash) =>
+          Future.successful(
+            ScanResource.GetRewardAccountingRootHashResponse.OK(
+              definitions.GetRewardAccountingRootHashResponse(
+                definitions.RewardAccountingRootHashOk(
+                  status = "Ok",
+                  roundNumber = rootHash.roundNumber,
+                  rootHash = rootHash.rootHash.toHex,
                 )
               )
-            case None =>
-              appActivityStore.earliestIngestedRound().map {
-                case Some(earliestIngested) if roundNumber <= earliestIngested =>
-                  cannotProvide
-                case _ =>
-                  undetermined
-              }
+            )
+          )
+        case None =>
+          appActivityStore.ingestionStatusForRound(roundNumber).map {
+            case RoundIngestionStatus.CannotProvide => cannotProvide
+            case RoundIngestionStatus.Undetermined => undetermined
           }
-        case _ =>
-          Future.successful(cannotProvide)
       }
     }
   }
@@ -2840,55 +3018,61 @@ class HttpScanHandler(
   ] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getRewardAccountingBatch") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
-          Future.successful(
+      appRewardsStore
+        .lookupBatchByHash(roundNumber, DbScanAppRewardsStore.RewardHash.fromHex(batchHash))
+        .map {
+          case None =>
             ScanResource.GetRewardAccountingBatchResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
+              ErrorResponse(
+                s"Batch not (yet) found for round $roundNumber with hash $batchHash"
+              )
             )
-          )
-        case Some(appRewardsStore) =>
-          appRewardsStore
-            .lookupBatchByHash(roundNumber, DbScanAppRewardsStore.RewardHash.fromHex(batchHash))
-            .map {
-              case None =>
-                ScanResource.GetRewardAccountingBatchResponse.NotFound(
-                  ErrorResponse(
-                    s"Batch not (yet) found for round $roundNumber with hash $batchHash"
-                  )
+          case Some(batch: DbScanAppRewardsStore.BatchOfBatches) =>
+            ScanResource.GetRewardAccountingBatchResponse.OK(
+              definitions.GetRewardAccountingBatchResponse(
+                definitions.RewardAccountingBatchOfBatches(
+                  batchType = "BatchOfBatches",
+                  childHashes = batch.childHashes.map(_.toHex).toVector,
                 )
-              case Some(batch: DbScanAppRewardsStore.BatchOfBatches) =>
-                ScanResource.GetRewardAccountingBatchResponse.OK(
-                  definitions.GetRewardAccountingBatchResponse(
-                    definitions.RewardAccountingBatchOfBatches(
-                      batchType = "BatchOfBatches",
-                      childHashes = batch.childHashes.map(_.toHex).toVector,
+              )
+            )
+          case Some(batch: DbScanAppRewardsStore.BatchOfMintingAllowances) =>
+            ScanResource.GetRewardAccountingBatchResponse.OK(
+              definitions.GetRewardAccountingBatchResponse(
+                definitions.RewardAccountingBatchOfMintingAllowances(
+                  batchType = "BatchOfMintingAllowances",
+                  mintingAllowances = batch.allowances
+                    .map(a =>
+                      definitions.RewardAccountingMintingAllowance(
+                        provider = a.provider,
+                        amount = a.amount.toString,
+                      )
                     )
-                  )
+                    .toVector,
                 )
-              case Some(batch: DbScanAppRewardsStore.BatchOfMintingAllowances) =>
-                ScanResource.GetRewardAccountingBatchResponse.OK(
-                  definitions.GetRewardAccountingBatchResponse(
-                    definitions.RewardAccountingBatchOfMintingAllowances(
-                      batchType = "BatchOfMintingAllowances",
-                      mintingAllowances = batch.allowances
-                        .map(a =>
-                          definitions.RewardAccountingMintingAllowance(
-                            provider = a.provider,
-                            amount = a.amount.toString,
-                          )
-                        )
-                        .toVector,
-                    )
-                  )
-                )
-            }
-      }
+              )
+            )
+        }
     }
   }
 }
 
 object HttpScanHandler {
+  private def toHttpAvailability(
+      availability: BulkObjectsAvailability
+  ): definitions.BulkObjectsAvailability =
+    availability match {
+      case BulkObjectsAvailability.Available => definitions.BulkObjectsAvailability.Available
+      case BulkObjectsAvailability.Processing => definitions.BulkObjectsAvailability.Processing
+      case BulkObjectsAvailability.Backfilling => definitions.BulkObjectsAvailability.Backfilling
+    }
+
+  private def fromHttpObjectKind(kind: definitions.BulkObjectKind): BulkObjectKind =
+    kind match {
+      case definitions.BulkObjectKind.members.Updates => BulkObjectKind.Updates
+      case definitions.BulkObjectKind.members.Snapshots => BulkObjectKind.Snapshots
+    }
+
   // We expect a handful at most but want to somewhat guard against attacks
   // so we just hardcode a limit of 100.
   private val MAX_TRANSFER_COMMAND_CONTRACTS: Int = 100

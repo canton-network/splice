@@ -3,8 +3,14 @@
 
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology
 
+import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.crypto.Signature
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
+import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.canton.crypto.FingerprintKeyId
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.DefaultEpochLength
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.topology.TopologyActivationTime
@@ -14,7 +20,6 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   EpochLength,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.utils.Miscellaneous.TestBootstrapTopologyActivationTime
-import com.digitalasset.canton.util.MaxBytesToDecompress
 import com.digitalasset.canton.version.ProtocolVersion
 import com.google.common.annotations.VisibleForTesting
 
@@ -41,11 +46,11 @@ final case class OrderingTopology(
     nodesTopologyInfo: Map[BftNodeId, NodeTopologyInfo],
     epochLength: EpochLength,
     sequencingParameters: SequencingParameters,
-    maxBytesToDecompress: MaxBytesToDecompress,
+    maxRequestPayloadBytes: NonNegativeInt,
     activationTime: TopologyActivationTime,
     areTherePendingCantonTopologyChanges: Option[Boolean],
 ) extends MessageAuthorizer
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
 
   lazy val size: Int = nodesTopologyInfo.size
 
@@ -72,7 +77,12 @@ final case class OrderingTopology(
   override def isAuthorized(from: BftNodeId, keyId: BftKeyId): Boolean =
     nodesTopologyInfo.get(from).exists(_.keyIds.contains(keyId))
 
-  override protected def pretty: Pretty[OrderingTopology.this.type] =
+  override def prettyCompanion: PrettyPrintingCompanion[OrderingTopology] = OrderingTopology
+}
+
+object OrderingTopology extends PrettyPrintingCompanion[OrderingTopology] {
+
+  override protected val pretty: Pretty[OrderingTopology] =
     prettyOfClass(
       param("activationTime", _.activationTime.value),
       param("size", _.size),
@@ -83,21 +93,23 @@ final case class OrderingTopology(
         _.nodesTopologyInfo.map { case (node, info) => node.doubleQuoted -> info },
       ),
       param("sequencingParameters", _.sequencingParameters),
-      param("maxBytesToDecompress", _.maxBytesToDecompress.limit),
+      param("maxRequestPayloadBytes", _.maxRequestPayloadBytes),
       param(
         "areTherePendingCantonTopologyChanges",
         _.areTherePendingCantonTopologyChanges,
       ),
     )
-}
-
-object OrderingTopology {
 
   final case class NodeTopologyInfo(
       keyIds: Set[BftKeyId]
-  ) extends PrettyPrinting {
+  ) extends PrettyPrintingFromCompanion {
 
-    override protected def pretty: Pretty[NodeTopologyInfo] =
+    override def prettyCompanion: PrettyPrintingCompanion[NodeTopologyInfo] = NodeTopologyInfo
+  }
+
+  object NodeTopologyInfo extends PrettyPrintingCompanion[NodeTopologyInfo] {
+
+    override protected val pretty: Pretty[NodeTopologyInfo] =
       prettyOfClass(
         param("keyIds", _.keyIds.map(_.doubleQuoted))
       )
@@ -112,6 +124,9 @@ object OrderingTopology {
       areTherePendingCantonTopologyChanges: Option[Boolean] = Some(false),
       nodesTopologyInfos: Map[BftNodeId, NodeTopologyInfo] = Map.empty,
       epochLength: EpochLength = DefaultEpochLength,
+      // No decompression bound needed: test-only constructor.
+      maxRequestPayloadBytes: NonNegativeInt =
+        DynamicSynchronizerParameters.defaultMaxRequestSize.value,
   )(implicit synchronizerProtocolVersion: ProtocolVersion): OrderingTopology =
     OrderingTopology(
       nodes.view.map { node =>
@@ -124,8 +139,7 @@ object OrderingTopology {
       }.toMap,
       epochLength,
       sequencingParameters.getOrElse(SequencingParameters.Default),
-      // TODO(i10428) Move this method under BftSequencerBaseTest so we can reuse defaultMaxBytesToDecompress
-      MaxBytesToDecompress.MaxValueUnsafe,
+      maxRequestPayloadBytes,
       activationTime,
       areTherePendingCantonTopologyChanges,
     )

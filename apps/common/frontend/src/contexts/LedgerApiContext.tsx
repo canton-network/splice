@@ -143,7 +143,7 @@ export class LedgerApiClient {
       },
     };
 
-    const body = {
+    const commands = {
       commands: [command],
       workflowId: '',
       commandId: uuidv4(),
@@ -161,6 +161,21 @@ export class LedgerApiClient {
       packageIdSelectionPreference: [],
     };
 
+    const body = {
+      commands,
+      transactionFormat: {
+        transactionShape: 'TRANSACTION_SHAPE_LEDGER_EFFECTS',
+        eventFormat: {
+          filtersByParty: Object.fromEntries(
+            actAs.map(party => [
+              party,
+              { cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] },
+            ])
+          ),
+        },
+      },
+    };
+
     const describeChoice = `Exercised choice: actAs=${JSON.stringify(
       actAs
     )}, readAs=${JSON.stringify(readAs)}, choiceName=${choice.choiceName}, templateId=${
@@ -168,7 +183,7 @@ export class LedgerApiClient {
     }, contractId=${contractId}`;
 
     const responseBody = await fetch(
-      `${this.jsonApiUrl}v2/commands/submit-and-wait-for-transaction-tree`,
+      `${this.jsonApiUrl}v2/commands/submit-and-wait-for-transaction`,
       { headers: this.headers, method: 'POST', body: JSON.stringify(body) }
     )
       .then(async r => {
@@ -196,12 +211,10 @@ export class LedgerApiClient {
         throw e;
       });
 
-    const tree = responseBody.transactionTree;
-    const eventIds = Object.keys(tree.eventsById).map(Number);
-    const rootEventId = Math.min(...eventIds);
-    const rootEvent = tree.eventsById[rootEventId];
+    const transaction = responseBody.transaction;
+    const rootEvent = transaction.events[0];
     const exerciseResult = choice.resultDecoder.runWithException(
-      rootEvent.ExercisedTreeEvent.value.exerciseResult
+      rootEvent.ExercisedEvent.exerciseResult
     );
     return exerciseResult;
   }

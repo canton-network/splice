@@ -208,6 +208,40 @@ tests:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='AUTH_JWKS_URL')].value
       - notExists:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='AUTH_TARGET_AUDIENCE')].value
+  - it: "does not enable key download by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')]
+  - it: "supports enabling key download"
+    set:
+      enableKeyDownload: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')].value
+          value: canton.parameters.enable-key-download = yes
+  - it: "does not enable repair commands by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS')]
+  - it: "supports enabling repair commands"
+    set:
+      enableRepairCommands: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS')].value
+          value: canton.features.enable-repair-commands = yes
   - it: "pvc creates persistent volume claim and volume mount"
     set:
       pvc:
@@ -324,7 +358,7 @@ tests:
     set:
       imageRepo: "secure-registry.example.com"
       imageName: "custom-participant"
-      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      persistence.initImageName: "secure-registry.example.com/postgres:18-custom"
       persistence.enablePgInitContainer: true
     documentSelector:
       path: kind
@@ -335,7 +369,7 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-participant:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-custom"
+          value: "secure-registry.example.com/postgres:18-custom"
 
   - it: "allows overriding participant database secret env vars with raw strings"
     set:
@@ -464,3 +498,84 @@ tests:
               drop:
                 - ALL
 
+
+  - it: "sets priorityClassName when provided"
+    set:
+      priorityClassName: high-priority
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+
+  - it: "renders a numeric-looking priorityClassName as a string"
+    set:
+      priorityClassName: "42"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: "42"
+
+  - it: "omits priorityClassName when not provided"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName
+
+  - it: "uses HTTP health probes by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health/live
+            port: 5071
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /health/ready
+            port: 5071
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.participants.participant.monitoring.http-health-server.port = 5071
+
+  - it: "uses gRPC health probes when httpHealthProbes is disabled"
+    set:
+      httpHealthProbes: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+          value:
+            port: 5061
+            service: liveness
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+          value:
+            port: 5061
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.participants.participant.monitoring.http-health-server.port = 5071

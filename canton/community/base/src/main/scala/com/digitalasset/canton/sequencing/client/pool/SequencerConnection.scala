@@ -8,7 +8,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
-import com.digitalasset.canton.sequencing.SequencedEventHandler
+import com.digitalasset.canton.sequencing.MaybeCompressedSequencedEventHandler
 import com.digitalasset.canton.sequencing.client.SendAsyncClientError.SendAsyncClientResponseError
 import com.digitalasset.canton.sequencing.client.{
   SequencerSubscription,
@@ -29,6 +29,8 @@ import com.digitalasset.canton.sequencing.protocol.{
 }
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
 
 import scala.concurrent.duration.Duration
 
@@ -80,9 +82,9 @@ trait SequencerConnection extends FlagCloseable with NamedLogging {
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, String, Option[CantonTimestamp]]
 
-  def downloadTopologyStateForInit(request: TopologyStateForInitRequest, timeout: Duration)(implicit
+  def streamTopologyStateForInit(request: TopologyStateForInitRequest, timeout: Duration)(implicit
       traceContext: TraceContext
-  ): EitherT[FutureUnlessShutdown, String, TopologyStateForInitResponse]
+  ): Either[String, Source[TopologyStateForInitResponse, NotUsed]]
 
   def downloadTopologyStateForInitHash(request: TopologyStateForInitRequest, timeout: Duration)(
       implicit traceContext: TraceContext
@@ -90,7 +92,7 @@ trait SequencerConnection extends FlagCloseable with NamedLogging {
 
   def subscribe[E](
       request: SubscriptionRequest,
-      handler: SequencedEventHandler[E],
+      handler: MaybeCompressedSequencedEventHandler[E],
       timeout: Duration,
   )(implicit
       traceContext: TraceContext

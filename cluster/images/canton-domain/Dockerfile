@@ -12,9 +12,12 @@ EXPOSE 5008
 EXPOSE 5009
 EXPOSE 5061
 EXPOSE 5062
+EXPOSE 5071
+EXPOSE 5072
 EXPOSE 10013
 
 COPY app.conf bootstrap.sc /app/
 
 HEALTHCHECK --start-period=10m \
-  CMD grpc-health-probe -addr=localhost:5061 && grpc-health-probe -addr=localhost:5062 || exit 1
+  CMD wget -Y off -q -T 5 -O /dev/null http://localhost:5071/health/ready \
+   && wget -Y off -q -T 5 -O /dev/null http://localhost:5072/health/ready || exit 1

@@ -5,7 +5,6 @@ package com.digitalasset.canton.participant.admin.grpc
 
 import cats.data.EitherT
 import cats.implicits.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.{ErrorCategory, ErrorCode, Explanation, Resolution, RpcError}
 import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.admin.grpc.{GrpcPruningScheduler, HasPruningScheduler}
@@ -16,6 +15,7 @@ import com.digitalasset.canton.error.CantonErrorGroups.ParticipantErrorGroup.Pru
 import com.digitalasset.canton.error.{CantonError, ContextualizedCantonError}
 import com.digitalasset.canton.ledger.error.groups.RequestValidationErrors.InvalidArgument
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.{GrpcETFUSExtended, wrapErrUS}
@@ -32,6 +32,7 @@ import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.{ParticipantId, SynchronizerId}
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
 import com.digitalasset.canton.util.EitherTUtil
+import com.digitalasset.nonempty.NonEmpty
 import io.grpc.{Status, StatusRuntimeException}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -145,7 +146,7 @@ class GrpcPruningService(
       request: v30.SetParticipantScheduleRequest
   ): Future[v30.SetParticipantScheduleResponse] = {
     implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    for {
+    val fus = for {
       scheduler <- ensureScheduler
       participantSchedule <- convertRequiredF(
         "participant_schedule",
@@ -157,16 +158,18 @@ class GrpcPruningService(
         "set_participant_schedule",
       )
     } yield v30.SetParticipantScheduleResponse()
+    fus.asGrpcFuture
   }
 
   override def getParticipantSchedule(
       request: v30.GetParticipantScheduleRequest
   ): Future[v30.GetParticipantScheduleResponse] = {
     implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    for {
+    val fus = for {
       scheduler <- ensureScheduler
       schedule <- scheduler.getParticipantSchedule()
     } yield v30.GetParticipantScheduleResponse(schedule.map(_.toProtoV30))
+    fus.asGrpcFuture
   }
 
   private def toProtoResponse(safeOffsetO: Option[Offset]): GetSafePruningOffsetResponse = {
@@ -185,8 +188,8 @@ class GrpcPruningService(
 
   override protected def ensureScheduler(implicit
       traceContext: TraceContext
-  ): Future[ParticipantPruningScheduler] =
-    Future.successful(pruningScheduler)
+  ): FutureUnlessShutdown[ParticipantPruningScheduler] =
+    FutureUnlessShutdown.pure(pruningScheduler)
 
   /** Enable or disable waiting for commitments from the given counter-participants Disabling
     * waiting for commitments disregards these counter-participants w.r.t. pruning, which gives up

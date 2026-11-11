@@ -1,8 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
+import * as fs from 'fs';
 import * as path from 'path';
 import { setMocks } from '@pulumi/pulumi/runtime/mocks';
+import { AsyncLocalStorage } from 'async_hooks';
 
 import {
   Auth0ClientSecret,
@@ -12,6 +14,7 @@ import {
   NamespacedAuth0Configs,
 } from './auth0/auth0types';
 import { isMainNet } from './config';
+import { ClusterBasename } from './config/gcpConfig';
 
 // Importing DEFAULT_AUDIENCE from auth0/audiences.ts creates a nightmare of things getting initialized too early, so we just redefine it here
 const DEFAULT_AUDIENCE = 'https://canton.network.global';
@@ -24,6 +27,7 @@ export enum PulumiFunction {
   GCP_GET_SECRET_VERSION = 'gcp:secretmanager/getSecretVersion:getSecretVersion',
   GCP_GET_CLUSTER = 'gcp:container/getCluster:getCluster',
   STD_BASE64_DECODE = 'std:index:base64decode',
+  GCP_GET_DATABASE_INSTANCES = 'gcp:sql/getDatabaseInstances:getDatabaseInstances',
 }
 
 export class SecretsFixtureMap extends Map<string, Auth0ClientSecret> {
@@ -130,6 +134,7 @@ const validator1Auth0Config: Auth0NamespaceConfig = {
     wallet: 'validator1-wallet-ui-client-id',
     cns: 'validator1-cns-ui-client-id',
     splitwell: 'validator1-splitwell-ui-client-id',
+    walletGateway: 'validator1-wallet-gateway-ui-client-id',
   },
 };
 
@@ -195,6 +200,85 @@ export const svRunbookAuth0Config = {
   fixedTokenCacheName: 'fixedTokenCacheName',
 };
 
+// Name of the stack (e.g. sv or validator) whose resources are currently being created.
+// Projects that deploy one stack per sv/validator use it to write each stack's resources to its own folder.
+const dumpConfigStack = new AsyncLocalStorage<string>();
+
+export function withDumpConfigStack<T>(stack: string, f: () => T): T {
+  return dumpConfigStack.run(stack, f);
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortKeys);
+  } else if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map(key => [key, sortKeys((value as Record<string, unknown>)[key])])
+    );
+  } else {
+    return value;
+  }
+}
+
+// Replace absolute paths to helm charts with relative paths so the output does not depend on the checkout location
+function relativizeChartPaths(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(relativizeChartPaths);
+  } else if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, v]) => [
+        key,
+        key === 'chart' && typeof v === 'string'
+          ? v.replace(/^\/.*?(?=\/cluster\/helm\/)/, '')
+          : relativizeChartPaths(v),
+      ])
+    );
+  } else {
+    return value;
+  }
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^A-Za-z0-9._-]+/g, '_');
+}
+
+// Every resource is written to its own file under DUMP_CONFIG_OUTPUT_DIR (in a subfolder per stack if set via withDumpConfigStack).
+// Files are only written once the process exits successfully, so that resources sharing a file path can be given deterministic names.
+function registerResourceFileWriter(): (args: pulumi.runtime.MockResourceArgs) => void {
+  const outputDir = process.env.DUMP_CONFIG_OUTPUT_DIR;
+  if (!outputDir) {
+    throw new Error(
+      'DUMP_CONFIG_OUTPUT_DIR must be set to the directory the resources are written to'
+    );
+  }
+  const resources = new Map<string, Set<string>>();
+  process.on('exit', code => {
+    if (code !== 0) {
+      return;
+    }
+    fs.rmSync(outputDir, { recursive: true, force: true });
+    for (const [filePath, contents] of resources) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      const sorted = [...contents].sort();
+      sorted.forEach((content, index) => {
+        const target = index === 0 ? filePath : filePath.replace(/\.json$/, `.${index}.json`);
+        fs.writeFileSync(target, content);
+      });
+    }
+  });
+  return args => {
+    const stack = dumpConfigStack.getStore();
+    const fileName = `${sanitizeFileName(args.name)}.${sanitizeFileName(args.type)}.json`;
+    const filePath = path.resolve(outputDir, ...(stack ? [sanitizeFileName(stack)] : []), fileName);
+    const content = JSON.stringify(sortKeys(relativizeChartPaths(args)), undefined, 2) + '\n';
+    const contents = resources.get(filePath) ?? new Set<string>();
+    contents.add(content);
+    resources.set(filePath, contents);
+  };
+}
+
 /*eslint no-process-env: "off"*/
 export async function initDumpConfig({
   stackOutputsProvider = infraStackOutputsProvider,
@@ -216,6 +300,7 @@ export async function initDumpConfig({
 
   const projectName = 'test-project';
   const stackName = 'test-stack';
+  const writeResource = registerResourceFileWriter();
 
   await setMocks(
     {
@@ -223,24 +308,24 @@ export async function initDumpConfig({
         id: string;
         state: any;
       } {
-        const buffer = Buffer.from(JSON.stringify(args, undefined, 4), 'utf8');
-        process.stdout.write(buffer);
-        process.stdout.write('\n');
+        writeResource(args);
 
-        if (args.type === 'pulumi:pulumi:StackReference') {
-          const [organization, project, stack] = args.name.split('/');
-          return {
-            id: args.name + '_id',
-            state: {
-              ...args.inputs,
-              outputs: pulumi.output(stackOutputsProvider(project, stack) ?? {}),
-            },
-          };
-        } else {
-          return {
-            id: args.inputs.name + '_id',
-            state: args.inputs,
-          };
+        switch (args.type) {
+          case 'pulumi:pulumi:StackReference': {
+            const [organization, project, stack] = args.name.split('/');
+            return {
+              id: args.name + '_id',
+              state: {
+                ...args.inputs,
+                outputs: pulumi.output(stackOutputsProvider(project, stack) ?? {}),
+              },
+            };
+          }
+          default:
+            return {
+              id: args.id ?? args.inputs.name + '_id',
+              state: args.inputs,
+            };
         }
       },
       call: function (args: pulumi.runtime.MockCallArgs) {
@@ -250,7 +335,7 @@ export async function initDumpConfig({
               result: `base64-decoded-mock`,
             };
           case PulumiFunction.GCP_GET_PROJECT:
-            return { ...args.inputs, name: projectName };
+            return { ...args.inputs, name: projectName, projectId: projectName };
           case PulumiFunction.GCP_GET_SUB_NETWORK:
             if (args.inputs.name === `cn-${stackName}net-subnet`) {
               return { ...args.inputs, id: 'subnet-id' };
@@ -317,15 +402,6 @@ export async function initDumpConfig({
                 ...args.inputs,
                 secretData,
               };
-            } else if (args.inputs.secret == 'artifactory-keys') {
-              const secretData = JSON.stringify({
-                username: 'art_user',
-                password: 's3cr3t',
-              });
-              return {
-                ...args.inputs,
-                secretData,
-              };
             } else if (args.inputs.secret == 'us-central1-artifact-reader-key') {
               const secretData = JSON.stringify({
                 type: 'service_account',
@@ -372,6 +448,15 @@ export async function initDumpConfig({
               );
               break;
             }
+          case PulumiFunction.GCP_GET_DATABASE_INSTANCES:
+            return {
+              instances: [
+                {
+                  name: 'sv-1-cn-apps-pg-7ca4614',
+                  settings: [{ userLabels: { cluster: ClusterBasename } }],
+                },
+              ],
+            };
           default:
             console.error('WARN unhandled call in setMockOptions: ', args);
         }
@@ -393,14 +478,27 @@ export type StackOutputsProvider = (
 ) => Partial<Record<string, any>> | undefined;
 
 export const infraStackOutputsProvider: StackOutputsProvider = (project: string) => {
-  return project === 'infra'
-    ? {
+  switch (project) {
+    case 'canton-network':
+      return {
+        svs: [...Array.from({ length: 16 }, (_, index) => `sv-${index + 1}`), 'sv-da-1'].map(
+          nodeName => ({
+            nodeName,
+            databaseInstanceName: `${nodeName}-cn-apps-pg`,
+            databaseSecretName: `${nodeName}-cn-apps-pg-secret`,
+          })
+        ),
+      };
+    case 'infra':
+      return {
         istioDashboardVersions: '1234',
         auth0: {
           svRunbook: svRunbookAuth0Config,
           cantonNetwork: cantonNetworkAuth0Config,
           mainnet: cantonNetworkAuth0Config,
         } as Auth0ClusterConfig,
-      }
-    : undefined;
+      };
+    default:
+      return undefined;
+  }
 };

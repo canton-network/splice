@@ -51,7 +51,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAllScanAppConfigs_,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
+import org.lfdecentralizedtrust.splice.config.{PerClientIpRateLimitConfig, RateLimitersConfig}
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -65,12 +65,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpiredAmuletAllocationV2Trigger,
   ExpiredAmuletTransferInstructionTrigger,
 }
-import org.lfdecentralizedtrust.splice.util.{
-  SpliceRateLimitConfig,
-  TimeTestUtil,
-  TriggerTestUtil,
-  WalletTestUtil,
-}
+import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction
@@ -144,7 +139,11 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         updateAllScanAppConfigs_(config =>
           config.copy(parameters =
             config.parameters.copy(rateLimiting =
-              RateLimitersConfig(SpliceRateLimitConfig(enabled = false, 1), Map.empty)
+              RateLimitersConfig(
+                default = PerClientIpRateLimitConfig(enabled = false, 1),
+                rateLimiters = Map.empty,
+                global = PerClientIpRateLimitConfig(enabled = false, 1),
+              )
             )
           )
         )(config)
@@ -274,7 +273,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
           "Create some holdings", {
             // Amulet holdings: one transferred via token standard, one tapped (minted)
             // TransferIn
-            executeTransferViaTokenStandard(
+            executeTransferViaTokenStandardV1(
               aliceValidatorBackend.participantClientWithAdminToken,
               aliceValidator,
               alice.partyId,
@@ -286,7 +285,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
               aliceWalletClient.balance().unlockedQty should beAround(BigDecimal("200"))
             }
             // send some back so there's a TransferOut
-            executeTransferViaTokenStandard(
+            executeTransferViaTokenStandardV1(
               aliceValidatorBackend.participantClientWithAdminToken,
               alice,
               aliceValidator.partyId,
@@ -309,7 +308,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             val (_, bobInstructionCids) = actAndCheck(
               "Alice creates 5 transfers to Bob who has no pre-approval", {
                 for (_ <- 1 to 4) {
-                  executeTransferViaTokenStandard(
+                  executeTransferViaTokenStandardV1(
                     aliceValidatorBackend.participantClientWithAdminToken,
                     alice,
                     bob.partyId,
@@ -319,7 +318,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
                   )
                 }
                 // the fifth one uses a longer duration so that it does not expire later when passing time
-                executeTransferViaTokenStandard(
+                executeTransferViaTokenStandardV1(
                   aliceValidatorBackend.participantClientWithAdminToken,
                   alice,
                   bob.partyId,
@@ -342,7 +341,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             actAndCheck(
               "Bob accepts transfer instruction #1", {
                 val now = env.environment.clock.now
-                acceptTransferInstruction(
+                acceptTransferInstructionV1(
                   bobValidatorBackend.participantClientWithAdminToken,
                   bob,
                   bobInstructionCids(0),
@@ -360,13 +359,13 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             )
             actAndCheck(
               "Bob rejects transfer instruction #2 and Alice withdraws #3", {
-                rejectTransferInstruction(
+                rejectTransferInstructionV1(
                   bobValidatorBackend.participantClientWithAdminToken,
                   bob,
                   bobInstructionCids(1),
                   expectedTimeBounds = Some((CantonTimestamp.MinValue, CantonTimestamp.MaxValue)),
                 )
-                withdrawTransferInstruction(
+                withdrawTransferInstructionV1(
                   aliceValidatorBackend.participantClientWithAdminToken,
                   alice,
                   bobInstructionCids(2),
@@ -404,7 +403,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
                 "Bob creates 4 transfers to Alice who has no longer a pre-approval",
                 for (_ <- 1 to 4) {
                   val now = env.environment.clock.now
-                  executeTransferViaTokenStandard(
+                  executeTransferViaTokenStandardV1(
                     bobValidatorBackend.participantClientWithAdminToken,
                     bob,
                     alice.partyId,
@@ -430,21 +429,21 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
               actAndCheck(
                 "Alice accepts instruction #1 and rejects #2; and bob withdraws #3; while #4 is left as-is", {
                   clue("Accept instruction #1") {
-                    acceptTransferInstruction(
+                    acceptTransferInstructionV1(
                       aliceValidatorBackend.participantClientWithAdminToken,
                       alice,
                       aliceInstructionCids(0),
                     )
                   }
                   clue("Reject instruction #2") {
-                    rejectTransferInstruction(
+                    rejectTransferInstructionV1(
                       aliceValidatorBackend.participantClientWithAdminToken,
                       alice,
                       aliceInstructionCids(1),
                     )
                   }
                   clue("Withdraw instruction #3") {
-                    withdrawTransferInstruction(
+                    withdrawTransferInstructionV1(
                       bobValidatorBackend.participantClientWithAdminToken,
                       bob,
                       aliceInstructionCids(2),
@@ -477,7 +476,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             actAndCheck(
               "Bob splits his holdings into two using a self-transfer", {
                 val now = env.environment.clock.now
-                executeTransferViaTokenStandard(
+                executeTransferViaTokenStandardV1(
                   bobValidatorBackend.participantClientWithAdminToken,
                   bob,
                   bob.partyId,
@@ -522,7 +521,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             // Test self-transfer for wallet history
             actAndCheck(
               "Alice merges her four unlocked holdings, and the expired locked amulet into a two using a self-transfer",
-              executeTransferViaTokenStandard(
+              executeTransferViaTokenStandardV1(
                 aliceValidatorBackend.participantClientWithAdminToken,
                 alice,
                 alice.partyId,
@@ -566,7 +565,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             actAndCheck(
               "Bob rejects instruction #4, whose backing amulet has already been archived", {
                 val now = env.environment.clock.now
-                rejectTransferInstruction(
+                rejectTransferInstructionV1(
                   bobValidatorBackend.participantClientWithAdminToken,
                   bob,
                   instrAboutToExpire,
@@ -672,7 +671,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             )
 
             val getUpdatesResponse = makeJsonApiV2Request(
-              "/v2/updates/flats",
+              "/v2/updates",
               getUpdatesPayload,
               io.circe.Decoder.decodeSeq(JsUpdateServiceCodecs.jsGetUpdatesResponseRW),
             )
@@ -1193,7 +1192,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
           Seq(
             RawHeader(
               "Authorization",
-              s"Bearer ${aliceValidatorBackend.participantClientWithAdminToken.adminToken.value}",
+              s"Bearer ${aliceValidatorBackend.participantClientWithAdminToken.ledgerApiToken.value}",
             )
           )
         )
@@ -1240,6 +1239,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         activeAtOffset =
           aliceValidatorBackend.participantClientWithAdminToken.ledger_api.state.end(),
         streamContinuationToken = None,
+        includeIncompleteReassignments = true,
       )
     )
 

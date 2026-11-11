@@ -3,7 +3,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import {
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 
 import { namespace } from '../namespace';
@@ -21,13 +21,13 @@ export const flux = new k8s.helm.v3.Release('flux', {
   },
   values: {
     cli: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
     },
     notificationController: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
     },
     sourceController: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
     },
     helmController: {
       create: false,

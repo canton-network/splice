@@ -24,10 +24,12 @@ import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  GetDsoInfoResponse,
+  DamlValueEncoding,
+  GetBulkObjectChecksumsResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
+  HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
@@ -36,6 +38,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkObjectKind
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.util.*
@@ -55,7 +59,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
-import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequestV1
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.OptionConverters.*
@@ -73,7 +76,9 @@ trait ScanConnection
 
   def getDsoPartyId()(implicit ec: ExecutionContext, tc: TraceContext): Future[PartyId]
 
-  def getDsoInfo()(implicit ec: ExecutionContext, tc: TraceContext): Future[GetDsoInfoResponse]
+  def getDsoInfo()(implicit ec: ExecutionContext, tc: TraceContext): Future[DsoInfo]
+
+  def getDsoInfoV1()(implicit ec: ExecutionContext, tc: TraceContext): Future[DsoInfoV1]
 
   /** Query for the DSO party id, retrying until it succeeds.
     *
@@ -108,9 +113,7 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[ContractWithState[AmuletRules.ContractId, AmuletRules]]
 
-  def getDsoRules()(implicit
-      tc: TraceContext
-  ): Future[Contract[DsoRules.ContractId, DsoRules]]
+  def getDsoRules()(implicit tc: TraceContext): Future[Contract[DsoRules.ContractId, DsoRules]]
 
   def getExternalPartyAmuletRules()(implicit
       ec: ExecutionContext,
@@ -360,6 +363,33 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[Option[GetRewardAccountingBatchResponse]]
 
+  def getBulkObjectChecksums(
+      requiredCatchupTimestamp: CantonTimestamp,
+      kind: BulkObjectKind,
+      objectKeys: Seq[String],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetBulkObjectChecksumsResponse]
+
+  def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[BulkStorageObjects.SnapshotObjects]]
+
+  def listBulkUpdateHistoryObjects(
+      startRecordTime: CantonTimestamp,
+      endRecordTime: CantonTimestamp,
+      pageSize: Int,
+      nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[BulkStorageObjects.UpdateObjectsPage]
 }
 
 object ScanConnection {

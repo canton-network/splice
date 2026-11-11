@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useDsoInfos } from '../contexts/SvContext';
 
-export const useNetworkInstanceName: () => string | undefined = () => {
+export const useNetworkInstanceName: () => string = () => {
   const dsoInfosQuery = useDsoInfos();
 
   const scanUrls = dsoInfosQuery.data?.nodeStates.flatMap(nsContract => {
@@ -13,11 +13,15 @@ export const useNetworkInstanceName: () => string | undefined = () => {
   }) as string[];
 
   if (scanUrls === undefined) {
-    return undefined;
+    return 'Unknown Network';
   }
 
   const instances = scanUrls
     .map(url => {
+      if (/\/\/localhost(?::\d+)?(?:\/|$)/.test(url)) {
+        return 'local';
+      }
+
       const regex = /(?<=\/\/(?:scan\.)sv-\d+\.)([a-zA-Z0-9-]+)/;
 
       return url.match(regex)?.[1];
@@ -28,22 +32,21 @@ export const useNetworkInstanceName: () => string | undefined = () => {
     return getNetworkName(instances[0]);
   }
 
-  return undefined;
+  return 'Unknown Network';
 };
 
 const getNetworkName = (network: string) => {
-  let networkName;
-
   // NOTE: mainnet does not have the network/cluster name in the url.
   if (network === 'global') {
-    networkName = 'MainNet';
+    return 'MainNet';
   } else if (network === 'test') {
-    networkName = 'TestNet';
+    return 'TestNet';
   } else if (network === 'dev') {
-    networkName = 'DevNet';
-  } else if (network?.startsWith('scratch')) {
-    networkName = 'ScratchNet';
+    return 'DevNet';
+  } else if (network === 'local') {
+    return 'LocalNet';
+  } else if (network.startsWith('scratch')) {
+    return 'ScratchNet';
   }
-
-  return networkName;
+  return network.charAt(0).toUpperCase() + network.slice(1);
 };

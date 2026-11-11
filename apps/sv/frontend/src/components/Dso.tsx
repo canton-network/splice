@@ -5,27 +5,26 @@ import React from 'react';
 import 'react-json-pretty/themes/monikai.css';
 
 import { useDsoInfos } from '../contexts/SvContext';
-import { useCometBftDebug } from '../hooks/useCometBftDebug';
 import { useMediatorStatus } from '../hooks/useMediatorStatus';
 import { useSequencerStatus } from '../hooks/useSequencerStatus';
 import { useSvConfig } from '../utils';
 
+const WithProvider: React.FC = () => {
+  const dsoInfoQuery = useDsoInfos();
+  const sequencerStatusQuery = useSequencerStatus();
+  const mediatorStatusQuery = useMediatorStatus();
+  return (
+    <DsoViewPrettyJSON
+      dsoInfoQuery={dsoInfoQuery}
+      svInfoQuery={dsoInfoQuery}
+      sequencerStatusQuery={sequencerStatusQuery}
+      mediatorStatusQuery={mediatorStatusQuery}
+    />
+  );
+};
+
 const DsoWithContexts: React.FC = () => {
   const config = useSvConfig();
-  const WithProvider = () => {
-    const dsoInfoQuery = useDsoInfos();
-    const cometBftNodeDebugQuery = useCometBftDebug();
-    const sequencerStatusQuery = useSequencerStatus();
-    const mediatorStatusQuery = useMediatorStatus();
-    return (
-      <DsoViewPrettyJSON
-        dsoInfoQuery={dsoInfoQuery}
-        cometBftNodeDebugQuery={cometBftNodeDebugQuery}
-        sequencerStatusQuery={sequencerStatusQuery}
-        mediatorStatusQuery={mediatorStatusQuery}
-      />
-    );
-  };
   return (
     <SvClientProvider url={config.services.sv.url}>
       <WithProvider />

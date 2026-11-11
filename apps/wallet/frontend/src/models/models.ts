@@ -138,15 +138,13 @@ export interface DevelopmentFundCoupon {
   beneficiary: string;
   amount: BigNumber;
   expiresAt: Date;
+  mintAfter?: Date;
   reason: string;
   withdrawalReason?: string;
 }
 
 export type ArchivedDevelopmentFundCouponStatusEnum =
-  | 'claimed'
-  | 'withdrawn'
-  | 'rejected'
-  | 'expired';
+  'claimed' | 'withdrawn' | 'rejected' | 'expired';
 
 export interface CouponHistoryEvent {
   id: string;

@@ -7,12 +7,16 @@ import cats.data.{EitherT, OptionT}
 import cats.syntax.alternative.*
 import cats.syntax.either.*
 import com.daml.nameof.NameOf.functionFullName
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.{BatchAggregatorConfig, ProcessingTimeout}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.participant.protocol.submission.*
 import com.digitalasset.canton.participant.store.InFlightSubmissionStore
@@ -35,6 +39,7 @@ import com.digitalasset.canton.util.*
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.retry.NoExceptionRetryPolicy
 import com.digitalasset.canton.version.ReleaseProtocolVersion
+import com.digitalasset.nonempty.NonEmpty
 import slick.jdbc.{PositionedParameters, SetParameter}
 
 import java.util.concurrent.atomic.AtomicReference
@@ -218,7 +223,7 @@ class DbInFlightSubmissionStore(
           )(setParams)
 
           storage
-            .queryAndUpdate(action, functionFullName)(traceContext, self.closeContext, implicitly)
+            .queryAndUpdate(action, functionFullName)(traceContext, self.closeContext)
             .map(_ => Seq.fill(items.size)(()))
         }
 
@@ -232,8 +237,12 @@ class DbInFlightSubmissionStore(
   }
 
   case class SequencedRootHash(rootHash: RootHash, submission: SequencedSubmission)
-      extends PrettyPrinting {
-    override protected def pretty: Pretty[SequencedRootHash] =
+      extends PrettyPrintingFromCompanion {
+    override def prettyCompanion: PrettyPrintingCompanion[SequencedRootHash] = SequencedRootHash
+  }
+
+  object SequencedRootHash extends PrettyPrintingCompanion[SequencedRootHash] {
+    override protected val pretty: Pretty[SequencedRootHash] =
       prettyOfClass(
         param("rootHash", _.rootHash),
         param("submission", _.submission),
@@ -363,6 +372,8 @@ object DbInFlightSubmissionStore {
     import RegisterProcessor.Result
     import storage.api.*
     import storage.converters.*
+
+    private implicit val dbProfile: DbStorage.Profile = storage.profile
 
     override def kind: String = "in-flight submission"
 

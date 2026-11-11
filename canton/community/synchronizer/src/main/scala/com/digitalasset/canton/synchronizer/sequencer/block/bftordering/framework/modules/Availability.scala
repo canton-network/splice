@@ -18,6 +18,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.availability.{
   BatchId,
+  OrderingBlock,
   ProofOfAvailability,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.ordering.{
@@ -37,6 +38,9 @@ import com.digitalasset.canton.synchronizer.sequencing.sequencer.bftordering.v30
 import com.digitalasset.canton.tracing.Traced
 import com.digitalasset.canton.version.*
 import com.google.protobuf.ByteString
+
+import java.time.Instant
+import scala.concurrent.duration.FiniteDuration
 
 object Availability {
 
@@ -143,8 +147,8 @@ object Availability {
 
       override val versioningTable: VersioningTable =
         VersioningTable(
-          SupportedVersions.ProtoData -> {
-            VersionedProtoCodec(SupportedVersions.CantonProtocol)(v30.AvailabilityMessage)(
+          SupportedVersions.ProtoData30 -> {
+            VersionedProtoCodec(SupportedVersions.CantonProtocol36)(v30.AvailabilityMessage)(
               supportedProtoVersionMemoized(_)(RemoteBatch.fromProtoAvailabilityMessage),
               _.toProtoV30,
             )
@@ -166,7 +170,7 @@ object Availability {
         for {
           id <- BatchId.fromProto(storeRequest.batchId)
           batch <- parseRequired(OrderingRequestBatch.fromProtoV30, "batch", storeRequest.batch)
-          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
+          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData30)
         } yield Availability.RemoteDissemination.RemoteBatch(id, batch, from)(
           rpv,
           deserializedFrom = Some(bytes),
@@ -219,8 +223,8 @@ object Availability {
       override def name: String = "RemoteBatchAcknowledged"
 
       override val versioningTable: VersioningTable = VersioningTable(
-        SupportedVersions.ProtoData ->
-          VersionedProtoCodec(SupportedVersions.CantonProtocol)(v30.AvailabilityMessage)(
+        SupportedVersions.ProtoData30 ->
+          VersionedProtoCodec(SupportedVersions.CantonProtocol36)(v30.AvailabilityMessage)(
             supportedProtoVersionMemoized(_)(RemoteBatchAcknowledged.fromAvailabilityMessage),
             _.toProtoV30,
           )
@@ -242,7 +246,7 @@ object Availability {
         for {
           id <- BatchId.fromProto(value.batchId)
           signature <- Signature.fromProtoV30(value.getSignature)
-          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
+          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData30)
         } yield Availability.RemoteDissemination.RemoteBatchAcknowledged(id, from, signature)(
           rpv,
           deserializedFrom = Some(bytes),
@@ -279,6 +283,12 @@ object Availability {
 
     final case class FetchBlockData(block: OrderedBlockForOutput) extends LocalOutputFetch
 
+    final case class EarlyFetchBlockData(
+        blockNumber: BlockNumber,
+        originalLeader: BftNodeId,
+        block: OrderingBlock,
+    ) extends LocalOutputFetch
+
     final case class FetchedBlockDataFromStorage(
         request: BatchesRequest,
         result: AvailabilityStore.FetchBatchesResult,
@@ -289,15 +299,39 @@ object Availability {
         orderingMode: OrderingMode,
     ) extends LocalOutputFetch
 
-    final case class FetchRemoteBatchDataTimeout(batchId: BatchId, epochNumber: EpochNumber)
-        extends LocalOutputFetch
+    final case class FetchRemoteBatchDataTimeout(
+        nodesThatTimedOut: Seq[BftNodeId],
+        batchId: BatchId,
+        epochNumber: EpochNumber,
+        timeout: FiniteDuration,
+    ) extends LocalOutputFetch
 
     final case class AttemptedBatchDataLoadForNode(
         batchId: BatchId,
         batch: Option[OrderingRequestBatch],
     ) extends LocalOutputFetch
 
+    /** Result of asynchronously validating a batch fetched from a remote node (i.e. checking that
+      * its payload matches the requested `BatchId`). The (potentially expensive) hash computation
+      * is performed off the actor thread, and this message carries the outcome back so that the
+      * remaining, state-mutating handling runs on the actor thread.
+      */
+    final case class LocalFetchedBatchValidated(
+        signedBatchId: BatchId,
+        batch: OrderingRequestBatch,
+        from: BftNodeId,
+        computedBatchId: BatchId,
+        isValid: Boolean,
+        timeWeReceivedResponse: Instant,
+    ) extends LocalOutputFetch
+
     final case class FetchedBatchStored(batchId: BatchId) extends LocalOutputFetch
+
+    final case class PickedRecipientsForFetch(
+        chosenRecipients: Seq[BftNodeId],
+        batchId: BatchId,
+        instantWhenDidRequest: Instant,
+    ) extends LocalOutputFetch
   }
 
   object RemoteOutputFetch {
@@ -335,8 +369,8 @@ object Availability {
       override def name: String = "FetchRemoteBatchData"
 
       override val versioningTable: VersioningTable = VersioningTable(
-        SupportedVersions.ProtoData ->
-          VersionedProtoCodec(SupportedVersions.CantonProtocol)(v30.AvailabilityMessage)(
+        SupportedVersions.ProtoData30 ->
+          VersionedProtoCodec(SupportedVersions.CantonProtocol36)(v30.AvailabilityMessage)(
             supportedProtoVersionMemoized(_)(
               FetchRemoteBatchData.fromAvailabilityMessage
             ),
@@ -360,7 +394,7 @@ object Availability {
       )(bytes: ByteString): ParsingResult[FetchRemoteBatchData] =
         for {
           id <- BatchId.fromProto(value.batchId)
-          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
+          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData30)
           epochNumber = EpochNumber(value.epochNumber)
         } yield Availability.RemoteOutputFetch.FetchRemoteBatchData(
           id,
@@ -417,8 +451,8 @@ object Availability {
 
       override val versioningTable: VersioningTable =
         VersioningTable(
-          SupportedVersions.ProtoData ->
-            VersionedProtoCodec(SupportedVersions.CantonProtocol)(v30.AvailabilityMessage)(
+          SupportedVersions.ProtoData30 ->
+            VersionedProtoCodec(SupportedVersions.CantonProtocol36)(v30.AvailabilityMessage)(
               supportedProtoVersionMemoized(_)(RemoteBatchDataFetched.fromProtoAvailabilityMessage),
               _.toProtoV30,
             )
@@ -445,7 +479,7 @@ object Availability {
               OrderingRequestBatch.fromProtoV30(batch)
             case None => Left(ProtoDeserializationError.FieldNotSet("batch"))
           }
-          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
+          rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData30)
         } yield Availability.RemoteOutputFetch.RemoteBatchDataFetched(from, id, batch)(
           rpv,
           deserializedFrom = Some(bytes),
@@ -473,7 +507,10 @@ object Availability {
         orderedBatchIds: Seq[BatchId] = Seq.empty,
     ) extends Consensus[E]
 
-    final case class UpdateTopologyDuringStateTransfer[E <: Env[E]](
+    // We always update Availability with the latest topology when transitioning epochs,
+    //  whether that is during normal consensus or state transfer, so that the topology is up-to-date
+    //  even if the node is blacklisted.
+    final case class UpdateTopology[E <: Env[E]](
         currentMembership: Membership,
         currentEpochNumber: EpochNumber,
         currentCryptoProvider: CryptoProvider[E],

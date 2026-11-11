@@ -13,11 +13,56 @@ import com.daml.ledger.javaapi.data.{
   Unit as damlUnit,
   Value as damlValue,
 }
+import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{LogEntry, NamedLogging, SuppressionRule}
 import com.digitalasset.canton.protocol.LfContractId
+import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
+import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
+import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
+import com.digitalasset.daml.lf.data.Numeric
 import com.google.protobuf.ByteString
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.Source
+import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight,
+  LockedAmulet,
+  cryptohash as cryptoHashCodegen,
+  rewardaccountingv2 as rewardAccountingCodegen,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
+  AmuletConfig,
+  RewardConfig,
+  USD,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
+  AllocationSpecification,
+  Reference,
+  SettlementInfo,
+  TransferLeg,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.Transfer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.{RewardState, SvRewardState}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
+  VRO_Accepted,
+  VRO_Rejected,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.{
   payment as paymentCodegen,
@@ -30,74 +75,17 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   expiry as expiryCodegen,
   externalpartyamuletrules as externalpartyamuletrulesCodegen,
   fees as feesCodegen,
+  governancelock as governancelockCodegen,
   round as roundCodegen,
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  rewardaccountingv2 as rewardAccountingCodegen
-}
+import org.lfdecentralizedtrust.splice.environment.ledger.api.*
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResource, DarResources}
-import org.lfdecentralizedtrust.splice.environment.ledger.api.{
-  ActiveContract,
-  IncompleteReassignmentEvent,
-  Reassignment,
-  ReassignmentEvent,
-  ReassignmentUpdate,
-  TransactionTreeUpdate,
-  TreeUpdate,
-  TreeUpdateOrOffsetCheckpoint,
-}
-import org.lfdecentralizedtrust.splice.util.{
-  Contract,
-  EventId,
-  PackageQualifiedName,
-  SpliceUtil,
-  Trees,
-}
-import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
-import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
-import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.daml.lf.data.Numeric
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.Materializer
-import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{AmuletConfig, USD}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.{RewardState, SvRewardState}
-import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.InstrumentId
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
-  VRO_Accepted,
-  VRO_Rejected,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  ActionRequiringConfirmation,
-  DsoRules_AddSv,
-  DsoRules_CloseVoteRequest,
-  DsoRules_CloseVoteRequestResult,
-  Reason,
-  Vote,
-  VoteRequest,
-}
 import org.lfdecentralizedtrust.splice.history.{AmuletCreate, AppRewardCreate}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.Transfer
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.Metadata
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.LockedAmulet
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
-  AllocationSpecification,
-  SettlementInfo,
-  TransferLeg,
-  Reference,
-}
-import org.lfdecentralizedtrust.splice.store.db.TxLogRowData
+import org.lfdecentralizedtrust.splice.store.db.{InternedStringStore, TxLogRowData}
+import org.lfdecentralizedtrust.splice.util.*
 import org.scalatest.wordspec.AsyncWordSpec
 import org.slf4j.event.Level
 
@@ -106,6 +94,7 @@ import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 import java.util
 import java.util.Optional
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Future, blocking}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -120,6 +109,15 @@ abstract class StoreTestBase
   protected val upgradedAppRewardCouponPackageId = "upgradedpackageid"
   protected val dummyHoldingPackageId = DummyHolding.TEMPLATE_ID.getPackageId
   protected val maliciousPackageId = "maliciouspackageid"
+
+  protected def internedStringStore(storage: DbStorage)(implicit close: CloseContext) =
+    InternedStringStore.createWithoutWarmup(
+      storage,
+      10_000L,
+      FiniteDuration(1, "minute"),
+      loggerFactory,
+      NoOpMetricsFactory,
+    )
 
   // Looks up the package name from the package ID in dars.lock, to avoid having to parse all DARs just to find this mapping
   // TODO(#3937): this is quite hacky. What we should really do is just auto-generate DarResources instead of deriving it from DARs at runtime.
@@ -277,6 +275,8 @@ abstract class StoreTestBase
       round: Long,
       amuletPrice: Double,
       opensAt: Instant = Instant.now().truncatedTo(ChronoUnit.MICROS),
+      contractId: String = nextCid(),
+      rewardConfig: Optional[RewardConfig] = Optional.empty(),
   ) = {
     val template = new roundCodegen.OpenMiningRound(
       dso.toProtoPrimitive,
@@ -289,12 +289,12 @@ abstract class StoreTestBase
       SpliceUtil.issuanceConfig(10.0, 10.0, 10.0),
       new RelTime(1_000_000),
       Optional.empty(), // trafficPrice
-      Optional.empty(), // rewardConfig
+      rewardConfig,
     )
 
     contract(
       roundCodegen.OpenMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
-      new roundCodegen.OpenMiningRound.ContractId(round.toString),
+      new roundCodegen.OpenMiningRound.ContractId(contractId),
       template,
     )
   }
@@ -310,6 +310,7 @@ abstract class StoreTestBase
       Instant.now().truncatedTo(ChronoUnit.MICROS),
       Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(600),
       java.util.Optional.of(numeric(1.0)), // optIssuancePerValidatorFaucetCoupon
+      Optional.empty(), // optIssuancePerFeaturedAssetRewardCoupon (CIP-0104)
     )
 
     contract(
@@ -352,6 +353,27 @@ abstract class StoreTestBase
     contract(
       rewardAccountingCodegen.CalculateRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID,
       new rewardAccountingCodegen.CalculateRewardsV2.ContractId(nextCid()),
+      template,
+    )
+  }
+
+  protected def processRewardsV2(
+      dso: PartyId,
+      round: Long,
+      dryRun: Boolean = true,
+      batchHash: String = "00" * 32,
+  ) = {
+    val template = new rewardAccountingCodegen.ProcessRewardsV2(
+      dso.toProtoPrimitive,
+      new Round(round),
+      Instant.now().truncatedTo(ChronoUnit.MICROS),
+      dryRun,
+      new RelTime(600_000_000L),
+      new cryptoHashCodegen.Hash(batchHash),
+    )
+    contract(
+      rewardAccountingCodegen.ProcessRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new rewardAccountingCodegen.ProcessRewardsV2.ContractId(nextCid()),
       template,
     )
   }
@@ -501,6 +523,119 @@ abstract class StoreTestBase
       payload = template,
     )
   }
+
+  protected def governanceLock(
+      owner: PartyId,
+      amount: BigDecimal,
+      dso: PartyId = dsoParty,
+      kind: governancelockCodegen.GovernanceLockKind =
+        new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1"),
+      vestingEndTime: Option[Instant] = None,
+      vestingPeriod: RelTime = new RelTime(1_000_000),
+      contractId: String = nextCid(),
+  ): Contract[
+    governancelockCodegen.GovernanceLock.ContractId,
+    governancelockCodegen.GovernanceLock,
+  ] =
+    contract(
+      identifier = governancelockCodegen.GovernanceLock.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new governancelockCodegen.GovernanceLock.ContractId(contractId),
+      payload = new governancelockCodegen.GovernanceLock(
+        dso.toProtoPrimitive,
+        owner.toProtoPrimitive,
+        amount.bigDecimal,
+        new LockedAmulet.ContractId(nextCid()),
+        vestingEndTime match {
+          case Some(endTime) =>
+            new governancelockCodegen.governancelockspecification.GLS_VestingLock(
+              new governancelockCodegen.VestingLockSpecification(
+                kind,
+                vestingPeriod,
+                endTime,
+              )
+            )
+          case None =>
+            new governancelockCodegen.governancelockspecification.GLS_FullLock(
+              new governancelockCodegen.FullLockSpecification(kind)
+            )
+        },
+        Optional.empty(),
+        Instant.now().truncatedTo(ChronoUnit.MICROS),
+      ),
+    )
+
+  protected def testGovernanceLockIngestion(
+      owner: PartyId,
+      dso: PartyId,
+      otherDso: PartyId,
+      mkStore: () => Future[AppStore],
+  ) =
+    "ingest GovernanceLocks of the DSO and skip those of other parties" in {
+      val wantedFull = governanceLock(owner, amount = BigDecimal(10), dso = dso)
+      val unwantedFull = governanceLock(owner, amount = BigDecimal(20), dso = otherDso)
+      val vestingEndTime = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.MICROS)
+      val wantedVesting = governanceLock(
+        owner,
+        amount = BigDecimal(10),
+        vestingEndTime = Some(vestingEndTime),
+        dso = dso,
+      )
+      val unwantedVesting = governanceLock(
+        owner,
+        amount = BigDecimal(20),
+        vestingEndTime = Some(vestingEndTime),
+        dso = otherDso,
+      )
+      for {
+        store <- mkStore()
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(wantedFull, unwantedFull, wantedVesting, unwantedVesting)
+        )(
+          dummyDomain.create(_, createdEventSignatories = Seq(dso, owner))(
+            store.multiDomainAcsStore
+          )
+        )
+        result <- store.multiDomainAcsStore.listContracts(
+          governancelockCodegen.GovernanceLock.COMPANION
+        )
+      } yield {
+        result.map(_.contractId) should contain theSameElementsAs
+          Seq(wantedFull, wantedVesting).map(_.contractId)
+      }
+    }
+
+  protected def governanceLockTransfer(
+      sender: PartyId,
+      receiver: PartyId,
+      expiresAt: Instant,
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    governancelockCodegen.transfer.GovernanceLockTransfer.ContractId,
+    governancelockCodegen.transfer.GovernanceLockTransfer,
+  ] =
+    contract(
+      identifier =
+        governancelockCodegen.transfer.GovernanceLockTransfer.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new governancelockCodegen.transfer.GovernanceLockTransfer.ContractId(contractId),
+      payload = new governancelockCodegen.transfer.GovernanceLockTransfer(
+        new governancelockCodegen.GovernanceLockKey(
+          dso.toProtoPrimitive,
+          sender.toProtoPrimitive,
+          // The kind is always an SV lock here: an FA party is not a stakeholder of the
+          // transfer itself, so there is nothing extra to test for it.
+          new governancelockCodegen.governancelockspecification.GLS_FullLock(
+            new governancelockCodegen.FullLockSpecification(
+              new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1")
+            )
+          ),
+        ),
+        receiver.toProtoPrimitive,
+        BigDecimal(10).bigDecimal,
+        Instant.EPOCH,
+        expiresAt,
+      ),
+    )
 
   protected def appRewardCoupon(
       round: Int,
@@ -682,11 +817,15 @@ abstract class StoreTestBase
       providerParty: PartyId,
       contractId: String = nextCid(),
       activityWeight: Option[BigDecimal] = None,
+      appKind: Option[FeaturedAppKind] = None,
+      opsParties: Option[Seq[PartyId]] = None,
   ) = {
     val template = new FeaturedAppRight(
       dsoParty.toProtoPrimitive,
       providerParty.toProtoPrimitive,
       activityWeight.map(_.bigDecimal).toJava,
+      appKind.toJava,
+      opsParties.map(_.map(_.toProtoPrimitive).asJava).toJava,
     )
     contract(
       FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,
@@ -1167,45 +1306,53 @@ abstract class StoreTestBase
       incompleteIn: Seq[StoreTestBase.AcsImportIncompleteEntry] = Seq.empty,
       acsOffset: Long = nextOffset(),
   )(implicit store: MultiDomainAcsStore): Future[Unit] = for {
-    _ <- store.testIngestionSink.ingestAcs(
+    _ <- store.testIngestionSink.ingestAcsStreamInBatches(
+      Source.single(
+        acs.map[BaseLedgerConnection.ActiveContractsItem](entry =>
+          BaseLedgerConnection.ActiveContractsItem.ActiveContract(
+            acsImportEntryToActiveContract(entry)
+          )
+        ) ++ incompleteOut.map {
+          case StoreTestBase.AcsImportIncompleteEntry(
+                c,
+                sourceDomain,
+                targetDomain,
+                tfid,
+                counter,
+                implementedInterfaces,
+              ) =>
+            BaseLedgerConnection.ActiveContractsItem.IncompleteUnassign(
+              toIncompleteUnassign(
+                c,
+                tfid,
+                sourceDomain,
+                targetDomain,
+                counter,
+                implementedInterfaces,
+              )
+            )
+        } ++ incompleteIn.map {
+          case StoreTestBase.AcsImportIncompleteEntry(
+                c,
+                sourceDomain,
+                targetDomain,
+                tfid,
+                counter,
+                implementedInterfaces,
+              ) =>
+            BaseLedgerConnection.ActiveContractsItem.IncompleteAssign(
+              toIncompleteAssign(
+                c,
+                tfid,
+                sourceDomain,
+                targetDomain,
+                counter,
+                implementedInterfaces,
+              )
+            )
+        }
+      ),
       acsOffset,
-      acs.map(acsImportEntryToActiveContract),
-      incompleteOut.map {
-        case StoreTestBase.AcsImportIncompleteEntry(
-              c,
-              sourceDomain,
-              targetDomain,
-              tfid,
-              counter,
-              implementedInterfaces,
-            ) =>
-          toIncompleteUnassign(
-            c,
-            tfid,
-            sourceDomain,
-            targetDomain,
-            counter,
-            implementedInterfaces,
-          )
-      },
-      incompleteIn.map {
-        case StoreTestBase.AcsImportIncompleteEntry(
-              c,
-              sourceDomain,
-              targetDomain,
-              tfid,
-              counter,
-              implementedInterfaces,
-            ) =>
-          toIncompleteAssign(
-            c,
-            tfid,
-            sourceDomain,
-            targetDomain,
-            counter,
-            implementedInterfaces,
-          )
-      },
     )
   } yield ()
 

@@ -1,0 +1,196 @@
+// Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+package com.digitalasset.canton.protocol.messages
+
+import cats.syntax.either.*
+import cats.syntax.option.*
+import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
+import com.digitalasset.canton.protocol.{AcsCommitmentLimits, v32}
+import com.digitalasset.canton.serialization.ProtoConverter.{
+  ParsingResult,
+  parseLfParticipantId,
+  parseRequiredNonEmpty,
+}
+import com.digitalasset.canton.serialization.ProtocolVersionedMemoizedEvidence
+import com.digitalasset.canton.topology.PhysicalSynchronizerId
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
+import com.digitalasset.canton.validation.{ProtoUnvalidatedString, ProtoValidation, ValidationParam}
+import com.digitalasset.canton.version.{
+  HasProtocolVersionedWrapper,
+  ProtoVersion,
+  ProtocolVersion,
+  ProtocolVersionValidation,
+  RepresentativeProtocolVersion,
+  VersionedProtoCodec,
+  VersioningCompanionContextMemoization,
+}
+import com.digitalasset.canton.{LedgerParticipantId, ProtoDeserializationError}
+import com.google.protobuf.ByteString
+
+final case class AcsCommitmentSummary(
+    psid: PhysicalSynchronizerId,
+    commitmentTick: CantonTimestamp,
+    addressedCounterparticipants: Seq[LedgerParticipantId],
+    unsentDigests: Seq[DigestForCounterparticipant],
+    batchIndex: NonNegativeInt,
+    lastBatch: Boolean,
+)(
+    override val representativeProtocolVersion: RepresentativeProtocolVersion[
+      AcsCommitmentSummary.type
+    ],
+    override val deserializedFrom: Option[ByteString],
+) extends HasProtocolVersionedWrapper[AcsCommitmentSummary]
+    with ProtocolVersionedMemoizedEvidence
+    with PrettyPrintingFromCompanion {
+
+  @transient override protected lazy val companionObj: AcsCommitmentSummary.type =
+    AcsCommitmentSummary
+
+  override protected[this] def toByteStringUnmemoized: ByteString =
+    super[HasProtocolVersionedWrapper].toByteString
+
+  override def prettyCompanion: PrettyPrintingCompanion[AcsCommitmentSummary] =
+    AcsCommitmentSummary
+
+  private[messages] def toProtoV32: v32.AcsCommitmentSummary = v32.AcsCommitmentSummary(
+    physicalSynchronizerId = psid.toProtoPrimitive,
+    commitmentTick = commitmentTick.toProtoPrimitive,
+    addressedCounterparticipants = addressedCounterparticipants.map(_.toProtoUnvalidated),
+    unsentDigests = unsentDigests.map(_.toProtoV32),
+    batchIndex = batchIndex.value,
+    lastBatch = lastBatch,
+  )
+}
+
+object AcsCommitmentSummary
+    extends VersioningCompanionContextMemoization[
+      AcsCommitmentSummary,
+      AcsCommitmentDeserializationContext,
+    ]
+    with PrettyPrintingCompanion[AcsCommitmentSummary] {
+
+  override protected val pretty: Pretty[AcsCommitmentSummary] =
+    prettyOfClass(
+      param("psid", _.psid),
+      param("commitmentTick", _.commitmentTick),
+      param("addressedCounterparticipants", _.addressedCounterparticipants),
+      param("unsentDigests", _.unsentDigests),
+      param("batchIndex", _.batchIndex),
+      param("lastBatch", _.lastBatch),
+    )
+
+  override def name: String = "AcsCommitmentSummary"
+
+  override val versioningTable: VersioningTable = VersioningTable(
+    ProtoVersion(32) -> VersionedProtoCodec(ProtocolVersion.v36)(v32.AcsCommitmentSummary)(
+      supportedProtoVersionMemoizedPVV(_)(AcsCommitmentSummary.fromProtoV32),
+      _.toProtoV32,
+    )
+  )
+
+  def create(
+      psid: PhysicalSynchronizerId,
+      commitmentTick: CantonTimestamp,
+      addressedCounterparticipants: Seq[LedgerParticipantId],
+      unsentDigests: Seq[DigestForCounterparticipant],
+      batchIndex: NonNegativeInt,
+      lastBatch: Boolean,
+      protocolVersion: ProtocolVersion,
+      limits: AcsCommitmentLimits,
+  ): Either[String, AcsCommitmentSummary] = {
+    val pvv = ProtocolVersionValidation.PV(protocolVersion)
+    for {
+      _ <- ProtoValidation
+        .validateLength(
+          addressedCounterparticipants,
+          "addressed_counterparticipants",
+          pvv,
+          ValidationParam(
+            ProtocolVersion.newBoundsOnPV37 -> limits.maxAddressedCounterparticipants
+          ),
+        )
+        .leftMap(_.message)
+      _ <- ProtoValidation
+        .validateLength(
+          unsentDigests,
+          "unsent_digests",
+          pvv,
+          ValidationParam(
+            ProtocolVersion.newBoundsOnPV37 -> limits.maxUnsentDigests
+          ),
+        )
+        .leftMap(_.message)
+    } yield AcsCommitmentSummary(
+      psid = psid,
+      commitmentTick = commitmentTick,
+      addressedCounterparticipants = addressedCounterparticipants,
+      unsentDigests = unsentDigests,
+      batchIndex = batchIndex,
+      lastBatch = lastBatch,
+    )(
+      protocolVersionRepresentativeFor(protocolVersion),
+      deserializedFrom = None,
+    )
+  }
+
+  def fromProtoV32(
+      pvv: ProtocolVersionValidation,
+      context: AcsCommitmentDeserializationContext,
+      protoMsg: v32.AcsCommitmentSummary,
+  )(
+      bytes: ByteString
+  ): ParsingResult[AcsCommitmentSummary] = {
+    val limits = context.synchronizerLimits.acsCommitmentLimits
+    for {
+      psid <- ProtoValidation.validateThen(
+        protoMsg.physicalSynchronizerId,
+        "physical_synchronizer_id",
+        pvv,
+      )(PhysicalSynchronizerId.fromProtoPrimitive)
+      commitmentTick <- CantonTimestamp.fromProtoPrimitive(protoMsg.commitmentTick)
+      addressedCounterparticipantsP <- ProtoValidation.validateLength(
+        protoMsg.addressedCounterparticipants,
+        "addressed_counterparticipants",
+        pvv,
+        ValidationParam(
+          ProtocolVersion.newBoundsOnPV37 -> limits.maxAddressedCounterparticipants
+        ),
+      )
+      addressedCounterparticipants <- parseRequiredNonEmpty(
+        (p: ProtoUnvalidatedString) =>
+          ProtoValidation.validateThen(p, "addressed_counterparticipants", pvv)(
+            parseLfParticipantId
+          ),
+        "addressed_counterparticipants",
+        addressedCounterparticipantsP,
+      )
+      unsentDigests <- ProtoValidation
+        .validateLengthThen(
+          protoMsg.unsentDigests,
+          "unsent_digests",
+          pvv,
+          ValidationParam(
+            ProtocolVersion.newBoundsOnPV37 -> limits.maxUnsentDigests
+          ),
+        )((element, _) => DigestForCounterparticipant.fromProtoV32(pvv, element))
+      batchIndex <- NonNegativeInt.create(protoMsg.batchIndex).leftMap { error =>
+        ProtoDeserializationError.InvariantViolation("batch_index", error)
+      }
+      rpv <- protocolVersionRepresentativeFor(ProtoVersion(32))
+    } yield AcsCommitmentSummary(
+      psid = psid,
+      commitmentTick = commitmentTick,
+      addressedCounterparticipants = addressedCounterparticipants,
+      unsentDigests = unsentDigests,
+      batchIndex = batchIndex,
+      lastBatch = protoMsg.lastBatch,
+    )(rpv, bytes.some)
+  }
+}

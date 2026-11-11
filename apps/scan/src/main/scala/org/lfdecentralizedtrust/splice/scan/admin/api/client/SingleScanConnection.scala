@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.OptionT
-import cats.syntax.either.*
 import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
@@ -26,12 +25,17 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.{
+  BaseAppConnection,
   HttpAppConnection,
   RetryProvider,
   SpliceLedgerClient,
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  BulkStorageBucket,
+  DamlValueEncoding,
+  GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -44,12 +48,17 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
+import org.lfdecentralizedtrust.splice.http.v0.definitions
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkObjectKind
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   Contract,
   ContractWithState,
+  DsoInfo,
+  DsoInfoV1,
   FactoryChoiceWithDisclosures,
   TemplateJsonDecoder,
 }
@@ -77,9 +86,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
-import io.grpc.Status
-import org.apache.pekko.http.scaladsl.model.{HttpHeader, Uri}
-import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, StatusCodes, Uri}
+import org.lfdecentralizedtrust.splice.admin.api.client.commands.{HttpCommand, HttpCommandException}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
@@ -96,7 +104,7 @@ import scala.util.{Failure, Success}
   * to query for the DSO party id.
   */
 class SingleScanConnection private[client] (
-    private[client] val config: ScanAppClientConfig,
+    val config: ScanAppClientConfig,
     upgradesConfig: UpgradesConfig,
     protected val clock: Clock,
     retryProvider: RetryProvider,
@@ -141,9 +149,11 @@ class SingleScanConnection private[client] (
             .runHttpCmd(url, command, headers)
             .andThen {
               case Failure(e) =>
-                MetricsContext.withMetricLabels(("outcome", e.getClass.getSimpleName)) {
-                  implicit ec2 =>
-                    metrics.callPerConnection.mark()(m.merge(ec2))
+                MetricsContext.withMetricLabels(
+                  ("outcome", e.getClass.getSimpleName),
+                  ("http_status", SingleScanConnection.httpStatusLabel(e)),
+                ) { implicit ec2 =>
+                  metrics.callPerConnection.mark()(m.merge(ec2))
                 }
                 timer.stop()(m)
               case Success(_) =>
@@ -183,8 +193,15 @@ class SingleScanConnection private[client] (
   override def getDsoInfo()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[org.lfdecentralizedtrust.splice.http.v0.definitions.GetDsoInfoResponse] = {
+  ): Future[DsoInfo] = {
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetDsoInfo(List()))
+  }
+
+  override def getDsoInfoV1()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[DsoInfoV1] = {
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetDsoInfoV1(List()))
   }
 
   override def getHoldingsSummaryAt(
@@ -246,18 +263,7 @@ class SingleScanConnection private[client] (
   )(implicit
       tc: TraceContext
   ): Future[Contract[DsoRules.ContractId, DsoRules]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.GetDsoInfo(headers = List()),
-    ).map { dsoInfo =>
-      Contract
-        .fromHttp(DsoRules.COMPANION)(dsoInfo.dsoRules.contract)
-        .valueOr(err =>
-          throw Status.INVALID_ARGUMENT
-            .withDescription(s"Failed to decode dso rules: $err")
-            .asRuntimeException
-        )
-    }
+    getDsoInfo().map(_.dsoRules.contract)
   }
 
   override def listVoteRequests()(implicit
@@ -1027,9 +1033,95 @@ class SingleScanConnection private[client] (
       config.adminApi.url,
       HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash),
     )
+
+  override def getBulkObjectChecksums(
+      requiredCatchupTimestamp: CantonTimestamp,
+      kind: BulkObjectKind,
+      objectKeys: Seq[String],
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectChecksums(objectKeys),
+    )
+  }
+
+  def listBulkAcsSnapshotObjects(
+      atOrBeforeRecordTime: CantonTimestamp,
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.ListBulkAcsSnapshotObjects(atOrBeforeRecordTime, damlValueEncoding),
+    )
+      .flatMap(response =>
+        SingleScanConnection.decoded(BulkStorageObjects.snapshotObjects(response)).map(Some(_))
+      )
+      .recover {
+        case e: HttpCommandException if e.status == StatusCodes.NotFound => None
+      }
+
+  override def listBulkUpdateHistoryObjects(
+      startRecordTime: CantonTimestamp,
+      endRecordTime: CantonTimestamp,
+      pageSize: Int,
+      nextPageToken: Option[String],
+      damlValueEncoding: Option[DamlValueEncoding],
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.ListBulkUpdateHistoryObjects(
+        startRecordTime,
+        endRecordTime,
+        nextPageToken,
+        pageSize,
+        damlValueEncoding,
+      ),
+    ).flatMap(response =>
+      SingleScanConnection.decoded(BulkStorageObjects.updateObjectsPage(response))
+    )
+
+  // Not intended to be called via BftScanConnection, so not defined in ScanConnection trait.
+  def getBulkObjectsProgress(
+      recordTime: CantonTimestamp,
+      bucket: BulkStorageBucket,
+      kind: BulkObjectKind,
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectsProgressResponse] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectsProgress(
+        recordTime,
+        bucket,
+        Some(SingleScanConnection.toHttpObjectKind(kind)),
+      ),
+    )
+  }
 }
 
 object SingleScanConnection {
+
+  private def toHttpObjectKind(kind: BulkObjectKind): definitions.BulkObjectKind =
+    kind match {
+      case BulkObjectKind.Updates => definitions.BulkObjectKind.Updates
+      case BulkObjectKind.Snapshots => definitions.BulkObjectKind.Snapshots
+    }
+
+  private def decoded[T](result: Either[String, T]): Future[T] =
+    result.fold(err => Future.failed(new IllegalStateException(err)), Future.successful)
+
+  private[client] def httpStatusLabel(error: Throwable): String =
+    error match {
+      case e: BaseAppConnection.UnexpectedHttpJsonResponse => e.statusCode.intValue.toString
+      case e: BaseAppConnection.UnexpectedHttpMalformedJsonResponse =>
+        e.statusCode.intValue.toString
+      case e: BaseAppConnection.UnexpectedHttpTextResponse => e.statusCode.intValue.toString
+      case e: BaseAppConnection.UnexpectedHttpNonJsonResponse => e.statusCode.intValue.toString
+      case e: HttpCommandException => e.status.intValue.toString
+      case _ => "none"
+    }
+
   def withSingleScanConnection[T](
       scanConfig: ScanAppClientConfig,
       upgradesConfig: UpgradesConfig,

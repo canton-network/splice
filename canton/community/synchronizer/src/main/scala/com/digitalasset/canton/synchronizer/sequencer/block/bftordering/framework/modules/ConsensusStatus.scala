@@ -5,6 +5,11 @@ package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewo
 
 import cats.syntax.traverse.*
 import com.digitalasset.canton.ProtoDeserializationError
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.serialization.ProtocolVersionedMemoizedEvidence
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.SupportedVersions
@@ -23,6 +28,7 @@ import com.digitalasset.canton.version.{
   VersionedProtoCodec,
   VersioningCompanionContextMemoization,
 }
+import com.digitalasset.nonempty.NonEmpty
 import com.google.protobuf.ByteString
 
 /** Status messages that describe how far into the consensus process a node is. This is used as part
@@ -34,7 +40,7 @@ object ConsensusStatus {
   final case class EpochStatus private (
       from: BftNodeId,
       epochNumber: EpochNumber,
-      segments: Seq[SegmentStatus],
+      segments: NonEmpty[Seq[SegmentStatus]],
   )(
       override val representativeProtocolVersion: RepresentativeProtocolVersion[
         EpochStatus.type
@@ -44,7 +50,7 @@ object ConsensusStatus {
       with ProtocolVersionedMemoizedEvidence
       with MessageFrom
       with HasProtocolVersionedWrapper[EpochStatus] {
-    def toProto: v30.EpochStatus = v30.EpochStatus(epochNumber, segments.map(_.toProto))
+    def toProto: v30.EpochStatus = v30.EpochStatus(epochNumber, segments.map(_.toProto).forgetNE)
 
     override protected val companionObj: EpochStatus.type = EpochStatus
 
@@ -62,7 +68,7 @@ object ConsensusStatus {
     def create(
         from: BftNodeId,
         epochNumber: EpochNumber,
-        segments: Seq[SegmentStatus],
+        segments: NonEmpty[Seq[SegmentStatus]],
     )(implicit
         synchronizerProtocolVersion: ProtocolVersion
     ): EpochStatus =
@@ -77,31 +83,44 @@ object ConsensusStatus {
     )(originalByteString: ByteString): ParsingResult[EpochStatus] =
       for {
         segments <- protoEpochStatus.segments.traverse(SegmentStatus.fromProto)
-        rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
+        nonEmptySegments <- NonEmpty
+          .from(segments)
+          .toRight(
+            ProtoDeserializationError.ValueConversionError("segments", "must not be empty")
+          )
+        rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData30)
       } yield EpochStatus(
         from,
         EpochNumber(protoEpochStatus.epochNumber),
-        segments,
+        nonEmptySegments,
       )(rpv, Some(originalByteString))
 
     override val versioningTable: VersioningTable = VersioningTable(
-      SupportedVersions.ProtoData ->
-        VersionedProtoCodec(SupportedVersions.CantonProtocol)(v30.EpochStatus)(
+      SupportedVersions.ProtoData30 ->
+        VersionedProtoCodec(SupportedVersions.CantonProtocol36)(v30.EpochStatus)(
           supportedProtoVersionMemoized(_)(fromProto),
           _.toProto,
         )
     )
   }
 
-  sealed trait SegmentStatus {
+  sealed trait SegmentStatus extends PrettyPrintingFromCompanion with Product with Serializable {
     def toProto: v30.SegmentStatus
   }
 
   object SegmentStatus {
-    final object Complete extends SegmentStatus {
+    final case object Complete extends SegmentStatus {
       override val toProto: v30.SegmentStatus =
         v30.SegmentStatus(v30.SegmentStatus.Status.Complete(com.google.protobuf.empty.Empty()))
+
+      override def prettyCompanion: PrettyPrintingCompanion[Complete.this.type] =
+        CompletePrettyPrintingCompanion
     }
+
+    private object CompletePrettyPrintingCompanion extends PrettyPrintingCompanion[Complete.type] {
+      override protected val pretty: Pretty[Complete.type] = prettyOfObject[Complete.type]
+    }
+
     sealed trait Incomplete extends SegmentStatus {
       def viewNumber: ViewNumber
       def areBlocksComplete: Seq[Boolean]
@@ -116,7 +135,17 @@ object ConsensusStatus {
             v30.SegmentInProgress(viewNumber, blockStatuses.map(_.toProto))
           )
         )
+
+      override def prettyCompanion: PrettyPrintingCompanion[InProgress] = InProgress
     }
+
+    object InProgress extends PrettyPrintingCompanion[InProgress] {
+      override protected val pretty: Pretty[InProgress] = prettyOfClass(
+        param("viewNumber", _.viewNumber),
+        param("blockStatuses", _.blockStatuses),
+      )
+    }
+
     final case class InViewChange(
         viewNumber: ViewNumber,
         viewChangeMessagesPresent: Seq[Boolean],
@@ -127,6 +156,17 @@ object ConsensusStatus {
           v30.SegmentInViewChange(viewNumber, viewChangeMessagesPresent, areBlocksComplete)
         )
       )
+
+      override def prettyCompanion: PrettyPrintingCompanion[InViewChange] = InViewChange
+    }
+
+    object InViewChange extends PrettyPrintingCompanion[InViewChange] {
+      override protected val pretty: Pretty[InViewChange] =
+        prettyOfClass(
+          param("viewNumber", _.viewNumber),
+          param("viewChangeMessagesPresent", _.viewChangeMessagesPresent),
+          param("areBlocksComplete", _.areBlocksComplete),
+        )
     }
 
     private[modules] def fromProto(proto: v30.SegmentStatus): ParsingResult[SegmentStatus] =
@@ -153,17 +193,25 @@ object ConsensusStatus {
 
   }
 
-  sealed trait BlockStatus {
+  sealed trait BlockStatus extends PrettyPrintingFromCompanion {
     def isComplete: Boolean
     def toProto: v30.BlockStatus
   }
 
   object BlockStatus {
-    final object Complete extends BlockStatus {
+    final case object Complete extends BlockStatus {
       override val isComplete: Boolean = true
       override val toProto: v30.BlockStatus =
         v30.BlockStatus(v30.BlockStatus.Status.Complete(com.google.protobuf.empty.Empty()))
+
+      override def prettyCompanion: PrettyPrintingCompanion[Complete.this.type] =
+        CompletePrettyPrintingCompanion
     }
+
+    private object CompletePrettyPrintingCompanion extends PrettyPrintingCompanion[Complete.type] {
+      override protected val pretty: Pretty[Complete.type] = prettyOfObject[Complete.type]
+    }
+
     final case class InProgress(
         prePrepared: Boolean,
         preparesPresent: Seq[Boolean],
@@ -174,6 +222,16 @@ object ConsensusStatus {
         v30.BlockStatus.Status.InProgress(
           v30.BlockInProgress(prePrepared, preparesPresent, commitsPresent)
         )
+      )
+
+      override def prettyCompanion: PrettyPrintingCompanion[InProgress] = InProgress
+    }
+
+    object InProgress extends PrettyPrintingCompanion[InProgress] {
+      override protected val pretty: Pretty[InProgress] = prettyOfClass(
+        param("prePrepared", _.prePrepared),
+        param("preparesPresent", _.preparesPresent),
+        param("commitsPresent", _.commitsPresent),
       )
     }
 

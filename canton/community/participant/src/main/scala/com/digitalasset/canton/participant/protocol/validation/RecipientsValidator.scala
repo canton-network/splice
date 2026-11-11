@@ -6,11 +6,11 @@ package com.digitalasset.canton.participant.protocol.validation
 import cats.data.OptionT
 import cats.syntax.functorFilter.*
 import cats.syntax.parallel.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.data.ViewPosition.MerklePathElement
 import com.digitalasset.canton.data.{ViewPosition, ViewTree}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.protocol.ProtocolProcessor.{
   WrongRecipients,
@@ -24,6 +24,7 @@ import com.digitalasset.canton.topology.client.PartyTopologySnapshotClient
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ErrorUtil
 import com.digitalasset.canton.util.collection.IterableUtil
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -47,6 +48,7 @@ class RecipientsValidator[I](
     *
     * A view v will be kept iff there is a path rp through the recipients tree (ordered leaf to
     * root) such that the following conditions hold:
+    *
     *   1. Every informee of the view is hosted by an active participant.
     *   1. Every informee participant of the view v is declared as a recipient of v in the first
     *      element of rp.

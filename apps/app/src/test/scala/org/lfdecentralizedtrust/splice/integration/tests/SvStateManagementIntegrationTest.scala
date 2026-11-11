@@ -43,6 +43,7 @@ import com.digitalasset.canton.console.CommandFailure
 
 import java.util.Optional
 import scala.collection.parallel.CollectionConverters.seqIsParallelizable
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.*
 
@@ -150,7 +151,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
         sv1Backend.listVoteRequests().loneElement
       },
     )
-    actAndCheck(
+    actAndCheck(timeUntilSuccess = 40.seconds)(
       "A number of SVs less than the required number of voters cast a vote",
       Seq(sv1Backend, sv2Backend).par.foreach { sv =>
         sv.castVote(
@@ -397,6 +398,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
           sv1Backend.getDsoInfo().dsoRules.payload.config.nextScheduledSynchronizerUpgrade,
           sv1Backend.getDsoInfo().dsoRules.payload.config.voteCooldownTime,
           sv1Backend.getDsoInfo().dsoRules.payload.config.nextScheduledLogicalSynchronizerUpgrade,
+          sv1Backend.getDsoInfo().dsoRules.payload.config.svOperationsSwitchOverTimes,
         )
 
         val action: ActionRequiringConfirmation =
@@ -506,6 +508,10 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       initialConfig.externalPartyConfigStateTickDuration,
       initialConfig.rewardConfig,
       initialConfig.transferPreapprovalBaseDuration,
+      initialConfig.developmentFundManagerBlacklist,
+      initialConfig.minDevelopmentFundMintingDelay,
+      initialConfig.amuletSwitchOverTimes,
+      initialConfig.governanceLockConfig,
     )
 
     val (_, voteRequestCid) = actAndCheck(
@@ -675,6 +681,8 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
   "Vote requests expire" in { implicit env =>
     clue("Initialize DSO with 2 SVs") {
       startAllSync(
+        // sv1's scan is required for sv2's onboarding
+        sv1ScanBackend,
         sv1Backend,
         sv2Backend,
       )

@@ -2,10 +2,35 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import type { ReactNode } from 'react';
+import { MemberIdentifier } from '../ui';
+import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../ui/identifierStyles';
+import {
+  EFFECTIVE_AT_LABEL,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  THRESHOLD_DEADLINE_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import type { ConfigChange } from '../../utils/types';
-import { scrollContainerSx, scrollableIdentifierFieldSx } from '../beta/identifierStyles';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
+import { OpsPartiesDiff, OpsPartiesDisplay } from './OpsPartiesDisplay';
+import { ProposalReviewField } from './ProposalReviewField';
+
+/** Figma review party IDs: Source Code Pro 14px + copy (node 4832:4323). */
+const ReviewPartyId: React.FC<{ partyId: string; 'data-testid': string }> = ({
+  partyId,
+  'data-testid': testId,
+}) => (
+  <MemberIdentifier
+    partyId={partyId}
+    isYou={false}
+    size="small"
+    maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+    data-testid={testId}
+  />
+);
 
 interface BaseProposalSummaryProps {
   actionName: string;
@@ -33,6 +58,8 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         formType: 'grant-right';
         grantRight: string;
         activityWeight: string;
+        appKind: string;
+        opsParties: string[];
       }
     | {
         formType: 'revoke-right';
@@ -42,6 +69,8 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
     | {
         formType: 'config-change';
         configFormData: ConfigChange[];
+        /** Rendered under Proposed Configuration Changes (e.g. Show JSON). */
+        jsonDiff?: ReactNode;
       }
     | {
         formType: 'create-unallocated-unclaimed-activity-record';
@@ -55,7 +84,14 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         rightCid: string;
         currentActivityWeight: string;
         newActivityWeight: string;
-        reason: string;
+      }
+    | {
+        formType: 'amend-featured-app';
+        providerPartyId: string;
+        rightCid: string;
+        scalarChanges: ConfigChange[];
+        opsAdded: string[];
+        opsRemoved: string[];
       }
   );
 
@@ -63,44 +99,60 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
   const { formType, actionName, url, summary, expiryDate, effectiveDate } = props;
 
   return (
-    <Box>
-      <Typography variant="h3" mb={8}>
-        Proposal Summary
+    <Box data-testid="proposal-review">
+      <Typography
+        component="h2"
+        data-testid="proposal-review-title"
+        sx={{
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 700,
+          fontSize: '18px',
+          lineHeight: '28px',
+          letterSpacing: 0,
+          color: '#FFFFFF',
+          mb: 4,
+        }}
+      >
+        {PROPOSAL_REVIEW_TITLE}
       </Typography>
 
-      <Box>
-        <ProposalField id="action" title="Action" value={actionName} />
-
-        <ProposalField id="url" title="URL" value={url} />
-
-        <ProposalField id="summary" title="Summary" value={summary} />
-
-        <ProposalField
-          id="expiryDate"
-          title="Threshold Deadline"
-          subtitle={THRESHOLD_DEADLINE_SUBTITLE}
-          value={expiryDate}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <ProposalReviewField
+          id="action"
+          label={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+          value={actionName}
         />
 
-        <ProposalField
-          id="effectiveDate"
-          title="Effective Date"
-          value={effectiveDate ? effectiveDate : 'Threshold'}
-        />
+        {/* Action-specific fields follow Action (Figma: config/member before threshold). */}
+        {formType === 'config-change' && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ProposalReviewField
+              id="configChange"
+              label="Proposed Configuration Changes"
+              value={<ConfigValuesChanges changes={props.configFormData} isSummaryView />}
+            />
+            {props.jsonDiff}
+          </Box>
+        )}
 
         {formType === 'sv-reward-weight' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="svRewardWeightMember"
-              title="Member"
-              value={props.svRewardWeightMember}
-              scrollableIdentifier
+              label="Member"
+              value={
+                <ReviewPartyId
+                  partyId={props.svRewardWeightMember}
+                  data-testid="svRewardWeightMember-party-id"
+                />
+              }
             />
-            <ProposalField
+            <ProposalReviewField
               id="configChange"
-              title="Proposed Changes"
+              label="Proposed Changes"
               value={
                 <ConfigValuesChanges
+                  isSummaryView
                   changes={[
                     {
                       label: 'Super Validator Reward Weight',
@@ -117,54 +169,77 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
 
         {formType === 'grant-right' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="grantRight"
-              title="Provider Party ID"
-              value={props.grantRight}
-              scrollableIdentifier
+              label="Provider Party ID"
+              value={<ReviewPartyId partyId={props.grantRight} data-testid="grantRight-party-id" />}
             />
-            <ProposalField
+            <ProposalReviewField
               id="grantRightActivityWeight"
-              title="Activity Weight"
+              label="App Composition Weight"
               value={props.activityWeight}
+            />
+            <ProposalReviewField
+              id="grantRightAppKind"
+              label="App Category"
+              value={props.appKind || 'Default (unset)'}
+            />
+            <ProposalReviewField
+              id="grantRightOpsParties"
+              label="App Operations Parties"
+              value={
+                <OpsPartiesDisplay
+                  parties={props.opsParties.filter(p => p.trim() !== '')}
+                  idPrefix="grant-review-ops"
+                />
+              }
             />
           </>
         )}
 
         {formType === 'revoke-right' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="revokeProviderPartyId"
-              title="Provider Party ID"
-              value={props.providerPartyId}
-              scrollableIdentifier
+              label="Provider Party ID"
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="revokeProviderPartyId-party-id"
+                />
+              }
             />
-            <ProposalField
+            <ProposalReviewField
               id="revokeRight"
-              title="Featured Application Contract ID"
+              label="Featured Application Contract ID"
               value={props.revokeRight}
-              scrollableIdentifier
             />
           </>
         )}
 
         {formType === 'update-right-weight' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="updateProviderPartyId"
-              title="Provider Party ID"
-              value={props.providerPartyId}
+              label="Provider Party ID"
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="updateProviderPartyId-party-id"
+                />
+              }
             />
-            <ProposalField
+            <ProposalReviewField
               id="updateRight"
-              title="Featured Application Contract ID"
+              label="Featured Application Contract ID"
               value={props.rightCid}
             />
-            <ProposalField
+            <ProposalReviewField
               id="updateActivityWeight"
-              title="Proposed Changes"
+              label="Proposed Changes"
               value={
                 <ConfigValuesChanges
+                  isSummaryView
                   changes={[
                     {
                       label: 'Activity Weight',
@@ -176,104 +251,91 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
                 />
               }
             />
-            <ProposalField id="updateReason" title="Reason" value={props.reason} />
+          </>
+        )}
+
+        {formType === 'amend-featured-app' && (
+          <>
+            <ProposalReviewField
+              id="amendProviderPartyId"
+              label="Provider Party ID"
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="amendProviderPartyId-party-id"
+                />
+              }
+            />
+            <ProposalReviewField
+              id="amendRight"
+              label="Featured Application Contract ID"
+              value={props.rightCid}
+            />
+            {props.scalarChanges.length > 0 && (
+              <ProposalReviewField
+                id="amendScalarChanges"
+                label="Proposed Changes"
+                value={<ConfigValuesChanges isSummaryView changes={props.scalarChanges} />}
+              />
+            )}
+            <ProposalReviewField
+              id="amendOpsParties"
+              label="Changes to App Operations Parties"
+              value={
+                <OpsPartiesDiff
+                  added={props.opsAdded}
+                  removed={props.opsRemoved}
+                  idPrefix="amend-review-ops"
+                />
+              }
+            />
           </>
         )}
 
         {formType === 'offboard' && (
-          <ProposalField
+          <ProposalReviewField
             id="offboardMember"
-            title="Offboard Member"
-            value={props.offboardMember}
-            scrollableIdentifier
+            label="Member"
+            value={
+              <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
+            }
           />
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="beneficiary"
-              title="Beneficiary"
-              value={props.beneficiary}
-              scrollableIdentifier
+              label="Beneficiary"
+              value={
+                <ReviewPartyId partyId={props.beneficiary} data-testid="beneficiary-party-id" />
+              }
             />
-
-            <ProposalField id="amount" title="Amount" value={props.amount} />
-
-            <ProposalField id="expiresAt" title="Must Mint Before" value={props.expiresAt} />
+            <ProposalReviewField id="amount" label="Amount" value={props.amount} />
+            <ProposalReviewField
+              id="expiresAt"
+              label="Must Mint Before"
+              value={formatDatetimeWithOffset(props.expiresAt)}
+            />
           </>
         )}
 
-        <Box mt={4}>
-          {formType === 'config-change' && (
-            <ProposalField
-              id="configChange"
-              title="Proposed Changes"
-              value={<ConfigValuesChanges changes={props.configFormData} isSummaryView />}
-            />
-          )}
-        </Box>
-      </Box>
-    </Box>
-  );
-};
+        <ProposalReviewField
+          id="expiryDate"
+          label={THRESHOLD_DEADLINE_LABEL}
+          subtitle={THRESHOLD_DEADLINE_SUBTITLE}
+          value={formatDatetimeWithOffset(expiryDate)}
+        />
 
-interface ProposalFieldProps {
-  id: string;
-  title: string;
-  subtitle?: string;
-  value: React.ReactNode;
-  scrollableIdentifier?: boolean;
-}
+        <ProposalReviewField
+          id="effectiveDate"
+          label={EFFECTIVE_AT_LABEL}
+          value={effectiveDate ? formatDatetimeWithOffset(effectiveDate) : 'Threshold'}
+        />
 
-const ProposalField: React.FC<ProposalFieldProps> = props => {
-  const { id, title, subtitle, value, scrollableIdentifier = false } = props;
+        <ProposalReviewField id="summary" label="Proposal Summary" value={summary} />
 
-  return (
-    <Box sx={{ minWidth: '80%' }}>
-      <Typography
-        variant="h5"
-        id={`${id}-title`}
-        data-testid={`${id}-title`}
-        gutterBottom
-        mb={1}
-        mt={4}
-      >
-        {title}
-      </Typography>
-
-      <Box>
-        {subtitle && (
-          <Typography
-            variant="body2"
-            id={`${id}-subtitle`}
-            data-testid={`${id}-subtitle`}
-            gutterBottom
-          >
-            {subtitle}
-          </Typography>
-        )}
-
-        {typeof value === 'string' ? (
-          scrollableIdentifier ? (
-            <Box sx={scrollContainerSx} data-testid={`${id}-field-scroll`}>
-              <Typography
-                variant="body2"
-                color="grey"
-                data-testid={`${id}-field`}
-                sx={scrollableIdentifierFieldSx}
-              >
-                {value}
-              </Typography>
-            </Box>
-          ) : (
-            <Typography variant="body2" data-testid={`${id}-field`} color="grey">
-              {value}
-            </Typography>
-          )
-        ) : (
-          value
-        )}
+        <ProposalReviewField id="url" label="Supporting URL" value={url} />
       </Box>
     </Box>
   );

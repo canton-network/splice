@@ -7,7 +7,6 @@
   lnav = super.callPackage ./lnav.nix {};
   canton = super.callPackage ./canton.nix {};
   dpm-sdk = super.callPackage ./dpm-sdk.nix {};
-  cometbft_driver = super.callPackage ./cometbft-driver.nix {};
   python3 = super.python3.override {
     packageOverrides = pySelf : pySuper : rec {
       sphinx-reredirects = pySelf.callPackage ./sphinx-reredirects.nix { };
@@ -27,22 +26,6 @@
     });
   });
   git-search-replace = super.callPackage ./git-search-replace.nix {};
-  # helm-unittest v1.1.0 switched plugin.yaml to use platformCommand with platform-specific
-  # binary names (e.g. untt-linux-amd64) instead of a generic `command: untt`.
-  # The nix derivation only installs a single `untt` binary, so we create symlinks
-  # for all platform variants referenced in plugin.yaml.
-  kubernetes-helmPlugins = super.kubernetes-helmPlugins // {
-    helm-unittest = super.kubernetes-helmPlugins.helm-unittest.overrideAttrs (old: {
-      postInstall = old.postInstall + ''
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-amd64
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-arm64
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-ppc64le
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-linux-s390x
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-macos-amd64
-        ln -s $out/helm-unittest/untt $out/helm-unittest/untt-macos-arm64
-      '';
-    });
-  };
   sphinx-lint = super.callPackage ./sphinx-lint.nix {};
   pulumi-bin = super.pulumi-bin.overrideAttrs (_: previousAttrs:
     let

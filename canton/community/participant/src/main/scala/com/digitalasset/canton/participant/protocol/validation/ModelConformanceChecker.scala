@@ -9,14 +9,17 @@ import cats.implicits.{toFoldableOps, toFunctorOps}
 import cats.syntax.alternative.*
 import cats.syntax.bifunctor.*
 import cats.syntax.parallel.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.{Hash, HashOps, HmacOps, InteractiveSubmission}
 import com.digitalasset.canton.data.*
 import com.digitalasset.canton.data.ViewParticipantData.RootAction
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.ParticipantNodeParameters
 import com.digitalasset.canton.participant.protocol.EngineController.{
@@ -24,11 +27,14 @@ import com.digitalasset.canton.participant.protocol.EngineController.{
   GetEngineAbortStatus,
 }
 import com.digitalasset.canton.participant.protocol.TransactionProcessingSteps.CommonData
-import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory
 import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory.{
   ContractInstanceOfId,
   ContractLookupError,
   TransactionTreeConversionError,
+}
+import com.digitalasset.canton.participant.protocol.submission.{
+  TransactionTreeFactory,
+  UsableSynchronizers,
 }
 import com.digitalasset.canton.participant.protocol.validation.ModelConformanceChecker.*
 import com.digitalasset.canton.participant.store.{ContractLookup, ReplayContractLookup}
@@ -54,10 +60,17 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.PackageConsumer.PackageResolver
 import com.digitalasset.canton.util.collection.MapsUtil
 import com.digitalasset.canton.util.{ContractValidator, ErrorUtil, MonadUtil, RoseTree}
-import com.digitalasset.canton.version.{HashingSchemeVersion, ProtocolVersion}
-import com.digitalasset.canton.{LfPartyId, checked}
+import com.digitalasset.canton.version.{
+  HashingSchemeVersion,
+  ProtocolVersion,
+  ProtocolVersionValidation,
+}
+import com.digitalasset.canton.{LfPackageId, LfPartyId, checked}
 import com.digitalasset.daml.lf.data.Ref.{CommandId, PackageId, PackageName}
+import com.digitalasset.daml.lf.data.Relation
+import com.digitalasset.daml.lf.engine.Blinding
 import com.digitalasset.daml.lf.value.GenValue
+import com.digitalasset.nonempty.NonEmpty
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -78,6 +91,7 @@ class ModelConformanceChecker(
     packageResolver: PackageResolver,
     contractLookup: ContractLookup,
     parallelism: PositiveInt,
+    protocolVersion: ProtocolVersion,
     validateLegacyContractsV11: Boolean,
     hashOps: HashOps & HmacOps,
     override protected val loggerFactory: NamedLoggerFactory,
@@ -100,12 +114,13 @@ class ModelConformanceChecker(
       commonData: CommonData,
       getEngineAbortStatus: GetEngineAbortStatus,
       reInterpretedTopLevelViews: LazyAsyncReInterpretationMap,
-      // TODO(#29834): Make this a parameter of ModelConformanceChecker as an instance of this is tied to a connected synchronizer and
-      //               implicitly to protocol version
-      protocolVersion: ProtocolVersion,
+      hostedOnboardingPartiesO: Option[HostedOnboardingParties],
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, ErrorWithSubTransaction[ViewEffect], Result] = {
+
+    val transactionMerge: TransactionMerge = TransactionMerge(protocolVersion)
+
     val CommonData(updateId, ledgerTime, preparationTime) = commonData
 
     // Previous checks in Phase 3 ensure that all the root views are sent to the same
@@ -135,52 +150,53 @@ class ModelConformanceChecker(
             )
           ],
       )
-    ] = views
-      .parTraverse { case (view, effects, viewPos, submittingParticipantO) =>
-        for {
-          wfTxE <- checkView(
-            updateId,
-            view,
-            viewPos,
-            mediator,
-            transactionUuid,
-            ledgerTime,
-            preparationTime,
-            submittingParticipantO,
-            topologySnapshot,
-            getEngineAbortStatus,
-            reInterpretedTopLevelViews,
-            protocolVersion,
-          ).value
+    ] = MonadUtil
+      .parTraverseWithLimit(parallelism)(views) {
+        case (view, effects, viewPos, submittingParticipantO) =>
+          for {
+            wfTxE <- checkView(
+              updateId,
+              view,
+              viewPos,
+              mediator,
+              transactionUuid,
+              ledgerTime,
+              preparationTime,
+              submittingParticipantO,
+              topologySnapshot,
+              getEngineAbortStatus,
+              reInterpretedTopLevelViews,
+              protocolVersion,
+            ).value
 
-          errorsViewsTxs <- wfTxE match {
-            case Right(wfTx) => FutureUnlessShutdown.pure((Seq.empty, Seq((view, effects, wfTx))))
+            errorsViewsTxs <- wfTxE match {
+              case Right(wfTx) => FutureUnlessShutdown.pure((Seq.empty, Seq((view, effects, wfTx))))
 
-            // There is no point in checking subviews if we have aborted
-            case Left(error @ DAMLeError(DAMLe.EngineAborted(_), _)) =>
-              FutureUnlessShutdown.pure((Seq(error), Seq.empty))
+              // There is no point in checking subviews if we have aborted
+              case Left(error @ DAMLeError(DAMLe.EngineAborted(_), _)) =>
+                FutureUnlessShutdown.pure((Seq(error), Seq.empty))
 
-            case Left(error) =>
-              val subviewsWithIndex = view.subviews.unblindedElementsWithIndex
-              val childEffects = effects.children
-              ErrorUtil.requireArgument(
-                subviewsWithIndex.sizeCompare(childEffects) == 0,
-                s"Number of subviews (${subviewsWithIndex.size}) and child effects (${childEffects.size}) do not match for view at position $viewPos",
-              )
-              val subviewsWithInfo =
-                subviewsWithIndex.zip(childEffects).map { case ((sv, svIndex), svEffects) =>
-                  (sv, svEffects, svIndex +: viewPos, None)
+              case Left(error) =>
+                val subviewsWithIndex = view.subviews.unblindedElementsWithIndex
+                val childEffects = effects.children
+                ErrorUtil.requireArgument(
+                  subviewsWithIndex.sizeCompare(childEffects) == 0,
+                  s"Number of subviews (${subviewsWithIndex.size}) and child effects (${childEffects.size}) do not match for view at position $viewPos",
+                )
+                val subviewsWithInfo =
+                  subviewsWithIndex.zip(childEffects).map { case ((sv, svIndex), svEffects) =>
+                    (sv, svEffects, svIndex +: viewPos, None)
+                  }
+
+                findValidSubtransactions(subviewsWithInfo).map { case (subErrors, subViewsTxs) =>
+                  // If a view is not model conformant, all its ancestors are not either.
+                  // To avoid redundant errors, return this view's error only if the subviews are valid.
+                  val errors = if (subErrors.isEmpty) Seq(error) else subErrors
+
+                  (errors, subViewsTxs)
                 }
-
-              findValidSubtransactions(subviewsWithInfo).map { case (subErrors, subViewsTxs) =>
-                // If a view is not model conformant, all its ancestors are not either.
-                // To avoid redundant errors, return this view's error only if the subviews are valid.
-                val errors = if (subErrors.isEmpty) Seq(error) else subErrors
-
-                (errors, subViewsTxs)
-              }
-          }
-        } yield errorsViewsTxs
+            }
+          } yield errorsViewsTxs
       }
       .map { aggregate =>
         val (errorsSeq, viewsTxsSeq) = aggregate.separate
@@ -201,15 +217,33 @@ class ModelConformanceChecker(
 
     } yield {
       val (errors, viewsTxs) = errorsAndViewTxs
-      val (_, effects, txs) = viewsTxs.unzip3
+      val (_, effects, unmergedTransactions) = viewsTxs.unzip3
 
-      val (wftxO, mergeErrorOO) = NonEmpty.from(txs).map(WellFormedTransaction.merge(_)).separate
+      // Filter out transaction nodes only relevant to onboarding parties on this participant
+      val txs = hostedOnboardingPartiesO.fold(unmergedTransactions)(hostedOnboardingParties =>
+        unmergedTransactions.map(
+          WellFormedTransaction.projectOutOnboardingTransactionNodes(_, hostedOnboardingParties)
+        )
+      )
+
+      val (wftxO, mergeErrorOO) = NonEmpty.from(txs).map(transactionMerge.merge(_)).separate
       val mergeErrorO = mergeErrorOO.flatten.map(MergeError.apply)
 
-      NonEmpty.from(errors ++ mergeErrorO ++ conflictingStoredContractErrors) match {
+      NonEmpty.from(
+        errors ++ mergeErrorO ++ conflictingStoredContractErrors
+      ) match {
         case None =>
           wftxO match {
-            case Some(wftx) => Right(Result(updateId, wftx))
+            case Some(wftx) =>
+              Right(
+                Result(
+                  updateId,
+                  wftx,
+                  // drop top-level rollback nodes as the internal consistency checker's
+                  // NUCK validation ignores rollback nodes
+                  txs.map(_.unwrap.unwrap),
+                )
+              )
             case _ =>
               ErrorUtil.internalError(
                 new IllegalStateException(
@@ -234,7 +268,7 @@ class ModelConformanceChecker(
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, Map[PackageName, PackageId]] =
     EitherT(for {
-      resolvedE <- packageIds.toSeq.parTraverse(pId =>
+      resolvedE <- MonadUtil.parTraverseWithLimit(parallelism)(packageIds)(pId =>
         packageResolver
           .resolve(
             pId,
@@ -299,6 +333,7 @@ class ModelConformanceChecker(
           packagePreference,
           failed,
           getEngineAbortStatus,
+          () => view.tryExternalCallReplayData,
         )(traceContext)
         .leftMap(DAMLeError(_, view.viewHash))
         .leftWiden[Error]
@@ -329,7 +364,6 @@ class ModelConformanceChecker(
   ]] = {
     val submittingParticipantO = submitterMetadataO.map(_.submittingParticipant)
     val viewParticipantData = view.viewParticipantData.tryUnwrap
-
     val rbContext = viewParticipantData.rollbackContext
     for {
       // If we already have the re-interpreted view then re-use it
@@ -350,7 +384,6 @@ class ModelConformanceChecker(
         ReInterpretationResult(
           lfTx,
           metadata,
-          legacyKeyResolver,
           usedPackages,
           _,
         ),
@@ -358,17 +391,16 @@ class ModelConformanceChecker(
         _,
       ) = lfTxAndMetadata
 
-      _ <- checkPackageVetting(
-        view,
-        topologySnapshot,
-        usedPackages,
-        metadata.ledgerTime,
-        protocolVersion,
-      )
+      _ <-
+        if (protocolVersion >= ProtocolVersion.v36) {
+          checkTxPackageVetting(topologySnapshot, lfTx, metadata.ledgerTime)
+        } else {
+          checkViewPackageVetting(view, topologySnapshot, usedPackages, metadata.ledgerTime)
+        }
 
       wfTx <- EitherT.fromEither[FutureUnlessShutdown](
         WellFormedTransaction
-          .check(lfTx, metadata, WithoutSuffixes)
+          .check(lfTx, metadata, WithoutSuffixes, RollbackContextFactory(protocolVersion))
           .leftMap[Error](err => TransactionNotWellFormed(err, view.viewHash))
       )
 
@@ -378,7 +410,11 @@ class ModelConformanceChecker(
         case _: CantonContractIdV2Version =>
           ContractIdAbsolutizationDataV2(updateId, metadata.ledgerTime)
       }
-      absolutizer = new ContractIdAbsolutizer(hashOps, absolutizationData)
+      absolutizer = new ContractIdAbsolutizer(
+        ProtocolVersionValidation(protocolVersion),
+        hashOps,
+        absolutizationData,
+      )
 
       replayContractInstanceLookup: ContractInstanceOfId = { (id: LfContractId) =>
         EitherT.fromEither[FutureUnlessShutdown](
@@ -397,7 +433,6 @@ class ModelConformanceChecker(
           transactionUuid = transactionUuid,
           topologySnapshot = topologySnapshot,
           contractOfId = replayContractInstanceLookup,
-          legacyKeyResolver = legacyKeyResolver,
           absolutizer = absolutizer,
         )
       ).leftMap(err => TransactionTreeError(err, view.viewHash))
@@ -410,15 +445,18 @@ class ModelConformanceChecker(
         ViewReconstructionError(view, reconstructedView): Error,
       )
 
-    } yield WithRollbackScope(rbContext.rollbackScope, suffixedTx)
+    } yield WithRollbackScope(
+      rbContext.rollbackScope,
+      suffixedTx,
+    )
   }
 
-  private def checkPackageVetting(
+  // Checks vetting for informees of view, but not subviews informees.
+  private def checkViewPackageVetting(
       view: TransactionView,
       snapshot: TopologySnapshot,
       usedPackages: UsedPackages,
       ledgerTime: CantonTimestamp,
-      protocolVersion: ProtocolVersion,
   )(implicit traceContext: TraceContext): EitherT[FutureUnlessShutdown, Error, Unit] = {
 
     val informees = view.viewCommonData.tryUnwrap.viewConfirmationParameters.informees
@@ -428,32 +466,45 @@ class ModelConformanceChecker(
         snapshot.activeParticipantsOfParties(informees.toSeq)
 
       informeeParticipants = informeeParticipantsByParty.values.flatten.toSet
-      // Don't check vetting of package dependencies for protocol version v35 and beyond
-      checkDependencyVetting = protocolVersion <= ProtocolVersion.v34
-      packagesForVettingChecks =
-        if (checkDependencyVetting) {
-          // Even though it's redundant with package dependency vetting checks,
-          // preserve protocol version 34 behavior of passing all used packages from reinterpretation to loadUnvettedPackagesOrDependencies
-          usedPackages.allUsedPackageIds
-        } else {
-          // For protocol version v35 and beyond, only pass the directly used packages to loadUnvettedPackagesOrDependencies
-          usedPackages.actionNodePackageIds
-        }
-      unvetted <- informeeParticipants.toSeq
-        .parTraverse(p =>
-          snapshot.loadUnvettedPackagesOrDependencies(
-            participantId = p,
-            packages = packagesForVettingChecks,
-            ledgerTime = ledgerTime,
-            checkDependencyVetting = checkDependencyVetting,
-          )
+
+      unvetted <- MonadUtil.parTraverseWithLimit(parallelism)(informeeParticipants)(p =>
+        snapshot.loadUnvettedPackagesOrDependencies(
+          participantId = p,
+          packages = usedPackages.actionNodePackageIds,
+          ledgerTime = ledgerTime,
         )
+      )
     } yield {
       val combined = unvetted.combineAll.unknownOrUnvetted
       Either.cond(combined.isEmpty, (), UnvettedPackages(combined))
     })
   }
 
+  // Checks package vetting for entire (sub) transaction so also checks subview vetting
+  private def checkTxPackageVetting(
+      snapshot: TopologySnapshot,
+      tx: LfVersionedTransaction,
+      ledgerTime: CantonTimestamp,
+  )(implicit traceContext: TraceContext): EitherT[FutureUnlessShutdown, Error, Unit] = {
+    val requiredPackagesByParty: Map[LfPartyId, Set[LfPackageId]] = Blinding.partyPackages(tx)
+    UsableSynchronizers
+      .checkRequiredPackagesByParty(
+        snapshot,
+        requiredPackagesByParty,
+        ledgerTime,
+      )
+      .leftMap { unknown =>
+        val unvetted = Relation.from(unknown.map(ut => ut.participantId -> ut.packageId))
+        UnvettedPackages(unvetted)
+      }
+  }
+
+  /** Background:
+    *   - https://github.com/DACH-NY/canton/issues/32688
+    *   - https://github.com/DACH-NY/canton/issues/32765
+    *   - https://github.com/DACH-NY/canton/issues/32950
+    */
+  // TODO(i33170): Remove this workaround together with UpgradeFriendlyUnsafe.
   private def checkContractDataForContractIdV11(
       rootViewTrees: Seq[TransactionViewTree]
   )(implicit traceContext: TraceContext): FutureUnlessShutdown[Seq[ConflictingStoredContract]] = {
@@ -464,7 +515,7 @@ class ModelConformanceChecker(
         CantonContractIdVersion
           .extractCantonContractIdVersion(cid)
           // Also include cid, if the contract id version cannot be determined.
-          .forall(_.contractHashingMethod == LfHash.HashingMethod.UpgradeFriendly) &&
+          .forall(_.contractHashingMethod == LfHash.HashingMethod.UpgradeFriendlyUnsafe) &&
         proneToHashCollision(inputContract.contract.inst.createArg)
       }
       .toSet
@@ -518,6 +569,7 @@ object ModelConformanceChecker {
       packageResolver: PackageResolver,
       contractLookup: ContractLookup,
       participantNodeParameters: ParticipantNodeParameters,
+      protocolVersion: ProtocolVersion,
       hashOps: HashOps & HmacOps,
       loggerFactory: NamedLoggerFactory,
   )(implicit executionContext: ExecutionContext): ModelConformanceChecker = {
@@ -533,6 +585,7 @@ object ModelConformanceChecker {
       packageResolver,
       contractLookup,
       parallelism,
+      protocolVersion,
       participantNodeParameters.validateLegacyContractsV11,
       hashOps,
       loggerFactory,
@@ -587,6 +640,7 @@ object ModelConformanceChecker {
         )
 
         enrichedInputContracts <- inputContracts.toList
+          // TODO(#24573): add and use a parallelism limit
           .parTraverse { case (cid, (inst, targetPackageIds)) =>
             contractEnricher((inst, targetPackageIds))(traceContext).map(cid -> _)
           }
@@ -617,7 +671,7 @@ object ModelConformanceChecker {
       } yield hash
   }
 
-  sealed trait Error extends PrettyPrinting
+  sealed trait Error extends PrettyPrintingFromCompanion
 
   /** Enriches a model conformance error with the valid subtransaction, if any. If there is a valid
     * subtransaction, the list of valid subview trees will not be empty.
@@ -658,14 +712,23 @@ object ModelConformanceChecker {
 
   final case class DAMLeError(cause: DAMLe.ReinterpretationError, viewHash: ViewHash)
       extends Error {
-    override protected def pretty: Pretty[DAMLeError] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[DAMLeError] = DAMLeError
+  }
+
+  object DAMLeError extends PrettyPrintingCompanion[DAMLeError] {
+    override protected val pretty: Pretty[DAMLeError] = prettyOfClass(
       param("cause", _.cause),
       param("view hash", _.viewHash),
     )
   }
 
   final case class TransactionNotWellFormed(cause: String, viewHash: ViewHash) extends Error {
-    override protected def pretty: Pretty[TransactionNotWellFormed] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[TransactionNotWellFormed] =
+      TransactionNotWellFormed
+  }
+
+  object TransactionNotWellFormed extends PrettyPrintingCompanion[TransactionNotWellFormed] {
+    override protected val pretty: Pretty[TransactionNotWellFormed] = prettyOfClass(
       param("cause", _.cause.unquoted),
       unnamedParam(_.viewHash),
     )
@@ -678,7 +741,12 @@ object ModelConformanceChecker {
 
     def cause: String = "Failed to construct transaction tree."
 
-    override protected def pretty: Pretty[TransactionTreeError] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[TransactionTreeError] =
+      TransactionTreeError
+  }
+
+  object TransactionTreeError extends PrettyPrintingCompanion[TransactionTreeError] {
+    override protected val pretty: Pretty[TransactionTreeError] = prettyOfClass(
       param("cause", _.cause.unquoted),
       unnamedParam(_.details),
       unnamedParam(_.viewHash),
@@ -692,7 +760,12 @@ object ModelConformanceChecker {
 
     def cause = "Reconstructed view differs from received view."
 
-    override protected def pretty: Pretty[ViewReconstructionError] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[ViewReconstructionError] =
+      ViewReconstructionError
+  }
+
+  object ViewReconstructionError extends PrettyPrintingCompanion[ViewReconstructionError] {
+    override protected val pretty: Pretty[ViewReconstructionError] = prettyOfClass(
       param("cause", _.cause.unquoted),
       param("received", _.received),
       param("reconstructed", _.reconstructed),
@@ -702,7 +775,11 @@ object ModelConformanceChecker {
   final case class UnvettedPackages(
       unvetted: Map[ParticipantId, Set[PackageId]]
   ) extends Error {
-    override protected def pretty: Pretty[UnvettedPackages] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[UnvettedPackages] = UnvettedPackages
+  }
+
+  object UnvettedPackages extends PrettyPrintingCompanion[UnvettedPackages] {
+    override protected val pretty: Pretty[UnvettedPackages] = prettyOfClass(
       unnamedParam(
         _.unvetted
           .map { case (participant, packageIds) =>
@@ -716,7 +793,11 @@ object ModelConformanceChecker {
   final case class PackageNotFound(
       missing: Map[ParticipantId, Set[PackageId]]
   ) extends Error {
-    override protected def pretty: Pretty[PackageNotFound] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[PackageNotFound] = PackageNotFound
+  }
+
+  object PackageNotFound extends PrettyPrintingCompanion[PackageNotFound] {
+    override protected val pretty: Pretty[PackageNotFound] = prettyOfClass(
       unnamedParam(
         _.missing
           .map { case (participant, packageIds) =>
@@ -730,7 +811,12 @@ object ModelConformanceChecker {
   final case class ConflictingNameBindings(
       conflicting: Map[ParticipantId, Map[PackageName, Set[PackageId]]]
   ) extends Error {
-    override protected def pretty: Pretty[ConflictingNameBindings] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[ConflictingNameBindings] =
+      ConflictingNameBindings
+  }
+
+  object ConflictingNameBindings extends PrettyPrintingCompanion[ConflictingNameBindings] {
+    override protected val pretty: Pretty[ConflictingNameBindings] = prettyOfClass(
       unnamedParam(
         _.conflicting
           .map { case (participant, conflicts) =>
@@ -746,17 +832,36 @@ object ModelConformanceChecker {
   }
 
   final case class MergeError(cause: String) extends Error {
-    override protected def pretty: Pretty[MergeError] = prettyOfParam(_.cause.unquoted)
+    override def prettyCompanion: PrettyPrintingCompanion[MergeError] = MergeError
+  }
+
+  object MergeError extends PrettyPrintingCompanion[MergeError] {
+    override protected val pretty: Pretty[MergeError] = prettyOfParam(_.cause.unquoted)
   }
 
   final case class ConflictingStoredContract(cause: String) extends Error {
-    override protected def pretty: Pretty[ConflictingStoredContract] =
+    override def prettyCompanion: PrettyPrintingCompanion[ConflictingStoredContract] =
+      ConflictingStoredContract
+  }
+
+  object ConflictingStoredContract extends PrettyPrintingCompanion[ConflictingStoredContract] {
+    override protected val pretty: Pretty[ConflictingStoredContract] =
       prettyOfParam(_.cause.unquoted)
   }
 
+  /** Model conformance successful result as input for indexing and further consistency checks.
+    *
+    * @param updateId
+    *   update id to be used for indexing if the transaction commits
+    * @param suffixedTransaction
+    *   the merged transaction with suffixed contract ids to use for indexing
+    * @param unmergedTransactionsWithoutTopLevelRollbackNodes
+    *   the unmerged root transactions to use for internal lf transaction consistency checks
+    */
   final case class Result(
       updateId: UpdateId,
       suffixedTransaction: WellFormedTransaction[WithSuffixesAndMerged],
+      unmergedTransactionsWithoutTopLevelRollbackNodes: Seq[LfVersionedTransaction],
   )
 
 }

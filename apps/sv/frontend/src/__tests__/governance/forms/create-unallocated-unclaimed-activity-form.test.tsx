@@ -10,7 +10,11 @@ import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { CreateUnallocatedUnclaimedActivityRecordForm } from '../../../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
 import { SvConfigProvider } from '../../../utils';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 import { Wrapper } from '../../helpers';
 import { svPartyId } from '../../mocks/constants';
 import { server, svUrl } from '../../setup/setup';
@@ -47,7 +51,7 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     expect(
       screen.getByTestId('create-unallocated-unclaimed-activity-record-form')
     ).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-action');
     expect(actionInput).toBeInTheDocument();
@@ -368,7 +372,7 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('should show error on form if submission fails', async () => {
@@ -476,5 +480,69 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     await user.click(submitButton); //submit proposal
 
     await screen.findByText('Successfully submitted the proposal');
+  });
+
+  test('sends the mint before date to the backend converted from local time to UTC', async () => {
+    let requestBody = '';
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        requestBody = await request.text();
+        return HttpResponse.json({});
+      })
+    );
+
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <CreateUnallocatedUnclaimedActivityRecordForm />
+      </Wrapper>
+    );
+
+    const actionInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-action');
+    const submitButton = screen.getByTestId('submit-button');
+
+    await user.type(
+      screen.getByTestId('create-unallocated-unclaimed-activity-record-summary'),
+      'Summary of the proposal'
+    );
+    await user.type(
+      screen.getByTestId('create-unallocated-unclaimed-activity-record-url'),
+      'https://example.com'
+    );
+    await user.type(
+      screen.getByTestId('create-unallocated-unclaimed-activity-record-beneficiary'),
+      'beneficiary123'
+    );
+    await user.type(
+      screen.getByTestId('create-unallocated-unclaimed-activity-record-amount'),
+      '100'
+    );
+
+    const mintBeforeLocal = dayjs().add(14, 'days').startOf('hour');
+    const mintBeforeInput = screen.getByTestId(
+      'create-unallocated-unclaimed-activity-record-mint-before-field'
+    );
+    fireEvent.change(mintBeforeInput, {
+      target: { value: mintBeforeLocal.format(dateTimeFormatISO) },
+    });
+
+    await user.click(actionInput);
+
+    await waitFor(async () => {
+      expect(submitButton.getAttribute('disabled')).toBeNull();
+    });
+
+    await user.click(submitButton);
+    await user.click(submitButton);
+
+    const expectedUtc = mintBeforeLocal.toISOString();
+    const naiveLocalAsUtc = `${mintBeforeLocal.format('YYYY-MM-DDTHH:mm:ss')}.000Z`;
+    expect(expectedUtc).not.toBe(naiveLocalAsUtc);
+
+    await waitFor(() => {
+      expect(requestBody).toContain(`"expiresAt":"${expectedUtc}"`);
+    });
+    expect(requestBody).not.toContain(naiveLocalAsUtc);
   });
 });

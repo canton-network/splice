@@ -208,11 +208,9 @@ object BuildCommon {
       Global / excludeLintKeys += Compile / damlBuildOrder,
       Global / excludeLintKeys += `canton-community-app` / autoAPIMappings,
       Global / excludeLintKeys += `canton-community-app` / Compile / damlDarLfVersion,
-      Global / excludeLintKeys += `canton-community-common` / autoAPIMappings,
       Global / excludeLintKeys += `canton-community-synchronizer` / autoAPIMappings,
       Global / excludeLintKeys += `canton-community-participant` / autoAPIMappings,
       //      Global / excludeLintKeys += `demo` / autoAPIMappings,
-      Global / excludeLintKeys += `canton-slick-fork` / autoAPIMappings,
       Global / excludeLintKeys += Global / damlCodeGeneration,
       Global / googleCredentialsDisable := true,
       Global / resolvers += ("Canton snapshots" at "artifactregistry://europe-maven.pkg.dev/da-images/public-maven-unstable"),
@@ -306,6 +304,7 @@ object BuildCommon {
       Seq(
         organization := "org.lfdecentralizedtrust.splice",
         scalaVersion := scala_version,
+        dependencyOverrides ++= Dependencies.pinnedTransitiveVersions,
         // , scalacOptions += "-Ystatistics" // re-enable if you need to debug compile times
       )
     )
@@ -377,132 +376,12 @@ object BuildCommon {
     headerResources / excludeFilter := "*",
   ) ++ sharedProtocSettings ++ Headers.NoHeaderSettings
 
-  // Project for utilities that are also used outside of the Canton repo
-  lazy val `canton-util-external` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-util-external", file("canton/base/util-external"))
-      .dependsOn(
-        `canton-pekko-fork`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
-        // Canton depends on the Daml code via a git submodule and the two
-        // projects below. We instead depend on the artifacts released
-        // from the Daml repo listed in libraryDependencies below.
-        // `daml-copy-common`,
-        // `daml-copy-testing` % "test->test",
-      )
-      .settings(
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          aws_kms,
-          aws_sts,
-          better_files,
-          canton_magnolify_addon,
-          gcp_kms,
-          canton_observability_metrics,
-          daml_tracing,
-          daml_executors,
-          daml_lf_data,
-          daml_nonempty_cats,
-          logback_classic,
-          logback_core,
-          scala_logging,
-          scala_collection_contrib,
-          scalatest % Test,
-          mockito_scala % Test,
-          scalatestMockito % Test,
-          cats,
-          jul_to_slf4j % Test,
-          log4j_core,
-          log4j_api,
-          monocle_macro, // Include it here, even if unused, so that it can be used everywhere
-          pureconfig, // Only dependencies may be needed, but it is simplest to include it like this
-          opentelemetry_api,
-          opentelemetry_sdk,
-          opentelemetry_sdk_autoconfigure,
-          opentelemetry_instrumentation_grpc,
-          opentelemetry_zipkin,
-        ),
-        dependencyOverrides ++= Seq(log4j_core, log4j_api),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        // JvmRulesPlugin.damlRepoHeaderSettings,
-      )
-  }
-
-  lazy val `canton-base-errors` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-base-errors", file("canton/base/errors"))
-      .dependsOn(
-        `canton-google-common-protos-scala`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
-      )
-      .settings(
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          slf4j_api,
-          grpc_api,
-          reflections,
-          scalatest % Test,
-          scalacheck % Test,
-          scalatestScalacheck % Test,
-        ),
-      )
-  }
-
-  lazy val `canton-daml-adjustable-clock` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-daml-adjustable-clock", file("canton/base/adjustable-clock"))
-      .settings(
-        sharedCantonSettings
-      )
-  }
-
-  lazy val `canton-util-observability` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-util-observability", file("canton/community/util-observability"))
-      .dependsOn(
-        `canton-base-errors` % "compile->compile;test->test",
-        `canton-util-external`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
-      )
-      .settings(
-        sharedCantonSettings,
-        sharedSettings ++ cantonWarts,
-        scalacOptions += "-Wconf:src=src_managed/.*:silent",
-        libraryDependencies ++= Seq(
-          daml_grpc_utils,
-          better_files,
-          canton_observability_metrics,
-          canton_contextualized_logging,
-          daml_lf_data,
-          daml_nonempty_cats,
-          daml_tracing,
-          logback_classic,
-          logback_core,
-          scala_logging,
-          log4j_core,
-          log4j_api,
-          opentelemetry_api,
-          opentelemetry_sdk,
-          opentelemetry_sdk_autoconfigure,
-          opentelemetry_instrumentation_grpc,
-          opentelemetry_zipkin,
-          opentelemetry_trace,
-        ),
-        dependencyOverrides ++= Seq(log4j_core, log4j_api),
-      )
-  }
-
   lazy val `canton-community-app` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-community-app", file("canton/community/app"))
       .dependsOn(
         `canton-community-app-base`,
-        `canton-community-common` % "compile->compile;test->test",
         `canton-community-synchronizer`,
         `canton-community-participant`,
         `canton-community-integration-testing` % "test",
@@ -516,6 +395,7 @@ object BuildCommon {
         disableTests,
         removeTestSources,
         libraryDependencies ++= Seq(
+          CantonDependencies.canton_community_common,
           CantonDependencies.canton_ledger_api_core,
           scala_logging,
           jul_to_slf4j,
@@ -592,53 +472,57 @@ object BuildCommon {
     sbt.Project
       .apply("canton-community-base", file("canton/community/base"))
       .enablePlugins(BuildInfoPlugin)
-      .dependsOn(
-        `canton-slick-fork`,
-        `canton-util-external`,
-        `canton-ledger-common`,
-        `canton-community-admin-api`,
-        `canton-kms-driver-api`,
-        `canton-scalatest-addon` % "compile->test",
-        // Canton depends on the Daml code via a git submodule and the two
-        // projects below. We instead depend on the artifacts released
-        // from the Daml repo listed in libraryDependencies below.
-        // `daml-copy-common`,
-        // No strictly internal dependencies on purpose so that this can be a foundational module and avoid circular dependencies
-      )
+      // Canton depends on the Daml code via a git submodule and the two
+      // projects below. We instead depend on the artifacts released
+      // from the Daml repo listed in libraryDependencies below.
+      // `daml-copy-common`,
+      // No strictly internal dependencies on purpose so that this can be a foundational module and avoid circular dependencies
       .settings(
         removeTestSources,
         sharedCantonSettings,
         // commented out from Canton OS repo as settings don't apply to us (yet)
         // JvmRulesPlugin.damlRepoHeaderSettings,
         libraryDependencies ++= Seq(
+          canton_community_admin_api,
+          // protos of the published artifact, imported by our protos
+          canton_community_admin_api % "protobuf",
           apache_commons_compress,
+          aws_kms,
           better_files,
           bouncycastle_bcpkix_jdk15on,
           bouncycastle_bcprov_jdk15on,
+          canton_base_validation,
+          canton_kms_driver_api,
+          canton_slick_fork,
+          canton_util_external,
           cats,
           chimney,
           circe_core,
           circe_generic,
           daml_executors,
           daml_jwt,
+          daml_nonempty,
           daml_tls,
           flyway.excludeAll(ExclusionRule("org.apache.logging.log4j")),
           flyway_postgresql,
+          gcp_kms,
           grpc_services,
           postgres,
           pprint,
           scaffeine,
           tink,
-          daml_nonempty_cats,
           daml_lf_transaction,
           CantonDependencies.grpc_services % "protobuf",
+          scalapb_json4s,
           scalapb_runtime_grpc,
           scalapb_runtime,
           slick_hikaricp,
           CantonDependencies.opentelemetry_instrumentation_runtime_metrics,
           CantonDependencies.opentelemetry_instrumentation_hikari,
           CantonDependencies.canton_java_bindings,
+          zstd,
         ),
+        libraryDependencies ++= canton_ledger_common_deps,
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
         ),
@@ -653,8 +537,10 @@ object BuildCommon {
           BuildInfoKey("version", version), // hacked.
           scalaVersion,
           sbtVersion,
-          BuildInfoKey("damlLibrariesVersion" -> CantonDependencies.daml_libraries_version),
-          BuildInfoKey("stableProtocolVersions" -> List("34", "35")),
+          // We don't actually care about the damlLibrariesVersion but some of the Canton code needs it to compile.
+          // We just set it to the canton version which isn't right but seems less annoying than having to maintain the actual version.
+          BuildInfoKey("damlLibrariesVersion" -> CantonDependencies.canton_library_version),
+          BuildInfoKey("stableProtocolVersions" -> List("36", "37")),
           BuildInfoKey("betaProtocolVersions" -> List()),
         ),
         buildInfoPackage := "com.digitalasset.canton.buildinfo",
@@ -678,6 +564,15 @@ object BuildCommon {
       )
   }
 
+  lazy val `canton-fork-logback-test` =
+    sbt
+      .Project("canton-fork-logback-test", file("canton-fork/logback-test"))
+      .disablePlugins(WartRemover)
+      .settings(
+        removeTestSources,
+        sharedSettings,
+      )
+
   lazy val `canton-community-testing` = {
     import CantonDependencies._
     sbt.Project
@@ -685,7 +580,7 @@ object BuildCommon {
       .disablePlugins(WartRemover)
       .dependsOn(
         `canton-community-base`,
-        `canton-util-observability` % "compile->test",
+        `canton-fork-logback-test`,
       )
       .settings(
         sharedCantonSettings,
@@ -697,6 +592,7 @@ object BuildCommon {
           cats,
           cats_law,
           daml_executors,
+          daml_scalatest_utils,
           jul_to_slf4j,
           mockito_scala,
           opentelemetry_api,
@@ -714,30 +610,6 @@ object BuildCommon {
       )
   }
 
-  // Canton publishes observability-testing but not the test code.
-  // However, community-integration-testing depends on the InMemoryMetricsFactory which is in the test code.
-  lazy val `canton-observability-metrics-testing` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-observability-metrics-testing", file("canton/base/observability/metrics"))
-      .disablePlugins(WartRemover)
-      .settings(
-        sharedCantonSettings,
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          canton_observability_metrics,
-          daml_testing_utils,
-          scalatest,
-        ),
-        Compile / unmanagedSourceDirectories := Seq(
-          baseDirectory.value / "src/test/scala"
-        ),
-        Compile / unmanagedSources / includeFilter := "InMemoryMetricsFactory.scala" || "MetricValues.scala",
-        Test / unmanagedSourceDirectories := Seq.empty,
-        scalacOptions += "-Wconf:msg=unused value of type:s",
-      )
-  }
-
   lazy val `canton-community-integration-testing` = {
     import CantonDependencies._
     sbt.Project
@@ -747,13 +619,13 @@ object BuildCommon {
         `canton-community-app-base`,
         `canton-community-testing`,
         `canton-community-reference-driver`,
-        `canton-observability-metrics-testing`,
       )
       .settings(
         Compile / unmanagedSources / excludeFilter :=
           (Compile / unmanagedSources / excludeFilter).value || "UseLedgerApiTestTool.scala",
         excludeTranscodeConflictingDependencies,
         sharedCantonSettings,
+        removeTestSources,
 
         // The dependency override is needed because `community-testing` depends transitively on
         // `scalatest` and `community-app-base` depends transitively on `ammonite`, which in turn
@@ -773,110 +645,12 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-community-common` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-community-common", file("canton/community/common"))
-      .enablePlugins(DamlPlugin)
-      .dependsOn(
-        `canton-pekko-fork` % "compile->compile;test->test",
-        `canton-community-base`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
-        `canton-util-external` % "compile->compile;test->test",
-        `canton-community-testing` % "test",
-        `canton-ledger-common` % "compile->compile;test->test",
-      )
-      .settings(
-        removeTestSources,
-        // We only need 3 files out of a lot of test files so add them explicitly
-        Test / managedSources := Seq(
-          (Test / sourceDirectory).value / "scala/com/digitalasset/canton/HasActorSystem.scala",
-          (Test / sourceDirectory).value / "scala/com/digitalasset/canton/store/db/DbTest.scala",
-          (Test / sourceDirectory).value / "scala/com/digitalasset/canton/store/db/DbStorageIdempotency.scala",
-        ),
-        disableTests,
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          pekko_http,
-          pekko_http_core,
-          pekko_slf4j, // not used at compile time, but required by com.digitalasset.canton.util.pekkoUtil.createActorSystem
-          daml_lf_archive_reader,
-          daml_lf_engine,
-          daml_lf_transaction, // needed for importing java classes
-          daml_nonempty_cats,
-          canton_blake2b,
-          canton_magnolify_addon,
-          logback_classic,
-          logback_core,
-          scala_logging,
-          scala_collection_contrib,
-          scalatest % Test,
-          scalacheck % Test,
-          scalatestScalacheck % Test,
-          cats_scalacheck % Test,
-          mockito_scala % Test,
-          scalatestMockito % Test,
-          magnolia % Test,
-          magnolify_scalacheck % Test,
-          magnolify_shared % Test,
-          daml_lf_transaction % Test,
-          better_files,
-          cats,
-          cats_law % Test,
-          chimney,
-          circe_core,
-          circe_generic,
-          circe_generic_extras,
-          jul_to_slf4j % Test,
-          bouncycastle_bcprov_jdk15on,
-          bouncycastle_bcpkix_jdk15on,
-          grpc_netty_shaded,
-          grpc_services,
-          scalapb_runtime_grpc,
-          scalapb_runtime,
-          log4j_core,
-          log4j_api,
-          flyway excludeAll (ExclusionRule("org.apache.logging.log4j")),
-          flyway_postgresql,
-          h2,
-          tink,
-          slick,
-          slick_hikaricp,
-          testcontainers % Test,
-          testcontainers_postgresql % Test,
-          postgres,
-          sttp,
-          sttp_okhttp,
-          sttp_circe,
-          monocle_macro, // Include it here, even if unused, so that it can be used everywhere
-          pprint,
-          pureconfig, // Only dependencies may be needed, but it is simplest to include it like this
-          opentelemetry_api,
-          opentelemetry_sdk,
-          opentelemetry_sdk_autoconfigure,
-          opentelemetry_instrumentation_grpc,
-          opentelemetry_zipkin,
-          opentelemetry_prometheus,
-          scaffeine,
-        ),
-        dependencyOverrides ++= Seq(log4j_core, log4j_api),
-        Compile / PB.targets := Seq(
-          scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
-        ),
-        Compile / PB.protoSources ++= (Test / PB.protoSources).value,
-        Test / damlTest := Seq(),
-        Compile / damlEnableJavaCodegen := true,
-        Compile / damlCodegenUseProject := false,
-      )
-  }
-
   lazy val `canton-community-synchronizer` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-community-synchronizer", file("canton/community/synchronizer"))
       .dependsOn(
-        `canton-community-common` % "compile->compile;test->test",
-        `canton-community-admin-api` % "compile->compile;test->test",
+        `canton-community-base`,
         `canton-sequencer-driver-api`,
         `canton-community-reference-driver`,
       )
@@ -884,6 +658,9 @@ object BuildCommon {
         removeTestSources,
         sharedCantonSettings,
         libraryDependencies ++= Seq(
+          canton_community_common,
+          // protos of the published artifact, imported by our protos
+          canton_community_admin_api % "protobuf",
           pekko_actor_typed,
           scala_logging,
           scalatest % Test,
@@ -903,39 +680,13 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-community-admin-api` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-community-admin-api", file("canton/community/admin-api"))
-      .dependsOn(`canton-util-external`)
-      .settings(
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          scalapb_runtime // not sufficient to include only through the `common` dependency - race conditions ensue
-        ),
-        Compile / PB.targets := Seq(
-          scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
-        ),
-        // Ensure the package scoped options will be picked up by sbt-protoc if used downstream
-        // See https://scalapb.github.io/docs/customizations/#publishing-package-scoped-options
-        Compile / packageBin / packageOptions += (
-          Package.ManifestAttributes(
-            "ScalaPB-Options-Proto" -> "com/digitalasset/canton/admin/scalapb/package.proto"
-          )
-        ),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        // addProtobufFilesToHeaderCheck(Compile),
-      )
-  }
-
   lazy val `canton-community-participant` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-community-participant", file("canton/community/participant"))
       .dependsOn(
-        `canton-community-common` % "compile->compile;test->test",
+        `canton-community-base`,
         `canton-ledger-json-api`,
-        `canton-community-admin-api`,
         `canton-traffic-enforcement-component`,
       )
       .enablePlugins(DamlPlugin)
@@ -944,6 +695,9 @@ object BuildCommon {
         sharedCantonSettings,
         excludeTranscodeConflictingDependencies,
         libraryDependencies ++= Seq(
+          canton_community_common,
+          // protos of the published artifact, imported by our protos
+          canton_community_admin_api % "protobuf",
           canton_ledger_api_core,
           scala_logging,
           scalatest % Test,
@@ -980,8 +734,8 @@ object BuildCommon {
               "com.digitalasset.canton.participant.admin.workflows",
             ),
             (
-              (Compile / sourceDirectory).value / "daml" / "canton-builtin-admin-workflow-party-replication-alpha",
-              (Compile / damlDarOutput).value / "canton-builtin-admin-workflow-party-replication-alpha-current.dar",
+              (Compile / sourceDirectory).value / "daml" / "canton-builtin-admin-workflow-acs-replication-alpha",
+              (Compile / damlDarOutput).value / "canton-builtin-admin-workflow-acs-replication-alpha-current.dar",
               "com.digitalasset.canton.participant.admin.workflows",
             ),
           ),
@@ -989,7 +743,7 @@ object BuildCommon {
         Compile / damlCodegenUseProject := false,
         Compile / damlBuildOrder := Seq(
           "daml/canton-builtin-admin-workflow-ping/daml.yaml",
-          "daml/canton-builtin-admin-workflow-party-replication-alpha/daml.yaml",
+          "daml/canton-builtin-admin-workflow-acs-replication-alpha/daml.yaml",
         ),
         // TODO(DACH-NY/canton-network-node#16168) Before creating the first stable release with backwards compatibility guarantees,
         //  make "AdminWorkflows.dar" stable again
@@ -1001,34 +755,20 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-slick-fork` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-slick-fork", file("canton/community/lib/slick"))
-      .disablePlugins(ScalafmtPlugin, WartRemover)
-      .settings(
-        sharedCantonSettings,
-        removeTestSources,
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          scala_reflect,
-          slick,
-        ),
-      )
-  }
-
   lazy val `canton-wartremover-extension` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-wartremover-extension", file("canton/community/lib/wartremover"))
-      .dependsOn(`canton-wartremover-annotations`, `canton-slick-fork`)
       .settings(
         Test / scalacOptions ++= Seq(
           "-Wconf:msg=synchronized not selected from this instance:silent"
         ),
         disableTests,
+        removeTestSources,
         sharedSettings,
         libraryDependencies ++= Seq(
+          canton_slick_fork,
+          canton_wartremover_annotations,
           cats,
           grpc_stub,
           mockito_scala % Test,
@@ -1045,159 +785,35 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-wartremover-annotations` =
-    sbt.Project
-      .apply("canton-wartremover-annotations", file("canton/community/lib/wartremover-annotations"))
-      .settings(sharedSettings)
-
-  // https://github.com/DACH-NY/canton/issues/10617: remove when no longer needed
-  lazy val `canton-pekko-fork` = {
+  private[this] lazy val canton_ledger_common_deps = {
     import CantonDependencies._
-    sbt.Project
-      .apply("canton-pekko-fork", file("canton/community/lib/pekko"))
-      .disablePlugins(ScalafixPlugin, ScalafmtPlugin, WartRemover)
-      .settings(
-        sharedCantonSettings,
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          pekko_stream,
-          pekko_stream_testkit % Test,
-          pekko_slf4j,
-          scalatest % Test,
-        ),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        //      // Exclude to apply our license header to any Scala files
-        //      headerSources / excludeFilter := "*.scala",
-        //      coverageEnabled := false,
-      )
-  }
-
-  lazy val `canton-scalatest-addon` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-scalatest-addon", file("canton/community/lib/scalatest"))
-      .settings(
-        sharedSettings,
-        libraryDependencies += scalatest,
-        // Exclude to apply our license header to any Scala files
-        headerSources / excludeFilter := "*.scala",
-      )
-  }
-
-  lazy val `canton-ledger-common` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-ledger-common", file("canton/community/ledger/ledger-common"))
-      .disablePlugins(WartRemover, ScalafmtPlugin)
-      .dependsOn(
-        `canton-util-external`,
-        `canton-util-observability`,
-      )
-      .settings(
-        removeTestSources,
-        sharedCantonSettings,
-        disableTests,
-        sharedSettings,
-        scalacOptions += "-Wconf:src=src_managed/.*:silent",
-        Compile / PB.targets := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value / "protobuf",
-          scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf",
-        ),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        //      addProtobufFilesToHeaderCheck(Compile),
-        libraryDependencies ++= Seq(
-          canton_contextualized_logging,
-          daml_lf_engine,
-          daml_lf_archive_reader,
-          CantonDependencies.canton_java_bindings,
-          CantonDependencies.canton_ledger_api_scala,
-          daml_jwt,
-          daml_tracing,
-          apache_commons_codec,
-          apache_commons_io,
-          daml_ledger_resources,
-          daml_timer_utils,
-          daml_rs_grpc_pekko,
-          opentelemetry_api,
-          pekko_stream,
-          slf4j_api,
-          grpc_api,
-          reflections,
-          grpc_netty_shaded,
-          caffeine,
-          scalapb_runtime,
-          scalapb_runtime_grpc,
-          scopt,
-          awaitility % Test,
-          logback_classic % Test,
-          scalatest % Test,
-          mockito_scala % Test,
-          scalatestMockito % Test,
-          pekko_stream_testkit % Test,
-          scalacheck % Test,
-          opentelemetry_sdk_testing % Test,
-          scalatestScalacheck % Test,
-          daml_lf_data,
-          daml_lf_transaction,
-          daml_ports % Test,
-        ),
-        Test / fork := true,
-        Test / testForkedParallel := true,
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        //      coverageEnabled := false,
-        //      JvmRulesPlugin.damlRepoHeaderSettings,
-      )
-  }
-
-  // this project builds scala protobuf versions that include
-  // java conversions of a few google standard items
-  // the google protobuf files are extracted from the provided jar files
-  lazy val `canton-google-common-protos-scala` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply(
-        "canton-google-common-protos-scala",
-        file("canton/community/lib/google-common-protos-scala"),
-      )
-      .disablePlugins(
-        ScalafixPlugin,
-        ScalafmtPlugin,
-        WartRemover,
-      )
-      .settings(
-        sharedCantonSettings,
-        scalacOptions --= removeCompileFlagsForDaml,
-        sharedSettings,
-        // we restrict the compilation to a few files that we actually need, skipping the large majority ...
-        excludeFilter := HiddenFileFilter || "scalapb.proto",
-        PB.generate / includeFilter := "status.proto" || "code.proto" || "error_details.proto" || "health.proto",
-        dependencyOverrides ++= Seq(),
-        // compile proto files that we've extracted here
-        Compile / PB.protoSources += (target.value / "protobuf_external"),
-        Compile / PB.targets := Seq(
-          // with java conversions but no java classes!
-          scalapb.gen(
-            javaConversions = true,
-            flatPackage = false, // consistent with upstream daml
-          ) -> (Compile / sourceManaged).value
-        ),
-        libraryDependencies ++= Seq(
-          scalapb_runtime,
-          scalapb_runtime_grpc,
-          // the grpc services is necessary so we can build the
-          // scala version of the health services, without
-          // building the java protoc (to avoid duplicate symbols
-          // during assembly)
-          grpc_services,
-          // extract the protobuf to target/protobuf_external
-          // however, we'll only be including the ones in the includeFilter
-          grpc_services % "protobuf",
-          google_common_protos % "protobuf",
-          google_common_protos,
-          google_protobuf_java,
-          google_protobuf_java_util,
-        ),
-      )
+    Seq(
+      canton_contextualized_logging,
+      canton_util_external,
+      daml_lf_engine,
+      daml_lf_archive_reader,
+      CantonDependencies.canton_java_bindings,
+      CantonDependencies.canton_ledger_api_scala,
+      daml_jwt,
+      daml_tracing,
+      apache_commons_codec,
+      apache_commons_io,
+      daml_ledger_resources,
+      daml_timer_utils,
+      daml_rs_grpc_pekko,
+      opentelemetry_api,
+      pekko_stream,
+      slf4j_api,
+      grpc_api,
+      reflections,
+      grpc_netty_shaded,
+      caffeine,
+      scalapb_runtime,
+      scalapb_runtime_grpc,
+      scopt,
+      daml_lf_data,
+      daml_lf_transaction,
+    )
   }
 
   // this project exists solely for the purpose of extracting value.proto
@@ -1211,6 +827,7 @@ object BuildCommon {
     )
     .settings(
       sharedCantonSettings,
+      removeTestSources,
       sharedSettings,
       // we restrict the compilation to a few files that we actually need, skipping the large majority ...
       excludeFilter := HiddenFileFilter || "scalapb.proto",
@@ -1227,9 +844,7 @@ object BuildCommon {
     sbt.Project
       .apply("canton-ledger-json-api", file("canton/community/ledger/ledger-json-api"))
       .dependsOn(
-        `canton-util-observability`,
-        `canton-ledger-common` % "test->test",
-        `canton-community-testing` % Test,
+        `canton-community-testing` % Test
       )
       .disablePlugins(
         ScalafixPlugin,
@@ -1251,6 +866,7 @@ object BuildCommon {
           .mkString(",", ",", ""),
         libraryDependencies ++= Seq(
           CantonDependencies.canton_ledger_api_core,
+          CantonDependencies.canton_util_observability,
           CantonDependencies.canton_transcode_json,
           CantonDependencies.canton_transcode_proto_scala,
           CantonDependencies.canton_transcode_daml_lf,
@@ -1292,17 +908,64 @@ object BuildCommon {
       )
   }
 
+  lazy val `daml-lf-transaction-test-lib` = project
+    .in(file("canton/community/daml-lf/transaction-test-lib"))
+    .disablePlugins(
+      WartRemover
+    )
+    .settings(
+      sharedCantonSettings,
+      Compile / unmanagedSources / includeFilter :=
+        "*ValueGenerators.scala" || "TransactionBuilder.scala" || "NodeIdTransactionBuilder.scala" || "TestIdFactory.scala",
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          daml_lf_api_type_signature,
+          daml_lf_data,
+          daml_lf_language,
+          daml_lf_transaction,
+          scalacheck,
+          scala_logging,
+          scalatestScalacheck,
+          scalatest,
+          scalaz_core,
+          scalaz_scalacheck,
+          shapeless,
+        )
+      },
+    )
+    .dependsOn(
+      `daml-lf-data-scalacheck`
+    )
+
+  lazy val `daml-lf-data-scalacheck` = project
+    .in(file("canton/community/daml-lf/data-scalacheck"))
+    .disablePlugins(WartRemover)
+    .settings(
+      sharedCantonSettings,
+      removeTestSources,
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          daml_lf_data,
+          scalacheck,
+        )
+      },
+      Test / scalacOptions ++= Seq(
+        "-Wconf:msg=match may not be exhaustive:s"
+      ),
+    )
+
   lazy val `canton-sequencer-driver-api` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-sequencer-driver-api", file("canton/community/sequencer-driver"))
-      .dependsOn(
-        `canton-util-external`,
-        `canton-util-observability`,
-      )
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         libraryDependencies ++= Seq(
+          canton_util_external,
+          canton_util_observability,
           logback_classic,
           logback_core,
           scala_logging,
@@ -1331,13 +994,13 @@ object BuildCommon {
         file("canton/community/traffic-enforcement/component"),
       )
       .dependsOn(
-        `canton-util-observability`,
+        `canton-community-base`,
         `canton-community-testing` % Test,
-        `canton-community-common` % "compile->compile;test->test",
       )
       .enablePlugins(DamlPlugin)
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf"
         ),
@@ -1345,7 +1008,9 @@ object BuildCommon {
           import CantonDependencies._
           Seq(
             apache_commons_io,
+            canton_community_common,
             canton_traffic_enforcement_api,
+            canton_util_observability,
             canton_ledger_api_core,
             canton_ledger_api_scala,
             pekko_actor_typed,
@@ -1359,7 +1024,7 @@ object BuildCommon {
             // in prod code as well
             pekko_projection_testkit,
             pekko_actor_testkit_typed,
-            pekko_slf4j % "compile->compile;test->test",
+            pekko_slf4j,
             pureconfig,
             pureconfig_generic,
             scalapb_runtime,
@@ -1378,34 +1043,20 @@ object BuildCommon {
         file("canton/community/reference-sequencer-driver/"),
       )
       .dependsOn(
-        `canton-util-external`,
-        `canton-community-common` % "compile->compile;test->test",
-        `canton-sequencer-driver-api` % "compile->compile;test->test",
+        `canton-community-base`,
+        `canton-sequencer-driver-api`,
         `canton-community-testing` % Test,
       )
-      .dependsOn(`canton-util-external`)
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         dependencyOverrides ++= Seq(log4j_core, log4j_api),
+        libraryDependencies ++= Seq(canton_community_common, canton_util_external),
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
         ),
       )
   }
-
-  lazy val `canton-kms-driver-api` = project
-    .in(file("canton/community/kms-driver-api"))
-    .settings(
-      sharedCantonSettings,
-      libraryDependencies ++= {
-        import CantonDependencies.*
-        Seq(
-          pureconfig,
-          slf4j_api,
-          opentelemetry_api,
-        )
-      },
-    )
 
   import defs._
 
@@ -1511,6 +1162,21 @@ object BuildCommon {
         log: ManagedLogger,
     ) = runCommand(
       Seq("npm", "run", script, "--workspace", workspace),
+      log,
+      None,
+      Some(workingDir),
+    )
+
+    /** Compiles a generated OpenAPI client (a directory with its own tsconfig.json) to
+      * its dist/ output. These clients are linked into node_modules by
+      * apps/scripts/link-generated-packages.mjs rather than declared as workspaces.
+      */
+    def buildOpenApiClient(
+        workingDir: File,
+        clientDir: String,
+        log: ManagedLogger,
+    ) = runCommand(
+      Seq("node_modules/.bin/tsc", "-p", clientDir),
       log,
       None,
       Some(workingDir),

@@ -5,13 +5,16 @@ package com.digitalasset.canton.participant.protocol.validation
 
 import cats.data.EitherT
 import cats.syntax.either.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.data.FullTransactionViewTree
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.participant.protocol.validation.InternalConsistencyChecker.{
   ErrorWithInternalConsistencyCheck,
   InconsistentKeyMaintainers,
@@ -21,14 +24,14 @@ import com.digitalasset.canton.protocol.{
   LfGlobalKey,
   LfTemplateId,
   LfTransaction,
-  RollbackContext,
+  LfVersionedTransaction,
 }
 import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.collection.MapsUtil
-import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.daml.lf.transaction.{NodeId, TransactionError}
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.concurrent.ExecutionContext
 
@@ -38,7 +41,7 @@ trait InternalConsistencyChecker {
 
   def check(
       rootViewTrees: NonEmpty[Seq[FullTransactionViewTree]],
-      mergedTransaction: LfTransaction,
+      unmergedTransactionsWithoutToplevelRollbackNodes: Seq[LfVersionedTransaction],
       topologySnapshot: TopologySnapshot,
   )(implicit
       traceContext: TraceContext,
@@ -59,12 +62,18 @@ trait InternalConsistencyChecker {
       hostedKeys = keyMaintainers.toSeq.collect {
         case (key, maintainers) if maintainers.exists(hostedMaintainers.contains) => key
       }.toSet
-      _ <- EitherT.fromEither(check(rootViewTrees, mergedTransaction, hostedKeys))
+      _ <- EitherT.fromEither(
+        check(
+          rootViewTrees,
+          unmergedTransactionsWithoutToplevelRollbackNodes.map(_.transaction),
+          hostedKeys,
+        )
+      )
     } yield ()
 
   protected[validation] def check(
       rootViewTrees: NonEmpty[Seq[FullTransactionViewTree]],
-      mergedTransaction: LfTransaction,
+      unmergedTransactionsWithoutToplevelRollbackNodes: Seq[LfTransaction],
       hostedKeys: Set[LfGlobalKey],
   )(implicit
       traceContext: TraceContext
@@ -76,16 +85,11 @@ object InternalConsistencyChecker {
 
   def apply(
       participantId: ParticipantId,
-      protocolVersion: ProtocolVersion,
       loggerFactory: NamedLoggerFactory,
   ): InternalConsistencyChecker =
-    if (protocolVersion >= ProtocolVersion.v35) {
-      new NextGenInternalConsistencyChecker(participantId, loggerFactory)
-    } else {
-      new LegacyInternalConsistencyChecker(participantId, loggerFactory)
-    }
+    new NextGenInternalConsistencyChecker(participantId, loggerFactory)
 
-  trait Error extends PrettyPrinting
+  trait Error extends PrettyPrintingFromCompanion
 
   object Error {
     def fromTransactionError(error: TransactionError): Error =
@@ -101,8 +105,15 @@ object InternalConsistencyChecker {
       }
   }
 
-  final case class ErrorWithInternalConsistencyCheck(error: Error) extends PrettyPrinting {
-    override protected def pretty: Pretty[ErrorWithInternalConsistencyCheck] =
+  final case class ErrorWithInternalConsistencyCheck(error: Error)
+      extends PrettyPrintingFromCompanion {
+    override def prettyCompanion: PrettyPrintingCompanion[ErrorWithInternalConsistencyCheck] =
+      ErrorWithInternalConsistencyCheck
+  }
+
+  object ErrorWithInternalConsistencyCheck
+      extends PrettyPrintingCompanion[ErrorWithInternalConsistencyCheck] {
+    override protected val pretty: Pretty[ErrorWithInternalConsistencyCheck] =
       prettyOfClass(
         unnamedParam(_.error)
       )
@@ -111,23 +122,43 @@ object InternalConsistencyChecker {
   private[validation] type Result[R] = Either[ErrorWithInternalConsistencyCheck, R]
 
   case object Aborted extends Error {
-    override protected def pretty: Pretty[Aborted.type] = prettyOfObject[Aborted.type]
+    override def prettyCompanion: PrettyPrintingCompanion[Aborted.this.type] =
+      AbortedPrettyPrintingCompanion
+  }
+
+  private object AbortedPrettyPrintingCompanion extends PrettyPrintingCompanion[Aborted.type] {
+    override protected val pretty: Pretty[Aborted.type] = prettyOfObject[Aborted.type]
   }
 
   final case class InconsistentKeyMaintainers(inconsistent: Map[LfGlobalKey, Set[Set[LfPartyId]]])
       extends Error {
-    override protected def pretty: Pretty[InconsistentKeyMaintainers] = prettyOfClass(
-      param("inconsistent", _ => inconsistent)
+    override def prettyCompanion: PrettyPrintingCompanion[InconsistentKeyMaintainers] =
+      InconsistentKeyMaintainers
+  }
+
+  object InconsistentKeyMaintainers extends PrettyPrintingCompanion[InconsistentKeyMaintainers] {
+    override protected val pretty: Pretty[InconsistentKeyMaintainers] = prettyOfClass(
+      param("inconsistent", _.inconsistent)
     )
   }
 
   final case class EffectfulRollbackError(nodeIds: Set[NodeId]) extends Error {
-    override protected def pretty: Pretty[EffectfulRollbackError] =
+    override def prettyCompanion: PrettyPrintingCompanion[EffectfulRollbackError] =
+      EffectfulRollbackError
+  }
+
+  object EffectfulRollbackError extends PrettyPrintingCompanion[EffectfulRollbackError] {
+    override protected val pretty: Pretty[EffectfulRollbackError] =
       prettyOfClass(unnamedParam(_.nodeIds))
   }
 
   final case class DuplicateContractIdError(contractId: LfContractId) extends Error {
-    override protected def pretty: Pretty[DuplicateContractIdError] =
+    override def prettyCompanion: PrettyPrintingCompanion[DuplicateContractIdError] =
+      DuplicateContractIdError
+  }
+
+  object DuplicateContractIdError extends PrettyPrintingCompanion[DuplicateContractIdError] {
+    override protected val pretty: Pretty[DuplicateContractIdError] =
       prettyOfClass(unnamedParam(_.contractId))
   }
 
@@ -136,7 +167,13 @@ object InternalConsistencyChecker {
       tmplId: LfTemplateId,
       nodeId: String,
   ) extends Error {
-    override protected def pretty: Pretty[AlreadyConsumedContractError] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[AlreadyConsumedContractError] =
+      AlreadyConsumedContractError
+  }
+
+  object AlreadyConsumedContractError
+      extends PrettyPrintingCompanion[AlreadyConsumedContractError] {
+    override protected val pretty: Pretty[AlreadyConsumedContractError] = prettyOfClass(
       param("contractId", _.contractId),
       param("tmplId", _.tmplId),
       param("nodeId", _.nodeId.unquoted),
@@ -144,45 +181,46 @@ object InternalConsistencyChecker {
   }
 
   final case class InconsistentContractKeyError(key: LfGlobalKey) extends Error {
-    override protected def pretty: Pretty[InconsistentContractKeyError] =
+    override def prettyCompanion: PrettyPrintingCompanion[InconsistentContractKeyError] =
+      InconsistentContractKeyError
+  }
+
+  object InconsistentContractKeyError
+      extends PrettyPrintingCompanion[InconsistentContractKeyError] {
+    override protected val pretty: Pretty[InconsistentContractKeyError] =
       prettyOfClass(unnamedParam(_.key))
   }
 
   final case class IncorrectRollbackScopeOrder(error: String) extends Error {
-    override protected def pretty: Pretty[IncorrectRollbackScopeOrder] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[IncorrectRollbackScopeOrder] =
+      IncorrectRollbackScopeOrder
+  }
+
+  object IncorrectRollbackScopeOrder extends PrettyPrintingCompanion[IncorrectRollbackScopeOrder] {
+    override protected val pretty: Pretty[IncorrectRollbackScopeOrder] = prettyOfClass(
       param("cause", _.error.unquoted)
     )
   }
 
   final case class UsedBeforeCreation(contractIds: NonEmpty[Set[LfContractId]]) extends Error {
-    override protected def pretty: Pretty[UsedBeforeCreation] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[UsedBeforeCreation] = UsedBeforeCreation
+  }
+
+  object UsedBeforeCreation extends PrettyPrintingCompanion[UsedBeforeCreation] {
+    override protected val pretty: Pretty[UsedBeforeCreation] = prettyOfClass(
       param("contractIds", _.contractIds)
     )
   }
 
   final case class UsedAfterArchive(contractIds: NonEmpty[Set[LfContractId]]) extends Error {
-    override protected def pretty: Pretty[UsedAfterArchive] = prettyOfClass(
+    override def prettyCompanion: PrettyPrintingCompanion[UsedAfterArchive] = UsedAfterArchive
+  }
+
+  object UsedAfterArchive extends PrettyPrintingCompanion[UsedAfterArchive] {
+    override protected val pretty: Pretty[UsedAfterArchive] = prettyOfClass(
       param("contractIds", _.contractIds)
     )
   }
-
-  private[validation] def checkRollbackScopeOrder(
-      presented: Seq[RollbackContext]
-  ): Either[String, Unit] =
-    Either.cond(
-      presented == presented.sorted,
-      (),
-      s"Detected out of order rollback scopes in: $presented",
-    )
-
-  private[validation] def checkRollbackScopes(
-      rootViewTrees: NonEmpty[Seq[FullTransactionViewTree]]
-  ): Result[Unit] =
-    checkRollbackScopeOrder(
-      rootViewTrees.map(_.viewParticipantData.rollbackContext)
-    ).left.map { error =>
-      ErrorWithInternalConsistencyCheck(IncorrectRollbackScopeOrder(error))
-    }
 
   private[validation] def checkNotUsedBeforeCreation(
       previouslyReferenced: Set[LfContractId],

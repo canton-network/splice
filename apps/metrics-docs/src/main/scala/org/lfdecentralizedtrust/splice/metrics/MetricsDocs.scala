@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.admin.api.client.DamlGrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.TriggerMetrics
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 import org.lfdecentralizedtrust.splice.scan.metrics.{
+  RewardAccountingPruningMetrics,
   RewardComputationMetrics,
   ScanMediatorVerdictIngestionMetrics,
 }
@@ -22,6 +23,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.{
   AmuletPriceMetricsTrigger,
   ReportSvStatusMetricsExportTrigger,
   RewardMetricsTrigger,
+  VoteRequestMetricsTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStoreMetrics
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreMetrics}
@@ -31,7 +33,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProcessRewardsTriggerBase
 import org.lfdecentralizedtrust.splice.validator.metrics.TopologyMetrics
-import org.lfdecentralizedtrust.splice.wallet.metrics.AmuletMetrics
+import org.lfdecentralizedtrust.splice.wallet.metrics.{AmuletMetrics, TreasuryMetrics}
 
 final case class GeneratedMetrics(
     common: List[MetricDoc.Item],
@@ -95,6 +97,7 @@ object MetricsDocs {
     generator.reset()
     // validator
     new AmuletMetrics(walletUserParty, generator)
+    new TreasuryMetrics(walletUserParty, generator, () => 0L)
     val topologyMetrics = new TopologyMetrics(generator)
     // force creation of a gauge for a dummy participant
     val _ = topologyMetrics.getNumPartiesPerParticipantGauge(
@@ -105,13 +108,13 @@ object MetricsDocs {
     // sv
     new DbSvDsoStoreMetrics(generator)
     new SequencerPruningMetrics(generator)
-    new ReportSvStatusMetricsExportTrigger.SvCometBftMetrics(generator)
     new ReportSvStatusMetricsExportTrigger.SvStatusMetrics(
       ReportSvStatusMetricsExportTrigger.SvId(svParty.toProtoPrimitive, "svName"),
       generator,
     )
     new AmuletPriceMetricsTrigger.AmuletPriceMetrics(generator)
     new RewardMetricsTrigger.RewardMetrics(generator)
+    new VoteRequestMetricsTrigger.VoteRequestMetrics(generator)
     new ProcessRewardsTriggerBase.ProcessRewardsMetrics(generator, true)
     new CalculateRewardsTriggerBase.CalculateRewardsMetrics(generator, true)
     new SummarizingMiningRoundTrigger.SummarizingMiningRoundMetrics(generator)
@@ -125,6 +128,7 @@ object MetricsDocs {
     )
     new ScanMediatorVerdictIngestionMetrics(generator)
     new RewardComputationMetrics(generator)(MetricsContext.Empty)
+    new RewardAccountingPruningMetrics(generator)(MetricsContext.Empty)
     val scanMetrics = generator.getAll()
     generator.reset()
     GeneratedMetrics(

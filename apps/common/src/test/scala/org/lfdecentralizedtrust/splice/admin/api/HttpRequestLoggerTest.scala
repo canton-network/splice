@@ -6,19 +6,23 @@ package org.lfdecentralizedtrust.splice.admin.api
 import com.digitalasset.canton.config.ApiLoggingConfig
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.BaseTest
-import org.apache.pekko.http.scaladsl.model.StatusCodes
+import com.digitalasset.canton.concurrent.Threading
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, RemoteAddress, StatusCodes}
+import org.apache.pekko.http.scaladsl.model.headers.{RawHeader, `X-Forwarded-For`}
 import org.apache.pekko.http.scaladsl.server.{RejectionHandler, Route}
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
+import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
 
 class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRouteTest {
 
   private val apiLoggingConfig = ApiLoggingConfig()
 
-  private def loggerDirective = HttpRequestLogger(
+  private def loggerDirective(clientIpHeaders: Seq[String]) = HttpRequestLogger(
     apiLoggingConfig,
+    clientIpHeaders,
     loggerFactory,
   )
 
@@ -28,8 +32,10 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
     * all outcomes and logs exactly one "Responding with status code" per request —
     * whether matched or rejected.
     */
-  private def route: Route =
-    loggerDirective {
+  private def routeFor(
+      clientIpHeaders: Seq[String] = RateLimitersConfig.DefaultClientIpHeaders
+  ): Route =
+    loggerDirective(clientIpHeaders) {
       handleRejections(RejectionHandler.default) {
         concat(
           pathPrefix("api" / "admin") {
@@ -42,7 +48,43 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
       }
     }
 
+  private lazy val route = routeFor()
+
+  private def assertLoggedClientIp(request: HttpRequest, expectedClientIp: String): Unit =
+    loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.DEBUG))(
+      {
+        request ~> routeFor(Seq("x-envoy-external-address")) ~> check {
+          status shouldBe StatusCodes.OK
+        }
+      },
+      logEntries =>
+        forExactly(1, logEntries) { entry =>
+          entry.message should include("received request")
+          entry.message should include(s"from ($expectedClientIp)")
+        },
+    )
+
   "HttpRequestLogger" should {
+
+    "prefer the configured client IP header" in {
+      assertLoggedClientIp(
+        Get("/api/app").withHeaders(
+          RawHeader("X-Envoy-External-Address", "5.5.5.5"),
+          RawHeader("X-Forwarded-For", "1.1.1.1"),
+        ),
+        "5.5.5.5",
+      )
+    }
+
+    "fall back to the existing client IP extraction" in {
+      assertLoggedClientIp(
+        Get("/api/app").withHeaders(
+          RawHeader("X-Envoy-External-Address", "not-an-ip"),
+          `X-Forwarded-For`(Seq(RemoteAddress(Array[Byte](2, 2, 2, 2)))),
+        ),
+        "2.2.2.2",
+      )
+    }
 
     "log exactly one 'received request' and one response for a matching route" in {
       loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.DEBUG))(
@@ -58,6 +100,35 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
 
           // Exactly one response log from mapResponse
           forExactly(1, logEntries)(_.message should include("Responding with status code"))
+        },
+      )
+    }
+
+    "log the request duration with the response" in {
+      val delayMs = 300L
+      val slowRoute: Route =
+        loggerDirective(RateLimitersConfig.DefaultClientIpHeaders) {
+          path("api" / "slow") {
+            complete {
+              Threading.sleep(delayMs)
+              "slow"
+            }
+          }
+        }
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.DEBUG))(
+        {
+          Get("/api/slow") ~> slowRoute ~> check {
+            status shouldBe StatusCodes.OK
+            responseAs[String] shouldBe "slow"
+          }
+        },
+        { logEntries =>
+          val tookMs = """Responding with status code: 200 OK, took (\d+) ms""".r
+          forExactly(1, logEntries) { entry =>
+            inside(tookMs.findFirstMatchIn(entry.message)) { case Some(m) =>
+              m.group(1).toLong should be >= delayMs
+            }
+          }
         },
       )
     }
@@ -84,7 +155,7 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
 
     "one log entry per request when methods conflict across siblings" in {
       val newStyleMethodRoute: Route =
-        loggerDirective {
+        loggerDirective(RateLimitersConfig.DefaultClientIpHeaders) {
           handleRejections(RejectionHandler.default) {
             concat(
               pathPrefix("api" / "data") {

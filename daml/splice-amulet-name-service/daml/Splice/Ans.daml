@@ -332,4 +332,7 @@ validAnsConfig AnsRulesConfig{..} =
 
 
 instance HasCheckedFetch AnsEntryContext ForDso where
-  contractGroupId AnsEntryContext with .. = ForDso with ..
+  contractGroupId AnsEntryContext{..} = ForDso with dso
+
+instance HasCheckedFetch AnsEntry ForDso where
+  contractGroupId AnsEntry{..} = ForDso with dso

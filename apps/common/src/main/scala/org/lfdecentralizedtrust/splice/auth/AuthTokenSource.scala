@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.auth
 
-import com.daml.jwt.{AuthServiceJWTCodec, Jwt, JwtDecoder, StandardJWTPayload}
+import com.daml.jwt.{AuthServiceJWTCodec, Jwt, JwtDecoder, PartyJWTPayload, StandardJWTPayload}
 import com.digitalasset.canton.config.NonNegativeDuration
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.auth.OAuthApi.TokenResponse
@@ -41,6 +41,8 @@ object AuthToken {
     } yield {
       payload match {
         case standard: StandardJWTPayload => standard.userId
+        case _: PartyJWTPayload =>
+          throw new IllegalArgumentException("PartyJWTPayload is not supported")
       }
     }
   }
@@ -54,11 +56,13 @@ object AuthToken {
   */
 final case class AuthToken(accessToken: String, expiresAt: CantonTimestamp, user: Option[String])
 
-sealed trait AuthTokenSource {
+trait AuthTokenProvider {
   def getToken(implicit tc: TraceContext): Future[Option[AuthToken]]
 }
 
-case class AuthTokenSourceNone() extends AuthTokenSource {
+sealed trait AuthTokenSource extends AuthTokenProvider
+
+case object AuthTokenSourceNone extends AuthTokenSource {
   override def getToken(implicit tc: TraceContext): Future[Option[AuthToken]] =
     Future.successful(None)
 }
@@ -119,7 +123,7 @@ object AuthTokenSource {
       loggerFactory: NamedLoggerFactory,
   )(implicit ec: ExecutionContext, ac: ActorSystem): AuthTokenSource = config match {
     case AuthTokenSourceConfig.None() =>
-      new AuthTokenSourceNone()
+      AuthTokenSourceNone
     case AuthTokenSourceConfig.Static(token, _) =>
       new AuthTokenSourceStatic(token)
     case AuthTokenSourceConfig.SelfSigned(audience, user, secret, _) =>

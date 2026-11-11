@@ -14,7 +14,7 @@ import com.google.protobuf.ByteString
 import io.circe.Json
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.ledger.api as ledgerApi
-import org.lfdecentralizedtrust.splice.http.OmitNullString
+import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItem,
@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, definitions as httpApi}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
+import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppAndAssetActivityRecordT
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{
   TrafficSummaryT,
   TransactionViewT,
@@ -90,8 +90,8 @@ sealed trait ScanHttpEncodings {
                   eventIdBuilder,
                 )
               }.toMap,
-              Option.when(!tree.getExternalTransactionHash.isEmpty)(
-                OmitNullString(HexString.toHexString(tree.getExternalTransactionHash))
+              Option.when(!tree.getTransactionHash.isEmpty)(
+                OmitNullString(HexString.toHexString(tree.getTransactionHash))
               ),
             )
         )
@@ -622,7 +622,7 @@ object ScanHttpEncodings {
   }
 
   def encodeAppActivityRecord(
-      record: AppActivityRecordT
+      record: AppAndAssetActivityRecordT
   ): definitions.EventHistoryAppActivityRecords = {
     val records = record.appProviderParties
       .zip(record.appActivityWeights)
@@ -635,6 +635,34 @@ object ScanHttpEncodings {
       records = records,
     )
   }
+
+  /** Returns `None` when there is no record or no asset activity, so the JSON
+    * key is omitted (via `OmitNullArray`) rather than emitted as `null` — matches
+    * pre-upgrade SV behaviour so BFT reads converge during the upgrade window.
+    */
+  def encodeAssetActivityRecord(
+      recordO: Option[AppAndAssetActivityRecordT]
+  ): Option[OmitNullArray[definitions.ActivityRecord]] =
+    recordO.flatMap { r =>
+      val records = r.assetActivityProviderParties
+        .zip(r.assetActivityWeights)
+        .map { case (party, weight) =>
+          definitions.ActivityRecord(party = party, weight = weight)
+        }
+        .toVector
+      if (records.isEmpty) None else Some(OmitNullArray(records))
+    }
+
+  def encodeSubmittingAppProvider(
+      recordO: Option[AppAndAssetActivityRecordT]
+  ): Option[OmitNullString] =
+    recordO.flatMap(_.submittingAppProvider).map(OmitNullString(_))
+
+  def fromDamlValueEncoding(encoding: definitions.DamlValueEncoding): ScanHttpEncodings =
+    encoding match {
+      case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
+      case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
+    }
 
   def encodeUpdate(
       update: TreeUpdateWithMigrationId,
@@ -656,10 +684,7 @@ object ScanHttpEncodings {
           externalTransactionHashThresholdTime,
         )
     }
-    val encodings: ScanHttpEncodings = encoding match {
-      case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
-      case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
-    }
+    val encodings: ScanHttpEncodings = fromDamlValueEncoding(encoding)
     // v0 always returns the update ids as `#` prefixed,as that's the way they were encoded in canton. v1 returns it without the `#`
     encodings.lapiToHttpUpdate(
       update2,
@@ -893,11 +918,11 @@ object ScanHttpEncodings {
     val externalTransactionHash: ByteString =
       hashInclusionPolicy match {
         case ExternalHashInclusionPolicy.AlwaysInclude =>
-          tree.getExternalTransactionHash
+          tree.getTransactionHash
         case ExternalHashInclusionPolicy.ApplyThreshold =>
           externalTransactionHashThresholdTime match {
             case Some(threshold) if !tree.getRecordTime.isBefore(threshold) =>
-              tree.getExternalTransactionHash
+              tree.getTransactionHash
             case _ =>
               ByteString.EMPTY
           }

@@ -9,7 +9,7 @@ import {
 import React, { useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
-import { CheckCircleOutline, ErrorOutline } from '@mui/icons-material';
+import { CheckCircleOutlined, ErrorOutlined } from '@mui/icons-material';
 import { Box, Button, Stack, Typography, styled } from '@mui/material';
 
 import Searchbar from '../components/Searchbar';
@@ -42,7 +42,7 @@ const RequestAnsEntry: React.FC = () => {
       : 'taken';
 
   return (
-    <Stack justifyContent="center" mt={2} spacing={2}>
+    <Stack spacing={2} sx={{ justifyContent: 'center', mt: 2 }}>
       <Typography variant="body1">
         Register your name in {config.spliceInstanceNames.networkName}
       </Typography>
@@ -109,17 +109,17 @@ const SubscriptionBar: React.FC<{ entryName: string; nameLookupStatus: NameLooku
   if (!isEntryNameValid(entryName)) {
     message =
       'The provided entry name has an invalid format. Maximum 60 characters(including suffix), a-z, 0-9, - and _ are supported.';
-    icon = <ErrorOutline id="unavailable-icon" color="error" />;
+    icon = <ErrorOutlined id="unavailable-icon" color="error" />;
   } else if (nameLookupStatus === 'available') {
     message = 'is available!';
-    icon = <CheckCircleOutline color="success" />;
+    icon = <CheckCircleOutlined color="success" />;
     additionalContent = (
-      <Stack direction="row" alignItems="center">
-        <Typography display="inline" fontWeight="bold">
+      <Stack direction="row" sx={{ alignItems: 'center' }}>
+        <Typography sx={{ display: 'inline', fontWeight: 'bold' }}>
           <AmountDisplay amount={entryFee} currency="USDUnit" />
         </Typography>
         &nbsp;
-        <Typography display="inline">
+        <Typography sx={{ display: 'inline' }}>
           every <IntervalDisplay microseconds={entryInterval.microseconds} />
         </Typography>
         <SubscriptionButton
@@ -135,20 +135,18 @@ const SubscriptionBar: React.FC<{ entryName: string; nameLookupStatus: NameLooku
     );
   } else if (nameLookupStatus === 'taken') {
     message = 'is not available. Please try a different name.';
-    icon = <ErrorOutline id="unavailable-icon" color="error" />;
+    icon = <ErrorOutlined id="unavailable-icon" color="error" />;
   }
 
   return (
     <SubscriptionBarStyled direction="row">
-      <Stack direction="row" alignItems="center">
-        <Box display="flex" marginRight={1} alignItems="center">
-          {icon}
-        </Box>
-        <Typography display="inline" fontWeight="bold">
+      <Stack direction="row" sx={{ alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', marginRight: 1, alignItems: 'center' }}>{icon}</Box>
+        <Typography sx={{ display: 'inline', fontWeight: 'bold' }}>
           {toFullEntryName(entryName, ENTRY_NAME_SUFFIX)}
         </Typography>
         &nbsp;
-        <Typography id="entry-name-validation-message" display="inline">
+        <Typography id="entry-name-validation-message" sx={{ display: 'inline' }}>
           {' '}
           {message}
         </Typography>

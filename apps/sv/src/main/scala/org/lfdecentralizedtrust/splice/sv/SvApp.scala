@@ -51,6 +51,7 @@ import org.lfdecentralizedtrust.splice.http.{HttpClient, HttpRateLimiter}
 import org.lfdecentralizedtrust.splice.http.v0.sv_admin.SvAdminResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource
+import org.lfdecentralizedtrust.splice.http.v0.sv_public_stream.SvPublicStreamResource
 import org.lfdecentralizedtrust.splice.setup.ParticipantInitializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -65,7 +66,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.{
   SvDsoAutomationService,
   SvSvAutomationService,
 }
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
 import org.lfdecentralizedtrust.splice.sv.config.{
   SvAppBackendConfig,
   SvCantonIdentifierConfig,
@@ -79,6 +79,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
 import org.lfdecentralizedtrust.splice.sv.onboarding.sv1.SV1Initializer
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{
+  FeaturedAppRightValidator,
   JsonOnboardingSecret,
   SvOnboardingToken,
   ValidatorOnboardingSecret,
@@ -121,13 +122,7 @@ class SvApp(
     super.packagesForJsonDecoding ++ DarResources.dsoGovernance.all ++ DarResources.validatorLifecycle.all ++ DarResources.amuletNameService.all
 
   override def preInitializeBeforeLedgerConnection()(implicit tc: TraceContext): Future[Unit] = {
-    val participantAdminConnection = new ParticipantAdminConnection(
-      config.participantClient.adminApi,
-      amuletAppParameters.loggingConfig.api,
-      loggerFactory,
-      metrics.grpcClientMetrics,
-      retryProvider,
-    )
+    val participantAdminConnection = createParticipantAdminConnection()
     (for {
       _ <-
         appInitStep("Ensure participant is initialized with expected id") {
@@ -151,21 +146,10 @@ class SvApp(
   override def initializeNode(
       ledgerClient: SpliceLedgerClient
   )(implicit tc: TraceContext): Future[SvApp.State] = {
-    val participantAdminConnection = new ParticipantAdminConnection(
-      config.participantClient.adminApi,
-      amuletAppParameters.loggingConfig.api,
-      loggerFactory,
-      metrics.grpcClientMetrics,
-      retryProvider,
-    )
+    val participantAdminConnection = createParticipantAdminConnection()
 
     def localSyncNodeFromConfig(svSynchronizerConfig: SvSynchronizerNodeConfig) = {
-      CometBftNode(
-        svSynchronizerConfig.cometBftConfig,
-        participantAdminConnection,
-        loggerFactory,
-        retryProvider,
-      ).map(
+      Future(
         new LocalSynchronizerNode(
           participantAdminConnection,
           new SequencerAdminConnection(
@@ -185,11 +169,9 @@ class SvApp(
           loggerFactory,
           retryProvider,
           SequencerConfig.fromConfig(
-            svSynchronizerConfig.sequencer,
-            svSynchronizerConfig.cometBftConfig,
+            svSynchronizerConfig.sequencer
           ),
           svSynchronizerConfig,
-          _,
         )
       )
     }
@@ -220,6 +202,7 @@ class SvApp(
             localSynchronizerNodes.current.close()
             localSynchronizerNodes.successor.foreach(_.close())
             localSynchronizerNodes.legacy.foreach(_.close())
+            localSynchronizerNodes.additionalLegacy.foreach(_.close())
             Future.failed(err)
           }
       )
@@ -465,7 +448,6 @@ class SvApp(
         }
 
       publicHandler = new HttpSvPublicHandler(
-        config.ledgerApiUser,
         svAutomation,
         dsoAutomation,
         isDevNet,
@@ -484,7 +466,6 @@ class SvApp(
           loggerFactory,
         ),
         loggerFactory,
-        initialRound,
       )
 
       operatorHandler = new HttpSvOperatorHandler(
@@ -499,6 +480,7 @@ class SvApp(
         loggerFactory,
         amuletAppParameters.upgradesConfig,
         participantAdminConnection,
+        initialRound,
       )
 
       adminHandler = new HttpSvAdminHandler(
@@ -550,6 +532,12 @@ class SvApp(
           errorHandler.directive(traceContext) {
             concat(
               SvPublicResource.routes(
+                publicHandler,
+                operation =>
+                  buildOperation("svPublic", operation)
+                    .tflatMap(_ => provide(traceContext)),
+              ),
+              SvPublicStreamResource.routes(
                 publicHandler,
                 operation =>
                   buildOperation("svPublic", operation)
@@ -743,12 +731,22 @@ object SvApp {
 
     override def closeAsync(): Seq[AsyncOrSyncCloseable] =
       Seq(
+        // One SyncCloseable per node so a failing close does not skip the others.
         SyncCloseable(
-          s"Domain connections", {
-            localSynchronizerNodes.current.close()
-            localSynchronizerNodes.successor.foreach(_.close())
-            localSynchronizerNodes.legacy.foreach(_.close())
-          },
+          s"current domain connections",
+          localSynchronizerNodes.current.close(),
+        ),
+        SyncCloseable(
+          s"successor domain connections",
+          localSynchronizerNodes.successor.foreach(_.close()),
+        ),
+        SyncCloseable(
+          s"legacy domain connections",
+          localSynchronizerNodes.legacy.foreach(_.close()),
+        ),
+        SyncCloseable(
+          s"additional legacy domain connections",
+          localSynchronizerNodes.additionalLegacy.foreach(_.close()),
         ),
         SyncCloseable(
           s"Participant Admin connection",
@@ -904,52 +902,61 @@ object SvApp {
       "Splice.DsoRules",
       "ActionRequiringConfirmation",
     )(action)
-    dsoStoreWithIngestion.store
-      .lookupVoteRequestByThisSvAndActionWithOffset(decodedAction)
+    FeaturedAppRightValidator
+      .validateFeaturedAppRightAction(
+        decodedAction,
+        dsoStoreWithIngestion.store,
+      )
       .flatMap {
-        case QueryResult(_, Some(vote)) =>
-          Future.successful(
-            Left(s"This vote request has already been created ${vote.contractId}.")
-          )
-        case QueryResult(offset, None) =>
-          for {
-            res <- retryProvider.retryForClientCalls(
-              "createVoteRequest",
-              "createVoteRequest",
-              for {
-                dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
-                reason = new Reason(reasonUrl, reasonDescription)
-                request = new DsoRules_RequestVote(
-                  requester,
-                  decodedAction,
-                  reason,
-                  java.util.Optional.of(decodedExpiration),
-                  effectiveTime,
+        case Left(err) => Future.successful(Left(err))
+        case Right(()) =>
+          dsoStoreWithIngestion.store
+            .lookupVoteRequestByThisSvAndActionWithOffset(decodedAction)
+            .flatMap {
+              case QueryResult(_, Some(vote)) =>
+                Future.successful(
+                  Left(s"This vote request has already been created ${vote.contractId}.")
                 )
-                cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
-                res <- dsoStoreWithIngestion
-                  .connection(SpliceLedgerConnectionPriority.Low)
-                  .submit(
-                    actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
-                    readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
-                    cmd,
+              case QueryResult(offset, None) =>
+                for {
+                  res <- retryProvider.retryForClientCalls(
+                    "createVoteRequest",
+                    "createVoteRequest",
+                    for {
+                      dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+                      reason = new Reason(reasonUrl, reasonDescription)
+                      request = new DsoRules_RequestVote(
+                        requester,
+                        decodedAction,
+                        reason,
+                        java.util.Optional.of(decodedExpiration),
+                        effectiveTime,
+                      )
+                      cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
+                      res <- dsoStoreWithIngestion
+                        .connection(SpliceLedgerConnectionPriority.Low)
+                        .submit(
+                          actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
+                          readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
+                          cmd,
+                        )
+                        .withDedup(
+                          commandId = SpliceLedgerConnection.CommandId(
+                            "org.lfdecentralizedtrust.splice.sv.requestVote",
+                            Seq(
+                              dsoStoreWithIngestion.store.key.dsoParty,
+                              dsoStoreWithIngestion.store.key.svParty,
+                            ),
+                            action.toString,
+                          ),
+                          deduplicationOffset = offset,
+                        )
+                        .yieldResult()
+                    } yield res,
+                    logger,
                   )
-                  .withDedup(
-                    commandId = SpliceLedgerConnection.CommandId(
-                      "org.lfdecentralizedtrust.splice.sv.requestVote",
-                      Seq(
-                        dsoStoreWithIngestion.store.key.dsoParty,
-                        dsoStoreWithIngestion.store.key.svParty,
-                      ),
-                      action.toString,
-                    ),
-                    deduplicationOffset = offset,
-                  )
-                  .yieldResult()
-              } yield res,
-              logger,
-            )
-          } yield Right(res.exerciseResult.voteRequest)
+                } yield Right(res.exerciseResult.voteRequest)
+            }
       }
   }
 

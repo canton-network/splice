@@ -72,17 +72,23 @@ object DarLockChecker {
     }
   }
 
-  def rewritePackageJson(
+  // Rewrites the alias targets in apps/generated-packages.json, e.g.
+  // "splice-amulet": "splice-amulet-0.1.18" -> "splice-amulet-0.1.19".
+  // The version suffix must follow the package name directly, so a package
+  // whose name is a prefix of another (splice-amulet vs splice-amulet-name-service)
+  // does not match the other's entry.
+  def rewriteGeneratedPackages(
       content: String,
       packageName: PackageName,
       newVersion: PackageVersion,
   ): String = {
     val escapedName = java.util.regex.Pattern.quote(packageName.toString)
-    val pattern =
-      ("""("file:common/frontend/daml\.js/""" + escapedName + """)-[0-9]+\.[0-9]+\.[0-9]+(")""").r
+    val pattern = ("""(": ")""" + escapedName + """-[0-9]+\.[0-9]+\.[0-9]+(")""").r
     pattern.replaceAllIn(
       content,
-      m => java.util.regex.Matcher.quoteReplacement(s"${m.group(1)}-$newVersion${m.group(2)}"),
+      m =>
+        java.util.regex.Matcher
+          .quoteReplacement(s"${m.group(1)}$packageName-$newVersion${m.group(2)}"),
     )
   }
 
@@ -121,15 +127,7 @@ object DarLockChecker {
             val currentHashes = File(outputFilename).contentAsString
             val lockStr = getLockStr(checkedInDarMap ++ darMap)
             if (currentHashes != lockStr)
-              sys.error(
-                Seq(
-                  "Error: daml lockfile is not up-to-date",
-                  "Expected:",
-                  lockStr,
-                  "Actual:",
-                  currentHashes,
-                ).mkString(System.lineSeparator())
-              )
+              sys.error(lockOutOfDateMessage(outputFilename, lockStr))
           case "update" =>
             // Check that the freshly built packages either match the
             // last release or have a different version number.
@@ -161,11 +159,11 @@ object DarLockChecker {
                 val updated = rewriteDamlYamlVersion(yamlFile.contentAsString, t.toVersion)
                 val _ = yamlFile.overwrite(updated)
               }
-              val packageJson = File("apps/package.json")
-              val updatedJson = targets.foldLeft(packageJson.contentAsString) { (acc, t) =>
-                rewritePackageJson(acc, t.name, t.toVersion)
+              val generatedPackages = File("apps/generated-packages.json")
+              val updatedJson = targets.foldLeft(generatedPackages.contentAsString) { (acc, t) =>
+                rewriteGeneratedPackages(acc, t.name, t.toVersion)
               }
-              val _ = packageJson.overwrite(updatedJson)
+              val _ = generatedPackages.overwrite(updatedJson)
             }
           case _ =>
             printHelpAndError(s"unknown command '$cmd'")
@@ -186,7 +184,8 @@ object DarLockChecker {
   ): Unit = {
     val lastReleaseNumber = File("LATEST_RELEASE").contentAsString.strip
     val branch = s"release-line-$lastReleaseNumber"
-    val ref = s"refs/remotes/origin/$branch"
+    val remote = resolveRemoteRef(branch)
+    val ref = s"refs/remotes/$remote/$branch"
     ensureRefAvailable(branch)
     val lastReleaseDarLock =
       s"git show $ref:daml/dars.lock".!!
@@ -263,6 +262,33 @@ object DarLockChecker {
       .sorted
       .mkString(System.lineSeparator())
 
+  private[build_tools] def lockOutOfDateMessage(
+      currentLockFile: String,
+      expectedLockStr: String,
+      diffColor: String = if (sys.env.contains("CI")) "never" else "always",
+  ): String =
+    File.temporaryFile(prefix = "expected-dars", suffix = ".lock") { expectedFile =>
+      val _ = expectedFile.write(expectedLockStr)
+
+      val out = new StringBuilder("")
+      def appendToOut(s: String): Unit = out ++= s + System.lineSeparator()
+      val _ = Seq(
+        "diff",
+        s"--color=$diffColor",
+        "--unified=0",
+        s"--label=$currentLockFile",
+        "--label=expected-dars.lock",
+        currentLockFile,
+        expectedFile.toString,
+      ).!(ProcessLogger(appendToOut, appendToOut))
+
+      Seq(
+        "Error: daml lockfile is not up-to-date",
+        "",
+        out.toString,
+      ).mkString(System.lineSeparator())
+    }
+
   private def getCheckedInDarMap(): Map[(PackageName, PackageVersion), String] = {
     val checkedInDars = File("daml/dars").list(_.extension == Some(".dar")).toSeq
     toDarMap(readDars(checkedInDars.map(_.toString())))
@@ -338,12 +364,30 @@ object DarLockChecker {
   }
 
   // Default: the release line ref used by checkPackageIdsImmutable, e.g.
-  // `refs/remotes/origin/release-line-0.6.0`. Override via the `--base=<ref>` flag
+  // `refs/remotes/upstream/release-line-0.6.0`. Override via the `--base=<ref>` flag
   // (e.g. `--base=origin/main`) for long-running branches that are not targeting
   // the next release.
   private def defaultCompareRef(): String = {
     val lastReleaseNumber = File("LATEST_RELEASE").contentAsString.strip
-    s"refs/remotes/origin/release-line-$lastReleaseNumber"
+    val branch = s"release-line-$lastReleaseNumber"
+    val remote = resolveRemoteRef(branch)
+    s"refs/remotes/$remote/$branch"
+  }
+
+  private[build_tools] def resolveRemoteRef(
+      branch: String,
+      remotes: Seq[String] = Seq("origin", "upstream"),
+      availableRefs: Option[Set[String]] = None,
+  ): String = {
+    val refs = availableRefs.getOrElse {
+      remotes.flatMap { remote =>
+        val ref = s"refs/remotes/$remote/$branch"
+        if (s"git rev-parse --verify --quiet $ref".! == 0) Seq(ref) else Seq.empty
+      }.toSet
+    }
+    remotes
+      .find(remote => refs.contains(s"refs/remotes/$remote/$branch"))
+      .getOrElse(remotes.headOption.getOrElse("origin"))
   }
 
   private def fetchCompareDarsLock(ref: String): Map[(PackageName, PackageVersion), String] = {
@@ -360,14 +404,15 @@ object DarLockChecker {
     }
   }
 
-  /** Ensure `refs/remotes/origin/$branch` exists locally
+  /** Ensure `refs/remotes/<remote>/$branch` exists locally.
     */
   private def ensureRefAvailable(branch: String): Unit = {
-    val ref = s"refs/remotes/origin/$branch"
+    val remote = resolveRemoteRef(branch)
+    val ref = s"refs/remotes/$remote/$branch"
     if (s"git rev-parse --verify --quiet $ref".! != 0) {
-      System.err.println(s"Fetching $branch, not present locally")
-      val rc = s"git fetch --no-tags --depth=1 origin $branch:$ref".!
-      if (rc != 0) sys.error(s"git fetch $branch failed (exit $rc)")
+      System.err.println(s"Fetching $branch from $remote, not present locally")
+      val rc = s"git fetch --no-tags --depth=1 $remote $branch:$ref".!
+      if (rc != 0) sys.error(s"git fetch $remote $branch failed (exit $rc)")
     }
   }
 }

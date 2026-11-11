@@ -297,6 +297,25 @@ function _assert_lock() {
     fi
 }
 
+# Fail if the cluster lock is held by someone else, without claiming it.
+function _check_lock_available() {
+    local lockholder
+    lockholder=$(_current_lockholder)
+    if [ -n "$lockholder" ] && [ "$lockholder" != "$(whoami)" ]; then
+        _error "Cluster already locked by: ${lockholder}. Lock age: $(_current_lock_age_formatted)."
+    fi
+}
+
+# Ensure the cluster lock is held by the current user, claiming it if free.
+# Fails if the cluster is locked by someone else.
+function _ensure_lock() {
+    _check_lock_available
+    if [ -z "$(_current_lockholder)" ]; then
+        _info "Cluster is not locked, claiming the lock."
+        subcmd_lock
+    fi
+}
+
 ################################
 ### Commands
 ################################
@@ -443,7 +462,7 @@ function subcmd_logs() {
 
 
 function k8s_labels_for_app() {
-    local global_domain_specific_apps=("global-domain-cometbft" "global-domain-sequencer" "global-domain-mediator")
+    local global_domain_specific_apps=("global-domain-sequencer" "global-domain-mediator")
 
     # shellcheck disable=SC2076
     # shellcheck disable=SC2053
@@ -543,9 +562,9 @@ function subcmd_gcloud_alert_logs_ui() {
 
     base_query="resource.labels.cluster_name%3D%22${GCP_CLUSTER_NAME}%22"
     cluster=$(basename "$PWD")
-    expected_file="../../expected/observability/expected-${cluster}.json"
+    expected_file="../../expected/observability/${cluster}/log_warnings.gcp_logging_metric_Metric.json"
     _info "Using filter from $expected_file"
-    query=$(cat "${expected_file}" | jq '.[] | select(.name == "log_warnings") | .inputs.filter')
+    query=$(cat "${expected_file}" | jq '.inputs.filter')
     encoded_query=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote($query))")
 
     url="https://console.cloud.google.com/logs/query?query=$encoded_query&project=$CLOUDSDK_CORE_PROJECT&duration=PT1H"
@@ -1430,8 +1449,7 @@ subcommand_whitelist[wait_for_daml_upgrade]="Waits for daml upgrade after a vote
 
 function subcmd_wait_for_daml_upgrade() {
     _info "Fetching DSO rules"
-    token=$(subcmd_get_token sv-1 sv)
-    dso=$(curl -s "https://sv.sv-2.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/dso" -H "authorization: Bearer ${token}")
+    dso=$(curl -s "https://scan.sv-2.${GCP_CLUSTER_HOSTNAME}/api/scan/v0/dso")
     # get the first futureValue's effective date, which corresponds to the vote from DamlCIUpgradeVotePreflightTest
     effective_date=$(jq -r '.amulet_rules.payload.configSchedule.futureValues[0]._1' <<< "$dso")
 
@@ -1475,6 +1493,124 @@ subcommand_whitelist[lockholder]="Print the current lockholder, if any, for the 
 
 function subcmd_lockholder() {
     _current_lockholder
+}
+
+###
+
+subcommand_whitelist[validate_lock]="Validate that the cluster lock is held by you (or, on CI, by the workflow approver)."
+
+function subcmd_validate_lock() {
+    _assert_lock
+    _info "Cluster lock validated."
+}
+
+subcommand_whitelist[deploy_basic]='Trigger a basic cluster test deploy for a PR and post the run link back on the PR.'
+
+function subcmd_deploy_basic() {
+    _deploy_cluster_workflow "deploy_scratchnet_basic.yml" "Cluster test" "$@"
+}
+
+subcommand_whitelist[deploy_upgrade]='Trigger a scratchnet upgrade test deploy for a PR and post the run link back on the PR.'
+
+function subcmd_deploy_upgrade() {
+    _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "$@"
+}
+
+function _deploy_cluster_workflow() {
+    local deploy_workflow="$1" label="$2"; shift 2
+
+    # DA-internal repo hosting the deploy workflows triggered from here, and the
+    # default repo PRs are looked up in (overridable per call via --repo).
+    local deploy_internal_repo="DACH-NY/canton-network-internal"
+    local deploy_default_repo="canton-network/splice"
+
+    local repo="${deploy_default_repo}" repo_explicit="" pr="" url_repo=""
+    local pr_json sha cluster dispatch_out run_url me body
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --repo)
+                repo="${2-}"; repo_explicit=1; shift 2;;
+            --repo=*)
+                repo="${1#--repo=}"; repo_explicit=1; shift;;
+            -h|--help)
+                echo "Usage: $0 ${SUBCOMMAND_NAME} <pr-number|pr-url> [--repo org/name]"
+                echo ""
+                echo "${label} deploy for the given PR on the current cluster,"
+                echo "with the workflow run link posted back on the PR."
+                echo "The PR can be given as a number (e.g. 7742) or as a full URL"
+                echo "(e.g. https://github.com/canton-network/splice/pull/7742,"
+                echo "in which case the repo is deduced from the URL)."
+                echo "Use --repo for PRs in forks when passing a bare number,"
+                echo "e.g. --repo canton-network/splice-multi-sync."
+                return 0;;
+            -*)
+                _error "Unknown option: $1";;
+            *)
+                if [ -n "$pr" ]; then
+                    _error "Unexpected argument: $1"
+                fi
+                pr="$1"; shift;;
+        esac
+    done
+
+    if [ -z "$pr" ]; then
+        _error "Usage: $0 ${SUBCOMMAND_NAME} <pr-number|pr-url> [--repo org/name]"
+    fi
+    if [[ "$pr" =~ ^https?://(www\.)?github\.com/([^/]+)/([^/]+)/pull/([0-9]+)(/.*)?$ ]]; then
+        url_repo="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+        if [ -n "$repo_explicit" ] && [ "$repo" != "$url_repo" ]; then
+            _error "--repo $repo conflicts with the repo deduced from the PR URL: $url_repo"
+        fi
+        repo="$url_repo"
+        pr="${BASH_REMATCH[4]}"
+    elif [[ ! "$pr" =~ ^[0-9]+$ ]]; then
+        _error "Argument must be a PR number or a PR URL, got: '$pr'"
+    fi
+    if ! command -v gh > /dev/null 2>&1; then
+        _error "The 'gh' CLI is required but not installed. See https://cli.github.com/"
+    fi
+
+    # Fail early on a cluster locked by someone else, but only claim the lock
+    # after confirmation so that answering "n" does not leave it behind.
+    _check_lock_available
+
+    _info "Resolving head SHA of PR ${repo}#${pr}."
+    pr_json=$(gh api "repos/${repo}/pulls/${pr}") || _error "Failed to fetch PR ${repo}#${pr}."
+    sha=$(echo "$pr_json" | jq -r '.head.sha')
+    if [ -z "$sha" ] || [ "$sha" = "null" ]; then
+        _error "Could not determine head SHA of PR ${repo}#${pr}."
+    fi
+    _info "PR head SHA: ${sha}"
+
+    _prompt_to_confirm --no-lock
+    _ensure_lock
+
+    # The deploy workflow expects the full scratchnet name (scratchneta-e),
+    # while this checkout only exports the short basename (scratcha-e),
+    # so derive it here.
+    if [[ "$GCP_CLUSTER_BASENAME" == scratch* ]]; then
+        cluster="${GCP_CLUSTER_BASENAME/scratch/scratchnet}"
+    else
+        cluster="$GCP_CLUSTER_BASENAME"
+    fi
+
+    _info "Triggering ${deploy_workflow} in ${deploy_internal_repo} for ${sha} on ${cluster}."
+    dispatch_out=$(gh workflow run "${deploy_workflow}" -R "${deploy_internal_repo}" \
+        -f splice-repo="$repo" \
+        -f splice-git-ref="$sha" \
+        -f cluster="$cluster" 2>&1) || _error "Failed to trigger ${deploy_workflow}: ${dispatch_out}"
+    echo "$dispatch_out"
+    run_url=$(echo "$dispatch_out" | grep -oE 'https://[^[:space:]]*/actions/runs/[0-9]+' | head -n 1 || true)
+
+    if [ -z "$run_url" ]; then
+        _error "Run URL not returned. The workflow may still have been dispatched, so check https://github.com/${deploy_internal_repo}/actions/workflows/${deploy_workflow} (and https://www.githubstatus.com/ for GitHub Actions incidents)."
+    fi
+
+    me=$(gh api user --jq '.login')
+    body="${label} triggered for PR #${pr} (${sha}) on ${cluster} by @${me}. Track progress here: ${run_url}"
+    gh api "repos/${repo}/issues/${pr}/comments" --method POST -f body="$body" > /dev/null
+    _info "Posted run link back on PR ${repo}#${pr}."
 }
 
 ###
@@ -1948,7 +2084,7 @@ function subcmd_restore_node() {
             _info "Silencing SV report creation alerts for $sv_name for 1 hour"
             subcmd_silence_grafana_alerts "1 hour" "alertname=Report Creation Time Lag" "report_publisher=$sv_name"
             _info "Restoring sv node $node"
-            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cometbft cantonBft sequencer participant mediator cn-apps
+            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cantonBft sequencer participant mediator cn-apps
             ;;
         validator1|splitwell)
             _info "Restoring validator node $node"
@@ -1971,64 +2107,6 @@ function subcmd_preflight_sv_reonboard() {
     cd "${SPLICE_ROOT}" && \
             NETWORK_APPS_ADDRESS="${GCP_CLUSTER_HOSTNAME}" \
             sbt "apps-app/testOnly $preflight_tests"
-}
-
-###
-
-subcommand_whitelist[list_sv_cometbft_addresses]='List the sv cometbft addresses'
-
-function subcmd_list_sv_cometbft_addresses() {
-  sv="${1-}"
-
-  if [ -z "${sv}" ]; then
-    _error "Usage: $SCRIPTNAME list_sv_cometbft_addresses <sv-name>"
-  fi
-
-  pubkey_sv=$(mktemp)
-  pubkey_address=$(mktemp)
-  curl -sSLf "https://sv.$sv.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/dso" | jq '[.sv_node_states[] | .contract.payload as $payload | .contract.payload.state.synchronizerNodes[] | select(.[0] | startswith("global"))[1].cometBft.nodes[]|{ sv: $payload.svName, pub_key: .[1].validatorPubKey, peer_id: .[0]}]' > "$pubkey_sv"
-  curl -sSLf --header "Content-Type: application/json" -X POST -d '{"id": 0, "method": "validators"}' "https://sv.$sv.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/admin/domain/cometbft/json-rpc" | \
-    jq '[.result.validators[] | { address: .address, pub_key:  .pub_key.value}] | to_entries | map({index: .key, pub_key: .value.pub_key, address: .value.address})' > "$pubkey_address"
-
-  jq -s '[ .[0] + .[1] | group_by(.pub_key)[] | select(length > 1) | add ] | sort_by(.index)' "$pubkey_address" "$pubkey_sv"
-}
-
-###
-
-subcommand_whitelist[list_cometbft_peers]="List sv1's cometbft peers"
-
-function subcmd_list_cometbft_peers() {
-  migration_id=${1:-}
-
-  if [ -z "${migration_id}" ]; then
-    _error "Usage: $SCRIPTNAME list_cometbft_peers <migration-id>"
-  fi
-
-  cleanup() {
-    kill $port_forward_pid
-  }
-  trap cleanup EXIT
-
-  kubectl port-forward -n "sv-1" deployment/global-domain-"$migration_id"-cometbft 26657:26657 > /dev/null &
-  port_forward_pid=$!
-
-  if ! kill -0 $port_forward_pid; then
-    _error "Failed to start port forwarding"
-    exit 1
-  fi
-
-  start=$(date +%s)
-  while ! nc -z -w 1 localhost 26657 > /dev/null 2>&1; do
-    sleep 0.1
-    now=$(date +%s)
-    if (( (now - start) > 5 )); then
-      echo "Failed to port-forward to sv-1 migration_id ${migration_id} cometbft pod"
-      cleanup
-      exit 1
-    fi
-  done
-
-  curl -sSLf "http://localhost:26657/net_info" | jq -S '.result.peers | map({sv: .node_info.moniker, peer_id: .node_info.id, listen_addr: .node_info.listen_addr, is_outbound: .is_outbound}) | sort_by(.sv)'
 }
 
 ###
@@ -2231,6 +2309,9 @@ function subcmd_request_pam() {
 
 ###
 subcommand_whitelist[dump_identities]="Dump all node identities to a file"
+# Nodes that disallow key downloads cannot serve an identities dump; their IDs are reported as this marker instead.
+# TODO(DACH-NY/canton-network-internal#7687): Add dedicated endpoints to validators and SVs that return just the node IDs, so that this command works for all deployed nodes again.
+KEY_DOWNLOADS_DISABLED="<key downloads disabled>"
 function subcmd_dump_identities() {
     _cluster_must_exist
 
@@ -2246,8 +2327,12 @@ function subcmd_dump_identities() {
         token=$(subcmd_get_token $i sv)
         url="https://sv.${domain}.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/admin/domain/identities-dump"
         echo "Getting identities from $url"
-        full_identities=$(curl -sSLf -H "authorization: Bearer $token" "$url")
-        identities=$(echo "$full_identities" | jq "{\"$i\": {participant: .identities.participant.id, sequencer: .identities.sequencer.id, mediator: .identities.mediator.id}}")
+        full_identities=$(_get_identities_dump "$url" "$token")
+        if [ -n "$full_identities" ]; then
+            identities=$(echo "$full_identities" | jq "{\"$i\": {participant: .identities.participant.id, sequencer: .identities.sequencer.id, mediator: .identities.mediator.id}}")
+        else
+            identities=$(jq -n --arg m "$KEY_DOWNLOADS_DISABLED" "{\"$i\": {participant: \$m, sequencer: \$m, mediator: \$m}}")
+        fi
         all=$(echo "$all" "$identities" | jq -s add)
     done
 
@@ -2268,10 +2353,37 @@ function _add_validator_identities() {
     token=$(subcmd_get_token "$namespace" validator)
     url="https://wallet.${namespace}.${GCP_CLUSTER_HOSTNAME}/api/validator/v0/admin/participant/identities"
     echo "Getting identities from $url"
-    full_identities=$(curl -sSLf -H "authorization: Bearer $token" "$url")
-    identities=$(echo "$full_identities" | jq "{\"${namespace}\": {participant: .id}}")
+    full_identities=$(_get_identities_dump "$url" "$token")
+    if [ -n "$full_identities" ]; then
+        identities=$(echo "$full_identities" | jq "{\"${namespace}\": {participant: .id}}")
+    else
+        identities=$(jq -n --arg m "$KEY_DOWNLOADS_DISABLED" "{\"${namespace}\": {participant: \$m}}")
+    fi
 
     all=$(echo "$all" "$identities" | jq -s add)
+}
+
+# Prints the identities dump served at the given URL, or nothing if the node disallows key downloads.
+# Fails if the node is unavailable or returns any other error.
+function _get_identities_dump() {
+    local url="$1"
+    local token="$2"
+    local response
+    local status
+    local body
+
+    if ! response=$(curl -sSL -w '\n%{http_code}' -H "authorization: Bearer $token" "$url"); then
+        _error "Failed to reach $url"
+    fi
+    status=$(tail -n 1 <<< "$response")
+    body=$(sed '$d' <<< "$response")
+    if [ "$status" == "200" ]; then
+        echo "$body"
+    elif [ "$status" == "400" ] && jq -e '.error | contains("key downloads are disabled")' <<< "$body" > /dev/null 2>&1; then
+        echo "Key downloads are disabled on the node serving $url, reporting $KEY_DOWNLOADS_DISABLED instead of its IDs" >&2
+    else
+        _error "Failed to get identities from $url (HTTP $status): $body"
+    fi
 }
 
 ###
@@ -2336,23 +2448,36 @@ function subcmd_psql() {
   local APPLICATION="$2"
 
   _info "Retrieving DB connection info from pod description..."
-  local DB_INIT_COMMAND
-  DB_INIT_COMMAND=$(
+  local DB_INIT_SCRIPT
+  DB_INIT_SCRIPT=$(
     kubectl get deployment \
       --namespace "${NAMESPACE}" \
       --selector "app=${APPLICATION}" \
       -o 'jsonpath={..spec.template.spec.initContainers[0].command}' \
-    | jq 'join(" ")' \
-    | grep -i psql \
-    | sed -nE 's/^.*(psql.?*) 2>&1.*$/\1/p'
+    | jq -r 'join("\n")'
   )
+
+  # There can be multiple psql invocations, pick the one that contains create database.
+  local DB_INIT_COMMAND
+  DB_INIT_COMMAND=$(
+    grep -F 'create database' <<< "${DB_INIT_SCRIPT}" \
+      | sed -nE 's/^.*(psql .*) 2>&1.*$/\1/p' \
+      | tail -n 1
+  ) || true
 
   if [ -z "${DB_INIT_COMMAND}" ]; then
     _error "Application ${APPLICATION} in namespace ${NAMESPACE} does not have an associated database."
     exit 1
   fi
 
-  eval "set -- $DB_INIT_COMMAND"
+  # The participant does not directly inline the db name so we resolve things here.
+  local DB_INIT_VARS
+  DB_INIT_VARS=$(
+    sed -nE "s/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*='[^']*')[[:space:]]*$/local \1/p" <<< "${DB_INIT_SCRIPT}"
+  ) || true
+
+  eval "${DB_INIT_VARS}
+        set -- ${DB_INIT_COMMAND}"
   while [ $# -gt 0 ]; do
     case "$1" in
       -h|--host)

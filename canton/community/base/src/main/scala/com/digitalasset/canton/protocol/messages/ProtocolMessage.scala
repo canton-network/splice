@@ -5,7 +5,6 @@ package com.digitalasset.canton.protocol.messages
 
 import cats.Functor
 import cats.data.EitherT
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.crypto.signer.SyncCryptoSigner.SigningTimestampOverrides
 import com.digitalasset.canton.crypto.{
   HashPurpose,
@@ -16,16 +15,22 @@ import com.digitalasset.canton.crypto.{
   SyncCryptoError,
 }
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.protocol.messages.ProtocolMessage.ProtocolMessageContentCast
 import com.digitalasset.canton.protocol.messages.SignedProtocolMessageContent.SignedMessageContentCast
-import com.digitalasset.canton.protocol.{v30, v31}
+import com.digitalasset.canton.protocol.{v30, v32}
 import com.digitalasset.canton.sequencing.protocol.{ClosedEnvelope, OpenEnvelope}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.{Member, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.{
   HasProtocolVersionedWrapper,
   HasRepresentativeProtocolVersion,
@@ -34,8 +39,9 @@ import com.digitalasset.canton.version.{
   ProtocolVersionValidation,
   RepresentativeProtocolVersion,
   VersionedProtoCodec,
-  VersioningCompanionContext,
+  VersioningCompanion,
 }
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 
 import scala.concurrent.ExecutionContext
@@ -46,7 +52,7 @@ sealed trait ProtocolMessage
     extends Product
     with Serializable
     with HasPhysicalSynchronizerId
-    with PrettyPrinting
+    with PrettyPrintingFromCompanion
     with HasRepresentativeProtocolVersion {
 
   override def representativeProtocolVersion: RepresentativeProtocolVersion[companionObj.type]
@@ -58,10 +64,12 @@ sealed trait ProtocolMessage
     * confidential data. Sub-classes may override the pretty instance to print more information.
     */
   @VisibleForTesting
-  override def pretty: Pretty[this.type] = prettyOfObject[ProtocolMessage]
+  override def prettyCompanion: PrettyPrintingCompanion[this.type] = ProtocolMessage
 }
 
-object ProtocolMessage {
+object ProtocolMessage extends PrettyPrintingCompanion[ProtocolMessage] {
+
+  override protected val pretty: Pretty[ProtocolMessage] = prettyOfObject[ProtocolMessage]
 
   /** Returns the envelopes from the batch that match the given synchronizer id. If any other
     * messages exist, it gives them to the provided callback
@@ -112,26 +120,22 @@ object ProtocolMessage {
   * by the recipient(s).
   */
 trait UnsignedProtocolMessage extends ProtocolMessage {
-  protected[messages] def toProtoSomeEnvelopeContentV30: v30.EnvelopeContent.SomeEnvelopeContent
-
-  protected[messages] def toProtoSomeEnvelopeContentV31: v31.EnvelopeContent.SomeEnvelopeContent
+  protected[messages] def toProtoSomeEnvelopeContentV32: v32.EnvelopeContent.SomeEnvelopeContent
 }
 
 /** There can be any number of signatures. Every signature covers the serialization of the
   * `typedMessage` and needs to be valid.
   */
 @SuppressWarnings(Array("org.wartremover.warts.FinalCaseClass")) // This class is mocked in tests
-case class SignedProtocolMessage[+M <: SignedProtocolMessageContent](
+case class SignedProtocolMessage[+M <: SignedProtocolMessageContent] private (
     typedMessage: TypedSignedProtocolMessageContent[M],
     signatures: NonEmpty[Seq[Signature]],
+)(
+    override val representativeProtocolVersion: RepresentativeProtocolVersion[
+      SignedProtocolMessage.type
+    ]
 ) extends ProtocolMessage
     with HasProtocolVersionedWrapper[SignedProtocolMessage[SignedProtocolMessageContent]] {
-
-  override val representativeProtocolVersion: RepresentativeProtocolVersion[
-    SignedProtocolMessage.type
-  ] = SignedProtocolMessage.protocolVersionRepresentativeFor(
-    typedMessage.content.psid.protocolVersion
-  )
 
   @transient override protected lazy val companionObj: SignedProtocolMessage.type =
     SignedProtocolMessage
@@ -173,7 +177,7 @@ case class SignedProtocolMessage[+M <: SignedProtocolMessageContent](
       typedMessage: TypedSignedProtocolMessageContent[MM] = this.typedMessage,
       signatures: NonEmpty[Seq[Signature]] = this.signatures,
   ): SignedProtocolMessage[MM] =
-    SignedProtocolMessage(typedMessage, signatures)
+    SignedProtocolMessage(typedMessage, signatures)(representativeProtocolVersion)
 
   override def psid: PhysicalSynchronizerId = message.psid
 
@@ -192,33 +196,47 @@ case class SignedProtocolMessage[+M <: SignedProtocolMessageContent](
       else this.copy(typedMessage = newTypedMessage)
     }
 
-  override def pretty: Pretty[this.type] =
-    prettyOfClass(unnamedParam(_.message), param("signatures", _.signatures))
+  override def prettyCompanion
+      : PrettyPrintingCompanion[SignedProtocolMessage[SignedProtocolMessageContent]] =
+    SignedProtocolMessage
 }
 
 object SignedProtocolMessage
-    extends VersioningCompanionContext[SignedProtocolMessage[
-      SignedProtocolMessageContent
-    ], ProtocolVersionValidation] {
+    extends VersioningCompanion[SignedProtocolMessage[SignedProtocolMessageContent]]
+    with PrettyPrintingCompanion[SignedProtocolMessage[SignedProtocolMessageContent]] {
   override val name: String = "SignedProtocolMessage"
+
+  override protected val pretty: Pretty[SignedProtocolMessage[SignedProtocolMessageContent]] =
+    prettyOfClass(unnamedParam(_.message), param("signatures", _.signatures))
 
   val versioningTable: VersioningTable = VersioningTable(
     ProtoVersion(30) -> VersionedProtoCodec(
-      ProtocolVersion.v34
+      ProtocolVersion.v36
     )(v30.SignedProtocolMessage)(
-      supportedProtoVersion(_)(fromProtoV30),
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
 
+  def apply[M <: SignedProtocolMessageContent](
+      typedMessage: TypedSignedProtocolMessageContent[M],
+      signatures: NonEmpty[Seq[Signature]],
+      protocolVersion: ProtocolVersion,
+  ): SignedProtocolMessage[M] =
+    new SignedProtocolMessage(typedMessage, signatures)(
+      SignedProtocolMessage.protocolVersionRepresentativeFor(protocolVersion)
+    )
+
   @VisibleForTesting
   def from[M <: SignedProtocolMessageContent](
       message: M,
+      protocolVersion: ProtocolVersion,
       signature: Signature,
       moreSignatures: Signature*
   ): SignedProtocolMessage[M] = SignedProtocolMessage(
-    TypedSignedProtocolMessageContent(message),
+    TypedSignedProtocolMessageContent(message, protocolVersion),
     NonEmpty(Seq, signature, moreSignatures*),
+    protocolVersion,
   )
 
   /** @param signingTimestampOverrides
@@ -229,6 +247,7 @@ object SignedProtocolMessage
       message: M,
       cryptoApi: SyncCryptoApi,
       signingTimestampOverrides: Option[SigningTimestampOverrides],
+      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext,
       ec: ExecutionContext,
@@ -261,31 +280,34 @@ object SignedProtocolMessage
       message: M,
       cryptoApi: SyncCryptoApi,
       signingTimestampOverrides: Option[SigningTimestampOverrides],
+      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext,
       ec: ExecutionContext,
   ): FutureUnlessShutdown[SignedProtocolMessage[M]] =
-    signAndCreate(message, cryptoApi, signingTimestampOverrides)
+    signAndCreate(message, cryptoApi, signingTimestampOverrides, protocolVersion)
       .valueOr(err =>
         throw new IllegalStateException(s"Failed to create signed protocol message: $err")
       )
 
   private def fromProtoV30(
-      expectedProtocolVersion: ProtocolVersionValidation,
+      pvv: ProtocolVersionValidation,
       signedMessageP: v30.SignedProtocolMessage,
   ): ParsingResult[SignedProtocolMessage[SignedProtocolMessageContent]] = {
     val v30.SignedProtocolMessage(signaturesP, typedMessageBytes) = signedMessageP
 
     for {
       typedMessage <- TypedSignedProtocolMessageContent
-        .fromByteStringPVV(expectedProtocolVersion, typedMessageBytes)
+        .fromByteString(pvv, typedMessageBytes)
+      signaturesSeqP <- ProtoValidation
+        .validateLength(signaturesP, "signatures", pvv, ProtoValidation.MaxCollectionSize)
       signatures <- ProtoConverter.parseRequiredNonEmpty(
         Signature.fromProtoV30,
         "signatures",
-        signaturesP,
+        signaturesSeqP,
       )
-      signedMessage = SignedProtocolMessage(typedMessage, signatures)
-    } yield signedMessage
+      rpv <- SignedProtocolMessage.protocolVersionRepresentativeFor(ProtoVersion(30))
+    } yield SignedProtocolMessage(typedMessage, signatures)(rpv)
   }
 
   implicit def signedMessageCast[M <: SignedProtocolMessageContent](implicit

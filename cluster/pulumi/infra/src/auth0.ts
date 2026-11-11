@@ -19,6 +19,10 @@ import {
   standardSvConfigsBasic,
   extraSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
+import {
+  allValidatorsConfig,
+  validatorIngressName,
+} from '@canton-network/splice-pulumi-common-validator/src/config';
 
 function tokenLifetime(): number {
   return fixedTokens() ? 2592000 : 86400; // TODO(DACH-NY/canton-network-internal#2114): Move this to the cluster config? We want it to be long for fixed token clusters
@@ -195,37 +199,30 @@ function newM2MApp(
   return ret;
 }
 
-function newUiApp(
-  resourceName: string,
-  name: string,
-  description: string,
-  urlPrefixes: string[],
-  ingressName: string,
-  clusterBasename: string,
-  clusterDnsNames: string[],
-  auth0DomainProvider: auth0.Provider,
-  extraUrls: string[] = []
-): auth0.Client {
-  const urls = urlPrefixes
-    .map(prefix => {
-      return clusterDnsNames.map(dnsName => {
-        return `https://${prefix}.${ingressName}.${dnsName}`;
-      });
-    })
-    .flat()
-    .concat(extraUrls);
+interface SpaClientArgs {
+  name: string;
+  description: string;
+  clusterBasename: string;
+  origins: string[];
+  callbacks: string[];
+}
 
+function newSpaClient(
+  resourceName: string,
+  args: SpaClientArgs,
+  auth0DomainProvider: auth0.Provider
+): auth0.Client {
   const ret = new auth0.Client(
     resourceName,
     {
-      name: `${name} (Pulumi managed, ${clusterBasename})`,
+      name: `${args.name} (Pulumi managed, ${args.clusterBasename})`,
       appType: 'spa',
-      callbacks: urls,
-      allowedOrigins: urls,
-      allowedLogoutUrls: urls,
-      webOrigins: urls,
+      callbacks: args.callbacks,
+      allowedOrigins: args.origins,
+      allowedLogoutUrls: args.origins,
+      webOrigins: args.origins,
       crossOriginAuth: false,
-      description: ` ** Managed by Pulumi, do not edit manually **\n${description}`,
+      description: ` ** Managed by Pulumi, do not edit manually **\n${args.description}`,
       oidcConformant: true,
       grantTypes: ['authorization_code', 'implicit', 'refresh_token'],
       refreshToken: {
@@ -252,6 +249,39 @@ function newUiApp(
     { provider: auth0DomainProvider }
   );
   return ret;
+}
+
+function newUiApp(
+  resourceName: string,
+  name: string,
+  description: string,
+  urlPrefixes: string[],
+  ingressName: string,
+  clusterBasename: string,
+  clusterDnsNames: string[],
+  auth0DomainProvider: auth0.Provider,
+  extraUrls: string[] = []
+): auth0.Client {
+  const urls = urlPrefixes
+    .map(prefix => {
+      return clusterDnsNames.map(dnsName => {
+        return `https://${prefix}.${ingressName}.${dnsName}`;
+      });
+    })
+    .flat()
+    .concat(extraUrls);
+
+  return newSpaClient(
+    resourceName,
+    {
+      name,
+      description,
+      clusterBasename,
+      origins: urls,
+      callbacks: urls,
+    },
+    auth0DomainProvider
+  );
 }
 
 interface BackendAuth0Params {
@@ -454,8 +484,18 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
     dnsNames,
     provider
   );
-  const validator1Auth0Config: pulumi.Output<Auth0NamespaceConfig> = validator1UiApp.id.apply(
-    clientId => {
+  const validator1WalletGatewayApp = newWalletGatewayApp(
+    'validator1WalletGatewayApp',
+    'Validator1 Wallet Gateway',
+    'Used for the Wallet Gateway UI login for the standalone Validator1',
+    'validator1',
+    clusterBasename,
+    dnsNames,
+    provider
+  );
+  const validator1Auth0Config: pulumi.Output<Auth0NamespaceConfig> = pulumi
+    .all([validator1UiApp.id, validator1WalletGatewayApp.id])
+    .apply(([clientId, walletGatewayClientId]) => {
       return {
         audiences: {
           ledgerApi: DEFAULT_AUDIENCE,
@@ -471,10 +511,10 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
           wallet: clientId,
           cns: clientId,
           splitwell: clientId,
+          walletGateway: walletGatewayClientId,
         },
       };
-    }
-  );
+    });
 
   const splitwellUiApp = newUiApp(
     'SplitwellUiApp',
@@ -517,6 +557,31 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
 
       return baseCfg;
     });
+}
+
+function newWalletGatewayApp(
+  resourceName: string,
+  name: string,
+  description: string,
+  ingressName: string,
+  clusterBasename: string,
+  clusterDnsNames: string[],
+  auth0DomainProvider: auth0.Provider
+): auth0.Client {
+  const origins = clusterDnsNames.map(dnsName => `https://walletgateway.${ingressName}.${dnsName}`);
+
+  return newSpaClient(
+    resourceName,
+    {
+      name,
+      description,
+      clusterBasename,
+      origins,
+      // The gateway completes the login on /callback/ (with the trailing slash) rather than on the origin.
+      callbacks: origins.map(origin => `${origin}/callback/`),
+    },
+    auth0DomainProvider
+  );
 }
 
 function svRunbookAuth0(
@@ -604,6 +669,68 @@ function svRunbookAuth0(
     });
 }
 
+function auth0ForValidatorNamespace(
+  clusterBasename: string,
+  namespace: string,
+  provider: auth0.Provider,
+  ingressName: string,
+  dnsNames: string[]
+): pulumi.Output<Auth0NamespaceConfig> {
+  const resourcePrefix = namespace.replace(/-/g, '');
+  const walletUiApp = newUiApp(
+    `${resourcePrefix}WalletUi`,
+    `Wallet UI (${namespace})`,
+    `Used for the Wallet UI for validator ${namespace}`,
+    ['wallet'],
+    ingressName,
+    clusterBasename,
+    dnsNames,
+    provider,
+    ['http://localhost:3000', 'http://wallet.localhost']
+  );
+  const ansUiApp = newUiApp(
+    `${resourcePrefix}CnsUi`,
+    `ANS UI (${namespace})`,
+    `Used for the ANS UI for validator ${namespace}`,
+    [ansDomainPrefix],
+    ingressName,
+    clusterBasename,
+    dnsNames,
+    provider,
+    ['http://localhost:3001', 'http://ans.localhost']
+  );
+  const walletGatewayApp = newWalletGatewayApp(
+    `${resourcePrefix}WalletGatewayApp`,
+    `Wallet Gateway (${namespace})`,
+    `Used for the Wallet Gateway UI login for validator ${namespace}`,
+    ingressName,
+    clusterBasename,
+    dnsNames,
+    provider
+  );
+
+  return pulumi
+    .all([walletUiApp.id, ansUiApp.id, walletGatewayApp.id])
+    .apply(([walletUiAppId, ansUiAppId, walletGatewayAppId]) => {
+      return {
+        audiences: {
+          // The Ledger API in the validator-test tenant
+          ledgerApi: 'https://ledger_api.example.com',
+          // The Validator App API in the validator-test tenant
+          validatorApi: 'https://validator.example.com/api',
+        },
+        backendClientIds: {
+          validator: 'cznBUeB70fnpfjaq9TzblwiwjkVyvh5z',
+        },
+        uiClientIds: {
+          wallet: walletUiAppId,
+          cns: ansUiAppId,
+          walletGateway: walletGatewayAppId,
+        },
+      };
+    });
+}
+
 function validatorRunbookAuth0(
   clusterBasename: string,
   dnsNames: string[]
@@ -618,46 +745,32 @@ function validatorRunbookAuth0(
     clientSecret: auth0MgtClientSecret,
   });
 
-  const walletUiApp = newUiApp(
-    'validatorWalletUi',
-    'Wallet UI',
-    'Used for the Wallet UI for the validator runbook',
-    ['wallet'],
-    'validator',
-    clusterBasename,
-    dnsNames,
-    provider,
-    ['http://localhost:3000', 'http://wallet.localhost']
-  );
-  const ansUiApp = newUiApp(
-    'validatorCnsUi',
-    'ANS UI',
-    'Used for the ANS UI for the validator runbook',
-    [ansDomainPrefix],
-    'validator',
-    clusterBasename,
-    dnsNames,
-    provider,
-    ['http://localhost:3001', 'http://ans.localhost']
-  );
+  const validatorAuth0CfgPromises = Object.values(allValidatorsConfig).map(validator => {
+    const namespace = validator.namespace;
+    const auth0NamespaceConfig = auth0ForValidatorNamespace(
+      clusterBasename,
+      namespace,
+      provider,
+      validatorIngressName(validator),
+      dnsNames
+    );
+    return auth0NamespaceConfig.apply(cfg => ({
+      namespace: namespace,
+      cfg: cfg,
+    }));
+  });
 
-  return pulumi.all([walletUiApp.id, ansUiApp.id]).apply(([walletUiAppId, ansUiAppId]) => {
-    const namespacedConfig: NamespacedAuth0Configs = {
-      validator: {
-        audiences: {
-          ledgerApi: 'https://ledger_api.example.com', // The Ledger API in the validator-test tenant
-          validatorApi: 'https://validator.example.com/api', // The Validator App API in the validator-test tenant
-        },
-        backendClientIds: {
-          validator: 'cznBUeB70fnpfjaq9TzblwiwjkVyvh5z',
-        },
-        uiClientIds: {
-          wallet: walletUiAppId,
-          cns: ansUiAppId,
-        },
+  const namespacedConfig = pulumi.all(validatorAuth0CfgPromises).apply(cfgs => {
+    return cfgs.reduce(
+      (acc: Record<string, Auth0NamespaceConfig>, validatorCfg) => {
+        acc[validatorCfg.namespace] = validatorCfg.cfg;
+        return acc;
       },
-    };
+      {} as Record<string, Auth0NamespaceConfig>
+    );
+  });
 
+  return namespacedConfig.apply(namespacedConfig => {
     return {
       namespacedConfigs: namespacedConfig,
       fixedTokenCacheName: 'auth0-fixed-token-cache-validator-test',

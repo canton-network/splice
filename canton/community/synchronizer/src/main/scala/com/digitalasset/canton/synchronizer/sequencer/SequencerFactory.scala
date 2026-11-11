@@ -11,6 +11,7 @@ import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown, H
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.Storage
 import com.digitalasset.canton.synchronizer.block.SequencerDriver
+import com.digitalasset.canton.synchronizer.config.PublicServerConfig
 import com.digitalasset.canton.synchronizer.metrics.SequencerMetrics
 import com.digitalasset.canton.synchronizer.sequencer.HASequencerExclusiveStorageBuilder.ExclusiveStorage
 import com.digitalasset.canton.synchronizer.sequencer.SequencerConfig.{BftSequencer, External}
@@ -72,11 +73,11 @@ object SequencerMetaFactory {
       storage: Storage,
       sequencerId: SequencerId,
       nodeParameters: SequencerNodeParameters,
+      publicApi: PublicServerConfig,
       futureSupervisor: FutureSupervisor,
       loggerFactory: NamedLoggerFactory,
   )(
-      sequencerConfig: SequencerConfig,
-      producePostOrderingTopologyTicks: Boolean,
+      sequencerConfig: SequencerConfig
   )(implicit executionContext: ExecutionContextExecutor): SequencerFactory =
     sequencerConfig match {
       case databaseConfig: SequencerConfig.Database =>
@@ -156,8 +157,8 @@ object SequencerMetaFactory {
       case BftSequencer(blockSequencerConfig, config) =>
         new BftSequencerFactory(
           config,
+          publicApi,
           blockSequencerConfig,
-          producePostOrderingTopologyTicks,
           health,
           storage,
           protocolVersion,
@@ -175,7 +176,6 @@ object SequencerMetaFactory {
           SequencerDriver.DriverApiVersion,
           rawConfig,
           blockSequencerConfig,
-          producePostOrderingTopologyTicks,
           health,
           storage,
           protocolVersion,

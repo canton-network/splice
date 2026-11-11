@@ -9,9 +9,8 @@ import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.networking.grpc.{CantonGrpcUtil, GrpcError}
 import com.digitalasset.canton.sequencer.api.v30.AcknowledgeSignedResponse
-import com.digitalasset.canton.sequencing.SequencedEventHandler
+import com.digitalasset.canton.sequencing.MaybeCompressedSequencedEventHandler
 import com.digitalasset.canton.sequencing.client.SequencerSubscription
-import com.digitalasset.canton.sequencing.client.pool.UserSequencerConnectionStub.DefaultSendAsyncLogPolicy
 import com.digitalasset.canton.sequencing.protocol.{
   AcknowledgeRequest,
   GetTrafficStateForMemberRequest,
@@ -23,8 +22,9 @@ import com.digitalasset.canton.sequencing.protocol.{
   TopologyStateForInitRequest,
   TopologyStateForInitResponse,
 }
-import com.digitalasset.canton.synchronizer.sequencer.errors.SequencerError.ExceededMaxSequencingTime
 import com.digitalasset.canton.tracing.TraceContext
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
 
 import scala.concurrent.duration.Duration
 
@@ -41,7 +41,7 @@ trait UserSequencerConnectionStub extends NamedLogging {
       request: SignedContent[SubmissionRequest],
       timeout: Duration,
       retryPolicy: GrpcError => Boolean = CantonGrpcUtil.RetryPolicy.noRetry,
-      logPolicy: CantonGrpcUtil.GrpcLogPolicy = DefaultSendAsyncLogPolicy,
+      logPolicy: CantonGrpcUtil.GrpcLogPolicy,
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SequencerConnectionStubError.ConnectionError, Unit]
@@ -76,17 +76,16 @@ trait UserSequencerConnectionStub extends NamedLogging {
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SequencerConnectionStubError, Option[CantonTimestamp]]
 
-  def downloadTopologyStateForInit(request: TopologyStateForInitRequest, timeout: Duration)(implicit
+  def streamTopologyStateForInit(request: TopologyStateForInitRequest, timeout: Duration)(implicit
       traceContext: TraceContext
-  ): EitherT[
-    FutureUnlessShutdown,
-    SequencerConnectionStubError,
+  ): Either[SequencerConnectionStubError, Source[
     TopologyStateForInitResponse,
-  ]
+    NotUsed,
+  ]]
 
   def subscribe[E](
       request: SubscriptionRequest,
-      handler: SequencedEventHandler[E],
+      handler: MaybeCompressedSequencedEventHandler[E],
       timeout: Duration,
   )(implicit
       traceContext: TraceContext
@@ -100,12 +99,4 @@ trait UserSequencerConnectionStub extends NamedLogging {
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, SequencerConnectionStubError, TopologyStateForInitHashResponse]
-}
-
-object UserSequencerConnectionStub {
-
-  /** Does not log if request is refused due to the max sequencing time having elapsed. */
-  val DefaultSendAsyncLogPolicy = new CantonGrpcUtil.FilteredGrpcLogPolicy({ error =>
-    error.code.id == ExceededMaxSequencingTime.code.id
-  })
 }

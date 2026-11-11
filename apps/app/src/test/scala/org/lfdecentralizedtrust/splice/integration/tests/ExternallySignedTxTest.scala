@@ -1,19 +1,15 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  IntegrationTestWithIsolatedEnvironment,
-  SpliceTestConsoleEnvironment,
-}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import com.digitalasset.canton.{HasExecutionContext, HasTempDirectory}
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 
 import java.util.UUID
 import scala.collection.mutable
 import scala.sys.process.{Process, ProcessLogger}
 
-trait ExternallySignedTxTest
+final class ExternallySignedPartyOnboardingTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
     with ExternallySignedPartyTestUtil
@@ -21,11 +17,7 @@ trait ExternallySignedTxTest
 
   override def environmentDefinition: SpliceEnvironmentDefinition = {
     EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName)
-  }.withTransferCommandSupport
-
-  def prepareAndSubmitTransfer(keyName: String, sender: PartyId, receiver: PartyId)(implicit
-      env: SpliceTestConsoleEnvironment
-  ): Unit
+  }
 
   "a ccsp provider" should {
 
@@ -112,67 +104,6 @@ trait ExternallySignedTxTest
           .getExternalPartyBalance(partyId)
           .totalUnlockedCoin shouldBe "24.0000000000"
       }
-      val partyHint2 = UUID.randomUUID().toString
-      val keyName2 = "party-key-2"
-      runProcess(
-        Seq(
-          "python",
-          "scripts/external-signing/external-signing.py",
-          "generate-key-pair",
-          s"--key-directory=${tempDirectory.path}",
-          s"--key-name=$keyName2",
-        ),
-        aliceValidatorBackend.token.value,
-      )
-      runProcess(
-        Seq(
-          "python",
-          "scripts/external-signing/external-signing.py",
-          "setup-party",
-          s"--validator-url=http://localhost:${aliceValidatorBackend.config.adminApi.port}",
-          s"--key-directory=${tempDirectory.path}",
-          s"--key-name=$keyName2",
-          s"--party-hint=$partyHint2",
-        ),
-        aliceValidatorBackend.token.value,
-      )
-
-      val partyId2 = aliceValidatorBackend.participantClient.parties
-        .hosted(filterParty = partyHint2)
-        .loneElement
-        .party
-
-      runProcess(
-        Seq(
-          "python",
-          "scripts/external-signing/external-signing.py",
-          "setup-transfer-preapproval",
-          s"--validator-url=http://localhost:${aliceValidatorBackend.config.adminApi.port}",
-          s"--key-directory=${tempDirectory.path}",
-          s"--key-name=$keyName2",
-          s"--party-id=${partyId2.toProtoPrimitive}",
-        ),
-        aliceValidatorBackend.token.value,
-      )
-
-      eventually() {
-        sv1ScanBackend
-          .lookupTransferPreapprovalByParty(partyId2)
-          .value
-          .payload
-          .receiver shouldBe partyId2.toProtoPrimitive
-      }
-
-      actAndCheck(
-        "Prepare and submit transaction to create TransferCommand",
-        prepareAndSubmitTransfer(keyName, partyId, partyId2),
-      )(
-        "DSO automation completes transfer",
-        _ =>
-          aliceValidatorBackend
-            .getExternalPartyBalance(partyId2)
-            .totalUnlockedCoin shouldBe "20.0000000000",
-      )
     }
   }
 
@@ -186,28 +117,5 @@ trait ExternallySignedTxTest
       readLines.foreach(logger.error(_)(TraceContext.empty))
       throw new RuntimeException(s"$args failed.")
     }
-  }
-}
-
-class ExternallySignedPartyOnboardingTest extends ExternallySignedTxTest {
-  override def prepareAndSubmitTransfer(keyName: String, sender: PartyId, receiver: PartyId)(
-      implicit env: SpliceTestConsoleEnvironment
-  ) = {
-    runProcess(
-      Seq(
-        "python",
-        "scripts/external-signing/external-signing.py",
-        "transfer-preapproval-send",
-        s"--validator-url=http://localhost:${aliceValidatorBackend.config.adminApi.port}",
-        s"--scan-url=http://localhost:${sv1ScanBackend.config.adminApi.port}",
-        s"--key-directory=${tempDirectory.path}",
-        s"--key-name=$keyName",
-        s"--sender-party-id=${sender.toProtoPrimitive}",
-        s"--receiver-party-id=${receiver.toProtoPrimitive}",
-        s"--amount=20.0",
-        s"--nonce=0",
-      ),
-      aliceValidatorBackend.token.value,
-    )
   }
 }

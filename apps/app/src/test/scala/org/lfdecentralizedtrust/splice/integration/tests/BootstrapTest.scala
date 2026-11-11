@@ -3,7 +3,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import better.files.File
 import com.digitalasset.canton.ConsoleScriptRunner
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.useSelfSignedTokensForLedgerApiAuth
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import com.digitalasset.canton.logging.SuppressionRule
@@ -20,10 +19,13 @@ class BootstrapTest extends IntegrationTestWithIsolatedEnvironment {
         this.getClass.getSimpleName,
       )
       .clearConfigTransforms()
+      // clearConfigTransforms skips ConfigTransforms.defaults, so we re-apply
+      // the TBAR configuration explicitly here
+      .addConfigTransform((_, config) => ConfigTransforms.withTrafficBasedAppRewards(config))
       .addConfigTransforms((_, config) =>
         ConfigTransforms.withPausedSvDomainComponentsOffboardingTriggers()(config)
       )
-      .addConfigTransform((_, config) => useSelfSignedTokensForLedgerApiAuth("test")(config))
+      .addConfigTransform((_, config) => ConfigTransforms.useSelfSignedTokensForAuth(config))
       // We reduce the polling interval here primarily for the top-up trigger to ensure that a top-up happens as soon as
       // possible during the validator setup and other txs do not get throttled for want of traffic.
       .addConfigTransform((_, config) => ConfigTransforms.reducePollingInterval(config))

@@ -1,7 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.admin.api.client.data.{NodeStatus, WaitingForId}
-import com.digitalasset.canton.config.{DbConfig, FullClientConfig}
+import com.digitalasset.canton.config.DbConfig
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.RequireTypes.{Port, PositiveInt}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -143,7 +143,12 @@ class SvReonboardingIntegrationTest
                     adminApi = referenceValidatorConfig.adminApi
                       .copy(internalPort = Some(Port.tryCreate(27503))),
                     participantClient = ParticipantClientConfig(
-                      FullClientConfig(port = Port.tryCreate(27502)),
+                      referenceValidatorConfig.participantClient.adminApi.copy(
+                        clientConfig =
+                          referenceValidatorConfig.participantClient.adminApi.clientConfig.copy(
+                            port = Port.tryCreate(27502)
+                          )
+                      ),
                       referenceValidatorConfig.participantClient.ledgerApi.copy(
                         clientConfig =
                           referenceValidatorConfig.participantClient.ledgerApi.clientConfig.copy(
@@ -230,6 +235,8 @@ class SvReonboardingIntegrationTest
         (None, None, None, Some(sv4Backend)),
         logSuffix = "sv4-reonboarding",
         svs123 = false,
+        // required for dumping sv4's participant identities
+        enableKeyDownload = true,
       )() {
         startAllSync(
           (sv1Nodes ++ sv2Nodes ++ sv3Nodes ++ sv4Nodes)*
@@ -516,6 +523,8 @@ class SvReonboardingIntegrationTest
             new SRARC_GrantFeaturedAppRight(
               new DsoRules_GrantFeaturedAppRight(
                 sv4PartyNew.toProtoPrimitive,
+                java.util.Optional.empty(),
+                java.util.Optional.empty(),
                 java.util.Optional.empty(),
               )
             )

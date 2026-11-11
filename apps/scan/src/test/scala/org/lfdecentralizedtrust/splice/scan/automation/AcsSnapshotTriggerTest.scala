@@ -2,14 +2,13 @@ package org.lfdecentralizedtrust.splice.scan.automation
 
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
   IncrementalAcsSnapshot,
+  LegacyAcsSnapshot,
 }
 import org.lfdecentralizedtrust.splice.util.DomainRecordTimeRange
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotBackfillingTrigger.RetrieveTaskForBackfillingMigrationResult
-import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerBase
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -29,7 +28,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime = returnForMigrationSync(migration4 -> None),
           getIncrementalSnapshot = () => Future.successful(None),
           getLatestSnapshot = returnForMigration(migration4 -> Some(previousSnapshot)),
@@ -50,7 +49,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime = returnForMigrationSync(migration4 -> None),
           getIncrementalSnapshot = () => Future.successful(None),
           getLatestSnapshot = returnForMigration(migration4 -> None),
@@ -68,7 +67,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime = returnForMigrationSync(migration4 -> None),
           getIncrementalSnapshot = () => Future.successful(None),
           getLatestSnapshot = returnForMigration(migration4 -> None),
@@ -86,11 +85,11 @@ class AcsSnapshotTriggerTest
         )
     }
 
-    "don't do anything if history is still backfilling" in {
+    "don't do anything while snapshots may not start" in {
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> false),
+          mayStart = returnForMigration(migration4 -> false),
           getLastIngestedRecordTime = returnForMigrationSync(migration4 -> None),
           getIncrementalSnapshot = unused0,
           getLatestSnapshot = unused1,
@@ -116,7 +115,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime = returnForMigrationSync(migration4 -> None),
           getIncrementalSnapshot = () => Future.successful(Some(incrementalSnapshot)),
           getLatestSnapshot = unused1,
@@ -148,7 +147,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime =
             returnForMigrationSync(migration4 -> Some(lastIngestedRecordTime)),
           getIncrementalSnapshot = () => Future.successful(Some(incrementalSnapshot)),
@@ -181,7 +180,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime =
             returnForMigrationSync(migration4 -> Some(lastIngestedRecordTime)),
           getIncrementalSnapshot = () => Future.successful(Some(incrementalSnapshot)),
@@ -216,7 +215,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime =
             returnForMigrationSync(migration4 -> Some(lastIngestedRecordTime)),
           getIncrementalSnapshot = () => Future.successful(Some(incrementalSnapshot)),
@@ -244,7 +243,7 @@ class AcsSnapshotTriggerTest
       AcsSnapshotTrigger
         .retrieveTaskForCurrentMigration(
           migrationId = migration4,
-          isHistoryBackfilled = returnForMigration(migration4 -> true),
+          mayStart = returnForMigration(migration4 -> true),
           getLastIngestedRecordTime =
             returnForMigrationSync(migration4 -> Some(lastIngestedRecordTime)),
           getIncrementalSnapshot = () => Future.successful(Some(incrementalSnapshot)),
@@ -694,7 +693,7 @@ class AcsSnapshotTriggerTest
   private def storageConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
     bulkAcsSnapshotPeriodHours = 1, // ignored in this test
-    bulkDbReadChunkSize = 1, // ignored in this test
+    bulkZstdBlockSize = 0L, // ignored in this test
     bulkZstdFrameSize = 0L, // ignored in this test
     bulkMaxFileSize = 0L, // ignored in this test
     zstdCompressionLevel = 0, // ignored in this test
@@ -730,7 +729,7 @@ class AcsSnapshotTriggerTest
   private def historyId = 1L
 
   private def snapshotAt(migrationId: Long, time: CantonTimestamp) =
-    AcsSnapshot(time, migrationId, historyId, 0, 100, None, None)
+    LegacyAcsSnapshot(time, migrationId, historyId, 0, 100, None, None, true)
 
   private def cantonTimestamp(isoStr: String) =
     CantonTimestamp.assertFromInstant(java.time.Instant.parse(isoStr))

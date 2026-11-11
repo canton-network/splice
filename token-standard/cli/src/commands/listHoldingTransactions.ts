@@ -32,7 +32,7 @@ export async function listHoldingTransactions(
       Number(opts.afterOffset) ||
       (await ledgerClient.getV2StateLatestPrunedOffsets())
         .participantPrunedUpToInclusive!;
-    const updates = await ledgerClient.postV2UpdatesFlats({
+    const updates = await ledgerClient.postV2Updates({
       updateFormat: {
         includeTransactions: {
           eventFormat: {
@@ -47,7 +47,6 @@ export async function listHoldingTransactions(
         },
       },
       beginExclusive: afterOffset,
-      verbose: false,
     });
     if (opts.debugPath) {
       fs.writeFileSync(opts.debugPath, JSON.stringify(updates, null, 2));

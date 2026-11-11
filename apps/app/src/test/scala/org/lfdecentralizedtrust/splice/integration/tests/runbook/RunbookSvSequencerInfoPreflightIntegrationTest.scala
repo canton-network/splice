@@ -9,7 +9,9 @@ import scala.jdk.OptionConverters.*
 
 /** Preflight test that makes sure that the sequencer url is published to dsoRules
   */
-class RunbookSvSequencerInfoPreflightIntegrationTest extends IntegrationTest {
+class RunbookSvSequencerInfoPreflightIntegrationTest
+    extends IntegrationTest
+    with PreflightIntegrationTestUtil {
 
   override lazy val resetRequiredTopologyState: Boolean = false
   override protected def runTokenStandardCliSanityCheck: Boolean = false
@@ -20,16 +22,15 @@ class RunbookSvSequencerInfoPreflightIntegrationTest extends IntegrationTest {
     )
 
   "The SV sequencer public url has been published to DsoRules" in { implicit env =>
-    val sv = sv_client("sv")
     val dsoInfo = eventuallySucceeds() {
-      sv.getDsoInfo()
+      scancl("svScan").getDsoInfo()
     }
     val nodeState: SvNodeState = dsoInfo.svNodeStates.get(dsoInfo.svParty).value.payload
     val domainConfig = nodeState.state.synchronizerNodes.asScala.values.headOption.value
-    val sequencerUrl = domainConfig.physicalSynchronizers.toScala
-      .flatMap(_.asScala.get(migrationId).flatMap(_.sequencer.toScala.map(_.url)))
-      .orElse(domainConfig.sequencer.toScala.filter(_.migrationId == migrationId).map(_.url))
-      .value
-    sequencerUrl shouldBe s"https://sequencer-$migrationId.sv.${sys.env("NETWORK_APPS_ADDRESS")}"
+    val sequencerUrls = domainConfig.physicalSynchronizers.toScala.toList
+      .flatMap(_.asScala.values.flatMap(_.sequencer.toScala.map(_.url)))
+    sequencerUrls should contain(
+      s"https://sequencer-$migrationId.sv.${sys.env("NETWORK_APPS_ADDRESS")}"
+    )
   }
 }

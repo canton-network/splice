@@ -5,26 +5,38 @@ import {
   activeVersion,
   Auth0Config,
   auth0UserNameEnvVarSource,
+  BucketConfig,
   ChartValues,
-  DomainMigrationIndex,
+  checkKeyDownloadForPeriodicBackups,
   ExactNamespace,
   getAdditionalJvmOptions,
   getParticipantKmsHelmResources,
   installSpliceHelmChart,
   loadYamlFromFile,
-  sanitizedForPostgres,
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
   spliceConfig,
   getLedgerApiAudience,
+  DecentralizedSynchronizerUpgradeConfig,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorNodeConfig } from '@canton-network/splice-pulumi-common-validator';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
 import { Output } from '@pulumi/pulumi';
 
+export function checkValidatorKeyDownloadForPeriodicBackups(
+  nodeName: string,
+  validatorConfig: ValidatorNodeConfig,
+  periodicBackupConfig?: BucketConfig
+): void {
+  checkKeyDownloadForPeriodicBackups(nodeName, {
+    usesKms: validatorConfig.kms !== undefined,
+    enableKeyDownload: validatorConfig.participant.enableKeyDownload,
+    periodicBackups: periodicBackupConfig !== undefined,
+  });
+}
+
 export async function installParticipant(
   validatorConfig: ValidatorNodeConfig,
-  migrationId: DomainMigrationIndex,
   xns: ExactNamespace,
   auth0Config: Auth0Config,
   disableAuth?: boolean,
@@ -45,6 +57,7 @@ export async function installParticipant(
       `participant-pg`,
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const participantValues: ChartValues = {
@@ -55,13 +68,14 @@ export async function installParticipant(
       }
     ),
     ...loadYamlFromFile(
-      `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/standalone-participant-values.yaml`,
-      { MIGRATION_ID: migrationId.toString() }
+      `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/standalone-participant-values.yaml`
     ),
     ...kmsValues,
     metrics: {
       enable: true,
     },
+    enableKeyDownload: validatorConfig.participant.enableKeyDownload,
+    enableRepairCommands: validatorConfig.participant.enableRepairCommands,
   };
 
   const participantValuesWithSpecifiedAud: ChartValues = {
@@ -72,8 +86,8 @@ export async function installParticipant(
     },
   };
 
-  const name = `participant-${migrationId}`;
-  const pgName = sanitizedForPostgres(name);
+  const name = 'participant';
+  const pgName = `participant_${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`;
   const release = installSpliceHelmChart(
     xns,
     name,
@@ -112,6 +126,12 @@ export async function installParticipant(
       dependsOn: (customOptions?.dependsOn || [])
         .concat([participantPostgres])
         .concat(kmsDependencies),
+      deleteBeforeReplace: true,
+      aliases: [
+        {
+          name: `${xns.logicalName}-participant-${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`,
+        },
+      ],
     }
   );
   return {

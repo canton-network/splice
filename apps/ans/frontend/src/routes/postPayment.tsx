@@ -71,10 +71,7 @@ const AnsLoading: React.FC<AnsProps> = ({ fullEntryName }) => {
   return (
     <Stack
       spacing={20}
-      alignItems="center"
-      textAlign="center"
-      justifyContent="center"
-      marginTop={10}
+      sx={{ alignItems: 'center', textAlign: 'center', justifyContent: 'center', marginTop: 10 }}
     >
       <Stack spacing={3}>
         <Loading />
@@ -92,11 +89,8 @@ const AnsFailed: React.FC<{ errorMessage: string; errorDetails?: string }> = ({
 }) => {
   return (
     <Stack
-      alignItems="center"
-      textAlign="center"
-      justifyContent="center"
-      marginTop={10}
       spacing={3}
+      sx={{ alignItems: 'center', textAlign: 'center', justifyContent: 'center', marginTop: 10 }}
     >
       <CloseRounded color="error" style={statusIconStyle} />
       <Typography variant="h5">Payment Failed</Typography>
@@ -118,12 +112,12 @@ const AnsReady: React.FC<AnsProps> = ({ fullEntryName }) => {
   return (
     <Stack
       spacing={20}
-      alignItems="center"
-      textAlign="center"
-      justifyContent="center"
-      marginTop={10}
+      sx={{ alignItems: 'center', textAlign: 'center', justifyContent: 'center', marginTop: 10 }}
     >
-      <Stack spacing={3} alignItems="center" textAlign="center" justifyContent="center">
+      <Stack
+        spacing={3}
+        sx={{ alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}
+      >
         <DoneRounded color="success" style={statusIconStyle} />
         <Typography variant="h5">Thank you for confirming your subscription.</Typography>
         <Typography variant="h5">
@@ -143,10 +137,10 @@ const UnverifiedInfo: React.FC<AnsProps> = ({ fullEntryName }) => {
   if (isUnverified) {
     return (
       <Stack>
-        <Typography variant="body1" color="colors.neutral.80">
+        <Typography variant="body1" sx={{ color: 'colors.neutral.80' }}>
           Why <i>unverified</i>.{nsn}?
         </Typography>
-        <Typography variant="body1" color="colors.neutral.80">
+        <Typography variant="body1" sx={{ color: 'colors.neutral.80' }}>
           There is no verification of a user’s identity for
           {nsn.toUpperCase()} entry names at this point so entries are required to include
           ".unverified" in the name to allow for the later addition of verified entries.

@@ -1,12 +1,14 @@
 package org.lfdecentralizedtrust.splice.performance.tests
 
+import com.digitalasset.canton.tracing.TraceContext
+
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.NoReportingTracerProvider
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
@@ -20,11 +22,12 @@ import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
 import java.nio.file.Path
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 class ScanStoreIngestionPerformanceTest(
     dsoParty: PartyId,
     migrationId: Long,
+    synchronizerId: SynchronizerId,
     updateHistoryDumpPath: Path,
     storageConfig: StorageConfig,
     timeouts: ProcessingTimeout,
@@ -44,7 +47,7 @@ class ScanStoreIngestionPerformanceTest(
   override protected val tablesToSanityCheck: Seq[String] =
     Seq(ScanTables.acsTableName, ScanTables.txLogTableName)
 
-  override protected def mkStore(storage: DbStorage): MultiDomainAcsStore = {
+  override protected def mkStore(storage: DbStorage): Future[MultiDomainAcsStore] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
         DarResources.amulet.all ++
@@ -53,19 +56,22 @@ class ScanStoreIngestionPerformanceTest(
       )
     implicit val templateJsonDecoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(packageSignatures, loggerFactory)
-    new DbScanStore(
-      ScanStore.Key(dsoParty),
-      storage,
-      loggerFactory,
-      RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
-        NoReportingTracerProvider.tracer
-      ),
-      migrationId,
-      participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
-      IngestionConfig(),
-      new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
-      defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-    )(ec, templateJsonDecoder, closeContext).multiDomainAcsStore
+    DbScanStore
+      .create(
+        ScanStore.Key(dsoParty),
+        storage,
+        loggerFactory,
+        RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)(
+          NoReportingTracerProvider.tracer
+        ),
+        migrationId,
+        synchronizerId,
+        participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
+        IngestionConfig(),
+        new DbScanStoreMetrics(NoOpMetricsFactory, loggerFactory, timeouts),
+        defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+      )(ec, templateJsonDecoder, closeContext, TraceContext.empty)
+      .map(_.multiDomainAcsStore)
   }
 
 }
@@ -75,6 +81,7 @@ object ScanStoreIngestionPerformanceTest {
   case class ScanStoreIngestionPerformanceTestConfig(
       dsoParty: String,
       migrationId: Long,
+      synchronizerId: String,
   )
   private implicit val configReader: ConfigReader[ScanStoreIngestionPerformanceTestConfig] =
     deriveReader[ScanStoreIngestionPerformanceTestConfig]
@@ -101,6 +108,7 @@ object ScanStoreIngestionPerformanceTest {
           new ScanStoreIngestionPerformanceTest(
             PartyId.tryFromProtoPrimitive(cfg.dsoParty),
             cfg.migrationId,
+            SynchronizerId.tryFromString(cfg.synchronizerId),
             updateHistoryDumpPath,
             sv1Config.storage,
             spliceConfig.parameters.timeouts.processing,

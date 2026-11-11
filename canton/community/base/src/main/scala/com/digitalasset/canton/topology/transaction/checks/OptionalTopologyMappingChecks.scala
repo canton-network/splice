@@ -6,6 +6,7 @@ package com.digitalasset.canton.topology.transaction.checks
 import cats.data.EitherT
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.topology.processing.EffectiveTime
@@ -19,6 +20,7 @@ import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.Ge
 import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.topology.transaction.{
   MediatorSynchronizerState,
+  PartyToParticipant,
   SequencerSynchronizerState,
   SignedTopologyTransaction,
   TopologyChangeOp,
@@ -100,6 +102,24 @@ class OptionalTopologyMappingChecks(
               effective,
               _,
               inStore.flatMap(_.select[TopologyChangeOp.Replace, SequencerSynchronizerState]),
+            )
+          )
+      // Also rejects Active -> Onboarding between `v30` transactions, which the synchronizer
+      // accepts for backward compatibility (see RequiredTopologyMappingChecks), to phase it out.
+      case (Code.PartyToParticipant, None | Some(Code.PartyToParticipant)) =>
+        toValidate
+          .select[TopologyChangeOp.Replace, PartyToParticipant]
+          .map(ptp =>
+            EitherT.fromEither[FutureUnlessShutdown](
+              TopologyMappingChecks.rejectHostingStateMoves(
+                ptp.mapping.partyId,
+                TopologyMappingChecks.backwardHostingStateMoves(
+                  ptp.mapping,
+                  inStore
+                    .flatMap(_.select[TopologyChangeOp.Replace, PartyToParticipant])
+                    .map(_.mapping),
+                ),
+              )
             )
           )
       case _otherwise => None

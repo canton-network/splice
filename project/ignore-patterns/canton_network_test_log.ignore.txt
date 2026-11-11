@@ -61,9 +61,6 @@ Trying to re-register template.*
 # TODO(#975): investigate and remove once fixed
 failed with UNKNOWN/channel closed.*SvAppLedgerApiConnectivityIntegrationTest
 
-# This might be logged between the test finishing and shutdown of the nodes (see #8991)
-Noticed an DsoRules epoch change.*DecentralizedSynchronizerMigrationIntegrationTest
-
 # TODO (#825): this only applies to simtime.
 # In simtime tests where the rounds are advanced too quickly, this trigger might not have enough time to receive the coupon.
 # Nevertheless, it is still useful to have the warning in production environments, where this should never happen.
@@ -91,6 +88,7 @@ ForkJoinIdlenessExecutorService.*shutdown did not complete gracefully in allotte
 
 Consensus not reached.*BftScanConnection:BftScanConnectionTest.*
 Consensus not reached.*BftScanConnection:ConfigurationProvidedBftScanConnectionIntegrationTest.*
+All scans have responded with 'never'.*BftCallExecutorTest:BftCallExecutorTest.*
 
 # internal selenium error. Potentially intermittent
 Exception managing firefox: error sending request for url .* http2 error: stream error received: refused stream before processing any application
@@ -104,12 +102,9 @@ Splice unsafe shutdown future
 # Scan UI calls round-based endpoints that emit this error, even if we're only interested in the transaction log
 .*No data has been made available yet.*
 
-# SV UI polls cometbft status endpoint even when there's no cometBFT (we have this in the full network docker compose test)
-.*CometBFT is not configured for this app.*
 
-# Expected during SV onboarding as we start scan and the sv app concurrently
-# TODO(#893) maybe remove this again
-Failed to read bft sequencers list from scan
+# The portfolio UI warns about the plain-HTTP validator URL used by the docker compose deployment
+Using a non-TLS validator endpoint\. This is acceptable only in trusted environments
 
 Failed to connect to scan of Digital-Asset-Eng-3.*AppUpgradeIntegrationTest
 
@@ -133,17 +128,17 @@ Circuit breaker .* tripped after .* failures.*(Command|Splice)CircuitBreakerTest
 # This is more likely in test code where we run multiple apps against the same database, all trying to create the same index.
 Index .* should be created and is invalid, dropping it
 
-# TODO(#4738) - remove this
-processTaskWithRetry failed with an unknown exception, not retrying.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
-Skipping processing of.*due to unexpected failure.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
-
 # Injected errors in s3Mock
 Simulated S3 error
 
 # Shutdown issues
 Previous channel ManagedChannelImpl.* was garbage collected without being shut down!
+# This is logged by pekko's RestartSource. Ideally we'd prevent it from logging that when shutting down,
+# but it doesn't offer a clean way of doing that. Lowering log level also doesn't seem sensible,
+# as we don't want to miss non-shutdown warnings in production.
+Restarting stream due to failure.*Channel shutdown(Now)? invoked
 # TODO(#564) - check what's happening here during shutdown
-Timeout 10 seconds expired, but readers are still active. Shutting down forcibly.*LsuIntegrationTest
+Timeout 10 seconds expired, but readers are still active. Shutting down forcibly
 
 # Warnings in s3Mock log (which we redirect to our logs), that we don't care about
 \[s3Mock\].*Ignoring option --illegal-access=warn
@@ -154,11 +149,12 @@ Not publishing sequencer successor as we are past upgrade time.*LsuNodeInitializ
 Skipping processing of.*TOPOLOGY_INVALID_SYNCHRONIZER.*ReconcileSequencingParametersTrigger:LsuIntegrationTest
 The operation 'update sequencing parameters' failed with a non-retryable error.*TOPOLOGY_INVALID_SYNCHRONIZER.*ParticipantAdminConnection:LsuIntegrationTest
 The operation 'processTaskWithRetry' failed with a non-retryable error.*TOPOLOGY_INVALID_SYNCHRONIZER.*ReconcileSequencingParametersTrigger:LsuIntegrationTest
+# Scans probe the configured successor BFT sequencers before the test starts them
+Failed to get status of BFT sequencer with p2p url.*(RollForwardLsu.*|Lsu)IntegrationTest
 
 # Roll forward tests
 Failed to connect to scan of FAILED Seed URL.*RollForwardLsu.*IntegrationTest
 Found roll forward config.*but available sequencers.*is less than the trust threshold in the configuration.*RollForwardLsuIntegrationTest
-Failed to get status of BFT sequencer with p2p url*RollForwardLsu.*IntegrationTest
 
 # slow future supervision, ignore logs as we want them just for debugging
 Supervised futures for the following trace IDs have not completed
@@ -176,3 +172,14 @@ api/sv/v0/onboard/validator \(POST\) resulted in a timeout
 # The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
 # a single pattern matching the message (the unloadable sbt tests jar) covers both.
 Skipping unloadable jar file: file:.*-tests\.jar
+
+Connection for .* with psid .* is no longer active \(status: .*\), skipping update of the connection config
+
+# Onboarding multiple users in tests may lead to repeated STALE_STREAM_AUTHORIZATION and
+# ingestion restarts. This can result in long delays in signalWhenIngested.
+# See https://github.com/DACH-NY/cn-test-failures/issues/10095.
+signalWhenIngested.* has not completed after .* milliseconds
+
+# The BFT bootstrap test adds a dummy 5th SV with an unreachable scan URL (http://localhost:1)
+# to raise f from 0 to 1. All BFT peers attempt to connect to this URL and log warnings.
+Failed to connect to scan of.*NonZeroRoundBootstrapBftTimeBasedIntegrationTest

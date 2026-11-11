@@ -8,7 +8,7 @@ import cats.kernel.Semigroup
 import cats.syntax.functorFilter.*
 import cats.syntax.parallel.*
 import cats.syntax.traverse.*
-import com.digitalasset.canton.config.{ProcessingTimeout, TopologyConfig}
+import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.connection.GrpcApiInfoService
 import com.digitalasset.canton.connection.v30.ApiInfoServiceGrpc
 import com.digitalasset.canton.crypto.{SigningKeyUsage, SynchronizerCryptoClient}
@@ -16,6 +16,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.health.HealthListener
 import com.digitalasset.canton.health.admin.data.TopologyQueueStatus
 import com.digitalasset.canton.lifecycle.*
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
@@ -40,12 +41,13 @@ import com.digitalasset.canton.synchronizer.sequencer.admin.data.{
   SequencerAdminStatus,
   SequencerHealthStatus,
 }
-import com.digitalasset.canton.synchronizer.sequencer.config.SequencerNodeParameters
+import com.digitalasset.canton.synchronizer.sequencer.config.{
+  SequencerLimits,
+  SequencerNodeParameters,
+}
 import com.digitalasset.canton.synchronizer.sequencer.time.{
   BroadcastTimeTrackerImpl,
   LsuSequencingBounds,
-  TimeAdvancingTopologySubscriberV1,
-  TimeAdvancingTopologySubscriberV2,
 }
 import com.digitalasset.canton.synchronizer.sequencing.authentication.grpc.SequencerConnectServerInterceptor
 import com.digitalasset.canton.synchronizer.sequencing.service.*
@@ -72,7 +74,6 @@ import com.digitalasset.canton.topology.transaction.{
 }
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.{ErrorUtil, FutureUtil}
-import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{SequencerCounter, config}
 import com.google.common.annotations.VisibleForTesting
 import io.grpc.{ServerInterceptors, ServerServiceDefinition}
@@ -110,6 +111,7 @@ class SequencerRuntime(
     @VisibleForTesting val client: SequencerClient,
     staticSynchronizerParameters: StaticSynchronizerParameters,
     localNodeParameters: SequencerNodeParameters,
+    sequencerLimits: SequencerLimits,
     lsuSequencingBounds: Option[LsuSequencingBounds],
     val timeTracker: SynchronizerTimeTracker,
     val metrics: SequencerMetrics,
@@ -121,9 +123,7 @@ class SequencerRuntime(
     topologyClient: SynchronizerTopologyClientWithInit,
     topologyProcessor: TopologyTransactionProcessor,
     topologyManagerStatusO: Option[TopologyManagerStatus],
-    topologyConfig: TopologyConfig,
-    producePostOrderingTopologyTicks: Boolean,
-    storage: Storage,
+    @VisibleForTesting val storage: Storage,
     clock: Clock,
     staticMembersToRegister: Seq[Member],
     authenticationServices: AuthenticationServices,
@@ -292,6 +292,7 @@ class SequencerRuntime(
             syncCrypto,
             clock,
             lsuSequencingBounds,
+            sequencerLimits,
             sanitizePublicErrorMessages = localNodeParameters.sanitizePublicErrorMessages,
             disableReleaseVersionHandshakeCheck =
               localNodeParameters.disableReleaseVersionHandshakeCheck,
@@ -395,36 +396,6 @@ class SequencerRuntime(
 
   private val broadcastTimeTracker = new BroadcastTimeTrackerImpl(loggerFactory)
 
-  private val timeAdvancingTopologySubscriber
-      : TopologyTransactionProcessingSubscriber & AutoCloseable =
-    if (topologyConfig.useTimeProofsToObserveEffectiveTime)
-      new TimeAdvancingTopologySubscriberV1(
-        clock,
-        client,
-        topologyClient,
-        psid,
-        sequencerId,
-        loggerFactory,
-      )
-    else
-      new TimeAdvancingTopologySubscriberV2(
-        clock,
-        client,
-        topologyClient,
-        psid,
-        sequencerId,
-        broadcastTimeTracker,
-        localNodeParameters.timeAdvancingTopology,
-        timeouts,
-        loggerFactory,
-      )
-  if (
-    !producePostOrderingTopologyTicks || staticSynchronizerParameters.protocolVersion <= ProtocolVersion.v34
-  ) {
-    logger.info("Subscribing to topology transactions for time-advancing broadcast")
-    topologyProcessor.subscribe(timeAdvancingTopologySubscriber)
-  }
-
   private val topologyHandler = topologyProcessor.createHandler(psid)
   private val trafficProcessor =
     new TrafficControlProcessor(
@@ -473,7 +444,11 @@ class SequencerRuntime(
           client.subscribeTracking(
             topologyManagerSequencerCounterTrackerStore,
             DiscardIgnoredEvents(loggerFactory) {
-              EnvelopeOpener(staticSynchronizerParameters.protocolVersion, syncCrypto.pureCrypto)(
+              EnvelopeOpener(
+                staticSynchronizerParameters.protocolVersion,
+                syncCrypto.pureCrypto,
+                topologyClient,
+              )(
                 eventHandler
               )
             },
@@ -508,7 +483,6 @@ class SequencerRuntime(
 
   override def onClosed(): Unit =
     LifeCycle.close(
-      timeAdvancingTopologySubscriber,
       LifeCycle.toCloseableOption(sequencer.rateLimitManager),
       timeTracker,
       syncCrypto,

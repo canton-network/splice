@@ -1,0 +1,8 @@
+globalLimits:
+  maxTokens: 200000
+  tokensPerFill: 200000
+  fillInterval: 60s
+globalPerIpLimits:
+  maxTokens: 10000
+  tokensPerFill: 10000
+  fillInterval: 60s

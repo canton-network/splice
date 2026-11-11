@@ -16,7 +16,8 @@ from com.digitalasset.canton.topology.admin.v30 import (
     topology_manager_read_service_pb2,
     common_pb2,
 )
-from com.digitalasset.canton.protocol.v30 import topology_pb2
+from com.digitalasset.canton.protocol.v30 import topology_pb2 as topology_v30_pb2
+from com.digitalasset.canton.protocol.v31 import topology_pb2 as topology_v31_pb2
 from com.digitalasset.canton.version.v1 import untyped_versioned_message_pb2
 from com.digitalasset.canton.crypto.v30 import crypto_pb2
 from google.rpc import status_pb2, error_details_pb2
@@ -27,6 +28,50 @@ import grpc
 
 
 # [Imports end]
+
+# Protocol version for which the helpers and examples build topology transactions by default. Its
+# proto version 30 is what they built in earlier releases, and synchronizers on protocol versions 36
+# and 37 accept it.
+DEFAULT_PROTOCOL_VERSION = "36"
+
+# Explains which protocol version to pass, for the help and the errors of the examples
+PROTOCOL_VERSION_HELP = (
+    "Protocol version of the synchronizer that the topology transactions are for: 36 (default) or 37. "
+    "36 builds v30 topology transactions, as earlier releases did. Synchronizers on protocol versions 36 "
+    "and 37 accept them; those on 37 do so only to ease the transition. 37 builds v31 topology "
+    "transactions, the version added for protocol version 37, which synchronizers on protocol version 36 "
+    "reject. Switch to 37 once your synchronizer runs protocol version 37. Higher values also build v31 "
+    "topology transactions. For a later protocol version, use the scripts released with it, as it may add "
+    "another topology version. In the Canton console, <participant>.synchronizers.list_connected() shows "
+    "the protocol version at the end of the physical synchronizer ID, e.g. 37 in '...::37-0'."
+)
+
+
+def get_topology_module(protocol_version: str):
+    """Returns the correct protobuf module based on the protocol version."""
+    if get_topology_version_number(protocol_version) == 31:
+        return topology_v31_pb2
+    return topology_v30_pb2
+
+
+def get_topology_version_number(protocol_version: str) -> int:
+    """Returns the protobuf version number for UntypedVersionedMessage."""
+    pv = str(protocol_version)
+    if pv == "36":
+        return 30
+    if pv == "dev" or (pv.isdigit() and int(pv) >= 37):
+        return 31
+    raise ValueError(f"Unsupported protocol version '{protocol_version}'. {PROTOCOL_VERSION_HELP}")
+
+
+def check_protocol_version_argument(parser, protocol_version):
+    """Exits with an explanation if the --protocol-version argument is unsupported."""
+    try:
+        get_topology_version_number(protocol_version)
+    except ValueError as e:
+        parser.error(str(e))
+
+
 def handle_grpc_error(func):
     """
     Decorator to handle gRPC errors and print detailed error information.
@@ -160,7 +205,7 @@ def sign_hash(
 
 
 def build_add_transaction_request(
-    signed_transactions: [topology_pb2.SignedTopologyTransaction],
+    signed_transactions,
     synchronizer_id: str,
 ):
     """
@@ -221,9 +266,10 @@ def build_signed_transaction(
         signatures (list[crypto_pb2.Signature]): List of cryptographic signatures.
 
     Returns:
-        topology_pb2.SignedTopologyTransaction: The signed transaction.
+        topology_v30_pb2.SignedTopologyTransaction: The signed transaction.
+        (Note: SignedTopologyTransaction is always v30, even if the payload inside is v31)
     """
-    return topology_pb2.SignedTopologyTransaction(
+    return topology_v30_pb2.SignedTopologyTransaction(
         transaction=serialized_versioned_transaction,
         signatures=signatures,
     )
@@ -234,6 +280,8 @@ def build_namespace_mapping(
     public_key_bytes: bytes,
     key_format: crypto_pb2.CryptoKeyFormat,
     key_scheme: crypto_pb2.SigningKeyScheme,
+    *,
+    protocol_version: str = DEFAULT_PROTOCOL_VERSION,
 ):
     """
     Constructs a topology mapping for namespace delegation.
@@ -243,12 +291,15 @@ def build_namespace_mapping(
         public_key_bytes (bytes): The raw bytes of the public key.
         key_format (crypto_pb2.CryptoKeyFormat): The format of the public key.
         key_scheme (crypto_pb2.SigningKeyScheme): The signing scheme of the key.
+        protocol_version (str): The protocol version of the synchronizer that the transaction is for, "36" or "37". Defaults to "36".
 
     Returns:
         topology_pb2.TopologyMapping: A topology mapping for namespace delegation.
     """
+    topology_pb2 = get_topology_module(protocol_version)
     return topology_pb2.TopologyMapping(
-        namespace_delegation=topology_pb2.NamespaceDelegation(
+        # NamespaceDelegation is always defined in v30 and reused across later protocol versions
+        namespace_delegation=topology_v30_pb2.NamespaceDelegation(
             namespace=public_key_fingerprint,
             target_key=crypto_pb2.SigningPublicKey(
                 # Must match the format to which the key was exported
@@ -267,8 +318,10 @@ def build_namespace_mapping(
 
 
 def build_topology_transaction(
-    mapping: topology_pb2.TopologyMapping,
+    mapping,
     serial: int = 1,
+    *,
+    protocol_version: str = DEFAULT_PROTOCOL_VERSION,
 ):
     """
     Builds a topology transaction.
@@ -276,52 +329,65 @@ def build_topology_transaction(
     Args:
         mapping (topology_pb2.TopologyMapping): The topology mapping to include in the transaction.
         serial (int): The serial of the topology transaction. Defaults to 1.
+        protocol_version (str): The protocol version of the synchronizer that the transaction is for, "36" or "37". Defaults to "36".
 
     Returns:
         topology_pb2.TopologyTransaction: The topology transaction object.
     """
+    topology_pb2 = get_topology_module(protocol_version)
     return topology_pb2.TopologyTransaction(
         mapping=mapping,
-        operation=topology_pb2.Enums.TopologyChangeOp.TOPOLOGY_CHANGE_OP_ADD_REPLACE,
+        # TopologyChangeOp enums are defined in v30 and reused
+        operation=topology_v30_pb2.Enums.TopologyChangeOp.TOPOLOGY_CHANGE_OP_ADD_REPLACE,
         serial=serial,
     )
 
 
 def build_versioned_transaction(
     data: bytes,
+    *,
+    protocol_version: str = DEFAULT_PROTOCOL_VERSION,
 ):
     """
     Builds a versioned transaction wrapper for the given data.
 
     Args:
         data (bytes): Serialized transaction data.
+        protocol_version (str): The protocol version of the synchronizer that the transaction is for, "36" or "37". Defaults to "36".
 
     Returns:
         untyped_versioned_message_pb2.UntypedVersionedMessage: The versioned transaction object.
     """
+    version = get_topology_version_number(protocol_version)
     return untyped_versioned_message_pb2.UntypedVersionedMessage(
         data=data,
-        version=30,
+        version=version,
     )
 
 
 def serialize_topology_transaction(
-    mapping: topology_pb2.TopologyMapping,
+    mapping,
     serial: int = 1,
+    *,
+    protocol_version: str = DEFAULT_PROTOCOL_VERSION,
 ):
     """
-    Serializes a topology transaction.
+    Serializes a topology transaction correctly based on the protocol version.
 
     Args:
-        mapping (topology_pb2.TopologyMapping): The topology mapping to serialize.
+        mapping: The topology mapping to serialize.
         serial (int): The serial of the topology transaction. Defaults to 1.
+        protocol_version (str): The protocol version of the synchronizer that the transaction is for, "36" or "37". Defaults to "36".
 
     Returns:
         bytes: The serialized topology transaction.
     """
-    topology_transaction = build_topology_transaction(mapping, serial)
+    topology_transaction = build_topology_transaction(
+        mapping, serial=serial, protocol_version=protocol_version
+    )
     versioned_topology_transaction = build_versioned_transaction(
-        topology_transaction.SerializeToString()
+        topology_transaction.SerializeToString(),
+        protocol_version=protocol_version,
     )
     return versioned_topology_transaction.SerializeToString()
 
@@ -329,7 +395,7 @@ def serialize_topology_transaction(
 @handle_grpc_error
 def submit_signed_transactions(
     channel: Channel,
-    signed_transactions: [topology_pb2.SignedTopologyTransaction],
+    signed_transactions,
     synchronizer_id: str,
 ) -> (EllipticCurvePrivateKey, str):
     """

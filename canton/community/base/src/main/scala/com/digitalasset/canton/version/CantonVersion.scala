@@ -122,5 +122,23 @@ object ReleaseVersion {
     Encoder.encodeString.contramap[ReleaseVersion](_.fullVersion)
 
   def fromProtoPrimitive(proto: String, fieldName: String): ParsingResult[ReleaseVersion] =
-    create(proto).leftMap(ValueDeserializationError(fieldName, _))
+    create(proto).leftMap(ValueDeserializationError(_, fieldName))
+
+  // Useful for places where we need branching based on what a different node supports.
+  trait Feature {
+    def introduced: ReleaseVersion
+    def supported(versionO: Option[ReleaseVersion]): Boolean =
+      versionO.fold(false)(_ >= introduced)
+  }
+
+  object Feature {
+
+    /** The admin API carries `v31` topology mappings: topology proposals can contain them, and
+      * `ListPartyToParticipant` returns them to clients of this version. The lowest pre-release of
+      * 3.7.0, so that its snapshots count as well.
+      */
+    object topologyMappingProtoV31 extends Feature {
+      override def introduced: ReleaseVersion = ReleaseVersion(3, 7, 0, Some("0"))
+    }
+  }
 }

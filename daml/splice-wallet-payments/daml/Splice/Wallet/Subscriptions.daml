@@ -444,3 +444,9 @@ mkTransferOutput reason receiver amount =
     lock = None
     receiverFeeRatio = 0.0
     meta = Some (TSU.reasonToMeta reason emptyMetadata)
+
+-- Instances
+------------
+
+instance HasCheckedFetch SubscriptionIdleState ForDso where
+  contractGroupId SubscriptionIdleState{..} = ForDso with dso = subscriptionData.dso

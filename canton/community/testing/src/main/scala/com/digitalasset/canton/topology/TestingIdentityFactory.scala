@@ -5,7 +5,6 @@ package com.digitalasset.canton.topology
 
 import cats.syntax.either.*
 import cats.syntax.functor.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.BaseTest.{
   RichSynchronizerIdO,
   defaultStaticSynchronizerParameters,
@@ -27,6 +26,7 @@ import com.digitalasset.canton.metrics.CommonMockMetrics
 import com.digitalasset.canton.protocol.{
   DynamicSynchronizerParameters,
   StaticSynchronizerParameters,
+  SynchronizerLimits,
   SynchronizerParameters,
   TestSynchronizerParameters,
 }
@@ -47,15 +47,19 @@ import com.digitalasset.canton.topology.transaction.DelegationRestriction.{
   CanSignAllButNamespaceDelegations,
   CanSignAllMappings,
 }
+import com.digitalasset.canton.topology.transaction.HostingParticipant.HostingState
 import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp.Remove
 import com.digitalasset.canton.topology.transaction.TopologyTransaction.TxHash
 import com.digitalasset.canton.tracing.{NoTracing, TraceContext}
 import com.digitalasset.canton.util.ErrorUtil
 import com.digitalasset.canton.util.collection.MapsUtil
+import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{BaseTest, FutureHelpers, LfPackageId, LfPartyId}
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
+import org.slf4j.LoggerFactory
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration.*
@@ -110,7 +114,9 @@ import TestingTopology.*
   *   Set of synchronizers for which the topology is valid
   * @param topology
   *   Static association of parties to participants in the most complete way it can be defined in
-  *   this testing class.
+  *   this testing class. The threshold is the mapping's threshold. On protocol versions with
+  *   hosting states, snapshots return the effective confirmation threshold instead, which differs
+  *   from it while entries are not Active.
   * @param participants
   *   participants for which keys should be added. A participant mentioned in `topology` will be
   *   included automatically in the topology state, so such a participant does not need to be
@@ -118,6 +124,9 @@ import TestingTopology.*
   *   of `participants` have higher precedence.
   * @param keyPurposes
   *   The purposes of the keys that will be generated.
+  * @param hostingStates
+  *   Hosting state per (party, participant) entry of `topology`. Entries without a state are
+  *   Onboarding if their `ParticipantAttributes.onboarding` is set, Active otherwise.
   */
 final case class TestingTopology(
     synchronizers: Set[PhysicalSynchronizerId] = defaultSynchronizers,
@@ -126,15 +135,18 @@ final case class TestingTopology(
     sequencerGroup: SequencerGroup = defaultSequencerGroup,
     participants: Map[ParticipantId, ParticipantAttributes] = Map.empty,
     packages: Map[ParticipantId, Seq[VettedPackage]] = Map.empty,
-    featureFlags: Map[ParticipantId, Seq[ParticipantTopologyFeatureFlag]] = Map.empty,
+    featureFlags: Map[ParticipantId, Set[ParticipantTopologyFeatureFlag]] = Map.empty,
     keyPurposes: Set[KeyPurpose] = KeyPurpose.All,
     synchronizerParameters: List[
       SynchronizerParameters.WithValidity[DynamicSynchronizerParameters]
     ] = defaultSynchronizerParams,
     staticSynchronizerParameters: StaticSynchronizerParameters =
       defaultStaticSynchronizerParameters,
+    externalParties: Map[PartyId, (ParticipantId, SigningKeysWithThreshold)] = Map.empty,
     cryptoConfig: CryptoConfig = CryptoConfig(),
     freshKeys: AtomicBoolean = new AtomicBoolean(false),
+    // TODO(#36492): Check if this could be integrated in `PartyInfo` (`topology` field)
+    hostingStates: Map[LfPartyId, Map[ParticipantId, HostingState]] = Map.empty,
 ) {
   def mediators: Seq[MediatorId] = mediatorGroups.toSeq.flatMap(_.all)
 
@@ -202,11 +214,8 @@ final case class TestingTopology(
 
   def enableMultiSynchronizer(participants: ParticipantId*): TestingTopology =
     this.copy(featureFlags = participants.foldLeft(featureFlags) { (flags, participant) =>
-      val existing = flags.getOrElse(participant, Seq.empty)
-      flags.updated(
-        participant,
-        (ParticipantTopologyFeatureFlag.EnableMultiSynchronizer +: existing).distinct,
-      )
+      val existing = flags.getOrElse(participant, Set.empty)
+      flags.updated(participant, existing + ParticipantTopologyFeatureFlag.EnableMultiSynchronizer)
     })
 
   def allParticipants(): Set[ParticipantId] =
@@ -252,7 +261,7 @@ final case class TestingTopology(
       parties: Map[LfPartyId, (PositiveInt, Seq[(ParticipantId, ParticipantPermission)])]
   ): TestingTopology = {
     val tmp: Map[LfPartyId, PartyInfo] = parties.map { case (party, (threshold, participants)) =>
-      party -> PartyInfo(
+      party -> PartyInfo.forTesting(
         threshold,
         participants.map { case (pid, permission) =>
           pid -> ParticipantAttributes(permission, None)
@@ -262,8 +271,64 @@ final case class TestingTopology(
     this.copy(topology = tmp)
   }
 
+  /** Overwrites the `hostingStates` field. Validates the states against `topology`, so call it
+    * after the topology is set. Fails if a state is set for an entry missing from `topology`,
+    * conflicts with the entry's `onboarding` flag, or cannot be serialized on the tested protocol
+    * version.
+    */
+  def withHostingStates(
+      hostingStates: Map[LfPartyId, Map[ParticipantId, HostingState]]
+  ): Either[String, TestingTopology] = {
+    val entries = for {
+      (party, states) <- hostingStates.toSeq
+      (participant, state) <- states.toSeq
+    } yield HostingStateEntry(
+      party,
+      participant,
+      state,
+      topologyAttributes = topology.get(party).flatMap(_.participants.get(participant)),
+    )
+    val missing = entries.filter(_.topologyAttributes.isEmpty).map(_.describe)
+    val conflicting = entries
+      .filter(entry =>
+        entry.topologyAttributes.exists(_.onboarding) && entry.state != HostingState.Onboarding
+      )
+      .map(_.describe)
+    val v31Only = entries
+      .filter(entry =>
+        entry.state == HostingState.Nominated || entry.state == HostingState.Freezing
+      )
+      .map(_.describe)
+    for {
+      _ <- Either.cond(
+        missing.isEmpty,
+        (),
+        s"Hosting states set for entries missing from the topology: ${missing.mkString(", ")}",
+      )
+      _ <- Either.cond(
+        conflicting.isEmpty,
+        (),
+        s"Hosting states conflict with onboarding = true: ${conflicting.mkString(", ")}",
+      )
+      supported <- supportsAllHostingStates(BaseTest.testedProtocolVersion)
+      _ <- Either.cond(
+        v31Only.isEmpty || supported,
+        (),
+        s"Nominated and Freezing require PartyToParticipant v31, which protocol version " +
+          s"${BaseTest.testedProtocolVersion} does not use: ${v31Only.mkString(", ")}",
+      )
+    } yield this.copy(hostingStates = hostingStates)
+  }
+
   def withPackages(packages: Map[ParticipantId, Seq[LfPackageId]]): TestingTopology =
     this.copy(packages = packages.view.mapValues(VettedPackage.unbounded).toMap)
+
+  def withExternalParty(
+      partyId: PartyId,
+      participantId: ParticipantId,
+      signingKeys: SigningKeysWithThreshold,
+  ) =
+    this.copy(externalParties = externalParties + (partyId -> ((participantId, signingKeys))))
 
   def build(
       loggerFactory: NamedLoggerFactory = NamedLoggerFactory("test-area", "crypto")
@@ -297,14 +362,14 @@ object TestingTopology {
     DefaultTestIdentities.physicalSynchronizerId
   )
   private val defaultSequencerGroup: SequencerGroup = SequencerGroup(
-    active = Seq(DefaultTestIdentities.sequencerId),
+    active = NonEmpty(Seq, DefaultTestIdentities.sequencerId),
     passive = Seq.empty,
     threshold = PositiveInt.one,
   )
   private val defaultMediatorGroups: Set[MediatorGroup] = Set(
     MediatorGroup(
       NonNegativeInt.zero,
-      Seq(DefaultTestIdentities.mediatorId),
+      NonEmpty(Seq, DefaultTestIdentities.mediatorId),
       Seq(),
       PositiveInt.one,
     )
@@ -340,11 +405,25 @@ object TestingTopology {
       cryptoConfig = cryptoConfig,
     )
 
+  private final case class HostingStateEntry(
+      party: LfPartyId,
+      participant: ParticipantId,
+      state: HostingState,
+      topologyAttributes: Option[ParticipantAttributes],
+  ) {
+    def describe: String = s"$party@$participant -> $state"
+  }
+
+  /** Whether `protocolVersion` can serialize every hosting state (Nominated and Freezing need v31).
+    */
+  def supportsAllHostingStates(protocolVersion: ProtocolVersion): Either[String, Boolean] =
+    TopologyTransaction.protoVersionFor(protocolVersion).map(_.v >= 31)
+
   private def toPartyInfo(participants: Map[ParticipantId, ParticipantPermission]): PartyInfo = {
     val participantAttributes = participants.map { case (participantId, permission) =>
       participantId -> ParticipantAttributes(permission, None)
     }
-    PartyInfo(threshold = PositiveInt.one, participants = participantAttributes)
+    PartyInfo.forTesting(threshold = PositiveInt.one, participants = participantAttributes)
   }
 }
 
@@ -524,6 +603,10 @@ class TestingIdentityFactory(
 
         override def latestTopologyChangeTimestamp: CantonTimestamp =
           currentSnapshotApproximationTimestamp
+
+        override def getSynchronizerLimits: SynchronizerLimits =
+          SynchronizerLimits.default
+
       })(TraceContext.empty)
     )
     ips
@@ -539,6 +622,24 @@ class TestingIdentityFactory(
       timestampForSynchronizerParameters: CantonTimestamp = CantonTimestamp.Epoch,
       timestampOfSnapshot: CantonTimestamp = CantonTimestamp.Epoch,
   ): TopologySnapshotLoader = {
+    val store = topologyStore(synchronizerId, timestampForSynchronizerParameters)
+    new StoreBasedTopologySnapshot(
+      store.storeId.psid,
+      timestampOfSnapshot,
+      store,
+      packageDependencyResolver,
+      loggerFactory,
+    )
+  }
+
+  /** The synchronizer topology store behind
+    * [[com.digitalasset.canton.topology.TestingIdentityFactory.topologySnapshot]], with this
+    * topology effective from the epoch.
+    */
+  def topologyStore(
+      synchronizerId: SynchronizerId = DefaultTestIdentities.synchronizerId,
+      timestampForSynchronizerParameters: CantonTimestamp = CantonTimestamp.Epoch,
+  ): InMemoryTopologyStore[TopologyStoreId.SynchronizerStore] = {
 
     val store = new InMemoryTopologyStore(
       TopologyStoreId.SynchronizerStore(synchronizerId.toPhysical),
@@ -565,7 +666,7 @@ class TestingIdentityFactory(
       participantsTxs(defaultPermissionByParticipant, topology.packages, topology.featureFlags)
 
     val synchronizerMembers =
-      (topology.sequencerGroup.active ++ topology.sequencerGroup.passive ++ topology.mediators)
+      (topology.sequencerGroup.active.forgetNE ++ topology.sequencerGroup.passive ++ topology.mediators)
         .flatMap(m => genKeyCollection(m))
 
     val mediatorOnboarding = topology.mediatorGroups.map(group =>
@@ -598,6 +699,19 @@ class TestingIdentityFactory(
 
     val partyDataTx = partyToParticipantTxs()
 
+    val externalPartyOnboarding = topology.externalParties.toList.map {
+      case (partyId, (participantId, signingKeys)) =>
+        mkAdd(
+          PartyToParticipant.tryCreate(
+            partyId = partyId,
+            threshold = PositiveInt.tryCreate(1),
+            participants =
+              Seq(HostingParticipant(participantId, ParticipantPermission.Confirmation)),
+            partySigningKeysWithThreshold = Some(signingKeys),
+          )
+        )
+    }
+
     val synchronizerGovernanceTxs = List(
       mkAdd(
         SynchronizerParametersState(
@@ -612,6 +726,7 @@ class TestingIdentityFactory(
       mediatorOnboarding ++
       Seq(sequencerOnboarding) ++
       partyDataTx ++
+      externalPartyOnboarding ++
       synchronizerGovernanceTxs)
       .map(ValidatedTopologyTransaction(_, rejectionReason = None))
 
@@ -626,13 +741,7 @@ class TestingIdentityFactory(
       1.seconds,
     ) // The in-memory topology store should complete the state update immediately
 
-    new StoreBasedTopologySnapshot(
-      store.storeId.psid,
-      timestampOfSnapshot,
-      store,
-      packageDependencyResolver,
-      loggerFactory,
-    )
+    store
   }
 
   private def synchronizerParametersChangeTx(ts: CantonTimestamp): DynamicSynchronizerParameters =
@@ -652,7 +761,7 @@ class TestingIdentityFactory(
       isProposal: Boolean = false,
   ): SignedTopologyTransaction[TopologyChangeOp.Replace, TopologyMapping] =
     SignedTopologyTransaction.withSignatures(
-      TopologyTransaction(
+      TopologyTransaction.tryCreate(
         TopologyChangeOp.Replace,
         serial,
         mapping,
@@ -775,18 +884,24 @@ class TestingIdentityFactory(
       .toList
   }
 
-  private def partyToParticipantTxs()
+  @VisibleForTesting
+  private[topology] def partyToParticipantTxs()
       : Iterable[SignedTopologyTransaction[TopologyChangeOp.Replace, TopologyMapping]] =
     topology.topology
       .map { case (lfParty, partyInfo) =>
         val partyId = PartyId.tryFromLfParty(lfParty)
         val participantsForParty = partyInfo.participants.filter(_._1.uid != partyId.uid)
+        val states = topology.hostingStates.getOrElse(lfParty, Map.empty)
         mkAdd(
           PartyToParticipant.tryCreate(
             partyId,
             threshold = partyInfo.threshold,
             participantsForParty.map { case (id, attributes) =>
-              HostingParticipant(id, attributes.permission)
+              val state = states.getOrElse(
+                id,
+                if (attributes.onboarding) HostingState.Onboarding else HostingState.Active,
+              )
+              HostingParticipant(id, attributes.permission, state)
             }.toSeq,
           )
         )
@@ -795,7 +910,7 @@ class TestingIdentityFactory(
   private def participantsTxs(
       defaultPermissionByParticipant: Map[ParticipantId, ParticipantPermission],
       packages: Map[ParticipantId, Seq[VettedPackage]],
-      featureFlags: Map[ParticipantId, Seq[ParticipantTopologyFeatureFlag]],
+      featureFlags: Map[ParticipantId, Set[ParticipantTopologyFeatureFlag]],
   ): Seq[SignedTopologyTransaction[TopologyChangeOp.Replace, TopologyMapping]] = topology
     .allParticipants()
     .toSeq
@@ -818,7 +933,7 @@ class TestingIdentityFactory(
         SynchronizerTrustCertificate(
           participantId,
           synchronizerId,
-          featureFlags.getOrElse(participantId, Seq.empty),
+          featureFlags.getOrElse(participantId, Set.empty),
         )
       ) :+ mkAdd(
         ParticipantSynchronizerPermission(
@@ -1007,9 +1122,12 @@ class TestingOwnerWithKeys(
           )
         val bytes = trans.toByteStringUnmemoized.concat(randomStringBytes)
         TopologyTransaction
-          .fromTrustedByteString(())(bytes)
+          .fromTrustedByteString(
+            TopologyTransactionDeserializationContext(SynchronizerLimits.default)
+          )(bytes)
           .leftMap(_.toString)
           .flatMap(_.select[Op, M].toRight("Parsed to different type"))
+          .leftMap(err => LoggerFactory.getLogger(getClass).error(s"Parse error $err"))
           .getOrElse(throw new IllegalArgumentException("Unable to parse topology tx"))
       }
     } else trans
@@ -1052,7 +1170,7 @@ class TestingOwnerWithKeys(
   )(implicit ec: ExecutionContext) = {
     import trans.transaction as tx
     mkTrans(
-      TopologyTransaction(
+      TopologyTransaction.tryCreate(
         tx.operation,
         serial,
         tx.mapping,
@@ -1081,7 +1199,7 @@ class TestingOwnerWithKeys(
       ec: ExecutionContext
   ): SignedTopologyTransaction[TopologyChangeOp.Replace, M] =
     mkTrans(
-      TopologyTransaction(
+      TopologyTransaction.tryCreate(
         TopologyChangeOp.Replace,
         serial,
         mapping,
@@ -1097,7 +1215,7 @@ class TestingOwnerWithKeys(
     mkRemove[TopologyMapping](
       tx.mapping,
       NonEmpty(Set, SigningKeys.key1),
-      tx.serial.increment,
+      tx.serial.increment.getOrElse(throw new IllegalStateException("Serial at Int.MaxValue")),
     )
 
   def mkRemove[M <: TopologyMapping: ClassTag](
@@ -1107,7 +1225,7 @@ class TestingOwnerWithKeys(
       isProposal: Boolean = false,
   )(implicit ec: ExecutionContext): SignedTopologyTransaction[TopologyChangeOp.Remove, M] =
     mkTrans(
-      TopologyTransaction(
+      TopologyTransaction.tryCreate(
         TopologyChangeOp.Remove,
         serial,
         mapping,

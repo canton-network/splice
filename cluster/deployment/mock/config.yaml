@@ -1,5 +1,6 @@
 !include(../../configs/shared/base.yaml)
 validator1:
+  disableAuth: true
   kms:
     type: gcp
     locationId: us-central1
@@ -13,7 +14,12 @@ validator1:
     additionalEnvVars:
       - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
         value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
-multiValidator:
+  walletGateway:
+    enabled: true
+multiValidator: !include(../../configs/shared/multi-validator.yaml)
+  # Load Tests
+  # 5 deployments with 10 validators in each so 50 total
+  instanceCount: 5
   postgresPvcSize: '100Gi'
   # Dummy values for testing
   extraValidatorEnvVars:
@@ -34,8 +40,21 @@ multiValidator:
 sv:
   synchronizer:
     skipInitialization: true
+  scan:
+    externalRateLimits:
+      globalPerIpLimits:
+        overrides:
+          test:
+            ips:
+              - 192.68.78.50
+            maxTokens: 250
+            tokensPerFill: 250
+            fillInterval: 60s
 splitwell:
-  maxDarVersion: '0.1.8'
+  maxDarVersion: '0.1.24'
+  participant:
+    # Required for periodic identities backups, as this participant does not use KMS
+    enableKeyDownload: true
   participantPruningSchedule:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
@@ -88,8 +107,6 @@ synchronizerMigration:
   active:
     id: 9
     version: 0.3.20
-    sequencer:
-      enableBftSequencer: true
     releaseReference:
       gitReference: "refs/heads/release-line-0.3.20"
       repoUrl: https://github.com/canton-network/splice
@@ -102,8 +119,6 @@ synchronizerMigration:
   upgrade:
     id: 10
     version: 0.3.21
-    sequencer:
-      enableBftSequencer: true
     releaseReference:
       gitReference: "refs/heads/release-line-0.3.21"
       repoUrl: https://github.com/canton-network/splice
@@ -126,16 +141,17 @@ pulumiProjectConfig:
 monitoring:
   alerting:
     enableNoDataAlerts: true
+    enableExtraHighPrioAlerts: true
     alerts:
       cloudSql:
         maintenance: true
+      sequencerParticipantRegistration:
+        enabled: true
       svNames:
         - Dummy-SV-1
         - Dummy-SV-2
     logAlerts:
       # These are mock values and in no way recommendations
-      forCometBft: |
-        -(resource.labels.container_name="multi-validator" AND jsonPayload.message=~"wallet/transfer-offers.* resulted in a timeout")
       forNonTAPS: |
         -(resource.labels.container_name="multi-participant" AND jsonPayload.message=~"The sequencer clock timestamp.*is already past the max sequencing time")
         -(jsonPayload."span-name"="MergeValidatorLicenseContractsTrigger" AND (severity=WARNING OR "has not vetted"))
@@ -189,14 +205,22 @@ loadTester:
     scaleUpStep: 3
     windowStartUTC: "02:30"
     windowDurationMinutes: 150
+chaosMesh:
+  podKillSchedule: '@every 120m'
 svs:
   sv: !include(sv.yaml)
     participant:
       bftSequencerConnection: false
-  sv-1: !include(sv.yaml)
+  sv-1: !include(sv.yaml;$SPLICE_ROOT/cluster/configs/shared/validator-topology-metrics-export.yaml)
     appsPg:
       cloudSql:
         tier: "apps-pg-override-tier-sv-1"
+    topologyKeyMonitor:
+      enable: true
+      pollIntervalSeconds: 1
+      keys:
+        - '12205e1643ef9bcc12dd3450d02f7c538de011dc92290672cb66dd47053ab4a67cae'
+        - '122057b07227114d122f5954a770c1ba30586cc51efd1dd644f6c85bfb9916eac967'
     periodicSnapshots:
       topology:
         backupInterval: '12h'
@@ -216,12 +240,20 @@ svs:
     validatorApp:
       sweep:
         fromEnv: SV1
+    cantonBft:
+      cloudSql:
+        tier: "cantonbft-tier-sv-1"
     physicalSynchronizerOverrides:
       9:
         sequencer:
           additionalEnvVars:
             - name: PS9_SEQUENCER_ENV_VAR_NAME
               value: PS9_SEQUENCER_ENV_VAR_VALUE
+          cloudSql:
+            tier: "sequencer-ps9-override-tier-sv-1"
+        cantonBft:
+          cloudSql:
+            tier: "cantonbft-ps9-override-tier-sv-1"
   sv-2: !include(sv.yaml) {}
   sv-da-1: !include(sv.yaml) # non "sv-X" key => additional SV that is always deployed (key == node name == k8s namespace)
     publicName: Digital-Asset-1
@@ -237,18 +269,10 @@ svs:
       kms:
         keyRingId: sv-da-1_participant_mock
         locationId: us-central1
-    cometbft:
-      nodeId: d825622358065aea3cb3b3479cf64d172675037e
-      validatorKeyAddress: 2D21D8AB2306770E9F93E8BD0E0F07B3E86817D7
-      keysGcpSecret: svda1-mock-cometbft-keys
-      additionalHelmValues:
-        node:
-          snapshotHeightDelta: 200
     svApp:
       auth0:
         clientId: bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7
       svIdKeyGcpSecret: svda1-mock-id
-      cometBftGovernanceKeyGcpSecret: svda1-mock-cometbft-governance-key
     validatorApp:
       walletUser: auth0|68c2c41e6470184569e4521e
       sweep:
@@ -259,7 +283,17 @@ svs:
       appsLogLevel: INFO
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
+    physicalSynchronizerOverrides:
+      10:
+        sequencer:
+          cloudSql:
+            tier: "sequencer-ps10-override-tier-sv-da-1"
+        cantonBft:
+          cloudSql:
+            tier: "cantonbft-ps10-override-tier-sv-da-1"
 infra:
+  gkeGateway:
+    proxyForIstioHttp: true
   ipWhitelisting:
     extraWhitelistedIngress:
       - 1.2.3.4/32
@@ -291,6 +325,7 @@ infra:
         key: value
         anotherKey: anotherValue
   istio:
+    enablePublicTokenRegistry: true
     istiodValues: # example istiod overrides
       global:
         proxy:
@@ -418,20 +453,33 @@ gha:
     ]
 networkWide:
   maxVettingDelay: 1m
+pulumiStacks:
+  default:
+    retryMaxBackoffDurationSeconds: 900
 validators:
   validator-runbook:
     postgresPvcSize: '200Gi'
+    sweep:
+      fromParty: "mock-5::5555555555555555555555555555555555555555555555555555555555555555555"
+      toParty: "mock-6::6666666666666666666666666666666666666666666666666666666666666666666"
+      maxBalance: 10
+      minBalance: 1
+      useTransferPreapproval: true
+      useTokenStandardTransfer: false
     partyAllocator:
       enable: true
       maxParties: 1234
       parallelism: 321
       preapprovalRetries: 9876
       preapprovalRetryDelayMs: 42
+      version: '1.2.3'
     participantPruningSchedule:
       cron: "0 /10 * * * ?" # Run every 10min
       maxDuration: "5m"
       retention: "30d"
     participant:
+      # Required for periodic identities backups, as this participant does not use KMS
+      enableKeyDownload: true
       additionalEnvVars:
         - name: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_NAME
           value: ADDITIONAL_ENV_VAR_VALIDATOR_PARTICIPANT_VALUE
@@ -447,5 +495,29 @@ validators:
           value: ADDITIONAL_ENV_VAR_VALIDATOR_NAME
       additionalJvmOptions: -Dparticipantoption
   extra-validator:
-    namespace: validator
+    namespace: extra-validator
     partyHint: 'extra-validator'
+    walletGateway: !include(../../configs/shared/wallet_gateway.yaml) {}
+cloudArmor:
+  enabled: true
+  logging:
+    enabled: true
+  wafRules:
+    groups:
+      - name: waf-sqli-sessionfixation-generic
+        description: 'WAF: SQL injection, session fixation and generic attacks'
+        signatures:
+          - name: sqli-v422-stable
+            sensitivity: 1
+            optOutRuleIds: ['942100', '942190']
+          - name: sessionfixation-v422-stable
+            sensitivity: 1
+          - name: generic-v422-stable
+            optOutRuleIds: ['934150']
+        # these signatures inspect the request body, which is binary protobuf on gRPC hosts
+        excludedHostPrefixes: ['sequencer-[0-9]+']
+      - name: waf-protocolattack
+        description: 'WAF: protocol attacks'
+        signatures:
+          - name: protocolattack-v422-stable
+            sensitivity: 1

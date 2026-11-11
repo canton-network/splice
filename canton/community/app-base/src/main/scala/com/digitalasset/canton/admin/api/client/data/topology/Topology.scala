@@ -5,13 +5,16 @@ package com.digitalasset.canton.admin.api.client.data.topology
 
 import cats.syntax.either.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.ProtoDeserializationError.RefinedDurationConversionError
 import com.digitalasset.canton.admin.api.client.data.SequencingParameters
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.{Fingerprint, Hash}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
+import com.digitalasset.canton.protocol.{DynamicSynchronizerParameters, SynchronizerLimits}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
@@ -19,10 +22,13 @@ import com.digitalasset.canton.topology.admin.v30
 import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.topology.transaction.TopologyTransaction.TxHash
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
-import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.validation.ProtoValidation
+import com.digitalasset.canton.version.{ProtocolVersion, ProtocolVersionValidation}
 import com.digitalasset.canton.{ProtoDeserializationError, protocol}
+import com.digitalasset.nonempty.NonEmpty
 
 import java.time.Instant
+import scala.annotation.nowarn
 
 sealed trait TopologyResult[M <: TopologyMapping] {
   def context: BaseResult
@@ -32,12 +38,14 @@ sealed trait TopologyResult[M <: TopologyMapping] {
     * server and not be done in the console macro
     */
   def toTopologyTransaction: TopologyTransaction[TopologyChangeOp, M] =
-    TopologyTransaction[TopologyChangeOp, M](
-      context.operation,
-      context.serial,
-      item,
-      ProtocolVersion.latest,
-    )
+    TopologyTransaction
+      .create[TopologyChangeOp, M](
+        context.operation,
+        context.serial,
+        item,
+        ProtocolVersion.latest,
+      ) // This is only used in a doc snippet. The alternative is to return the `Either` but break backwards compatibility.
+      .valueOr(err => throw new IllegalStateException(s"Transaction cannot be serialized: $err"))
 }
 
 final case class BaseResult(
@@ -77,11 +85,16 @@ object BaseResult {
       serial <- PositiveInt
         .create(serial)
         .leftMap(e => RefinedDurationConversionError("serial", e.message))
-      signedBy <-
-        ProtoConverter.parseRequiredNonEmpty(
-          Fingerprint.fromProtoPrimitive,
-          "signed_by_fingerprints",
-          signedByFingerprints,
+      signedByFingerprints <- ProtoValidation.validateThen(
+        signedByFingerprints,
+        "signed_by_fingerprints",
+        ProtocolVersionValidation.AlwaysValidation,
+        ProtoValidation.MaxCollectionSize,
+      )(Fingerprint.fromProtoPrimitive)
+      signedBy <- NonEmpty
+        .from(signedByFingerprints)
+        .toRight(
+          ProtoDeserializationError.FieldNotSet("Sequence signed_by_fingerprints not set or empty")
         )
       store <- ProtoConverter.parseRequired(
         TopologyStoreId.fromProtoV30(_, "store"),
@@ -116,8 +129,12 @@ object ListNamespaceDelegationResult {
     for {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
-      itemProto <- ProtoConverter.required("item", value.item)
-      item <- NamespaceDelegation.fromProtoV30(itemProto)
+      item <- value.item match {
+        case v30.ListNamespaceDelegationResponse.Result.Item.V30(i) =>
+          NamespaceDelegation.fromProtoV30(ProtocolVersionValidation.AlwaysValidation, i)
+        case v30.ListNamespaceDelegationResponse.Result.Item.Empty =>
+          ProtoConverter.required("item", None)
+      }
     } yield ListNamespaceDelegationResult(context, item)
 }
 
@@ -134,7 +151,11 @@ object ListDecentralizedNamespaceDefinitionResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- DecentralizedNamespaceDefinition.fromProtoV30(itemProto)
+      item <- DecentralizedNamespaceDefinition.fromProtoV30(
+        ProtocolVersionValidation.AlwaysValidation,
+        SynchronizerLimits.default.topologyLimits,
+        itemProto,
+      )
     } yield ListDecentralizedNamespaceDefinitionResult(context, item)
 }
 
@@ -150,8 +171,16 @@ object ListOwnerToKeyMappingResult {
     for {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
-      itemProto <- ProtoConverter.required("item", value.item)
-      item <- OwnerToKeyMapping.fromProtoV30(itemProto)
+      item <- value.item match {
+        case v30.ListOwnerToKeyMappingResponse.Result.Item.V30(i) =>
+          OwnerToKeyMapping.fromProtoV30(
+            ProtocolVersionValidation.AlwaysValidation,
+            SynchronizerLimits.default.topologyLimits,
+            i,
+          )
+        case v30.ListOwnerToKeyMappingResponse.Result.Item.Empty =>
+          ProtoConverter.required("item", None)
+      }
     } yield ListOwnerToKeyMappingResult(context, item)
 }
 
@@ -161,14 +190,23 @@ final case class ListPartyToKeyMappingResult(
 ) extends TopologyResult[PartyToKeyMapping]
 
 object ListPartyToKeyMappingResult {
+  @nowarn("msg=PartyToKeyMapping in package v30 is deprecated")
   def fromProtoV30(
       value: v30.ListPartyToKeyMappingResponse.Result
   ): ParsingResult[ListPartyToKeyMappingResult] =
     for {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
-      itemProto <- ProtoConverter.required("item", value.item)
-      item <- PartyToKeyMapping.fromProtoV30(itemProto)
+      item <- value.item match {
+        case v30.ListPartyToKeyMappingResponse.Result.Item.V30(i) =>
+          PartyToKeyMapping.fromProtoV30(
+            ProtocolVersionValidation.AlwaysValidation,
+            SynchronizerLimits.default.topologyLimits,
+            i,
+          )
+        case v30.ListPartyToKeyMappingResponse.Result.Item.Empty =>
+          ProtoConverter.required("item", None)
+      }
     } yield ListPartyToKeyMappingResult(context, item)
 }
 
@@ -185,7 +223,10 @@ object ListSynchronizerTrustCertificateResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- SynchronizerTrustCertificate.fromProtoV30(itemProto)
+      item <- SynchronizerTrustCertificate.fromProtoV30(
+        ProtocolVersionValidation.AlwaysValidation,
+        itemProto,
+      )
     } yield ListSynchronizerTrustCertificateResult(context, item)
 }
 
@@ -202,7 +243,10 @@ object ListParticipantSynchronizerPermissionResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- ParticipantSynchronizerPermission.fromProtoV30(itemProto)
+      item <- ParticipantSynchronizerPermission.fromProtoV30(
+        ProtocolVersionValidation.AlwaysValidation,
+        itemProto,
+      )
     } yield ListParticipantSynchronizerPermissionResult(context, item)
 }
 
@@ -219,7 +263,7 @@ object ListPartyHostingLimitsResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- PartyHostingLimits.fromProtoV30(itemProto)
+      item <- PartyHostingLimits.fromProtoV30(ProtocolVersionValidation.AlwaysValidation, itemProto)
     } yield ListPartyHostingLimitsResult(context, item)
 }
 
@@ -236,7 +280,7 @@ object ListVettedPackagesResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- VettedPackages.fromProtoV30(itemProto)
+      item <- VettedPackages.fromProtoV30(ProtocolVersionValidation.AlwaysValidation, itemProto)
     } yield ListVettedPackagesResult(context, item)
 }
 
@@ -252,8 +296,22 @@ object ListPartyToParticipantResult {
     for {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
-      itemProto <- ProtoConverter.required("item", value.item)
-      item <- PartyToParticipant.fromProtoV30(itemProto)
+      item <- value.item match {
+        case v30.ListPartyToParticipantResponse.Result.Item.V30(mappingP) =>
+          PartyToParticipant.fromProtoV30(
+            ProtocolVersionValidation.AlwaysValidation,
+            SynchronizerLimits.default.topologyLimits,
+            mappingP,
+          )
+        case v30.ListPartyToParticipantResponse.Result.Item.V31(mappingP) =>
+          PartyToParticipant.fromProtoV31(
+            ProtocolVersionValidation.AlwaysValidation,
+            SynchronizerLimits.default.topologyLimits,
+            mappingP,
+          )
+        case v30.ListPartyToParticipantResponse.Result.Item.Empty =>
+          ProtoConverter.required("item", None)
+      }
     } yield ListPartyToParticipantResult(context, item)
 }
 
@@ -276,8 +334,13 @@ final case class ListMultiHostingProposal(
     permission: ParticipantPermission,
     otherParticipants: Seq[HostingParticipant],
     threshold: PositiveInt,
-) extends PrettyPrinting {
-  override def pretty: Pretty[ListMultiHostingProposal] =
+) extends PrettyPrintingFromCompanion {
+  override def prettyCompanion: PrettyPrintingCompanion[ListMultiHostingProposal] =
+    ListMultiHostingProposal
+}
+
+object ListMultiHostingProposal extends PrettyPrintingCompanion[ListMultiHostingProposal] {
+  override protected val pretty: Pretty[ListMultiHostingProposal] =
     prettyOfClass(
       param("txHash", _.txHash.hash),
       param("party", _.party),
@@ -285,9 +348,7 @@ final case class ListMultiHostingProposal(
       param("others", _.otherParticipants.map(x => (x.participantId, x.permission.showType)).toMap),
       param("threshold", _.threshold),
     )
-}
 
-object ListMultiHostingProposal {
   def mapFilter(participantId: ParticipantId)(
       result: ListPartyToParticipantResult
   ): Option[ListMultiHostingProposal] =
@@ -354,7 +415,10 @@ object ListMediatorSynchronizerStateResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- MediatorSynchronizerState.fromProtoV30(itemProto)
+      item <- MediatorSynchronizerState.fromProtoV30(
+        ProtocolVersionValidation.AlwaysValidation,
+        itemProto,
+      )
     } yield ListMediatorSynchronizerStateResult(context, item)
 }
 
@@ -371,7 +435,10 @@ object ListSequencerSynchronizerStateResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- SequencerSynchronizerState.fromProtoV30(itemProto)
+      item <- SequencerSynchronizerState.fromProtoV30(
+        ProtocolVersionValidation.AlwaysValidation,
+        itemProto,
+      )
     } yield ListSequencerSynchronizerStateResult(context, item)
 }
 
@@ -388,7 +455,7 @@ object ListLsuAnnouncementResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- LsuAnnouncement.fromProtoV30(itemProto)
+      item <- LsuAnnouncement.fromProtoV30(ProtocolVersionValidation.AlwaysValidation, itemProto)
     } yield ListLsuAnnouncementResult(context, item)
 }
 
@@ -405,6 +472,9 @@ object ListLsuSequencerConnectionSuccessorResult {
       contextProto <- ProtoConverter.required("context", value.context)
       context <- BaseResult.fromProtoV30(contextProto)
       itemProto <- ProtoConverter.required("item", value.item)
-      item <- LsuSequencerConnectionSuccessor.fromProtoV30(itemProto)
+      item <- LsuSequencerConnectionSuccessor.fromProtoV30(
+        ProtocolVersionValidation.AlwaysValidation,
+        itemProto,
+      )
     } yield ListLsuSequencerConnectionSuccessorResult(context, item)
 }

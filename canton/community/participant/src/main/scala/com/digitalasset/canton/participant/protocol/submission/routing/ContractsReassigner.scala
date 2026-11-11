@@ -4,9 +4,8 @@
 package com.digitalasset.canton.participant.protocol.submission.routing
 
 import cats.data.EitherT
-import cats.syntax.functor.*
 import cats.syntax.parallel.*
-import com.digitalasset.canton.LfPartyId
+import com.digitalasset.canton.LfSubmissionId
 import com.digitalasset.canton.data.ReassignmentSubmitterMetadata
 import com.digitalasset.canton.error.TransactionRoutingError
 import com.digitalasset.canton.error.TransactionRoutingError.AutomaticReassignmentForTransactionFailure
@@ -16,14 +15,17 @@ import com.digitalasset.canton.ledger.participant.state.{
   SynchronizerRank,
 }
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.sync.ConnectedSynchronizersLookup
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.EitherTUtil
 import com.digitalasset.canton.util.ReassignmentTag.{Source, Target}
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 private[routing] class ContractsReassigner(
@@ -45,48 +47,65 @@ private[routing] class ContractsReassigner(
         s"Automatic transaction reassignment to synchronizer $targetPsid"
       )
 
-      def getStakeholders(
-          cid: LfContractId,
-          source: PhysicalSynchronizerId,
-      ): EitherT[FutureUnlessShutdown, TransactionRoutingError, Stakeholders] = (
-        for {
-          synchronizerState <- EitherT.fromEither[FutureUnlessShutdown](
-            connectedSynchronizers.get(source).toRight(s"Not connected to synchronizer $source")
-          )
-          contract <- synchronizerState.ephemeral.contractLookup
-            .lookup(cid)
-            .toRight(s"Cannot find contract with id $cid")
-          stakeholders = Stakeholders.tryCreate(
-            stakeholders = contract.stakeholders,
-            signatories = contract.signatories,
-          )
-        } yield stakeholders
-      ).leftMap[TransactionRoutingError](AutomaticReassignmentForTransactionFailure.Failed(_))
-
       for {
-        batches <- synchronizerRankTarget.reassignments.toSeq
-          .parTraverse { case (cid, (submitter, source)) =>
-            getStakeholders(cid, source)
-              .map(stakeholders => (submitter, source, stakeholders, cid))
-          }
-          .map {
-            _.groupBy { case (submitter, source, stakeholders, _cid) =>
-              (submitter, source, stakeholders)
-            }.view
-              .mapValues(_.map { case (_submitter, _source, _stakeholders, cid) => cid })
-              .toSeq
-          }
+        targetTopology <- EitherT.fromEither[FutureUnlessShutdown](
+          synchronizerState.getTopologySnapshotFor(targetPsid)
+        )
 
-        _ <- (batches: Seq[
-          ((LfPartyId, PhysicalSynchronizerId, Stakeholders), Iterable[LfContractId])
-        ])
+        // This should not fire because LAPI ensures that submission id is non-empty:
+        // if empty, a UUID is generated
+        submissionId <- EitherT.fromEither(
+          submitterInfo.submissionId.toRight(
+            TransactionRoutingError.MalformedInputErrors.InvalidSubmissionId
+              .Error(submissionId = "", issue = "Submission id must not be empty")
+          )
+        )
+
+        /*
+          The submission id of the automatic reassignments is:
+            submissionId-(a|u)random
+          where
+            submissionId is the submissionId of the command
+            a|u: a assignment, u for unassignment
+            random is a UUID without the - (the same uuid is used for the unassignment and the assignment)
+          To ensure that the whole string can fit into a submission id (255 characters), we check that the provided
+          submission id as length at most 221 = 255 - 32 - 1 - 1.
+         */
+        _ <- EitherTUtil.condUnitET[FutureUnlessShutdown](
+          submissionId.length <= 221,
+          TransactionRoutingError.MalformedInputErrors.InvalidSubmissionId.Error(
+            submissionId = submissionId,
+            issue =
+              "The length of the submission id of a command requiring automatic reassignments should be at most 221 characters.",
+          ),
+        )
+
+        // The source topology is read from a map, not recomputed. Each batch only submits its
+        // reassignment.
+        _ <- synchronizerRankTarget.reassignments.toSeq
           .parTraverse_ { case ((lfParty, sourceSynchronizerId, _), cids) =>
+            val randomSuffix = UUID.randomUUID().toString.replace("-", "")
+
+            def reassignmentSubmitterMetadata(isUnassigned: Boolean) = {
+              val kind = if (isUnassigned) "u" else "a"
+
+              ReassignmentSubmitterMetadata(
+                submitter = lfParty,
+                submittingParticipant = submittingParticipant,
+                commandId = submitterInfo.commandId,
+                submissionId = Some(
+                  LfSubmissionId.assertFromString(
+                    s"$submissionId-$kind$randomSuffix"
+                  )
+                ),
+                userId = submitterInfo.userId,
+                workflowId = None,
+              )
+            }
+
             for {
               sourceTopology <- EitherT.fromEither[FutureUnlessShutdown](
                 synchronizerState.getTopologySnapshotFor(sourceSynchronizerId)
-              )
-              targetTopology <- EitherT.fromEither[FutureUnlessShutdown](
-                synchronizerState.getTopologySnapshotFor(targetPsid)
               )
 
               _ <- perform(
@@ -94,14 +113,8 @@ private[routing] class ContractsReassigner(
                 Source(sourceTopology),
                 Target(targetPsid),
                 Target(targetTopology),
-                ReassignmentSubmitterMetadata(
-                  submitter = lfParty,
-                  submittingParticipant,
-                  submitterInfo.commandId,
-                  submitterInfo.submissionId,
-                  submitterInfo.userId,
-                  workflowId = None,
-                ),
+                Source(reassignmentSubmitterMetadata(isUnassigned = true)),
+                Target(reassignmentSubmitterMetadata(isUnassigned = false)),
                 cids.toSeq,
               )
                 .mapK(FutureUnlessShutdown.outcomeK)
@@ -117,7 +130,8 @@ private[routing] class ContractsReassigner(
       sourceTopology: Source[TopologySnapshot],
       targetSynchronizerId: Target[PhysicalSynchronizerId],
       targetTopology: Target[TopologySnapshot],
-      submitterMetadata: ReassignmentSubmitterMetadata,
+      submitterUnassignmentMetadata: Source[ReassignmentSubmitterMetadata],
+      submitterAssignmentMetadata: Target[ReassignmentSubmitterMetadata],
       contractIds: Seq[LfContractId],
   )(implicit traceContext: TraceContext): EitherT[Future, TransactionRoutingError, Unit] = {
     val reassignment = for {
@@ -142,10 +156,12 @@ private[routing] class ContractsReassigner(
 
       unassignmentResult <- sourceSynchronizer
         .submitUnassignments(
-          submitterMetadata,
+          submitterUnassignmentMetadata.value,
           contractIds,
           targetSynchronizerId,
           sourceTopology,
+          overrideSourceValidationPkgIds = Map.empty,
+          overrideTargetValidationPkgIds = Map.empty,
         )
         .mapK(FutureUnlessShutdown.outcomeK)
         .semiflatMap(Predef.identity)
@@ -167,7 +183,7 @@ private[routing] class ContractsReassigner(
 
       assignmentResult <- targetSynchronizer
         .submitAssignments(
-          submitterMetadata,
+          submitterAssignmentMetadata.value,
           unassignmentResult.reassignmentId,
           targetTopology,
         )

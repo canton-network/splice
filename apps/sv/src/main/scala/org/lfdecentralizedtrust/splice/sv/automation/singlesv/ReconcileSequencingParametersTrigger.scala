@@ -5,9 +5,9 @@ package org.lfdecentralizedtrust.splice.sv.automation.singlesv
 
 import cats.implicits.catsSyntaxTuple2Semigroupal
 import com.google.protobuf.ByteString
-import cats.syntax.either.*
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.SequencingParameters as ConsoleSequencingParameters
+import com.digitalasset.canton.admin.api.client.data.SequencingParametersAccess.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
@@ -45,7 +45,7 @@ class ReconcileSequencingParametersTrigger(
     for {
       synchronizerId <- participantAdminConnection.getPhysicalSynchronizerId(alias)
       parametersO = configParametersO.map(_.toInternal(synchronizerId.protocolVersion))
-      stateO <- participantAdminConnection.lookupSequencingParametersState(synchronizerId.logical)
+      stateO <- participantAdminConnection.lookupSequencingParametersState(synchronizerId)
     } yield {
       if (
         (stateO.flatMap(_.mapping.parameters.payload): Option[ByteString]) != (parametersO.map(
@@ -64,19 +64,18 @@ class ReconcileSequencingParametersTrigger(
     (task.parameters match {
       case Some(parameters) =>
         participantAdminConnection.ensureSequencingParametersState(
-          task.synchronizerId.logical,
+          task.synchronizerId,
           SequencingParametersState(
             task.synchronizerId.logical,
-            ConsoleSequencingParameters(Some(parameters.toByteString)).toInternal.valueOr(err =>
-              throw new IllegalStateException(s"Failed to convert sequencing parameters: $err")
-            ),
+            ConsoleSequencingParameters(Some(parameters.toByteString))
+              .toInternal(task.synchronizerId.protocolVersion),
           ),
         )
       case None =>
         participantAdminConnection.ensureTopologyMappingRemoved(
           "remove sequencing parameters",
           task.synchronizerId.logical,
-          participantAdminConnection.lookupSequencingParametersState(task.synchronizerId.logical),
+          participantAdminConnection.lookupSequencingParametersState(task.synchronizerId),
         )
     }).map(_ => TaskSuccess("Updated sequencing parameters"))
 

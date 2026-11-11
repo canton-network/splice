@@ -33,9 +33,10 @@ export SPLICE_APP_UI_NAME_SERVICE_NAME_ACRONYM=""
 export VALIDATOR_PARTICIPANT_IDENTITIES_DUMP="v" # A non-empty dummy value, just to make the docker-compose spec valid
 export VALIDATOR_NEW_PARTICIPANT_IDENTIFIER=""
 export HOST_BIND_IP=""
+export WALLET_GATEWAY_SCAN_ADDRESS=""
 
 # We include also compose-restore-from-id.yaml, so that if that was included in the start and created the init container,
 # that container is also included in the down and removed
-docker compose -f "$script_dir/compose.yaml" -f "$script_dir/compose-restore-from-id.yaml" down
+docker compose -f "$script_dir/compose.yaml" -f "$script_dir/compose-restore-from-id.yaml" -f "$script_dir/compose-wallet-gateway.yaml" -f "$script_dir/compose-wallet-gateway-disable-auth.yaml" down
 
 _info "Validator stopped. Note that its data is persisted in the compose_postgres-splice volume, and will be reused if started again."

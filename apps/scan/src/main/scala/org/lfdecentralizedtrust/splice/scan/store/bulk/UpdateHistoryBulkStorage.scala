@@ -58,7 +58,7 @@ class UpdateHistoryBulkStoragePersistentProgress(
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Unit] = {
-    metric.updateValue(segment.toTimestamp.timestamp)
+    metric.updateValue(segment.toTimestamp)
     kvProvider.store
       .setValue(kvStoreKey, segment)
       .map(_ => {
@@ -66,6 +66,10 @@ class UpdateHistoryBulkStoragePersistentProgress(
           s"Successfully completed processing updates segment $segment, persisted as the latest processed segment in bulk storage"
         )
       })
+  }
+
+  def reset(implicit tc: TraceContext): Future[Unit] = {
+    kvProvider.store.deleteKey(kvStoreKey)
   }
 }
 
@@ -76,7 +80,7 @@ class UpdateHistoryBulkStorage(
     writer: UpdateHistoryBulkStorageWriter,
     val persistentProgress: UpdateHistoryBulkStoragePersistentProgress,
     appConfig: BulkStorageConfig,
-    backfillingCompleteGate: Source[Boolean, Cancellable],
+    mayStart: Source[Boolean, Cancellable],
     override val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)
     extends NamedLogging
@@ -130,7 +134,7 @@ class UpdateHistoryBulkStorage(
       tc: TraceContext,
   ): Source[UpdatesSegment, Cancellable] = {
 
-    backfillingCompleteGate.flatMap { _ =>
+    mayStart.flatMap { _ =>
       Source
         .future(persistentProgress.readLatestProcessedSegment)
         .flatMapConcat(getUpdatesSegmentsAfter(_))

@@ -5,14 +5,15 @@ package org.lfdecentralizedtrust.splice.environment
 
 import com.daml.ledger.api.v2 as lapi
 import com.daml.ledger.api.v2.admin.identity_provider_config_service.IdentityProviderConfig
-import com.daml.ledger.api.v2.admin.{ObjectMetaOuterClass, UserManagementServiceOuterClass}
+import com.daml.ledger.api.v2.admin.ObjectMetaOuterClass
 import com.daml.ledger.api.v2.event
 import com.daml.ledger.api.v2.package_reference.PackageReference
 import com.daml.ledger.javaapi.data.codegen.{ContractId, Created, Exercised, HasCommands, Update}
 import com.daml.ledger.javaapi.data.{Command, CreatedEvent, ExercisedEvent, Transaction, User}
 import com.digitalasset.base.error.ErrorResource
 import com.digitalasset.base.error.utils.ErrorDetails
-import com.digitalasset.base.error.utils.ErrorDetails.ResourceInfoDetail
+import com.digitalasset.base.error.utils.ErrorDetails.{ErrorInfoDetail, ResourceInfoDetail}
+import io.grpc.protobuf.{StatusProto as GrpcStatusProto}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.parties.PartyDetails
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
@@ -27,7 +28,6 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.{Namespace, PartyId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.LoggerUtil
 import com.digitalasset.daml.lf.data.Ref
@@ -43,6 +43,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   IncompleteReassignmentEvent,
   LedgerClient,
   NoDedup,
+  TopologyTransactionUpdate,
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionFilter
 import org.lfdecentralizedtrust.splice.util.{
@@ -92,6 +93,11 @@ class BaseLedgerConnection(
   ): Future[Long] =
     client.ledgerEnd()
 
+  def ledgerEndWithSynchronizerTimes(synchronizerIds: Seq[SynchronizerId])(implicit
+      traceContext: TraceContext
+  ): Future[(Long, Map[SynchronizerId, CantonTimestamp])] =
+    client.ledgerEndWithSynchronizerTimes(synchronizerIds)
+
   def latestPrunedOffset()(implicit
       traceContext: TraceContext
   ): Future[Long] =
@@ -118,6 +124,7 @@ class BaseLedgerConnection(
               activeAtOffset = offset,
               eventFormat = Some(eventFormat),
               streamContinuationToken = restartItem.map(_.streamContinuationToken),
+              includeIncompleteReassignments = true,
             )
           )
           .map { item =>
@@ -190,6 +197,11 @@ class BaseLedgerConnection(
   )(implicit tc: TraceContext): Source[LedgerClient.GetTreeUpdatesResponse, NotUsed] =
     client
       .updates(LedgerClient.GetUpdatesRequest(beginOffset, None, filter))
+
+  def topologyTransactions(
+      beginExclusive: Long
+  )(implicit tc: TraceContext): Source[TopologyTransactionUpdate, NotUsed] =
+    client.topologyTransactions(beginExclusive)
 
   def getOptionalPrimaryParty(
       user: String,
@@ -367,29 +379,6 @@ class BaseLedgerConnection(
     } yield partyId
   }
 
-  // Doesn't update an existing user; only creates a new one if a config with that ID doesn't exist.
-  def ensureUserCreated(
-      user: String,
-      primaryParty: Option[PartyId],
-      rights: Seq[User.Right],
-      isDeactivated: Boolean = false,
-      annotations: Map[String, String] = Map.empty,
-      identityProviderId: Option[String] = None,
-  )(implicit
-      tc: TraceContext
-  ): Future[Unit] = {
-    val userId = Ref.UserId.assertFromString(user)
-    val userLf = primaryParty match {
-      case None =>
-        new User(userId)
-      case Some(party) =>
-        new User(userId, party.toLf)
-    }
-    client
-      .getOrCreateUser(userLf, rights, isDeactivated, annotations, identityProviderId)
-      .map(_ => ())
-  }
-
   def setUserPrimaryParty(
       user: String,
       party: PartyId,
@@ -532,6 +521,9 @@ class BaseLedgerConnection(
     client.grantUserRights(user, grants)
   }
 
+  def grantReadAsAnyParty(user: String)(implicit tc: TraceContext): Future[Unit] =
+    client.grantUserRights(user, Seq(User.Right.CanReadAsAnyParty.INSTANCE))
+
   def revokeUserRights(
       user: String,
       actAsParties: Seq[PartyId],
@@ -602,67 +594,10 @@ class BaseLedgerConnection(
   ): Future[String] =
     waitForUserMetadata(userId, SV_NAME_USER_METADATA_KEY)
 
-  def listAllUserData()(implicit
-      tc: TraceContext
-  ): Future[Seq[(UserManagementServiceOuterClass.User, Seq[User.Right])]] =
-    for {
-      identityProviderConfigs <- listIdentityProviderConfigs()
-      // the `Seq(None)` is so we also get the users that have no explicit idp set
-      identityProviderIds: Seq[Option[String]] = Seq(None) ++ identityProviderConfigs.map(
-        (c: IdentityProviderConfig) => Some(c.identityProviderId)
-      )
-      allUsers <- MonadUtil
-        .sequentialTraverse(identityProviderIds)(listAllUsersProto(None, 1000, _))
-        .map(_.flatten)
-      allUserData <- MonadUtil.sequentialTraverse(allUsers) { user =>
-        for {
-          rights <- client.listUserRights(
-            user.getId,
-            Option(user.getIdentityProviderId).filter(_.nonEmpty),
-          )
-        } yield (user, rights)
-      }
-    } yield allUserData
-
-  private def listAllUsersProto(
-      pageToken: Option[String],
-      pageSize: Int,
-      identityProviderId: Option[String],
-  )(implicit tc: TraceContext): Future[Seq[UserManagementServiceOuterClass.User]] =
-    client.listUsersProto(pageToken, pageSize, identityProviderId).flatMap {
-      case (users, nextToken) =>
-        if (nextToken.isEmpty) {
-          Future.successful(users)
-        } else {
-          listAllUsersProto(nextToken, pageSize, identityProviderId).map(users ++ _)
-        }
-    }
-
   def listIdentityProviderConfigs()(implicit
       tc: TraceContext
   ): Future[Seq[IdentityProviderConfig]] =
     client.listIdentityProviderConfigs()
-
-  // Doesn't update an existing config; only creates a new one if a config with that ID doesn't exist.
-  def ensureIdentityProviderConfigCreated(
-      id: String,
-      isDeactivated: Boolean,
-      jwksUrl: String,
-      issuer: String,
-      audience: String,
-  )(implicit
-      tc: TraceContext
-  ): Future[Unit] =
-    retryProvider.retry(
-      RetryFor.WaitingOnInitDependency,
-      "ensure_identity_provider_config_created",
-      show"Create identity provider $id",
-      client.createIdentityProviderConfig(id, isDeactivated, jwksUrl, issuer, audience).recover {
-        case ex: StatusRuntimeException if ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
-          logger.info(show"Identity provider $id already exists")
-      },
-      logger,
-    )
 
   def getSupportedPackageVersion(
       synchronizerId: SynchronizerId,
@@ -777,6 +712,23 @@ class SpliceLedgerConnection(
     callCallbacksOnCompletion(result)(x => (None, x))
   }
 
+  // Returns Some(completionOffset) when the exception is DUPLICATE_COMMAND with accepted=true,
+  // allowing callers to fetch the already-completed transaction instead of failing.
+  private def parseDuplicateCommandAccepted(ex: StatusRuntimeException): Option[Long] = {
+    val statusProto = GrpcStatusProto.fromThrowable(ex)
+    if (statusProto == null) None
+    else
+      ErrorDetails
+        .from(statusProto)
+        .collectFirst {
+          case ErrorInfoDetail(errorCodeId, metadata)
+              if errorCodeId == "DUPLICATE_COMMAND" &&
+                metadata.get("accepted").contains("true") =>
+            metadata.get("completion_offset").flatMap(co => Try(co.toLong).toOption)
+        }
+        .flatten
+  }
+
   private def verifyEnoughExtraTrafficRemains(
       synchronizerId: SynchronizerId,
       commandPriority: CommandPriority,
@@ -863,6 +815,7 @@ class SpliceLedgerConnection(
       priority: CommandPriority,
       deadline: Option[NonNegativeFiniteDuration] = None,
       preferredPackageIds: Seq[String] = Seq.empty,
+      recoverAcceptedDuplicates: Boolean = false,
   ) {
     private type DedupNotSpecifiedYet = CmdId =:= Any
     private type SynchronizerIdRequired = DomId <:< SynchronizerId
@@ -873,6 +826,7 @@ class SpliceLedgerConnection(
         disclosedContracts: DisclosedContracts = this.disclosedContracts,
         deadline: Option[NonNegativeFiniteDuration] = this.deadline,
         preferredPackageIds: Seq[String] = this.preferredPackageIds,
+        recoverAcceptedDuplicates: Boolean = this.recoverAcceptedDuplicates,
     ): submit[C, CmdId0, DomId0] =
       new submit(
         actAs,
@@ -884,7 +838,17 @@ class SpliceLedgerConnection(
         priority,
         deadline,
         preferredPackageIds,
+        recoverAcceptedDuplicates,
       )
+
+    /** Read an already-accepted duplicate back from the ledger and return its result, rather
+      * than failing the submission.
+      *
+      * For client calls, which cannot do anything useful with the failure. Automation leaves
+      * this off: a trigger needs the error so that its own retry re-runs the staleness check.
+      */
+    def recoveringAcceptedDuplicates(enabled: Boolean = true): submit[C, CmdId, DomId] =
+      copy(recoverAcceptedDuplicates = enabled)
 
     def withDedup(commandId: CommandId, deduplicationOffset: Long)(implicit
         cid: DedupNotSpecifiedYet
@@ -997,6 +961,21 @@ class SpliceLedgerConnection(
                     )
                     .withCause(ex.getCause)
                     .asRuntimeException
+                }
+                .recoverWith {
+                  case ex: StatusRuntimeException
+                      if recoverAcceptedDuplicates &&
+                        ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
+                    parseDuplicateCommandAccepted(ex) match {
+                      case Some(completionOffset) =>
+                        client.recoverFromDuplicateCommand(
+                          waitFor,
+                          completionOffset,
+                          actAs.map(_.toProtoPrimitive),
+                        )
+                      case None =>
+                        Future.failed(ex)
+                    }
                 }
             )(getOffsetAndResult)
 

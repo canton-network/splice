@@ -68,23 +68,12 @@ final class SvConnection private (
       templateDecoder: TemplateJsonDecoder,
       ec: ExecutionContext,
       mat: Materializer,
-  ): Future[ByteString] =
+  ): Future[Seq[ByteString]] =
     runHttpCmd(
       config.url,
       HttpSvPublicAppClient.OnboardSvSequencer(
         sequencerId
       ),
-    )
-
-  def getDsoInfo()(implicit
-      httpClient: HttpClient,
-      templateDecoder: TemplateJsonDecoder,
-      ec: ExecutionContext,
-      mat: Materializer,
-  ): Future[HttpSvPublicAppClient.DsoInfo] =
-    runHttpCmd(
-      config.url,
-      HttpSvPublicAppClient.GetDsoInfo,
     )
 
   def getMigrationId()(implicit

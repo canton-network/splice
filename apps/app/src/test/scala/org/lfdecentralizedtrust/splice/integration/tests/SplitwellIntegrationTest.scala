@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.SynchronizerAlias
 import org.lfdecentralizedtrust.splice.codegen.java.splice.splitwell as splitwellCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.splitwell.automation.AcceptedAppPaymentRequestsTrigger
@@ -20,6 +21,8 @@ class SplitwellIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .withAdditionalSetup(implicit env => {
         aliceValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
         bobValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
@@ -81,17 +84,17 @@ class SplitwellIntegrationTest
         groups should have size 1 withClue "alice Groups"
     }
 
-    "use its own app domain" in { implicit env =>
+    "use the global synchronizer" in { implicit env =>
       val (aliceUserParty, bobUserParty, _, _, key, _) = initSplitwellTest()
 
       aliceWalletClient.tap(50)
 
       val rules = aliceSplitwellClient.listSplitwellRules()
-      rules.keySet.map(_.uid.identifier) shouldBe Set("splitwell")
+      rules.keySet shouldBe Set(decentralizedSynchronizerId)
 
       val (_, paymentRequest) =
         actAndCheck(timeUntilSuccess = 40.seconds, maxPollInterval = 1.second)(
-          "alice initiates transfer on splitwell domain",
+          "alice initiates transfer",
           aliceSplitwellClient.initiateTransfer(
             key,
             Seq(
@@ -102,21 +105,21 @@ class SplitwellIntegrationTest
             ),
           ),
         )(
-          "alice sees payment request on global domain",
+          "alice sees payment request",
           _ => {
             getSingleAppPaymentRequest(aliceWalletClient)
           },
         )
 
       actAndCheck(
-        "alice initiates payment accept request on global domain",
+        "alice accepts the payment request",
         aliceWalletClient.acceptAppPaymentRequest(paymentRequest.contractId),
       )(
-        "alice sees balance update on splitwell domain",
+        "alice sees balance update on the global synchronizer",
         _ =>
           inside(aliceSplitwellClient.listBalanceUpdates(key)) { case Seq(update) =>
             val synchronizerId = aliceValidatorBackend.participantClient.synchronizers.id_of(
-              SynchronizerAlias.tryCreate("splitwell")
+              SynchronizerAlias.tryCreate("global")
             )
             aliceValidatorBackend.participantClient.ledger_api_extensions.acs
               .lookup_contract_domain(
@@ -144,10 +147,10 @@ class SplitwellIntegrationTest
       )
       try {
         splitwellBackend.participantClient.synchronizers
-          .disconnect(SynchronizerAlias.tryCreate("splitwell"))
+          .disconnect(SynchronizerAlias.tryCreate("global"))
       } finally {
         splitwellBackend.participantClient.synchronizers.reconnect(
-          SynchronizerAlias.tryCreate("splitwell")
+          SynchronizerAlias.tryCreate("global")
         )
       }
       actAndCheck("alice creates group2", aliceSplitwellClient.requestGroup("group2"))(
@@ -163,7 +166,7 @@ class SplitwellIntegrationTest
 
       val (paymentRequest, _) =
         actAndCheck(
-          "alice initiates transfer on splitwell domain",
+          "alice initiates transfer",
           aliceSplitwellClient.initiateTransfer(
             key,
             Seq(

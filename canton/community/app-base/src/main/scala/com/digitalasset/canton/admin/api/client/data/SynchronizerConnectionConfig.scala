@@ -5,11 +5,14 @@ package com.digitalasset.canton.admin.api.client.data
 
 import cats.syntax.either.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.catsinstances.`cats nonempty traverse`
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.config.SynchronizerTimeTrackerConfig
 import com.digitalasset.canton.console.ConsoleEnvironment
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig as SynchronizerConnectionConfigInternal
 import com.digitalasset.canton.time.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
@@ -62,7 +65,7 @@ final case class SynchronizerConnectionConfig(
     maxRetryDelay: Option[NonNegativeFiniteDuration] = None,
     timeTracker: SynchronizerTimeTrackerConfig = SynchronizerTimeTrackerConfig(),
     initializeFromTrustedSynchronizer: Boolean = false,
-) extends PrettyPrinting {
+) extends PrettyPrintingFromCompanion {
 
   /** Merges this connection config with provided config, but only if the provided config is
     * subsumed by this config. The provided configuration is considered subsumed, if all its
@@ -90,6 +93,7 @@ final case class SynchronizerConnectionConfig(
               `sequencerConnections`.`sequencerLivenessMargin`,
               `sequencerConnections`.submissionRequestAmplification,
               `sequencerConnections`.sequencerConnectionPoolDelays,
+              `sequencerConnections`.subscriptionLivenessLimits,
             ),
             `manualConnect`,
             otherSynchronizerId,
@@ -148,6 +152,7 @@ final case class SynchronizerConnectionConfig(
             sequencerConnections.sequencerLivenessMargin,
             sequencerConnections.submissionRequestAmplification,
             sequencerConnections.sequencerConnectionPoolDelays,
+            sequencerConnections.subscriptionLivenessLimits,
           )
         } yield this.copy(
           synchronizerId = updatedSynchronizerId,
@@ -225,7 +230,18 @@ final case class SynchronizerConnectionConfig(
       sequencerConnections.withSubmissionRequestAmplification(submissionRequestAmplification)
     )
 
-  override protected def pretty: Pretty[SynchronizerConnectionConfig] =
+  override def prettyCompanion: PrettyPrintingCompanion[SynchronizerConnectionConfig] =
+    SynchronizerConnectionConfig
+
+  private[canton] def toInternal: SynchronizerConnectionConfigInternal =
+    this
+      .into[SynchronizerConnectionConfigInternal]
+      .withFieldRenamed(_.synchronizerId, _.psid)
+      .transform
+}
+
+object SynchronizerConnectionConfig extends PrettyPrintingCompanion[SynchronizerConnectionConfig] {
+  override protected val pretty: Pretty[SynchronizerConnectionConfig] =
     prettyOfClass(
       param("synchronizer", _.synchronizerAlias),
       param("sequencerConnections", _.sequencerConnections),
@@ -242,14 +258,6 @@ final case class SynchronizerConnectionConfig(
       ),
     )
 
-  def toInternal: SynchronizerConnectionConfigInternal =
-    this
-      .into[SynchronizerConnectionConfigInternal]
-      .withFieldRenamed(_.synchronizerId, _.psid)
-      .transform
-}
-
-object SynchronizerConnectionConfig {
   def tryGrpcSingleConnection(
       synchronizerAlias: SynchronizerAlias,
       sequencerAlias: SequencerAlias,
@@ -297,6 +305,7 @@ object SynchronizerConnectionConfig {
         SubmissionRequestAmplification.NoAmplification,
       sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
         SequencerConnectionPoolDelays.default,
+      subscriptionLivenessLimits: SubscriptionLivenessLimits = SubscriptionLivenessLimits.default,
   )(implicit consoleEnvironment: ConsoleEnvironment): SynchronizerConnectionConfig = {
     val sequencerConnections =
       SequencerConnections.tryMany(
@@ -305,6 +314,7 @@ object SynchronizerConnectionConfig {
         sequencerLivenessMargin = sequencerLivenessMargin,
         submissionRequestAmplification = submissionRequestAmplification,
         sequencerConnectionPoolDelays = sequencerConnectionPoolDelays,
+        subscriptionLivenessLimits = subscriptionLivenessLimits,
       )
 
     SynchronizerConnectionConfig(

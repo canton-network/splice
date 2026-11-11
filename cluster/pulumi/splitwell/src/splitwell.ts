@@ -23,6 +23,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
+  checkValidatorKeyDownloadForPeriodicBackups,
   installParticipant,
   splitwellDarPaths,
 } from '@canton-network/splice-pulumi-common-validator';
@@ -51,6 +52,7 @@ export async function installSplitwell(
         'splitwell-pg',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         splitPostgresInstances
       );
 
@@ -60,9 +62,9 @@ export async function installSplitwell(
 
   installIngress(xns, imagePullDeps);
 
+  checkValidatorKeyDownloadForPeriodicBackups('splitwell', splitwellConfig, backupConfig);
   const participant = await installParticipant(
     splitwellConfig,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     false,
@@ -81,6 +83,7 @@ export async function installSplitwell(
       'sw-pg',
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const splitwellDbName = 'app_splitwell';
@@ -127,6 +130,7 @@ export async function installSplitwell(
       'validator-pg',
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const validatorDbName = 'val_splitwell';

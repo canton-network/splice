@@ -12,7 +12,7 @@ import { UseQueryResult } from '@tanstack/react-query';
 import React from 'react';
 import JSONPretty from 'react-json-pretty';
 import 'react-json-pretty/themes/monikai.css';
-import { CometBftNodeDumpOrErrorResponse, NodeStatus } from '@canton-network/sv-openapi';
+import { NodeStatus } from '@canton-network/sv-openapi';
 
 import { Box, Tab, Table, TableBody, TableRow, Tabs, Typography } from '@mui/material';
 import TableCell from '@mui/material/TableCell';
@@ -22,13 +22,16 @@ import { SvNodeState } from '@daml.js/splice-dso-governance/lib/Splice/DSO/SvSta
 import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
 export interface DsoInfo {
-  svUser: string;
-  svPartyId: string;
   dsoPartyId: string;
   votingThreshold: bigint;
   amuletRules: Contract<AmuletRules>;
   dsoRules: Contract<DsoRules>;
   nodeStates: Contract<SvNodeState>[];
+}
+
+export interface SvInfo {
+  svUser: string;
+  svPartyId: string;
 }
 
 function encodeSvUiState(uiState: DsoInfo): unknown {
@@ -70,12 +73,15 @@ function getInfoTable(title: string, rows: { key: string; value: string; isParty
 function createRow(key: string, value: string, isParty: boolean = false) {
   return { key, value, isParty };
 }
-const GeneralInformationView: React.FC<{ dsoInfo: DsoInfo }> = ({ dsoInfo }) => {
+const GeneralInformationView: React.FC<{ dsoInfo: DsoInfo; svInfo: SvInfo }> = ({
+  dsoInfo,
+  svInfo,
+}) => {
   const cs: { key: string; value: string }[] = [];
   dsoInfo.dsoRules.payload.svs.forEach((value, key) => cs.push(createRow(key, value.name)));
   const svInfos = [
-    createRow('svUser', dsoInfo.svUser),
-    createRow('svPartyId', dsoInfo.svPartyId, true),
+    createRow('svUser', svInfo.svUser),
+    createRow('svPartyId', svInfo.svPartyId, true),
   ];
   const membersInfos: { key: string; value: string; isParty: boolean }[] = [];
   for (const member of cs) {
@@ -114,38 +120,6 @@ const TabPanel = (props: TabPanelProps) => {
     </div>
   );
 };
-
-function getCometBftDebugData(
-  cometBftNodeDebugQuery: UseQueryResult<CometBftNodeDumpOrErrorResponse>
-) {
-  if (cometBftNodeDebugQuery.isPending) {
-    return <Loading />;
-  }
-
-  if (cometBftNodeDebugQuery.isError) {
-    console.error(cometBftNodeDebugQuery.error);
-    return <p>Error encountered in cometBFT node: {cometBftNodeDebugQuery.error.message} </p>;
-  }
-
-  const data = cometBftNodeDebugQuery.data!;
-
-  return (
-    <div>
-      <JSONPretty id="comet-bft-debug-abci" style={{ fontSize: '10pt' }} data={data.abci_info} />
-      <JSONPretty
-        id="comet-bft-debug-validators"
-        style={{ fontSize: '10pt' }}
-        data={data.validators}
-      />
-      <JSONPretty id="comet-bft-debug-status" style={{ fontSize: '10pt' }} data={data.status} />
-      <JSONPretty
-        id="comet-bft-debug-network"
-        style={{ fontSize: '10pt' }}
-        data={data.network_info}
-      />
-    </div>
-  );
-}
 
 const StatusDisplay: React.FC<{ status: UseQueryResult<NodeStatus> }> = ({ status }) => {
   if (status.isPending) {
@@ -187,7 +161,7 @@ function cantonDomainTab(
 ) {
   const sequencerSection = (
     <div>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Sequencer status
       </Typography>
       <StatusDisplay status={sequencerStatus} />
@@ -195,7 +169,7 @@ function cantonDomainTab(
   );
   const mediatorSection = (
     <div>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Mediator status
       </Typography>
       <StatusDisplay status={mediatorStatus} />
@@ -217,13 +191,13 @@ function tabProps(info: string) {
 }
 interface DsoViewPrettyJSONProps {
   dsoInfoQuery: UseQueryResult<DsoInfo>;
-  cometBftNodeDebugQuery?: UseQueryResult<CometBftNodeDumpOrErrorResponse>;
+  svInfoQuery: UseQueryResult<SvInfo>;
   sequencerStatusQuery?: UseQueryResult<NodeStatus>;
   mediatorStatusQuery?: UseQueryResult<NodeStatus>;
 }
 const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
   dsoInfoQuery,
-  cometBftNodeDebugQuery,
+  svInfoQuery,
   sequencerStatusQuery,
   mediatorStatusQuery,
 }) => {
@@ -233,15 +207,16 @@ const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
     setValue(newValue);
   };
 
-  if (dsoInfoQuery.isPending) {
+  if (dsoInfoQuery.isPending || svInfoQuery.isPending) {
     return <Loading />;
   }
   if (dsoInfoQuery.isError) {
     return <ErrorDisplay message={'Failed to fetch DSO info.'} />;
   }
+  if (svInfoQuery.isError) {
+    return <ErrorDisplay message={'Failed to fetch SV info.'} />;
+  }
   const dsoInfoData = dsoInfoQuery.data;
-
-  const cometBftDebugTab = cometBftNodeDebugQuery && getCometBftDebugData(cometBftNodeDebugQuery);
 
   const updatedAmuletRules: AmuletRules = {
     dso: dsoInfoData?.amuletRules.payload.dso!,
@@ -260,14 +235,13 @@ const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
             label={`${window.splice_config.spliceInstanceNames?.amuletName} Info`}
             {...tabProps('amulet-info')}
           />
-          {cometBftDebugTab && <Tab label="CometBFT Debug Info" {...tabProps('cometBft-debug')} />}
           {sequencerStatusQuery && mediatorStatusQuery && (
             <Tab label="Domain Node Status" {...tabProps('canton-domain-status')} />
           )}
         </Tabs>
       </Box>
       <TabPanel value={value} index={0}>
-        <GeneralInformationView dsoInfo={dsoInfoData} />
+        <GeneralInformationView dsoInfo={dsoInfoData} svInfo={svInfoQuery.data} />
       </TabPanel>
       <TabPanel value={value} index={1}>
         <JSONPretty
@@ -283,13 +257,8 @@ const DsoViewPrettyJSON: React.FC<DsoViewPrettyJSONProps> = ({
           data={AmuletRules.encode(updatedAmuletRules)}
         />
       </TabPanel>
-      {cometBftDebugTab && (
-        <TabPanel value={value} index={3}>
-          {cometBftDebugTab}
-        </TabPanel>
-      )}
       {sequencerStatusQuery && mediatorStatusQuery && (
-        <TabPanel value={value} index={4}>
+        <TabPanel value={value} index={3}>
           {cantonDomainTab(sequencerStatusQuery, mediatorStatusQuery)}
         </TabPanel>
       )}

@@ -1,58 +1,42 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as pulumi from '@pulumi/pulumi';
 import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerMigrationConfig,
   EnvVarConfig,
+  envoyClientIpHeaderEnvVar,
   MigrationInfo,
   pvcSuffix,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 
 import { SingleSvConfiguration } from './singleSvConfig';
-import {
-  CometbftSynchronizerNode,
-  DecentralizedSynchronizerNode,
-} from './synchronizer/decentralizedSynchronizerNode';
+import { DecentralizedSynchronizerNode } from './synchronizer/decentralizedSynchronizerNode';
 import { SynchronizerNodes } from './synchronizer/synchronizerNodes';
 
 function localSynchronizerNodeValues(
   node: DecentralizedSynchronizerNode,
   nodeConfig: MigrationInfo,
   ingressName: string,
-  cometBftGovernanceKey?: unknown,
   sequencerPruningConfig?: object
 ) {
-  const useCantonBft = nodeConfig.sequencer.enableBftSequencer;
   return {
     sequencerAddress: node.namespaceInternalSequencerAddress,
     mediatorAddress: node.namespaceInternalMediatorAddress,
     sequencerPublicUrl: `https://sequencer-${nodeConfig.id}.${ingressName}.${CLUSTER_HOSTNAME}`,
-    ...(useCantonBft ? { enableBftSequencer: true } : {}),
-    ...(!useCantonBft
-      ? {
-          cometBFT: {
-            enabled: true,
-            connectionUri: pulumi.interpolate`http://${(node as unknown as CometbftSynchronizerNode).cometbftRpcServiceName}:26657`,
-            ...(cometBftGovernanceKey ? { externalGovernanceKey: true } : {}),
-          },
-        }
-      : {}),
     ...(sequencerPruningConfig ? { sequencerPruningConfig } : {}),
   };
 }
 
 export function valuesForSvApp(
   decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig,
-  config: SingleSvConfiguration & { cometBftGovernanceKey?: unknown; skipInitialization?: boolean },
+  config: SingleSvConfiguration & { skipInitialization?: boolean },
   synchronizerNodes: SynchronizerNodes,
   ingressName: string
 ): {
   domain?: object;
   synchronizers?: object;
   additionalEnvVars: EnvVarConfig[];
-  cometBFT?: object;
   pvc: object;
   permissionedSynchronizer?: boolean;
 } {
@@ -109,7 +93,8 @@ export function valuesForSvApp(
     .concat(bftSequencerConnectionEnvVars)
     .concat(mediatorPruningConfig)
     .concat(cantonBftPruningConfig)
-    .concat(additionalPackagesToUnvetConfig);
+    .concat(additionalPackagesToUnvetConfig)
+    .concat([envoyClientIpHeaderEnvVar('canton.sv-apps.sv')]);
 
   const synchronizerValues: { synchronizers: object } = {
     synchronizers: {
@@ -120,7 +105,6 @@ export function valuesForSvApp(
         synchronizerNodes.active,
         decentralizedSynchronizerMigrationConfig.active,
         ingressName,
-        config.cometBftGovernanceKey,
         config.pruning?.sequencer
       ),
       ...(synchronizerNodes.upgrade
@@ -129,7 +113,6 @@ export function valuesForSvApp(
               synchronizerNodes.upgrade,
               decentralizedSynchronizerMigrationConfig.upgrade!,
               ingressName,
-              config.cometBftGovernanceKey,
               config.pruning?.sequencer
             ),
           }
@@ -140,7 +123,6 @@ export function valuesForSvApp(
               synchronizerNodes.legacy,
               decentralizedSynchronizerMigrationConfig.legacy!,
               ingressName,
-              config.cometBftGovernanceKey,
               config.pruning?.sequencer
             ),
           }
@@ -160,7 +142,6 @@ export function valuesForSvApp(
                 node,
                 info,
                 ingressName,
-                config.cometBftGovernanceKey,
                 config.pruning?.sequencer
               );
             }),

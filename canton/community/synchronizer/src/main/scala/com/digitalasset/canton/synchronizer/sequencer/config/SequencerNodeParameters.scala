@@ -59,6 +59,8 @@ trait SequencerParameters {
   *   the server binary when the server is running an unstable protocol version.
   * @param enablePrevalidation
   *   if true then we will prevalidate signatures in a separate stage before processing
+  * @param enableAsyncSequencerLogging
+  *   if true then we will log the events after processing, but with outcomes
   */
 final case class SequencerNodeParameters(
     general: CantonNodeParameters.General,
@@ -76,9 +78,10 @@ final case class SequencerNodeParameters(
     delayRequestsBeforeLsuTrafficInit: Boolean,
     enableRejectDeliveredAggregationsOnPv35: Seq[String],
     disableSubmissionChecksForTesting: Boolean = false,
-    disableReleaseVersionHandshakeCheck: Boolean = false,
     lsuConfig: SequencerLsuConfig,
-    enablePrevalidation: Boolean = true,
+    disableReleaseVersionHandshakeCheck: Boolean = false,
+    enablePrevalidation: Boolean = true, // can be removed in 3.7
+    enableAsyncSequencerLogging: Boolean = false,
 ) extends CantonNodeParameters
     with HasGeneralCantonNodeParameters
     with HasProtocolCantonNodeParameters

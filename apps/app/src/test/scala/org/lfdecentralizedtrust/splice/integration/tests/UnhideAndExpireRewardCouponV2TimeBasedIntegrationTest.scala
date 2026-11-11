@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv
   RewardCoupon_AssignBeneficiaries,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -32,7 +33,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireRewardCouponV2Trigger,
   UnhideRewardCouponV2Trigger,
 }
-import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -51,12 +51,14 @@ import scala.jdk.OptionConverters.*
 // - ExpireRewardCouponV2Trigger does expiry correctly in both vetting state scenarios
 // Also include a test for an additional scenario where the reward assignment is
 // done while the beneficiary is offline (but has already vetted).
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
+@org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
 class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
     with WalletTestUtil
     with TimeTestUtil {
+
+  private val rewardCouponTtl = Duration.ofHours(2)
 
   // Version where V2 was introduced, or the current minimum initialization version if higher
   private val minV2AmuletVersion =
@@ -104,29 +106,23 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withNoVettedPackages(implicit env => Seq(aliceValidatorBackend.participantClient))
-      .addConfigTransforms((_, config) => {
-        val aliceValidator = InstanceName.tryCreate("aliceValidator")
-        config.copy(
-          validatorApps = config.validatorApps +
-            (aliceValidator -> config
-              .validatorApps(aliceValidator)
-              .copy(
-                additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
-                  .groupBy(_.metadata.name)
-                  .map { case (name, resources) =>
-                    name -> resources.map(_.metadata.version).toSet
-                  }
-              ))
-        )
-      })
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.withRewardConfig(
-          InitialRewardConfig(
-            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
-            dryRunVersion = None,
-            appRewardCouponThreshold = BigDecimal("0"),
+      .addConfigTransforms(
+        (_, config) => {
+          val aliceValidator = InstanceName.tryCreate("aliceValidator")
+          config.copy(
+            validatorApps = config.validatorApps +
+              (aliceValidator -> config
+                .validatorApps(aliceValidator)
+                .copy(
+                  additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
+                    .groupBy(_.metadata.name)
+                    .map { case (name, resources) =>
+                      name -> resources.map(_.metadata.version).toSet
+                    }
+                ))
           )
-        )(config)
+        },
+        (_, c) => ConfigTransforms.withNoSvOperationsSwitchOverTimes(c),
       )
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
@@ -143,6 +139,17 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           svConfig.copy(
             packageVettingCache = svConfig.packageVettingCache.copy(
               ttl = NonNegativeFiniteDuration.ofMillis(1)
+            )
+          )
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(foundDso =>
+          foundDso.copy(initialRewardConfig =
+            Some(
+              foundDso.initialRewardConfig
+                .getOrElse(InitialRewardConfig())
+                .copy(rewardCouponTimeToLiveMicros = rewardCouponTtl.toNanos / 1000)
             )
           )
         )(config)
@@ -205,8 +212,8 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       }
 
       actAndCheck(
-        "Advance past the coupon TTL while Alice is unvetted",
-        advanceTime(Duration.ofHours(37)),
+        "Advance past the coupon TTL while Alice is unvetted, one round at a time",
+        advanceRoundsUntil(getLedgerTime.toInstant.plus(rewardCouponTtl.plusMinutes(20))),
       )(
         "ExpireRewardCouponV2Trigger archives Alice's hidden and Bob's coupons while she is unvetted",
         _ => sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty,
@@ -432,8 +439,8 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         .toSet
 
       actAndCheck(
-        "Advance past the coupon TTL",
-        advanceTime(Duration.ofHours(37)),
+        "Advance past the coupon TTL, one round at a time",
+        advanceRoundsUntil(getLedgerTime.toInstant.plus(rewardCouponTtl.plusMinutes(20))),
       )(
         "ExpireRewardCouponV2Trigger ignores Alice coupons",
         _ => {
@@ -469,6 +476,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         },
       )
     }
+
   }
 
   private def vettedPackagesOnSv1View(
@@ -515,6 +523,8 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           update = new FeaturedAppRight(
             dsoParty.toProtoPrimitive,
             aliceParty.toProtoPrimitive,
+            java.util.Optional.empty(),
+            java.util.Optional.empty(),
             java.util.Optional.empty(),
           ).create,
         ),
@@ -601,12 +611,13 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       aliceParty: PartyId
   )(implicit env: SpliceTestConsoleEnvironment): Option[PackageVersion] =
     sv1Backend.participantClient.ledger_api.interactive_submission
-      .preferred_package_version(
-        Set(aliceParty),
-        DarResources.amulet.latest.metadata.name,
+      .preferred_packages(
+        Map(DarResources.amulet.latest.metadata.name -> Set(aliceParty)),
         Some(decentralizedSynchronizerId),
       )
-      .flatMap(_.packageReference.map(ref => PackageVersion.assertFromString(ref.packageVersion)))
+      .packageReferences
+      .headOption
+      .map(ref => PackageVersion.assertFromString(ref.packageVersion))
 
   private def hiddenCouponsMetricValue(
       party: PartyId

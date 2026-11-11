@@ -3,6 +3,7 @@
 import {
   AmuletPriceVote,
   DsoInfo,
+  SvInfo,
   SvVote,
   VotesHooks,
   VotesHooksContext,
@@ -18,13 +19,17 @@ import {
 import { ContractId } from '@daml/types';
 
 import * as svHooks from '../hooks';
-import { useDsoInfos as svAppUseDsoInfos } from '../contexts/SvContext';
+import { useDsoInfos as useSvAppDsoInfos } from '../contexts/SvContext';
 
 export const SvAppVotesHooksProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const hooks: VotesHooks = {
     isReadOnly: false,
     useDsoInfos(): UseQueryResult<DsoInfo> {
-      return svAppUseDsoInfos();
+      return useSvAppDsoInfos();
+    },
+    useSvInfo(): UseQueryResult<SvInfo> {
+      // The sv-app has both DsoInfo and SvInfo in a single endpoint
+      return useSvAppDsoInfos();
     },
     useListDsoRulesVoteRequests(): UseQueryResult<Contract<VoteRequest>[]> {
       return svHooks.useListDsoRulesVoteRequests();

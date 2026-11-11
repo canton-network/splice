@@ -8,7 +8,7 @@ import { Output } from '@pulumi/pulumi';
 import { AuthenticationClient, ManagementClient, TokenSet, withRetries } from 'auth0';
 
 import { config, isMainNet } from '../config';
-import { infraStack } from '../stackReferences';
+import { StackReferences } from '../stackReferences';
 import { fixedTokens } from '../utils';
 import { DEFAULT_AUDIENCE } from './audiences';
 import type {
@@ -55,20 +55,6 @@ export class Auth0Fetch implements Auth0Client {
 
   public getCfg(): Auth0Config {
     return this.cfg;
-  }
-
-  // Any namespace that we deploy using validator-runbook stack currently reuses the
-  // Auth0 artifacts from the 'validator' namespace, so we just copy the config over
-  // so that any lookup by namespace will just work.
-  public reuseNamespaceConfig(fromNamespace: string, toNamespace: string): void {
-    if (fromNamespace === toNamespace) {
-      // Nothing to do
-      return;
-    }
-    if (!this.cfg.namespacedConfigs[fromNamespace]) {
-      throw new Error(`No Auth0 configuration for namespace ${fromNamespace}`);
-    }
-    this.cfg.namespacedConfigs[toNamespace] = this.cfg.namespacedConfigs[fromNamespace];
   }
 
   private async loadSecrets(): Promise<Auth0SecretMap> {
@@ -253,7 +239,7 @@ export class Auth0Fetch implements Auth0Client {
        * lifetime or extend the length of the tokens issued by Auth0
        * (configured in the configuration of the ledger-api API in auth0).
        */
-      console.error(
+      await pulumi.log.error(
         `Auth0 access token issued with expiry (${expires_in}) too short to meet REQUIRED_TOKEN_LIFETIME (${REQUIRED_TOKEN_LIFETIME})`
       );
       process.exit(1);
@@ -314,7 +300,7 @@ export enum Auth0ClientType {
 
 export function getAuth0ClusterConfig(): Output<Auth0ClusterConfig> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const infraOutput: pulumi.Output<any> = infraStack.requireOutput('auth0');
+  const infraOutput: pulumi.Output<any> = StackReferences.infra.requireOutput('auth0');
   return infraOutput.apply(output => {
     if (
       (output['cantonNetwork'] && output['cantonNetwork']['appToClientId'] === undefined) ||

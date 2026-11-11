@@ -42,7 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
 }
 import org.lfdecentralizedtrust.splice.sv.migration.SynchronizerNodeIdentities
 import org.lfdecentralizedtrust.splice.sv.util.ValidatorOnboarding
-import org.lfdecentralizedtrust.splice.util.Contract
+import org.lfdecentralizedtrust.splice.util.{Contract, DsoInfo}
 
 import java.time.Instant
 import scala.concurrent.duration.FiniteDuration
@@ -89,31 +89,9 @@ abstract class SvAppReference(
       httpCommand(HttpSvPublicAppClient.DevNetOnboardValidatorPrepare())
     }
 
-  def getDsoInfo(): HttpSvPublicAppClient.DsoInfo =
+  def getDsoInfo(): DsoInfo =
     consoleEnvironment.run {
-      httpCommand(HttpSvPublicAppClient.GetDsoInfo)
-    }
-
-  @Help.Summary("Get the CometBFT node status")
-  def cometBftNodeStatus(): definitions.CometBftNodeStatusResponse =
-    consoleEnvironment.run {
-      httpCommand(HttpSvPublicAppClient.GetCometBftNodeStatus())
-    }
-
-  @Help.Summary("Get the CometBFT node dump")
-  def cometBftNodeDebugDump(): definitions.CometBftNodeDumpResponse =
-    consoleEnvironment.run {
-      httpCommand(HttpSvOperatorAppClient.GetCometBftNodeDump())
-    }
-
-  @Help.Summary("Make a CometBFT Json RPC request")
-  def cometBftJsonRpcRequest(
-      id: definitions.CometBftJsonRpcRequestId,
-      method: definitions.CometBftJsonRpcRequest.Method,
-      params: Map[String, io.circe.Json] = Map.empty,
-  ): definitions.CometBftJsonRpcResponse =
-    consoleEnvironment.run {
-      httpCommand(HttpSvPublicAppClient.CometBftJsonRpcRequest(id, method, params))
+      httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }
 
   def onboardSvPartyMigrationAuthorize(
@@ -184,6 +162,17 @@ abstract class SvAppReference(
         throw new RuntimeException("No latest vote request found")
       )
     latestVoteRequest.payload.trackingCid.toScala.getOrElse(latestVoteRequest.contractId)
+  }
+
+  @Help.Summary("List vote requests by their trackingCids")
+  def listVoteRequestsByTrackingCid(
+      trackingCids: Seq[VoteRequest.ContractId]
+  ): Seq[Contract[VoteRequest.ContractId, VoteRequest]] = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.ListVoteRequestsByTrackingCid(trackingCids)
+      )
+    }
   }
 
   @Help.Summary("Lookup vote request")
@@ -292,13 +281,10 @@ class SvAppBackendReference(
   def appState: SvApp.State = _appState[SvApp.State, SvApp]
 
   @Help.Summary(
-    "Returns the current delegate based automation. Do not keep references to the result, as this automation gets replaced whenever the DSO delegate changes."
+    "Returns the delegate based automation. The reference is stable for the lifetime of the app."
   )
-  def dsoDelegateBasedAutomation: DsoDelegateBasedAutomationService = {
-    appState.dsoAutomation.restartDsoDelegateBasedAutomationTrigger.epochState
-      .getOrElse(throw new RuntimeException("LeaderBasedAutomation is not fully started up"))
-      .dsoDelegateBasedAutomation
-  }
+  def dsoDelegateBasedAutomation: DsoDelegateBasedAutomationService =
+    appState.dsoAutomation.dsoDelegateBasedAutomation
 
   @Help.Summary(
     "Returns the current DSO automation."
@@ -369,12 +355,6 @@ class SvAppBackendReference(
       )
     }
 
-  @Help.Summary("Get the CometBFT node debug dump")
-  def cometBftNodeDump(): definitions.CometBftNodeDumpResponse =
-    consoleEnvironment.run {
-      httpCommand(HttpSvOperatorAppClient.GetCometBftNodeDump())
-    }
-
   @Help.Summary("Get the party to participant mapping for a given party")
   def getPartyToParticipant(partyId: String): definitions.GetPartyToParticipantResponseV1 =
     consoleEnvironment.run {
@@ -403,11 +383,6 @@ class SvAppBackendReference(
 
   lazy val sequencerClient: SequencerClientReference =
     sequencerClientFor(_.current)
-
-  lazy val sequencerClientSuccessor: SequencerClientReference =
-    sequencerClientFor(
-      _.successor.getOrElse(throw new IllegalStateException("successor not configured"))
-    )
 
   def sequencerClientFor(
       node: SvSynchronizerNodesConfig => SvSynchronizerNodeConfig

@@ -1,9 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { useAmuletPriceVotes } from './useAmuletPriceVotes';
-import { useCometBftDebug } from './useCometBftDebug';
 import { useInfiniteVoteRequestResults } from './useInfiniteVoteRequestResults';
-import { useListVoteRequestResult, useListDsoRulesVoteRequests } from './useListVoteRequests';
+import { useListDsoRulesVoteRequests, useListVoteRequestResult } from './useListVoteRequests';
 import { useListVotes } from './useListVotes';
 import { useMediatorStatus } from './useMediatorStatus';
 import { useNetworkInstanceName } from './useNetworkInstanceName';
@@ -16,7 +15,6 @@ import { useVoteRequestResultsCount } from './useVoteRequestResultsCount';
 
 export {
   useAmuletPriceVotes,
-  useCometBftDebug,
   useInfiniteVoteRequestResults,
   useListDsoRulesVoteRequests,
   useListVoteRequestResult,

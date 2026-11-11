@@ -16,4 +16,6 @@ object AdvisoryLockIds {
   private val base: Long = 0x73706c00
 
   final val acsSnapshotDataInsert: Long = base + 1
+  final val ddlStatement: Long = base + 2
+  final val acsSnapshotIndex: Long = base + 3
 }

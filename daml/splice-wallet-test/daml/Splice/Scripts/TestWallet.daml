@@ -547,6 +547,48 @@ testCO_MergeTransferInputs = script do
 
   pure ()
 
+testSelfGrantFeaturedAppRight : Script ()
+testSelfGrantFeaturedAppRight = script do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+
+  install <- submit (actAs alice.primaryParty <> actAs aliceValidator.primaryParty) $ createCmd $ WalletAppInstall with
+    endUserParty = alice.primaryParty
+    endUserName = "alice_user"
+    dsoParty = app.dso
+    validatorParty = aliceValidator.primaryParty
+  (amuletRulesCid, _) <- fetchAmuletRulesByKey app.dso
+
+  customCid <- submit (actAs aliceValidator.primaryParty <> readAs app.dso) $
+    exerciseCmd install WalletAppInstall_FeaturedAppRights_SelfGrant with
+      amuletRulesCid
+      activityWeight = Some 2.5
+      appKind = Some FAK_AssetMoving
+      opsParties = Some [bob.primaryParty]
+  Some customRight <- queryContractId alice.primaryParty customCid.featuredAppRight
+  customRight === FeaturedAppRight with
+    dso = app.dso
+    provider = alice.primaryParty
+    activityWeight = Some 2.5
+    appKind = Some FAK_AssetMoving
+    opsParties = Some [bob.primaryParty]
+
+  -- opsParties is limited to 10 entries
+  opsParties <- forA [1..11] $ \i -> allocateParty ("ops" <> show i)
+  submit (actAs aliceValidator.primaryParty <> readAs app.dso) $
+    exerciseCmd install WalletAppInstall_FeaturedAppRights_SelfGrant with
+      amuletRulesCid
+      activityWeight = None
+      appKind = None
+      opsParties = Some (take 10 opsParties)
+  submitMustFail (actAs aliceValidator.primaryParty <> readAs app.dso) $
+    exerciseCmd install WalletAppInstall_FeaturedAppRights_SelfGrant with
+      amuletRulesCid
+      activityWeight = None
+      appKind = None
+      opsParties = Some opsParties
+
+  pure ()
+
 testTransferPreapproval : Script ()
 testTransferPreapproval = script do
   DefaultAppWithUsers{..} <- setupDefaultAppWithUsers

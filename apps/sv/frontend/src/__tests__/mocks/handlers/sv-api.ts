@@ -10,7 +10,6 @@ import { FeatureSupportResponse, SuccessStatusResponse } from '@canton-network/s
 import {
   CountVoteResultsRequest,
   CountVoteResultsResponse,
-  ErrorResponse,
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
   ListFeaturedAppRightsByProviderResponse,
@@ -19,6 +18,7 @@ import {
   LookupFeaturedAppRightByContractIdResponse,
   ListVoteRequestByTrackingCidResponse,
   LookupDsoRulesVoteRequestResponse,
+  PrepareValidatorOnboardingResponse,
 } from '@canton-network/sv-openapi';
 
 import {
@@ -187,15 +187,6 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
     return new HttpResponse(null, { status: 201 });
   }),
 
-  http.get(`${svUrl}/v0/admin/domain/cometbft/debug`, () => {
-    return HttpResponse.json<ErrorResponse>(
-      {
-        error: `No domain nodes in this test.`,
-      },
-      { status: 404 }
-    );
-  }),
-
   http.get(`${svUrl}/v0/admin/domain/sequencer/status`, () => {
     return HttpResponse.json<SuccessStatusResponse>({
       success: {
@@ -229,6 +220,9 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
   }),
 
   validatorLicensesHandler(svUrl),
+  http.post(`${svUrl}/v0/admin/validator/onboarding/prepare`, () => {
+    return HttpResponse.json<PrepareValidatorOnboardingResponse>({ secret: 'new_encoded_secret' });
+  }),
   http.get(`${svUrl}/v0/admin/validator/onboarding/ongoing`, () => {
     return HttpResponse.json<ListOngoingValidatorOnboardingsResponse>({
       ongoing_validator_onboardings: [

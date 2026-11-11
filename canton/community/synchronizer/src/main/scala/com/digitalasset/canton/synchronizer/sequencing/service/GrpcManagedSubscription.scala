@@ -10,6 +10,7 @@ import cats.syntax.traverse.*
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown, UnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.sequencing.*
@@ -19,7 +20,7 @@ import com.digitalasset.canton.sequencing.client.transports.ServerSubscriptionCl
 import com.digitalasset.canton.synchronizer.sequencer.errors.CreateSubscriptionError
 import com.digitalasset.canton.synchronizer.sequencer.errors.CreateSubscriptionError.{
   EventsUnavailableForTimestamp,
-  MemberDisabled,
+  MemberNotActive,
 }
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.tracing.TraceContext
@@ -53,6 +54,16 @@ trait ManagedSubscription extends FlagCloseable with CloseNotification {
     * the connection to the sequencer itself is not terminated, and the subscription can be retried.
     */
   def transientClose(reason: ServerSubscriptionCloseReason.TransientCloseReason): Unit
+
+  /** Close the subscription for a fatal reason using the provided reason.
+    *
+    * Unlike [[transientClose]], which signals a temporary retryable condition (UNAVAILABLE), this
+    * method indicates that the subscription is permanently terminated (e.g. due to permission
+    * revocation or unrecoverable initialization error) and should not be automatically retried by
+    * the client.
+    */
+  def fatalClose(reason: ServerSubscriptionCloseReason.FatalCloseReason): Unit
+
 }
 
 /** Creates and manages a SequencerSubscription for the given grpc response observer. The sequencer
@@ -100,6 +111,11 @@ private[service] class GrpcManagedSubscription[T](
       ErrorSignal(Status.UNAVAILABLE.withDescription(reason.description).asException())
     )
 
+  override def fatalClose(reason: ServerSubscriptionCloseReason.FatalCloseReason): Unit =
+    signalAndClose(
+      ErrorSignal(reason.status.withDescription(reason.description).asException())
+    )
+
   private val handler: SequencedEventOrErrorHandler[SequencedEventError] = {
     case Right(event) =>
       implicit val traceContext: TraceContext = event.traceContext
@@ -145,7 +161,7 @@ private[service] class GrpcManagedSubscription[T](
                 // where a participant updates its sequencer connection config before it has caught up to the point
                 // where the sequencer was actually onboarded.
                 logger.info(message)
-              case _: MemberDisabled =>
+              case _: MemberNotActive =>
                 // Logging at INFO level because this can happen during normal operations when a participant is administratively
                 // disabled while off-line for >30d.
                 logger.info(message)
@@ -183,14 +199,17 @@ private[service] class GrpcManagedSubscription[T](
           s"Closing subscription for $member and completing subscription observer with $closeSignal"
         )
 
-        subscriptionRef
-          .get()
-          .fold(logger.debug("Closing but underlying subscription has not been created"))(_.close())
-
+        // important to complete grpcObserverHandle before subscription
+        // in order to avoid a race condition where an element is accepted
+        // by grpcObserverHandle while subscription is being closed, which
+        // can cause the subscription to get stuck and prevent shutdown
         closeSignal match {
           case CompleteSignal => grpcObserverHandle.onCompleted()
           case ErrorSignal(cause) => grpcObserverHandle.onError(cause)
         }
+        subscriptionRef
+          .get()
+          .fold(logger.debug("Closing but underlying subscription has not been created"))(_.close())
       } finally notifyClosed()
   }
 

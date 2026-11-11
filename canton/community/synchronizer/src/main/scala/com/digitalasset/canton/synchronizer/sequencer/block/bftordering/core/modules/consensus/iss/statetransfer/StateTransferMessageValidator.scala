@@ -4,6 +4,7 @@
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.statetransfer
 
 import cats.syntax.either.*
+import cats.syntax.traverse.*
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.synchronizer.metrics.BftOrderingMetrics
@@ -69,11 +70,14 @@ final class StateTransferMessageValidator[E <: Env[E]](
             case Right(()) => ValidResult
           }
         case response: StateTransferMessage.BlockTransferResponse =>
-          response.commitCertificate match {
-            case Some(cc)
-                if cc.prePrepare.message.blockMetadata.epochNumber <= latestLocallyCompletedEpoch =>
+          // All commit certificates in a single correct response share the same epoch,
+          //  so checking the first one is enough.
+          response.commitCertificates.headOption.map(
+            _.prePrepare.message.blockMetadata.epochNumber
+          ) match {
+            case Some(epochNumber) if epochNumber <= latestLocallyCompletedEpoch =>
               val respReason =
-                s"Old block transfer response from epoch ${cc.prePrepare.message.blockMetadata.epochNumber}, " +
+                s"Old block transfer response from epoch $epochNumber, " +
                   s"we have completed epoch $latestLocallyCompletedEpoch, dropping..."
               DropResult(respReason)
             case _ =>
@@ -134,27 +138,29 @@ final class StateTransferMessageValidator[E <: Env[E]](
       membership: Membership,
   ): Either[String, Unit] = {
     val from = response.from
-    val commitCert = response.commitCertificate
+    val commitCerts = response.commitCertificates
     val currentEpoch = latestLocallyCompletedEpoch + 1
     lazy val consensusCertificateValidator = new ConsensusCertificateValidator(
       membership.orderingTopology.strongQuorum
     )
     for {
       _ <- Either.cond(
-        commitCert.forall(_.prePrepare.message.blockMetadata.epochNumber == currentEpoch),
+        commitCerts.forall(_.prePrepare.message.blockMetadata.epochNumber == currentEpoch),
         (), {
-          val unexpectedEpoch = commitCert.map(_.prePrepare.message.blockMetadata.epochNumber)
-          s"received a block transfer response from '$from' containing a pre-prepare with unexpected epoch " +
-            s"$unexpectedEpoch, expected $currentEpoch"
+          val unexpectedEpochs = commitCerts
+            .map(_.prePrepare.message.blockMetadata.epochNumber)
+            .filterNot(_ == currentEpoch)
+            .distinct
+          s"received a block transfer response from '$from' containing pre-prepare(s) with unexpected epoch(s) " +
+            s"$unexpectedEpochs, expected $currentEpoch"
         },
       )
-      _ <- commitCert
-        .map(cert => consensusCertificateValidator.validateConsensusCertificate(cert))
-        .fold[Either[String, Unit]](Right(())) { validationResult =>
-          validationResult.leftMap(error =>
-            s"received a block transfer response from '$from' containing a commit certificate with the following issue: $error"
-          )
-        }
+      _ <- commitCerts
+        .traverse(cert => consensusCertificateValidator.validateConsensusCertificate(cert))
+        .leftMap(error =>
+          s"received a block transfer response from '$from' containing a commit certificate with the following issue: $error"
+        )
+        .map(_ => ())
     } yield ()
   }
 
@@ -168,14 +174,53 @@ final class StateTransferMessageValidator[E <: Env[E]](
   ): Unit =
     unverifiedMessage.message match {
       case response: BlockTransferResponse =>
-        // Block transfer responses are signed for uniformity/simplicity. However, it is just a thin wrapper around
-        //  commit certificates, which themselves contain signed data that is then verified. As long as there's no other
+        // Block transfer responses are signed for uniformity/simplicity. They are either empty, in which case they mean
+        // nothing to state transfer (and we verify them). Or it is just commit certificates, which themselves
+        // contain signed data that is then verified. As long as there's no other
         //  data than commit certs included in the responses, the signature verification can be safely skipped.
         //  As a result, any node can help with state transfer (as long as it provides valid commit certs), even when
         //  its responses are signed with a new/rotated key.
-        context.self.asyncSend(
-          Consensus.StateTransferMessage.VerifiedStateTransferMessage(response)
-        )
+
+        if (response.commitCertificates.nonEmpty) {
+          context.self.asyncSend(
+            Consensus.StateTransferMessage.VerifiedStateTransferMessage(response)
+          )
+        } else {
+          val from = unverifiedMessage.from
+          if (activeMembership.orderingTopology.nodes.contains(from)) {
+
+            context.pipeToSelf(
+              activeCryptoProvider.verifySignedMessage(
+                unverifiedMessage,
+                AuthenticatedMessageType.BftSignedStateTransferMessage,
+              )
+            ) {
+              case Failure(exception) =>
+                logger.error(
+                  s"Block transfer response $response from $from could not be verified, dropping",
+                  exception,
+                )
+                None
+              case Success(Left(errors)) =>
+                logger.warn(
+                  s"Block transfer response $response from $from failed verified, dropping: $errors"
+                )
+                emitNonCompliance(metrics)(
+                  from,
+                  metrics.security.noncompliant.labels.violationType.values.StateTransferInvalidMessage,
+                )
+                None
+              case Success(Right(())) =>
+                Some(Consensus.StateTransferMessage.VerifiedStateTransferMessage(response))
+            }
+
+          } else {
+            logger.info(
+              s"Got block transfer response from $from which is not in active membership, dropping"
+            )
+          }
+        }
+
       case request: BlockTransferRequest =>
         val from = unverifiedMessage.from
         if (activeMembership.orderingTopology.nodes.contains(from)) {
@@ -216,6 +261,7 @@ final class StateTransferMessageValidator[E <: Env[E]](
       from: BftNodeId,
       orderingTopologyInfo: OrderingTopologyInfo[E],
       currentEpochInfo: EpochInfo,
+      isForFutureEpoch: Boolean,
   )(implicit context: E#ActorContextT[Consensus.Message[E]], traceContext: TraceContext): Unit =
     context.pipeToSelf(
       signatureVerifier.verifyConsensusCertificate(commitCertificate, orderingTopologyInfo)
@@ -226,17 +272,26 @@ final class StateTransferMessageValidator[E <: Env[E]](
             commitCertificate,
             currentEpochInfo,
             from,
+            isForFutureEpoch,
           )
         )
       case Success(Left(errors)) =>
-        val blockMetadata = commitCertificate.prePrepare.message.blockMetadata
-        logger.warn(
-          s"Commit certificate ($blockMetadata) from '$from' failed signature verification, dropping: $errors"
-        )
-        emitNonCompliance(metrics)(
-          from,
-          metrics.security.noncompliant.labels.violationType.values.StateTransferInvalidMessage,
-        )
+        if (!isForFutureEpoch) {
+          val blockMetadata = commitCertificate.prePrepare.message.blockMetadata
+          logger.warn(
+            s"Commit certificate ($blockMetadata) from '$from' failed signature verification, dropping: $errors"
+          )
+          emitNonCompliance(metrics)(
+            from,
+            metrics.security.noncompliant.labels.violationType.values.StateTransferInvalidMessage,
+          )
+        } else {
+          val blockMetadata = commitCertificate.prePrepare.message.blockMetadata
+          logger.info(
+            s"Future Commit certificate ($blockMetadata) from '$from' failed signature verification, potentially due to future topology change."
+              + s"We will not early fetch instead we are dropping: $errors"
+          )
+        }
         None
       case Failure(exception) =>
         logger.warn(s"Commit certificate from '$from' could not be verified, dropping", exception)

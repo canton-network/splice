@@ -17,6 +17,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           # Checkout the PR head commit to get the commit message first
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: "recursive"
@@ -29,9 +30,10 @@ jobs:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check out repository code
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: inputs.commit_sha != ''
         with:
+          persist-credentials: false
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -41,7 +43,7 @@ jobs:
         if: steps.skip.outputs.skip != 'true'
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: ui_tests
 
       - name: Run UI tests
@@ -62,7 +64,7 @@ jobs:
         if: steps.skip.outputs.skip != 'true'
         uses: ./.github/actions/sbt/post_sbt
         with:
-          cache_version: 9
+          cache_version: 10
           setup_sbt_cache_hits: ${{ steps.setup.outputs.sbt_cache_hits }}
 
       - name: Upload logs

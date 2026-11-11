@@ -151,6 +151,7 @@ object CantonServerBuilder {
       tracing: TracingConfig,
       grpcMetrics: GrpcServerMetricsX,
       additionalInterceptors: Seq[ServerInterceptor] = Seq.empty,
+      nettyServerBuilderCustomizer: NettyServerBuilder => Unit = _ => (),
   ): CantonServerBuilder = {
     val builder =
       NettyServerBuilder
@@ -158,6 +159,13 @@ object CantonServerBuilder {
         .executor(executor)
         .maxInboundMessageSize(config.maxInboundMessageSize.unwrap)
         .maxConcurrentCallsPerConnection(config.maxConcurrentCallsPerConnection.unwrap)
+
+    // Leveraging mutable builder for conciseness
+    config.flowControlWindow.map(_.value).map(builder.flowControlWindow).discard
+    config.initialFlowControlWindow.map(_.value).map(builder.initialFlowControlWindow).discard
+
+    // Apply implementation-specific server customizations (e.g. transport-level instrumentation)
+    nettyServerBuilderCustomizer(builder)
 
     val builderWithSsl = config.sslContext match {
       case Some(sslContext) =>

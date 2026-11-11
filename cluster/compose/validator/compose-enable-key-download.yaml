@@ -1,0 +1,4 @@
+services:
+  participant:
+    environment:
+      - ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD=canton.parameters.enable-key-download = yes

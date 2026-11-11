@@ -32,6 +32,8 @@ class FeaturedAppActivityMarkerIntegrationTest
     EnvironmentDefinition
       // Using 4Svs so that we see whether they manage to jointly complete all work
       .simpleTopology4Svs(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(
@@ -78,7 +80,7 @@ class FeaturedAppActivityMarkerIntegrationTest
 
     actAndCheck(timeUntilSuccess = 60.seconds)(
       "Create activity markers", {
-        for (i <- 1 to markerMultiplier) {
+        for (_ <- 1 to markerMultiplier) {
           aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
             .submitJava(
               Seq(alice),

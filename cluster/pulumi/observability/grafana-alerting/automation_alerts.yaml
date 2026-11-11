@@ -96,13 +96,13 @@ groups:
               refId: threshold
               type: threshold
         dashboardUid: a3e1385f-6f03-46d9-908c-34aca0f507a6
-        panelId: 14
+        panelId: 18
         noDataState: $NODATA
         execErrState: Alerting
         for: 5m
         annotations:
           __dashboardUid__: a3e1385f-6f03-46d9-908c-34aca0f507a6
-          __panelId__: "14"
+          __panelId__: "18"
           description: The {{ index $labels "trigger_name" }} for the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace on migration id {{ index $labels "migration" }} experienced {{ index $values "failure_pct" }}% failures in the last 10 minutes.
           severity: |-
             {{- if (gt $values.failure_pct.Value 50.0) -}}
@@ -112,7 +112,7 @@ groups:
             {{- end -}}
           summary: '{{ index $values "failure_pct" }}% fatal errors occurred in {{ index $labels "namespace" }} - {{ index $labels "trigger_name" }} automation trigger'
         labels:
-          gcloud_filter: 'resource.labels.namespace_name=%22{{ index $labels "namespace" }}%22%0A%22{{ index $labels "trigger_name" }}%22'
+          gcloud_filter: 'resource.labels.namespace_name=%22{{ index $$labels "namespace" }}%22%0A%22{{ index $$labels "trigger_name" }}%22'
         isPaused: false
       - uid: ady2ks9ehbw1sb
         title: Busy task-based automation
@@ -162,13 +162,13 @@ groups:
               refId: threshold
               type: threshold
         dashboardUid: a3e1385f-6f03-46d9-908c-34aca0f507a6
-        panelId: 14
+        panelId: 18
         noDataState: OK
         execErrState: OK
         for: 5m
         annotations:
           __dashboardUid__: a3e1385f-6f03-46d9-908c-34aca0f507a6
-          __panelId__: "14"
+          __panelId__: "18"
           description: The {{ index $labels "trigger_name" }} for the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace on migration id {{ index $labels "migration" }} experienced {{ index $values "runs" }} runs per second in the last 5 minutes.
           runbook_url: ""
           severity: |-
@@ -180,7 +180,7 @@ groups:
           summary: '{{ index $values "runs" }} trigger runs per second occurred in {{ index $labels "namespace" }} - {{ index $labels "trigger_name" }} automation trigger'
         labels:
           "": ""
-          gcloud_filter: resource.labels.namespace_name=%22{{ index  "namespace" }}%22%0A%22{{ index  "trigger_name" }}%22
+          gcloud_filter: resource.labels.namespace_name=%22{{ index $$labels "namespace" }}%22%0A%22{{ index $$labels "trigger_name" }}%22
         isPaused: false
       - uid: edz6eq1kc543ke
         title: Busy polling-based automation
@@ -230,13 +230,13 @@ groups:
               refId: threshold
               type: threshold
         dashboardUid: a3e1385f-6f03-46d9-908c-34aca0f507a6
-        panelId: 14
+        panelId: 18
         noDataState: OK
         execErrState: OK
         for: 5m
         annotations:
           __dashboardUid__: a3e1385f-6f03-46d9-908c-34aca0f507a6
-          __panelId__: "14"
+          __panelId__: "18"
           description: The {{ index $labels "trigger_name" }} for the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace on migration id {{ index $labels "migration" }} experienced {{ index $values "runs" }} runs per second in the last 5 minutes.
           runbook_url: ""
           severity: |-
@@ -248,7 +248,7 @@ groups:
           summary: '{{ index $values "runs" }} trigger runs per second occurred in {{ index $labels "namespace" }} - {{ index $labels "trigger_name" }} automation trigger'
         labels:
           "": ""
-          gcloud_filter: resource.labels.namespace_name=%22{{ index  "namespace" }}%22%0A%22{{ index  "trigger_name" }}%22
+          gcloud_filter: resource.labels.namespace_name=%22{{ index $$labels "namespace" }}%22%0A%22{{ index $$labels "trigger_name" }}%22
         isPaused: false
       - uid: fe12i7xur3eo0d
         title: Backfilling not progressing
@@ -261,70 +261,14 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: max by(namespace)(rate(splice_history_backfilling_transaction_count[5m]) > 0 or splice_history_backfilling_completed)
-              instant: true
-              intervalMs: 1000
-              legendFormat: __auto
-              maxDataPoints: 43200
-              range: false
-              refId: Max (rate vs completed)
-          - refId: C
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 1e-11
-                    type: lt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    params: [ ]
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: Max (rate vs completed)
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: C
-              type: threshold
-        noDataState: $NODATA
-        execErrState: Alerting
-        for: 5m
-        annotations:
-          description: ""
-          runbook_url: ""
-          summary: History backfilling is not making any progress in {{ index $labels "namespace" }}
-        labels:
-          "": ""
-        isPaused: false
-      - uid: bel66uf182ha8e
-        title: TxLog backfilling not progressing
-        condition: C
-        data:
-          - refId: Max (rate vs completed)
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: prometheus
-            model:
-              editorMode: code
               expr: |-
                 max by(namespace)(
-                  rate(splice_history_txlog_backfilling_transaction_count[5m]) > 0 or
-                  splice_history_txlog_backfilling_completed or
-                  # TxLog backfilling can't start until history backfilling is completed
-                  absent(splice_history_backfilling_completed) or
-                  # Note: "== bool" is a boolean operator, "==" is a filter
-                  (splice_history_backfilling_completed == bool 0)
+                  splice_history_backfilling_completed == 1
+                  or rate(splice_history_backfilling_transaction_count[5m]) > 0
+                  # Update history backfilling can't start until we ingest the initial ACS import
+                  or (changes(splice_history_updates_latest_record_time[5m]) == bool 0) > 0
+                  # Fallback: 0 if none of the above apply
+                  or rate(splice_history_backfilling_transaction_count[5m])
                 )
               instant: true
               intervalMs: 1000
@@ -362,7 +306,72 @@ groups:
               type: threshold
         noDataState: $NODATA
         execErrState: Alerting
-        for: 5m
+        for: 30m
+        annotations:
+          description: ""
+          runbook_url: ""
+          summary: History backfilling is not making any progress in {{ index $labels "namespace" }}
+        labels:
+          "": ""
+        isPaused: false
+      - uid: bel66uf182ha8e
+        title: TxLog backfilling not progressing
+        condition: C
+        data:
+          - refId: Max (rate vs completed)
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: |-
+                max by(namespace)(
+                  splice_history_txlog_backfilling_completed == 1
+                  or rate(splice_history_txlog_backfilling_transaction_count[5m]) > 0
+                  # TxLog backfilling can't start until update history backfilling, incl. import updates, is complete
+                  or (splice_history_backfilling_completed == bool 0) > 0
+                  or (splice_history_import_updates_backfilling_completed == bool 0) > 0
+                  # Fallback: 0 if none of the above apply
+                  or splice_history_txlog_backfilling_completed
+                )
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: Max (rate vs completed)
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1e-11
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: [ ]
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: Max (rate vs completed)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: $NODATA
+        execErrState: Alerting
+        for: 30m
         annotations:
           description: ""
           runbook_url: ""
@@ -613,5 +622,5 @@ groups:
           description: The {{ index $labels "automation_service" }} background service of the {{ index $labels "node_type" }} app in the {{ index $labels "namespace" }} namespace has been continuously reporting unhealthy for more than 5 minutes.
           summary: '{{ index $labels "namespace" }} - {{ index $labels "node_type" }} - {{ index $labels "automation_service" }} automation service is unhealthy'
         labels:
-          gcloud_filter: 'resource.labels.namespace_name=%22{{ index $labels "namespace" }}%22'
+          gcloud_filter: 'resource.labels.namespace_name=%22{{ index $$labels "namespace" }}%22'
         isPaused: false

@@ -167,7 +167,8 @@ export interface WalletClient {
     beneficiary: string,
     amount: BigNumber,
     expiresAt: Date,
-    reason: string
+    reason: string,
+    mintAfter?: Date
   ) => Promise<void>;
   listActiveDevelopmentFundCoupons: () => Promise<DevelopmentFundCoupon[]>;
   listCouponHistoryEvents: (
@@ -509,13 +510,15 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
         beneficiary: string,
         amount: BigNumber,
         expiresAt: Date,
-        reason: string
+        reason: string,
+        mintAfter?: Date
       ): Promise<void> => {
         const request = {
           beneficiary: beneficiary,
           amount: amount.isInteger() ? amount.toFixed(1) : amount.toString(),
           expiresAt: expiresAt.getTime() * 1000,
           reason: reason,
+          mintAfter: mintAfter ? mintAfter.getTime() * 1000 : undefined,
         };
         await walletClient.allocateDevelopmentFundCoupon(request);
       },
@@ -530,6 +533,9 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
             beneficiary: contract.payload.beneficiary,
             amount: new BigNumber(contract.payload.amount),
             expiresAt: new Date(contract.payload.expiresAt),
+            mintAfter: contract.payload.mintAfter
+              ? new Date(contract.payload.mintAfter)
+              : undefined,
             reason: contract.payload.reason,
           };
         });

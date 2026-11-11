@@ -3,50 +3,42 @@
 
 package com.digitalasset.canton.version
 
+import cats.syntax.either.*
 import cats.syntax.functor.*
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
-import com.digitalasset.canton.ProtoDeserializationError.UnknownProtoVersion
+import com.digitalasset.canton.Errors.raiseCannotSerialize
+import com.digitalasset.canton.ProtoDeserializationError.{OtherError, UnknownProtoVersion}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
+import com.digitalasset.canton.topology.transaction.TopologyTransaction
 import com.digitalasset.canton.{ProtoDeserializationError, checked}
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 import scala.math.Ordered.orderingToOrdered
 
-final case class SupportedProtoVersions[
-    ValueClass,
-    Context,
-    DeserializedValueClass,
-    Comp,
-    Dependency,
-] private (
+final case class SupportedProtoVersions[F[
+    _
+], ValueClass, Context, DeserializedValueClass, Comp, Dependency] private (
     // Sorted with descending order
     converters: NonEmpty[immutable.SortedMap[
       ProtoVersion,
-      ProtoCodec[
-        ValueClass,
-        Context,
-        DeserializedValueClass,
-        Comp,
-        Dependency,
-      ],
+      ProtoCodec[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency],
     ]],
     name: String,
 ) {
 
-  type Codec = ProtoCodec[
-    ValueClass,
-    Context,
-    DeserializedValueClass,
-    Comp,
-    Dependency,
-  ]
+  type Codec = ProtoCodec[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency]
 
   val (higherProtoVersion, higherConverter) = converters.head1
 
   type Deserializer =
-    (Context, OriginalByteString, DataByteString) => ParsingResult[DeserializedValueClass]
+    (
+        ProtocolVersionValidation,
+        Context,
+        OriginalByteString,
+        DataByteString,
+    ) => ParsingResult[DeserializedValueClass]
 
   def converterFor(
       protocolVersion: ProtocolVersion
@@ -56,21 +48,39 @@ final case class SupportedProtoVersions[
         case (_, converter) if protocolVersion >= converter.fromInclusive.representative =>
           converter
       }
-      .getOrElse(higherConverter)
+      .getOrElse(raiseCannotSerialize(name, protocolVersion))
 
   def deserializerFor(
       protoVersion: ProtoVersion
-  ): Deserializer =
-    converters.get(protoVersion).map(_.deserializer).getOrElse(higherConverter.deserializer)
+  ): ParsingResult[Deserializer] =
+    converters.get(protoVersion).map(_.deserializer) match {
+      case Some(deserializer) => deserializer.asRight
+
+      case None =>
+        /*
+          We want to fail here. However, we have on MainNet a topology transaction with protobuf version 29.
+          Hence, for topology transactions, we make an exception.
+         */
+
+        // Converters are sorted in descending order, so the lowest supported version is the last one
+        val (lowestSupportedProtoVersion, lowestProtoCodec) = converters.last1
+
+        if (name == TopologyTransaction.name && protoVersion < lowestSupportedProtoVersion)
+          lowestProtoCodec.deserializer.asRight
+        else
+          OtherError(
+            s"Unable to find deserializer for version $protoVersion and message $name. This indicates that the node is trying to parse a message with a proto version that is not supported anymore."
+          ).asLeft
+    }
 
   def protoVersionFor(
       protocolVersion: RepresentativeProtocolVersion[Comp]
-  ): ProtoVersion = converters
+  ): Either[String, ProtoVersion] = converters
     .collectFirst {
       case (protoVersion, converter) if protocolVersion >= converter.fromInclusive =>
         protoVersion
     }
-    .getOrElse(higherProtoVersion)
+    .toRight(s"Unable to find proto version for $name for protocol version $protocolVersion")
 
   def converterFor(
       protocolVersion: RepresentativeProtocolVersion[Comp]
@@ -102,43 +112,17 @@ final case class SupportedProtoVersions[
 
 object SupportedProtoVersions {
 
-  def apply[
-      ValueClass,
-      Context,
-      DeserializedValueClass,
-      Comp,
-      Dependency,
-  ](name: String)(
+  def apply[F[_], ValueClass, Context, DeserializedValueClass, Comp, Dependency](name: String)(
       head: (
           ProtoVersion,
-          ProtoCodec[
-            ValueClass,
-            Context,
-            DeserializedValueClass,
-            Comp,
-            Dependency,
-          ],
+          ProtoCodec[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency],
       ),
       tail: (
           ProtoVersion,
-          ProtoCodec[
-            ValueClass,
-            Context,
-            DeserializedValueClass,
-            Comp,
-            Dependency,
-          ],
+          ProtoCodec[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency],
       )*
-  ): SupportedProtoVersions[
-    ValueClass,
-    Context,
-    DeserializedValueClass,
-    Comp,
-    Dependency,
-  ] =
-    SupportedProtoVersions.fromNonEmpty(name)(
-      NonEmpty.mk(Seq, head, tail*)
-    )
+  ): SupportedProtoVersions[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency] =
+    SupportedProtoVersions.fromNonEmpty(name)(NonEmpty.mk(Seq, head, tail*))
 
   /*
    Throws an error if a protocol version or a protobuf version is used twice.
@@ -146,8 +130,8 @@ object SupportedProtoVersions {
    - Each protobuf version should appear only once.
    - Each protobuf version should use a different minimum protocol version.
    */
-  private def ensureNoDuplicates(
-      converters: NonEmpty[Seq[(ProtoVersion, ProtoCodec[?, ?, ?, ?, ?])]],
+  private def ensureNoDuplicates[F[_]](
+      converters: NonEmpty[Seq[(ProtoVersion, ProtoCodec[F, ?, ?, ?, ?, ?])]],
       name: String,
   ): Unit = {
 
@@ -187,41 +171,25 @@ object SupportedProtoVersions {
     }.discard
   }
 
-  private[version] def fromNonEmpty[
-      ValueClass,
-      Context,
-      DeserializedValueClass,
-      Comp,
-      Dependency,
-  ](name: String)(
+  private[version] def fromNonEmpty[F[
+      _
+  ], ValueClass, Context, DeserializedValueClass, Comp, Dependency](
+      name: String,
+      expectedMinimumPv: ProtocolVersion = ProtocolVersion.minimum,
+  )(
       converters: NonEmpty[Seq[
         (
             ProtoVersion,
-            ProtoCodec[
-              ValueClass,
-              Context,
-              DeserializedValueClass,
-              Comp,
-              Dependency,
-            ],
+            ProtoCodec[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency],
         )
       ]]
-  ): SupportedProtoVersions[
-    ValueClass,
-    Context,
-    DeserializedValueClass,
-    Comp,
-    Dependency,
-  ] = {
+  ): SupportedProtoVersions[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency] = {
     ensureNoDuplicates(converters, name)
 
-    val sortedConverters: NonEmpty[SortedMap[ProtoVersion, ProtoCodec[
-      ValueClass,
-      Context,
-      DeserializedValueClass,
-      Comp,
-      Dependency,
-    ]]] = checked(
+    val sortedConverters: NonEmpty[SortedMap[
+      ProtoVersion,
+      ProtoCodec[F, ValueClass, Context, DeserializedValueClass, Comp, Dependency],
+    ]] = checked(
       NonEmptyUtil.fromUnsafe(
         immutable.SortedMap.from(converters)(implicitly[Ordering[ProtoVersion]].reverse)
       )
@@ -232,8 +200,8 @@ object SupportedProtoVersions {
     // remember to specify that explicitly by adding to the SupportedProtoVersions:
     // ProtoVersion(-1) -> UnsupportedProtoCodec(ProtocolVersion.minimum),
     require(
-      lowestProtocolVersion.fromInclusive.representative == ProtocolVersion.minimum,
-      s"ProtocolVersion corresponding to lowest proto version should be ${ProtocolVersion.minimum}, found $lowestProtocolVersion",
+      lowestProtocolVersion.fromInclusive.representative == expectedMinimumPv,
+      s"ProtocolVersion corresponding to lowest proto version should be $expectedMinimumPv, found $lowestProtocolVersion",
     )
 
     SupportedProtoVersions(sortedConverters, name)

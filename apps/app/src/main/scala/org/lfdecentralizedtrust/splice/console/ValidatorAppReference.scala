@@ -19,6 +19,8 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   ContractWithState,
+  DsoInfo,
+  DsoInfoV1,
   FactoryChoiceWithDisclosures,
 }
 import org.lfdecentralizedtrust.splice.validator.admin.api.client.commands.*
@@ -246,50 +248,6 @@ abstract class ValidatorAppReference(
     }
   }
 
-  @Help.Summary("Prepare TransferPreapproval send")
-  def prepareTransferPreapprovalSend(
-      senderPartyId: PartyId,
-      receiverPartyId: PartyId,
-      amount: BigDecimal,
-      expiresAt: CantonTimestamp,
-      nonce: Long,
-      description: Option[String],
-      verboseHashing: Boolean = false,
-  ): definitions.PrepareTransferPreapprovalSendResponse = {
-    consoleEnvironment.run {
-      httpCommand(
-        HttpValidatorAdminAppClient.PrepareTransferPreapprovalSend(
-          senderPartyId,
-          receiverPartyId,
-          amount,
-          expiresAt,
-          nonce,
-          description,
-          verboseHashing,
-        )
-      )
-    }
-  }
-
-  @Help.Summary("Submit TransferPreapproval send")
-  def submitTransferPreapprovalSend(
-      senderPartyId: PartyId,
-      transaction: String,
-      signature: String,
-      publicKey: String,
-  ): String = {
-    consoleEnvironment.run {
-      httpCommand(
-        HttpValidatorAdminAppClient.SubmitTransferPreapprovalSend(
-          senderPartyId,
-          transaction,
-          signature,
-          publicKey,
-        )
-      )
-    }
-  }
-
   def getExternalPartyBalance(partyId: PartyId): definitions.ExternalPartyBalanceResponse = {
     consoleEnvironment.run {
       httpCommand(
@@ -360,10 +318,18 @@ abstract class ValidatorAppReference(
       }
     }
 
-    def getDsoInfo(): definitions.GetDsoInfoResponse = {
+    def getDsoInfo(): DsoInfo = {
       consoleEnvironment.run {
         httpCommand(
           HttpScanProxyAppClient.GetDsoInfo
+        )
+      }
+    }
+
+    def getDsoInfoV1(): DsoInfoV1 = {
+      consoleEnvironment.run {
+        httpCommand(
+          HttpScanProxyAppClient.GetDsoInfoV1
         )
       }
     }

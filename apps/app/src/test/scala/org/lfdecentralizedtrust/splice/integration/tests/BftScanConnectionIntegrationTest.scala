@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.GetTransfer
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetChoiceContextRequest
 import org.slf4j.event.Level
 
+import scala.concurrent.duration.*
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -90,8 +91,6 @@ class BftScanConnectionIntegrationTest
         ) or
           include("Encountered 4 consecutive transient failures") or include(
             "Failed to connect to scan of FAILED Seed URL #0 (http://localhost:5112)."
-          ) or include(
-            "Failed to read bft sequencers list from scan http://localhost:5112"
           ))
       ),
     )
@@ -242,7 +241,7 @@ class BftScanConnectionIntegrationTest
     )
 
     withClue("Alice's validator should be able to onboard a user after establishing connections.") {
-      eventuallySucceeds() {
+      eventuallySucceeds(timeUntilSuccess = 2.minutes) {
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
       }
     }

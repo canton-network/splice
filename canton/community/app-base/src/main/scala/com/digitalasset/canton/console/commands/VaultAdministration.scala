@@ -6,7 +6,6 @@ package com.digitalasset.canton.console.commands
 import cats.data.EitherT
 import cats.syntax.either.*
 import cats.syntax.parallel.*
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.admin.api.client.commands.{TopologyAdminCommands, VaultAdminCommands}
 import com.digitalasset.canton.admin.api.client.data.ListKeyOwnersResult
 import com.digitalasset.canton.checked
@@ -22,11 +21,11 @@ import com.digitalasset.canton.console.{
   InstanceReference,
 }
 import com.digitalasset.canton.crypto.*
-import com.digitalasset.canton.crypto.admin.grpc.PrivateKeyMetadata
+import com.digitalasset.canton.crypto.admin.grpc.{BaseVaultRequest, PrivateKeyMetadata}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.{
   SignedTopologyTransaction,
   TopologyChangeOp,
@@ -36,19 +35,21 @@ import com.digitalasset.canton.topology.transaction.{
 import com.digitalasset.canton.topology.{ExternalParty, Member, MemberCode, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.BinaryFileUtil
-import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.version.{ProtocolVersion, ReleaseVersion}
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 import com.google.protobuf.ByteString
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext
 
 class SecretKeyAdministration(
-    instance: InstanceReference,
+    protected val instance: InstanceReference,
     runner: AdminCommandRunner,
     override protected val consoleEnvironment: ConsoleEnvironment,
     override protected val loggerFactory: NamedLoggerFactory,
 ) extends Helpful
-    with FeatureFlagFilter {
+    with FeatureFlagFilter
+    with AutoDetectSynchronizerHelper {
 
   import runner.*
 
@@ -65,7 +66,7 @@ class SecretKeyAdministration(
           keySpec = Some(signKey.keySpec),
           name = name,
         )
-      case unknown => throw new IllegalArgumentException(s"Invalid public key type: $unknown")
+      case unknown => consoleEnvironment.raiseError(s"Invalid public key type: $unknown")
     }
 
   @Help.Summary("List keys in private vault")
@@ -83,7 +84,15 @@ class SecretKeyAdministration(
   ): Seq[PrivateKeyMetadata] =
     consoleEnvironment.run {
       adminCommand(
-        VaultAdminCommands.ListMyKeys(filterFingerprint, filterName, filterPurpose, filterUsage)
+        VaultAdminCommands.ListMyKeys(
+          baseRequest = BaseVaultRequest(
+            clientVersion = ReleaseVersion.current
+          ),
+          filterFingerprint = filterFingerprint,
+          filterName = filterName,
+          filterPurpose = filterPurpose,
+          filterUsage = filterUsage,
+        )
       )
     }
 
@@ -111,9 +120,18 @@ class SecretKeyAdministration(
     NonEmpty.from(usage) match {
       case Some(usageNE) =>
         consoleEnvironment.run {
-          adminCommand(VaultAdminCommands.GenerateSigningKey(name, usageNE, keySpec))
+          adminCommand(
+            VaultAdminCommands.GenerateSigningKey(
+              baseRequest = BaseVaultRequest(
+                clientVersion = ReleaseVersion.current
+              ),
+              name = name,
+              usage = usageNE,
+              keySpec = keySpec,
+            )
+          )
         }
-      case None => throw new IllegalArgumentException("no signing key usage specified")
+      case None => consoleEnvironment.raiseError("no signing key usage specified")
     }
 
   @Help.Summary("Generate new public/private key pair for encryption and store it in the vault")
@@ -158,9 +176,18 @@ class SecretKeyAdministration(
     NonEmpty.from(usage) match {
       case Some(usageNE) =>
         consoleEnvironment.run {
-          adminCommand(VaultAdminCommands.RegisterKmsSigningKey(kmsKeyId, usageNE, name))
+          adminCommand(
+            VaultAdminCommands.RegisterKmsSigningKey(
+              baseRequest = BaseVaultRequest(
+                clientVersion = ReleaseVersion.current
+              ),
+              kmsKeyId = kmsKeyId,
+              usage = usageNE,
+              name = name,
+            )
+          )
         }
-      case None => throw new IllegalArgumentException("no signing key usage specified")
+      case None => consoleEnvironment.raiseError("no signing key usage specified")
     }
 
   @Help.Summary(
@@ -185,13 +212,13 @@ class SecretKeyAdministration(
       fingerprint: String,
       topologyAdmin: TopologyAdministrationGroup,
       owner: Member,
+      synchronizerId: SynchronizerId,
   ): PublicKey =
-    findPublicKeys(topologyAdmin, owner).find(_.fingerprint.unwrap == fingerprint) match {
+    findPublicKeys(topologyAdmin, owner, synchronizerId).find(
+      _.fingerprint.unwrap == fingerprint
+    ) match {
       case Some(key) => key
-      case None =>
-        throw new IllegalStateException(
-          s"The key $fingerprint does not exist"
-        )
+      case None => consoleEnvironment.raiseError(s"The key $fingerprint does not exist")
     }
 
   @Help.Summary("Rotate a given node's keypair with a new pre-generated KMS keypair")
@@ -205,24 +232,33 @@ class SecretKeyAdministration(
       |- fingerprint: The fingerprint of the key we want to rotate.
       |- newKmsKeyId: The id of the new KMS key (e.g. Resource Name).
       |- name: An optional name for the new key.
+      |- synchronizerId: Synchronizer on which to perform the rotation.  If omitted,
+      |  this will attempt to auto-detect a single configured and connected synchronizer.
       """
   )
   def rotate_kms_node_key(
       fingerprint: String,
       newKmsKeyId: String,
       name: String = "",
+      synchronizerId: Option[SynchronizerId] = None,
   ): PublicKey = {
 
     val owner = instance.id.member
 
-    val currentKey = findPublicKey(fingerprint, instance.topology, owner)
+    // We want to run the synchronizer auto-detection first, so we don't create
+    // any new keys in the KMS if the auto-detection fails.
+    val requiredSynchronizerId = synchronizerId.getOrElse(
+      autodetectSynchronizer("rotate_kms_node_key")
+    )
+
+    val currentKey = findPublicKey(fingerprint, instance.topology, owner, requiredSynchronizerId)
     val newKey = currentKey match {
       case SigningPublicKey(_, _, _, usage, _) =>
         instance.keys.secret.register_kms_signing_key(newKmsKeyId, usage, name)
       case _: EncryptionPublicKey =>
         instance.keys.secret.register_kms_encryption_key(newKmsKeyId, name)
       case _ =>
-        throw new IllegalStateException("Unsupported key type")
+        consoleEnvironment.raiseError("Unsupported key type")
     }
 
     // Rotate the key for the node in the topology management
@@ -230,6 +266,7 @@ class SecretKeyAdministration(
       owner,
       currentKey,
       newKey,
+      synchronizerId = Some(requiredSynchronizerId),
     )
     newKey
   }
@@ -243,12 +280,24 @@ class SecretKeyAdministration(
       |Parameters:
       |- fingerprint: The fingerprint of the key we want to rotate.
       |- name: An optional name for the new key.
+      |- synchronizerId: Synchronizer on which to perform the rotation.  If omitted,
+      |  this will attempt to auto-detect a single configured and connected synchronizer.
       """
   )
-  def rotate_node_key(fingerprint: String, name: String = ""): PublicKey = {
+  def rotate_node_key(
+      fingerprint: String,
+      name: String = "",
+      synchronizerId: Option[SynchronizerId] = None,
+  ): PublicKey = {
     val owner = instance.id.member
 
-    val currentKey = findPublicKey(fingerprint, instance.topology, owner)
+    // We want to run the synchronizer auto-detection first, so we don't create
+    // any new keys in the KMS if the auto-detection fails.
+    val requiredSynchronizerId = synchronizerId.getOrElse(
+      autodetectSynchronizer("rotate_kms_node_key")
+    )
+
+    val currentKey = findPublicKey(fingerprint, instance.topology, owner, requiredSynchronizerId)
 
     val newName =
       if (name.isEmpty)
@@ -264,6 +313,7 @@ class SecretKeyAdministration(
       owner,
       currentKey,
       newKey,
+      synchronizerId = Some(requiredSynchronizerId),
     )
     newKey
   }
@@ -276,14 +326,26 @@ class SecretKeyAdministration(
       |have an encryption key pair.
       |
       |NOTE: Namespace root or intermediate signing keys are NOT rotated by this command.
+      |
+      |Parameters:
+      |- synchronizerId: Synchronizer on which to perform the rotation.  If omitted,
+      |  this will attempt to auto-detect a single configured and connected synchronizer.
       """
   )
-  def rotate_node_keys(): Unit = {
+  def rotate_node_keys(
+      synchronizerId: Option[SynchronizerId] = None
+  ): Unit = {
 
     val owner = instance.id.member
 
+    // We want to run the synchronizer auto-detection first, so we don't create
+    // any new keys in the KMS if the auto-detection fails.
+    val requiredSynchronizerId = synchronizerId.getOrElse(
+      autodetectSynchronizer("rotate_kms_node_key")
+    )
+
     // Find the current keys
-    val currentKeys = findPublicKeys(instance.topology, owner)
+    val currentKeys = findPublicKeys(instance.topology, owner, requiredSynchronizerId)
 
     val replacements = currentKeys.map { currentKey =>
       val newKey =
@@ -305,6 +367,7 @@ class SecretKeyAdministration(
         owner,
         currentKey,
         newKey,
+        synchronizerId = Some(requiredSynchronizerId),
       )
     }
   }
@@ -314,14 +377,17 @@ class SecretKeyAdministration(
   private def findPublicKeys(
       topologyAdmin: TopologyAdministrationGroup,
       owner: Member,
-  ): Seq[PublicKey] =
+      synchronizerId: SynchronizerId,
+  ): Set[PublicKey] =
     topologyAdmin.owner_to_key_mappings
       .list(
-        store = Some(TopologyStoreId.Authorized),
+        store = Some(synchronizerId),
         filterKeyOwnerUid = owner.filterString,
         filterKeyOwnerType = Some(owner.code),
       )
       .flatMap(_.item.keys)
+      // Use a set to filter out duplicates across multiple topology stores
+      .toSet
 
   /** Helper to name new keys generated during a rotation with a ...-rotated-<timestamp> tag to
     * better identify the new keys after a rotation
@@ -695,7 +761,7 @@ class PublicKeyAdministration(
   )
   def upload_from(filename: String, name: Option[String]): Fingerprint =
     BinaryFileUtil.readByteStringFromFile(filename).map(upload(_, name)).valueOr { err =>
-      throw new IllegalArgumentException(err)
+      consoleEnvironment.raiseError(err)
     }
 
   @Help.Summary("Download public key")
@@ -705,12 +771,14 @@ class PublicKeyAdministration(
   ): ByteString = {
     val keys = list(fingerprint.unwrap)
     if (keys.sizeCompare(1) == 0) { // vector doesn't like matching on Nil
-      val key = keys.headOption.getOrElse(sys.error("no key"))
-      key.publicKey.toByteString(protocolVersion)
+      val key = keys.headOption.getOrElse(
+        consoleEnvironment.raiseError("should not happen: no head for seq with 1 element")
+      )
+      key.publicKey.toByteStringE(protocolVersion).valueOr(consoleEnvironment.raiseError)
     } else {
-      if (keys.isEmpty) throw new IllegalArgumentException(s"no key found for [$fingerprint]")
+      if (keys.isEmpty) consoleEnvironment.raiseError(s"no key found for [$fingerprint]")
       else
-        throw new IllegalArgumentException(
+        consoleEnvironment.raiseError(
           s"found multiple results for [$fingerprint]: ${keys.map(_.publicKey.fingerprint)}"
         )
     }
@@ -743,10 +811,13 @@ class PublicKeyAdministration(
     consoleEnvironment.run {
       adminCommand(
         VaultAdminCommands.ListPublicKeys(
-          filterFingerprint,
-          filterContext,
-          filterPurpose,
-          filterUsage,
+          baseRequest = BaseVaultRequest(
+            clientVersion = ReleaseVersion.current
+          ),
+          filterFingerprint = filterFingerprint,
+          filterName = filterContext,
+          filterPurpose = filterPurpose,
+          filterUsage = filterUsage,
         )
       )
     }
@@ -769,7 +840,14 @@ class PublicKeyAdministration(
   ): Seq[ListKeyOwnersResult] = consoleEnvironment.run {
     adminCommand(
       TopologyAdminCommands.Aggregation
-        .ListKeyOwners(synchronizerIds, filterKeyOwnerType, filterKeyOwnerUid, asOf, limit)
+        .ListKeyOwners(
+          synchronizerIds,
+          filterKeyOwnerType,
+          filterKeyOwnerUid,
+          asOf,
+          limit,
+          clientVersion = ReleaseVersion.current,
+        )
     )
   }
 
@@ -793,6 +871,7 @@ class PublicKeyAdministration(
           filterKeyOwnerUid = keyOwner.uid.toProtoPrimitive,
           asOf,
           limit,
+          clientVersion = ReleaseVersion.current,
         )
       )
     }
@@ -881,17 +960,20 @@ object LocalSecretKeyAdministration {
           EncryptionKeyPair.create(pub, pkey)
         case _ => sys.error("public and private keys must have same purpose")
       }
+      serializedKeyPair <- EitherT.fromEither[FutureUnlessShutdown](
+        keyPair.toByteString(protocolVersion)
+      )
 
       // Encrypt the keypair if a password is provided
       keyPairBytes = password match {
         case Some(password) =>
           crypto.pureCrypto
-            .encryptWithPassword(keyPair.toByteString(protocolVersion), password)
+            .encryptWithPassword(serializedKeyPair, password)
             .fold(
               err => sys.error(s"Failed to encrypt key pair for export: $err"),
               _.toByteString(protocolVersion),
             )
-        case None => keyPair.toByteString(protocolVersion)
+        case None => serializedKeyPair
       }
     } yield keyPairBytes
 }

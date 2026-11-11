@@ -46,19 +46,8 @@ trait SvTaskBasedTrigger[T <: PrettyPrinting] {
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     for {
       dsoRules <- store.getDsoRules()
-      sameEpoch = dsoRules.payload.epoch == svTaskContext.epoch
       svParty = store.key.svParty.toProtoPrimitive
-      result <-
-        if (sameEpoch) {
-          completeTaskAsAnySv(task, svParty, dsoRules)
-        } else {
-          // TODO(DACH-NY/canton-network-internal#495) Could this be busy-looping as well, if we are a polling trigger?
-          Future.successful(
-            TaskSuccess(
-              s"Skipping because current epoch ${dsoRules.payload.epoch} is not the same as trigger registration epoch ${svTaskContext.epoch}"
-            )
-          )
-        }
+      result <- completeTaskAsAnySv(task, svParty, dsoRules)
     } yield result
   }
 
@@ -130,7 +119,6 @@ object SvTaskBasedTrigger {
   case class Context(
       dsoStore: SvDsoStore,
       connection: SpliceLedgerConnectionPriority => SpliceLedgerConnection,
-      epoch: Long,
       delegatelessAutomationExpectedTaskDuration: Long,
       delegatelessAutomationExpiredRewardCouponBatchSize: Int,
       delegatelessAutomationExpiredRewardCouponNumBatches: Int,

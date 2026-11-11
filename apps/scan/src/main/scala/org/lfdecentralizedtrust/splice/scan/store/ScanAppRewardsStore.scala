@@ -5,7 +5,10 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputs
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.RewardComputationSummary
+import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.{
+  RewardAccountingPruneSummary,
+  RewardComputationSummary,
+}
 
 import scala.concurrent.Future
 
@@ -31,4 +34,11 @@ trait ScanAppRewardsStore {
       batchSize: Int,
       inputs: RewardComputationInputs,
   )(implicit tc: TraceContext): Future[RewardComputationSummary]
+
+  /** Deletes all reward-accounting data for a single round across all six
+    * reward-accounting tables.
+    */
+  def deleteRewardAccountingDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[RewardAccountingPruneSummary]
 }

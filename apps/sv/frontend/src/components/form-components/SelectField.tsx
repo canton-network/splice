@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { KeyboardArrowDown } from '@mui/icons-material';
 import {
   Box,
   FormControl,
@@ -10,9 +11,11 @@ import {
   SelectChangeEvent,
   Typography,
 } from '@mui/material';
+import { CREATE_PROPOSAL_FIELD_LABEL_SX } from '../../constants/createProposalLayout';
 import type { FormEvent } from 'react';
 import { useFieldContext } from '../../hooks/formContext';
-import { scrollableSelectFieldSx } from '../beta/identifierStyles';
+import { scrollableSelectFieldSx } from '../ui/identifierStyles';
+import { selectFieldSx } from '../../themes/fieldStyles';
 
 export type Option = { key: string; value: string };
 export interface SelectFieldProps {
@@ -34,25 +37,32 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
     externalOnChange();
   };
 
-  const showPlaceholder = !!placeholder && !field.state.value;
-  const isError = !field.state.meta.isValid && !showPlaceholder;
+  const article = /^[aeiou]/i.test(title) ? 'an' : 'a';
+  const resolvedPlaceholder = placeholder ?? `Select ${article} ${title.toLowerCase()}`;
+  const showPlaceholder = !field.state.value;
+  const isError = !field.state.meta.isValid && !(placeholder && showPlaceholder);
 
   return (
     <Box data-testid={`${id}-select-component`}>
-      <Typography variant="h6" gutterBottom>
+      <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}>
         {title}
       </Typography>
 
-      <FormControl variant="outlined" error={isError} fullWidth>
+      <FormControl
+        variant="outlined"
+        error={isError}
+        fullWidth
+        sx={{ '& .MuiFormHelperText-root': { mx: 0, mt: 1 } }}
+      >
         <Select
+          IconComponent={KeyboardArrowDown}
           value={field.state.value}
           displayEmpty
-          sx={scrollableIdentifier ? scrollableSelectFieldSx : undefined}
           renderValue={selected => {
             if (!selected) {
               return showPlaceholder ? (
-                <Typography component="span" color="text.secondary">
-                  {placeholder}
+                <Typography component="span" sx={{ color: 'text.secondary' }}>
+                  {resolvedPlaceholder}
                 </Typography>
               ) : (
                 ''
@@ -68,6 +78,14 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
           disabled={disabled}
           id={`${id}-dropdown`}
           data-testid={id}
+          sx={
+            scrollableIdentifier
+              ? theme => ({
+                  ...(typeof selectFieldSx === 'function' ? selectFieldSx(theme) : selectFieldSx),
+                  ...scrollableSelectFieldSx,
+                })
+              : selectFieldSx
+          }
           inputProps={{
             'data-testid': `${id}-dropdown`,
             onChange: (e: FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {

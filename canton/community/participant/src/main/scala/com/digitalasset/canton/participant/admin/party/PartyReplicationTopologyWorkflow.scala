@@ -4,9 +4,12 @@
 package com.digitalasset.canton.participant.admin.party
 
 import cats.data.EitherT
+import cats.syntax.either.*
 import com.digitalasset.canton.config.ProcessingTimeout
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.Hash
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.admin.data.{
@@ -23,6 +26,7 @@ import com.digitalasset.canton.topology.client.SynchronizerTopologyClientWithIni
 import com.digitalasset.canton.topology.processing.EffectiveTime
 import com.digitalasset.canton.topology.store.TopologyStoreId.SynchronizerStore
 import com.digitalasset.canton.topology.store.{StoredTopologyTransaction, TimeQuery, TopologyStore}
+import com.digitalasset.canton.topology.transaction.HostingParticipant.HostingState
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp.Replace
 import com.digitalasset.canton.topology.transaction.{
   HostingParticipant,
@@ -40,6 +44,7 @@ import com.digitalasset.canton.topology.{
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.EitherTUtil
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.nowarn
 import scala.concurrent.ExecutionContext
 import scala.util.chaining.scalaUtilChainingOps
@@ -106,7 +111,7 @@ class PartyReplicationTopologyWorkflow(
       connectedSynchronizer: ConnectedSynchronizer,
   )(implicit
       traceContext: TraceContext
-  ): EitherT[FutureUnlessShutdown, String, Option[EffectiveTime]] =
+  ): EitherT[FutureUnlessShutdown, String, Option[(EffectiveTime, PositiveInt)]] =
     authorizeOnboardingTopology(
       params,
       PartyReplicationTopologyWorkflow.SynchronizerTopologyContext(connectedSynchronizer),
@@ -136,14 +141,15 @@ class PartyReplicationTopologyWorkflow(
     * @param topologyContext
     *   the active synchronizer topology context
     * @return
-    *   effective time of the onboarding topology transaction or None if not yet authorized
+    *   effective time and serial of the onboarding topology transaction or None if not yet
+    *   authorized
     */
   private[party] def authorizeOnboardingTopology(
       params: PartyReplicationStatus.ReplicationParams,
       topologyContext: PartyReplicationTopologyWorkflow.SynchronizerTopologyContext,
   )(implicit
       traceContext: TraceContext
-  ): EitherT[FutureUnlessShutdown, String, Option[EffectiveTime]] = {
+  ): EitherT[FutureUnlessShutdown, String, Option[(EffectiveTime, PositiveInt)]] = {
     val PartyReplicationStatus
       .ReplicationParams(
         requestId,
@@ -188,7 +194,9 @@ class PartyReplicationTopologyWorkflow(
       _ <- partyToParticipantTopologyPartyAddedO.fold(
         EitherT.rightT[FutureUnlessShutdown, String](())
       )(verifyAuthorizedTopology(params, _))
-    } yield partyToParticipantTopologyPartyAddedO.map(_.validFrom)
+    } yield partyToParticipantTopologyPartyAddedO.map { partyToParticipantTopologyPartyAdded =>
+      (partyToParticipantTopologyPartyAdded.validFrom, partyToParticipantTopologyPartyAdded.serial)
+    }
   }
 
   /** Only called on the target participant. Authorize party replication onboarding from the target
@@ -222,6 +230,13 @@ class PartyReplicationTopologyWorkflow(
       )
     } yield ()
   }
+
+  // Flaky test mitigation: Track the last TP-signed onboarding party replication on a best-effort
+  // basis with constant memory to prevent race conditions when submitting multiple proposals at the
+  // same serial. This is a pragmatic mitigation for now because OnPR will be triggered by topology
+  // authorization rather than vice versa, i.e. authorizeOnboardingTopology related code will be removed.
+  private lazy val lastOnboardingTopologySignedByTP =
+    new AtomicReference[Option[PartyReplicationStatus.ReplicationParams]](None)
 
   /** Only called on the target participant to check if the target participant has already signed
     * the onboarding topology transaction, and add the signature if necessary.
@@ -276,53 +291,59 @@ class PartyReplicationTopologyWorkflow(
         })
       )
       // For idempotency, check if the TP has already signed the proposal in a previous try.
-      hasTargetParticipantAlreadySigned <- existingProposalO.fold {
-        logger.debug(
-          s"No existing onboarding topology proposal found for party replication $requestId and party $partyId"
-        )
-        EitherT.rightT[FutureUnlessShutdown, String](false)
-      } { existingProposal =>
-        logger.debug(
-          s"About to check if target participant signature is missing from onboarding topology proposal for party replication $requestId and party $partyId: Existing proposal: $existingProposal"
-        )
-        // Check if the target participant signature is already present by extending the signed transaction.
-        // If the signed transaction does not change, the TP has already signed.
-        topologyManager
-          .extendSignature(
-            existingProposal.transaction,
-            // Don't specify signing keys to let the topology manager figure out the TP keys as it is complicated
-            // for code outside the topology manager to determine the signing keys in general topologies.
-            signingKeys = Seq.empty,
-            namespacesToSignFor = Seq(targetParticipantId.namespace),
-            forceFlags = ForceFlags.none,
+      hasTargetParticipantAlreadySigned <- existingProposalO match {
+        case _ if lastOnboardingTopologySignedByTP.get.contains(params) =>
+          logger.info(
+            s"Target participant has already signed the onboarding topology proposal for $params. Not signing again."
           )
-          .map { proposalSignedByTP =>
-            (proposalSignedByTP.transaction == existingProposal.transaction.transaction &&
-              // since signatures don't compare by content, check the size
-              proposalSignedByTP.signatures.sizeCompare(
-                existingProposal.transaction.signatures
-              ) == 0).tap(
-              if (_)
-                logger.debug(
-                  s"Onboarding proposal for party replication $requestId and party $partyId on target participant $targetParticipantId already signed by TP"
-                )
-              else
-                logger.info(
-                  s"Onboarding proposal for party replication $requestId and party $partyId on target participant $targetParticipantId missing TP signature; proposal signed by TP: $proposalSignedByTP"
-                )
+          EitherT.rightT[FutureUnlessShutdown, String](true)
+        case None =>
+          logger.debug(
+            s"No existing onboarding topology proposal found for party replication $requestId and party $partyId"
+          )
+          EitherT.rightT[FutureUnlessShutdown, String](false)
+        case Some(existingProposal) =>
+          logger.debug(
+            s"About to check if target participant signature is missing from onboarding topology proposal for party replication $requestId and party $partyId: Existing proposal: $existingProposal"
+          )
+          // Check if the target participant signature is already present by extending the signed transaction.
+          // If the signed transaction does not change, the TP has already signed.
+          topologyManager
+            .extendSignature(
+              existingProposal.transaction,
+              // Don't specify signing keys to let the topology manager figure out the TP keys as it is complicated
+              // for code outside the topology manager to determine the signing keys in general topologies.
+              signingKeys = Seq.empty,
+              namespacesToSignFor = Seq(targetParticipantId.namespace),
+              forceFlags = ForceFlags.none,
             )
-          }
-          .recover { case err @ NoAppropriateSigningKeyInStore.Failure(_, _) =>
-            // The existingProposal may have been authorized between the proposal query above and the topology manager
-            // call. Such a race condition results in a NoAppropriateSigningKeyInStore error because the authorized
-            // topology transaction cannot be signed anymore by any key. Accordingly return true to indicate that
-            // the TP signature is no longer needed.
-            logger.info(
-              s"No appropriate key response during key lookup indicates race with proposal authorization: $err"
-            )
-            true
-          }
-          .leftMap(_.asGrpcError.getMessage)
+            .map { proposalSignedByTP =>
+              (proposalSignedByTP.transaction == existingProposal.transaction.transaction &&
+                // since signatures don't compare by content, check the size
+                proposalSignedByTP.signatures.sizeCompare(
+                  existingProposal.transaction.signatures
+                ) == 0).tap(
+                if (_)
+                  logger.debug(
+                    s"Onboarding proposal for party replication $requestId and party $partyId on target participant $targetParticipantId already signed by TP"
+                  )
+                else
+                  logger.info(
+                    s"Onboarding proposal for party replication $requestId and party $partyId on target participant $targetParticipantId missing TP signature; proposal signed by TP: $proposalSignedByTP"
+                  )
+              )
+            }
+            .recover { case err @ NoAppropriateSigningKeyInStore.Failure(_, _) =>
+              // The existingProposal may have been authorized between the proposal query above and the topology manager
+              // call. Such a race condition results in a NoAppropriateSigningKeyInStore error because the authorized
+              // topology transaction cannot be signed anymore by any key. Accordingly return true to indicate that
+              // the TP signature is no longer needed.
+              logger.info(
+                s"No appropriate key response during key lookup indicates race with proposal authorization: $err"
+              )
+              true
+            }
+            .leftMap(_.asGrpcError.getMessage)
       }
       // Sign and authorize the party addition on the target participant if the TP has not already signed.
       _ <- EitherTUtil.ifThenET(!hasTargetParticipantAlreadySigned)(
@@ -339,7 +360,7 @@ class PartyReplicationTopologyWorkflow(
               forceChanges = ForceFlags.none,
               waitToBecomeEffective = None,
             )
-            .map(_ => ())
+            .map(_ => lastOnboardingTopologySignedByTP.set(Some(params)))
             .recover { case err @ NoAppropriateSigningKeyInStore.Failure(_, _) =>
               // See the note above on the possible race condition between the existingProposal and the topology manager call.
               logger.info(
@@ -481,18 +502,26 @@ class PartyReplicationTopologyWorkflow(
             ptpHeadTxn.mapping.participants
               .exists(p => p.participantId == targetParticipantId && p.onboarding)
           ) {
-            PartyToParticipant
-              .create(
-                ptpHeadTxn.mapping.partyId,
-                ptpHeadTxn.mapping.threshold,
-                ptpHeadTxn.mapping.participants.map {
-                  case HostingParticipant(`targetParticipantId`, permission, true) =>
-                    HostingParticipant(targetParticipantId, permission, onboarding = false)
-                  case otherParticipant => otherParticipant
-                },
-                ptpHeadTxn.mapping.partySigningKeysWithThreshold,
-              )
-              .map(ptp => Some(ptp -> ptpHeadTxn.serial.increment))
+            ptpHeadTxn.serial.increment
+              .leftMap(_.message)
+              .flatMap { nextSerial =>
+                PartyToParticipant
+                  .create(
+                    ptpHeadTxn.mapping.partyId,
+                    ptpHeadTxn.mapping.threshold,
+                    ptpHeadTxn.mapping.participants.map {
+                      case HostingParticipant(
+                            `targetParticipantId`,
+                            permission,
+                            HostingState.Onboarding,
+                          ) =>
+                        HostingParticipant(targetParticipantId, permission, onboarding = false)
+                      case otherParticipant => otherParticipant
+                    },
+                    ptpHeadTxn.mapping.partySigningKeysWithThreshold,
+                  )
+                  .map(ptp => Some(ptp -> nextSerial))
+              }
           } else Right(None)
         )
         .leftMap(err => AuthorizeClearanceError.ProposeError(err): AuthorizeClearanceError)

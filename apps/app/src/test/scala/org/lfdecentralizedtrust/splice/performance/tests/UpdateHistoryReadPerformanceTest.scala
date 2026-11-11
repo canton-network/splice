@@ -2,7 +2,12 @@ package org.lfdecentralizedtrust.splice.performance.tests
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
+import com.digitalasset.canton.config.{
+  NonNegativeFiniteDuration,
+  ProcessingTimeout,
+  QueryCostMonitoringConfig,
+  StorageConfig,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
@@ -10,12 +15,19 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
-import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding
+import io.circe.syntax.*
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{DamlValueEncoding, UpdateHistoryItem}
+import org.lfdecentralizedtrust.splice.scan.admin.http.ScanJsonSupport.*
 import org.lfdecentralizedtrust.splice.scan.admin.http.{
   ExternalHashInclusionPolicy,
   ScanHttpEncodings,
 }
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
+import org.lfdecentralizedtrust.splice.scan.config.{
+  AnalyzableTimeWindowConfig,
+  ScanAppBackendConfig,
+}
+import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
+import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
   TreeUpdateWithMigrationId,
@@ -25,6 +37,7 @@ import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
 import java.nio.file.Path
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Read performance test for UpdateHistory.
@@ -51,16 +64,27 @@ class UpdateHistoryReadPerformanceTest(
 
   override type Store = UpdateHistory
 
-  override protected def mkStore(storage: DbStorage): UpdateHistory = {
-    new UpdateHistory(
+  override protected def logQueryCost: Option[QueryCostMonitoringConfig] =
+    Some(QueryCostMonitoringConfig(every = NonNegativeFiniteDuration.ofSeconds(5)))
+
+  override protected def mkStore(storage: DbStorage): Future[UpdateHistory] = {
+    implicit val initTc: TraceContext = TraceContext.empty
+    UpdateHistory.create(
       storage = storage,
       domainMigrationId = migrationId,
       storeName = this.getClass.getName,
-      participantId = mkParticipantId(this.getClass.getSimpleName),
+      participantId = StoreMemberId(mkParticipantId(this.getClass.getSimpleName)),
       updateStreamParty = dsoParty,
       backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore = InternedStringStore.createWithoutWarmup(
+        storage,
+        10_000L,
+        FiniteDuration(1, "hour"),
+        loggerFactory,
+        NoOpMetricsFactory,
+      ),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory = loggerFactory,
-      enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
       metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
     )
@@ -71,8 +95,14 @@ class UpdateHistoryReadPerformanceTest(
       txs: Seq[TreeUpdateWithMigrationId],
   ): Seq[ReadOperation] =
     Seq(
+      // (1) fetches the update from the DB and create LAPI API object
       getUpdateByIdOperation(store, txs),
+      // (2) converts LAPI API object to Scan API object
       encodeUpdateOperation(txs),
+      // (3) v1-to-v2 reshape of Scan API object
+      // our preliminary benchmarks show v1-to-v2 only consumes 2% of the overall execution time, so we ignore it.
+      // (4) serializes the Scan API object to JSON
+      serializeJsonOperation(txs),
     )
 
   /** Fetches the update from the store and decode. */
@@ -115,6 +145,51 @@ class UpdateHistoryReadPerformanceTest(
                 ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
             )
           }
+        }
+      },
+    )
+  }
+
+  /** Runs circe JSON serialization on the already-encoded API objects.
+    */
+  private def serializeJsonOperation(
+      txs: Seq[TreeUpdateWithMigrationId]
+  ): ReadOperation = {
+    implicit val elc: ErrorLoggingContext =
+      ErrorLoggingContext.fromTracedLogger(logger)(TraceContext.empty)
+    // encode outside the timed block so only the JSON serialization is measured.
+    // .toVector.map ensures the encoding is done eagerly, not lazily during the timed block.
+    // encodeCount verifies this at runtime
+    val encodeCount = new java.util.concurrent.atomic.AtomicInteger(0)
+    val encoded: Seq[UpdateHistoryItem] = txs.toVector.map { tx =>
+      encodeCount.incrementAndGet()
+      ScanHttpEncodings.encodeUpdate(
+        tx,
+        encoding = DamlValueEncoding.members.CompactJson,
+        version = ScanHttpEncodings.V1,
+        hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
+        externalTransactionHashThresholdTime =
+          ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
+      )
+    }
+    require(
+      encodeCount.get() == txs.size,
+      s"encode did not run eagerly at construction: expected ${txs.size}, got ${encodeCount.get()}",
+    )
+    ReadOperation(
+      name = "serializeJson",
+      execute = { (_: TraceContext) =>
+        Future {
+          val encodeCountBefore = encodeCount.get()
+          encoded.foreach { item =>
+            // mirror the HTTP layer's circe marshaller exactly
+            val _ = io.circe.Printer.noSpaces.print(item.asJson)
+          }
+          require(
+            encodeCount.get() == encodeCountBefore,
+            s"encode leaked into the timed serialization block: count increased from " +
+              s"$encodeCountBefore to ${encodeCount.get()}",
+          )
         }
       },
     )

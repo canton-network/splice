@@ -28,6 +28,7 @@ trait AdminCommandRunner {
 
   protected[console] def tracedLogger: TracedLogger
 
+  protected[console] def adminApiToken: Option[String]
 }
 
 object AdminCommandRunner {
@@ -57,11 +58,11 @@ object AdminCommandRunner {
   */
 trait LedgerApiCommandRunner {
 
-  def ledgerApiCommand[Result](
+  protected[console] def ledgerApiCommand[Result](
       command: GrpcAdminCommand[?, ?, Result]
   ): ConsoleCommandResult[Result]
 
-  protected[console] def token: Option[String]
+  protected[console] def ledgerApiToken: Option[String]
 }
 
 trait PublicApiCommandRunner {

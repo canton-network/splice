@@ -6,7 +6,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   ExternalPartySetupProposal,
   TransferPreapproval,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.install.amuletoperation.CO_CreateExternalPartySetupProposal
@@ -20,8 +19,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions
-import definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -33,21 +30,16 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireTransferPreapprovalsTrigger,
 }
 import org.lfdecentralizedtrust.splice.util.{DisclosedContracts, TriggerTestUtil, WalletTestUtil}
-import org.lfdecentralizedtrust.splice.validator.automation.{
-  RenewTransferPreapprovalTrigger,
-  TransferCommandSendTrigger,
-}
-import com.daml.ledger.javaapi.data.codegen.json.JsonLfReader
+import org.lfdecentralizedtrust.splice.validator.automation.RenewTransferPreapprovalTrigger
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
-import com.digitalasset.canton.crypto.*
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
-import com.digitalasset.canton.util.HexString
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import monocle.macros.syntax.lens.*
 
-import java.time.{Duration, Instant}
+import java.time.Instant
 import java.util.UUID
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -75,6 +67,8 @@ class ExternalPartySetupProposalIntegrationTest
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms(
         // set renewal duration to be same as pre-approval lifetime to ensure renewal
         // gets triggered immediately
@@ -103,7 +97,6 @@ class ExternalPartySetupProposalIntegrationTest
             NonNegativeFiniteDuration.ofMillis(500)
           )(config),
       )
-      .withTransferCommandSupport
 
   }
 
@@ -155,7 +148,7 @@ class ExternalPartySetupProposalIntegrationTest
   "TransferPreapproval allows to transfer between externally signed parties" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_9) in {
     implicit env =>
       // Onboard and Create/Accept ExternalPartySetupProposal for Alice
-      val onboardingAlice @ OnboardingResult(aliceParty, alicePublicKey, alicePrivateKey) =
+      val onboardingAlice @ OnboardingResult(aliceParty, _, _) =
         onboardExternalParty(aliceValidatorBackend, Some("aliceExternal"))
       aliceValidatorBackend.participantClient.parties
         .hosted(filterParty =
@@ -266,330 +259,42 @@ class ExternalPartySetupProposalIntegrationTest
               c => c.data.provider == aliceParty.toProtoPrimitive,
             ) should have length (1),
       )
+  }
 
-      // Transfer 1000.0 from Alice to Bob
-      val prepareSend =
-        aliceValidatorBackend.prepareTransferPreapprovalSend(
-          aliceParty,
-          bobParty,
-          BigDecimal(1000.0),
-          CantonTimestamp.now().plus(Duration.ofHours(24)),
-          0L,
-          Some("transfer-command-description"),
-          verboseHashing = true,
-        )
-      prepareSend.hashingDetails should not be empty withClue "TransferPreapproval send hashingDetails"
-      val (updateId, _) = actAndCheck(
-        "Submit signed TransferCommand creation",
-        aliceValidatorBackend.submitTransferPreapprovalSend(
-          aliceParty,
-          prepareSend.transaction,
-          HexString.toHexString(
-            crypto
-              .signBytes(
-                HexString.parseToByteString(prepareSend.txHash).value,
-                alicePrivateKey.asInstanceOf[SigningPrivateKey],
-                usage = SigningKeyUsage.ProtocolOnly,
-              )
-              .value
-              .toProtoV30
-              .signature
-          ),
-          publicKeyAsHexString(alicePublicKey),
-        ),
-      )(
-        "validator automation completes transfer",
-        _ => {
-          BigDecimal(
-            aliceValidatorBackend
-              .getExternalPartyBalance(aliceParty)
-              .totalUnlockedCoin
-          ) should be(
-            BigDecimal(1000) + BigDecimal(
-              issuingRound.issuancePerUnfeaturedAppRewardCoupon
-            ) * appRewardAmount
+  "Wallet automation starts for external parties with signing keys embedded in PartyToParticipant" in {
+    implicit env =>
+      val onboarding = onboardExternalPartyWithEmbeddedKeys(aliceValidatorBackend)
+      val synchronizerStore = TopologyStoreId.Synchronizer(decentralizedSynchronizerId)
+      eventually() {
+        aliceValidatorBackend.participantClient.topology.party_to_participant_mappings
+          .list(
+            synchronizerStore,
+            filterParty = onboarding.party.filterString,
           )
-          bobValidatorBackend
-            .getExternalPartyBalance(bobParty)
-            .totalUnlockedCoin shouldBe "1000.0000000000"
-          aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-            .filterJava(amuletCodegen.AppRewardCoupon.COMPANION)(
-              aliceParty,
-              c => c.data.provider == aliceParty.toProtoPrimitive,
-            ) shouldBe empty withClue "alice AppRewardCoupons"
-          // Transfer command counter gets created/incremented
-          aliceValidatorBackend.scanProxy
-            .lookupTransferCommandCounterByParty(aliceParty)
-            .value
-            .payload
-            .nextNonce shouldBe 1
-          val result = aliceValidatorBackend.scanProxy
-            .lookupTransferCommandStatus(
-              aliceParty,
-              0L,
-            )
-            .value
-          result.transferCommandsByContractId.values.loneElement.status shouldBe definitions.TransferCommandContractStatus.members
-            .TransferCommandSentResponse(
-              definitions.TransferCommandSentResponse(status = "sent")
-            )
-          result.transferCommandsByContractId.keys.loneElement should startWith(
-            prepareSend.transferCommandContractIdPrefix
-          )
-          val payload = TransferCommand
-            .jsonDecoder()
-            .decode(
-              new JsonLfReader(
-                result.transferCommandsByContractId.values.loneElement.contract.payload.noSpaces
-              )
-            )
-          payload shouldBe new TransferCommand(
-            dsoParty.toProtoPrimitive,
-            aliceParty.toProtoPrimitive,
-            bobParty.toProtoPrimitive,
-            aliceValidatorBackend.getValidatorPartyId().toProtoPrimitive,
-            BigDecimal(1000.0).bigDecimal,
-            payload.expiresAt,
-            0L,
-            java.util.Optional.of("transfer-command-description"),
-          )
-        },
-      )
-      val update = eventuallySucceeds() {
-        sv1ScanBackend.getUpdate(updateId, encoding = CompactJson)
+          .loneElement
+          .item
+          .partySigningKeysWithThreshold should not be empty
       }
-      // Create a validator reward to test reward minting
-      val (_, rewardRound) = actAndCheck(
-        "Create validator reward",
-        createRewards(
-          appRewards = Seq.empty,
-          validatorRewards = Seq((aliceParty, BigDecimal(1.0))),
-        ),
-      )(
-        "reward is observable",
-        _ =>
-          aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-            .filterJava(amuletCodegen.ValidatorRewardCoupon.COMPANION)(
-              aliceParty,
-              c => c.data.user == aliceParty.toProtoPrimitive,
-            )
-            .loneElement
-            .data
-            .round
-            .number,
-      )
-
+      // The point of this test is to cover parties without a PartyToKeyMapping
+      @nowarn("cat=deprecation")
+      val partyToKeyMappings =
+        aliceValidatorBackend.participantClient.topology.party_to_key_mappings.list(
+          synchronizerStore,
+          filterParty = onboarding.party.filterString,
+        )
+      partyToKeyMappings shouldBe empty
+      aliceValidatorWalletClient.tap(10.0)
       actAndCheck(
-        s"Advance rounds until $rewardRound is issuing", {
-          advanceRoundsByOneTickViaAutomation()
-          advanceRoundsByOneTickViaAutomation()
-          advanceRoundsByOneTickViaAutomation()
-        },
+        s"Setup external party ${onboarding.party} on alice validator",
+        createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, onboarding),
       )(
-        s"Round $rewardRound is issuing",
-        _ => {
-          val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
-          issuingRounds.map(_.payload.round.number) should contain(rewardRound)
-        },
-      )
-      clue("ValidatorRewardCoupon gets collected") {
-        eventually() {
-          // Just checking for archival. Checking the tx history or something for collection is a bit annoying since there
-          // are multiple things resulting in validator rewards and we only get a total sum.
-          aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-            .filterJava(amuletCodegen.ValidatorRewardCoupon.COMPANION)(
-              aliceParty,
-              c => c.data.user == aliceParty.toProtoPrimitive,
-            ) shouldBe empty withClue "alice ValidatorRewardCoupons"
-
-          // Sanity check that the reward really got collected and not expired.
-          val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
-          issuingRounds.map(_.payload.round.number) should contain(rewardRound)
-        }
-      }
-
-      inside(update) {
-        case definitions.UpdateHistoryItem.members.UpdateHistoryTransaction(transaction) =>
-          forExactly(1, transaction.eventsById) {
-            case (_, definitions.TreeEvent.members.ExercisedEvent(ev)) =>
-              ev.choice shouldBe "ExternalPartyAmuletRules_CreateTransferCommand"
-            case _ => fail()
-          }
-      }
-
-      // Check that transfer works correctly with featured app rights
-      bobValidatorWalletClient.selfGrantFeaturedAppRight()
-      // Transfer 500.0 from Alice to Bob
-      val prepareSendFeatured =
-        aliceValidatorBackend.prepareTransferPreapprovalSend(
-          aliceParty,
-          bobParty,
-          BigDecimal(500.0),
-          CantonTimestamp.now().plus(Duration.ofHours(24)),
-          1L,
-          Some("transfer-command-description"),
-          verboseHashing = true,
-        )
-      prepareSendFeatured.hashingDetails should not be empty withClue "TransferPreapproval send hashingDetails"
-      val (_, _) = actAndCheck(
-        "Submit signed TransferCommand creation",
-        aliceValidatorBackend.submitTransferPreapprovalSend(
-          aliceParty,
-          prepareSendFeatured.transaction,
-          HexString.toHexString(
-            crypto
-              .signBytes(
-                HexString.parseToByteString(prepareSendFeatured.txHash).value,
-                alicePrivateKey.asInstanceOf[SigningPrivateKey],
-                usage = SigningKeyUsage.ProtocolOnly,
-              )
-              .value
-              .toProtoV30
-              .signature
-          ),
-          publicKeyAsHexString(alicePublicKey),
-        ),
-      )(
-        "validator automation completes transfer",
-        _ => {
-          BigDecimal(
-            aliceValidatorBackend
-              .getExternalPartyBalance(aliceParty)
-              .totalUnlockedCoin
-          ) should be(
-            BigDecimal(
-              2000 - 1000 - 500
-            ) + BigDecimal(issuingRound.issuancePerUnfeaturedAppRewardCoupon) * appRewardAmount
-          )
-          bobValidatorBackend
-            .getExternalPartyBalance(bobParty)
-            .totalUnlockedCoin shouldBe "1500.0000000000"
-          val rewards =
-            bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .filterJava(amuletCodegen.AppRewardCoupon.COMPANION)(
-                bobValidatorBackend.getValidatorUserInfo().primaryParty,
-                c =>
-                  c.data.provider == bobValidatorBackend
-                    .getValidatorUserInfo()
-                    .primaryParty
-                    .toProtoPrimitive,
-              )
-          rewards.loneElement.data.featured shouldBe true
-        },
-      )
-
-      // Check that transfer command gets archived if preapproval does not exist.
-      val sv1Party = sv1Backend.getDsoInfo().svParty
-      val now = env.environment.clock.now.toInstant
-      // Create a preapproval temporarily, otherwise the prepare step already rejects
-      val (preapproval, _) = actAndCheck(
-        "Create preapproval",
-        sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-          .submitWithResult(
-            userId = sv1Backend.config.ledgerApiUser,
-            actAs = Seq(dsoParty, sv1Party),
-            readAs = Seq.empty,
-            update = new TransferPreapproval(
-              dsoParty.toProtoPrimitive,
-              sv1Party.toProtoPrimitive,
-              sv1Party.toProtoPrimitive,
-              now,
-              now,
-              now.plusMillis(500),
-            ).create,
-          ),
-      )(
-        "Preapproval is ingested by scan",
+        s"Wallet automation for ${onboarding.party} is started",
         _ =>
-          inside(aliceValidatorBackend.scanProxy.lookupTransferPreapprovalByParty(sv1Party)) {
-            case Some(_) =>
-              succeed
-          },
+          aliceValidatorBackend.appState.walletManager
+            .valueOrFail("WalletManager is expected to be defined")
+            .externalPartyWalletManager
+            .lookupExternalPartyWallet(onboarding.party) should not be empty,
       )
-
-      val prepareSendNoPreapproval =
-        aliceValidatorBackend.prepareTransferPreapprovalSend(
-          aliceParty,
-          sv1Party,
-          BigDecimal(10.0),
-          CantonTimestamp.now().plus(Duration.ofHours(24)),
-          2L,
-          Some("transfer-command-description"),
-        )
-      prepareSendNoPreapproval.hashingDetails shouldBe empty withClue "TransferPreapproval send hashingDetails"
-
-      // Archive the preapproval
-      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-        .submitWithResult(
-          userId = sv1Backend.config.ledgerApiUser,
-          actAs = Seq(dsoParty, sv1Party),
-          readAs = Seq.empty,
-          update = preapproval.contractId.exerciseArchive(),
-        )
-      setTriggersWithin(triggersToPauseAtStart =
-        Seq(aliceValidatorBackend.validatorAutomation.trigger[TransferCommandSendTrigger])
-      ) {
-        val (_, suffixedCid) = actAndCheck(
-          "Submit signed TransferCommand creation",
-          aliceValidatorBackend.submitTransferPreapprovalSend(
-            aliceParty,
-            prepareSendNoPreapproval.transaction,
-            HexString.toHexString(
-              crypto
-                .signBytes(
-                  HexString.parseToByteString(prepareSendNoPreapproval.txHash).value,
-                  alicePrivateKey.asInstanceOf[SigningPrivateKey],
-                  usage = SigningKeyUsage.ProtocolOnly,
-                )
-                .value
-                .toProtoV30
-                .signature
-            ),
-            publicKeyAsHexString(alicePublicKey),
-          ),
-        )(
-          "TransferCommand is created",
-          _ => {
-            aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .filterJava(TransferCommand.COMPANION)(
-                aliceParty,
-                c => c.data.sender == aliceParty.toProtoPrimitive,
-              )
-              .loneElement
-              .id
-          },
-        )
-        actAndCheck(
-          "Resume validator automation for TransferCommands",
-          aliceValidatorBackend.validatorAutomation.trigger[TransferCommandSendTrigger].resume(),
-        )(
-          "TransferCommand gets archived",
-          _ => {
-            aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .filterJava(TransferCommand.COMPANION)(
-                aliceParty,
-                c => c.data.sender == aliceParty.toProtoPrimitive,
-              ) shouldBe empty withClue "alice TransferCommands"
-            val result = aliceValidatorBackend.scanProxy
-              .lookupTransferCommandStatus(
-                aliceParty,
-                2L,
-              )
-              .value
-            result.transferCommandsByContractId.values.loneElement.status shouldBe definitions.TransferCommandContractStatus.members
-              .TransferCommandFailedResponse(
-                definitions.TransferCommandFailedResponse(
-                  status = "failed",
-                  failureKind =
-                    definitions.TransferCommandFailedResponse.FailureKind.members.Failed,
-                  reason =
-                    s"ITR_Other(No TransferPreapproval for receiver '${sv1Party.toProtoPrimitive}')",
-                )
-              )
-            result.transferCommandsByContractId.keys.loneElement shouldBe suffixedCid.contractId
-          },
-        )
-      }
   }
 
   "TransferPreapprovals get renewed by validator automation" in { implicit env =>

@@ -3,6 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store
 
+import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.tracing.TraceContext
+
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
@@ -52,7 +55,6 @@ import com.digitalasset.canton.logging.pretty.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
-import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 
@@ -568,17 +570,13 @@ object UserWalletStore {
       paymentInterval: RelTime,
       paymentDuration: RelTime,
   )
-  final case class EntryWithSubscriptionContext(
-      entry: Contract[ansCodegen.AnsEntry.ContractId, ansCodegen.AnsEntry],
-      subscriptionReference: subsCodegen.SubscriptionRequest.ContractId,
-  )
-
   def apply(
       key: Key,
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -586,13 +584,15 @@ object UserWalletStore {
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
       close: CloseContext,
-  ): UserWalletStore = {
-    new DbUserWalletStore(
+      tc: TraceContext,
+  ): Future[UserWalletStore] = {
+    DbUserWalletStore.create(
       key,
       storage,
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       ingestionConfig,
       defaultLimit,
@@ -864,6 +864,23 @@ object UserWalletStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
         ),
+        mkFilter(splice.governancelock.GovernanceLock.COMPANION)(
+          co => co.payload.dso == dso && co.payload.owner == endUser,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          val (lockType, lockSubject) =
+            GovernanceLockUtil.governanceLockTypeAndSubject(contract.payload)
+          UserWalletAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = GovernanceLockUtil
+              .getVestingLockSpecification(contract.payload)
+              .map(v => Timestamp.assertFromInstant(v.endTime)),
+            governanceLockType = Some(lockType.storeValue),
+            governanceLockSubject = Some(lockSubject),
+          )
+        },
       ),
       Map(
         mkFilterInterface(allocationrequestv1.AllocationRequest.INTERFACE)(co =>

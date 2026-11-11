@@ -26,6 +26,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.store.HistoryMetrics.AcsSnapshotsMetrics
+import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -60,7 +61,7 @@ abstract class AcsSnapshotTriggerBase(
       store
         .initializeIncrementalSnapshot(
           table = snapshotTable,
-          initializeFrom = from,
+          initializeFromT = from,
           targetRecordTime = nextAt,
         )
         .map(_ => TaskSuccess(s"Initialized incremental snapshot from $from"))
@@ -110,8 +111,12 @@ abstract class AcsSnapshotTriggerBase(
         .map(size => {
           snapshotMetrics.latestRecordTimeSave.updateValue(snapshot.recordTime)
           size match {
-            case Some(v) => snapshotMetrics.snapshotSize.updateValue(v)
-            case None => snapshotMetrics.snapshotSize.updateValue(-1)
+            case Some(v) =>
+              snapshotMetrics.snapshotSize.updateValue(v.createRows)
+              snapshotMetrics.snapshotStakeholdersSize.updateValue(v.stakeholderRows)
+            case None =>
+              snapshotMetrics.snapshotSize.updateValue(-1)
+              snapshotMetrics.snapshotStakeholdersSize.updateValue(-1)
           }
           TaskSuccess(s"Saved incremental snapshot at ${snapshot.recordTime}")
         })
@@ -126,7 +131,7 @@ abstract class AcsSnapshotTriggerBase(
     case Success(result) =>
       snapshotMetrics.waitingForLock.updateValue(0)
       Success(result)
-    case Failure(e: AcsSnapshotStore.FailedToAcquireLockException) =>
+    case Failure(e: AdvisoryLocks.FailedToAcquireLockException) =>
       // It is expected that we sometimes fail to acquire the lock on the snapshot table.
       // The time until the lock is released is typically much larger than our task retry timeouts,
       // so we can just silently skip the task and try again later.
@@ -210,7 +215,7 @@ object AcsSnapshotTriggerBase {
   /** Determines the next task to perform in order to update the incremental snapshot for the given migration.
     *
     * @param migrationId the migration for which to retrieve the task
-    * @param isHistoryBackfilled check if the history backfilling is complete for a given migration
+    * @param mayStart check if snapshots may be taken for a given migration
     * @param getIncrementalSnapshot the current incremental snapshot, if it exists
     * @param getLatestSnapshot the latest full snapshot for a given migration
     * @param getMinRecordTime the record time of the first non-import update for a given migration
@@ -223,7 +228,7 @@ object AcsSnapshotTriggerBase {
     */
   def retrieveTaskForMigration(
       migrationId: Long,
-      isHistoryBackfilled: (Long) => Future[Boolean],
+      mayStart: (Long) => Future[Boolean],
       getIncrementalSnapshot: () => Future[Option[IncrementalAcsSnapshot]],
       getLatestSnapshot: (Long) => Future[Option[AcsSnapshot]],
       getMinRecordTime: (Long) => Future[Option[CantonTimestamp]],
@@ -236,10 +241,9 @@ object AcsSnapshotTriggerBase {
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[RetrieveTaskForMigrationResult] = {
-    isHistoryBackfilled(migrationId).flatMap {
+    mayStart(migrationId).flatMap {
       case false =>
-        // UpdateHistoryBackfillingTrigger is still running for this migration,
-        // wait until it's done.
+        // Snapshots may not start yet for this migration (history backfilling or the snapshot seed is pending).
         Future.successful(RetrieveTaskForMigrationResult.Waiting)
       case true =>
         getIncrementalSnapshot().flatMap {

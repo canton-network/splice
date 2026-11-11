@@ -11,7 +11,7 @@ import Copyright from './Copyright';
 import DateDisplay from './DateDisplay';
 import DateWithDurationDisplay from './DateWithDurationDisplay';
 import DisableConditionally from './DisableConditionally';
-import DsoViewPrettyJSON, { DsoInfo } from './Dso';
+import DsoViewPrettyJSON, { DsoInfo, SvInfo } from './Dso';
 import ErrorBoundary from './ErrorBoundary';
 import ErrorDisplay from './ErrorDisplay';
 import ErrorRouterPage from './ErrorRouterPage';
@@ -22,6 +22,7 @@ import Login from './Login';
 import LoginFailed from './LoginFailed';
 import PartyId from './PartyId';
 import { computeDiff, PrettyJsonDiff } from './PrettyJsonDiff';
+import QueryDevtools from './QueryDevtools';
 import RateDisplay from './RateDisplay';
 import TitledTable from './TitledTable';
 import { updateIdFromEventId, UpdateId } from './UpdateId';
@@ -57,6 +58,7 @@ export {
   DateWithDurationDisplay,
   DisableConditionally,
   DsoInfo,
+  SvInfo,
   DsoViewPrettyJSON,
   ErrorBoundary,
   ErrorDisplay,
@@ -69,6 +71,7 @@ export {
   LoginFailed,
   PartyId,
   PrettyJsonDiff,
+  QueryDevtools,
   RateDisplay,
   SubscriptionButton,
   TitledTable,

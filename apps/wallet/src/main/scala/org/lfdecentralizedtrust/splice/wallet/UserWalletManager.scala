@@ -37,6 +37,8 @@ import io.opentelemetry.api.trace.Tracer
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.util.Failure
+import scala.util.control.NonFatal
 
 /** Manages all services comprising an end-user wallets. */
 class UserWalletManager(
@@ -93,7 +95,8 @@ class UserWalletManager(
   // and removing users.
   private[this] def addEndUserPartyWallet(
       endUserParty: PartyId,
-      createWallet: PartyId => (RetryProvider, UserWalletService),
+      userRetryProvider: RetryProvider,
+      userStore: UserWalletStore,
   ): Option[(RetryProvider, UserWalletService)] = blocking {
     mutex.exclusive {
       if (endUserPartyWalletsMap.contains(endUserParty)) {
@@ -105,7 +108,8 @@ class UserWalletManager(
         logger.debug(
           show"Creating wallet service and retry provider for user ${endUserParty}."
         )(TraceContext.empty)
-        val endUserPartyWallet = createWallet(endUserParty)
+        val endUserPartyWallet =
+          createEndUserPartyWallet(endUserParty, userRetryProvider, userStore)
         endUserPartyWalletsMap.put(endUserParty, endUserPartyWallet): Unit
         Some(endUserPartyWallet)
       }
@@ -170,72 +174,108 @@ class UserWalletManager(
     */
   final def getOrCreateUserWallet(
       install: Contract[WalletAppInstall.ContractId, WalletAppInstall]
-  ): UnlessShutdown[Boolean] = {
+  )(implicit tc: TraceContext): FutureUnlessShutdown[Boolean] = {
+    val endUserParty = PartyId.tryFromProtoPrimitive(install.payload.endUserParty)
     if (retryProvider.isClosing) {
-      UnlessShutdown.AbortedDueToShutdown
+      FutureUnlessShutdown.abortedDueToShutdown
+    } else if (endUserPartyWalletsMap.contains(endUserParty)) {
+      logger.debug(
+        show"Wallet for user party ${endUserParty} already exists, not creating a new one."
+      )
+      FutureUnlessShutdown.pure(false)
     } else {
-      val endUserParty = PartyId.tryFromProtoPrimitive(install.payload.endUserParty)
-
-      val userRetryProviderAndWalletService =
-        addEndUserPartyWallet(endUserParty, createEndUserPartyWallet)
-
-      // There might have been a concurrent call to .close() that missed the above addition of this user
-      if (retryProvider.isClosing) {
-        logger.debug(
-          show"Detected race between adding wallet for party ${endUserParty} and shutdown: closing wallet."
-        )(TraceContext.empty)
-        userRetryProviderAndWalletService.foreach { case (userRetryProvider, walletService) =>
+      val key = UserWalletStore.Key(
+        dsoParty = store.walletKey.dsoParty,
+        store.walletKey.validatorParty,
+        endUserParty,
+      )
+      val userLoggerFactory = loggerFactory.append("endUserParty", key.endUserParty.toString)
+      // We allocate a separate retry provider per user, since users can also be offboarded (thus their service closed)
+      // without the entire node going down.
+      val userRetryProvider =
+        RetryProvider(
+          userLoggerFactory,
+          retryProvider.timeouts,
+          retryProvider.futureSupervisor,
+          retryProvider.metricsFactory,
+        )
+      val userStoreF = UserWalletStore(
+        key,
+        storage,
+        userLoggerFactory,
+        userRetryProvider,
+        migrationId,
+        store.multiDomainAcsStore.synchronizerId,
+        participantId,
+        automationConfig.ingestion,
+        params.defaultLimit,
+      ).transform {
+        case Failure(e) =>
           userRetryProvider.close()
-          walletService.close()
+          Failure(e)
+        case success => success
+      }
+      FutureUnlessShutdown.outcomeF(userStoreF).flatMap { userStore =>
+        // If creating the service fails, the store and the retry provider are closed there
+        val userRetryProviderAndWalletService =
+          addEndUserPartyWallet(endUserParty, userRetryProvider, userStore)
+        if (userRetryProviderAndWalletService.isEmpty) {
+          // Lost a race with a concurrent creation of the same user's wallet
+          try userStore.close()
+          finally userRetryProvider.close()
         }
-        UnlessShutdown.AbortedDueToShutdown
-      } else {
-        UnlessShutdown.Outcome(userRetryProviderAndWalletService.isDefined)
+
+        // There might have been a concurrent call to .close() that missed the above addition of this user
+        if (retryProvider.isClosing) {
+          logger.debug(
+            show"Detected race between adding wallet for party ${endUserParty} and shutdown: closing wallet."
+          )
+          userRetryProviderAndWalletService.foreach { case (userRetryProvider, walletService) =>
+            try userRetryProvider.close()
+            finally walletService.close()
+          }
+          FutureUnlessShutdown.abortedDueToShutdown
+        } else {
+          FutureUnlessShutdown.pure(userRetryProviderAndWalletService.isDefined)
+        }
       }
     }
   }
 
   private def createEndUserPartyWallet(
-      endUserParty: PartyId
+      endUserParty: PartyId,
+      userRetryProvider: RetryProvider,
+      userStore: UserWalletStore,
   ): (RetryProvider, UserWalletService) = {
-    val key = UserWalletStore.Key(
-      dsoParty = store.walletKey.dsoParty,
-      store.walletKey.validatorParty,
-      endUserParty,
-    )
-    val userLoggerFactory = loggerFactory.append("endUserParty", key.endUserParty.toString)
-    // We allocate a separate retry provider per user, since users can also be offboarded (thus their service closed)
-    // without the entire node going down.
-    val userRetryProvider =
-      RetryProvider(
-        userLoggerFactory,
-        retryProvider.timeouts,
-        retryProvider.futureSupervisor,
-        retryProvider.metricsFactory,
-      )
-    val walletService = new UserWalletService(
-      ledgerClient,
-      key,
-      this,
-      automationConfig,
-      clock,
-      domainTimeSync,
-      treasuryConfig,
-      storage,
-      userRetryProvider,
-      userLoggerFactory,
-      scanConnection,
-      packageVersionSupport,
-      migrationId,
-      participantId,
-      Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
-      // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
-      walletSweep.get(endUserParty.toProtoPrimitive),
-      autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
-      rewardSharingConfigByParty.getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
-      dedupDuration,
-      params,
-    )
+    val userLoggerFactory = loggerFactory.append("endUserParty", endUserParty.toString)
+    val walletService =
+      try {
+        new UserWalletService(
+          ledgerClient,
+          userStore,
+          this,
+          automationConfig,
+          clock,
+          domainTimeSync,
+          treasuryConfig,
+          userRetryProvider,
+          userLoggerFactory,
+          scanConnection,
+          packageVersionSupport,
+          Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
+          // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
+          walletSweep.get(endUserParty.toProtoPrimitive),
+          autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
+          rewardSharingConfigByParty
+            .getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig.BuiltIn()),
+          dedupDuration,
+          params,
+        )
+      } catch {
+        case NonFatal(e) =>
+          userRetryProvider.close()
+          throw e
+      }
     (userRetryProvider, walletService)
   }
 
@@ -246,8 +286,8 @@ class UserWalletManager(
           .withDescription(show"No wallet service found for user party ${userParty}")
           .asRuntimeException()
       case Some((userRetryProvider, walletService)) =>
-        userRetryProvider.close()
-        walletService.close()
+        try userRetryProvider.close()
+        finally walletService.close()
     }
   }
 

@@ -5,10 +5,6 @@ package com.digitalasset.canton.participant.synchronizer
 
 import com.digitalasset.base.error.{ErrorCategory, ErrorCode, ErrorGroup, Explanation, Resolution}
 import com.digitalasset.canton.SynchronizerAlias
-import com.digitalasset.canton.common.sequencer.grpc.SequencerInfoLoader.{
-  SequencerAggregatedInfo,
-  SequencerInfoLoaderError,
-}
 import com.digitalasset.canton.crypto.SynchronizerCryptoClient
 import com.digitalasset.canton.data.SynchronizerPredecessor
 import com.digitalasset.canton.error.*
@@ -21,18 +17,22 @@ import com.digitalasset.canton.participant.store.{
   SyncPersistentState,
 }
 import com.digitalasset.canton.participant.sync.SyncServiceError.SynchronizerRegistryErrorGroup
+import com.digitalasset.canton.participant.synchronizer.SynchronizerRegistryHelpers.SequencerAggregatedInfo
 import com.digitalasset.canton.participant.topology.TopologyComponentFactory
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
+import com.digitalasset.canton.sequencing.SequencerConnectionValidation
 import com.digitalasset.canton.sequencing.client.RichSequencerClient
 import com.digitalasset.canton.sequencing.client.channel.SequencerChannelClient
 import com.digitalasset.canton.sequencing.client.pool.SequencerConnectionPool
 import com.digitalasset.canton.topology.client.SynchronizerTopologyClientWithInit
+import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.topology.{
   PhysicalSynchronizerId,
   SynchronizerId,
   TopologyManagerError,
 }
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.nonempty.NonEmpty
 import org.slf4j.event.Level
 
 /** A registry of synchronizers. */
@@ -47,12 +47,24 @@ trait SynchronizerRegistry extends AutoCloseable {
     *   set).
     */
   def connect(
-      storedConfig: StoredSynchronizerConnectionConfig
+      storedConfig: StoredSynchronizerConnectionConfig,
+      onboardingTransactions: Option[NonEmpty[Seq[GenericSignedTopologyTransaction]]],
   )(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[
     Either[SynchronizerRegistryError, SynchronizerHandle]
   ]
+
+  def validateConfig(
+      newConfig: SynchronizerConnectionConfig,
+      sequencerConnectionValidation: SequencerConnectionValidation,
+  )(implicit
+      traceContext: TraceContext
+  ): FutureUnlessShutdown[Either[SynchronizerRegistryError, Unit]]
+
+  def getPsid(config: SynchronizerConnectionConfig)(implicit
+      traceContext: TraceContext
+  ): FutureUnlessShutdown[Either[SynchronizerRegistryError, PhysicalSynchronizerId]]
 
   /** Performs the handshake with the synchronizer.
     *
@@ -79,32 +91,6 @@ sealed trait SynchronizerRegistryError
     with ContextualizedCantonError
 
 object SynchronizerRegistryError extends SynchronizerRegistryErrorGroup {
-
-  def fromSequencerInfoLoaderError(
-      error: SequencerInfoLoaderError
-  )(implicit loggingContext: ErrorLoggingContext): SynchronizerRegistryError =
-    error match {
-      case SequencerInfoLoaderError.DeserializationFailure(cause) =>
-        SynchronizerRegistryError.SynchronizerRegistryInternalError.DeserializationFailure(cause)
-      case SequencerInfoLoaderError.InvalidResponse(cause) =>
-        SynchronizerRegistryError.SynchronizerRegistryInternalError.InvalidResponse(cause, None)
-      case SequencerInfoLoaderError.InvalidState(cause) =>
-        SynchronizerRegistryError.SynchronizerRegistryInternalError.InvalidState(cause)
-      case SequencerInfoLoaderError.SynchronizerIsNotAvailableError(alias, cause) =>
-        SynchronizerRegistryError.ConnectionErrors.SynchronizerIsNotAvailable.Error(alias, cause)
-      case SequencerInfoLoaderError.HandshakeFailedError(cause) =>
-        SynchronizerRegistryError.HandshakeErrors.HandshakeFailed.Error(cause)
-      case SequencerInfoLoaderError.SequencersFromDifferentSynchronizersAreConfigured(cause) =>
-        SynchronizerRegistryError.ConfigurationErrors.SequencersFromDifferentSynchronizersAreConfigured
-          .Error(cause)
-      case SequencerInfoLoaderError.MisconfiguredStaticSynchronizerParameters(cause) =>
-        SynchronizerRegistryError.ConfigurationErrors.MisconfiguredStaticSynchronizerParameters
-          .Error(cause)
-      case SequencerInfoLoaderError.FailedToConnectToSequencers(cause) =>
-        SynchronizerRegistryError.ConnectionErrors.FailedToConnectToSequencers.Error(cause)
-      case SequencerInfoLoaderError.InconsistentConnectivity(cause) =>
-        SynchronizerRegistryError.ConnectionErrors.FailedToConnectToSequencers.Error(cause)
-    }
 
   object ConnectionErrors extends ErrorGroup() {
 
@@ -223,7 +209,7 @@ object SynchronizerRegistryError extends SynchronizerRegistryErrorGroup {
       final case class Error(override val cause: String)(implicit
           val loggingContext: ErrorLoggingContext
       ) extends CantonError.Impl(cause)
-          with SynchronizerRegistryError {}
+          with SynchronizerRegistryError
     }
 
     @Explanation(
@@ -238,7 +224,7 @@ object SynchronizerRegistryError extends SynchronizerRegistryErrorGroup {
       final case class Error(override val cause: String)(implicit
           val loggingContext: ErrorLoggingContext
       ) extends CantonError.Impl(cause)
-          with SynchronizerRegistryError {}
+          with SynchronizerRegistryError
     }
 
     @Explanation(
@@ -260,7 +246,7 @@ object SynchronizerRegistryError extends SynchronizerRegistryErrorGroup {
       ) extends CantonError.Impl(
             cause = s"Can not auto-issue a synchronizer-trust certificate on this node: $reason"
           )
-          with SynchronizerRegistryError {}
+          with SynchronizerRegistryError
     }
 
     @Explanation(

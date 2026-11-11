@@ -4,11 +4,15 @@
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.crypto
 
 import com.daml.metrics.api.MetricsContext
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.HashAlgorithm.Sha256
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.serialization.ProtocolVersionedMemoizedEvidence
 import com.digitalasset.canton.synchronizer.metrics.BftOrderingMetrics
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.crypto.CryptoProvider.{
@@ -22,6 +26,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   SignedMessage,
 }
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.nonempty.NonEmpty
 
 trait CryptoProvider[E <: Env[E]] {
 
@@ -68,10 +73,15 @@ trait CryptoProvider[E <: Env[E]] {
 
 object CryptoProvider {
 
-  sealed trait AuthenticatedMessageType extends Product with PrettyPrinting {
-    override final def pretty: Pretty[this.type] = prettyOfObject[this.type]
+  sealed trait AuthenticatedMessageType extends Product with PrettyPrintingFromCompanion {
+    override final def prettyCompanion: PrettyPrintingCompanion[AuthenticatedMessageType] =
+      AuthenticatedMessageType
   }
-  object AuthenticatedMessageType {
+  object AuthenticatedMessageType extends PrettyPrintingCompanion[AuthenticatedMessageType] {
+
+    override protected val pretty: Pretty[AuthenticatedMessageType] =
+      prettyOfObject[AuthenticatedMessageType]
+
     case object BftOrderingPbftBlock extends AuthenticatedMessageType
     case object BftAvailabilityAck extends AuthenticatedMessageType
     case object BftBatchId extends AuthenticatedMessageType

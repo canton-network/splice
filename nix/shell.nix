@@ -2,11 +2,11 @@
 let
   inherit (pkgs) stdenv fetchzip;
   sources = builtins.fromJSON (builtins.readFile ./canton-sources.json);
-  cometbftDriverSources = builtins.fromJSON (builtins.readFile ./cometbft-driver-sources.json);
   dpmSdkSources = builtins.fromJSON (builtins.readFile ./dpm-sdk-sources.json);
+  ghaRunnerSources = builtins.fromJSON (builtins.readFile ./gha-runner-sources.json);
 
   # No macOS support for firefox
-  linuxOnly = if stdenv.isDarwin then [ ] else with pkgs; [ firefox iproute2 rust-parallel util-linux ];
+  linuxOnly = if stdenv.hostPlatform.isDarwin then [ ] else with pkgs; [ firefox iproute2 rust-parallel util-linux ];
 
   standard_packages = with pkgs; [
 
@@ -45,7 +45,7 @@ let
     openjdk21
     pigz
     popeye
-    postgresql_14
+    postgresql_18
     pre-commit
     procps
     protobuf_25
@@ -63,6 +63,7 @@ let
     python3Packages.dockerfile-parse
     python3Packages.flask
     python3Packages.gitpython
+    python3Packages.junit2html
     python3Packages.google-cloud-bigquery
     python3Packages.google-cloud-storage
     python3Packages.gql
@@ -71,16 +72,18 @@ let
     python3Packages.jsonpickle
     python3Packages.kubernetes
     python3Packages.marshmallow-dataclass
+    python3Packages.mypy
     python3Packages.polib
+    python3Packages.prometheus-client
     python3Packages.pydantic
     python3Packages.pygithub
     python3Packages.pyjwt
+    python3Packages.openapi-schema-validator
     python3Packages.pyyaml
     python3Packages.regex
     python3Packages.requests
     python3Packages.rich
     python3Packages.pulumi
-    python3Packages.pypandoc
     python3Packages.google-cloud-storage
     python3Packages.requests-toolbelt
     python3Packages.semver
@@ -88,12 +91,17 @@ let
     python3Packages.sphinx-copybutton
     python3Packages.sphinxcontrib-openapi
     python3Packages.sphinx-autobuild
+    python3Packages.types-docutils
+    python3Packages.types-jsonschema
+    python3Packages.types-pyyaml
+    python3Packages.types-requests
     python3Packages.waitress
     python3.pkgs.pip  # TODO(DACH-NY/canton-network-internal#565): Remove this once we switch to poetry
     python3.pkgs.sphinx-reredirects
     redocly
     ripgrep
     rsync
+    ruff
     sbt
     scala_2_13
     selenium-server-standalone
@@ -109,6 +117,7 @@ let
     which
     xxd
     zip
+    zizmor
 
     # Package required to install daml studio
     yq-go
@@ -125,6 +134,7 @@ let
     jq
     nodejs
     openapi-generator-cli
+    pigz
     pre-commit
     python3
     python3Packages.dockerfile-parse
@@ -134,6 +144,7 @@ let
     shellcheck
     skopeo
     which
+    zizmor
   ] ++ linuxOnly;
 
 in pkgs.mkShell {
@@ -149,12 +160,11 @@ in pkgs.mkShell {
   CANTON_MEDIATOR_IMAGE_SHA256 = "${sources.canton_mediator_image_sha256}";
   DPM_SDK_VERSION = "${dpmSdkSources.version}";
   DAML_COMPILER_VERSION = "${dpmSdkSources.version}";
-  COMETBFT_RELEASE_VERSION = "${cometbftDriverSources.version}";
-  COMETBFT_IMAGE_SHA256 = "${cometbftDriverSources.image_sha256}";
-  COMETBFT_DRIVER = "${pkgs.cometbft_driver}";
+  GHA_RUNNER_VERSION = "${ghaRunnerSources.version}";
+  GHA_RUNNER_DIGEST = "${ghaRunnerSources.digest}";
   PULUMI_HOME = "${pkgs.pulumi-bin}";
   # Avoid sbt-assembly falling over. See https://github.com/sbt/sbt-assembly/issues/496
-  LC_ALL = if stdenv.isDarwin then "" else "C.UTF-8";
+  LC_ALL = if stdenv.hostPlatform.isDarwin then "" else "C.UTF-8";
   # Avoid "warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)"
   # warnings in damlc.
   LOCALE_ARCHIVE_2_27 = if pkgs.stdenv.hostPlatform.libc == "glibc"

@@ -101,6 +101,28 @@ async function ledgerApiSecretContent(
   }
 }
 
+export async function installWalletGatewayAdminSecret(
+  auth0Client: Auth0Client,
+  xns: ExactNamespace
+): Promise<k8s.core.v1.Secret> {
+  const allSecrets = await auth0Client.getSecrets();
+  const clientSecrets = lookupClientSecrets(allSecrets, auth0Client, xns.logicalName, 'validator');
+
+  return new k8s.core.v1.Secret(
+    `splice-auth0-secret-${xns.logicalName}-wallet-gateway-admin`,
+    {
+      metadata: {
+        name: 'splice-app-wallet-gateway-admin-oauth',
+        namespace: xns.ns.metadata.name,
+      },
+      stringData: {
+        'client-secret': clientSecrets.client_secret,
+      },
+    },
+    { dependsOn: xns.ns }
+  );
+}
+
 export async function installLedgerApiUserSecret(
   auth0Client: Auth0Client,
   xns: ExactNamespace,

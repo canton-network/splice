@@ -11,6 +11,11 @@ chart:
   # Override for testing labels
   version: 0.1.1
   appVersion: 0.1.0
+set:
+  # Things we need just to pass the schema
+  sequencer:
+    driver:
+      type: cantonbft
 tests:
   - it: "sets labels as expected"
     documentSelector:
@@ -157,7 +162,7 @@ tests:
     set:
       imageRepo: "secure-registry.com"
       mediator.imageName: "approved-mediator"
-      mediator.persistence.initImageName: "secure-registry.com/postgres:14-hardened"
+      mediator.persistence.initImageName: "secure-registry.com/postgres:18-hardened"
     documentSelector:
       path: kind
       value: Deployment
@@ -167,7 +172,7 @@ tests:
           pattern: "^secure-registry.com/approved-mediator:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.com/postgres:14-hardened"
+          value: "secure-registry.com/postgres:18-hardened"
 
   - it: "allows overriding mediator database secret env vars with raw strings"
     set:
@@ -297,3 +302,84 @@ tests:
             capabilities:
               drop:
                 - ALL
+
+  - it: "propagates priorityClassName to the postgres-metrics deployment"
+    set:
+      enablePostgresMetrics: true
+      priorityClassName: high-priority
+      mediator:
+        persistence:
+          postgresName: mediator-pg
+          databaseName: mediator_db
+    documentSelector:
+      path: spec.template.metadata.labels.app
+      value: pge-mediator-pg-mediator-db
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+
+  - it: "omits priorityClassName on the postgres-metrics deployment when unset"
+    set:
+      enablePostgresMetrics: true
+      mediator:
+        persistence:
+          postgresName: mediator-pg
+          databaseName: mediator_db
+    documentSelector:
+      path: spec.template.metadata.labels.app
+      value: pge-mediator-pg-mediator-db
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName
+
+  - it: "uses HTTP health probes by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health/live
+            port: 5071
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /health/ready
+            port: 5071
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.mediators.mediator.monitoring.http-health-server.port = 5071
+
+  - it: "uses gRPC health probes when httpHealthProbes is disabled"
+    set:
+      httpHealthProbes: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+          value:
+            port: 5061
+            service: liveness
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+          value:
+            port: 5061
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.mediators.mediator.monitoring.http-health-server.port = 5071

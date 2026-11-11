@@ -4,15 +4,8 @@
 package org.lfdecentralizedtrust.splice.sv.onboarding
 
 import cats.data.OptionT
-import com.digitalasset.canton.drivers.cometbft.SvNodeConfig
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.{
-  CometBftConfig,
-  CometBftNodeConfig,
-  GovernanceKeyConfig,
-  SequencingKeyConfig,
-}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.store.DsoRulesStore
@@ -20,46 +13,10 @@ import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
-import scala.jdk.OptionConverters.{RichOption, RichOptional}
 
 trait SynchronizerNodeConfigClient {
 
-  protected def getNewSynchronizerNodeConfig(
-      synchronizerNodeConfig: Option[SynchronizerNodeConfig],
-      localSvNodeConfig: SvNodeConfig,
-  ): SynchronizerNodeConfig =
-    new SynchronizerNodeConfig(
-      getNewCometBftNodeConfig(localSvNodeConfig),
-      synchronizerNodeConfig.flatMap(_.sequencer.toScala).toJava,
-      synchronizerNodeConfig.flatMap(_.mediator.toScala).toJava,
-      synchronizerNodeConfig.flatMap(_.scan.toScala).toJava,
-      synchronizerNodeConfig.flatMap(_.legacySequencerConfig.toScala).toJava,
-      synchronizerNodeConfig.flatMap(_.sequencerIdentity.toScala).toJava,
-      synchronizerNodeConfig.flatMap(_.physicalSynchronizers.toScala).toJava,
-    )
-
-  protected def getNewCometBftNodeConfig(
-      localSvNodeConfig: SvNodeConfig
-  ): CometBftConfig =
-    new CometBftConfig(
-      localSvNodeConfig.cometbftNodes.map { case (nodeId, config) =>
-        (
-          nodeId,
-          new CometBftNodeConfig(
-            config.validatorPubKey,
-            config.votingPower,
-          ),
-        )
-      }.asJava,
-      localSvNodeConfig.governanceKeys
-        .map(key => new GovernanceKeyConfig(key.pubKey))
-        .asJava,
-      localSvNodeConfig.sequencingKeys
-        .map(key => new SequencingKeyConfig(key.pubKey))
-        .asJava,
-    )
-
-  protected def getCometBftNodeConfigDsoState(dsoStore: SvDsoStore, svParty: PartyId)(implicit
+  protected def getSynchronizerNodeConfigDsoState(dsoStore: SvDsoStore, svParty: PartyId)(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): OptionT[Future, (DsoRulesStore.DsoRulesWithSvNodeState, Option[SynchronizerNodeConfig])] = {

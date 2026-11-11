@@ -15,7 +15,6 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
-import com.digitalasset.canton.util.HexString
 import com.digitalasset.canton.version.ProtocolVersion
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.config.{
@@ -52,6 +51,7 @@ import scala.collection.parallel.CollectionConverters.seqIsParallelizable
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.RichOptional
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
 class LsuIntegrationTest
@@ -64,7 +64,8 @@ class LsuIntegrationTest
     with HasExecutionContext
     with SynchronizerFeesTestUtil
     with LsuTestUtil
-    with TryValues {
+    with TryValues
+    with TokenStandardTest {
 
   override protected def runEventHistorySanityCheck: Boolean = false
   override protected lazy val resetRequiredTopologyState: Boolean = false
@@ -83,7 +84,7 @@ class LsuIntegrationTest
     SynchronizerUpgradeUtil.migrationDumpDir.delete(swallowIOExceptions = true)
   }
 
-  private val successorPv = ProtocolVersion.v35
+  private val successorPv = ProtocolVersion.v37
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -94,11 +95,7 @@ class LsuIntegrationTest
           .updateAllSvAppConfigs { (name, config) =>
             config.copy(
               localSynchronizerNodes = config.localSynchronizerNodes
-                .copy(successor =
-                  config.localSynchronizerNodes.current
-                    .copy(protocolVersion = successorPv)
-                    .some
-                ),
+                .copy(successor = config.localSynchronizerNodes.current.some),
               domainMigrationDumpPath = Some(
                 (SynchronizerUpgradeUtil.migrationTestDumpDir(
                   name
@@ -109,10 +106,11 @@ class LsuIntegrationTest
                   physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
                 ),
                 // sv-4 is intentionally a late-joining node in this test, which means the
-                // sequencer spends some time catching up. This can cause the sv-app's
+                // sequencer spends some time catching up. This can cause the sv-4 apps'
                 // circuit breakers to trip, which makes annoying logs and delays init.
                 // The circuit breakers tripping a bit during catchup would be just fine
-                // IRL, so as a simple fix to this test we disable them for sv-4.
+                // IRL, so as a simple fix to this test we disable them for all sv-4 apps
+                // (see also the scan and validator app transforms below).
                 circuitBreakers =
                   if (name == "sv4") CircuitBreakersConfig.never
                   else config.parameters.circuitBreakers,
@@ -121,7 +119,7 @@ class LsuIntegrationTest
           }
           .andThen(
             ConfigTransforms
-              .updateAllScanAppConfigs { (_, config) =>
+              .updateAllScanAppConfigs { (name, config) =>
                 config.copy(
                   synchronizerNodes = config.synchronizerNodes.copy(
                     successor = Some(config.synchronizerNodes.current)
@@ -129,8 +127,23 @@ class LsuIntegrationTest
                   parameters = config.parameters.copy(
                     spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
                       physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
-                    )
+                    ),
+                    circuitBreakers =
+                      if (name == "sv4Scan") CircuitBreakersConfig.never
+                      else config.parameters.circuitBreakers,
                   ),
+                )
+              }
+          )
+          .andThen(
+            ConfigTransforms
+              .updateAllValidatorAppConfigs { (name, config) =>
+                config.copy(
+                  parameters = config.parameters.copy(
+                    circuitBreakers =
+                      if (name == "sv4Validator") CircuitBreakersConfig.never
+                      else config.parameters.circuitBreakers
+                  )
                 )
               }
           )(config)
@@ -203,7 +216,6 @@ class LsuIntegrationTest
       .withSvBftSequencerConnectionDisabled()
       .withAmuletPrice(walletAmuletPrice)
       .withManualStart
-      .withTransferCommandSupport
 
   override def walletAmuletPrice: java.math.BigDecimal = SpliceUtil.damlDecimal(1.0)
 
@@ -235,13 +247,19 @@ class LsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "cancel-global-synchronizer-upgrade",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
       clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
-        scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
+        scheduleLsu(
+          topologyFreezeTime,
+          upgradeTime,
+          newSynchronizerSerial.value.toLong,
+          successorPv,
+        )
       }
 
       clue("Wait for LSU announcement to be proposed") {
@@ -271,7 +289,7 @@ class LsuIntegrationTest
             sv1Backend.participantClientWithAdminToken.topology.lsu.sequencer_successors
               .list(store = Some(Synchronizer(decentralizedSynchronizerId)))
           successors should have size svNodesDoingTheLsu.size.toLong
-          successors.map(_.item.successorPsid).toSet shouldBe Set(successorPsid)
+          successors.map(_.item.successorPsid).toSet shouldBe Set(successorPsid.opaque)
         }
       }
 
@@ -321,15 +339,12 @@ class LsuIntegrationTest
         inside(sv1ScanBackend.listDsoSequencers()) {
           case Seq(DomainSequencers(synchronizerId, sequencers)) =>
             synchronizerId shouldBe decentralizedSynchronizerId
-            sequencers should have size 12
+            sequencers should have size 8
             forExactly(4, sequencers) {
-              _.serial.value shouldBe 0
+              _.serial shouldBe 0
             }
             forExactly(4, sequencers) {
-              _.serial.value shouldBe 1
-            }
-            forExactly(4, sequencers) {
-              _.serial should be(empty)
+              _.serial shouldBe 1
             }
         }
       }
@@ -346,8 +361,9 @@ class LsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "global-synchronizer-upgrade",
+      // LSU exports the sequencer and mediator keys
+      enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
@@ -466,7 +482,12 @@ class LsuIntegrationTest
       // and finish sequencer initialization so we can then publish the sequencer announcement before the upgrade time.
       val upgradeTime = CantonTimestamp.now().plusSeconds(150)
       clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
-        scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
+        scheduleLsu(
+          topologyFreezeTime,
+          upgradeTime,
+          newSynchronizerSerial.value.toLong,
+          successorPv,
+        )
       }
       val allBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
       val initialSvNodesDoingTheLsu = Seq(sv1Backend, sv2Backend, sv3Backend)
@@ -534,6 +555,9 @@ class LsuIntegrationTest
           clue(s"check ${backend.name} initialized sequencer from synchronizer predecessor") {
             eventuallySucceeds(3.minutes) {
               upgradeSequencerClient.physical_synchronizer_id shouldBe successorPsid
+              upgradeSequencerClient.synchronizer_parameters.static
+                .get()
+                .synchronizerLimits shouldBe SvSynchronizerNodeConfig.defaultSynchronizerLimits
             }
           }
 
@@ -656,28 +680,21 @@ class LsuIntegrationTest
           inside(sv1ScanBackend.listDsoSequencers()) {
             case Seq(DomainSequencers(synchronizerId, sequencers)) =>
               synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 12
+              sequencers should have size 8
               sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                 clue(s"check sequencers for $sv") {
                   forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial.value shouldBe 0
-                    sequencer.migrationId shouldBe -1
+                    sequencer.serial shouldBe 0
                   }
                   if (sv != sv4Backend.config.onboarding.value.name)
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                     }
                   else {
                     // sv4 still reports the old serial until it upgrades
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe 1
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe 1
                     }
-                  }
-                  forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial should be(empty)
-                    sequencer.migrationId shouldBe 0
                   }
                 }
               }
@@ -689,42 +706,24 @@ class LsuIntegrationTest
         aliceValidatorBackend
           .getExternalPartyBalance(externalPartyOnboarding.party)
           .totalUnlockedCoin shouldBe "40.0000000000"
-        val prepareSend =
-          aliceValidatorBackend.prepareTransferPreapprovalSend(
-            externalPartyOnboarding.party,
+
+        actAndCheck(
+          "external party transfer 10 cc",
+          executeTransferViaTokenStandardV1(
+            aliceValidatorBackend.participantClientWithAdminToken,
+            externalPartyOnboarding.richPartyId,
             aliceValidatorBackend.getValidatorPartyId(),
-            BigDecimal(10.0),
-            CantonTimestamp.now().plus(Duration.ofHours(24)),
-            0L,
-            Some("transfer-command-description"),
-          )
-        actAndCheck(timeUntilSuccess = 1.minute)(
-          "Submit signed TransferCommand creation",
-          aliceValidatorBackend.submitTransferPreapprovalSend(
-            externalPartyOnboarding.party,
-            prepareSend.transaction,
-            HexString.toHexString(
-              crypto
-                .signBytes(
-                  HexString.parseToByteString(prepareSend.txHash).value,
-                  externalPartyOnboarding.privateKey.asInstanceOf[SigningPrivateKey],
-                  usage = SigningKeyUsage.ProtocolOnly,
-                )
-                .value
-                .toProtoV30
-                .signature
-            ),
-            publicKeyAsHexString(externalPartyOnboarding.publicKey),
+            BigDecimal("10.0"),
+            transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Direct,
           ),
         )(
-          "validator automation completes transfer",
-          _ => {
+          "external party's balance decreases by 10 cc",
+          _ =>
             BigDecimal(
               aliceValidatorBackend
                 .getExternalPartyBalance(externalPartyOnboarding.party)
                 .totalUnlockedCoin
-            ) should be(BigDecimal(30))
-          },
+            ) should be(BigDecimal(30)),
         )
       }
 
@@ -874,7 +873,7 @@ class LsuIntegrationTest
         sv1Backend.stop()
         sv1LocalBackend.startSync()
         forExactly(1, sv1ScanBackend.listDsoSequencers().loneElement.sequencers) { s =>
-          s.serial shouldBe Some(0)
+          s.serial shouldBe 0
           s.svName shouldBe sv1LocalBackend.config.onboarding.value.name
         }
       }
@@ -889,11 +888,9 @@ class LsuIntegrationTest
               .listDsoSequencers()
               .loneElement
               .sequencers
-              .filter(c =>
-                c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
-              )
+              .filter(c => c.svName == sv1LocalBackend.config.onboarding.value.name)
               .loneElement
-              .serial shouldBe Some(2),
+              .serial shouldBe 2,
         )
       }
 

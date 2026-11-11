@@ -4,15 +4,18 @@
 
 set -eou pipefail
 
+check() {
+  echo "Checking $1"
+  # -Y off: busybox wget ignores no_proxy, so a proxy injected via the environment would break the probe
+  wget -Y off -q --tries=1 --timeout=5 -O /dev/null "http://127.0.0.1:$1/health/ready"
+}
+
 if [ "$APP_USER_PROFILE" = "on" ]; then
-  echo "Checking 2${CANTON_GRPC_HEALTHCHECK_PORT_SUFFIX}"
-  grpc-health-probe -addr="localhost:2${CANTON_GRPC_HEALTHCHECK_PORT_SUFFIX}"
+  check "2${CANTON_HTTP_HEALTHCHECK_PORT_SUFFIX}"
 fi
 if [ "$APP_PROVIDER_PROFILE" = "on" ]; then
-  echo "Checking 3${CANTON_GRPC_HEALTHCHECK_PORT_SUFFIX}"
-  grpc-health-probe -addr="localhost:3${CANTON_GRPC_HEALTHCHECK_PORT_SUFFIX}"
+  check "3${CANTON_HTTP_HEALTHCHECK_PORT_SUFFIX}"
 fi
 if [ "$SV_PROFILE" = "on" ]; then
-  echo "Checking 4${CANTON_GRPC_HEALTHCHECK_PORT_SUFFIX}"
-  grpc-health-probe -addr="localhost:4${CANTON_GRPC_HEALTHCHECK_PORT_SUFFIX}"
+  check "4${CANTON_HTTP_HEALTHCHECK_PORT_SUFFIX}"
 fi

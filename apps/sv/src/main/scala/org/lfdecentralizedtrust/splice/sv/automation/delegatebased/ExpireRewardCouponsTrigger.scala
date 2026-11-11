@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver.Package.SpliceAmulet
-import org.lfdecentralizedtrust.splice.sv.store.{ExpiredRewardCouponsBatch, IgnoredPartiesStore}
+import org.lfdecentralizedtrust.splice.sv.store.ExpiredRewardCouponsBatch
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -26,7 +26,7 @@ import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.store.{UnavailablePartiesStore, PageLimit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 
 import java.util.Optional
@@ -45,7 +45,7 @@ import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 class ExpireRewardCouponsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
     override protected val svConfig: SvAppBackendConfig,
 )(implicit
     override val ec: ExecutionContext,
@@ -53,7 +53,7 @@ class ExpireRewardCouponsTrigger(
     tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard {
+    with UnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
@@ -64,7 +64,7 @@ class ExpireRewardCouponsTrigger(
       .getExpiredCouponsInBatchesPerRoundAndCouponType(
         dsoRules.domain,
         context.config.enableExpireValidatorFaucet,
-        Some(ignoredPartiesStore),
+        Some(unavailablePartiesStore),
         batchSize =
           PageLimit.tryCreate(svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize),
         numBatches =
@@ -76,13 +76,18 @@ class ExpireRewardCouponsTrigger(
       .map(seq => Random.shuffle(seq).take(context.config.parallelism))
   } yield batches
 
-  def dropUnvettedBatch[TCid, T](
-      batches: Map[Option[PackageVersion], Seq[Seq[Contract[TCid, T]]]]
+  private def dropUnvettedBatch[TCid, T](
+      batches: Map[Option[PackageVersion], Seq[Seq[Contract[TCid, T]]]],
+      stakeholders: ContractStakeholders[T],
   )(implicit tc: TraceContext): Iterable[(PackageVersion, Seq[Contract[TCid, T]])] =
-    batches.view.flatMap {
+    batches.toSeq.flatMap {
       case (Some(v), batches) => batches.map((v, _))
       case (None, batches) =>
-        logger.warn(s"No vetted amulet version for ${batches.flatMap(_.map(_.contractId))}")
+        val contracts = batches.flatten
+        ignorePartiesWithoutVettedAmulet(
+          stakeholders.getInformeesFromContracts(contracts),
+          contracts.map(_.contractId.contractId),
+        ).foreach(logger.info(_))
         Seq.empty
     }
 
@@ -126,20 +131,21 @@ class ExpireRewardCouponsTrigger(
         validatorLivenessActivityRecords = Seq.empty,
       )
       // The store query only produces batches with exactly one of the coupon types set so we also don't bother merging them here.
-      (dropUnvettedBatch(validatorCoupons).map { case (v, batch) =>
+      (dropUnvettedBatch(validatorCoupons, ValidatorCoupons).map { case (v, batch) =>
         Task(v, emptyBatch.copy(validatorCoupons = batch))
       } ++
-        dropUnvettedBatch(appCoupons).map { case (v, batch) =>
+        dropUnvettedBatch(appCoupons, AppRewardCoupons).map { case (v, batch) =>
           Task(v, emptyBatch.copy(appCoupons = batch))
         } ++
-        dropUnvettedBatch(svRewardCoupons).map { case (v, batch) =>
+        dropUnvettedBatch(svRewardCoupons, SvRewardCoupons).map { case (v, batch) =>
           Task(v, emptyBatch.copy(svRewardCoupons = batch))
         } ++
-        dropUnvettedBatch(validatorFaucets).map { case (v, batch) =>
+        dropUnvettedBatch(validatorFaucets, ValidatorFaucetCoupons).map { case (v, batch) =>
           Task(v, emptyBatch.copy(validatorFaucets = batch))
         } ++
-        dropUnvettedBatch(validatorLivenessActivityRecords).map { case (v, batch) =>
-          Task(v, emptyBatch.copy(validatorLivenessActivityRecords = batch))
+        dropUnvettedBatch(validatorLivenessActivityRecords, ValidatorLivenessActivityRecords).map {
+          case (v, batch) =>
+            Task(v, emptyBatch.copy(validatorLivenessActivityRecords = batch))
         }).toSeq
     }
 
@@ -163,11 +169,10 @@ class ExpireRewardCouponsTrigger(
       ValidatorLivenessActivityRecords.getInformeesFromContracts(
         task.batch.validatorLivenessActivityRecords
       )
-    completeWithIgnoredAmuletVersionCheck(
+    completeUnlessAmuletVersionIgnored(
       task.vettedAmuletVersion.toString,
       informees,
-      store.dsoPartyId,
-      enableUnresponsivePartiesAutoIgnore = true,
+      ignoreUnresponsiveParties = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

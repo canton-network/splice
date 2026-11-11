@@ -27,7 +27,7 @@ IMAGES = [
 ]
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Search for a Canton snapshot tag by git SHA."
     )
@@ -63,7 +63,8 @@ def fetch_tags(image: str) -> list[str]:
         check=True,
     )
     data = json.loads(result.stdout)
-    return data.get("Tags", [])
+    tags: list[str] = data.get("Tags", [])
+    return tags
 
 
 def find_matching_tags(tags: list[str], sha: str) -> list[str]:
@@ -76,7 +77,7 @@ def find_matching_tags(tags: list[str], sha: str) -> list[str]:
     return [t for t in tags if pattern.search(t)]
 
 
-def main():
+def main() -> None:
     args = parse_args()
     sha = args.canton_sha.lower()
 

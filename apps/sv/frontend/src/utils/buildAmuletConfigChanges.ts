@@ -3,8 +3,10 @@
 import { Optional } from '@daml/types';
 import {
   AmuletConfig,
+  GovernanceLockConfig,
   PackageConfig,
   RewardConfig,
+  RewardVersion,
 } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import { Tuple2 } from '@daml.js/daml-prim-DA-Types-1.0.0/lib/DA/Types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
@@ -13,6 +15,7 @@ import { IssuanceConfig } from '@daml.js/splice-amulet/lib/Splice/Issuance';
 import { Schedule } from '@daml.js/splice-amulet/lib/Splice/Schedule';
 import { AmuletDecentralizedSynchronizerConfig } from '@daml.js/splice-amulet/lib/Splice/DecentralizedSynchronizer';
 import { ConfigChange } from './types';
+import { switchOverMapToConfigValue } from '../components/forms/formValidators';
 
 export function buildAmuletConfigChanges(
   before: Optional<AmuletConfig<'USD'>>,
@@ -44,6 +47,19 @@ export function buildAmuletConfigChanges(
       label: 'Development fund manager',
       currentValue: before?.optDevelopmentFundManager || '',
       newValue: after?.optDevelopmentFundManager || '',
+    },
+    {
+      fieldName: 'developmentFundManagerBlacklist',
+      label: 'Blacklisted development fund managers (comma-separated party ids)',
+      currentValue: before?.developmentFundManagerBlacklist?.join(', ') || '',
+      newValue: after?.developmentFundManagerBlacklist?.join(', ') || '',
+    },
+    {
+      fieldName: 'minDevelopmentFundMintingDelay',
+      label:
+        'Minimum delay between allocating and minting a development fund coupon in microseconds',
+      currentValue: before?.minDevelopmentFundMintingDelay?.microseconds || '',
+      newValue: after?.minDevelopmentFundMintingDelay?.microseconds || '',
     },
     {
       fieldName: 'transferConfigCreateFee',
@@ -117,6 +133,15 @@ export function buildAmuletConfigChanges(
     ...buildPackageConfigChanges(before?.packageConfig, after?.packageConfig),
 
     ...buildRewardConfigChanges(before?.rewardConfig, after?.rewardConfig),
+
+    {
+      fieldName: 'amuletSwitchOverTimes',
+      label: 'Amulet switch-over times',
+      currentValue: switchOverMapToConfigValue(before?.amuletSwitchOverTimes),
+      newValue: switchOverMapToConfigValue(after?.amuletSwitchOverTimes),
+    },
+
+    ...buildGovernanceLockConfigChanges(before?.governanceLockConfig, after?.governanceLockConfig),
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);
@@ -320,6 +345,16 @@ function buildIssuanceCurveChanges(
   return [...initialValues, ...futureValues];
 }
 
+const rewardVersionLabels = {
+  RewardVersion_FeaturedAppMarkers: 'Featured App Markers (pre CIP-104)',
+  RewardVersion_TrafficBasedAppRewards: 'Traffic-Based App Rewards (CIP-104)',
+} satisfies Record<RewardVersion, string>;
+
+const rewardVersionOptions = RewardVersion.keys.map(value => ({
+  value,
+  label: rewardVersionLabels[value],
+}));
+
 function buildRewardConfigChanges(
   before: RewardConfig | null | undefined,
   after: RewardConfig | null | undefined
@@ -327,33 +362,66 @@ function buildRewardConfigChanges(
   return [
     {
       fieldName: 'rewardConfigMintingVersion',
-      label: 'Reward config: Minting version',
+      label: 'Reward config: Reward scheme',
       currentValue: before?.mintingVersion || '',
       newValue: after?.mintingVersion || '',
+      options: rewardVersionOptions,
+      description: 'Which reward scheme to use in production.',
     },
     {
       fieldName: 'rewardConfigDryRunVersion',
-      label: 'Reward config: Dry-run version',
+      label: 'Reward config: Dry-run reward scheme',
       currentValue: before?.dryRunVersion || '',
       newValue: after?.dryRunVersion || '',
+      options: [{ value: '', label: 'None (disabled)' }, ...rewardVersionOptions],
+      description:
+        'Which reward scheme to run in dry-run mode. Select "None (disabled)" to turn it off.',
     },
     {
       fieldName: 'rewardConfigBatchSize',
-      label: 'Reward config: Batch size',
+      label: 'Reward config: Merkle tree batch size',
       currentValue: before?.batchSize || '',
       newValue: after?.batchSize || '',
+      description: 'Batch size for building the Merkle tree over minting allowances (default: 100)',
     },
     {
       fieldName: 'rewardConfigRewardCouponTimeToLive',
       label: 'Reward config: Reward coupon time to live (microseconds)',
       currentValue: before?.rewardCouponTimeToLive.microseconds || '',
       newValue: after?.rewardCouponTimeToLive.microseconds || '',
+      description: 'Time-to-live for RewardCouponV2 contracts (default: 36 hours)',
     },
     {
       fieldName: 'rewardConfigAppRewardCouponThreshold',
       label: 'Reward config: App reward coupon threshold ($)',
       currentValue: before?.appRewardCouponThreshold || '',
       newValue: after?.appRewardCouponThreshold || '',
+      description:
+        'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
+    },
+    {
+      fieldName: 'rewardConfigExtraFeaturedAssetActivityWeight',
+      label: 'Reward config: Extra featured asset activity weight per transaction',
+      currentValue: before?.extraFeaturedAssetActivityWeight || '',
+      newValue: after?.extraFeaturedAssetActivityWeight || '',
+      description:
+        'Weight applied to extra featured asset activity across the whole transaction (default: 0.2). Leave blank to use the protocol default.',
+    },
+    {
+      fieldName: 'rewardConfigMaxExtraFeaturedAssetActivityWeightPerAsset',
+      label: 'Reward config: Max extra featured asset activity weight per asset',
+      currentValue: before?.maxExtraFeaturedAssetActivityWeightPerAsset || '',
+      newValue: after?.maxExtraFeaturedAssetActivityWeightPerAsset || '',
+      description:
+        'Maximum extra featured asset activity weight counted per asset (default: 0.1). Leave blank to use the protocol default.',
+    },
+    {
+      fieldName: 'rewardConfigDsoAppActivityWeight',
+      label: 'Reward config: DSO app activity weight',
+      currentValue: before?.dsoAppActivityWeight || '',
+      newValue: after?.dsoAppActivityWeight || '',
+      description:
+        'Weight applied to DSO app activity (default: 0.1). Leave blank to use the protocol default.',
     },
   ] as ConfigChange[];
 }
@@ -370,7 +438,7 @@ function buildDecentralizedSynchronizerChanges(
     return synchronizers.map
       .entriesArray()
       .map(r => r[0])
-      .sort();
+      .toSorted();
   };
 
   const beforeRequiredSynchronizers = getRequiredSynchronizers(before?.requiredSynchronizers);
@@ -378,7 +446,7 @@ function buildDecentralizedSynchronizerChanges(
 
   const allSynchronizers = [
     ...new Set([...beforeRequiredSynchronizers, ...afterRequiredSynchronizers]),
-  ].sort();
+  ].toSorted();
   const requiredSynchronizersChanges = allSynchronizers.map((sync, idx) => ({
     fieldName: `decentralizedSynchronizerRequiredSynchronizers${idx + 1}`,
     label: `(unused) Decentralized synchronizer (required synchronizer ${idx + 1})`,
@@ -427,5 +495,35 @@ function buildDecentralizedSynchronizerChanges(
       newValue: after?.fees.minTopupAmount || '',
     },
     ...requiredSynchronizersChanges,
+  ] as ConfigChange[];
+}
+
+function buildGovernanceLockConfigChanges(
+  before: Optional<GovernanceLockConfig> | undefined,
+  after: Optional<GovernanceLockConfig> | undefined
+) {
+  return [
+    {
+      fieldName: 'governanceLockConfigMinimumLockAmount',
+      label: 'Governance lock config: Minimum governance lock amount (Amulet)',
+      currentValue: before?.minimumLockAmount || '',
+      newValue: after?.minimumLockAmount || '',
+      description:
+        'Minimum amount in Amulet required to create a governance lock (default: 10000 Amulet)',
+    },
+    {
+      fieldName: 'governanceLockConfigSuperValidatorLockVestingDuration',
+      label: 'Governance lock config: SV lock vesting duration (microseconds)',
+      currentValue: before?.superValidatorLockVestingDuration?.microseconds || '',
+      newValue: after?.superValidatorLockVestingDuration?.microseconds || '',
+      description: 'Vesting duration for SV governance locks (default: 365.25 days)',
+    },
+    {
+      fieldName: 'governanceLockConfigFeaturedAppLockVestingDuration',
+      label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+      currentValue: before?.featuredAppLockVestingDuration?.microseconds || '',
+      newValue: after?.featuredAppLockVestingDuration?.microseconds || '',
+      description: 'Vesting duration for featured app governance locks (default: 60 days)',
+    },
   ] as ConfigChange[];
 }

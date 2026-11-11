@@ -7,13 +7,26 @@ import { useDsoInfos } from '../../contexts/SvContext';
 import dayjs from 'dayjs';
 import {
   activityWeightToOptional,
+  appKindSelectOptions,
+  appKindToOptional,
   createProposalActions,
   getInitialExpiration,
+  opsPartiesToOptional,
 } from '../../utils/governance';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
 import { useStore } from '@tanstack/react-form';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_EFFECTIVE_AT,
+  CREATE_PROPOSAL_LABEL_FEATURED_APP_CONTRACT_ID,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
+  CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  SUPPORTING_URL_PLACEHOLDER,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
 import { FeaturedAppRight } from '@daml.js/splice-amulet/lib/Splice/Amulet';
@@ -22,18 +35,21 @@ import {
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
+  validateOpsParties,
   validatePartyId,
   validateSummary,
   validateUrl,
 } from './formValidators';
 import { FormLayout } from './FormLayout';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
+import { OpsPartiesField } from '../form-components/OpsPartiesField';
 import { useEffect, useState } from 'react';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import { useFeaturedAppRightPicker } from '../../hooks/useFeaturedAppRightPicker';
+import { GrantWarnings } from './GrantWarnings';
 
 type ProviderId = string;
 type FeaturedAppRightId = string;
@@ -43,19 +59,21 @@ interface ExtraFormField {
   partyId: ProviderId;
   rightCid: FeaturedAppRightId;
   activityWeight: string;
+  appKind: string;
+  opsParties: string[];
 }
 
 export type GrantRevokeFeaturedAppFormData = CommonProposalFormData & ExtraFormField;
 
 const GRANT_REVOKE_FEATURED_APP_CONFIG = {
   SRARC_GrantFeaturedAppRight: {
-    providerFieldTitle: 'Provider Party ID',
+    providerFieldTitle: CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
     testIdPrefix: 'grant-featured-app',
     reviewFormKey: 'grant-right' as const,
   },
   SRARC_RevokeFeaturedAppRight: {
-    providerFieldTitle: 'Provider Party ID',
-    rightCidFieldTitle: 'Featured Application Contract ID',
+    providerFieldTitle: CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
+    rightCidFieldTitle: CREATE_PROPOSAL_LABEL_FEATURED_APP_CONTRACT_ID,
     testIdPrefix: 'revoke-featured-app',
     reviewFormKey: 'revoke-right' as const,
   },
@@ -114,6 +132,8 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     partyId: '',
     rightCid: '',
     activityWeight: '',
+    appKind: '',
+    opsParties: [],
   };
 
   const form = useAppForm({
@@ -132,6 +152,8 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               value: {
                 provider: formValues.idValue,
                 activityWeight: activityWeightToOptional(formValues.activityWeight),
+                appKind: appKindToOptional(formValues.appKind),
+                opsParties: opsPartiesToOptional(formValues.opsParties),
               },
             },
           },
@@ -185,7 +207,12 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
 
   return (
     <>
-      <FormLayout form={form} id={`${testIdPrefix}-form`}>
+      <FormLayout
+        form={form}
+        id={`${testIdPrefix}-form`}
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}
@@ -196,6 +223,8 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             formType={reviewFormKey}
             grantRight={form.state.values.idValue}
             activityWeight={form.state.values.activityWeight}
+            appKind={form.state.values.appKind}
+            opsParties={form.state.values.opsParties}
             providerPartyId={form.state.values.partyId}
             revokeRight={form.state.values.rightCid}
             onEdit={() => setShowConfirmation(false)}
@@ -204,7 +233,12 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
         ) : (
           <>
             <form.AppField name="action">
-              {field => <field.ProposalTypeField id={`${testIdPrefix}-action`} />}
+              {field => (
+                <field.ProposalTypeField
+                  id={`${testIdPrefix}-action`}
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+                />
+              )}
             </form.AppField>
 
             {formAction === 'SRARC_GrantFeaturedAppRight' && (
@@ -239,12 +273,60 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               >
                 {field => (
                   <field.TextField
-                    title="Activity Weight"
+                    title="App Composition Weight"
                     id={`${testIdPrefix}-activityWeight`}
                     subtitle="Optional. Leave blank to use the default weight"
                   />
                 )}
               </form.AppField>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.AppField name="appKind">
+                {field => (
+                  <field.SelectField
+                    title="App Category"
+                    id={`${testIdPrefix}-appKind`}
+                    options={appKindSelectOptions()}
+                  />
+                )}
+              </form.AppField>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.Field
+                name="opsParties"
+                validators={{
+                  // No onChangeListenTo on idValue: idValue has an async validator, and
+                  // re-validating opsParties on every idValue change prevents canSubmit from
+                  // settling. provider-not-in-opsParties is still enforced on submit.
+                  onChange: ({ value }) => validateOpsParties(value, form.state.values.idValue),
+                }}
+              >
+                {field => (
+                  <OpsPartiesField
+                    id={`${testIdPrefix}-opsParties`}
+                    title="App Operations Parties"
+                    subtitle="Optional. Parties whose submissions count as this app's activity."
+                    value={field.state.value}
+                    onChange={field.handleChange}
+                    onBlur={field.handleBlur}
+                    error={field.state.meta.errors?.[0]}
+                  />
+                )}
+              </form.Field>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.Subscribe
+                selector={state => ({
+                  provider: state.values.idValue,
+                  opsParties: state.values.opsParties,
+                })}
+                children={({ provider, opsParties }) => (
+                  <GrantWarnings provider={provider} opsParties={opsParties} />
+                )}
+              />
             )}
 
             {formAction === 'SRARC_RevokeFeaturedAppRight' && (
@@ -263,7 +345,9 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       id={`${testIdPrefix}-partyId`}
                       scrollableIdentifier
                       subtitle={
-                        field.state.meta.isValidating ? 'Loading featured app rights...' : undefined
+                        field.state.meta.isValidating
+                          ? 'Loading Featured Application Contract IDs...'
+                          : undefined
                       }
                       onChange={() => {
                         picker.resetOptions();
@@ -288,7 +372,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       disabled={picker.rightOptions.length === 0}
                       placeholder={
                         providerHasNoRights
-                          ? 'No featured application rights found for this provider'
+                          ? 'No Featured Application Contract IDs found for this provider'
                           : undefined
                       }
                     />
@@ -306,7 +390,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id={`${testIdPrefix}-expiry-date`}
                 />
@@ -321,6 +405,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               }}
               children={_ => (
                 <EffectiveDateField
+                  title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id={`${testIdPrefix}-effective-date`}
                 />
@@ -334,7 +419,12 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 onChange: ({ value }) => validateSummary(value),
               }}
             >
-              {field => <field.ProposalSummaryField id={`${testIdPrefix}-summary`} />}
+              {field => (
+                <field.ProposalSummaryField
+                  id={`${testIdPrefix}-summary`}
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
+                />
+              )}
             </form.AppField>
 
             <form.AppField
@@ -344,7 +434,13 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id={`${testIdPrefix}-url`} />}
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
+                  id={`${testIdPrefix}-url`}
+                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
+                />
+              )}
             </form.AppField>
           </>
         )}

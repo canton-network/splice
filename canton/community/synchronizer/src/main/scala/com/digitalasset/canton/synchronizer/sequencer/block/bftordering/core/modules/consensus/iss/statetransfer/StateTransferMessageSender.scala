@@ -5,6 +5,7 @@ package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.mo
 
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.crypto.CryptoProvider
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.crypto.CryptoProvider.AuthenticatedMessageType
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.consensus.iss.data.EpochStore
@@ -13,9 +14,11 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.{
   BftNodeId,
   EpochNumber,
+  WorkflowId,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.SignedMessage
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.ordering.{
+  CommitCertificate,
   OrderedBlock,
   OrderedBlockForOutput,
   OrderingMode,
@@ -38,23 +41,39 @@ final class StateTransferMessageSender[E <: Env[E]](
     thisNode: BftNodeId,
     consensusDependencies: ConsensusModuleDependencies[E],
     epochStore: EpochStore[E],
+    workflowId: WorkflowId,
     override val loggerFactory: NamedLoggerFactory,
-)(implicit synchronizerProtocolVersion: ProtocolVersion, metricsContext: MetricsContext)
-    extends NamedLogging {
+)(implicit
+    synchronizerProtocolVersion: ProtocolVersion,
+    config: BftBlockOrdererConfig,
+    metricsContext: MetricsContext,
+) extends NamedLogging {
 
   import StateTransferMessageSender.*
 
   def sendBlockTransferRequest(
       blockTransferRequest: SignedMessage[StateTransferMessage.BlockTransferRequest],
-      to: BftNodeId,
-  )(implicit traceContext: TraceContext): Unit = {
-    logger.debug(
-      s"Sending a block transfer request for epoch ${blockTransferRequest.message.epoch} to '$to'"
-    )
+      possibleRecipients: Seq[BftNodeId],
+      nodesThatTimedOut: Seq[BftNodeId],
+      onRecipientDecision: Option[Seq[BftNodeId] => Unit],
+  )(implicit traceContext: TraceContext): Unit =
+    // Ask a single node for an entire epoch of blocks to compromise between noise for different nodes
+    //  and load balancing. Note that we're shuffling (instead of round-robin), so the same node might be chosen
+    //  multiple times in a row, resulting in uneven load balancing for certain periods. On the other hand, shuffling
+    //  is more straightforward code-wise. A potentially irrelevant implication is that the order in which nodes
+    //  are chosen is less predictable (e.g., by malicious nodes), and, at the same time, harder to reason about.
+    // TODO(#24940) consider not rotating when everything runs smoothly
     consensusDependencies.p2pNetworkOut.asyncSend(
-      P2PNetworkOut.send(wrapSignedMessage(blockTransferRequest), to)
+      P2PNetworkOut.SendToRandomAuthenticated(
+        wrapSignedMessage(blockTransferRequest),
+        possibleRecipients,
+        // Already considering all nodes that were in the relevant topology
+        secondChoiceRecipientsPool = None,
+        Some(workflowId),
+        nodesThatTimedOut,
+        onRecipientDecision,
+      )
     )
-  }
 
   def sendBlockTransferResponses(
       activeCryptoProvider: CryptoProvider[E],
@@ -68,9 +87,11 @@ final class StateTransferMessageSender[E <: Env[E]](
         s"Nothing to state transfer to '$to' for epoch $forEpoch, " +
           s"latest locally completed epoch is $latestCompletedEpochNumber"
       )
-      val response =
-        StateTransferMessage.BlockTransferResponse.create(commitCertificate = None, from = thisNode)
-      sendResponse(response, activeCryptoProvider, to)
+      sendBlockTransferResponsesForCommitCertificates(
+        activeCryptoProvider,
+        to,
+        commitCerts = Seq.empty,
+      )
     } else {
       logger.debug(s"Loading blocks from epoch $forEpoch")
       context.pipeToSelf(
@@ -83,17 +104,59 @@ final class StateTransferMessageSender[E <: Env[E]](
           logger.info(
             s"Sending block transfer responses from epoch $forEpoch (start block number = $startBlockNumber) to '$to'"
           )
-          commitCerts.foreach { commitCert =>
-            // We send only one block at a time to avoid exceeding the max gRPC message size.
-            val response =
-              StateTransferMessage.BlockTransferResponse.create(Some(commitCert), from = thisNode)
-            sendResponse(response, activeCryptoProvider, to)
-          }
+          sendBlockTransferResponsesForCommitCertificates(
+            activeCryptoProvider,
+            to,
+            commitCerts,
+          )
           None // do not send anything back
         case Failure(exception) => Some(Consensus.ConsensusMessage.AsyncException(exception))
       }
     }
   }
+
+  private def sendBlockTransferResponsesForCommitCertificates(
+      activeCryptoProvider: CryptoProvider[E],
+      to: BftNodeId,
+      commitCerts: Seq[CommitCertificate],
+  )(implicit
+      context: E#ActorContextT[Consensus.Message[E]],
+      traceContext: TraceContext,
+  ): Unit =
+    if (synchronizerProtocolVersion >= ProtocolVersion.v37) {
+      // Protocol versions >= 37 can carry multiple commit certificates per response, reusing the retransmission
+      //  response message. We group them using a configurable size limit, similarly to retransmission responses, to
+      //  avoid exceeding the max gRPC message size.
+      val groupsOfCommitCerts =
+        config.consensusWindowSizeForStateTransferOfCommitCertificates match {
+          case Some(windowSize) if commitCerts.nonEmpty =>
+            commitCerts.grouped(windowSize.value).toSeq
+          // If no window size is specified, send all commit certificates in a single message. Also send a single
+          //  (empty) response when there is nothing to state transfer.
+          case _ => Seq(commitCerts)
+        }
+      groupsOfCommitCerts.foreach { commitCertsGroup =>
+        val response =
+          StateTransferMessage.BlockTransferResponse31.create(commitCertsGroup, from = thisNode)
+        sendResponse(response, activeCryptoProvider, to)
+      }
+    } else {
+      // Protocol versions < 37 carry at most one commit certificate per response.
+      if (commitCerts.isEmpty) {
+        val response =
+          StateTransferMessage.BlockTransferResponse30.create(
+            commitCertificate = None,
+            from = thisNode,
+          )
+        sendResponse(response, activeCryptoProvider, to)
+      } else {
+        commitCerts.foreach { commitCert =>
+          val response =
+            StateTransferMessage.BlockTransferResponse30.create(Some(commitCert), from = thisNode)
+          sendResponse(response, activeCryptoProvider, to)
+        }
+      }
+    }
 
   def sendBlockToOutput(prePrepare: PrePrepare, lastInEpoch: Boolean)(implicit
       traceContext: TraceContext

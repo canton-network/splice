@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+set -E
+trap 'echo "ERROR: On line $LINENO in function \"${FUNCNAME[0]}\". Exit code is $?." >&2' ERR
+
 SV_METRICS_URL="${SV_METRICS_URL:-http://sv-app:10013/metrics}"
 SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 
@@ -491,7 +494,7 @@ cantonbft_get_status_reachability() {
       run_parallel "$get_cantonbfts_info_cmds" |
         json_object_values_fromjson || echo '{}'
     } |
-    jq '{ bftSequencers: [.[] | .bftSequencers[]] }'
+    jq '{ bftSequencers: map(.bftSequencers[]?) }'
   )
 
   local cantonbfts_info_for_serial; cantonbfts_info_for_serial=$(

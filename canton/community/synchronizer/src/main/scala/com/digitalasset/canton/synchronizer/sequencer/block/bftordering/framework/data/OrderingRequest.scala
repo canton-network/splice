@@ -5,14 +5,22 @@ package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewo
 
 import com.digitalasset.canton.crypto.HashBuilder
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.TracedLogger
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.synchronizer.block.BlockFormat
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.SupportedVersions
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.EpochNumber
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.OrderingRequest.ValidTags
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.OrderingRequest.{
+  ValidTags,
+  traceContextForHashBuilder,
+}
 import com.digitalasset.canton.synchronizer.sequencing.sequencer.bftordering.v30
 import com.digitalasset.canton.tracing.{TraceContext, Traced}
 import com.digitalasset.canton.version.{
@@ -37,31 +45,52 @@ final case class OrderingRequest(
   def isTagValid: Boolean =
     ValidTags.contains(tag)
 
-  def addToHashBuilder(hashBuilder: HashBuilder): Unit =
+  def addToHashBuilder(
+      hashBuilder: HashBuilder
+  )(implicit protocolVersion: ProtocolVersion): Unit = {
     hashBuilder
       .addByteString(payload)
       .addString(tag)
-      .addString(orderingStartInstant.toString)
       .discard
+
+    if (protocolVersion < ProtocolVersion.v37) {
+      hashBuilder.addString(orderingStartInstant.toString).discard
+    }
+  }
 
   def headerString: String =
     s"(tag=$tag, messageId=$messageId, payloadSize=${payload.size()}, orderingStartInstant=$orderingStartInstant)"
 }
 
 object OrderingRequest {
+
   val ValidTags: Set[String] =
     Set(BlockFormat.AcknowledgeTag, BlockFormat.SendTag)
+
+  def traceContextToProtoString(traceContext: TraceContext): Option[String] =
+    traceContext.asW3CTraceContext.map(_.parent)
+
+  def traceContextFromProtoString(traceContextString: String): TraceContext =
+    TraceContext.fromW3CTraceParent(traceContextString)
+
+  def traceContextForHashBuilder(traceContext: TraceContext): String =
+    traceContext.toString
 }
 
-final case class OrderingRequestBatchStats(requests: Int, bytes: Int) extends PrettyPrinting {
+final case class OrderingRequestBatchStats(requests: Int, bytes: Int)
+    extends PrettyPrintingFromCompanion {
 
-  override protected def pretty: Pretty[OrderingRequestBatchStats.this.type] =
+  override def prettyCompanion: PrettyPrintingCompanion[OrderingRequestBatchStats] =
+    OrderingRequestBatchStats
+}
+object OrderingRequestBatchStats extends PrettyPrintingCompanion[OrderingRequestBatchStats] {
+
+  override protected val pretty: Pretty[OrderingRequestBatchStats] =
     prettyOfClass(
       param("requests", _.requests),
       param("bytes", _.bytes),
     )
-}
-object OrderingRequestBatchStats {
+
   val ForTesting: OrderingRequestBatchStats = OrderingRequestBatchStats(0, 0)
 }
 
@@ -74,11 +103,36 @@ final case class OrderingRequestBatch private (
     ]
 ) extends HasProtocolVersionedWrapper[OrderingRequestBatch] {
 
-  def addToHashBuilder(hashBuilder: HashBuilder): Unit = {
+  def addToHashBuilder(
+      hashBuilder: HashBuilder,
+      logger: TracedLogger,
+  )(implicit protocolVersion: ProtocolVersion, traceContext: TraceContext): Unit = {
+    logger.debug(s"Adding epoch number $epochNumber to hash builder")
     hashBuilder.addLong(epochNumber)
+    val useOldHashFormat = protocolVersion < ProtocolVersion.v37
+    if (useOldHashFormat)
+      logger.debug(
+        s"Synchronizer protocol version is $protocolVersion, " +
+          "using old (< PV37) hash format: " +
+          s"adding ${requests.size} requests to hash builder, " +
+          s"each with hardcoded representative protocol version 34 and request trace context"
+      )
+    else
+      logger.debug(
+        s"Synchronizer protocol version is $protocolVersion, " +
+          "using new (>= PV37) hash format: " +
+          s"adding ${requests.size} requests to hash builder, " +
+          "each without representative protocol version nor request trace context"
+      )
     requests.foreach { request =>
-      hashBuilder.addInt(representativeProtocolVersion.representative.toProtoPrimitive)
-      hashBuilder.addString(request.traceContext.toString)
+      if (useOldHashFormat) {
+        // In protocol versions < v37, we used to add the representative protocol version to the hash builder. Since
+        // v37 we no longer do. The rpv have since changed, but in all versions before v37 rpv was always 34. So that is
+        // value we use here.
+        val requestTraceContext = request.traceContext
+        hashBuilder.addInt(34)
+        hashBuilder.addString(traceContextForHashBuilder(requestTraceContext))
+      }
       request.value.addToHashBuilder(hashBuilder)
     }
   }
@@ -107,7 +161,7 @@ final case class OrderingRequestBatch private (
       requests.map { orderingRequest =>
         orderingRequestToProtoV30(
           orderingRequest.value,
-          orderingRequest.traceContext.asW3CTraceContext.map(_.parent),
+          OrderingRequest.traceContextToProtoString(orderingRequest.traceContext),
         )
       },
       epochNumber,
@@ -138,9 +192,8 @@ object OrderingRequestBatch extends VersioningCompanion[OrderingRequestBatch] {
       batch: v30.Batch
   ): ParsingResult[OrderingRequestBatch] =
     for {
-      rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
-    } yield OrderingRequestBatch(
-      batch.orderingRequests.map { protoOrderingRequest =>
+      rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData30)
+      requests = batch.orderingRequests.map { protoOrderingRequest =>
         Traced.fromPair[OrderingRequest](
           (
             OrderingRequest(
@@ -149,17 +202,19 @@ object OrderingRequestBatch extends VersioningCompanion[OrderingRequestBatch] {
               protoOrderingRequest.payload,
               protoOrderingRequest.orderingStartInstant.map(_.asJavaInstant),
             ),
-            TraceContext.fromW3CTraceParent(protoOrderingRequest.traceContext),
+            OrderingRequest.traceContextFromProtoString(protoOrderingRequest.traceContext),
           )
         )
-      },
+      }
+    } yield OrderingRequestBatch(
+      requests,
       EpochNumber(batch.epochNumber),
     )(rpv)
 
   override val versioningTable: framework.data.OrderingRequestBatch.VersioningTable =
     VersioningTable(
-      SupportedVersions.ProtoData ->
-        VersionedProtoCodec(SupportedVersions.CantonProtocol)(v30.Batch)(
+      SupportedVersions.ProtoData30 ->
+        VersionedProtoCodec(SupportedVersions.CantonProtocol36)(v30.Batch)(
           supportedProtoVersion(_)(fromProtoV30),
           _.toProtoV30,
         )

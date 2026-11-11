@@ -31,6 +31,8 @@ class WalletTxLogWithRewardsCollectionTimeBasedIntegrationTest
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       // Set a non-unit amulet price to better test CC-USD conversion.
       .addConfigTransform((_, config) => ConfigTransforms.setAmuletPrice(amuletPrice)(config))
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .addConfigTransforms(
         (_, config) =>
           // without this, you can have 1 or 2 transfers in the txlog, or just 1 with different balance
@@ -49,7 +51,7 @@ class WalletTxLogWithRewardsCollectionTimeBasedIntegrationTest
   "A wallet" should {
 
     "handle app and validator rewards that are collected" in { implicit env =>
-      val (alice, bob) = onboardAliceAndBob()
+      val (_, bob) = onboardAliceAndBob()
       waitForWalletUser(aliceValidatorWalletClient)
       waitForWalletUser(bobValidatorWalletClient)
 

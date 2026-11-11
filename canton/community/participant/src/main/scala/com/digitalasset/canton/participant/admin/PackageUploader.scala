@@ -10,6 +10,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.String255
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.ledger.error.PackageServiceErrors
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown, UnlessShutdown}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.participant.admin.PackageService.{
@@ -25,7 +26,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Thereafter.syntax.ThereafterOps
 import com.digitalasset.canton.{LedgerSubmissionId, LfPackageId}
-import com.digitalasset.daml.lf.archive.{DamlLf, Dar as LfDar, DarParser, Decode}
+import com.digitalasset.daml.lf.archive.{DamlLf, DarParser, Decode, Dar as LfDar}
 import com.digitalasset.daml.lf.engine.{Engine, Error as EngineError}
 import com.digitalasset.daml.lf.language.{Ast, LanguageVersion as LV}
 import com.google.protobuf.ByteString

@@ -4,11 +4,15 @@
 package com.digitalasset.canton.sequencing
 
 import cats.syntax.either.*
+import cats.syntax.traverse.*
 import cats.{Id, Monad}
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.admin.sequencer.v30
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.version.{
@@ -20,6 +24,7 @@ import com.digitalasset.canton.version.{
   ProtocolVersion,
 }
 import com.digitalasset.canton.{ProtoDeserializationError, SequencerAlias}
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 
 final case class SequencerConnections private (
     aliasToConnection: NonEmpty[Map[SequencerAlias, SequencerConnection]],
@@ -27,8 +32,9 @@ final case class SequencerConnections private (
     sequencerLivenessMargin: NonNegativeInt,
     submissionRequestAmplification: SubmissionRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+    subscriptionLivenessLimits: SubscriptionLivenessLimits,
 ) extends HasVersionedWrapper[SequencerConnections]
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
   require(
     aliasToConnection.sizeIs >= sequencerTrustThreshold.unwrap,
     s"sequencerTrustThreshold cannot be greater than number of sequencer connections. Found threshold of $sequencerTrustThreshold and ${aliasToConnection.size} sequencer connections",
@@ -59,6 +65,7 @@ final case class SequencerConnections private (
       sequencerLivenessMargin = sequencerLivenessMargin,
       submissionRequestAmplification = submissionRequestAmplification,
       sequencerConnectionPoolDelays = sequencerConnectionPoolDelays,
+      subscriptionLivenessLimits = subscriptionLivenessLimits,
     )
 
   private def modifyM[M[_]](
@@ -79,14 +86,8 @@ final case class SequencerConnections private (
       }
       .getOrElse(M.pure(this))
 
-  override protected def pretty: Pretty[SequencerConnections] =
-    prettyOfClass(
-      param("connections", _.aliasToConnection.forgetNE),
-      param("sequencer trust threshold", _.sequencerTrustThreshold),
-      param("sequencer liveness margin", _.sequencerLivenessMargin),
-      param("submission request amplification", _.submissionRequestAmplification),
-      param("sequencer connection pool delays", _.sequencerConnectionPoolDelays),
-    )
+  override def prettyCompanion: PrettyPrintingCompanion[SequencerConnections] =
+    SequencerConnections
 
   def toProtoV30: v30.SequencerConnections =
     new v30.SequencerConnections(
@@ -95,6 +96,7 @@ final case class SequencerConnections private (
       Some(submissionRequestAmplification.toProtoV30),
       sequencerLivenessMargin.unwrap,
       Some(sequencerConnectionPoolDelays.toProtoV30),
+      Some(subscriptionLivenessLimits.toProtoV30),
     )
 
   @transient override protected lazy val companionObj
@@ -104,7 +106,17 @@ final case class SequencerConnections private (
 
 object SequencerConnections
     extends HasVersionedMessageCompanion[SequencerConnections]
-    with HasVersionedMessageCompanionDbHelpers[SequencerConnections] {
+    with HasVersionedMessageCompanionDbHelpers[SequencerConnections]
+    with PrettyPrintingCompanion[SequencerConnections] {
+  override protected val pretty: Pretty[SequencerConnections] =
+    prettyOfClass(
+      param("connections", _.aliasToConnection.forgetNE),
+      param("sequencer trust threshold", _.sequencerTrustThreshold),
+      param("sequencer liveness margin", _.sequencerLivenessMargin),
+      param("submission request amplification", _.submissionRequestAmplification),
+      param("sequencer connection pool delays", _.sequencerConnectionPoolDelays),
+      param("subscription liveness limits", _.subscriptionLivenessLimits),
+    )
 
   def single(
       connection: SequencerConnection
@@ -115,6 +127,7 @@ object SequencerConnections
       sequencerLivenessMargin = NonNegativeInt.zero,
       submissionRequestAmplification = SubmissionRequestAmplification.NoAmplification,
       sequencerConnectionPoolDelays = SequencerConnectionPoolDelays.default,
+      subscriptionLivenessLimits = SubscriptionLivenessLimits.default,
     )
 
   def many(
@@ -123,6 +136,7 @@ object SequencerConnections
       sequencerLivenessMargin: NonNegativeInt,
       submissionRequestAmplification: SubmissionRequestAmplification,
       sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+      subscriptionLivenessLimits: SubscriptionLivenessLimits,
   ): Either[String, SequencerConnections] = {
     val repeatedAliases = connections.groupBy(_.sequencerAlias).filter { case (_, connections) =>
       connections.lengthCompare(1) > 0
@@ -141,6 +155,7 @@ object SequencerConnections
             sequencerLivenessMargin,
             submissionRequestAmplification,
             sequencerConnectionPoolDelays,
+            subscriptionLivenessLimits,
           )
         )
         .leftMap(_.getMessage)
@@ -153,6 +168,7 @@ object SequencerConnections
       sequencerLivenessMargin: NonNegativeInt,
       submissionRequestAmplification: SubmissionRequestAmplification,
       sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
+      subscriptionLivenessLimits: SubscriptionLivenessLimits,
   ): SequencerConnections =
     many(
       NonEmptyUtil.fromUnsafe(connections),
@@ -160,6 +176,7 @@ object SequencerConnections
       sequencerLivenessMargin,
       submissionRequestAmplification,
       sequencerConnectionPoolDelays,
+      subscriptionLivenessLimits,
     ).valueOr(err => throw new IllegalArgumentException(err))
 
   def fromProtoV30(
@@ -171,6 +188,7 @@ object SequencerConnections
       submissionRequestAmplificationP,
       sequencerLivenessMarginP,
       sequencerConnectionPoolDelaysP,
+      subscriptionLivenessLimitsP,
     ) = sequencerConnectionsProto
     for {
       sequencerTrustThreshold <- ProtoConverter.parsePositiveInt(
@@ -196,6 +214,9 @@ object SequencerConnections
         "sequencer_connection_pool_delays",
         sequencerConnectionPoolDelaysP,
       )
+      subscriptionLivenessLimitsO <- subscriptionLivenessLimitsP.traverse(
+        SubscriptionLivenessLimits.fromProtoV30
+      )
       _ <- Either.cond(
         sequencerConnectionsNes.map(_.sequencerAlias).toSet.sizeIs == sequencerConnectionsNes.size,
         (),
@@ -210,6 +231,7 @@ object SequencerConnections
         sequencerLivenessMargin,
         submissionRequestAmplification,
         sequencerConnectionPoolDelays,
+        subscriptionLivenessLimitsO.getOrElse(SubscriptionLivenessLimits.default),
       ).leftMap(ProtoDeserializationError.InvariantViolation(field = None, _))
     } yield sequencerConnections
   }
@@ -218,7 +240,7 @@ object SequencerConnections
 
   val supportedProtoVersions: SupportedProtoVersions = SupportedProtoVersions(
     ProtoVersion(30) -> ProtoCodec(
-      ProtocolVersion.v34,
+      ProtocolVersion.v36,
       supportedProtoVersion(v30.SequencerConnections)(fromProtoV30),
       _.toProtoV30,
     )

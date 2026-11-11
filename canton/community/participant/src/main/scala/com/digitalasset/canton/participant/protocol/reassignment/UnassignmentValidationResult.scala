@@ -30,11 +30,16 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ReassignmentTag
 import com.digitalasset.canton.util.ReassignmentTag.Target
 
+/** @param assignmentExclusivity
+  *   before this time (measured on the target synchronizer), only the submitter of the unassignment
+  *   can initiate the assignment; set on reassigning participants when the target synchronizer runs
+  *   protocol version 36 or lower, None otherwise
+  */
 final case class UnassignmentValidationResult(
     unassignmentData: UnassignmentData,
     override val rootHash: RootHash,
-    hostedConfirmingReassigningParties: Set[LfPartyId],
-    // Defined iff the participant is reassigning
+    hostedConfirmingParties: Set[LfPartyId],
+    isReassigningParticipant: Boolean,
     assignmentExclusivity: Option[Target[CantonTimestamp]],
     commonValidationResult: UnassignmentValidationResult.CommonValidationResult,
     reassigningParticipantValidationResult: UnassignmentValidationResult.ReassigningParticipantValidationResult,
@@ -48,36 +53,31 @@ final case class UnassignmentValidationResult(
 
   override def reassignmentId: ReassignmentId = unassignmentData.reassignmentId
 
-  def isReassigningParticipant: Boolean = assignmentExclusivity.isDefined
-
   override def activenessResultIsSuccessful: Boolean =
     commonValidationResult.activenessResult.isSuccessful
 
+  override protected def requestDescription: String = "Unassignment request"
+
   def contracts: ContractsReassignmentBatch = unassignmentData.contractsBatch
 
-  def commitSet: CommitSet = CommitSet(
-    archivals = Map.empty,
-    creations = Map.empty,
-    assignments = Map.empty,
-    unassignments = (contracts.contractIdCounters
-      .map { case (contractId, reassignmentCounter) =>
-        (
-          contractId,
-          CommitSet.UnassignmentCommit(
-            targetSynchronizer.map(_.logical),
-            stakeholders,
-            reassignmentCounter,
-          ),
-        )
-      })
-      .toMap
-      .forgetNE,
-  )
+  def commitSet: CommitSet =
+    CommitSet.createForUnassignment(contracts, targetSynchronizer, stakeholders)
 
+  /** @param participantId
+    *   the participant emitting the event
+    * @param recordTime
+    *   record time of the emitted event
+    * @param trafficCost
+    *   traffic cost reported in the completion of the submitting participant
+    * @param storedInReassignmentStore
+    *   whether the reassignment was recorded in the reassignment store, emitted as
+    *   `isReassigningParticipant`
+    */
   def createReassignmentAccepted(
       participantId: ParticipantId,
       recordTime: CantonTimestamp,
       trafficCost: NonNegativeLong,
+      storedInReassignmentStore: Boolean,
   )(implicit
       traceContext: TraceContext
   ): AcsChangeFactory => InternalContractIds => Update.SequencedReassignmentAccepted = {
@@ -106,7 +106,7 @@ final case class UnassignmentValidationResult(
             targetSynchronizer = targetSynchronizer.map(_.logical),
             submitter = Option(submitterMetadata.submitter),
             reassignmentId = reassignmentId,
-            isReassigningParticipant = isReassigningParticipant,
+            isReassigningParticipant = storedInReassignmentStore,
           ),
           reassignment =
             Reassignment.Batch(contracts.contracts.zipWithIndex.map { case (reassign, idx) =>
@@ -124,6 +124,7 @@ final case class UnassignmentValidationResult(
           recordTime = recordTime,
           synchronizerId = sourceSynchronizer.unwrap.logical,
           acsChangeFactory = acsChangeFactory,
+          traceContext = traceContext,
         )
   }
 }
@@ -137,9 +138,13 @@ object UnassignmentValidationResult {
         ReassignmentValidationError,
         Unit,
       ],
+      packageVettingResult: Option[ReassignmentValidationError],
       submitterCheckResult: Option[ReassignmentValidationError],
       multiSynchronizerFeatureFlagCheckResult: Option[ReassignmentValidationError],
   ) extends ReassignmentValidationResult.CommonValidationResult {
+
+    // The contract must be serializable on the source synchronizer
+    override val contractSerializationResult: Option[ReassignmentValidationError] = None
 
     // During unassignment the reassignment id is computed, rather than being passed in
     // so there's no need to validate it.
@@ -147,18 +152,15 @@ object UnassignmentValidationResult {
   }
 
   final case class ReassigningParticipantValidationResult(
-      errors: Seq[ReassignmentValidationError]
+      contractAuthenticationResultF: EitherT[
+        FutureUnlessShutdown,
+        ReassignmentValidationError,
+        Unit,
+      ],
+      errors: Seq[ReassignmentValidationError],
   ) extends ReassignmentValidationResult.ReassigningParticipantValidationResult {
-    def isTargetTsValidatable: Boolean = !errors.exists {
-      case UnassignmentValidationError.TargetTimestampTooFarInFuture => true
-      case _ => false
-    }
-  }
-
-  object ReassigningParticipantValidationResult {
-    val TargetTimestampTooFarInFuture: ReassigningParticipantValidationResult =
-      ReassigningParticipantValidationResult(
-        Seq(UnassignmentValidationError.TargetTimestampTooFarInFuture)
-      )
+    // These validations read the target topology at this participant's localTargetTs, which may not
+    // yet reflect recent topology changes, so we abstain on any failure.
+    override def isAbstain: Boolean = true
   }
 }

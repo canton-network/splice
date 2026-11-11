@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import org.lfdecentralizedtrust.splice.data.CantonTimestampExtensions.*
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
@@ -21,12 +22,7 @@ import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
-import org.lfdecentralizedtrust.splice.store.{
-  HasS3Mock,
-  HistoryMetrics,
-  StoreTestBase,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{HasS3Mock, HistoryMetrics, StoreTestBase}
 
 import scala.concurrent.Future
 import scala.util.Using
@@ -46,13 +42,14 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 3,
     bulkAcsSnapshotPeriodHours = 24,
-    bulkDbReadChunkSize = 1000,
+    bulkZstdBlockSize = 1000L,
     bulkZstdFrameSize = 10000L,
     bulkMaxFileSize = 50000L,
     zstdCompressionLevel = 3,
   )
   val appConfig = BulkStorageConfig(
-    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
+    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   override val initialBuckets: Seq[String] = Seq("staging", "committed")
@@ -93,6 +90,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         bulkStorageTestConfig,
         stagingConnection,
         committedConnection,
+        () => Future.successful(None),
         loggerFactory,
       )
 
@@ -104,6 +102,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           committedConnection,
           reader,
           appConfig,
+          null, // not used when bft reads are disabled
+          _ => (),
           loggerFactory,
         )
         val commitService = {
@@ -128,7 +128,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       def createDummySnapshot(day: Int, objectCount: Int): Unit = {
         createDummySnapshotWithoutMarkingProcessed(day, objectCount)
         acsStagingProgress
-          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts(day), 0))
+          .persistLatestProcessedSnapshotTimestamp(ts(day))
           .futureValue
       }
 
@@ -137,21 +137,25 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           objectCount: Int,
       ): Unit = {
         (0 until objectCount).foreach { i =>
-          stagingConnection
-            .createObject(
-              s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd",
-              s"dummy acs snapshot at ${ts(day)} (object $i)".getBytes,
-            )
-            .futureValue
+          ScanStorageConfig.Encoding.all.toList.foreach { encoding =>
+            stagingConnection
+              .createObject(
+                s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/${encoding.storageKey("ACS", i)}",
+                s"dummy acs snapshot at ${ts(day)} (object $i)".getBytes,
+              )
+              .futureValue
+          }
         }
       }
 
       def assertCommittedObjectsForSnapshot(day: Int, expectedCount: Int): Assertion = {
-        val expectedKeys = (0 until expectedCount).map { i =>
-          s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd"
+        val expectedKeys = (0 until expectedCount).flatMap { i =>
+          ScanStorageConfig.Encoding.all.toList.map { encoding =>
+            s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/${encoding.storageKey("ACS", i)}"
+          }
         }
         reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts(day))
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts(day), ScanStorageConfig.Encoding.all)
           .futureValue
           .objects
           .map(_.key) should contain theSameElementsAs
@@ -176,9 +180,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         createDummySnapshotWithoutMarkingProcessed(day = 3, objectCount = 2)
 
         eventually() {
-          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
-            _.timestamp
-          ) shouldBe Some(ts(2))
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue shouldBe Some(ts(2))
         }
         assertCommittedObjectsForSnapshot(day = 1, expectedCount = 1)
         assertCommittedObjectsForSnapshot(day = 2, expectedCount = 2)
@@ -198,12 +200,10 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         )
 
         acsStagingProgress
-          .persistLatestProcessedSnapshotTimestamp(TimestampWithMigrationId(ts(3), 0))
+          .persistLatestProcessedSnapshotTimestamp(ts(3))
           .futureValue
         eventually() {
-          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
-            _.timestamp
-          ) shouldBe Some(ts(3))
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue shouldBe Some(ts(3))
         }
         assertCommittedObjectsForSnapshot(day = 3, expectedCount = 2)
         assertNoStagingObjectsForSnapshot(3)
@@ -215,15 +215,14 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       committedConnection
         .copyObject(
           "staging",
-          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/ACS_0.zstd",
+          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/${ScanStorageConfig.Encoding.CompactJson
+              .storageKey("ACS", 0)}",
         )
         .futureValue
 
       withNewCommitService {
         eventually() {
-          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
-            _.timestamp
-          ) shouldBe Some(ts(4))
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue shouldBe Some(ts(4))
         }
         assertCommittedObjectsForSnapshot(day = 4, expectedCount = 3)
         assertNoStagingObjectsForSnapshot(4)
@@ -236,21 +235,21 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         committedConnection
           .copyObject(
             "staging",
-            s"${bulkStorageTestConfig.getSegmentFolder(ts(5), None)}/ACS_$i.zstd",
+            s"${bulkStorageTestConfig
+                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}",
           )
           .futureValue
         stagingConnection
           .deleteObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts(5), None)}/ACS_$i.zstd"
+            s"${bulkStorageTestConfig
+                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}"
           )
           .futureValue
       }
 
       withNewCommitService {
         eventually() {
-          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue.map(
-            _.timestamp
-          ) shouldBe Some(ts(5))
+          acsCommittedProgress.readLatestProcessedSnapshotTimestamp.futureValue shouldBe Some(ts(5))
         }
         assertCommittedObjectsForSnapshot(day = 5, expectedCount = 2)
         assertNoStagingObjectsForSnapshot(5)

@@ -12,7 +12,7 @@ set -eou pipefail
 # SV1 creates the vote request to offboard the sv runbook
 sv1_token=$(cncluster get_token sv-1 sv)
 
-current_dso_config=$(curl -s --fail-with-body --show-error --retry 10 --retry-delay 10 --retry-all-errors -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v0/dso")
+current_dso_config=$(curl -s --fail-with-body --show-error --retry 10 --retry-delay 10 --retry-all-errors -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v1/dso" -H "Authorization: Bearer $sv1_token")
 echo "DSO: $current_dso_config"
 
 requester=$(echo "$current_dso_config" | jq '.sv_party_id')
@@ -105,7 +105,7 @@ until [ $retry_count -gt $MAX_RETRIES ]; do
   echo "Checking whether DSO info has been updated"
   retry_count=$((retry_count+1))
 
-  new_dso_config=$(curl -s -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v0/dso")
+  new_dso_config=$(curl -s -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v1/dso" -H "Authorization: Bearer $sv1_token")
   echo "DSO info: $new_dso_config"
   offboarded_status=$(echo "$new_dso_config" | jq -r '.dso_rules.contract.payload.svs | map(select(.[1].name == "DA-Helm-Test-Node")) | length')
 

@@ -4,11 +4,12 @@
 package com.digitalasset.canton.protocol.messages
 
 import com.digitalasset.canton.protocol.messages.ProtocolMessage.ProtocolMessageContentCast
-import com.digitalasset.canton.protocol.{v30, v31}
+import com.digitalasset.canton.protocol.{v30, v32}
 import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.transaction.*
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.{
   HasProtocolVersionedWrapper,
   ProtoVersion,
@@ -19,26 +20,22 @@ import com.digitalasset.canton.version.{
   VersioningCompanionContext,
 }
 
-final case class TopologyTransactionsBroadcast(
+final case class TopologyTransactionsBroadcast private (
     override val psid: PhysicalSynchronizerId,
     transactions: SignedTopologyTransactions[TopologyChangeOp, TopologyMapping],
+)(
+    override val representativeProtocolVersion: RepresentativeProtocolVersion[
+      TopologyTransactionsBroadcast.type
+    ]
 ) extends UnsignedProtocolMessage
     with HasProtocolVersionedWrapper[TopologyTransactionsBroadcast] {
-
-  override val representativeProtocolVersion: RepresentativeProtocolVersion[
-    TopologyTransactionsBroadcast.type
-  ] = TopologyTransactionsBroadcast.protocolVersionRepresentativeFor(psid.protocolVersion)
 
   @transient override protected lazy val companionObj: TopologyTransactionsBroadcast.type =
     TopologyTransactionsBroadcast
 
-  override protected[messages] def toProtoSomeEnvelopeContentV30
-      : v30.EnvelopeContent.SomeEnvelopeContent =
-    v30.EnvelopeContent.SomeEnvelopeContent.TopologyTransactionsBroadcast(toProtoV30)
-
-  override protected[messages] def toProtoSomeEnvelopeContentV31
-      : v31.EnvelopeContent.SomeEnvelopeContent =
-    v31.EnvelopeContent.SomeEnvelopeContent.TopologyTransactionsBroadcast(toProtoV30)
+  override protected[messages] def toProtoSomeEnvelopeContentV32
+      : v32.EnvelopeContent.SomeEnvelopeContent =
+    v32.EnvelopeContent.SomeEnvelopeContent.TopologyTransactionsBroadcast(toProtoV30)
 
   def toProtoV30: v30.TopologyTransactionsBroadcast = v30.TopologyTransactionsBroadcast(
     psid.toProtoPrimitive,
@@ -52,17 +49,18 @@ final case class TopologyTransactionsBroadcast(
 object TopologyTransactionsBroadcast
     extends VersioningCompanionContext[
       TopologyTransactionsBroadcast,
-      ProtocolVersion,
+      TopologyTransactionDeserializationContext,
     ] {
 
   def apply(
       psid: PhysicalSynchronizerId,
       transactions: Seq[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]],
+      protocolVersion: ProtocolVersion,
   ): TopologyTransactionsBroadcast =
     TopologyTransactionsBroadcast(
       psid,
-      SignedTopologyTransactions(transactions, psid.protocolVersion),
-    )
+      SignedTopologyTransactions(transactions, protocolVersion),
+    )(protocolVersionRepresentativeFor(protocolVersion))
 
   override def name: String = "TopologyTransactionsBroadcast"
 
@@ -76,29 +74,34 @@ object TopologyTransactionsBroadcast
     }
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.TopologyTransactionsBroadcast
     )(
-      supportedProtoVersion(_)(fromProtoV30),
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
 
   private[messages] def fromProtoV30(
-      expectedProtocolVersion: ProtocolVersion,
+      pvv: ProtocolVersionValidation,
+      context: TopologyTransactionDeserializationContext,
       message: v30.TopologyTransactionsBroadcast,
   ): ParsingResult[TopologyTransactionsBroadcast] = {
     val v30.TopologyTransactionsBroadcast(psidP, signedTopologyTransactionsP) = message
     for {
-      synchronizerId <- PhysicalSynchronizerId.fromProtoPrimitive(psidP, "physical_synchronizer_id")
+      synchronizerId <- ProtoValidation.validateThen(
+        psidP,
+        "physical_synchronizer_id",
+        pvv,
+      )(PhysicalSynchronizerId.fromProtoPrimitive)
 
       signedTopologyTransactions <- ProtoConverter.parseRequired(
-        SignedTopologyTransactions
-          .fromProtoV30(ProtocolVersionValidation.PV(expectedProtocolVersion), _),
+        SignedTopologyTransactions.fromProtoV30(pvv, context, _),
         "signed_transactions",
         signedTopologyTransactionsP,
       )
-    } yield TopologyTransactionsBroadcast(synchronizerId, signedTopologyTransactions)
+      rpv <- TopologyTransactionsBroadcast.protocolVersionRepresentativeFor(ProtoVersion(30))
+    } yield TopologyTransactionsBroadcast(synchronizerId, signedTopologyTransactions)(rpv)
   }
 
   /** The state of the submission of a topology transaction broadcast. In combination with the

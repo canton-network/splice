@@ -2,12 +2,27 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Link as RouterLink } from 'react-router';
-import { Box, Divider, TextField as MuiTextField, Typography } from '@mui/material';
+import {
+  Box,
+  Divider,
+  FormControl,
+  MenuItem,
+  Select,
+  TextField as MuiTextField,
+  Typography,
+} from '@mui/material';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useFieldContext } from '../../hooks/formContext';
 import type { ConfigChange, PendingConfigFieldInfo } from '../../utils/types';
 import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
+import { configFieldFieldSx, configFieldInputSx } from '../../themes/fieldStyles';
+import {
+  CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
+  CREATE_PROPOSAL_FIELD_BODY_SX,
+} from '../../constants/createProposalLayout';
+import { isSwitchOverField } from '../forms/formValidators';
+import { SwitchOverTimesValue } from '../governance/SwitchOverTimesValue';
 
 dayjs.extend(relativeTime);
 
@@ -55,13 +70,17 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
 
   const textFieldProps = {
     variant: 'outlined' as const,
-    size: 'small' as const,
     color: field.state.meta.isDefaultValue ? ('primary' as const) : ('secondary' as const),
     focused: !field.state.meta.isDefaultValue,
     autoComplete: 'off' as const,
-    inputProps: {
-      sx: { textAlign: 'right' },
-      'data-testid': `config-field-${configChange.fieldName}`,
+    sx: configFieldFieldSx,
+    slotProps: {
+      input: {
+        sx: configFieldInputSx,
+      },
+      htmlInput: {
+        'data-testid': `config-field-${configChange.fieldName}`,
+      },
     },
     disabled: isDisabled,
   };
@@ -70,45 +89,117 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
     <>
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          display: 'grid',
+          gridTemplateColumns: `minmax(0, 1fr) ${CREATE_PROPOSAL_CONFIG_INPUT_WIDTH}`,
+          columnGap: 2,
+          alignItems: 'start',
+          minWidth: 0,
         }}
       >
-        <Box>
-          <Typography variant="body1" data-testid={`config-label-${configChange.fieldName}`}>
+        <Box
+          sx={{
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            overflow: 'hidden',
+          }}
+        >
+          <Typography
+            component="p"
+            data-testid={`config-label-${configChange.fieldName}`}
+            sx={{ ...CREATE_PROPOSAL_FIELD_BODY_SX, m: 0, wordBreak: 'break-word' }}
+          >
             {configChange.label}
           </Typography>
           <Typography
-            fontFamily="'Source Code Pro', monospace"
-            color="colors.neutral.70"
-            sx={{ mt: 1 }}
+            component="p"
             data-testid={`config-field-name-${configChange.fieldName}`}
+            sx={{
+              fontFamily: "'Source Code Pro', monospace",
+              fontSize: '14px',
+              fontWeight: 400,
+              lineHeight: '22px',
+              color: '#d5d7dd',
+              m: 0,
+              wordBreak: 'break-all',
+              overflowWrap: 'anywhere',
+            }}
           >
             {configChange.fieldName}
           </Typography>
         </Box>
+        <Box
+          sx={{
+            width: CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
+            maxWidth: '100%',
+            minWidth: 0,
+            flexShrink: 0,
+          }}
+        >
+          {configChange.options ? (
+            <FormControl size="small" fullWidth disabled={isDisabled}>
+              <Select
+                value={field.state.value?.value || ''}
+                onBlur={field.handleBlur}
+                onChange={e =>
+                  field.handleChange({
+                    fieldName: configChange.fieldName,
+                    value: e.target.value,
+                  })
+                }
+                data-testid={`config-field-${configChange.fieldName}`}
+                color={field.state.meta.isDefaultValue ? 'primary' : 'secondary'}
+              >
+                {configChange.options.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <MuiTextField
+              {...textFieldProps}
+              fullWidth
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
+              // We choose empty string to represent fields that could be undefined because their values have not been set.
+              value={field.state.value?.value || ''}
+              onBlur={field.handleBlur}
+              onChange={e =>
+                field.handleChange({
+                  fieldName: configChange.fieldName,
+                  value: e.target.value,
+                })
+              }
+            />
+          )}
 
-        <Box sx={{ width: 250 }}>
-          <MuiTextField
-            {...textFieldProps}
-            // We choose empty string to represent fields that could be undefined because their values have not been set.
-            value={field.state.value?.value || ''}
-            onBlur={field.handleBlur}
-            onChange={e =>
-              field.handleChange({
-                fieldName: configChange.fieldName,
-                value: e.target.value,
-              })
-            }
-          />
+          {configChange.description && (
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}
+            >
+              {configChange.description}
+            </Typography>
+          )}
 
           {!field.state.meta.isDefaultValue && (
             <Typography
               variant="caption"
-              color="text.secondary"
-              sx={{ mt: 0.5, display: 'block' }}
+              title={configChange.currentValue}
               data-testid={`config-current-value-${configChange.fieldName}`}
+              sx={{
+                color: 'text.secondary',
+                mt: 0.5,
+                display: 'block',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+              }}
             >
               Current Configuration: {configChange.currentValue}
             </Typography>
@@ -140,24 +231,50 @@ export const PendingConfigDisplay: React.FC<PendingConfigDisplayProps> = ({ pend
     effectiveDate === 'Threshold' ? 'at Threshold' : dayjs(effectiveDate).fromNow();
 
   return (
-    <Typography
-      variant="caption"
-      color="text.secondary"
-      sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}
+    <Box
+      sx={{ mt: 0.5, width: '100%', minWidth: 0 }}
       data-testid={`config-pending-value-${fieldName}`}
     >
-      Pending Configuration: <strong>{pendingValue}</strong> <br />
-      This{' '}
-      <RouterLink
-        to={`/governance/proposals/${proposalCid}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: 'inherit' }}
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary', display: 'block', textAlign: 'left' }}
       >
-        pending configuration
-      </RouterLink>{' '}
-      will go into effect <strong>{effectiveText}</strong>
-    </Typography>
+        Pending Configuration:{' '}
+        {isSwitchOverField(fieldName) ? (
+          <Box component="span" sx={{ display: 'inline-block', verticalAlign: 'top' }}>
+            <SwitchOverTimesValue value={pendingValue} />
+          </Box>
+        ) : (
+          <Box
+            component="strong"
+            title={pendingValue}
+            sx={{
+              display: 'inline',
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+              fontWeight: 700,
+            }}
+          >
+            {pendingValue}
+          </Box>
+        )}
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary', display: 'block', textAlign: 'left', mt: 0.5 }}
+      >
+        This{' '}
+        <RouterLink
+          to={`/governance/proposals/${proposalCid}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'inherit' }}
+        >
+          pending configuration
+        </RouterLink>{' '}
+        will go into effect <strong>{effectiveText}</strong>
+      </Typography>
+    </Box>
   );
 };
 
@@ -188,9 +305,8 @@ export const SynchronizerUpgradeTimeDisplay: React.FC<
   return (
     <Typography
       variant="caption"
-      color="text.secondary"
-      sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}
       data-testid={`${fieldName}-default`}
+      sx={{ color: 'text.secondary', mt: 0.5, display: 'block', textAlign: 'left' }}
     >
       {`Default: ${defaultMigrationTime}`}
     </Typography>

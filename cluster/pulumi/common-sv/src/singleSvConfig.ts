@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
 import {
   DecentralizedSynchronizerUpgradeConfig,
@@ -7,6 +8,7 @@ import {
   KmsConfigSchema,
   LogLevelSchema,
   K8sResourceSchema,
+  TopologyKeyMonitorConfigSchema,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
@@ -15,10 +17,13 @@ import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/c
 import util from 'node:util';
 import { z } from 'zod';
 
+import { FlywayMigrationToWaitForSchema } from './bigQueryFlywayMigration';
 import { TopologySnapshotSchema } from './config';
 import {
   CloudSqlWithOverrideConfigSchema,
   PhysicalSynchronizersConfigOverridesSchema,
+  SvCantonBftConfig,
+  SvCantonBftConfigSchema,
   SvMediatorConfig,
   SvMediatorConfigSchema,
   SvSequencerConfig,
@@ -26,11 +31,11 @@ import {
 } from './physicalSynchronizerConfig';
 import { CatchupTestSchema } from './testing';
 
+// TODO(#7741): remove once mainnet is on >= 0.10.2
 const SvCometbftConfigSchema = z
   .object({
     nodeId: z.string().optional(),
     validatorKeyAddress: z.string().optional(),
-    // defaults to {svName}-cometbft-keys if not set
     keysGcpSecret: z.string().optional(),
     enableStateSync: z.boolean().optional(),
     resources: K8sResourceSchema,
@@ -41,11 +46,10 @@ const SvCometbftConfigSchema = z
         ttlSeconds: z.number().optional(),
       })
       .optional(),
-    // Ad-hoc Helm values to be merged (nested) into the values passed to the splice-cometbft chart.
-    // Values provided here override values computed by pulumi for the same nested key.
     additionalHelmValues: z.record(z.string(), z.any()).optional(),
   })
   .strict();
+
 const CantonPruningSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -58,6 +62,7 @@ const SvParticipantConfigSchema = z
   .object({
     kms: KmsConfigSchema.optional(),
     bftSequencerConnection: z.boolean().optional(),
+    enableKeyDownload: z.boolean().optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
@@ -82,7 +87,7 @@ const SvAppConfigSchema = z
     auth0: Auth0ConfigSchema.optional(),
     // defaults to {svName}-id if not set
     svIdKeyGcpSecret: z.string().optional(),
-    // defaults to {svName}-cometbft-governance-key if not set
+    // TODO(#7741): remove once mainnet is on >= 0.10.2
     cometBftGovernanceKeyGcpSecret: z.string().optional(),
     permissionedSynchronizer: z.boolean().optional(),
     // Map of package name -> list of versions to explicitly unvet
@@ -93,22 +98,49 @@ const SvAppConfigSchema = z
 const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
 });
+
 export type BulkStorageConfig = z.infer<typeof BulkStorageConfigSchema>;
+
+// 1. Extract ScanBigQueryConfigSchema to validate all Datastream settings.
+//    All new fields are optional to ensure existing deployments do not fail parsing.
+const SECONDS_PER_DAY = 24 * 3600;
+export const ScanBigQueryConfigSchema = z
+  .object({
+    dataset: z.string(),
+    prefix: z.string(),
+    functionsDataset: z.string().optional(),
+    silverDataset: z.string().optional(),
+    goldDataset: z.string().optional(),
+    enableLegacyDatastream: z.boolean().default(true),
+    enableStagProdDatastream: z.boolean().default(false),
+    legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    retentionPeriodSeconds: z
+      .number()
+      .min(3 * SECONDS_PER_DAY, {
+        message: 'Value must be at least 3 days (259,200 seconds)',
+      })
+      .refine(v => v % SECONDS_PER_DAY === 0, {
+        message: 'Value must be an exact number of days, expressed in seconds',
+      })
+      .default(7 * SECONDS_PER_DAY),
+    flywayMigrationToWaitFor: FlywayMigrationToWaitForSchema,
+  })
+  .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
+
+// 2. Single source of truth: infer the TypeScript type directly from the Zod schema
+export type ScanBigQueryConfig = z.infer<typeof ScanBigQueryConfigSchema>;
+// 3. Update ScanAppConfigSchema to reference the extracted sub-schema
 const ScanAppConfigSchema = z
   .object({
-    bigQuery: z
-      .object({
-        dataset: z.string(),
-        prefix: z.string(),
-        functionsDataset: z.string().optional(),
-      })
-      .optional(),
+    bigQuery: ScanBigQueryConfigSchema.optional(),
     bulkStorage: BulkStorageConfigSchema.optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     resources: K8sResourceSchema,
   })
   .strict();
+
 const SvValidatorAppConfigSchema = z
   .object({
     walletUser: z.string().optional(),
@@ -124,7 +156,7 @@ const SvValidatorAppConfigSchema = z
     resources: K8sResourceSchema,
   })
   .and(ValidatorAppConfigSchema);
-// https://docs.cometbft.com/main/explanation/core/running-in-production
+// // TODO(#7741): remove once mainnet is on >= 0.10.2
 const CometbftLogLevelSchema = z.enum(['info', 'error', 'debug', 'none']);
 // things here are declared optional even when they aren't, to allow partial overrides of defaults
 // TODO(DACH-NY/canton-network-internal#4859) the above is no longer true since defaults were removed.
@@ -133,10 +165,12 @@ const SingleSvConfigSchema = z
   .object({
     publicName: z.string().optional(),
     subdomain: z.string().optional(),
+    // TODO(#7741): remove, unused
     cometbft: SvCometbftConfigSchema.optional(),
     participant: SvParticipantConfigSchema.optional(),
     sequencer: SvSequencerConfigSchema.prefault({}),
     mediator: SvMediatorConfigSchema.prefault({}),
+    cantonBft: SvCantonBftConfigSchema.optional(),
     physicalSynchronizerOverrides: PhysicalSynchronizersConfigOverridesSchema.prefault({}),
     appsPg: AppsPgConfigSchema.optional(),
     svApp: SvAppConfigSchema.optional(),
@@ -144,6 +178,7 @@ const SingleSvConfigSchema = z
     validatorApp: SvValidatorAppConfigSchema.optional(),
     pruning: z
       .object({
+        // TODO(#7741): remove, unused
         cometbft: z
           .object({
             retainBlocks: z.number(),
@@ -173,32 +208,42 @@ const SingleSvConfigSchema = z
         // Falls back to `apiRequestLogLevel` when not specified
         cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
+        // TODO(#7741): remove, unused
         cometbftLogLevel: CometbftLogLevelSchema.optional(),
         cometbftExtraLogLevelFlags: z.string().optional(),
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
+    topologyKeyMonitor: TopologyKeyMonitorConfigSchema.optional(),
     testing: z.object({ catchup: CatchupTestSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })
   .strict()
-  .transform(({ physicalSynchronizerOverrides, sequencer, mediator, ...svConfig }) => {
+  .transform(({ physicalSynchronizerOverrides, sequencer, mediator, cantonBft, ...svConfig }) => {
     // Implicit config merging is confusing but for now I don't really see a better way of introducting these overrides.
     // Perhaps a proper revisit of the synchronizerMigration config structure will lead to a better solution here.
     const physicalSynchronizers = DecentralizedSynchronizerUpgradeConfig.allMigrations.map(
-      migration => [
-        migration.id,
-        {
-          mediator: mergeConfigFragments(
-            mediator,
-            physicalSynchronizerOverrides[migration.id]?.mediator || {}
-          ) as SvMediatorConfig,
-          sequencer: mergeConfigFragments(
-            sequencer,
-            physicalSynchronizerOverrides[migration.id]?.sequencer || {}
-          ) as SvSequencerConfig,
-        },
-      ]
+      migration => {
+        const mergedSequencer = mergeConfigFragments(
+          sequencer,
+          physicalSynchronizerOverrides[migration.id]?.sequencer || {}
+        ) as SvSequencerConfig;
+        return [
+          migration.id,
+          {
+            mediator: mergeConfigFragments(
+              mediator,
+              physicalSynchronizerOverrides[migration.id]?.mediator || {}
+            ) as SvMediatorConfig,
+            sequencer: mergedSequencer,
+            cantonBft: mergeConfigFragments(
+              _.pick(mergedSequencer, ['cloudSql', 'splicePostgres']),
+              cantonBft || {},
+              physicalSynchronizerOverrides[migration.id]?.cantonBft || {}
+            ) as SvCantonBftConfig,
+          },
+        ];
+      }
     );
     return {
       ...svConfig,
@@ -226,12 +271,11 @@ export const configForSv = (svName: string): SingleSvConfiguration => {
 
 export const allSvsConfiguration: SingleSvConfiguration[] = allConfiguredSvs.map(sv => {
   const svConfig = configForSv(sv);
-  console.error(
-    `Loaded ${sv} config`,
-    util.inspect(svConfig, {
+  void pulumi.log.debug(
+    `Loaded ${sv} config ${util.inspect(svConfig, {
       depth: null,
       maxStringLength: null,
-    })
+    })}`
   );
   return svConfig;
 });

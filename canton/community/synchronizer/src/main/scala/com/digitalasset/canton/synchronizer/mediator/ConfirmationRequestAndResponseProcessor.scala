@@ -19,6 +19,7 @@ import com.digitalasset.canton.crypto.{
 }
 import com.digitalasset.canton.data.{CantonTimestamp, ViewConfirmationParameters, ViewType}
 import com.digitalasset.canton.error.MediatorError
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{
   FlagCloseable,
   FutureUnlessShutdown,
@@ -33,11 +34,11 @@ import com.digitalasset.canton.sequencing.{HandlerResult, UnthrottledAsync}
 import com.digitalasset.canton.synchronizer.mediator.store.MediatorState
 import com.digitalasset.canton.time.SynchronizerTimeTracker
 import com.digitalasset.canton.topology.*
+import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import com.digitalasset.canton.util.*
 import com.digitalasset.canton.util.EitherUtil.RichEither
 import com.digitalasset.canton.util.ShowUtil.*
-import com.digitalasset.canton.version.ProtocolVersion
 import com.google.common.annotations.VisibleForTesting
 import io.opentelemetry.api.trace.Tracer
 import org.slf4j.event.Level
@@ -93,14 +94,25 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
       event: MediatorEvent
   )(implicit traceContext: TraceContext): HandlerResult = {
     val requestTimestamp = event.requestId.unwrap
+    // No topology state exists at or before the initial topology sequencing time, so a request id
+    // in that range can never be serviced. Note that topology snapshots use a strict
+    // `validFrom < ts` check, which makes both `MinValue` and its immediate successor unserviceable.
+    val minimumRequestTimestamp = SignedTopologyTransaction.InitialTopologySequencingTime
     if (requestTimestamp > event.sequencingTimestamp) {
       val error = MediatorError.MalformedMessage.Reject(
         s"Received a mediator message for request $requestTimestamp with earlier sequencing time ${event.sequencingTimestamp}. Discarding the message."
       )
       error.report()
       HandlerResult.done
+    } else if (requestTimestamp <= minimumRequestTimestamp) {
+      val error = MediatorError.MalformedMessage.Reject(
+        s"Received a mediator message for request $requestTimestamp at or before the synchronizer's initial topology sequencing time $minimumRequestTimestamp. Discarding the message."
+      )
+      error.report()
+      HandlerResult.done
     } else {
       val synchronousResult: HandlerResult = for {
+        // We validate the confirmation request using the sequenced timestamp, which in this case is the `requestId` timestamp.
         snapshot <- crypto.ips.awaitSnapshot(requestTimestamp)
 
         synchronizerParameters <- snapshot
@@ -145,7 +157,6 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
                 counter,
                 responseTimestamp,
                 responses,
-                topologyTimestamp,
                 recipients,
               ) =>
             HandlerResult.asynchronousUnit(
@@ -156,7 +167,6 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
                   participantResponseDeadline,
                   decisionTime,
                   responses,
-                  topologyTimestamp,
                   recipients,
                 ),
                 "process response",
@@ -247,6 +257,7 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
           span.setAttribute("counter", counter.toString)
 
           for {
+            // We validate the confirmation request using the sequenced timestamp, which in this case is the `requestId` timestamp.
             snapshot <- crypto.awaitSnapshot(requestId.unwrap)
 
             unitOrVerdictO <- validateRequest(
@@ -326,7 +337,13 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
                       decisionTime,
                     )
                   _ <- mediatorState.add(
-                    FinalizedResponse(requestId, request, requestId.unwrap, verdict)(traceContext)
+                    FinalizedResponse(
+                      requestId,
+                      request,
+                      requestId.unwrap,
+                      verdict,
+                      firstResponseReceived = None,
+                    )(traceContext)
                   )
                 } yield UnthrottledAsync.immediate // Already persisted above; nothing more to wait for
 
@@ -714,7 +731,6 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
       participantResponseDeadline: CantonTimestamp,
       decisionTime: CantonTimestamp,
       signedResponses: SignedProtocolMessage[ConfirmationResponses],
-      topologyTimestamp: Option[CantonTimestamp],
       recipients: Recipients,
   )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
     withSpan("ConfirmationRequestAndResponseProcessor.processResponse") {
@@ -745,7 +761,7 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
 
         (for {
           _ <-
-            if (psid.protocolVersion >= ProtocolVersion.v35 && mediatorGroupRecipients.sizeIs > 1) {
+            if (mediatorGroupRecipients.sizeIs > 1) {
               val error = MediatorError.MalformedMessage
                 .Reject(
                   s"Request ${responses.requestId}, sender ${responses.sender}: More than one mediator group in the recipients: $mediatorGroupRecipients. Discarding..."
@@ -757,17 +773,9 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
               OptionT.liftF(FutureUnlessShutdown.failed(grpcError))
             } else OptionT.some[FutureUnlessShutdown](())
 
-          snapshot <- OptionT.liftF(crypto.awaitSnapshot(responses.requestId.unwrap))
-          _ <- signedResponses
-            .verifySignature(snapshot, responses.sender)
-            .leftMap(err =>
-              MediatorError.MalformedMessage
-                .Reject(
-                  s"$psid (timestamp: $ts): invalid signature from ${responses.sender} with $err"
-                )
-                .report()
-            )
-            .toOption
+          // The checks below do not depend on the topology state, so they run before the topology
+          // snapshot is queried at the sender-supplied request timestamp. Any of them discards a
+          // message that we would not act upon anyway.
           _ <-
             if (signedResponses.psid == psid)
               OptionT.some[FutureUnlessShutdown](())
@@ -788,42 +796,21 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
               )
               OptionT.none[FutureUnlessShutdown, Unit]
             }
-          _ <- {
 
-            if (psid.protocolVersion >= ProtocolVersion.v35) {
-              // Starting from v35, we reject messages with topology timestamp set
-              if (topologyTimestamp.isEmpty)
-                OptionT.some[FutureUnlessShutdown](())
-              else {
-                MediatorError.MalformedMessage
-                  .Reject(
-                    s"Request ${responses.requestId}, sender ${responses.sender}: Discarding confirmation response because the topology timestamp is non-empty."
-                  )
-                  .report()
-                OptionT.none[FutureUnlessShutdown, Unit]
-              }
-            } else {
-              // To ensure that a mediator group address is resolved in the same way as for the request
-              // we require that the topology timestamp on the response submission request is set to the
-              // request's sequencing time. The sequencer communicates this timestamp to the client
-              // via the timestamp of signing key.
-              if (topologyTimestamp.contains(responses.requestId.unwrap))
-                OptionT.some[FutureUnlessShutdown](())
-              else {
-                MediatorError.MalformedMessage
-                  .Reject(
-                    s"Request ${responses.requestId}, sender ${responses.sender}: Discarding confirmation response because the topology timestamp is not set to the request id [$topologyTimestamp]"
-                  )
-                  .report()
-                OptionT.none[FutureUnlessShutdown, Unit]
-              }
-            }
-          }
+          snapshot <- OptionT.liftF(crypto.awaitSnapshot(responses.requestId.unwrap))
+          _ <- signedResponses
+            .verifySignature(snapshot, responses.sender)
+            .leftMap(err =>
+              MediatorError.MalformedMessage
+                .Reject(
+                  s"$psid (timestamp: $ts): invalid signature from ${responses.sender} with $err"
+                )
+                .report()
+            )
+            .toOption
 
           responseAggregation <- mediatorState.fetch(responses.requestId).orElse {
-            val logErrorOnUnknownRequestIdF =
-              if (psid.protocolVersion >= ProtocolVersion.v35) isInGroup(snapshot)
-              else OptionT.some[FutureUnlessShutdown](true)
+            val logErrorOnUnknownRequestIdF = isInGroup(snapshot)
 
             // This can happen as part of an attack.
             val cause =

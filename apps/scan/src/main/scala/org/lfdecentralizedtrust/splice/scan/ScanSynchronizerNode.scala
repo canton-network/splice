@@ -8,7 +8,7 @@ import org.lfdecentralizedtrust.splice.scan.sequencer.SequencerTrafficClient
 
 final class ScanSynchronizerNode(
     override val sequencerAdminConnection: SequencerAdminConnection,
-    val sequencerTrafficClient: Option[SequencerTrafficClient],
+    val sequencerTrafficClient: SequencerTrafficClient,
 ) extends SynchronizerNode(sequencerAdminConnection)
     with AutoCloseable {
   override def close(): Unit = {

@@ -36,7 +36,7 @@ on:
         default: "35"
 
 permissions:
-  id-token: write # Required for GCP Workload Identity for failure notifications
+  id-token: write # Required for GCP Workload Identity for failure notifications # zizmor: ignore[excessive-permissions]
   contents: read
   pull-requests: read # Required for the static tests
   issues: read # Required for the static tests
@@ -56,6 +56,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           # Checkout the PR head commit to get the commit message first
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: "recursive"
@@ -67,12 +68,18 @@ jobs:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Cancel if not opted in
         shell: bash
+        env:
+          STATIC_SKIP: ${{ steps.static_only.outputs.skip }}
+          API_URL: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           last_commit_msg=$(git log -1 --pretty=%B)
           echo "Last commit message: $last_commit_msg"
-          if [[ $last_commit_msg != *"[ci]"* ]] && [[ "${{ steps.static_only.outputs.skip }}" == "false" ]] ; then
+          if [[ $last_commit_msg != *"[ci]"* ]] && [[ "$STATIC_SKIP" == "false" ]] ; then
             echo "Cancelling the entire workflow because the current commit does not opt in for CI."
-            curl -fsSL -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+            curl -fsSL -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${API_URL}/repos/${REPO}/actions/runs/${RUN_ID}/cancel"
           else
             echo "Current commit opts in, letting it run."
           fi
@@ -102,7 +109,7 @@ jobs:
       runs_on: self-hosted-k8s-large
       test_names_file: 'test-full-class-names-sim-time.log'
       start_canton_options: -s
-      parallelism: 4
+      parallelism: 6
       test_name: simtime
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
@@ -115,8 +122,23 @@ jobs:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-resource-intensive.log'
       start_canton_options: -w
-      parallelism: 2
+      parallelism: 1
       test_name: resource-intensive
+      commit_sha: ${{ inputs.commit_sha }}
+      daml_base_version: ${{ inputs.daml_base_version }}
+      protocol_version: ${{ inputs.protocol_version }}
+    secrets: inherit
+
+  scala_test_key_download:
+    uses: ./.github/workflows/build.scala_test.yml
+    with:
+      # x-large because of SvReonboardingIntegrationTest, which starts additional Canton instances
+      runs_on: self-hosted-k8s-x-large
+      test_names_file: 'test-full-class-names-key-download.log'
+      start_canton_options: -wk
+      parallelism: 1
+      test_name: key-download
+      with_gcp_creds: true
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
       protocol_version: ${{ inputs.protocol_version }}
@@ -140,7 +162,8 @@ jobs:
     with:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-lsu.log'
-      start_canton_options: -w
+      # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
+      start_canton_options: -wk
       parallelism: 1
       test_name: logical-sync-upgrade
       commit_sha: ${{ inputs.commit_sha }}
@@ -153,23 +176,10 @@ jobs:
     with:
       runs_on: self-hosted-k8s-x-large
       test_names_file: 'test-full-class-names-roll-forward-lsu.log'
-      start_canton_options: -w
+      # -k: LSU exports the sequencer and mediator keys, which run in the same Canton process as the participants
+      start_canton_options: -wk
       parallelism: 2
       test_name: roll-forward-lsu
-      commit_sha: ${{ inputs.commit_sha }}
-      daml_base_version: ${{ inputs.daml_base_version }}
-      protocol_version: ${{ inputs.protocol_version }}
-    secrets: inherit
-
-  scala_test_with_cometbft:
-    uses: ./.github/workflows/build.scala_test_with_cometbft.yml
-    # skip for external contributors (fork PRs) as we pull the cometbft image from artifactory.
-    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
-    with:
-      runs_on: self-hosted-k8s-medium
-      test_names_file: "test-cometbft-full-class-names.log"
-      parallelism: 1
-      test_name: cometbft
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
       protocol_version: ${{ inputs.protocol_version }}
@@ -180,7 +190,7 @@ jobs:
     with:
       runs_on: self-hosted-k8s-medium
       test_names_file: 'test-full-class-names-signatures.log'
-      start_canton_options: -B "scripts/bootstrap/bootstrap-canton-with-unsigned-keys.sc"
+      start_canton_options: -w -B "scripts/bootstrap/bootstrap-canton-with-unsigned-keys.sc"
       parallelism: 1
       test_name: signatures
       with_gcp_creds: false
@@ -194,12 +204,11 @@ jobs:
     with:
       runs_on: self-hosted-k8s-large
       test_names_file: 'test-full-class-names.log'
-      start_canton_options: -we
+      start_canton_options: -w
       # TODO(DACH-NY/canton-network-node#10912) Investigate why things got slower
       parallelism: 10
       test_name: wall-clock-time
       with_gcp_creds: true
-      pre_sbt_cmd: "export SPLICE_USE_CANTON_BFT_SEQUENCER=1"
       commit_sha: ${{ inputs.commit_sha }}
       daml_base_version: ${{ inputs.daml_base_version }}
       protocol_version: ${{ inputs.protocol_version }}
@@ -208,7 +217,7 @@ jobs:
   scala_test_frontend_wall_clock_time:
     uses: ./.github/workflows/build.scala_test.yml
     with:
-      runs_on: self-hosted-k8s-x-large
+      runs_on: self-hosted-k8s-large
       test_names_file: 'test-full-class-names-frontend.log'
       start_canton_options: -w
       parallelism: 3
@@ -304,8 +313,20 @@ jobs:
     with:
       commit_sha: ${{ inputs.commit_sha }}
 
+  python_tests:
+    uses: ./.github/workflows/build.python_tests.yml
+    secrets: inherit
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+
   docs:
     uses: ./.github/workflows/build.docs.yml
+    secrets: inherit
+    with:
+      commit_sha: ${{ inputs.commit_sha }}
+
+  bundle_smoke_test:
+    uses: ./.github/workflows/build.bundle_smoke_test.yml
     secrets: inherit
     with:
       commit_sha: ${{ inputs.commit_sha }}
@@ -332,10 +353,10 @@ jobs:
     - daml_test
     - scala_test_sim_time
     - scala_test_resource_intensive
+    - scala_test_key_download
     - scala_test_record_time_tolerance
     - scala_test_logical_sync_upgrade
     - scala_test_roll_forward_lsu
-    - scala_test_with_cometbft
     - scala_test_signatures
     - scala_test_wall_clock_time
     - scala_test_frontend_wall_clock_time
@@ -347,12 +368,15 @@ jobs:
     - scala_test_without_canton
     - ui_tests
     - ts_cli_tests
+    - python_tests
     - docs
+    - bundle_smoke_test
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: true # needed to fetch HEAD commit in later step
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check if static only
@@ -362,26 +386,30 @@ jobs:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Handle [force] and [static] labels
         shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATIC_SKIP: ${{ steps.static_only.outputs.skip }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          git fetch origin ${{ github.event.pull_request.head.sha }}
-          last_commit_msg=$(git log -1 --pretty=%B ${{ github.event.pull_request.head.sha }})
+          git fetch origin "$HEAD_SHA"
+          last_commit_msg=$(git log -1 --pretty=%B "$HEAD_SHA")
           echo "Last commit message: $last_commit_msg"
           if [[ $last_commit_msg == *"[force]"* ]]; then
             echo "Skipping the check for job success because the current commit opts in for a forced run."
             echo "FORCE=true" >> "$GITHUB_ENV"
-          elif [[ "${{ steps.static_only.outputs.skip }}" == "true" ]]; then
+          elif [[ "$STATIC_SKIP" == "true" ]]; then
             echo "Only static tests are required"
             # shellcheck disable=SC2129
             echo "FORCE=false" >> "$GITHUB_ENV"
             echo "JOBS<<EOF" >> "$GITHUB_ENV"
-            echo '${{ toJSON(needs) }}' | jq '{"docs", "static_tests", "deployment_test"}' >> "$GITHUB_ENV"
+            echo "$NEEDS_JSON" | jq '{"docs", "static_tests", "deployment_test"}' >> "$GITHUB_ENV"
             echo "EOF" >> "$GITHUB_ENV"
           else
             echo "Checking if all jobs succeeded."
             # shellcheck disable=SC2129
             echo "FORCE=false" >> "$GITHUB_ENV"
             echo "JOBS<<EOF" >> "$GITHUB_ENV"
-            echo '${{ toJSON(needs) }}' >> "$GITHUB_ENV"
+            echo "$NEEDS_JSON" >> "$GITHUB_ENV"
             echo "EOF" >> "$GITHUB_ENV"
           fi
           echo "env file: $(cat "$GITHUB_ENV")"
@@ -390,4 +418,4 @@ jobs:
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
           jobs: ${{ env.JOBS }}
-          allowed-skips: scala_test_with_cometbft, scala_test_docker_compose, scala_test_local_net
+          allowed-skips: scala_test_docker_compose, scala_test_local_net, bundle_smoke_test

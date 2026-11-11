@@ -30,6 +30,9 @@
     "serviceAccountName": {
       "type": "string"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "imageName": {
       "type": "string"
     },
@@ -70,35 +73,6 @@
     }
   },
   "allOf": [
-    {
-      "if": {
-        "properties": {
-          "cometbft": {
-            "properties": {
-              "enabled": {
-                "const": "true"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "cometbft": {
-            "type": "object",
-            "required": ["connectionUri"],
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              },
-              "connectionUri": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
-    },
     {
       "oneOf": [
         {
@@ -282,9 +256,6 @@
             },
             "skipInitialization": {
                 "type": "boolean"
-            },
-            "enableBftSequencer": {
-                "type": "boolean"
             }
           }
         },
@@ -314,8 +285,12 @@
         },
         "joinWithKeyOnboarding": {
           "type": "object",
+          "required": ["sponsorApiUrl", "sponsorScanUrl"],
           "properties": {
             "sponsorApiUrl": {
+              "type": "string"
+            },
+            "sponsorScanUrl": {
               "type": "string"
             }
           }
@@ -580,6 +555,9 @@
         "tolerations": {
           "type": "array"
         },
+        "priorityClassName": {
+          "type": "string"
+        },
         "livenessProbeInitialDelaySeconds": {
           "type": "integer",
           "minimum": 0
@@ -653,24 +631,6 @@
             },
             "pruningInterval": {
               "type": "string"
-            }
-          }
-        },
-        "enableBftSequencer": {
-          "type": "boolean"
-        },
-        "cometBFT": {
-          "type": "object",
-          "required": ["enabled"],
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "connectionUri": {
-              "type": "string"
-            },
-            "externalGovernanceKey": {
-              "type": "boolean"
             }
           }
         }

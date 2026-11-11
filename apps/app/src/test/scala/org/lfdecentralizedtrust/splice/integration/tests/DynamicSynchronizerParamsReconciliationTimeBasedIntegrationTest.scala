@@ -1,6 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.config.{NonNegativeFiniteDuration, PositiveFiniteDuration}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
@@ -23,7 +23,12 @@ class DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest
           svApps = config.svApps +
             (InstanceName.tryCreate("sv1Local") ->
               config
-                .svApps(InstanceName.tryCreate(s"sv1"))) +
+                .svApps(InstanceName.tryCreate(s"sv1"))
+                .copy(
+                  // Non-default value (Canton's default is 2min) to check that the
+                  // reconciliation trigger applies it to the synchronizer.
+                  setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(4)
+                )) +
             (InstanceName.tryCreate("sv1") ->
               config
                 .svApps(InstanceName.tryCreate(s"sv1"))
@@ -60,6 +65,12 @@ class DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest
         .trafficControl
         .getOrElse(throw new RuntimeException("Traffic control parameters not found"))
         .freeConfirmationResponses shouldBe false
+      // FoundDso does not set the submission window size, so bootstrapping leaves it at Canton's default
+      sv1Backend.participantClient.topology.synchronizer_parameters
+        .get_dynamic_synchronizer_parameters(synchronizerId)
+        .trafficControl
+        .getOrElse(throw new RuntimeException("Traffic control parameters not found"))
+        .setBalanceRequestSubmissionWindowSize shouldBe PositiveFiniteDuration.ofMinutes(2)
       sv1Backend.stop()
 
       sv1LocalBackend.startSync()
@@ -76,6 +87,12 @@ class DynamicSynchronizerParamsReconciliationTimeBasedIntegrationTest
           .trafficControl
           .getOrElse(throw new RuntimeException("Traffic control parameters not found"))
           .freeConfirmationResponses shouldBe true
+        // sv1Local is configured with a non-default window size which the trigger applies.
+        sv1Backend.participantClient.topology.synchronizer_parameters
+          .get_dynamic_synchronizer_parameters(synchronizerId)
+          .trafficControl
+          .getOrElse(throw new RuntimeException("Traffic control parameters not found"))
+          .setBalanceRequestSubmissionWindowSize shouldBe PositiveFiniteDuration.ofMinutes(4)
       }
 
       // We go slightly above 48h as time is not actually completely still in simtime, the microseconds still advance.

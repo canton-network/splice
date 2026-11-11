@@ -16,7 +16,9 @@ set:
   # Things we need just to pass the schema
   sequencer:
     driver:
-      type: cometbft
+      type: cantonbft
+      externalAddress: "sequencer.example.com"
+      externalPort: 5010
 tests:
   - it: "sets labels as expected"
     documentSelector:
@@ -270,7 +272,7 @@ tests:
             secretName: custom-pg-secret
             databaseName: custom_bft_db
             user: custom-user
-            initImageName: "postgres:14"
+            initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
     documentSelector:
       path: kind
       value: Deployment
@@ -306,7 +308,7 @@ tests:
           path: spec.template.spec.initContainers[1]
           content:
             name: pg-init-bft-driver
-            image: postgres:14
+            image: postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
             env:
               - name: PGPASSWORD
                 valueFrom:
@@ -314,29 +316,13 @@ tests:
                     key: postgresPassword
                     name: custom-pg-secret
 
-  - it: "allows setting cometbft sequencer image and primary initImage"
-    set:
-      imageRepo: "secure-registry.example.com"
-      sequencer.cometbft.imageName: "custom-cometbft-sequencer"
-      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
-    documentSelector:
-      path: kind
-      value: Deployment
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='sequencer')].image
-          pattern: "^secure-registry\\.example\\.com/custom-cometbft-sequencer:"
-      - equal:
-          path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-primary"
-
-  - it: "allows setting standard sequencer image and initImages for non-cometbft driver"
+  - it: "allows setting sequencer image and initImages"
     set:
       sequencer.driver.type: "cantonbft"
       imageRepo: "secure-registry.example.com"
       sequencer.imageName: "custom-standard-sequencer"
-      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:14-primary"
-      sequencer.driver.persistence.initImageName: "secure-registry.example.com/postgres:14-driver"
+      sequencer.persistence.initImageName: "secure-registry.example.com/postgres:18-primary"
+      sequencer.driver.persistence.initImageName: "secure-registry.example.com/postgres:18-driver"
       sequencer.driver.persistence.host: "dummy-host"
       sequencer.driver.persistence.databaseName: "dummy_db"
     documentSelector:
@@ -348,14 +334,14 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-standard-sequencer:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-primary"
+          value: "secure-registry.example.com/postgres:18-primary"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init-bft-driver')].image
-          value: "secure-registry.example.com/postgres:14-driver"
+          value: "secure-registry.example.com/postgres:18-driver"
 
   - it: "allows overriding sequencer base database password with raw strings"
     set:
-      sequencer.driver.type: "postgres"
+      sequencer.driver.type: "cantonbft"
       sequencer.driver.address: "mock-driver-address"
       sequencer.persistence.secretOverrides.postgresPassword: "vault:kv/data/sequencer/postgres-password"
     documentSelector:
@@ -364,9 +350,6 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='CANTON_DOMAIN_POSTGRES_PASSWORD')].value
-          pattern: "vault:kv/data/sequencer/postgres-password"
-      - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='SEQUENCER_DRIVER_DATABASE_PASSWORD')].value
           pattern: "vault:kv/data/sequencer/postgres-password"
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value
@@ -540,3 +523,62 @@ tests:
             capabilities:
               drop:
                 - ALL
+
+  - it: "uses HTTP health probes by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health/live
+            port: 5071
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /health/ready
+            port: 5071
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.sequencers.sequencer.monitoring.http-health-server.port = 5071
+
+  - it: "uses gRPC health probes when httpHealthProbes is disabled"
+    set:
+      httpHealthProbes: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.grpc
+          value:
+            port: 5061
+            service: liveness
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.grpc
+          value:
+            port: 5061
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
+            value: canton.sequencers.sequencer.monitoring.http-health-server.port = 5071
+
+  - it: "fails when the sequencer driver type is not cantonbft"
+    set:
+      sequencer.driver.type: "cometbft"
+    asserts:
+      - failedTemplate:
+          errorPattern: "at '/sequencer/driver/type': value must be 'cantonbft'"
+

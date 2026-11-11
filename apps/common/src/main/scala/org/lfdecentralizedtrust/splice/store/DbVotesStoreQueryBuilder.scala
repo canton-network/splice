@@ -5,8 +5,10 @@ package org.lfdecentralizedtrust.splice.store
 
 import cats.data.NonEmptyList
 import com.daml.ledger.javaapi.data.codegen.ContractId
+import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.logging.NamedLogging
+import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.VoteRequest
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
@@ -140,19 +142,21 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
   */
 trait DbVotesAcsStoreQueryBuilder extends AcsQueries with LimitHelpers with NamedLogging {
 
+  implicit protected def dbProfile: DbStorage.Profile
+
   def listVoteRequestsByTrackingCidQuery(
       acsTableName: String,
       acsStoreId: AcsStoreId,
       domainMigrationId: Long,
       trackingCidColumnName: String,
-      trackingCids: Seq[VoteRequest.ContractId],
+      trackingCids: NonEmpty[Seq[VoteRequest.ContractId]],
       limit: Limit,
   ): SqlStreamingAction[Vector[
     AcsQueries.SelectFromAcsTableResult
   ], AcsQueries.SelectFromAcsTableResult, Effect.Read] = {
-    val cids: Seq[ContractId[?]] = trackingCids
+    val cids: NonEmpty[Seq[ContractId[?]]] = trackingCids
     val voteRequestTrackingCidsSql =
-      inClause(trackingCidColumnName, cids)
+      DbStorage.toInClause(trackingCidColumnName, cids)
     selectFromAcsTable(
       acsTableName,
       acsStoreId,

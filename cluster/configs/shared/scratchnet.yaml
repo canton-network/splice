@@ -3,19 +3,19 @@ cluster:
   nodePools:
     apps:
       zones: '*'
-    additionalApps:
-    # Second, Intel based, pool is supposed to address GCloud compute resource issues.
-    - minNodes: 0
-      # A high max-nodes by default to support large deployments and hard migrations
-      # Should be set to a lower number (currently 8) on CI clusters that do neither of those.
-      maxNodes: 20
-      nodeType: n4-standard-16
+      maxNodes: 40
+      nodeType: c3d-standard-8
+    additionalInfra:
+    - nodeType: c3d-standard-8
+      minNodes: 0
+      maxNodes: 3
       zones: '*'
 infra:
   prometheus:
     retentionDuration: "30d"
     retentionSize: "200GB"
     storageSize: "600Gi"
+  enableSweetSecurity: true
 pulumiProjectConfig:
   default:
     cloudSql:
@@ -26,8 +26,17 @@ validator1:
     maxDuration: "5m"
     retention: "1h" # Keep 1h
   deduplicationDuration: 30m
+  walletGateway:
+    enabled: true
+validators:
+  validator-runbook:
+    participant:
+      # so we can test taking identity dumps from it
+      enableKeyDownload: true
+    walletGateway:
+      enabled: true
 svs:
-  sv-1: !include(scratchnet-sv.yaml) {}
+  sv-1: !include(scratchnet-sv.yaml;$SPLICE_ROOT/cluster/configs/shared/validator-topology-metrics-export.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}
   sv-3: !include(scratchnet-sv.yaml) {}
   sv-4: !include(scratchnet-sv.yaml) {}
@@ -47,9 +56,6 @@ svs:
   sv-da-1: !include(scratchnet-sv.yaml)
     publicName: Digital-Asset-1
     subdomain: sv-1
-    cometbft:
-      nodeId: d825622358065aea3cb3b3479cf64d172675037e
-      validatorKeyAddress: 2D21D8AB2306770E9F93E8BD0E0F07B3E86817D7
     svApp:
       auth0:
         clientId: bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7

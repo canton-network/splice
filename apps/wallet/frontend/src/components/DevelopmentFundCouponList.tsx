@@ -125,6 +125,7 @@ const ActiveCouponsTable: React.FC = () => {
                   <TableCell>Beneficiary</TableCell>
                   <TableCell>Amount</TableCell>
                   <TableCell>Expires At</TableCell>
+                  <TableCell>Mint After</TableCell>
                   <TableCell>Allocation Reason</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
@@ -132,8 +133,8 @@ const ActiveCouponsTable: React.FC = () => {
               <TableBody>
                 {coupons.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      <Typography variant="body2" color="text.secondary">
+                    <TableCell colSpan={7} align="center">
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                         No development fund allocations found
                       </Typography>
                     </TableCell>
@@ -153,6 +154,15 @@ const ActiveCouponsTable: React.FC = () => {
                       <TableCell>
                         <DateDisplay datetime={coupon.expiresAt} format="MMM d, yyyy hh:mm a" />
                       </TableCell>
+                      <TableCell>
+                        {coupon.mintAfter ? (
+                          <DateDisplay datetime={coupon.mintAfter} format="MMM d, yyyy hh:mm a" />
+                        ) : (
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell>{coupon.reason}</TableCell>
                       <TableCell>
                         {coupon.fundManager === primaryParty ? (
@@ -164,7 +174,7 @@ const ActiveCouponsTable: React.FC = () => {
                             Withdraw
                           </Button>
                         ) : (
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                             -
                           </Typography>
                         )}
@@ -177,11 +187,11 @@ const ActiveCouponsTable: React.FC = () => {
           </TableContainer>
 
           {/* Pagination controls */}
-          <Box display="flex" justifyContent="space-between" mt={2}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
             <Button disabled={!hasPreviousPage} onClick={goToPreviousPage}>
               Previous
             </Button>
-            <Typography variant="body2" alignSelf="center">
+            <Typography variant="body2" sx={{ alignSelf: 'center' }}>
               Page {currentPage}
             </Typography>
             <Button disabled={!hasNextPage} onClick={goToNextPage}>
@@ -199,7 +209,7 @@ const ActiveCouponsTable: React.FC = () => {
       >
         <DialogTitle>Withdraw Development Fund Coupon</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             {withdrawError && <Alert severity="error">{withdrawError}</Alert>}
             <Typography variant="body2">
               Please provide a reason for withdrawing this development fund allocation.
@@ -289,7 +299,7 @@ const CouponHistoryTable: React.FC = () => {
               {historyEvents.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center">
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       No history events found
                     </Typography>
                   </TableCell>
@@ -327,11 +337,11 @@ const CouponHistoryTable: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
-        <Box display="flex" justifyContent="space-between" mt={2}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
           <Button disabled={!hasPreviousHistoryPage} onClick={goToPreviousHistoryPage}>
             Previous
           </Button>
-          <Typography variant="body2" alignSelf="center">
+          <Typography variant="body2" sx={{ alignSelf: 'center' }}>
             Page {currentHistoryPage}
           </Typography>
           <Button disabled={!hasNextHistoryPage} onClick={goToNextHistoryPage}>

@@ -38,12 +38,13 @@ jest.mock('./config', () => ({
 jest.mock('@canton-network/splice-pulumi-common', () => ({
   __esModule: true,
   appsAffinityAndTolerations: {},
+  CACHE_GHCR: 'https://dummy-ghcr-mirror.com',
   DOCKER_REPO: 'https://dummy-docker-repo.com',
   HELM_MAX_HISTORY_SIZE: 42,
   GCP_REGION: 'us-central123',
   GCP_ZONE: 'some-wonderful-place',
   imagePullSecretByNamespaceNameForServiceAccount: () => [],
-  infraAffinityAndTolerations: {},
+  infraKubernetesScheduling: {},
   CloudSqlConfigSchema: z.object({ flags: z.record(z.string(), z.string()).default({}) }),
   installPostgresPasswordSecret: () => {
     return { metadata: { name: 'secret' } };

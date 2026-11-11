@@ -7,12 +7,12 @@ import cats.data.EitherT
 import cats.syntax.applicativeError.*
 import cats.syntax.functorFilter.*
 import cats.syntax.parallel.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.LfPartyId
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.error.TransactionRoutingError
 import com.digitalasset.canton.ledger.participant.state.RoutingSynchronizerState
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.topology.client.PartyTopologySnapshotClient
 import com.digitalasset.canton.topology.client.PartyTopologySnapshotClient.PartyInfo
@@ -20,11 +20,28 @@ import com.digitalasset.canton.topology.transaction.ParticipantAttributes
 import com.digitalasset.canton.topology.transaction.ParticipantPermission.Submission
 import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.concurrent.ExecutionContext
 import scala.math.Ordered.orderingToOrdered
 
 import TransactionRoutingError.{TopologyErrors, UnableToQueryTopologySnapshot}
+
+private final case class SynchronizerSuitability(
+    unknownSubmitters: Set[LfPartyId],
+    submittersWithoutSubmissionPermission: Seq[LfPartyId],
+    decentralizedPartiesWithSubmittingParticipant: Seq[LfPartyId],
+) {
+  def isSuitable: Boolean =
+    unknownSubmitters.isEmpty &&
+      submittersWithoutSubmissionPermission.isEmpty &&
+      decentralizedPartiesWithSubmittingParticipant.isEmpty
+
+  def isUnsuitableOnlyDueToDecentralizedParties: Boolean =
+    unknownSubmitters.isEmpty &&
+      submittersWithoutSubmissionPermission.isEmpty &&
+      decentralizedPartiesWithSubmittingParticipant.nonEmpty
+}
 
 class AdmissibleSynchronizersComputation(
     localParticipantId: ParticipantId,
@@ -36,10 +53,16 @@ class AdmissibleSynchronizersComputation(
     *   - submitters have to be hosted on the local participant
     *   - informees have to be hosted on some participant. It is assumed that the participant is
     *     connected to all synchronizers in `connectedSynchronizers`
+    *
+    * @param prescribedSynchronizerO
+    *   The synchronizer the request prescribes, if any. It does not restrict the result, but if
+    *   only a party's freeze keeps it from being admissible, the computation fails with
+    *   FROZEN_PARTIES.
     */
   def forParties(
       submitters: Set[LfPartyId],
       informees: Set[LfPartyId],
+      prescribedSynchronizerO: Option[PhysicalSynchronizerId],
       synchronizerState: RoutingSynchronizerState,
   )(implicit
       ec: ExecutionContext,
@@ -49,7 +72,11 @@ class AdmissibleSynchronizersComputation(
     Map[LfPartyId, Set[ParticipantId]],
   ]]] = {
 
-    def queryPartyTopologySnapshotClient(
+    type PartyInfos = (PartyTopologySnapshotClient, Seq[LfPartyId]) => FutureUnlessShutdown[
+      Map[LfPartyId, PartyInfo]
+    ]
+
+    def queryPartyTopologySnapshotClient(partyInfos: PartyInfos)(
         synchronizerPartyTopologySnapshotClient: (
             PhysicalSynchronizerId,
             PartyTopologySnapshotClient,
@@ -59,9 +86,7 @@ class AdmissibleSynchronizersComputation(
     ]] = {
       val (synchronizerId, partyTopologySnapshotClient) = synchronizerPartyTopologySnapshotClient
       val allParties = submitters.view ++ informees.view
-      partyTopologySnapshotClient
-        .activeParticipantsOfPartiesWithInfo(allParties.toSeq)
-        .attemptT
+      partyInfos(partyTopologySnapshotClient, allParties.toSeq).attemptT
         .map { partyTopology =>
           val partyTopologyWithThresholds = partyTopology
             .filter { case (_, partyInfo) => partyInfo.participants.nonEmpty }
@@ -76,12 +101,15 @@ class AdmissibleSynchronizersComputation(
         }
     }
 
-    def queryTopology(): EitherT[FutureUnlessShutdown, TransactionRoutingError, Map[
+    def queryTopology(
+        partyInfos: PartyInfos
+    ): EitherT[FutureUnlessShutdown, TransactionRoutingError, Map[
       PhysicalSynchronizerId,
       Map[LfPartyId, PartyInfo],
     ]] =
+      // TODO(#33650) - replace with unboundedTraverseFilter, safe because the number of topology snapshots is bounded by the participant's connected synchronizers
       synchronizerState.topologySnapshots.toVector
-        .parTraverseFilter(queryPartyTopologySnapshotClient)
+        .parTraverseFilter(queryPartyTopologySnapshotClient(partyInfos))
         .map(_.toMap)
 
     def ensureAllKnown[A, E](
@@ -170,50 +198,78 @@ class AdmissibleSynchronizersComputation(
         s"Checking whether one synchronizer in ${synchronizersWithAllSubmitters.keys} is suitable for submission"
       )
 
-      // Return true if all submitters are locally hosted with correct permissions
-      def canUseSynchronizer(
+      // Return all reasons why a synchronizer cannot be used, empty reasons means suitable.
+      def unsuitableSynchronizerReason(
           synchronizerId: PhysicalSynchronizerId,
           parties: Map[LfPartyId, PartyInfo],
-      ): Boolean = {
+      ): SynchronizerSuitability = {
         // We keep only the relevant topology (submitter on the local participant)
-        val locallyHostedSubmitters: Map[LfPartyId, (ParticipantAttributes, PositiveInt)] =
+        val locallyHostedSubmitters: Map[LfPartyId, (ParticipantAttributes, PartyInfo)] =
           parties.toSeq.mapFilter { case (party, partyInfo) =>
             for {
               permissions <- partyInfo.participants.get(localParticipantId)
               _ <- Option.when(submitters.contains(party))(())
-            } yield (party, (permissions, partyInfo.threshold))
+            } yield (party, (permissions, partyInfo))
           }.toMap
 
         val unknownSubmitters: Set[LfPartyId] = submitters.diff(locallyHostedSubmitters.keySet)
 
-        val incorrectPermissionSubmitters = locallyHostedSubmitters.toSeq.flatMap {
-          case (party, (permissions, threshold)) =>
-            if (permissions.permission < Submission)
-              List(s"submitter $party has permissions=${permissions.permission}")
-            else if (threshold > PositiveInt.one)
-              List(s"submitter $party has threshold=$threshold")
-            else Nil
-        }
+        /* A party that is hosted with Submission permission on some participant has no signing key of
+         * its own: its submission authorization is created by the submitting participant. Such a party
+         * therefore cannot have a confirmation threshold greater than 1, because a single participant
+         * cannot produce authorization on behalf of several independent participants.
+         * If no hosting participant has Submission permission, the party can only act through external
+         * signing, so this diagnosis does not apply and the generic error is reported instead.
+         */
+        def hasSubmittingParticipant(partyInfo: PartyInfo): Boolean =
+          partyInfo.participants.values.exists(_.permission >= Submission)
 
-        val canUseSynchronizer = unknownSubmitters.isEmpty && incorrectPermissionSubmitters.isEmpty
+        val (decentralizedPartiesWithSubmittingParticipant, submittersWithoutSubmissionPermission) =
+          locallyHostedSubmitters.toSeq.foldLeft(
+            (Seq.empty[LfPartyId], Seq.empty[LfPartyId])
+          ) { case ((decentralizedParties, withoutPermission), (party, (permissions, partyInfo))) =>
+            if (partyInfo.threshold > PositiveInt.one && hasSubmittingParticipant(partyInfo))
+              (decentralizedParties :+ party, withoutPermission)
+            else if (permissions.permission < Submission)
+              (decentralizedParties, withoutPermission :+ party)
+            else (decentralizedParties, withoutPermission)
+          }
 
-        if (!canUseSynchronizer) {
-          val context = Map(
+        val reason = SynchronizerSuitability(
+          unknownSubmitters = unknownSubmitters,
+          submittersWithoutSubmissionPermission = submittersWithoutSubmissionPermission,
+          decentralizedPartiesWithSubmittingParticipant =
+            decentralizedPartiesWithSubmittingParticipant,
+        )
+
+        if (!reason.isSuitable) {
+          val context: Map[String, Any] = Map(
             "unknown submitters" -> unknownSubmitters,
-            "incorrect permissions" -> incorrectPermissionSubmitters,
+            "without submission permission" -> submittersWithoutSubmissionPermission,
+            "submission permission and confirmation threshold > 1" ->
+              decentralizedPartiesWithSubmittingParticipant,
           )
           logger.debug(s"Cannot use synchronizer $synchronizerId: $context")
         }
 
-        canUseSynchronizer
+        reason
       }
 
-      val suitableSynchronizers = for {
-        (synchronizerId, topology) <- synchronizersWithAllSubmitters
-        if canUseSynchronizer(synchronizerId, topology)
-      } yield synchronizerId
+      val (unsuitableReasons, suitableSynchronizerIds) =
+        synchronizersWithAllSubmitters.toSeq.partitionMap { case (synchronizerId, topology) =>
+          val reason = unsuitableSynchronizerReason(synchronizerId, topology)
+          Either.cond(reason.isSuitable, synchronizerId, reason)
+        }
 
-      ensureNonEmpty(suitableSynchronizers.toSet, noSynchronizerWhereAllSubmittersCanSubmit)
+      // Only evaluated if no synchronizer is suitable
+      def noSuitableSynchronizerError: TransactionRoutingError =
+        if (unsuitableReasons.forall(_.isUnsuitableOnlyDueToDecentralizedParties))
+          TopologyErrors.DecentralizedPartyCannotSubmit.Error(
+            unsuitableReasons.flatMap(_.decentralizedPartiesWithSubmittingParticipant).distinct
+          )
+        else noSynchronizerWhereAllSubmittersCanSubmit
+
+      ensureNonEmpty(suitableSynchronizerIds.toSet, noSuitableSynchronizerError)
     }
 
     def commonSynchronizerIds(
@@ -234,34 +290,94 @@ class AdmissibleSynchronizersComputation(
           TopologyErrors.NoSynchronizerOnWhichAllSubmittersCanSubmit.NoSuitableSynchronizer(some)
       }
 
+    type AdmissibleSynchronizers =
+      NonEmpty[Map[PhysicalSynchronizerId, Map[LfPartyId, Set[ParticipantId]]]]
+
+    def admissibleSynchronizers(
+        topology: Map[PhysicalSynchronizerId, Map[LfPartyId, PartyInfo]]
+    ): EitherT[FutureUnlessShutdown, TransactionRoutingError, AdmissibleSynchronizers] = {
+      val knownParties = topology.view.values.map(_.keySet).fold(Set.empty)(_ ++ _)
+      for {
+        _ <- ensureAllSubmittersAreKnown(knownParties)
+        _ <- ensureAllInformeesAreKnown(knownParties)
+
+        synchronizersWithAllSubmitters <- synchronizersWithAllSubmitters(topology)
+        _ = logger.debug(
+          s"Synchronizers with all submitters: ${synchronizersWithAllSubmitters.keySet}"
+        )
+
+        synchronizersWithAllInformees <- synchronizersWithAllInformees(topology)
+        _ = logger.debug(
+          s"Synchronizers with all informees: ${synchronizersWithAllInformees.keySet}"
+        )
+
+        submittersSynchronizerIds <- suitableSynchronizers(synchronizersWithAllSubmitters)
+        informeesSynchronizerIds = synchronizersWithAllInformees.keySet
+        commonSynchronizerIds <- commonSynchronizerIds(
+          submittersSynchronizerIds,
+          informeesSynchronizerIds,
+        )
+      } yield NonEmpty
+        .from(
+          topology.view
+            .filterKeys(commonSynchronizerIds)
+            .mapValues(_.view.mapValues(_.participants.keySet).toMap)
+            .toMap
+        )
+        .getOrElse(sys.error("Unexpected empty result"))
+    }
+
+    /* A frozen party has no hosts, so the checks above report it like a party that is unknown or not
+     * hosted, and the prescribed synchronizer like one that does not host all informees. Fails with
+     * FROZEN_PARTIES if the request could be routed were no party frozen, to the prescribed
+     * synchronizer if there is one. Succeeds otherwise, as the request would also fail after the
+     * freeze ends.
+     */
+    def failIfFreezeIsOnlyCause(
+        topology: Map[PhysicalSynchronizerId, Map[LfPartyId, PartyInfo]]
+    ): EitherT[FutureUnlessShutdown, TransactionRoutingError, Unit] = {
+      def partiesOn(
+          topology: Map[PhysicalSynchronizerId, Map[LfPartyId, PartyInfo]],
+          synchronizerId: PhysicalSynchronizerId,
+      ): Set[LfPartyId] = topology.get(synchronizerId).fold(Set.empty[LfPartyId])(_.keySet)
+
+      val frozenParties = for {
+        topologyIgnoringFreeze <- queryTopology(
+          _.activeParticipantsOfPartiesWithInfoIgnoringFreeze(_)
+        )
+        admissibleIgnoringFreeze <- admissibleSynchronizers(topologyIgnoringFreeze)
+      } yield admissibleIgnoringFreeze.keySet
+        .filter(synchronizerId => prescribedSynchronizerO.forall(_ == synchronizerId))
+        // The two hosting views differ only in that the default one drops all hosts of a frozen party
+        .flatMap(synchronizerId =>
+          partiesOn(topologyIgnoringFreeze, synchronizerId) -- partiesOn(topology, synchronizerId)
+        )
+      EitherT(
+        frozenParties
+          // Routing would also fail were no party frozen, or the topology cannot be queried
+          .getOrElse(Set.empty[LfPartyId])
+          .map(frozen =>
+            Either.cond(
+              frozen.isEmpty,
+              (),
+              TopologyErrors.FrozenParties.Error(frozen): TransactionRoutingError,
+            )
+          )
+      )
+    }
+
     for {
-      topology <- queryTopology()
+      topology <- queryTopology(_.activeParticipantsOfPartiesWithInfo(_))
       _ = logger.debug(s"Topology queried for the following synchronizers: ${topology.keySet}")
-      knownParties = topology.view.values.map(_.keySet).fold(Set.empty)(_ ++ _)
-      _ <- ensureAllSubmittersAreKnown(knownParties)
-      _ <- ensureAllInformeesAreKnown(knownParties)
-
-      synchronizersWithAllSubmitters <- synchronizersWithAllSubmitters(topology)
-      _ = logger.debug(
-        s"Synchronizers with all submitters: ${synchronizersWithAllSubmitters.keySet}"
+      result <- admissibleSynchronizers(topology).leftFlatMap(error =>
+        failIfFreezeIsOnlyCause(topology).subflatMap(_ =>
+          Left[TransactionRoutingError, AdmissibleSynchronizers](error)
+        )
       )
-
-      synchronizersWithAllInformees <- synchronizersWithAllInformees(topology)
-      _ = logger.debug(s"Synchronizers with all informees: ${synchronizersWithAllInformees.keySet}")
-
-      submittersSynchronizerIds <- suitableSynchronizers(synchronizersWithAllSubmitters)
-      informeesSynchronizerIds = synchronizersWithAllInformees.keySet
-      commonSynchronizerIds <- commonSynchronizerIds(
-        submittersSynchronizerIds,
-        informeesSynchronizerIds,
-      )
-    } yield NonEmpty
-      .from(
-        topology.view
-          .filterKeys(commonSynchronizerIds)
-          .mapValues(_.view.mapValues(_.participants.keySet).toMap)
-          .toMap
-      )
-      .getOrElse(sys.error("Unexpected empty result"))
+      _ <-
+        if (prescribedSynchronizerO.forall(result.keySet.contains))
+          EitherT.rightT[FutureUnlessShutdown, TransactionRoutingError](())
+        else failIfFreezeIsOnlyCause(topology)
+    } yield result
   }
 }

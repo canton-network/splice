@@ -7,6 +7,8 @@ import cats.implicits.{catsSyntaxApplicativeByValue as _, *}
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.ledger.javaapi.data.User
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.admin.api.client.data.SequencerConnectionPoolDelaysAccess.*
+import com.digitalasset.canton.admin.api.client.data.SubscriptionLivenessLimitsAccess.*
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.ProcessingTimeout
@@ -25,8 +27,10 @@ import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.cors.scaladsl.CorsDirectives.*
+import org.apache.pekko.http.cors.scaladsl.model.HttpOriginMatcher
 import org.apache.pekko.http.cors.scaladsl.settings.CorsSettings
 import org.apache.pekko.http.scaladsl.model.HttpMethods
+import org.apache.pekko.http.scaladsl.model.headers.HttpOrigin
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.directives.BasicDirectives
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
@@ -85,9 +89,11 @@ import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
 import org.lfdecentralizedtrust.splice.wallet.{ExternalPartyWalletManager, UserWalletManager}
 import org.lfdecentralizedtrust.tokenstandard.allocation.v1.Resource as TokenStandardAllocationV1Resource
 import org.lfdecentralizedtrust.tokenstandard.allocation.v2.Resource as TokenStandardAllocationV2Resource
-import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.Resource as TokenStandardAllocationInstructionResource
+import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.Resource as TokenStandardAllocationInstructionV1Resource
+import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v2.Resource as TokenStandardAllocationInstructionV2Resource
 import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStandardMetadataResource
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionV1Resource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2.Resource as TokenStandardTransferInstructionV2Resource
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
@@ -186,14 +192,13 @@ class ValidatorApp(
                 ValidatorScanConnection.persistScanUrlListBuilder(configProvider),
               )
             }
-            domainMigrationId <- appInitStep("Resolving domain migration id") {
+            _ <- appInitStep("Resolving domain migration id") {
               resolveDomainMigrationId(scanConnection)
             }
             domainConnector = new SynchronizerConnector(
               config,
               participantAdminConnection,
               scanConnection,
-              domainMigrationId,
               retryProvider,
               loggerFactory,
             )
@@ -520,14 +525,10 @@ class ValidatorApp(
     )
   }
 
-  private def withParticipantAdminConnection[T](f: ParticipantAdminConnection => Future[T]) = {
-    val participantAdminConnection = new ParticipantAdminConnection(
-      config.participantClient.adminApi,
-      amuletAppParameters.loggingConfig.api,
-      loggerFactory,
-      metrics.grpcClientMetrics,
-      retryProvider,
-    )
+  private def withParticipantAdminConnection[T](
+      f: ParticipantAdminConnection => Future[T]
+  ) = {
+    val participantAdminConnection = createParticipantAdminConnection()
     f(participantAdminConnection).andThen { _ => participantAdminConnection.close() }
   }
 
@@ -590,13 +591,12 @@ class ValidatorApp(
           this.getClass.getSimpleName,
           loggerFactory,
         )
-      participantAdminConnection = new ParticipantAdminConnection(
-        config.participantClient.adminApi,
-        amuletAppParameters.loggingConfig.api,
-        loggerFactory,
-        metrics.grpcClientMetrics,
-        retryProvider,
-      )
+      // Querying topology updates for all parties on the ledger API requires readAsAnyParty rights.
+      _ <-
+        if (config.automation.topologyMetricsPollingInterval.isDefined)
+          readOnlyLedgerConnection.grantReadAsAnyParty(config.ledgerApiUser)
+        else Future.unit
+      participantAdminConnection = createParticipantAdminConnection()
       participantIdentitiesStore = new NodeIdentitiesStore(
         participantAdminConnection,
         config.participantIdentitiesBackup.map(_ -> clock),
@@ -652,12 +652,14 @@ class ValidatorApp(
         validatorParty = validatorParty,
         dsoParty = dsoParty,
       )
-      store = ValidatorStore(
+      synchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
+      store <- ValidatorStore(
         key,
         storage,
         loggerFactory,
         retryProvider,
         domainMigrationId,
+        synchronizerId,
         participantId,
         config.automation.ingestion,
         config.parameters.defaultLimit,
@@ -680,7 +682,6 @@ class ValidatorApp(
         com.google.protobuf.duration.Duration
           .toJavaProto(DurationConversion.toProto(config.deduplicationDuration.asJavaApproximation))
       )
-      synchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
       cantonIdentifierConfig =
         ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
       _ <- ParticipantInitializer.ensureInitializedWithRotatedOTK(
@@ -765,7 +766,6 @@ class ValidatorApp(
           config,
           participantAdminConnection,
           scanConnection,
-          domainMigrationId,
           retryProvider,
           loggerFactory,
         ),
@@ -774,6 +774,7 @@ class ValidatorApp(
         config.svValidator,
         config.sequencerRequestAmplificationPatience.toInternal,
         config.sequencerConnectionPoolDelays.toInternal,
+        config.subscriptionLivenessLimits.toInternal,
         config.contactPoint,
         initialSynchronizerTime,
         config.maxVettingDelay,
@@ -782,7 +783,7 @@ class ValidatorApp(
         config.parameters.enabledFeatures,
         config.additionalPackagesToUnvet,
         config.domains.global.alias,
-        config.enableDeprecatedTransferCommandSupport,
+        config.supportEmbeddedPartySigningKeys,
         loggerFactory,
         packageVersionSupport,
       )
@@ -866,7 +867,6 @@ class ValidatorApp(
           getAmuletRulesDomain = scanConnection.getAmuletRulesDomain,
           scanConnection = scanConnection,
           participantAdminConnection,
-          packageVersionSupport,
           config,
           clock,
           retryProvider = retryProvider,
@@ -940,8 +940,13 @@ class ValidatorApp(
         loggerFactory,
       )
 
-      route = cors(
+      route = (handleRejections(corsRejectionHandler) & cors(
         CorsSettings(ac)
+          .withAllowedOrigins(
+            config.allowedOrigins.fold[HttpOriginMatcher](HttpOriginMatcher.*)(origins =>
+              HttpOriginMatcher(origins.map(HttpOrigin(_))*)
+            )
+          )
           .withAllowedMethods(
             List(
               HttpMethods.DELETE,
@@ -952,7 +957,7 @@ class ValidatorApp(
             )
           )
           .withExposedHeaders(Seq("traceparent"))
-      ) {
+      )) {
         withTraceContext { implicit traceContext =>
           HttpErrorHandler(loggerFactory)(traceContext) {
             concat(
@@ -986,26 +991,6 @@ class ValidatorApp(
                     },
                 ),
                 pathPrefix("api" / "validator" / "v0" / "scan-proxy") {
-                  TokenStandardAllocationV2Resource.routes(
-                    tokenStandardScanProxyHandler,
-                    operation => {
-                      metrics.httpServerMetrics
-                        .withMetrics("tokenStandardAllocationV2")(operation)
-                        .tflatMap { _ =>
-                          AuthenticationOnlyAuthExtractor(
-                            verifier,
-                            loggerFactory,
-                            OAuthRealms.ScanProxy,
-                          )(
-                            traceContext
-                          )(
-                            operation
-                          )
-                        }
-                    },
-                  )
-                },
-                pathPrefix("api" / "validator" / "v0" / "scan-proxy") {
                   concat(
                     TokenStandardMetadataResource.routes(
                       tokenStandardScanProxyHandler,
@@ -1025,7 +1010,7 @@ class ValidatorApp(
                           }
                       },
                     ),
-                    TokenStandardTransferInstructionResource.routes(
+                    TokenStandardTransferInstructionV1Resource.routes(
                       tokenStandardScanProxyHandler,
                       operation =>
                         metrics.httpServerMetrics
@@ -1042,11 +1027,45 @@ class ValidatorApp(
                             )
                           },
                     ),
-                    TokenStandardAllocationInstructionResource.routes(
+                    TokenStandardTransferInstructionV2Resource.routes(
+                      tokenStandardScanProxyHandler,
+                      operation =>
+                        metrics.httpServerMetrics
+                          .withMetrics("tokenStandardTransferV2")(operation)
+                          .tflatMap { _ =>
+                            AuthenticationOnlyAuthExtractor(
+                              verifier,
+                              loggerFactory,
+                              OAuthRealms.ScanProxy,
+                            )(
+                              traceContext
+                            )(
+                              operation
+                            )
+                          },
+                    ),
+                    TokenStandardAllocationInstructionV1Resource.routes(
                       tokenStandardScanProxyHandler,
                       operation =>
                         metrics.httpServerMetrics
                           .withMetrics("tokenStandardAllocationInstruction")(operation)
+                          .tflatMap { _ =>
+                            AuthenticationOnlyAuthExtractor(
+                              verifier,
+                              loggerFactory,
+                              OAuthRealms.ScanProxy,
+                            )(
+                              traceContext
+                            )(
+                              operation
+                            )
+                          },
+                    ),
+                    TokenStandardAllocationInstructionV2Resource.routes(
+                      tokenStandardScanProxyHandler,
+                      operation =>
+                        metrics.httpServerMetrics
+                          .withMetrics("tokenStandardAllocationInstructionV2")(operation)
                           .tflatMap { _ =>
                             AuthenticationOnlyAuthExtractor(
                               verifier,
@@ -1075,6 +1094,24 @@ class ValidatorApp(
                               operation
                             )
                           },
+                    ),
+                    TokenStandardAllocationV2Resource.routes(
+                      tokenStandardScanProxyHandler,
+                      operation => {
+                        metrics.httpServerMetrics
+                          .withMetrics("tokenStandardAllocationV2")(operation)
+                          .tflatMap { _ =>
+                            AuthenticationOnlyAuthExtractor(
+                              verifier,
+                              loggerFactory,
+                              OAuthRealms.ScanProxy,
+                            )(
+                              traceContext
+                            )(
+                              operation
+                            )
+                          }
+                      },
                     ),
                   )
                 },
@@ -1136,7 +1173,7 @@ class ValidatorApp(
                         )(operation)
                       },
                 )
-              } ++ walletStatusHandler.toList.map { case (walletHandler, walletManager) =>
+              } ++ walletStatusHandler.toList.map { case (walletHandler, _) =>
                 StatusWalletResource.routes(
                   walletHandler,
                   operation =>

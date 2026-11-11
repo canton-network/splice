@@ -1,5 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -10,6 +12,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.Integration
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AnsSubscriptionRenewalPaymentTrigger,
   ExpiredLockedAmuletTrigger,
+  ExpireTransferPreapprovalsTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.ReceiveSvRewardCouponTrigger
 import org.lfdecentralizedtrust.splice.util.{
@@ -18,8 +21,13 @@ import org.lfdecentralizedtrust.splice.util.{
   TriggerTestUtil,
   WalletTestUtil,
 }
-import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
+import org.lfdecentralizedtrust.splice.validator.automation.{
+  ReceiveFaucetCouponTrigger,
+  RenewTransferPreapprovalTrigger,
+}
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import monocle.macros.syntax.lens.*
 
 import java.time.Duration
 
@@ -29,6 +37,9 @@ class WalletTimeBasedIntegrationTest
     with TimeTestUtil
     with SplitwellTestUtil
     with TriggerTestUtil {
+
+  // reduce for expiry test
+  private val preapprovalLifetime = NonNegativeFiniteDuration.ofMinutes(1)
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -48,6 +59,11 @@ class WalletTimeBasedIntegrationTest
         updateAutomationConfig(ConfigurableApp.Sv)(
           // without this, alice's validator gets AppRewardCoupons that complicate testing
           _.withPausedTrigger[ReceiveSvRewardCouponTrigger]
+        )(config)
+      )
+      .addConfigTransforms((_, config) =>
+        ConfigTransforms.updateAllValidatorConfigs_(
+          _.focus(_.transferPreapproval.preapprovalLifetime).replace(preapprovalLifetime)
         )(config)
       )
 
@@ -219,6 +235,58 @@ class WalletTimeBasedIntegrationTest
             )
           }
         }
+    }
+
+    "create a new TransferPreapproval if the existing one has expired" in { implicit env =>
+      val aliceUserParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+
+      def alicePreapprovals =
+        aliceValidatorBackend
+          .listTransferPreapprovals()
+          .filter(_.payload.receiver == aliceUserParty.toProtoPrimitive)
+
+      // disable renew and expiry automation so the expired one does not get archived.
+      setTriggersWithin(
+        triggersToPauseAtStart = Seq(
+          aliceValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
+        ) ++ activeSvs.map(_.dsoDelegateBasedAutomation.trigger[ExpireTransferPreapprovalsTrigger])
+      ) {
+        val initial = clue("Alice creates a TransferPreapproval") {
+          createTransferPreapprovalEnsuringItExists(aliceWalletClient, aliceValidatorBackend)
+          alicePreapprovals.loneElement
+        }
+
+        clue("The TransferPreapproval expires without being renewed or archived") {
+          advanceTime(preapprovalLifetime.asJava.plusSeconds(1))
+          val expired = alicePreapprovals.loneElement
+          expired.contract.contractId shouldBe initial.contract.contractId
+          expired.payload.expiresAt should be < getLedgerTime.toInstant
+        }
+
+        actAndCheck(
+          "Alice creates another TransferPreapprovalProposal",
+          aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = aliceValidatorBackend.config.ledgerApiUser,
+              actAs = Seq(aliceUserParty),
+              readAs = Seq(aliceUserParty),
+              update = TransferPreapprovalProposal.create(
+                aliceUserParty.toProtoPrimitive,
+                aliceValidatorParty.toProtoPrimitive,
+                java.util.Optional.of(dsoParty.toProtoPrimitive),
+              ),
+            ),
+        )(
+          "Validator automation creates a new TransferPreapproval",
+          _ => {
+            val fresh = alicePreapprovals
+              .filterNot(_.contract.contractId == initial.contract.contractId)
+              .loneElement
+            fresh.payload.expiresAt should be > getLedgerTime.toInstant
+          },
+        )
+      }
     }
   }
 

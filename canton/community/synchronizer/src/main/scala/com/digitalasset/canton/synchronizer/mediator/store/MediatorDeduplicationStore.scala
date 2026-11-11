@@ -4,17 +4,22 @@
 package com.digitalasset.canton.synchronizer.mediator.store
 
 import com.daml.nameof.NameOf.functionFullName
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.{BatchAggregatorConfig, ProcessingTimeout}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable, FutureUnlessShutdown}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging, TracedLogger}
 import com.digitalasset.canton.resource.{DbStorage, DbStore, MemoryStorage, Storage}
 import com.digitalasset.canton.time.PositiveFiniteDuration
 import com.digitalasset.canton.tracing.{TraceContext, Traced}
 import com.digitalasset.canton.util.BatchAggregator
+import com.digitalasset.nonempty.NonEmpty
 import com.google.common.annotations.VisibleForTesting
 import slick.jdbc.{GetResult, SetParameter}
 
@@ -184,8 +189,12 @@ private[mediator] object MediatorDeduplicationStore {
       uuid: UUID,
       requestTime: CantonTimestamp,
       expireAfter: CantonTimestamp,
-  ) extends PrettyPrinting {
-    override protected def pretty: Pretty[DeduplicationData] =
+  ) extends PrettyPrintingFromCompanion {
+    override def prettyCompanion: PrettyPrintingCompanion[DeduplicationData] = DeduplicationData
+  }
+
+  object DeduplicationData extends PrettyPrintingCompanion[DeduplicationData] {
+    override protected val pretty: Pretty[DeduplicationData] =
       prettyOfClass(
         param("uuid", _.uuid),
         param("requestTime", _.requestTime),
@@ -275,7 +284,7 @@ private[mediator] class DbMediatorDeduplicationStore(
         sqlu"""delete from mediator_deduplication_store
               where request_time >= $deleteFromInclusive""",
         functionFullName,
-      )(traceContext, callerCloseContext, implicitly)
+      )(traceContext, callerCloseContext)
 
       activeUuids <- storage.query(
         sql"""select uuid, request_time, expire_after from mediator_deduplication_store
@@ -333,7 +342,6 @@ private[mediator] class DbMediatorDeduplicationStore(
             _ <- storage.queryAndUpdate(action, functionFullName)(
               traceContext,
               callerCloseContext,
-              implicitly,
             )
           } yield Seq.fill(items.size)(())
         }
@@ -371,7 +379,7 @@ private[mediator] class DbMediatorDeduplicationStore(
               sqlu"""delete from mediator_deduplication_store
                        where expire_after <= $upToInclusive""",
               functionFullName,
-            )(traceContext, callerCloseContext, implicitly)
+            )(traceContext, callerCloseContext)
           lastPruningOperation.set(newPruning)
           newPruning
         } else {

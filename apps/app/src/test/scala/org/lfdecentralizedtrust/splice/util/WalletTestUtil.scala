@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.console.{ValidatorAppBackendReference, *}
-import org.lfdecentralizedtrust.splice.environment.DarResources
+import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResources}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
@@ -33,6 +33,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.CreateTransferPreapprovalResponse
 import org.scalatest.Assertion
@@ -66,11 +67,12 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       wallet: WalletAppClientReference,
       expectedAmountRanges: Seq[(BigDecimal, BigDecimal)],
       holdingFee: BigDecimal = defaultHoldingFeeAmulet.bigDecimal,
+      timeUntilSuccess: FiniteDuration = 10.seconds,
   ): Unit = clue(s"checking wallet with $expectedAmountRanges") {
     val expectedRatePerRound = new feesCodegen.RatePerRound(
       holdingFee.bigDecimal setScale 10
     )
-    eventually(10.seconds, 500.millis) {
+    eventually(timeUntilSuccess, 500.millis) {
       val amulets =
         wallet.list().amulets.sortBy(amulet => amulet.contract.payload.amount.initialAmount)
       amulets should have size (expectedAmountRanges.size.toLong)
@@ -117,6 +119,59 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       waitForWalletUser(walletAppClient)
       party
     }
+  }
+
+  def onboardWalletUserHostedAlsoOn(
+      walletAppClient: WalletAppClientReference,
+      validator: ValidatorAppBackendReference,
+      additionalHost: ParticipantClientReference,
+      synchronizerId: SynchronizerId,
+  ): PartyId = {
+    val ledgerApiUser = walletAppClient.config.ledgerApiUser
+    val validatorParticipant = validator.participantClientWithAdminToken
+    val party = PartyId.tryCreate(
+      BaseLedgerConnection.sanitizeUserIdToPartyString(ledgerApiUser),
+      validatorParticipant.id.namespace,
+    )
+    val hosts = Seq(
+      (validatorParticipant.id, ParticipantPermission.Submission),
+      (additionalHost.id, ParticipantPermission.Submission),
+    )
+    actAndCheck(
+      s"Allocate $party hosted on ${validatorParticipant.id} and ${additionalHost.id} before it owns any contract",
+      eventuallySucceeds() {
+        validatorParticipant.topology.party_to_participant_mappings.propose(
+          party = party,
+          newParticipants = hosts,
+          store = synchronizerId,
+        )
+        additionalHost.topology.party_to_participant_mappings.propose(
+          party = party,
+          newParticipants = hosts,
+          store = synchronizerId,
+        )
+      },
+    )(
+      "the party is fully authorized on both participants and visible on the ledger API",
+      _ => {
+        val hosting = additionalHost.topology.party_to_participant_mappings
+          .list(synchronizerId, filterParty = party.toProtoPrimitive)
+          .flatMap(_.item.participants)
+        hosts.foreach { case (participantId, _) =>
+          hosting.exists(h => h.participantId == participantId && !h.onboarding) shouldBe true
+        }
+        validatorParticipant.ledger_api.parties.list().exists(_.party == party) shouldBe true
+      },
+    )
+    clue(s"Onboard $ledgerApiUser on ${validator.name} with the pre-allocated party $party") {
+      validator.onboardUser(
+        ledgerApiUser,
+        existingPartyId = Some(party),
+        createIfMissing = Some(false),
+      )
+      waitForWalletUser(walletAppClient)
+    }
+    party
   }
 
   def assertUserFullyOnboarded(
@@ -1132,6 +1187,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
         amount.bigDecimal,
         expiresAt.toInstant,
         reason,
+        java.util.Optional.empty(), // mintAfter
       ).create
     val created = participantClient.ledger_api_extensions.commands
       .submitWithResult(
@@ -1446,8 +1502,13 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       round: Option[splice.types.Round] = None,
       ttl: java.time.Duration = java.time.Duration.ofDays(1),
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val couponRound = round.getOrElse(
+      // waits until scan sees a round that has opened
+      eventuallySucceeds() {
+        sv1ScanBackend.getLatestOpenMiningRound(env.environment.clock.now).payload.round
+      }
+    )
     val now = env.environment.clock.now
-    val couponRound = round.getOrElse(sv1ScanBackend.getLatestOpenMiningRound(now).payload.round)
     sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
       actAs = Seq(dsoParty),
       commands = coupons.flatMap { case (provider, amount, beneficiaryO) =>

@@ -19,11 +19,10 @@ import {
   buildProposal,
   formatBasisPoints,
   getActionValue,
+  getRequesterPartyId,
   getVoteResultStatus,
 } from '../utils/governance';
 import { useDsoInfos } from '../contexts/SvContext';
-import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useVoteRequestResultByCid } from '../hooks/useVoteRequestResultByCid';
 import { usePreviousSvRewardWeight } from '../hooks/usePreviousSvRewardWeight';
 import { Loading } from '@canton-network/splice-common-frontend';
@@ -60,7 +59,7 @@ export const VoteRequestDetails: React.FC = () => {
       currentEffectiveAt
     );
 
-  if (dsoInfosQuery.isPending && isPending) {
+  if (dsoInfosQuery.isPending || isPending) {
     return <Loading />;
   }
 
@@ -73,7 +72,8 @@ export const VoteRequestDetails: React.FC = () => {
   }
 
   const svPartyId = dsoInfosQuery.data?.svPartyId || '';
-  const allSvs = dsoInfosQuery.data?.dsoRules.payload.svs.entriesArray().map(e => e[0]) || [];
+  const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
+  const allSvs = svs?.entriesArray().map(e => e[0]) || [];
   const amuletOrDsoAction = getActionValue(request.action);
 
   // check that amuletOrDsoAction is a supported action
@@ -90,12 +90,12 @@ export const VoteRequestDetails: React.FC = () => {
 
   const action = amuletOrDsoAction.tag as SupportedActionTag;
   const actionName = actionTagToTitle(amuletName)[action];
-  const createdAt = voteRequest ? dayjs(voteRequest.createdAt).format(dateTimeFormatISO) : '';
+  const createdAt = voteRequest?.createdAt;
 
   const proposalDetails: ProposalDetails = {
     actionName,
     action: action,
-    createdAt: createdAt,
+    createdAt,
     url: request.reason.url,
     summary: request.reason.body,
     isVoteRequest: hasVoteRequest,
@@ -111,13 +111,26 @@ export const VoteRequestDetails: React.FC = () => {
       previousRewardWeight !== undefined ? formatBasisPoints(previousRewardWeight) : '';
   }
 
+  // For closed votes the outcome carries the actual effective time. Old vote
+  // requests (created before targetEffectiveAt existed) decode with
+  // targetEffectiveAt = None, so the request alone can't tell "effective at
+  // threshold" apart from "effective at expiry".
+  const voteTakesEffect = hasVoteRequest
+    ? request.targetEffectiveAt
+      ? request.targetEffectiveAt
+      : 'Threshold'
+    : voteResult?.outcome.tag === 'VRO_Accepted'
+      ? voteResult.outcome.value.effectiveAt
+      : voteResult?.completedAt
+        ? voteResult.completedAt
+        : '';
+
+  const requesterPartyId = getRequesterPartyId(request.requester, svs);
   const votingInformation: ProposalVotingInformation = {
-    requester: request.requester,
-    requesterIsYou: request.requester === svPartyId,
-    votingThresholdDeadline: dayjs(request.voteBefore).format(dateTimeFormatISO),
-    voteTakesEffect: request.targetEffectiveAt
-      ? dayjs(request.targetEffectiveAt).format(dateTimeFormatISO)
-      : 'Threshold',
+    requester: requesterPartyId,
+    requesterIsYou: requesterPartyId === svPartyId,
+    votingThresholdDeadline: request.voteBefore,
+    voteTakesEffect,
     status: hasVoteRequest ? 'In Progress' : getVoteResultStatus(voteResult?.outcome),
   };
 

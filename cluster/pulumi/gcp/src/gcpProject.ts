@@ -72,6 +72,18 @@ class GcpProject extends pulumi.ComponentResource {
       opts
     );
 
+    // Cloud Armor is billed per project via a tier. We only use features available in
+    // the Standard tier (IP whitelisting, rate limiting, preconfigured WAF rules), so
+    // pin the project to it rather than an Enterprise tier.
+    new gcp.compute.ProjectCloudArmorTier(
+      'cloud-armor-tier',
+      {
+        project: gcpProjectId,
+        cloudArmorTier: 'CA_STANDARD',
+      },
+      opts
+    );
+
     // Source SV identities from a pre-existing project (i.e. devnet)
     // Note: this should be fine when ran against devnet itself...
     //  - But since we can automate this now, we might want to simply generate new SV secrets per project
@@ -81,10 +93,6 @@ class GcpProject extends pulumi.ComponentResource {
     this.importSecretIdFromDevnet('sv2-id');
     this.importSecretIdFromDevnet('sv3-id');
     this.importSecretIdFromDevnet('sv4-id');
-    // Import CometBft keys from devnet
-    for (let i = 1; i <= 16; i++) {
-      this.importSecretIdFromDevnet(`sv${i}-cometbft-keys`);
-    }
     // Import Observability grafana key secret from devnet
     this.importSecretIdFromDevnet('grafana-keys');
 
@@ -109,16 +117,6 @@ class GcpProject extends pulumi.ComponentResource {
               description: '(managed by Pulumi)',
               expression: `
           resource.name.endsWith("-id/versions/latest")
-          `,
-            },
-          },
-          {
-            id: 'roles/secretmanager.secretAccessor',
-            condition: {
-              title: 'CometBft keys',
-              description: '(managed by Pulumi)',
-              expression: `
-          resource.name.endsWith("-cometbft-keys/versions/latest")
           `,
             },
           },

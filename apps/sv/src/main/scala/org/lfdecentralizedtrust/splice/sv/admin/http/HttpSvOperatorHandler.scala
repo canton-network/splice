@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.sv.admin.http
 
-import cats.syntax.applicative.*
 import cats.syntax.either.*
 import com.digitalasset.canton.config.{
   NonNegativeDuration,
@@ -24,7 +23,7 @@ import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.auth.ActAsKnownPartyAuthExtractor.ActAsKnownUserRequest
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_operator as v0}
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource as r0
-import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, Thresholds, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.{
   HttpClient,
@@ -40,13 +39,12 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   VoteResultsFilters,
 }
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo, TemplateJsonDecoder}
 
 import java.util.Optional
 import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
@@ -63,6 +61,7 @@ class HttpSvOperatorHandler(
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
     participantAdminConnection: ParticipantAdminConnection,
+    initialRound: String,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -84,7 +83,7 @@ class HttpSvOperatorHandler(
   private val svStore = svStoreWithIngestion.store
   private val dsoStore = dsoStoreWithIngestion.store
   private val mutex = Mutex()
-  override protected val votesStore: ActiveVotesStore = dsoStore
+  override protected val activeVotesStore: ActiveVotesStore = dsoStore
   override protected val validatorLicensesStore: AppStore = dsoStore
 
   // Similar to PublishScanConfigTrigger, this class creates its own scan connection
@@ -112,6 +111,36 @@ class HttpSvOperatorHandler(
           scanConnectionV = Some(f)
           f
       }
+    }
+  }
+
+  /** Intended use: The SV app UI.
+    *
+    * Protection: Requires authorization as SV operator; replaces the public `/v0/dso` endpoint.
+    */
+  override def getDsoInfoV1(
+      respond: r0.GetDsoInfoV1Response.type
+  )()(extracted: ActAsKnownUserRequest): Future[r0.GetDsoInfoV1Response] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.getDsoInfoV1") { _ => _ =>
+      for {
+        latestOpenMiningRound <- dsoStore.getLatestActiveOpenMiningRound()
+        amuletRules <- dsoStore.getAssignedAmuletRules()
+        rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
+        dsoRules = rulesAndStates.dsoRules
+      } yield r0.GetDsoInfoV1Response.OK(
+        DsoInfo(
+          svUser = config.ledgerApiUser,
+          svParty = dsoStore.key.svParty,
+          dsoParty = dsoStore.key.dsoParty,
+          votingThreshold = Thresholds.requiredNumVotes(dsoRules),
+          latestMiningRound = latestOpenMiningRound.toContractWithState,
+          amuletRules = amuletRules.toContractWithState,
+          dsoRules = dsoRules,
+          svNodeStates = rulesAndStates.svNodeStates,
+          initialRound = Some(initialRound),
+        ).toHttp
+      )
     }
   }
 
@@ -574,30 +603,6 @@ class HttpSvOperatorHandler(
     }
   }
 
-  override def getCometBftNodeDebugDump(
-      respond: r0.GetCometBftNodeDebugDumpResponse.type
-  )()(extracted: ActAsKnownUserRequest): Future[
-    r0.GetCometBftNodeDebugDumpResponse
-  ] = {
-    implicit val ActAsKnownUserRequest(traceContext) = extracted
-    withSpan(s"$workflowId.getCometBftNodeDebugDump") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) { client =>
-        client
-          .nodeDebugDump()
-          .map(response =>
-            definitions.CometBftNodeDumpOrErrorResponse(
-              definitions.CometBftNodeDumpResponse(
-                status = response.status,
-                networkInfo = response.networkInfo,
-                abciInfo = response.abciInfo,
-                validators = response.validators,
-              )
-            )
-          )
-      }
-    }
-  }
-
   override def cancelLogicalSynchronizerUpgrade(
       respond: r0.CancelLogicalSynchronizerUpgradeResponse.type
   )()(
@@ -612,17 +617,6 @@ class HttpSvOperatorHandler(
       } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
     }
   }
-
-  private def withClientOrNotFound[T](
-      notFound: definitions.ErrorResponse => T
-  )(call: CometBftClient => Future[T])(implicit tc: TraceContext) =
-    synchronizerNodeService.activeSynchronizerNode().flatMap { node =>
-      node.cometbftNode.map(_.cometBftClient) match {
-        case None =>
-          notFound(definitions.ErrorResponse("CometBFT is not configured.")).pure[Future]
-        case Some(client) => call(client)
-      }
-    }
 
   private def withSequencerConnection[T](
       call: SequencerAdminConnection => Future[T]

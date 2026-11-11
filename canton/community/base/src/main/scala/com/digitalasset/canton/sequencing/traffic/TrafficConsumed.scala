@@ -6,7 +6,11 @@ package com.digitalasset.canton.sequencing.traffic
 import cats.syntax.either.*
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, NonNegativeNumeric}
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, TracedLogger}
 import com.digitalasset.canton.protocol.v30.TrafficConsumed as TrafficConsumedP
 import com.digitalasset.canton.sequencing.TrafficControlParameters
@@ -17,6 +21,8 @@ import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ErrorUtil
+import com.digitalasset.canton.validation.ProtoValidation
+import com.digitalasset.canton.version.ProtocolVersionValidation
 import slick.jdbc.GetResult
 
 /** State of the traffic consumed by a member at a given time.
@@ -37,7 +43,7 @@ final case class TrafficConsumed(
     extraTrafficConsumed: NonNegativeLong,
     baseTrafficRemainder: NonNegativeLong,
     lastConsumedCost: NonNegativeLong,
-) extends PrettyPrinting {
+) extends PrettyPrintingFromCompanion {
 
   def toTrafficReceipt: TrafficReceipt = TrafficReceipt(
     consumedCost = lastConsumedCost,
@@ -172,14 +178,7 @@ final case class TrafficConsumed(
     )
   }
 
-  override protected def pretty: Pretty[TrafficConsumed] =
-    prettyOfClass(
-      param("member", _.member),
-      param("extraTrafficConsumed", _.extraTrafficConsumed),
-      param("baseTrafficRemainder", _.baseTrafficRemainder),
-      param("lastConsumedCost", _.lastConsumedCost),
-      param("sequencingTimestamp", _.sequencingTimestamp),
-    )
+  override def prettyCompanion: PrettyPrintingCompanion[TrafficConsumed] = TrafficConsumed
 
   def toProtoV30: TrafficConsumedP =
     TrafficConsumedP(
@@ -191,7 +190,16 @@ final case class TrafficConsumed(
     )
 }
 
-object TrafficConsumed {
+object TrafficConsumed extends PrettyPrintingCompanion[TrafficConsumed] {
+  override protected val pretty: Pretty[TrafficConsumed] =
+    prettyOfClass(
+      param("member", _.member),
+      param("extraTrafficConsumed", _.extraTrafficConsumed),
+      param("baseTrafficRemainder", _.baseTrafficRemainder),
+      param("lastConsumedCost", _.lastConsumedCost),
+      param("sequencingTimestamp", _.sequencingTimestamp),
+    )
+
   import com.digitalasset.canton.store.db.RequiredTypesCodec.*
   import com.digitalasset.canton.topology.Member.DbStorageImplicits.*
 
@@ -228,9 +236,16 @@ object TrafficConsumed {
         TrafficConsumed(member, ts, trafficConsumed, baseTraffic, lastConsumedCost)
       }
 
-  def fromProtoV30(trafficConsumedP: TrafficConsumedP): ParsingResult[TrafficConsumed] =
+  def fromProtoV30(
+      pvv: ProtocolVersionValidation,
+      trafficConsumedP: TrafficConsumedP,
+  ): ParsingResult[TrafficConsumed] =
     for {
-      member <- Member.fromProtoPrimitive(trafficConsumedP.member, "member")
+      member <- ProtoValidation.validateThen(
+        trafficConsumedP.member,
+        "member",
+        pvv,
+      )(Member.fromProtoPrimitive)
       extraTrafficConsumed <- ProtoConverter.parseNonNegativeLong(
         "extra_traffic_consumed",
         trafficConsumedP.extraTrafficConsumed,

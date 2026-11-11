@@ -34,10 +34,16 @@ paths:
     $ref: "../../../../common/src/main/openapi/common-external.yaml#/paths/~1version"
 
   /v0/dso:
+    # TODO (#7882): remove
     get:
-      tags: [external, scan]
+      deprecated: true
+      tags: [deprecated]
       x-jvm-package: scan
       operationId: "getDsoInfo"
+      description: |
+        Deprecated. Please use /v1/dso instead, and /v0/sv-info for the `sv_user` and
+        `sv_party_id` fields. These fields differ between Scan instances, so responses
+        cannot be compared across SVs.
       responses:
         "200":
           description: ok
@@ -45,6 +51,37 @@ paths:
             application/json:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponse"
+
+  /v1/dso:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getDsoInfoV1"
+      description: |
+        Returns information about the DSO. Can be used in BFT reads.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponseV1"
+
+  /v0/sv-info:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getSvInfo"
+      description: |
+        Returns the SV operating this Scan instance. The response differs between
+        Scan instances, so it cannot be used in BFT reads.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetSvInfoResponse"
 
   /v0/validators/validator-faucets:
     get:
@@ -66,6 +103,7 @@ paths:
             type: array
             items:
               type: string
+            maxItems: 1000
       responses:
         "200":
           description: ok
@@ -366,9 +404,8 @@ paths:
         order of events in the transaction, for this you should rely on the order of `root_event_ids` and `child_event_ids`.
         Updates are ordered lexicographically by `(migration id, record time)`.
         For a given migration id, each update has a unique record time.
-        The record time ranges of different migrations may overlap, i.e.,
-        it is not guaranteed that the maximum record time of one migration is smaller than the minimum record time of the next migration,
-        and there may be two updates with the same record time but different migration ids.
+        Record times also increase across migrations: every update of a migration has a greater record time
+        than all updates of earlier migrations.
       requestBody:
         required: true
         content:
@@ -435,9 +472,8 @@ paths:
 
         Updates are ordered lexicographically by `(migration id, record time)`.
         For a given migration id, each update has a unique record time.
-        The record time ranges of different migrations may overlap, i.e.,
-        it is not guaranteed that the maximum record time of one migration is smaller than the minimum record time of the next migration,
-        and there may be two updates with the same record time but different migration ids.
+        Record times also increase across migrations: every update of a migration has a greater record time
+        than all updates of earlier migrations.
         The order of items in events_by_id is not defined.
       requestBody:
         required: true
@@ -608,39 +644,11 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
 
-  /v0/state/acs:
-    post:
-      deprecated: true
-      tags: [ deprecated ]
-      x-jvm-package: scan
-      operationId: "getAcsSnapshotAt"
-      description: |
-        Deprecated. Please use /v1/state/acs instead. Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/AcsRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AcsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
-  /v1/state/acs:
+  /v2/state/acs:
     post:
       tags: [ external, scan ]
       x-jvm-package: scan
-      operationId: "getAcsSnapshotAtV1"
+      operationId: "getAcsSnapshotAtV2"
       description: |
         Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
         Unlike /v0/state/acs, every contract is identified by an (optional) update_id
@@ -652,14 +660,14 @@ paths:
         content:
           application/json:
             schema:
-              "$ref": "#/components/schemas/AcsRequest"
+              "$ref": "#/components/schemas/AcsRequestV2"
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AcsResponseV1"
+                $ref: "#/components/schemas/AcsResponseV2"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "404":
@@ -690,38 +698,11 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/holdings/state:
-    post:
-      tags: [deprecated]
-      x-jvm-package: scan
-      operationId: "getHoldingsStateAt"
-      description: |
-        Deprecated. Please use /v1/holdings/state instead. Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/HoldingsStateRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AcsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
-  /v1/holdings/state:
+  /v2/holdings/state:
     post:
       tags: [external, scan]
       x-jvm-package: scan
-      operationId: "getHoldingsStateAtV1"
+      operationId: "getHoldingsStateAtV2"
       description: |
         Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
       requestBody:
@@ -729,14 +710,14 @@ paths:
         content:
           application/json:
             schema:
-              "$ref": "#/components/schemas/HoldingsStateRequest"
+              "$ref": "#/components/schemas/HoldingsStateRequestV2"
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AcsResponseV1"
+                $ref: "#/components/schemas/AcsResponseV2"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "404":
@@ -1143,50 +1124,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetMigrationIdResponse"
 
-  # TODO(DACH-NY/canton-network-internal#418) Move to SV app
-  /v0/synchronizer-identities/{domain_id_prefix}:
-    get:
-      tags: [internal, scan]
-      x-jvm-package: scan_soft_domain_migration_poc
-      operationId: "getSynchronizerIdentities"
-      parameters:
-        - name: "domain_id_prefix"
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/SynchronizerIdentities"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  # TODO(DACH-NY/canton-network-internal#418) Move to SV app
-  /v0/synchronizer-bootstrapping-transactions/{domain_id_prefix}:
-    get:
-      tags: [internal, scan]
-      x-jvm-package: scan_soft_domain_migration_poc
-      operationId: "getSynchronizerBootstrappingTransactions"
-      parameters:
-        - name: "domain_id_prefix"
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/SynchronizerBootstrappingTransactions"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/splice-instance-names:
     get:
       tags: [internal, scan]
@@ -1557,9 +1494,8 @@ paths:
         An event bears some combination of a transaction, a contract reassignment, and a verdict.
         Events are ordered lexicographically by `(migration id, record time)`.
         For a given migration id, each event has a unique record time.
-        The record time ranges of different migrations may overlap, i.e.,
-        it is not guaranteed that the maximum record time of one migration is smaller than the minimum record time of the next migration,
-        and there may be two updates with the same record time but different migration ids.
+        Record times also increase across migrations: every event of a migration has a greater record time
+        than all events of earlier migrations.
       requestBody:
         required: true
         content:
@@ -1577,6 +1513,28 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v0/events/latest-record-time:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getLatestEventRecordTime"
+      description: |
+        Returns the latest record time for which /v0/events will be able to return events.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventLatestRecordTimeResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/events/{update_id}:
     get:
       tags: [external, scan]
@@ -1623,6 +1581,36 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/ListUnclaimedDevelopmentFundCouponsResponse"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v0/reward-coupons-v2-disclosures:
+    post:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getRewardCouponsV2Disclosures"
+      description: |
+        Retrieve created event blobs for active contracts of the Daml template
+        `Splice.Amulet:RewardCouponV2` by contract ID.
+        Requests are limited to 100 contract IDs; larger requests return 400.
+        Missing or archived contracts, and contracts of other templates, are omitted
+        from the response. If no matching active contracts are found, the response
+        contains an empty map.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/GetRewardCouponsV2DisclosuresRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetRewardCouponsV2DisclosuresResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
@@ -1739,6 +1727,10 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: "daml_value_encoding"
+          in: "query"
+          schema:
+            $ref: "#/components/schemas/DamlValueEncoding"
       responses:
         "200":
           description: ok
@@ -1780,6 +1772,66 @@ paths:
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
 
+  /v0/history/bulk/checksums:
+    post:
+      tags: [ internal, pre-alpha, scan ]
+      x-jvm-package: scan
+      operationId: "getBulkObjectChecksums"
+      description: |
+        **Under Development, do not use in production yet** Get checksums for bulk history objects. Searches for object_keys in both staging and committed objects.
+        Meant for internal use only, as part of the processing pipeline of bulk history objects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/GetBulkObjectChecksumsRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetBulkObjectChecksumsResponse"
+        "501":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
+
+  /v0/history/bulk/progress:
+    get:
+      tags: [ internal, pre-alpha, scan ]
+      x-jvm-package: scan
+      operationId: "getBulkObjectsProgress"
+      description: |
+        **Under Development, do not use in production yet** Query whether bulk storage object creation has advanced to a certain record time.
+        Meant for internal use only, as part of the processing pipeline of bulk objects.
+      parameters:
+        - name: "record_time"
+          in: "query"
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: "bucket"
+          in: "query"
+          required: true
+          schema:
+            $ref: "#/components/schemas/BulkStorageBucket"
+        - name: "kind"
+          in: "query"
+          required: false
+          schema:
+            $ref: "#/components/schemas/BulkObjectKind"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetBulkObjectsProgressResponse"
+        "501":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
+
+
 
 components:
   schemas:
@@ -1817,6 +1869,18 @@ components:
       properties:
         dso_party_id:
           type: string
+    GetSvInfoResponse:
+      type: object
+      required:
+        - sv_user
+        - sv_party_id
+      properties:
+        sv_user:
+          description: User ID representing the SV
+          type: string
+        sv_party_id:
+          description: Party representing the SV
+          type: string
     GetClosedRoundsResponse:
       type: object
       required: ["rounds"]
@@ -1843,6 +1907,7 @@ components:
             knows about. If unsure, an empty array is fine; only a performance
             penalty is incurred.
           type: array
+          maxItems: 1000
           items:
             $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ContractId"
         cached_issuing_round_contract_ids:
@@ -1851,6 +1916,7 @@ components:
             caller knows about. If unsure, an empty array is fine; only a
             performance penalty is incurred.
           type: array
+          maxItems: 1000
           items:
             $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ContractId"
     GetOpenAndIssuingMiningRoundsResponse:
@@ -2753,7 +2819,7 @@ components:
           format: date-time
           description: |
             The record time of the last transaction in the snapshot.
-    AcsRequest:
+    AcsRequestV2:
       type: object
       required:
         - migration_id
@@ -2783,13 +2849,13 @@ components:
             - "at_or_before"
           default: "exact"
         after:
-          type: integer
-          format: int64
+          type: string
           description: |
             Pagination token for the next page of results. For this to be valid,
             this must be the `next_page_token` from a prior request with identical
             parameters aside from `after` and `page_size`; the response may be
             invalid otherwise.
+            This token is opaque and not meant to be edited by users.
         page_size:
           description: |
             The maximum number of created events returned for this request.
@@ -2799,15 +2865,17 @@ components:
           type: array
           items:
             type: string
+          maxItems: 1000
           description: |
             Filters the ACS by contracts in which these party IDs are stakeholders.
         templates:
           type: array
           items:
             type: string
+          maxItems: 1000
           description: |
             Filters the ACS by contracts with these template IDs, specified as "PACKAGE_NAME:MODULE_NAME:ENTITY_NAME".
-    HoldingsStateRequest: # subset of AcsRequest
+    HoldingsStateRequestV2: # subset of AcsRequestV2
       type: object
       required:
         - migration_id
@@ -2838,10 +2906,10 @@ components:
             - "at_or_before"
           default: "exact"
         after:
-          type: integer
-          format: int64
+          type: string
           description: |
             Pagination token for the next page of results.
+            This token is opaque and not meant to be edited by users.
         page_size:
           description: |
             The maximum number of created events returned for this request.
@@ -2852,6 +2920,7 @@ components:
           items:
             type: string
           minItems: 1
+          maxItems: 1000
           description: |
             Filters by contracts in which these party_ids are the owners of the amulets.
 
@@ -2889,6 +2958,7 @@ components:
           items:
             type: string
           minItems: 1
+          maxItems: 1000
           description: |
             The owners for which to compute the summary.
         as_of_round:
@@ -2931,6 +3001,7 @@ components:
           items:
             type: string
           minItems: 1
+          maxItems: 1000
           description: |
             The owners for which to compute the summary.
 
@@ -2949,37 +3020,7 @@ components:
           description: The current migration ID of the Scan.
           type: integer
           format: int64
-    AcsResponse:
-      type: object
-      required:
-        - record_time
-        - migration_id
-        - created_events
-      properties:
-        record_time:
-          description: The same `record_time` as in the request.
-          type: string
-          format: date-time
-        migration_id:
-          description: The same `migration_id` as in the request.
-          type: integer
-          format: int64
-        created_events:
-          description: |
-            Up to `page_size` contracts in the ACS.
-            `create_arguments` are always encoded as `compact_json`.
-          type: array
-          items:
-            $ref: "#/components/schemas/CreatedEvent"
-        next_page_token:
-          type: integer
-          format: int64
-          description: |
-            When requesting the next page of results, pass this as `after`
-            to the `AcsRequest` or `HoldingsStateRequest`.
-            Will be absent when there are no more pages.
-
-    AcsResponseV1:
+    AcsResponseV2:
       type: object
       required:
         - record_time
@@ -3002,12 +3043,12 @@ components:
           items:
             $ref: "#/components/schemas/ActiveContract"
         next_page_token:
-          type: integer
-          format: int64
+          type: string
           description: |
             When requesting the next page of results, pass this as `after`
-            to the `AcsRequest` or `HoldingsStateRequest`.
+            to the `AcsRequestV2` or `HoldingsStateRequestV2`.
             Will be absent when there are no more pages.
+            This token is opaque and not meant to be edited by users.
 
     HoldingsSummaryResponse:
       type: object
@@ -3462,41 +3503,6 @@ components:
           type: integer
           format: int64
 
-    SynchronizerIdentities:
-      type: object
-      required:
-        - sequencer_id
-        - sequencer_identity_transactions
-        - mediator_id
-        - mediator_identity_transactions
-      properties:
-        sequencer_id:
-          type: string
-        sequencer_identity_transactions:
-          type: array
-          items:
-            type: string
-        mediator_id:
-          type: string
-        mediator_identity_transactions:
-          type: array
-          items:
-            type: string
-
-    SynchronizerBootstrappingTransactions:
-      type: object
-      required:
-        - domain_parameters
-        - sequencer_domain_state
-        - mediator_domain_state
-      properties:
-        domain_parameters:
-          type: string
-        sequencer_domain_state:
-          type: string
-        mediator_domain_state:
-          type: string
-
     GetMigrationInfoRequest:
       type: object
       required:
@@ -3821,6 +3827,29 @@ components:
         app_activity_records:
           $ref: "#/components/schemas/EventHistoryAppActivityRecords"
           nullable: true
+        asset_activity_records:
+          description: |
+            Asset-side activity records (CIP-104), one per provider.
+            Omitted from JSON when there is no asset activity for the event.
+          type: array
+          x-scala-array-type: org.lfdecentralizedtrust.splice.http.OmitNullArray
+          items:
+            $ref: "#/components/schemas/ActivityRecord"
+        submitting_app_provider:
+          description: |
+            The submitting app provider party identifier, present only when the submitter is a featured-app.
+          type: string
+          x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullString
+    EventLatestRecordTimeResponse:
+      type: object
+      required:
+        - record_time
+      properties:
+        record_time:
+          description: |
+            The record_time of the latest event.
+          type: string
+          format: date-time
     EventHistoryVerdict:
       type: object
       required:
@@ -3838,6 +3867,9 @@ components:
         update_id:
           description: |
             The ID of the transaction update associated with this verdict.
+
+            Verdicts are deduplicated by update_id. Only the first verdict ingested for a given update_id is stored and returned, while a subsequent verdict with the same update_id is rejected.
+            This can happen for example if a sequencer client retries a successful submission. In that case, the retry is rejected as a duplicate, and the events endpoint will only show the successful verdict but not the rejected duplicates.
           type: string
         migration_id:
           description: |
@@ -3982,7 +4014,7 @@ components:
     EventHistoryAppActivityRecords:
       type: object
       description: |
-        App activity record computed from verdicts and traffic summaries
+        App activity records computed from verdicts and traffic summaries
         as per [CIP-104](https://github.com/canton-foundation/cips/blob/main/cip-0104/cip-0104.md).
       required:
         - round_number
@@ -3995,14 +4027,32 @@ components:
           format: int64
         records:
           description: |
-            App activity records, one per app provider.
+            Activity records, one per provider.
           type: array
           items:
             $ref: "#/components/schemas/AppActivityRecord"
+    ActivityRecord:
+      type: object
+      description: |
+        Activity record for a provider.
+      required:
+        - party
+        - weight
+      properties:
+        party:
+          description: |
+            The provider party identifier.
+          type: string
+        weight:
+          description: |
+            Activity weight in bytes of traffic.
+          type: integer
+          format: int64
     AppActivityRecord:
       type: object
       description: |
-        ActivityRecord for an app.
+        Conceptually equal to `ActivityRecord`, but kept
+        for backwards compatibility.
       required:
         - party
         - weight
@@ -4027,6 +4077,33 @@ components:
           type: array
           items:
             "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ContractWithState"
+
+    GetRewardCouponsV2DisclosuresRequest:
+      type: object
+      required: ["contract_ids"]
+      properties:
+        contract_ids:
+          description: |
+            Contract IDs of the `Splice.Amulet:RewardCouponV2` contracts to retrieve.
+            At most 100 contract IDs may be supplied per request.
+          type: array
+          maxItems: 100
+          items:
+            $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/ContractId"
+
+    GetRewardCouponsV2DisclosuresResponse:
+      type: object
+      required: ["created_event_blobs"]
+      properties:
+        created_event_blobs:
+          description: |
+            A map from contract ID to base64-encoded created event blob for the
+            requested active `Splice.Amulet:RewardCouponV2` contracts.
+            Missing or archived contracts, and contracts of other templates,
+            are omitted. No contract payloads or other metadata are returned.
+          type: object
+          additionalProperties:
+            type: string
 
     ListBulkAcsSnapshotObjectsResponse:
       type: object
@@ -4074,6 +4151,8 @@ components:
           format: int32
           minimum: 1
           maximum: 1000
+        daml_value_encoding:
+          $ref: "#/components/schemas/DamlValueEncoding"
 
     ListBulkUpdateHistoryObjectsResponse:
       type: object
@@ -4093,6 +4172,35 @@ components:
             to the next `ListBulkUpdateHistoryObjectsRequest` invocation.
             Will be absent when there are no more pages.
 
+    GetBulkObjectChecksumsRequest:
+      type: object
+      required:
+        - object_keys
+      properties:
+        object_keys:
+          description: |
+            The list of keys of the bulk storage objects for which checksums are requested.
+          type: array
+          maxItems: 1000
+          items:
+            type: string
+
+    GetBulkObjectChecksumsResponse:
+      type: object
+      required:
+        - checksums
+      properties:
+        checksums:
+          description: |
+            The list of (optional) checksums for the requested bulk storage objects (in the same order as the object_keys),
+            where `None` values indicate objects that do not exist.
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+
     BulkStorageObjectRef:
       type: object
       required:
@@ -4107,6 +4215,49 @@ components:
           description: |
             The sha256 digest of the bulk storage object, for verification of integrity and consistency across SVs.
           type: string
+
+    GetBulkObjectsProgressResponse:
+      type: object
+      required:
+        - availability
+      properties:
+        availability:
+          $ref: "#/components/schemas/BulkObjectsAvailability"
+
+    BulkStorageBucket:
+      type: string
+      description: |
+        The bulk storage bucket a progress query refers to: "staging" holds the objects this Scan has written or
+        copied but not yet verified against its peers, "committed" the objects that passed that check.
+      enum:
+        - "staging"
+        - "committed"
+
+    BulkObjectKind:
+      type: string
+      description: |
+        The kind of bulk storage objects a progress query refers to: "updates" for update segments, "snapshots" for
+        ACS snapshots. Without a kind, the query refers to both.
+      enum:
+        - "updates"
+        - "snapshots"
+
+    BulkObjectsAvailability:
+      type: string
+      description: |
+        Whether the requested bucket of this Scan holds all bulk storage objects of the requested kind (update
+        segments, ACS snapshots, or both when no kind is given) up to the requested record time.
+        "available": it does.
+        "processing": it does not yet. The record time lies within this Scan's own history, so it produces the
+        objects itself from its own data; they appear once its dump (staging) or its check against the peers
+        (committed) has reached the record time.
+        "backfilling": it does not, and will not produce them itself, because the record time lies before this
+        Scan's own history (it joined after the network started). It copies these objects from its peers instead,
+        and answers "available" once that copy has reached the record time.
+      enum:
+        - "available"
+        - "processing"
+        - "backfilling"
 
     GetRewardAccountingEarliestAvailableRoundResponse:
       type: object
@@ -4136,8 +4287,13 @@ components:
         - status
         - round_number
         - total_app_activity_weight
+        - total_asset_activity_weight
         - active_parties_count
         - activity_records_count
+        - total_app_reward_from_app_activity
+        - total_app_reward_from_asset_activity
+        - issuance_per_featured_app_activity
+        - issuance_per_featured_asset_activity
         - total_app_reward_minting_allowance
         - total_app_reward_thresholded
         - total_app_reward_unclaimed
@@ -4151,15 +4307,31 @@ components:
         total_app_activity_weight:
           type: integer
           format: int64
+        total_asset_activity_weight:
+          type: integer
+          format: int64
+          description: The total weight of asset activity (bytes) for this round.
         active_parties_count:
           type: integer
           format: int64
         activity_records_count:
           type: integer
           format: int64
+        total_app_reward_from_app_activity:
+          type: string
+          description: The total of all rewards from app activity for this round, including thresholded.
+        total_app_reward_from_asset_activity:
+          type: string
+          description: The total of all rewards from asset activity for this round, including thresholded.
+        issuance_per_featured_app_activity:
+          type: string
+          description: The ratio of Amulet minted per Amulet burned for app activity.
+        issuance_per_featured_asset_activity:
+          type: string
+          description: The ratio of Amulet minted per Amulet burned for asset activity.
         total_app_reward_minting_allowance:
           type: string
-          description: The total of all minting allowances granted to app providers in this round.
+          description: The total of all minting allowances granted to app providers in this round, combining app and asset activity rewards.
         total_app_reward_thresholded:
           type: string
           description: Total amount of minting allowances that fell below the configured app reward threshold and was thus burned.

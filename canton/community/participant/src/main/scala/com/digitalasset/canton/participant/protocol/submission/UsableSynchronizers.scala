@@ -8,9 +8,9 @@ import cats.implicits.toFoldableOps
 import cats.syntax.alternative.*
 import cats.syntax.bifunctor.*
 import cats.syntax.parallel.*
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory.PackageUnknownTo
 import com.digitalasset.canton.protocol.{
   LfActionNode,
@@ -29,6 +29,7 @@ import com.digitalasset.canton.version.{
 }
 import com.digitalasset.canton.{LfPackageId, LfPartyId}
 import com.digitalasset.daml.lf.engine.Blinding
+import com.digitalasset.nonempty.NonEmpty
 
 import scala.concurrent.ExecutionContext
 
@@ -174,7 +175,6 @@ object UsableSynchronizers {
   private def unknownPackages(
       snapshot: TopologySnapshot,
       ledgerTime: CantonTimestamp,
-      checkPackageDependencies: Boolean,
   )(
       participantIdAndRequiredPackages: (ParticipantId, Set[LfPackageId])
   )(implicit
@@ -185,7 +185,6 @@ object UsableSynchronizers {
       participantId,
       required,
       ledgerTime,
-      checkPackageDependencies,
     )
   }
 
@@ -237,30 +236,42 @@ object UsableSynchronizers {
       ec: ExecutionContext,
       tc: TraceContext,
   ): EitherT[FutureUnlessShutdown, UnknownPackage, Unit] =
+    checkRequiredPackagesByParty(
+      snapshot,
+      requiredPackagesByParty,
+      ledgerTime,
+    )
+      .leftMap(unknownPackages => UnknownPackage(synchronizerId, unknownPackages))
+
+  private[protocol] def checkRequiredPackagesByParty(
+      snapshot: TopologySnapshot,
+      requiredPackagesByParty: Map[LfPartyId, Set[LfPackageId]],
+      ledgerTime: CantonTimestamp,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): EitherT[FutureUnlessShutdown, NonEmpty[List[PackageUnknownTo]], Unit] =
     resolveParticipants(snapshot, requiredPackagesByParty)
       .flatMap(
-        checkPackagesVetted(synchronizerId, snapshot, ledgerTime, _)
+        checkRequiredPackagesByParticipant(snapshot, ledgerTime, _)
       )
 
-  private def checkPackagesVetted(
-      synchronizerId: PhysicalSynchronizerId,
+  private def checkRequiredPackagesByParticipant(
       snapshot: TopologySnapshot,
       ledgerTime: CantonTimestamp,
       requiredPackages: Map[ParticipantId, Set[LfPackageId]],
   )(implicit
       ec: ExecutionContext,
       traceContext: TraceContext,
-  ): EitherT[FutureUnlessShutdown, UnknownPackage, Unit] = {
-    val checkPackageDependencies = synchronizerId.protocolVersion <= ProtocolVersion.v34
+  ): EitherT[FutureUnlessShutdown, NonEmpty[List[PackageUnknownTo]], Unit] =
     EitherT(
       requiredPackages.toList
-        .parTraverse(unknownPackages(snapshot, ledgerTime, checkPackageDependencies))
+        .parTraverse(unknownPackages(snapshot, ledgerTime))
         .map(_.combineAll.unknownOrUnvetted.toList.flatMap { case (participantId, packageIds) =>
           packageIds.toSeq.map(packageId => PackageUnknownTo(packageId, participantId))
         })
-        .map(u => NonEmpty.from(u).map(UnknownPackage(synchronizerId, _)).toLeft(()))
+        .map(u => NonEmpty.from(u).toLeft(()))
     )
-  }
 
   private def checkProtocolVersion(
       synchronizerId: PhysicalSynchronizerId,

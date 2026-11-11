@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import {
   HELM_MAX_HISTORY_SIZE,
   exactNamespace,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 
 export function configureReloader(): k8s.helm.v3.Release {
@@ -29,7 +29,7 @@ export function configureReloader(): k8s.helm.v3.Release {
           readOnlyRootFileSystem: true,
           enableMetricsByNamespace: true,
           deployment: {
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
           containerSecurityContext: {
             capabilities: {

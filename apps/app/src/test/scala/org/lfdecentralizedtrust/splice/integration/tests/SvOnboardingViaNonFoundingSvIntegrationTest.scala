@@ -6,13 +6,11 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_OffboardSv
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  bumpUrl,
-  IsTheCantonSequencerBFTEnabled,
-}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.bumpUrl
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvBftSequencerPeerOffboardingTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.SvOffboardingSequencerTrigger
@@ -26,6 +24,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
     with SvTestUtil
     with StandaloneCanton {
 
+  // sv1 is stopped mid-test, so neither history check is meaningful here.
+  override protected def runUpdateHistorySanityCheck: Boolean = false
   override protected def runEventHistorySanityCheck: Boolean = false
 
   override def dbsSuffix: String = "non_sv1_svs"
@@ -53,6 +53,17 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
             case node: JoinWithKey => bumpUrl(sv1ToSv2Bump, node.svClient.adminApi.url.toString())
             case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
           }
+        val sv2OnboardingScanClientUrl =
+          configuration
+            .svApps(InstanceName.tryCreate("sv2"))
+            .onboarding
+            .getOrElse(
+              throw new IllegalStateException("Onboarding configuration not found.")
+            ) match {
+            case node: JoinWithKey =>
+              bumpUrl(sv1ToSv2Bump, node.scanClient.adminApi.url.toString())
+            case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
+          }
         val sv2BootstrapSequencerUrl =
           configuration
             .svApps(InstanceName.tryCreate("sv2"))
@@ -74,6 +85,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
                       SvAppClientConfig(NetworkAppClientConfig(sv2OnboardingSvClientUrl)),
                       node.publicKey,
                       node.privateKey,
+                      // fetch DSO info via the sponsor's (sv2's) scan
+                      ScanAppClientConfig(NetworkAppClientConfig(sv2OnboardingScanClientUrl)),
                     )
                   )
                 case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
@@ -214,25 +227,23 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
         }
 
         // resume only after the other offboarding triggeres finished to not brick sv1's sequencer too early
-        if (IsTheCantonSequencerBFTEnabled) {
-          sv1Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
-          sv2Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
-          eventually() {
-            sv2Backend.participantClient.topology.sequencers
-              .list(
-                store = Some(TopologyStoreId.Synchronizer(decentralizedSynchronizerId))
-              )
-              .loneElement
-              .item
-              .allSequencers
-              .toIndexedSeq should have size 1 withClue "sole sequencers"
-            sv2Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
-              .getSequencerOrderingTopology()
-              .futureValue
-              .sequencerIds should have size 1 withClue "sole sequencerId"
-          }
-          sv2Backend.dsoAutomation.trigger[SvBftSequencerPeerOffboardingTrigger].resume()
+        sv1Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
+        sv2Backend.dsoAutomation.trigger[SvOffboardingSequencerTrigger].resume()
+        eventually() {
+          sv2Backend.participantClient.topology.sequencers
+            .list(
+              store = Some(TopologyStoreId.Synchronizer(decentralizedSynchronizerId))
+            )
+            .loneElement
+            .item
+            .allSequencers
+            .toIndexedSeq should have size 1 withClue "sole sequencers"
+          sv2Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection
+            .getSequencerOrderingTopology()
+            .futureValue
+            .sequencerIds should have size 1 withClue "sole sequencerId"
         }
+        sv2Backend.dsoAutomation.trigger[SvBftSequencerPeerOffboardingTrigger].resume()
         clue("Stop SV1") {
           sv1Backend.stop()
         }

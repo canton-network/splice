@@ -7,6 +7,7 @@ import better.files.File
 import cats.implicits.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.grpc.adapter.client.pekko.ClientAdapter
+import com.digitalasset.canton.admin.api.client.commands.AdminCommandAccess.*
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
   PruningSchedulerCommands,
@@ -32,16 +33,17 @@ import com.digitalasset.canton.sequencing.protocol
 import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{Member, NodeIdentity, PhysicalSynchronizerId, SequencerId}
-import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
-import com.digitalasset.canton.topology.admin.v30.{
-  GenesisStateV2Response,
-  SequencerLsuStateResponse,
+import com.digitalasset.canton.topology.{
+  Member,
+  NodeIdentity,
+  PhysicalSynchronizerId,
+  SequencerId,
+  SynchronizerId,
 }
+import com.digitalasset.canton.topology.admin.v30.SequencerLsuStateResponse
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
-import com.digitalasset.canton.topology.store.TimeQuery.Snapshot
-import com.digitalasset.canton.topology.transaction.{SequencerSynchronizerState, TopologyMapping}
+import com.digitalasset.canton.topology.transaction.SequencerSynchronizerState
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import com.typesafe.config.ConfigFactory
@@ -64,10 +66,12 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
 }
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 
+import java.io.SequenceInputStream
 import java.nio.file.{Files, Path}
 import java.util.{Base64, Collections}
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 import org.lfdecentralizedtrust.splice.store.bulk.ZstdGroupedWeight
 
 /** Connection to the subset of the Canton sequencer admin API that we rely
@@ -115,20 +119,6 @@ class SequencerAdminConnection(
   def getSequencerId(implicit traceContext: TraceContext): Future[SequencerId] =
     getId().map(SequencerId(_))
 
-  def getGenesisState(timestamp: CantonTimestamp)(implicit
-      traceContext: TraceContext
-  ): Future[Seq[ByteString]] = {
-    val responseObserver = new SeqAccumulatingObserver[GenesisStateV2Response]()
-    runCmd(
-      TopologyAdminCommands.Read
-        .GenesisStateV2(
-          timestamp = Some(timestamp),
-          synchronizerStore = None,
-          observer = responseObserver,
-        )
-    ).flatMap(_ => responseObserver.resultFuture.map(_.map(_.chunk)))
-  }
-
   def getLsuState(file: File, ts: Option[CantonTimestamp])(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
@@ -157,6 +147,7 @@ class SequencerAdminConnection(
       topologySnapshot: Path,
       staticSynchronizerParameters: StaticSynchronizerParameters,
       ignorePsidCheck: Boolean,
+      synchronizerId: SynchronizerId,
   )(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
@@ -166,6 +157,8 @@ class SequencerAdminConnection(
         inputStream,
         staticSynchronizerParameters,
         ignorePsidCheck,
+        synchronizerId,
+        serverVersion = None,
       )
     ).andThen(_ => inputStream.close())
   }
@@ -186,33 +179,13 @@ class SequencerAdminConnection(
     )
   }
 
-  def getTopologyTransactionsSummary(store: TopologyStoreId, now: CantonTimestamp)(implicit
-      traceContext: TraceContext
-  ): Future[Map[TopologyMapping.Code, Int]] = {
-    runCmd(
-      TopologyAdminCommands.Read.ListAllV2(
-        query = BaseQuery(
-          store = store,
-          proposals = false,
-          timeQuery = Snapshot(now),
-          ops = None,
-          filterSigningKey = "",
-          protocolVersion = None,
-        ),
-        filterNamespace = "",
-        includeMappings = Seq.empty,
-      )
-    ).map(_.result.groupMapReduce(_.mapping.code)(_ => 1)(_ + _))
-  }
-
   def getOnboardingState(sequencerIdOrTimestamp: Either[SequencerId, CantonTimestamp])(implicit
       traceContext: TraceContext
-  ): Future[ByteString] = {
-    val responseObserver =
-      new ByteStringStreamObserver[OnboardingStateV2Response](_.onboardingStateForSequencer)
+  ): Future[Seq[ByteString]] = {
+    val responseObserver = new SeqAccumulatingObserver[OnboardingStateV2Response]
     runCmd(
       SequencerAdminCommands.OnboardingStateV2(responseObserver, sequencerIdOrTimestamp)
-    ).flatMap(_ => responseObserver.resultBytes)
+    ).flatMap(_ => responseObserver.resultFuture.map(_.map(_.onboardingStateForSequencer)))
   }
 
   /** Streams onboarding state from the gRPC admin service directly to a bucket without writing to memory
@@ -277,6 +250,7 @@ class SequencerAdminConnection(
                 ConfigFactory.parseMap(
                   Map[String, AnyRef](
                     "provider" -> "service-account",
+                    "scopes" -> scopes,
                     "service-account" ->
                       Map[String, AnyRef](
                         "private-key" -> Base64.getEncoder.encodeToString(
@@ -284,7 +258,6 @@ class SequencerAdminConnection(
                         ),
                         "client-email" -> x.getClientEmail,
                         "project-id" -> bucketConfig.projectId,
-                        "scopes" -> scopes,
                       ).asJava,
                   ).asJava
                 )
@@ -302,29 +275,36 @@ class SequencerAdminConnection(
       logger,
       s"$serviceName connection",
     )
-    // stub acts the client-side proxy to get access to raw grpc commands
-    val stub = request.createService(channel.channel)
-    // bridges the gRPC response stream to a Pekko Source and converts the Protobuf ByteString to a Pekko ByteString
-    val source = ClientAdapter
-      .serverStreaming(
-        request
-          .createRequestInternal()
-          .getOrElse(throw new IllegalStateException("Unable to create internal request.")),
-        (req: OnboardingStateV2Request, obs: StreamObserver[OnboardingStateV2Response]) =>
-          stub.onboardingStateV2(req, obs),
-      )
-      .map { response =>
-        val proto: ByteString = response.onboardingStateForSequencer
-        PekkoByteString(proto.asReadOnlyByteBuffer())
+    try {
+      // stub acts the client-side proxy to get access to raw grpc commands
+      val stub = request.createService(channel.channel)
+      // bridges the gRPC response stream to a Pekko Source and converts the Protobuf ByteString to a Pekko ByteString
+      val source = ClientAdapter
+        .serverStreaming(
+          request
+            .createRequestInternal()
+            .getOrElse(throw new IllegalStateException("Unable to create internal request.")),
+          (req: OnboardingStateV2Request, obs: StreamObserver[OnboardingStateV2Response]) =>
+            stub.onboardingStateV2(req, obs),
+        )
+        .map { response =>
+          val proto: ByteString = response.onboardingStateForSequencer
+          PekkoByteString(proto.asReadOnlyByteBuffer())
+        }
+        .via(
+          ZstdGroupedWeight(compressionLevel = 3, minSize = chunkSize.toLong)
+        ) // 3 is the default zstd compression level
+      val storageObject = source.runWith(sink)
+      storageObject.onComplete { _ =>
+        channel.close()
       }
-      .via(
-        ZstdGroupedWeight(compressionLevel = 3, minSize = chunkSize.toLong)
-      ) // 3 is the default zstd compression level
-    val storageObject = source.runWith(sink)
-    storageObject.onComplete { _ =>
-      channel.close()
+      storageObject
+    } catch {
+      // a throw before the onComplete callback is registered would leak the channel
+      case NonFatal(e) =>
+        channel.close()
+        Future.failed(e)
     }
-    storageObject
   }
 
   /** This is used for initializing the sequencer when the domain is first bootstrapped.
@@ -337,31 +317,19 @@ class SequencerAdminConnection(
     topologySnapshot.result.foreach(_.writeDelimitedTo(domainParameters.protocolVersion, builder))
     runCmd(
       SequencerAdminCommands.InitializeFromGenesisStateV2(
-        Seq(builder.toByteString),
+        builder.toByteString.newInput,
         domainParameters,
+        serverVersion = None,
       )
     )
   }
 
-  /** This is used for initializing the sequencer after hard domain migrations.
-    */
-  def initializeFromGenesisState(
-      genesisState: Seq[ByteString],
-      domainParameters: StaticSynchronizerParameters,
-  )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
-    runCmd(
-      SequencerAdminCommands.InitializeFromGenesisStateV2(
-        genesisState,
-        domainParameters,
-      )
-    )
-
   def initializeFromOnboardingState(
-      onboardingState: ByteString
+      onboardingState: Seq[ByteString]
   )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
     runCmd(
       SequencerAdminCommands.InitializeFromOnboardingStateV2(
-        onboardingState
+        new SequenceInputStream(onboardingState.iterator.map(_.newInput()).asJavaEnumeration)
       )
     )
 
@@ -567,7 +535,11 @@ object SequencerAdminConnection {
     def extraTrafficConsumed: NonNegativeLong = state.extraTrafficConsumed
     def extraTrafficLimit: NonNegativeLong =
       state.extraTrafficPurchased
-    def nextSerial: PositiveInt = state.serial.fold(PositiveInt.one)(_.increment)
+    def nextSerial: PositiveInt = state.serial.fold(PositiveInt.one)(
+      _.increment.valueOr(err =>
+        throw new IllegalStateException(s"Failed to increment serial: $err")
+      )
+    )
 
     override def pretty: Pretty[TrafficState] = prettyOfClass(
       param("member", _.member),

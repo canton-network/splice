@@ -22,8 +22,9 @@ jobs:
       image: ${{ inputs.self_hosted && 'us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12' || '' }}
     steps:
       - name: Check out repository code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -31,20 +32,17 @@ jobs:
       - name: Setup Nix
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: canton_consistency
           target: 'static_tests'
 
       - name: Run consistency check
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           additional_nix_args: "--keep PATH"
           cmd: |
             CURRENT_VERSION=$(jq -r '.version' nix/canton-sources.json)
             echo "Validating Docker digests for Canton version: $CURRENT_VERSION"
-
-            # TODO(#6581) to be removed
-            export CONTAINERS_REGISTRIES_CONF=$(mktemp)
 
             function set_value() {
               local key="$1"
@@ -79,6 +77,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -87,37 +86,37 @@ jobs:
         id: setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: static_tests
           target: 'static_tests'
 
       - name: Check Grafana Dashboards
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-grafana-dashboards.sh
 
       - name: Check trailing whitespace
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-trailing-whitespace.sh
 
       - name: Run Daml warts check
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-daml-warts.sh
 
       - name: Run Daml return types check
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-daml-return-types.sh
 
       - name: Run Daml interface implementations check
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-daml-interface-impls.sh
 
       - name: Checking TODOs
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         if: ${{ inputs.skip_todo_check == false }}
         with:
           cmd: |
@@ -132,17 +131,22 @@ jobs:
           CIRCLE_PULL_REQUEST: ${{ github.event.pull_request.number }}
 
       - name: Lint GHA
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/actionlint.sh
 
+      - name: Security audit GHA with zizmor
+        uses: ./.github/actions/nix/run
+        with:
+          cmd: ./scripts/zizmor.sh
+
       - name: Check that docker base images are pinned by digest
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-base-images.sh
 
       - name: Check that npm packages are properly namespaced
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: ./scripts/check-npm-package-names.py
 
@@ -152,7 +156,7 @@ jobs:
           cmd: "Test/compile lint updateTestConfigForParallelRuns updateDarResources"
 
       - name: Verify no changes in SBT test files
-        uses: ./.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run
         with:
           cmd: git add . && git diff --staged --exit-code test*.log '**/DarResources.scala'
 

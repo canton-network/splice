@@ -7,20 +7,25 @@ import cats.data.EitherT
 import cats.syntax.either.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.metrics.api.MetricsContext
-import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.checked
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.crypto.SynchronizerCrypto
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.health.{AtomicHealthElement, CompositeHealthElement, HealthListener}
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.{
   FutureUnlessShutdown,
   HasRunOnClosing,
   LifeCycle,
   RunOnClosing,
 }
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrinting,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.metrics.SequencerConnectionPoolMetrics
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil.RetryPolicy
@@ -38,6 +43,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Thereafter.syntax.*
 import com.digitalasset.canton.util.{FutureUnlessShutdownUtil, Mutex, SingleUseCell}
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.nonempty.NonEmpty
 import org.apache.pekko.stream.Materializer
 
 import java.util.concurrent.atomic.AtomicReference
@@ -59,7 +65,7 @@ class GrpcInternalSequencerConnection private[sequencing] (
     protected override val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContextExecutor, esf: ExecutionSequencerFactory, materializer: Materializer)
     extends InternalSequencerConnection
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
   import GrpcInternalSequencerConnection.*
 
   private val lock = Mutex()
@@ -301,7 +307,10 @@ class GrpcInternalSequencerConnection private[sequencing] (
       _ <- EitherT.cond[FutureUnlessShutdown](
         apiName == CantonGrpcUtil.ApiName.SequencerPublicApi,
         (),
-        SequencerConnectionInternalError.ValidationError(s"Bad API: $apiName"),
+        SequencerConnectionInternalError.ValidationError(
+          s"Endpoint '${config.endpoint}' provides '$apiName', expected '${CantonGrpcUtil.ApiName.SequencerPublicApi}'. " +
+            "This message indicates a possible mistake in configuration, please check node connection settings'."
+        ),
       )
 
       handshakeResponse <- stub
@@ -412,17 +421,20 @@ class GrpcInternalSequencerConnection private[sequencing] (
 
   override def onClosed(): Unit = {
     val toClose = userConnectionRef.get.toList :+ validationLimiter
-    LifeCycle.close(toClose*)(logger)
+    LifeCycle.close(toClose)(logger)
   }
 
-  override protected def pretty: Pretty[GrpcInternalSequencerConnection] =
+  override def prettyCompanion: PrettyPrintingCompanion[GrpcInternalSequencerConnection] =
+    GrpcInternalSequencerConnection
+}
+
+object GrpcInternalSequencerConnection
+    extends PrettyPrintingCompanion[GrpcInternalSequencerConnection] {
+  override protected val pretty: Pretty[GrpcInternalSequencerConnection] =
     prettyOfClass(
       param("name", _.name.singleQuoted),
       param("attributes", _.attributesCell.get),
     )
-}
-
-object GrpcInternalSequencerConnection {
   abstract class GrpcSequencerConnectionHealth(
       override val name: String,
       override val associatedHasRunOnClosing: HasRunOnClosing,

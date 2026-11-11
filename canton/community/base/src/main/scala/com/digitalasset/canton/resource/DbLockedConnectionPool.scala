@@ -12,6 +12,7 @@ import com.digitalasset.canton.config.{DbConfig, DbLockedConnectionPoolConfig, P
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.*
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.UnlessShutdown.{AbortedDueToShutdown, Outcome}
 import com.digitalasset.canton.logging.{
   ErrorLoggingContext,
@@ -127,7 +128,7 @@ class DbLockedConnectionPool private (
 
           logger.debug(s"Ramping up connection pool with ${poolSize.value} connections")
 
-          val pool = Range(0, poolSize.value).map { idx =>
+          val pool = (0 until poolSize.value).map { idx =>
             createPoolConnection(s"pool-$idx", DbLockMode.Shared)
           }
 
@@ -183,11 +184,11 @@ class DbLockedConnectionPool private (
 
     logger.trace(s"Closing pool connections")
     LifeCycle.close(
-      (transitionOrFail(
+      transitionOrFail(
         classOf[State.Active].getSimpleName,
         getActiveState(_),
         State.Passive,
-      ).pool)*
+      ).pool
     )(logger)
   }
 
@@ -254,7 +255,13 @@ class DbLockedConnectionPool private (
     }
 
   private def scheduleHealthCheck(now: CantonTimestamp): Unit =
-    clock.scheduleAt(runScheduledHealthCheck, now.add(config.healthCheckPeriod.asJava)).discard
+    clock
+      .scheduleAtCancelledOnShutdown(
+        runScheduledHealthCheck,
+        s"${getClass.getName}: scheduling health check",
+        now.add(config.healthCheckPeriod.asJava),
+      )
+      .discard
 
   private def findActiveConnection(pool: Seq[DbLockedConnection]): Option[KeepAliveConnection] = {
     val availableConnectionOpt = pool.find(_.get.exists(_.markInUse()))
@@ -317,7 +324,7 @@ class DbLockedConnectionPool private (
   override def onClosed(): Unit =
     stateRef.get() match {
       case State.Active(pool) =>
-        LifeCycle.close(execQueue +: pool :+ mainConnection :+ mainExecutor :+ ds: _*)(logger)
+        LifeCycle.close(execQueue +: pool :+ mainConnection :+ mainExecutor :+ ds)(logger)
       case State.Passive =>
         LifeCycle.close(execQueue, mainConnection, mainExecutor, ds)(logger)
     }

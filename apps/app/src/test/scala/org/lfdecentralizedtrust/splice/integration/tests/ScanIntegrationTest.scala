@@ -3,16 +3,22 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
+import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.RewardCouponV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules, VoteRequest}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.PerClientIpRateLimitConfig
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
   ConfigurableApp,
@@ -22,8 +28,9 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.CantonBftPeerConfig
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient
+import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
   ExpireIssuingMiningRoundTrigger,
@@ -32,6 +39,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 
+import java.util.Optional
 import scala.concurrent.{blocking, Future}
 import scala.util.{Success, Try}
 
@@ -76,7 +84,7 @@ class ScanIntegrationTest
               // used for the rate limit test
               rateLimiting = config.parameters.rateLimiting.copy(
                 rateLimiters =
-                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> SpliceRateLimitConfig(
+                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> PerClientIpRateLimitConfig(
                     ratePerSecond = 5
                   ))
               ),
@@ -88,6 +96,11 @@ class ScanIntegrationTest
         ConfigTransforms.updateInitialTickDuration(NonNegativeFiniteDuration.ofMillis(500))(config)
       )
       .withTrafficTopupsEnabled
+
+  // The RewardCouponV2 test creates the coupon directly as the DSO.
+  override protected lazy val sanityChecksIgnoredRootCreates = Seq(
+    RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+  )
 
   "getAcsSnapshot respects custom timeout" in { implicit env =>
     loggerFactory.assertLogsUnordered(
@@ -101,46 +114,35 @@ class ScanIntegrationTest
 
   "return dso info same as the sv app" in { implicit env =>
     val scan = sv1ScanBackend.getDsoInfo()
-    inside(sv1Backend.getDsoInfo()) {
-      case HttpSvPublicAppClient.DsoInfo(
-            svUser,
-            svParty,
-            dsoParty,
-            votingThreshold,
-            latestMiningRound,
-            amuletRules,
-            dsoRules,
-            svNodeStates,
-            _,
-          ) =>
-        scan.svUser should be(svUser)
-        scan.svPartyId should be(svParty.toProtoPrimitive)
-        scan.dsoPartyId should be(dsoParty.toProtoPrimitive)
-        scan.votingThreshold should be(votingThreshold)
-        scan.latestMiningRound should be(latestMiningRound.toHttp)
-        scan.amuletRules should be(amuletRules.toHttp)
-        scan.dsoRules should be(dsoRules.toHttp)
-        scan.svNodeStates should be(svNodeStates.map(_._2.toHttp))
-    }
+    val svDsoInfo = sv1Backend.getDsoInfo()
+    scan shouldBe svDsoInfo
+    sv1ScanBackend.getDsoInfoV1() shouldBe svDsoInfo.toV1
+    sv1ScanBackend.getSvInfo() shouldBe HttpScanAppClient.SvInfo(
+      svDsoInfo.svUser,
+      svDsoInfo.svParty,
+    )
+    val dsoParty = scan.dsoParty
     clue("Returns physical synchronizer id") {
       sv1ScanBackend.getActivePhysicalSynchronizerSerial() shouldBe NonNegativeInt.zero
     }
     // sanity checks
-    scan.dsoRules.contract.contractId should be(
+    scan.dsoRules.contract.contractId.contractId should be(
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(DsoRules.COMPANION)(dsoParty)
         .loneElement
         .id
         .contractId
     )
-    scan.amuletRules.contract.contractId should be(
+    scan.amuletRules.contract.contractId.contractId should be(
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(AmuletRules.COMPANION)(dsoParty)
         .loneElement
         .id
         .contractId
     )
-    scan.svNodeStates.map(_.contract.contractId) should be(
+    scan.svNodeStates.values.map(
+      _.contract.contractId.contractId
+    ) should contain theSameElementsAs (
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(SvNodeState.COMPANION)(dsoParty)
         .map(_.id.contractId)
@@ -186,6 +188,157 @@ class ScanIntegrationTest
             )
         }
     }
+  }
+
+  "reject request arrays longer than maxItems with 400" in { implicit env =>
+    val maxItems = HttpRequestLimits.MaxRequestArrayItems
+    val tooMany = maxItems + 1
+    val at = CantonTimestamp.now()
+    val migrationId = 0L
+    val dso = dsoParty
+    val parties = Vector.fill(tooMany)(dso)
+    val openRound = sv1ScanBackend.getOpenAndIssuingMiningRounds()._1.headOption.value
+    // faking an IssuingRound is easier than getting one, especially in this
+    // suite, which pauses the advance trigger
+    val issuingRound = ContractWithState(
+      Contract(
+        IssuingMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
+        new IssuingMiningRound.ContractId(openRound.contractId.contractId),
+        new IssuingMiningRound(
+          dso.toProtoPrimitive,
+          openRound.payload.round,
+          SpliceUtil.damlDecimal(1.0),
+          SpliceUtil.damlDecimal(1.0),
+          SpliceUtil.damlDecimal(1.0),
+          SpliceUtil.damlDecimal(1.0),
+          openRound.payload.opensAt,
+          openRound.payload.targetClosesAt,
+          Optional.empty(),
+          Optional.empty(), // optIssuancePerFeaturedAssetRewardCoupon (CIP-0104)
+        ),
+        ByteString.EMPTY,
+        openRound.contract.createdAt,
+      ),
+      ContractState.InFlight,
+    )
+    // contract ID type doesn't matter for this test
+    val fakeVoteRequestCids = {
+      val cid = new VoteRequest.ContractId(openRound.contractId.contractId)
+      Seq.fill(tooMany)(cid)
+    }
+
+    val cases: Seq[(String, String, () => Any)] = Seq(
+      (
+        "/api/scan/v0/open-and-issuing-mining-rounds",
+        "cached_open_mining_round_contract_ids",
+        () =>
+          sv1ScanBackend.getOpenAndIssuingMiningRounds(cachedOpenRounds =
+            Seq.fill(tooMany)(openRound)
+          ),
+      ),
+      (
+        "/api/scan/v0/open-and-issuing-mining-rounds",
+        "cached_issuing_round_contract_ids",
+        () =>
+          sv1ScanBackend.getOpenAndIssuingMiningRounds(cachedIssuingRounds =
+            Seq.fill(tooMany)(issuingRound)
+          ),
+      ),
+      (
+        "/api/scan/v2/state/acs",
+        "party_ids",
+        () => sv1ScanBackend.getAcsSnapshotAtV2(at, migrationId, partyIds = Some(parties)),
+      ),
+      (
+        "/api/scan/v2/state/acs",
+        "templates",
+        () =>
+          sv1ScanBackend.getAcsSnapshotAtV2(
+            at,
+            migrationId,
+            templates = Some {
+              val pqn = PackageQualifiedName fromJavaCodegenCompanion AmuletRules.COMPANION
+              Vector.fill(tooMany)(pqn)
+            },
+          ),
+      ),
+      (
+        "/api/scan/v2/holdings/state",
+        "owner_party_ids",
+        () => sv1ScanBackend.getHoldingsStateAtV2(at, migrationId, parties),
+      ),
+      (
+        "/api/scan/v0/holdings/summary",
+        "owner_party_ids",
+        () => sv1ScanBackend.getHoldingsSummaryAt(at, migrationId, parties),
+      ),
+      (
+        "/api/scan/v1/holdings/summary",
+        "owner_party_ids",
+        () => sv1ScanBackend.getHoldingsSummaryAtV1(at, migrationId, parties),
+      ),
+      (
+        "/api/scan/v0/voterequest",
+        "vote_request_contract_ids",
+        () => sv1ScanBackend.listVoteRequestsByTrackingCid(fakeVoteRequestCids),
+      ),
+      // technically an sv endpoint test, but an outlier and otherwise identical
+      (
+        "/api/sv/v0/admin/sv/voterequest",
+        "vote_request_contract_ids",
+        () => sv1Backend.listVoteRequestsByTrackingCid(fakeVoteRequestCids),
+      ),
+    )
+
+    forEvery(Table(("path", "field", "call"), cases*)) { case (path, field, call) =>
+      assertThrowsAndLogsCommandFailures(
+        call(),
+        _.errorMessage should (include(s"HTTP 400 Bad Request POST at '$path'") and include(
+          s"Expected '$field' to contain at most $maxItems items, but contained $tooMany."
+        )),
+      )
+    }
+  }
+
+  "serve RewardCouponV2 created event blobs via getRewardCouponsV2Disclosures" taggedAs Tags.SpliceAmulet_0_1_19 in {
+    implicit env =>
+      val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
+      // A contract of a different template, which the endpoint must omit.
+      val amuletRulesCid = sv1ScanBackend.getAmuletRules().contractId.contractId
+
+      // CollectRewardsAndMergeAmuletsTrigger is paused for this suite, so the coupon is not minted away.
+      val (_, couponCid) = actAndCheck(
+        "Create a RewardCouponV2 for bob's validator",
+        createRewardCouponsV2(Seq((bobValidatorParty, BigDecimal(1.0), None))),
+      )(
+        "The DSO store ingests the coupon",
+        _ =>
+          sv1Backend.appState.dsoStore
+            .listRewardCouponsV2()
+            .futureValue
+            .filter(_.payload.provider == bobValidatorParty.toProtoPrimitive)
+            .loneElement
+            .contractId
+            .contractId,
+      )
+
+      clue("Scan serves the created event blob for the active coupon and omits non-matches") {
+        eventually() {
+          val disclosures =
+            sv1ScanBackend.getRewardCouponsV2Disclosures(Seq(couponCid, amuletRulesCid))
+          disclosures.keySet shouldBe Set(couponCid)
+          disclosures(couponCid).size should be > 0
+        }
+      }
+
+      clue("Requests exceeding the 100 contract-id limit are rejected with 400") {
+        assertThrowsAndLogsCommandFailures(
+          sv1ScanBackend.getRewardCouponsV2Disclosures(Seq.fill(101)(couponCid)),
+          _.errorMessage should (include("HTTP 400 Bad Request") and include(
+            "Expected 'contract_ids' to contain at most 100 items, but contained 101."
+          )),
+        )
+      }
   }
 
   "return bft sequencers" in { implicit env =>
@@ -234,7 +387,11 @@ class ScanIntegrationTest
         // then 5 every second
         // first second is 5 (full capacity) + 5 (capacity added after consumption)
         // then 5 every second
-        val maxAccepted = 30
+        // The 50 calls are emitted at 10/s, so ~5s of refill gives 30 in the ideal case. Allow one
+        // more second of refill: throttle jitter or a slow first call stretches the window past 5s
+        // and lets a further batch through (seen accepting 31). This is still far below the 50
+        // attempted, so the assertion keeps proving that the limiter rejects.
+        val maxAccepted = 35
         // account for bursts in the stream used to rate limit the calls in `runRateLimited`
         val minAccepted = 10
         results.count(identity) should (be >= minAccepted and be <= maxAccepted)

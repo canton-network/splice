@@ -4,7 +4,6 @@
 package com.digitalasset.canton.logging.pretty
 
 import cats.Show.Shown
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.base.error.utils.DecodedCantonError
 import com.digitalasset.canton.config.RequireTypes.{Port, RefinedNumeric}
 import com.digitalasset.canton.data.{DeduplicationPeriod, LedgerTimeBoundaries}
@@ -17,10 +16,9 @@ import com.digitalasset.canton.util.{HexString, ThrowableUtil}
 import com.digitalasset.canton.{LedgerUserId, LfPartyId, LfTimestamp, LfVersioned, Uninhabited}
 import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.data.Ref.{DottedName, PackageId, QualifiedName}
-import com.digitalasset.daml.lf.transaction.LegacyContractStateMachine.ActiveLedgerState
-import com.digitalasset.daml.lf.transaction.LegacyTransactionErrors.*
 import com.digitalasset.daml.lf.transaction.{CreationTime, Versioned}
 import com.digitalasset.daml.lf.value.Value
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 import com.google.protobuf.ByteString
 import io.grpc.Status
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus
@@ -48,6 +46,15 @@ trait PrettyInstances {
       inst.prettyInternal.treeOf(inst.asInstanceOf[inst.type])
     }
 
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  implicit def prettyPrettyPrintingFromCompanion[T <: PrettyPrintingFromCompanion]: Pretty[T] =
+    inst =>
+      if (inst == null) PrettyUtil.nullTree
+      else {
+        // Cast is required to make IDEA happy.
+        inst.prettyCompanion.prettyInternal.treeOf(inst.asInstanceOf[inst.type])
+      }
+
   implicit def prettyTree[T <: Tree]: Pretty[T] = identity
 
   /** Makes the syntax from [[com.digitalasset.canton.util.ShowUtil]] accessible in places where a
@@ -60,6 +67,8 @@ trait PrettyInstances {
   implicit def prettyLong: Pretty[Long] = prettyOfString(_.toString)
 
   implicit def prettyBigDecimal: Pretty[BigDecimal] = prettyOfString(_.toString)
+
+  implicit def prettyBigInt: Pretty[BigInt] = prettyOfString(_.toString)
 
   implicit def prettyJLong: Pretty[JLong] = prettyOfString(_.toString)
 
@@ -103,7 +112,7 @@ trait PrettyInstances {
     elements =>
       treeOfIterable("Map", elements.map { case (k, v) => Tree.Infix(k.toTree, "->", v.toTree) })
 
-  def treeOfIterable[T: Pretty](prefix: String, elements: Iterable[T]): Tree =
+  private def treeOfIterable[T: Pretty](prefix: String, elements: Iterable[T]): Tree =
     if (elements.sizeCompare(1) == 0) {
       elements.iterator.next().toTree
     } else {
@@ -165,7 +174,7 @@ trait PrettyInstances {
 
   implicit val prettyNodeId: Pretty[LfNodeId] = prettyOfParam(_.index)
 
-  protected def prettyUidString(partyStr: String): String =
+  private def prettyUidString(partyStr: String): String =
     UniqueIdentifier.fromProtoPrimitive_(partyStr) match {
       case Right(uid) => uid.show
       case Left(_) => partyStr
@@ -293,22 +302,6 @@ trait PrettyInstances {
     unnamedParam(_.value),
     unnamedParam(_.traceContext),
   )
-
-  implicit val prettyKeyInputError: Pretty[KeyInputError] = {
-    case InconsistentContractKeyKIError(e: InconsistentContractKey) =>
-      prettyOfClass[InconsistentContractKey](unnamedParam(_.key)).treeOf(e)
-    case DuplicateContractKeyKIError(e: DuplicateContractKey) =>
-      prettyOfClass[DuplicateContractKey](unnamedParam(_.key)).treeOf(e)
-    case DuplicateContractIdKIError(e: DuplicateContractId) =>
-      prettyOfClass[DuplicateContractId](unnamedParam(_.contractId)).treeOf(e)
-  }
-
-  implicit def prettyActiveLedgerState[T: Pretty]: Pretty[ActiveLedgerState[T]] =
-    prettyOfClass[ActiveLedgerState[T]](
-      param("locallyCreatedThisTimeline", _.locallyCreatedThisTimeline),
-      param("consumedBy", _.consumedBy),
-      param("localActiveKeys", _.localActiveKeys),
-    )
 
   implicit val prettyPort: Pretty[Port] = prettyOfString(_.unwrap.toString)
 

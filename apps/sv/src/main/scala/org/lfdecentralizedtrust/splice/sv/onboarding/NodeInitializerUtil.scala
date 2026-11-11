@@ -18,7 +18,6 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.{
   EnabledFeaturesConfig,
-  NetworkAppClientConfig,
   SpliceInstanceNamesConfig,
   UpgradesConfig,
 }
@@ -27,13 +26,19 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.Topol
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
-import org.lfdecentralizedtrust.splice.store.db.DbAppStore
+import org.lfdecentralizedtrust.splice.store.{
+  InMemoryUnavailablePartiesStore,
+  UnavailablePartiesStore,
+}
+import org.lfdecentralizedtrust.splice.store.db.{
+  DbAppStore,
+  DbUnavailablePartiesStore,
+  StoreDescriptor,
+}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
-import org.lfdecentralizedtrust.splice.sv.cometbft.{CometBftNode, CometBftRequestSigner}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
   FoundDso,
   JoinWithKey,
@@ -41,10 +46,9 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvCantonIdentifierConfig}
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
-import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.util.{DsoInfo, TemplateJsonDecoder}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.jdk.CollectionConverters.*
 
 trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNodeConfigClient {
 
@@ -79,18 +83,21 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected def newSvStore(
       key: SvStore.Key,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
       ec: ExecutionContext,
       templateDecoder: TemplateJsonDecoder,
       closeContext: CloseContext,
-  ): SvSvStore = SvSvStore(
+      tc: TraceContext,
+  ): Future[SvSvStore] = SvSvStore(
     key,
     storage,
     loggerFactory,
     retryProvider,
     migrationId,
+    synchronizerId,
     participantId,
     config.automation.ingestion,
     config.parameters.defaultLimit,
@@ -130,19 +137,22 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected def newDsoStore(
       key: SvStore.Key,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
       ec: ExecutionContext,
       templateDecoder: TemplateJsonDecoder,
       closeContext: CloseContext,
-  ): SvDsoStore = {
+      tc: TraceContext,
+  ): Future[SvDsoStore] = {
     SvDsoStore(
       key,
       storage,
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,
@@ -167,26 +177,57 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       templateJsonDecoder: TemplateJsonDecoder,
       esf: ExecutionSequencerFactory,
       tc: TraceContext,
-  ) =
-    new SvDsoAutomationService(
-      clock,
-      domainTimeSync,
-      config,
-      svStore,
-      dsoStore,
-      ledgerClient,
-      participantAdminConnection,
-      retryProvider,
-      synchronizerNodeService,
-      upgradesConfig,
-      spliceInstanceNamesConfig,
-      loggerFactory,
-      grpcClientMetrics,
-      packageVersionSupport,
-      synchronizerId,
-      enabledFeatures,
-      synchronizerNodeReconciler,
-    )
+  ): Future[SvDsoAutomationService] =
+    newUnavailablePartiesStore(dsoStore).map { unavailablePartiesStore =>
+      new SvDsoAutomationService(
+        clock,
+        domainTimeSync,
+        config,
+        svStore,
+        dsoStore,
+        ledgerClient,
+        participantAdminConnection,
+        retryProvider,
+        synchronizerNodeService,
+        upgradesConfig,
+        spliceInstanceNamesConfig,
+        loggerFactory,
+        grpcClientMetrics,
+        packageVersionSupport,
+        synchronizerId,
+        enabledFeatures,
+        synchronizerNodeReconciler,
+        unavailablePartiesStore,
+      )
+    }
+
+  /** Either the persisted or the in-memory store of parties to be skipped by DSO automation,
+    * depending on the `enablePersistedUnavailableParties` feature flag.
+    */
+  protected def newUnavailablePartiesStore(
+      dsoStore: SvDsoStore
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[UnavailablePartiesStore] =
+    if (config.parameters.enabledFeatures.enablePersistedUnavailableParties) {
+      implicit val closeContext: CloseContext = CloseContext(retryProvider)
+      participantAdminConnection.getParticipantId().flatMap { participantId =>
+        DbUnavailablePartiesStore(
+          StoreDescriptor(
+            version = 1,
+            name = "DbUnavailablePartiesStore",
+            party = dsoStore.key.dsoParty,
+            participant = participantId,
+            key = Map("svParty" -> dsoStore.key.svParty.toProtoPrimitive),
+          ),
+          storage,
+          config.unavailablePartiesBackoffParameters.baseIgnoreDuration,
+          config.unavailablePartiesBackoffParameters.maxIgnoreDuration,
+          clock,
+          loggerFactory,
+        )
+      }
+    } else {
+      Future.successful(new InMemoryUnavailablePartiesStore(config.automation.ignoredPartyIds))
+    }
 
   protected def newDsoPartyHosting(
       dsoParty: PartyId
@@ -196,63 +237,6 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     retryProvider,
     loggerFactory,
   )
-
-  protected def ensureCometBftGovernanceKeysAreSet(
-      cometBftNode: Option[CometBftNode],
-      svParty: PartyId,
-      dsoStore: SvDsoStore,
-      dsoAutomation: SvDsoAutomationService,
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
-    cometBftNode match {
-      case Some(cometBftNode) =>
-        for {
-          _ <- retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "updated_node_config_dso_state",
-            "Governance keys are updated in the dso state",
-            for {
-              (rulesAndState, synchronizerNodeConfig) <- getCometBftNodeConfigDsoState(
-                dsoStore,
-                svParty,
-              ).getOrElse(throw new RuntimeException("No DSO rules with SV node state found"))
-              governanceKeysPubKey = synchronizerNodeConfig match {
-                case Some(synchronizerNodeConfig) =>
-                  synchronizerNodeConfig.cometBft.governanceKeys.asScala.map(_.pubKey).toSeq
-                case None => Seq.empty
-              }
-              genesisKeysPubKey = CometBftRequestSigner.genesisSigner.publicKeyBase64
-              governanceKeyNotUpdatedInDsoState = governanceKeysPubKey.contains(
-                genesisKeysPubKey
-              )
-              _ = if (governanceKeyNotUpdatedInDsoState) {
-                for {
-                  localSvNodeConfig <- cometBftNode.getLocalNodeConfig()
-                  newSvNodeConfig = getNewSynchronizerNodeConfig(
-                    synchronizerNodeConfig,
-                    localSvNodeConfig,
-                  )
-                  _ <- updateSynchronizerNodeConfig(
-                    rulesAndState,
-                    newSvNodeConfig,
-                    dsoStore,
-                    dsoAutomation.connection(SpliceLedgerConnectionPriority.High),
-                  )
-                } yield ()
-              }
-            } yield {
-              if (governanceKeyNotUpdatedInDsoState)
-                throw Status.FAILED_PRECONDITION
-                  .withDescription(
-                    "New governance keys is not in the dso state"
-                  )
-                  .asRuntimeException()
-            },
-            logger,
-          )
-        } yield ()
-      case None => Future.unit
-    }
-  }
 
   protected def isOnboardedInDsoRules(
       svcStore: SvDsoStore
@@ -382,21 +366,43 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       mat: Materializer,
   ): Future[Long] =
     for {
-      initialRound <- {
-        val sponsorConfig = joiningConfig.svClient.adminApi
-        retryProvider.getValueWithRetries(
-          RetryFor.InitializingClientCalls,
-          "initial_round_from_sponsor",
-          s"Initial Round from sponsoring SV ${joiningConfig.svClient.adminApi}",
-          setInitialRoundFromSponsor(sponsorConfig, upgradesConfig),
-          logger,
-        )
-      }
+      initialRound <- retryProvider.getValueWithRetries(
+        RetryFor.InitializingClientCalls,
+        "initial_round_from_sponsor",
+        s"Initial Round from sponsoring SV ${joiningConfig.svClient.adminApi}",
+        setInitialRoundFromSponsor(joiningConfig, upgradesConfig),
+        logger,
+      )
       _ <- setInitialRound(connection, initialRound.toLong)
     } yield initialRound.toLong
 
+  /** Fetch the DSO info a joining SV needs from its sponsor, via the configured scan instance
+    * (typically the sponsor's).
+    */
+  protected def getDsoInfoFromSponsor(
+      joiningConfig: JoinWithKey,
+      upgradesConfig: UpgradesConfig,
+  )(implicit
+      tc: TraceContext,
+      ece: ExecutionContextExecutor,
+      httpClient: HttpClient,
+      templateDecoder: TemplateJsonDecoder,
+      mat: Materializer,
+  ): Future[DsoInfo] =
+    for {
+      scanConnection <- ScanConnection.singleUncached(
+        joiningConfig.scanClient,
+        upgradesConfig,
+        clock,
+        retryProvider,
+        loggerFactory,
+        retryConnectionOnInitialFailure = true,
+      )
+      dsoInfo <- scanConnection.getDsoInfo().andThen(_ => scanConnection.close())
+    } yield dsoInfo
+
   private def setInitialRoundFromSponsor(
-      sponsorConfig: NetworkAppClientConfig,
+      joiningConfig: JoinWithKey,
       upgradesConfig: UpgradesConfig,
   )(implicit
       tc: TraceContext,
@@ -405,18 +411,9 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       templateDecoder: TemplateJsonDecoder,
       mat: Materializer,
   ): Future[String] =
-    SvConnection(
-      sponsorConfig,
-      upgradesConfig,
-      retryProvider,
-      loggerFactory,
-    ).flatMap { svConnection =>
-      svConnection
-        .getDsoInfo()
-        // the sponsor might use the old api, in this case initial round has to be 0
-        .map(_.initialRound.getOrElse("0"))
-        .andThen(_ => svConnection.close())
-    }
+    getDsoInfoFromSponsor(joiningConfig, upgradesConfig)
+      // the sponsor might use an old api version that does not return it, in this case the initial round has to be 0
+      .map(_.initialRound.getOrElse("0"))
 
   private def isOnboardedInDecentralizedNamespace(
       svcStore: SvDsoStore

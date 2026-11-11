@@ -134,7 +134,7 @@ instance CryptoHash.Hashable Batch where
       CryptoHash.hashVariant "BatchOfMintingAllowances" [CryptoHash.hash mintingAllowances]
 
 instance HasCheckedFetch CalculateRewardsV2 ForDso where
-  contractGroupId CalculateRewardsV2 with .. = ForDso with ..
+  contractGroupId CalculateRewardsV2{..} = ForDso with dso
 
 instance HasCheckedFetch ProcessRewardsV2 ForDso where
-  contractGroupId ProcessRewardsV2 with .. = ForDso with ..
+  contractGroupId ProcessRewardsV2{..} = ForDso with dso

@@ -28,8 +28,7 @@ import com.digitalasset.canton.console.declarative.DeclarativeApi.{
   UpdateResult,
 }
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.ledger.api
-import com.digitalasset.canton.ledger.api.IdentityProviderId
+import com.digitalasset.canton.health.admin.data.NodeStatus
 import com.digitalasset.canton.lifecycle.{CloseContext, LifeCycle, RunOnClosing}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.metrics.DeclarativeApiMetrics
@@ -38,7 +37,7 @@ import com.digitalasset.canton.participant.admin.AdminWorkflowServices
 import com.digitalasset.canton.participant.config.*
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.{GrpcSequencerConnection, SequencerConnectionValidation}
-import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
+import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, BaseWriteRequest, TopologyStoreId}
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
 import com.digitalasset.canton.topology.transaction.{
@@ -51,8 +50,10 @@ import com.digitalasset.canton.topology.transaction.{
 }
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.user.IdentityProviderId
 import com.digitalasset.canton.util.{BinaryFileUtil, MonadUtil}
-import com.digitalasset.canton.{SynchronizerAlias, config}
+import com.digitalasset.canton.version.ReleaseVersion
+import com.digitalasset.canton.{SynchronizerAlias, config, user}
 import com.digitalasset.daml.lf.archive.DarParser
 import com.google.protobuf.field_mask.FieldMask
 
@@ -67,6 +68,7 @@ class DeclarativeParticipantApi(
     adminApiConfig: ClientConfig,
     override val consistencyTimeout: config.NonNegativeDuration,
     adminToken: => Option[CantonAdminToken],
+    getStatus: => Option[NodeStatus.Status],
     runnerFactory: String => GrpcAdminCommandRunner,
     val closeContext: CloseContext,
     val metrics: DeclarativeApiMetrics,
@@ -185,22 +187,29 @@ class DeclarativeParticipantApi(
 
     def proposeEnableMultiSynchronizerFeatureFlag(
         synchronizerId: SynchronizerId,
-        oldFeatureFlags: Seq[ParticipantTopologyFeatureFlag],
+        oldFeatureFlags: Set[ParticipantTopologyFeatureFlag],
     ): Either[String, SignedTopologyTransaction[TopologyChangeOp, SynchronizerTrustCertificate]] = {
       val mapping = SynchronizerTrustCertificate(
         participantId,
         synchronizerId,
-        featureFlags = (ParticipantTopologyFeatureFlag.EnableMultiSynchronizer +: oldFeatureFlags),
+        featureFlags = oldFeatureFlags + ParticipantTopologyFeatureFlag.EnableMultiSynchronizer,
       )
-      queryAdminApi(
-        TopologyAdminCommands.Write.Propose(
-          mapping,
-          signedBy = Seq.empty,
-          store = synchronizerId,
-          mustFullyAuthorize = true,
-          waitToBecomeEffective = Some(consistencyTimeout),
+      for {
+        nodeStatus <- getStatus.toRight("Unable to get status of node. Is the node started?")
+        res <- queryAdminApi(
+          TopologyAdminCommands.Write.Propose(
+            BaseWriteRequest(
+              clientVersion = Some(ReleaseVersion.current)
+            ),
+            mapping,
+            signedBy = Seq.empty,
+            store = synchronizerId,
+            mustFullyAuthorize = true,
+            waitToBecomeEffective = Some(consistencyTimeout),
+            serverVersion = nodeStatus.version.some,
+          )
         )
-      )
+      } yield res
     }
 
     if (config.enableMultiSynchronizerTopologyFeatureFlag) {
@@ -209,7 +218,7 @@ class DeclarativeParticipantApi(
           synchronizerIds.traverse { sid =>
             for {
               current <- fetchSynchronizerTrustCertificate(sid.synchronizerId)
-              currentFeatureFlags = current.headOption.map(_.item.featureFlags).getOrElse(Seq.empty)
+              currentFeatureFlags = current.headOption.map(_.item.featureFlags).getOrElse(Set.empty)
               shouldUpdate = !currentFeatureFlags.contains(
                 ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
               )
@@ -268,20 +277,41 @@ class DeclarativeParticipantApi(
       )
     )
 
-    def fetchHostedTuple(filterParty: String, synchronizerId: SynchronizerId) =
+    def fetchOwnEntries(
+        filterParty: String,
+        synchronizerId: SynchronizerId,
+    ): Either[String, Seq[((UniqueIdentifier, SynchronizerId), HostingParticipant)]] =
       fetchHosted(filterParty, synchronizerId).map(_.flatMap { party2Participant =>
-        val maybePermission = party2Participant.item.participants
+        party2Participant.item.participants
           .find(_.participantId == participantId)
-          .map(_.permission)
-        maybePermission
-          .map(permission =>
-            (
-              (party2Participant.item.partyId.uid, synchronizerId),
-              ParticipantPermissionConfig.fromInternal(permission),
-            )
-          )
+          .map(entry => ((party2Participant.item.partyId.uid, synchronizerId), entry))
           .toList
       })
+
+    // A Nominated or Freezing entry must move forward only through an explicit hosting state
+    // change. Adding or updating the party here would rewrite the entry to Active, and removing it
+    // would remove the party's whole mapping. Hence such parties are left alone.
+    def fetchHostedTuple(filterParty: String, synchronizerId: SynchronizerId) =
+      fetchOwnEntries(filterParty, synchronizerId).map(_.collect {
+        case (key, entry) if entry.state.canHost =>
+          (key, ParticipantPermissionConfig.fromInternal(entry.permission))
+      })
+
+    def skipIfAwaitingReplication(
+        wanted: ((UniqueIdentifier, SynchronizerId), ParticipantPermissionConfig)
+    ): Either[String, Option[((UniqueIdentifier, SynchronizerId), ParticipantPermissionConfig)]] = {
+      val (key @ (uid, synchronizerId), _) = wanted
+      fetchOwnEntries(uid.toProtoPrimitive, synchronizerId).map(
+        _.collectFirst { case (`key`, entry) if !entry.state.canHost => entry.state } match {
+          case Some(state) =>
+            logger.info(
+              s"Skipping party $uid on $synchronizerId: this participant's hosting state is $state"
+            )
+            None
+          case None => Some(wanted)
+        }
+      )
+    }
 
     def createTopologyTx(
         uid: UniqueIdentifier,
@@ -289,6 +319,7 @@ class DeclarativeParticipantApi(
         permission: ParticipantPermission,
     ) =
       for {
+        nodeStatus <- getStatus.toRight("Unable to get status of node. Is the node started?")
         mapping <- PartyToParticipant.create(
           PartyId(uid),
           threshold = PositiveInt.one,
@@ -299,27 +330,36 @@ class DeclarativeParticipantApi(
         )
         _ <- queryAdminApi(
           TopologyAdminCommands.Write.Propose(
+            BaseWriteRequest(
+              clientVersion = Some(ReleaseVersion.current)
+            ),
             mapping,
             signedBy = Seq.empty,
             store = synchronizerId,
             mustFullyAuthorize = true,
             waitToBecomeEffective = Some(consistencyTimeout),
+            serverVersion = nodeStatus.version.some,
           )
         ).map(_ => ())
       } yield ()
 
     def removeParty(uid: UniqueIdentifier, synchronizerId: SynchronizerId): Either[String, Unit] =
       for {
+        nodeStatus <- getStatus.toRight("Unable to get status of node. Is the node started?")
         current <- fetchHosted(filterParty = uid.toProtoPrimitive, synchronizerId)
           .flatMap(_.headOption.toRight(s"Party not found for removal?: $uid"))
         _ <- queryAdminApi(
           TopologyAdminCommands.Write.Propose(
+            BaseWriteRequest(
+              clientVersion = Some(ReleaseVersion.current)
+            ),
             current.item,
             signedBy = Seq.empty,
             store = synchronizerId,
             mustFullyAuthorize = true,
             change = TopologyChangeOp.Remove,
             waitToBecomeEffective = Some(consistencyTimeout),
+            serverVersion = nodeStatus.version.some,
           )
         )
       } yield {}
@@ -357,7 +397,7 @@ class DeclarativeParticipantApi(
 
     queryAdminApi(ListConnectedSynchronizers())
       .flatMap { synchronizerIds =>
-        val wanted = parties.flatMap { p =>
+        val configured = parties.flatMap { p =>
           val party =
             if (p.party.contains(UniqueIdentifier.delimiter))
               UniqueIdentifier.tryFromProtoPrimitive(p.party)
@@ -376,33 +416,35 @@ class DeclarativeParticipantApi(
             fetchHostedTuple(filterParty = "", synchronizerId)
           }
 
-        run[(UniqueIdentifier, SynchronizerId), ParticipantPermissionConfig](
-          "party",
-          removeParties,
-          checkSelfConsistency,
-          want = wanted,
-          fetch = _ => fetchAll(),
-          get = { case (uid, synchronizerId) =>
-            fetchHostedTuple(uid.toProtoPrimitive, synchronizerId).map(_.toList).flatMap {
-              case (_, v) :: Nil => Right(Some(v))
-              case Nil => Right(None)
-              case rst =>
-                Left(
-                  s"Multiple entries found for party $uid and synchronizer $synchronizerId: $rst"
-                )
-            }
-          },
-          add = { case ((uid, synchronizerId), permission) =>
-            createTopologyTx(uid, synchronizerId, permission.toNative)
-          },
-          upd = { case ((uid, synchronizerId), wantPermission, _) =>
-            createTopologyTx(uid, synchronizerId, wantPermission.toNative)
-          },
-          rm = { case ((u, s), current) =>
-            removeParty(u, s)
-          },
-          await = Some(awaitLedgerApiServer),
-        )
+        configured.traverse(skipIfAwaitingReplication).map(_.flatten).flatMap { wanted =>
+          run[(UniqueIdentifier, SynchronizerId), ParticipantPermissionConfig](
+            "party",
+            removeParties,
+            checkSelfConsistency,
+            want = wanted,
+            fetch = _ => fetchAll(),
+            get = { case (uid, synchronizerId) =>
+              fetchHostedTuple(uid.toProtoPrimitive, synchronizerId).map(_.toList).flatMap {
+                case (_, v) :: Nil => Right(Some(v))
+                case Nil => Right(None)
+                case rst =>
+                  Left(
+                    s"Multiple entries found for party $uid and synchronizer $synchronizerId: $rst"
+                  )
+              }
+            },
+            add = { case ((uid, synchronizerId), permission) =>
+              createTopologyTx(uid, synchronizerId, permission.toNative)
+            },
+            upd = { case ((uid, synchronizerId), wantPermission, _) =>
+              createTopologyTx(uid, synchronizerId, wantPermission.toNative)
+            },
+            rm = { case ((u, s), current) =>
+              removeParty(u, s)
+            },
+            await = Some(awaitLedgerApiServer),
+          )
+        }
       }
   }
 
@@ -452,6 +494,7 @@ class DeclarativeParticipantApi(
               participantAdmin = rights.participantAdmin,
               identityProviderAdmin = rights.identityProviderAdmin,
               readAsAnyParty = rights.readAsAnyParty,
+              actAsAnyParty = rights.actAsAnyParty,
             ),
             primaryPartyAuthentication = primaryPartyAuthentication,
           )(resourceVersion = metadata.resourceVersion)
@@ -518,6 +561,7 @@ class DeclarativeParticipantApi(
           readAsAnyParty = user.rights.readAsAnyParty,
           executeAs = user.rights.executeAs.map(PartyId.tryFromProtoPrimitive).map(_.toLf),
           executeAsAnyParty = user.rights.executeAsAnyParty,
+          actAsAnyParty = user.rights.actAsAnyParty,
           primaryPartyAuthentication = user.primaryPartyAuthentication,
         )
       ).map(_ => ())
@@ -571,6 +615,8 @@ class DeclarativeParticipantApi(
           grantOrRevoke(existing.readAsAnyParty, desired.readAsAnyParty)
         val (grantExecuteAsAny, revokeExecuteAsAny) =
           grantOrRevoke(existing.executeAsAnyParty, desired.executeAsAnyParty)
+        val (grantActAsAny, revokeActAsAny) =
+          grantOrRevoke(existing.actAsAnyParty, desired.actAsAnyParty)
         val (grantReadAs, revokeReadAs) =
           grantOrRevokeSet(existing.readAs, desired.readAs)
         val (grantExecuteAs, revokeExecuteAs) =
@@ -579,7 +625,7 @@ class DeclarativeParticipantApi(
           grantOrRevokeSet(existing.actAs, desired.actAs)
         val grantE =
           if (
-            grantParticipantAdmin || grantIdpAdmin || grantReadAsAny || grantReadAs.nonEmpty || grantActAs.nonEmpty || grantExecuteAsAny || grantExecuteAs.nonEmpty
+            grantParticipantAdmin || grantIdpAdmin || grantReadAsAny || grantReadAs.nonEmpty || grantActAs.nonEmpty || grantExecuteAsAny || grantExecuteAs.nonEmpty || grantActAsAny
           ) {
             queryLedgerApi(
               LedgerApiCommands.Users.Rights.Grant(
@@ -592,12 +638,13 @@ class DeclarativeParticipantApi(
                 readAsAnyParty = grantReadAsAny,
                 executeAsAnyParty = grantExecuteAsAny,
                 identityProviderAdmin = grantIdpAdmin,
+                actAsAnyParty = grantActAsAny,
               )
             ).map(_ => ())
           } else Either.unit
         val revokeE =
           if (
-            revokeParticipantAdmin || revokeIdpAdmin || revokeReadAsAny || revokeReadAs.nonEmpty || revokeActAs.nonEmpty || revokeExecuteAsAny || revokeExecuteAs.nonEmpty
+            revokeParticipantAdmin || revokeIdpAdmin || revokeReadAsAny || revokeReadAs.nonEmpty || revokeActAs.nonEmpty || revokeExecuteAsAny || revokeExecuteAs.nonEmpty || revokeActAsAny
           ) {
             queryLedgerApi(
               LedgerApiCommands.Users.Rights.Revoke(
@@ -610,6 +657,7 @@ class DeclarativeParticipantApi(
                 readAsAnyParty = revokeReadAsAny,
                 executeAsAnyParty = revokeExecuteAsAny,
                 identityProviderAdmin = revokeIdpAdmin,
+                actAsAnyParty = revokeActAsAny,
               )
             ).map(_ => ())
           } else Either.unit
@@ -758,6 +806,7 @@ class DeclarativeParticipantApi(
           ParticipantAdminCommands.SynchronizerConnectivity.ConnectSynchronizer(
             synchronizerConnectionConfig,
             sequencerConnectionValidation = SequencerConnectionValidation.Active,
+            onboardingTransactions = Nil,
           )
         )
       } yield ()
@@ -836,7 +885,7 @@ class DeclarativeParticipantApi(
     def update(config: DeclarativeIdpConfig): Either[String, Unit] =
       queryLedgerApi(
         LedgerApiCommands.IdentityProviderConfigs.Update(
-          identityProviderConfig = api.IdentityProviderConfig(
+          identityProviderConfig = user.IdentityProviderConfig(
             identityProviderId = config.apiIdentityProviderId,
             isDeactivated = config.isDeactivated,
             jwksUrl = config.apiJwksUrl,
@@ -947,6 +996,7 @@ class DeclarativeParticipantApi(
                     ops = Some(TopologyChangeOp.Replace),
                     filterSigningKey = "",
                     protocolVersion = None,
+                    clientVersion = Some(ReleaseVersion.current),
                   ),
                   filterParticipant = ParticipantId(participantId).filterString,
                 )

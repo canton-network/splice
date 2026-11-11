@@ -3,6 +3,8 @@
 
 import { Divider, Stack, Typography } from '@mui/material';
 
+import { CREATE_PROPOSAL_FIELD_LABEL_SX } from '../../../constants/createProposalLayout';
+
 interface DetailItemProps {
   label: string;
   value: React.ReactNode;
@@ -14,20 +16,22 @@ export const DetailItem: React.FC<DetailItemProps> = props => {
   const { label, value, labelId, valueId } = props;
 
   return (
-    <Stack gap={3}>
+    <Stack sx={{ gap: 3 }}>
       <Typography
-        variant="subtitle2"
-        color="white"
-        fontWeight="bold"
-        fontSize={16}
-        lineHeight={1}
+        component="p"
+        sx={CREATE_PROPOSAL_FIELD_LABEL_SX}
         id={labelId}
         data-testid={labelId}
       >
         {label}
       </Typography>
       {typeof value === 'string' ? (
-        <Typography variant="body1" lineHeight={1} fontSize={16} id={valueId} data-testid={valueId}>
+        <Typography
+          variant="body1"
+          id={valueId}
+          data-testid={valueId}
+          sx={{ lineHeight: 1, fontSize: 16 }}
+        >
           {value}
         </Typography>
       ) : (

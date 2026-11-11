@@ -2,7 +2,18 @@ services:
   participant:
     environment:
       - CANTON_PARTICIPANT_ADMIN_USER_NAME=ledger-api-user
-      - ADDITIONAL_CONFIG_DISABLE_AUTH=canton.participants.participant.ledger-api.auth-services=[]
+      # Unauthenticated requests keep full access (wildcard), while tokens signed with the shared
+      # "unsafe" secret identify their user, which the wallet gateway relies on
+      - |
+        ADDITIONAL_CONFIG_DISABLE_AUTH=
+          canton.participants.participant.ledger-api.auth-services = [
+            {
+              type = unsafe-jwt-hmac-256
+              secret = "unsafe"
+              target-audience = "${LEDGER_API_AUTH_AUDIENCE}"
+            },
+            { type = wildcard }
+          ]
 
   validator:
     environment:
@@ -24,6 +35,11 @@ services:
           canton.validator-apps.validator_backend.participant-client.ledger-api.auth-config {
             type="none"
           }
+          canton.validator-apps.validator_backend.allowed-origins = [
+            "http://wallet.localhost",
+            "http://ans.localhost",
+            "http://portfolio.localhost"
+          ]
 
   wallet-web-ui:
     environment:
@@ -34,3 +50,8 @@ services:
     environment:
       - SPLICE_APP_UI_UNSAFE=true
       - SPLICE_APP_UI_UNSAFE_SECRET=unsafe
+
+  nginx:
+    volumes:
+      - ./nginx-disable-auth:/etc/nginx/nginx-disable-auth
+      - ./nginx-vhosts/disable-auth.conf:/etc/nginx/vhosts/disable-auth.conf

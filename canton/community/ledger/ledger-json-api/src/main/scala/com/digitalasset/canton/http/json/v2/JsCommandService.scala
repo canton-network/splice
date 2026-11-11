@@ -6,19 +6,11 @@ package com.digitalasset.canton.http.json.v2
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.daml.ledger.api.v2.command_service.{
   CommandServiceGrpc,
-  SubmitAndWaitForTransactionRequest,
   SubmitAndWaitRequest,
   SubmitAndWaitResponse,
 }
 import com.daml.ledger.api.v2.commands.Commands.DeduplicationPeriod
-import com.daml.ledger.api.v2.transaction_filter.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS
-import com.daml.ledger.api.v2.transaction_filter.{
-  CumulativeFilter,
-  EventFormat,
-  Filters,
-  TransactionFormat,
-  WildcardFilter,
-}
+import com.daml.ledger.api.v2.transaction_filter.TransactionFormat
 import com.daml.ledger.api.v2.value.Identifier
 import com.daml.ledger.api.v2.{
   command_completion_service,
@@ -42,10 +34,8 @@ import com.digitalasset.canton.http.json.v2.JsSchema.{
   JsCantonError,
   JsReassignment,
   JsTransaction,
-  JsTransactionTree,
   OneOfSchemaExtension,
 }
-import com.digitalasset.canton.http.json.v2.LegacyDTOs.toTransactionTree
 import com.digitalasset.canton.http.json.v2.damldefinitionsservice.Schema.Codecs.*
 import com.digitalasset.canton.ledger.client.LedgerClient
 import com.digitalasset.canton.logging.audit.ApiRequestLogger
@@ -108,10 +98,6 @@ class JsCommandService(
       submitAndWaitForReassignment,
     ),
     withServerLogic(
-      JsCommandService.submitAndWaitForTransactionTree,
-      submitAndWaitForTransactionTree,
-    ),
-    withServerLogic(
       JsCommandService.submitAsyncEndpoint,
       submitAsync,
     ),
@@ -136,6 +122,10 @@ class JsCommandService(
       JsCommandService.commandCompletionsListEndpoint,
       commandCompletionsStream,
       timeoutOpenEndedStream = (_: command_completion_service.GetCompletionsRequest) => true,
+    ),
+    withServerLogic(
+      JsCommandService.completionByHashEndpoint,
+      completionByHash,
     ),
   )
 
@@ -167,6 +157,17 @@ class JsCommandService(
     )
   }
 
+  private def completionByHash(
+      callerContext: CallerContext
+  ): TracedInput[command_completion_service.GetCompletionByHashRequest] => Future[
+    Either[JsCantonError, command_completion_service.GetCompletionByHashResponse]
+  ] = req => {
+    implicit val tc: TraceContext = callerContext.traceContext()
+    commandCompletionServiceClient(callerContext.token())
+      .getCompletionByHash(req.in)
+      .resultToRight
+  }
+
   def submitAndWait(callerContext: CallerContext): TracedInput[JsCommands] => Future[
     Either[JsCantonError, SubmitAndWaitResponse]
   ] = req => {
@@ -180,56 +181,6 @@ class JsCommandService(
         .resultToRight
     } yield result
   }
-
-  def submitAndWaitForTransactionTree(
-      callerContext: CallerContext
-  ): TracedInput[JsCommands] => Future[
-    Either[JsCantonError, JsSubmitAndWaitForTransactionTreeResponse]
-  ] = req => {
-    implicit val tc: TraceContext = callerContext.traceContext()
-    for {
-      commands <- protocolConverters.Commands.fromJson(req.in)
-      submitAndWaitForTransactionRequest =
-        SubmitAndWaitForTransactionRequest(
-          commands = Some(commands),
-          transactionFormat = Some(
-            TransactionFormat(
-              eventFormat = Some(
-                EventFormat(
-                  filtersByParty = commands.actAs
-                    .map(party =>
-                      party -> Filters(
-                        Seq(
-                          CumulativeFilter.defaultInstance
-                            .withWildcardFilter(WildcardFilter.defaultInstance)
-                        )
-                      )
-                    )
-                    .toMap,
-                  filtersForAnyParty = None,
-                  verbose = true,
-                )
-              ),
-              transactionShape = TRANSACTION_SHAPE_LEDGER_EFFECTS,
-            )
-          ),
-        )
-      result <- commandServiceClient(callerContext.token())
-        .submitAndWaitForTransaction(submitAndWaitForTransactionRequest)
-        .flatMap(r =>
-          protocolConverters.SubmitAndWaitTransactionTreeResponseLegacy
-            .toJson(toSubmitAndWaitTransactionTreeResponse(r))
-        )
-        .resultToRight
-    } yield result
-  }
-
-  private def toSubmitAndWaitTransactionTreeResponse(
-      response: command_service.SubmitAndWaitForTransactionResponse
-  ): LegacyDTOs.SubmitAndWaitForTransactionTreeResponse =
-    LegacyDTOs.SubmitAndWaitForTransactionTreeResponse(
-      response.transaction.map(toTransactionTree)
-    )
 
   def submitAndWaitForTransaction(
       callerContext: CallerContext
@@ -289,10 +240,6 @@ class JsCommandService(
 final case class JsSubmitAndWaitForTransactionRequest(
     commands: JsCommands,
     transactionFormat: Option[TransactionFormat] = None,
-)
-
-final case class JsSubmitAndWaitForTransactionTreeResponse(
-    transactionTree: JsTransactionTree
 )
 
 final case class JsSubmitAndWaitForTransactionResponse(
@@ -367,15 +314,6 @@ object JsCommandService extends DocumentationEndpoints {
     .in(jsonBody[command_service.SubmitAndWaitForReassignmentRequest])
     .out(jsonBody[JsSubmitAndWaitForReassignmentResponse])
     .protoRef(command_service.CommandServiceGrpc.METHOD_SUBMIT_AND_WAIT_FOR_REASSIGNMENT)
-
-  val submitAndWaitForTransactionTree = commands.post
-    .in(sttp.tapir.stringToPath("submit-and-wait-for-transaction-tree"))
-    .in(jsonBody[JsCommands])
-    .out(jsonBody[JsSubmitAndWaitForTransactionTreeResponse])
-    .deprecated()
-    .description(
-      "Submit a batch of commands and wait for the transaction trees response. Provided for backwards compatibility, it will be removed in the Canton version 3.5.0, use submit-and-wait-for-transaction instead."
-    )
 
   val submitAndWait = commands.post
     .in(sttp.tapir.stringToPath("submit-and-wait"))
@@ -452,17 +390,23 @@ object JsCommandService extends DocumentationEndpoints {
        """.stripMargin.trim)
       .inStreamListParamsAndDescription()
 
+  val completionByHashEndpoint = commands.post
+    .in(sttp.tapir.stringToPath("completion-by-hash"))
+    .in(jsonBody[command_completion_service.GetCompletionByHashRequest])
+    .out(jsonBody[command_completion_service.GetCompletionByHashResponse])
+    .protoRef(command_completion_service.CommandCompletionServiceGrpc.METHOD_GET_COMPLETION_BY_HASH)
+
   override def documentation: Seq[AnyEndpoint] = Seq(
     submitAndWait,
     submitAndWaitForTransactionEndpoint,
     submitAndWaitForReassignmentEndpoint,
-    submitAndWaitForTransactionTree,
     submitAsyncEndpoint,
     submitReassignmentAsyncEndpoint,
     completionStreamEndpoint,
     completionListEndpoint,
     commandCompletionsEndpoint,
     commandCompletionsListEndpoint,
+    completionByHashEndpoint,
   )
 }
 
@@ -514,6 +458,11 @@ object JsCommandServiceCodecs {
 
   implicit val getCompletionsRequestRW: Codec[command_completion_service.GetCompletionsRequest] =
     deriveRelaxedCodec
+
+  implicit val getCompletionByHashRequestRW
+      : Codec[command_completion_service.GetCompletionByHashRequest] = deriveRelaxedCodec
+  implicit val getCompletionByHashResponseRW
+      : Codec[command_completion_service.GetCompletionByHashResponse] = deriveRelaxedCodec
 
   implicit val reassignmentCommandsRW: Codec[reassignment_commands.ReassignmentCommands] =
     deriveRelaxedCodec

@@ -4,6 +4,7 @@ import { DsoRulesConfig } from '@daml.js/splice-dso-governance/lib/Splice/DsoRul
 import { DsoDecentralizedSynchronizerConfig } from '@daml.js/splice-dso-governance/lib/Splice/DSO/DecentralizedSynchronizer/module';
 import { Optional } from '@daml/types';
 import { ConfigChange } from './types';
+import { switchOverMapToConfigValue } from '../components/forms/formValidators';
 
 function buildSynchronizerMap(
   baseConfig: DsoDecentralizedSynchronizerConfig | undefined,
@@ -80,16 +81,16 @@ export function buildDsoConfigChanges(
       newValue: after?.numMemberTrafficContractsThreshold || '',
     },
     {
-      fieldName: 'actionConfirmationTimeout',
-      label: 'Time-To-Live for contracts representing a confirmation of an action',
-      currentValue: before?.actionConfirmationTimeout.microseconds || '',
-      newValue: after?.actionConfirmationTimeout.microseconds || '',
-    },
-    {
       fieldName: 'svOnboardingRequestTimeout',
       label: 'Time-To-Live for contracts representing an incomplete Super Validator onboarding',
       currentValue: before?.svOnboardingRequestTimeout.microseconds || '',
       newValue: after?.svOnboardingRequestTimeout.microseconds || '',
+    },
+    {
+      fieldName: 'actionConfirmationTimeout',
+      label: 'Time-To-Live for contracts representing a confirmation of an action',
+      currentValue: before?.actionConfirmationTimeout.microseconds || '',
+      newValue: after?.actionConfirmationTimeout.microseconds || '',
     },
     {
       fieldName: 'svOnboardingConfirmedTimeout',
@@ -97,12 +98,6 @@ export function buildDsoConfigChanges(
         'Time-To-Live for contracts representing confirmation for a Super Validator to onboard',
       currentValue: before?.svOnboardingConfirmedTimeout.microseconds || '',
       newValue: after?.svOnboardingConfirmedTimeout.microseconds || '',
-    },
-    {
-      fieldName: 'maxTextLength',
-      label: 'Generic upper limit on text fields',
-      currentValue: before?.maxTextLength || '',
-      newValue: after?.maxTextLength || '',
     },
     {
       fieldName: 'voteRequestTimeout',
@@ -145,6 +140,12 @@ export function buildDsoConfigChanges(
       label: 'Super Validator node limits: CometBFT: Maximum public key length',
       currentValue: before?.synchronizerNodeConfigLimits.cometBft.maxPubKeyLength || '',
       newValue: after?.synchronizerNodeConfigLimits.cometBft.maxPubKeyLength || '',
+    },
+    {
+      fieldName: 'maxTextLength',
+      label: 'Generic upper limit on text fields',
+      currentValue: before?.maxTextLength || '',
+      newValue: after?.maxTextLength || '',
     },
 
     ...buildSynchronizerMap(before?.decentralizedSynchronizer, after?.decentralizedSynchronizer),
@@ -212,6 +213,12 @@ export function buildDsoConfigChanges(
       label: 'The minimum time between two votes (or vote changes) by the same Super Validator',
       currentValue: before?.voteCooldownTime?.microseconds || '',
       newValue: after?.voteCooldownTime?.microseconds || '',
+    },
+    {
+      fieldName: 'svOperationsSwitchOverTimes',
+      label: 'SV operations switch-over times',
+      currentValue: switchOverMapToConfigValue(before?.svOperationsSwitchOverTimes),
+      newValue: switchOverMapToConfigValue(after?.svOperationsSwitchOverTimes),
     },
   ] as ConfigChange[];
 

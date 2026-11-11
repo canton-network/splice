@@ -5,7 +5,6 @@ package com.digitalasset.canton.console
 
 import ammonite.util.Bind
 import cats.syntax.either.*
-import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.admin.api.client.data.{
   GrpcSequencerConnection,
   SequencerConnection,
@@ -40,11 +39,12 @@ import com.digitalasset.canton.tracing.{NoTracing, TraceContext}
 import com.digitalasset.canton.{LfPartyId, SequencerAlias, SynchronizerAlias}
 import com.digitalasset.daml.lf.data.Ref.PackageId
 import com.digitalasset.daml.lf.transaction.CreationTime
+import com.digitalasset.nonempty.{NonEmpty, NonEmptyUtil}
 import com.typesafe.scalalogging.Logger
 import io.opentelemetry.api.trace.Tracer
 import org.tpolecat.typename.TypeName
 
-import java.time.{Duration as JDuration, Instant}
+import java.time.{Instant, Duration as JDuration}
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.Duration as SDuration
 import scala.reflect.runtime.universe
@@ -101,7 +101,7 @@ trait ConsoleEnvironment extends NamedLogging with FlagCloseable with NoTracing 
   private[console] def predefCode(interactive: Boolean, noTty: Boolean = false): String =
     ConsoleEnvironmentBinding.predefCode(interactive, noTty)
 
-  val tracer: Tracer = environment.tracerProvider.tracer
+  private[console] val tracer: Tracer = environment.tracerProvider.tracer
 
   /** Definition of the startup order of local instances. Nodes support starting up in any order
     * however to avoid delays/warnings we opt to start in the most desirable order for simple

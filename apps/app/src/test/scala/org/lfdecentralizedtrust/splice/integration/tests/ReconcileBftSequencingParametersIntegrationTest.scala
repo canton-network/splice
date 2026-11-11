@@ -33,15 +33,14 @@ class SvReconcileBftSequencingParametersIntegrationTest
                 c.svApps(InstanceName.tryCreate("sv1"))
                   .copy(
                     cantonBftSequencingParameters = Some(
-                      BftSequencingParameters(
+                      BftSequencingParameters.default.copy(
                         pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
                         segmentLength = SequencingParameters.DefaultSegmentLength.length,
                         blacklistLeaderSelectionPolicyConfig =
                           SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
                             howLongToBlacklist =
-                              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
-                                initialValue = 1L,
-                                maximumEpochBlacklisted = Some(250L),
+                              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear(
+                                maximumEpochBlacklisted = Some(250L)
                               )
                           ),
                       )
@@ -61,21 +60,23 @@ class SvReconcileBftSequencingParametersIntegrationTest
       ),
       logSuffix = "bft-sequencing-parameters",
       sv4 = false,
-      enableBftSequencer = true,
     )() {
       sv1Backend.startSync()
       sv1Backend.stop()
       val parameters = sv1Backend.participantClient.topology.sequencing_parameters
         .list(decentralizedSynchronizerId)
         .loneElement
+      val physicalSynchronizerId = sv1Backend.participantClient.synchronizers.physical_id_of(
+        sv1Backend.config.domains.global.alias
+      )
       val bytes = parameters.item.payload.value
       val bftParameters = SequencingParameters
-        .fromByteString(sv1Backend.config.localSynchronizerNodes.current.protocolVersion, bytes)
+        .fromByteString(physicalSynchronizerId.protocolVersion, bytes)
         .value
       bftParameters.pbftViewChangeTimeout shouldBe com.digitalasset.canton.time.PositiveFiniteDuration
         .tryOfSeconds(5)
       bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
-        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear
+        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
       ]
       sv1Backend.stop()
       actAndCheck(
@@ -89,10 +90,10 @@ class SvReconcileBftSequencingParametersIntegrationTest
             .loneElement
           val bytes = parameters.item.payload.value
           val bftParameters = SequencingParameters
-            .fromByteString(sv1Backend.config.localSynchronizerNodes.current.protocolVersion, bytes)
+            .fromByteString(physicalSynchronizerId.protocolVersion, bytes)
             .value
           bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
-            BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
+            BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear
           ]
         },
       )

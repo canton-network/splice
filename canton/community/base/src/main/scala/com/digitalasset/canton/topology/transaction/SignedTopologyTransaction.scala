@@ -11,23 +11,31 @@ import cats.syntax.functor.*
 import cats.syntax.functorFilter.*
 import cats.syntax.parallel.*
 import cats.syntax.traverse.*
-import com.daml.nonempty.NonEmpty
-import com.daml.nonempty.NonEmptyReturningOps.*
-import com.daml.nonempty.catsinstances.*
 import com.digitalasset.canton.ProtoDeserializationError
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.protocol.v30
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.logging.ErrorLoggingContext
+import com.digitalasset.canton.logging.pretty.{
+  Pretty,
+  PrettyPrintingCompanion,
+  PrettyPrintingFromCompanion,
+}
+import com.digitalasset.canton.protocol.{SynchronizerLimits, v30}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.store.db.DbSerializationException
-import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.topology.TopologyManager.assignExpectedUsageToKeys
+import com.digitalasset.canton.topology.store.TopologyTransactionRejection
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
 import com.digitalasset.canton.topology.transaction.TopologyTransaction.TxHash
+import com.digitalasset.canton.topology.{SynchronizerId, TopologyManagerError}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.validation.ProtoValidation
 import com.digitalasset.canton.version.*
+import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmptyReturningOps.*
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
 import slick.jdbc.{GetResult, PositionedParameters, SetParameter}
@@ -62,7 +70,7 @@ case class SignedTopologyTransaction[+Op <: TopologyChangeOp, +M <: TopologyMapp
     with DelegatedTopologyTransactionLike[Op, M]
     with Product
     with Serializable
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
   {
     val duplicateSigningKeys = signatures.toSeq
       .map(_.authorizingLongTermKey)
@@ -71,6 +79,12 @@ case class SignedTopologyTransaction[+Op <: TopologyChangeOp, +M <: TopologyMapp
       .keySet
     require(duplicateSigningKeys.isEmpty, s"Duplicate signing keys used: $duplicateSigningKeys")
   }
+
+  def nextSerial(implicit elc: ErrorLoggingContext): Either[TopologyManagerError, PositiveInt] =
+    transaction.nextSerial
+
+  def nextSerialOrRejection: Either[TopologyTransactionRejection, PositiveInt] =
+    transaction.nextSerialOrRejection
 
   def allUnvalidatedSignaturesCoveringHash: Set[TopologyTransactionSignature] =
     signatures.filter(_.coversHash(transaction.hash))
@@ -189,14 +203,9 @@ case class SignedTopologyTransaction[+Op <: TopologyChangeOp, +M <: TopologyMapp
     )
   }
 
-  override protected def pretty: Pretty[SignedTopologyTransaction.this.type] =
-    prettyOfClass(
-      unnamedParam(_.transaction),
-      // just calling `signatures.map(_.signedBy)` hides the fact that there could be
-      // multiple (possibly invalid) signatures by the same key
-      param("signatures", _.signatures.toSeq.map(_.authorizingLongTermKey).sorted),
-      paramIfTrue("proposal", _.isProposal),
-    )
+  override def prettyCompanion
+      : PrettyPrintingCompanion[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]] =
+    SignedTopologyTransaction
 
   def restrictedToSynchronizer: Option[SynchronizerId] =
     transaction.mapping.restrictedToSynchronizer
@@ -220,9 +229,21 @@ case class SignedTopologyTransaction[+Op <: TopologyChangeOp, +M <: TopologyMapp
 object SignedTopologyTransaction
     extends VersioningCompanionContext[
       SignedTopologyTransaction[TopologyChangeOp, TopologyMapping],
-      // Validation is done in synchronizer store but not in authorized store
-      ProtocolVersionValidation,
+      TopologyTransactionDeserializationContext,
+    ]
+    with PrettyPrintingCompanion[
+      SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]
     ] {
+
+  override protected val pretty
+      : Pretty[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]] =
+    prettyOfClass(
+      unnamedParam(_.transaction),
+      // just calling `signatures.map(_.signedBy)` hides the fact that there could be
+      // multiple (possibly invalid) signatures by the same key
+      param("signatures", _.signatures.toSeq.map(_.authorizingLongTermKey).sorted),
+      paramIfTrue("proposal", _.isProposal),
+    )
 
   val InitialTopologySequencingTime: CantonTimestamp = CantonTimestamp.MinValue.immediateSuccessor
 
@@ -235,10 +256,10 @@ object SignedTopologyTransaction
     SignedTopologyTransaction[TopologyChangeOp.Replace, TopologyMapping]
 
   val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.SignedTopologyTransaction
     )(
-      supportedProtoVersion(_)(fromProtoV30),
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -402,7 +423,8 @@ object SignedTopologyTransaction
   }
 
   def fromProtoV30(
-      protocolVersionValidation: ProtocolVersionValidation,
+      pvv: ProtocolVersionValidation,
+      context: TopologyTransactionDeserializationContext,
       transactionP: v30.SignedTopologyTransaction,
   ): ParsingResult[GenericSignedTopologyTransaction] = {
     val v30.SignedTopologyTransaction(
@@ -412,16 +434,31 @@ object SignedTopologyTransaction
       multiTransactionSignaturesPO,
     ) = transactionP
     for {
-      transaction <- TopologyTransaction.fromByteString(protocolVersionValidation, txBytes)
+      transaction <- TopologyTransaction.fromByteString(pvv, context, txBytes)
 
-      singleSignatures <- signaturesP
-        .traverse(Signature.fromProtoV30)
+      singleSignatures <- ProtoValidation
+        .validateLengthThen(
+          signaturesP,
+          "signatures",
+          pvv,
+          ProtoValidation.MaxCollectionSize,
+        )((element, _) => Signature.fromProtoV30(element))
         .map(
           _.map(SingleTransactionSignature(transaction.hash, _))
         )
 
-      multiTransactionHashes <- multiTransactionSignaturesPO
-        .flatTraverse(MultiTransactionSignature.fromProtoV30(_, transaction.hash).map(_.forgetNE))
+      multiTransactionHashes <- ProtoValidation
+        .validateLength(
+          multiTransactionSignaturesPO,
+          "multi_transaction_signatures",
+          pvv,
+          ProtoValidation.MaxCollectionSize,
+        )
+        .flatMap(
+          _.flatTraverse(
+            MultiTransactionSignature.fromProtoV30(pvv, _, transaction.hash).map(_.forgetNE)
+          )
+        )
 
       allSignaturesWithDuplicates <- NonEmpty
         .from(singleSignatures ++ multiTransactionHashes)
@@ -449,11 +486,15 @@ object SignedTopologyTransaction
       getByteString: GetResult[ByteString]
   ): GetResult[GenericSignedTopologyTransaction] =
     GetResult { r =>
-      fromTrustedByteStringPVV(r.<<[ByteString]).valueOr(err =>
+      // Trusted bytes from the node's own store, so the validators pass the content through and
+      // the limits in the context are never read.
+      fromTrustedByteString(TopologyTransactionDeserializationContext(SynchronizerLimits.default))(
+        r.<<[ByteString]
+      ).valueOr { err =>
         throw new DbSerializationException(
           s"Failed to deserialize SignedTopologyTransaction: $err"
         )
-      )
+      }
     }
 
   implicit def setParameterTopologyTransaction(implicit
@@ -470,14 +511,14 @@ final case class SignedTopologyTransactions[
       SignedTopologyTransactions.type
     ]
 ) extends HasProtocolVersionedWrapper[SignedTopologyTransactions[TopologyChangeOp, TopologyMapping]]
-    with PrettyPrinting {
+    with PrettyPrintingFromCompanion {
 
   @transient override protected lazy val companionObj: SignedTopologyTransactions.type =
     SignedTopologyTransactions
 
-  override protected def pretty: Pretty[SignedTopologyTransactions.this.type] = prettyOfParam(
-    _.transactions
-  )
+  override def prettyCompanion
+      : PrettyPrintingCompanion[SignedTopologyTransactions[TopologyChangeOp, TopologyMapping]] =
+    SignedTopologyTransactions
 
   def toProtoV30: v30.SignedTopologyTransactions = v30.SignedTopologyTransactions(
     transactions.map(_.toByteString)
@@ -497,13 +538,21 @@ final case class SignedTopologyTransactions[
 object SignedTopologyTransactions
     extends VersioningCompanionContext[
       SignedTopologyTransactions[TopologyChangeOp, TopologyMapping],
-      ProtocolVersionValidation,
+      TopologyTransactionDeserializationContext,
+    ]
+    with PrettyPrintingCompanion[
+      SignedTopologyTransactions[TopologyChangeOp, TopologyMapping]
     ] {
+
+  override protected val pretty
+      : Pretty[SignedTopologyTransactions[TopologyChangeOp, TopologyMapping]] = prettyOfParam(
+    _.transactions
+  )
   override val versioningTable: VersioningTable = VersioningTable(
-    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v34)(
+    ProtoVersion(30) -> VersionedProtoCodec(ProtocolVersion.v36)(
       v30.SignedTopologyTransactions
     )(
-      supportedProtoVersion(_)(fromProtoV30),
+      supportedProtoVersionPVV(_)(fromProtoV30),
       _.toProtoV30,
     )
   )
@@ -522,15 +571,22 @@ object SignedTopologyTransactions
     )
 
   def fromProtoV30(
-      expectedProtocolVersion: ProtocolVersionValidation,
+      pvv: ProtocolVersionValidation,
+      context: TopologyTransactionDeserializationContext,
       proto: v30.SignedTopologyTransactions,
   ): ParsingResult[SignedTopologyTransactions[TopologyChangeOp, TopologyMapping]] =
     for {
-      transactions <- proto.signedTransaction
+      signedTransactionsP <- ProtoValidation.validateLength(
+        proto.signedTransactions,
+        "signed_transactions",
+        pvv,
+        ProtoValidation.MaxCollectionSize,
+      )
+      transactions <- signedTransactionsP
         .traverse(
           SignedTopologyTransaction.fromByteString(
-            expectedProtocolVersion,
-            expectedProtocolVersion,
+            pvv,
+            context,
             _,
           )
         )
