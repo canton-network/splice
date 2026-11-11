@@ -246,18 +246,22 @@ object UnavailablePartiesDetector {
   private[unavailableparties] object VettingFailure {
     private[unavailableparties] val vettingErrorIds: Set[String] = Set(
       TransactionProcessor.SubmissionErrors.PackageNotVettedByRecipients.id,
-      TransactionRoutingError.TopologyErrors.NoSynchronizerForSubmission.id,
       CommandExecutionErrors.PackageSelectionFailed.id,
       CommandExecutionErrors.Interpreter.UpgradeError.ValidationFailed.id,
       CommandExecutionErrors.Interpreter.UpgradeError.TranslationFailed.id,
     )
 
     private[unavailableparties] val downgradeMessage = "may not be dropped during downgrading"
+    private[unavailableparties] val unknownPackageRoutingMessage =
+      "Some packages are not known to all informees"
 
     def unapply(t: Throwable): Boolean = t match {
       case ex: StatusRuntimeException =>
         ErrorDetails.from(ex).exists {
-          case ErrorDetails.ErrorInfoDetail(errorCodeId, _) => vettingErrorIds.contains(errorCodeId)
+          case ErrorDetails.ErrorInfoDetail(errorCodeId, _) =>
+            vettingErrorIds.contains(errorCodeId) ||
+            (errorCodeId == TransactionRoutingError.TopologyErrors.NoSynchronizerForSubmission.id &&
+              Option(ex.getStatus.getDescription).exists(_.contains(unknownPackageRoutingMessage)))
           case _ => false
         } || Option(ex.getStatus.getDescription).exists(_.contains(downgradeMessage))
       case _ => false

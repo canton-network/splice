@@ -282,6 +282,41 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
       }
     }
 
+    "split on NO_SYNCHRONIZER_FOR_SUBMISSION caused by unknown packages" in {
+      val contracts =
+        Seq(Contract("c1", Set(alice, dso)), Contract("c2", Set(bob, dso)))
+      run(
+        contracts,
+        Map(alice -> Some(v1)),
+        Set("c1"),
+        failure = submissionFailure(
+          message =
+            s"No valid synchronizer for submission found. Discarded synchronizers: sync::1: ${UnavailablePartiesDetector.VettingFailure.unknownPackageRoutingMessage} on synchronizer sync::1"
+        ),
+      ).map { case (result, _, store) =>
+        result.splits shouldBe 1
+        store.listParties().futureValue.toSet shouldBe Set(alice)
+      }
+    }
+
+    "fail the whole batch on NO_SYNCHRONIZER_FOR_SUBMISSION for other reasons" in {
+      val store = new InMemoryUnavailablePartiesStore(Set.empty)
+      val contracts =
+        Seq(Contract("c1", Set(alice, dso)), Contract("c2", Set(bob, dso)))
+      run(
+        contracts,
+        Map(alice -> Some(v1)),
+        Set("c1"),
+        store = store,
+        failure = submissionFailure(
+          message =
+            "No valid synchronizer for submission found. Discarded synchronizers: sync::1: Parties Set(alice) don't have an active participant on synchronizer sync::1"
+        ),
+      ).failed.map { _ =>
+        store.listParties().futureValue shouldBe empty
+      }
+    }
+
   }
 }
 
