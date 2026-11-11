@@ -14,7 +14,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.scan.metrics.RewardComputationMetrics
 import org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputs
 import org.lfdecentralizedtrust.splice.scan.store.{
-  AppActivityStore,
+  ActivityRecordMetaStore,
   ScanAppRewardsStore,
   ScanRewardsReferenceStore,
 }
@@ -36,7 +36,7 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class RewardComputationTrigger(
     appRewardsStore: ScanAppRewardsStore,
-    appActivityStore: AppActivityStore,
+    appActivityStore: ActivityRecordMetaStore,
     rewardsReferenceStore: ScanRewardsReferenceStore,
     updateHistory: UpdateHistory,
     override protected val context: TriggerContext,

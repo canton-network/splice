@@ -26,7 +26,7 @@ import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
-  AppActivityStore,
+  ActivityRecordMetaStore,
   ScanEventStore,
   ScanStore,
 }
@@ -80,7 +80,7 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       storeWithIngestion = storeWithIngestion,
       updateHistory = mock[UpdateHistory],
       appRewardsStore = mock[DbScanAppRewardsStore],
-      appActivityStore = mock[AppActivityStore],
+      appActivityStore = mock[ActivityRecordMetaStore],
       snapshotStore = mock[AcsSnapshotStore],
       eventStore = mock[ScanEventStore],
       historicalVotesStore = mock[HistoricalVotesStore],

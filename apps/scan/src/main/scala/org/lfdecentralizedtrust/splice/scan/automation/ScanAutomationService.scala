@@ -22,7 +22,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
 import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
-  AppActivityStore,
+  ActivityRecordMetaStore,
   ScanRewardsReferenceStore,
   ScanStore,
 }
@@ -49,7 +49,7 @@ class ScanAutomationService(
     store: ScanStore,
     val updateHistory: UpdateHistory,
     appRewardsStore: DbScanAppRewardsStore,
-    appActivityStore: AppActivityStore,
+    appActivityStore: ActivityRecordMetaStore,
     storage: DbStorage,
     snapshotStore: AcsSnapshotStore,
     svParty: PartyId,

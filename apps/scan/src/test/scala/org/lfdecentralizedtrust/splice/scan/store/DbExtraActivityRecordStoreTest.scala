@@ -9,7 +9,7 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbExtraActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbExtraActivityRecordStore.*

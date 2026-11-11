@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -64,9 +64,9 @@ object DbExtraActivityRecordStore {
   * The query methods (`earliestRoundWithCompleteAppActivity`,
   * `earliestIngestedRound`, `latestRoundWithCompleteAppActivity`,
   * `ingestionStatusForRound`, `startedIngestingAt`) match the
-  * `AppActivityStore` trait's shape so `DbActivityRecordMetaStore` can
-  * delegate here. This store does not implement the trait itself — the
-  * meta-store facade is the sole implementor.
+  * `ActivityRecordMetaStore` trait's shape so `DbActivityRecordMetaStore`
+  * can delegate here. This store does not implement the trait itself —
+  * the meta-store facade is the sole implementor.
   */
 class DbExtraActivityRecordStore(
     storage: DbStorage,
@@ -121,8 +121,9 @@ class DbExtraActivityRecordStore(
       )
     }
 
-  // Round-completion query methods — mirror AppActivityStore's surface
-  // so the step-3 facade can delegate here without a type-level dance.
+  // Round-completion query methods — mirror ActivityRecordMetaStore's
+  // surface so DbActivityRecordMetaStore can delegate here without a
+  // type-level dance.
 
   def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
     runQuerySingle(

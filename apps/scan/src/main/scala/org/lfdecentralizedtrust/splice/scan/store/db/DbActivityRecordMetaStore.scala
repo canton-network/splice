@@ -5,8 +5,8 @@ package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore
+import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -14,9 +14,9 @@ import scala.concurrent.{ExecutionContext, Future}
   * `DbAppActivityRecordStore` (fed from verdicts) and the CIP-0104 extension
   * hook's `DbExtraActivityRecordStore` (fed from
   * `ActivityRecorder_DsoRecordActivity` exercises). Combines their
-  * meta-store surfaces into the shape the `AppActivityStore` trait exposes
-  * to callers (triggers, HTTP handlers, automation service), so the two
-  * sources look like a single unified round-completion view.
+  * meta-store surfaces into the shape the `ActivityRecordMetaStore` trait
+  * exposes to callers (triggers, HTTP handlers, automation service), so
+  * the two sources look like a single unified round-completion view.
   *
   * Combine semantics:
   *   - `earliestRoundWithCompleteAppActivity`: max of the two stores'
@@ -38,7 +38,7 @@ class DbActivityRecordMetaStore(
     extraActivityRecordStore: DbExtraActivityRecordStore,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
-    extends AppActivityStore
+    extends ActivityRecordMetaStore
     with NamedLogging {
 
   override def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =

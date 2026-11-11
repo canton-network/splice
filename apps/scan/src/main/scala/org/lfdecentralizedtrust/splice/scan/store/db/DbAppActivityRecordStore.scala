@@ -4,8 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.digitalasset.nonempty.NonEmpty
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -106,8 +105,7 @@ class DbAppActivityRecordStore(
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
-) extends AppActivityStore
-    with NamedLogging
+) extends NamedLogging
     with org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes
     with FlagCloseable
     with HasCloseContext
@@ -201,7 +199,7 @@ class DbAppActivityRecordStore(
     )
   }
 
-  override def ingestionStatusForRound(roundNumber: Long)(implicit
+  def ingestionStatusForRound(roundNumber: Long)(implicit
       tc: TraceContext
   ): Future[RoundIngestionStatus] =
     earliestIngestedRound().map {
