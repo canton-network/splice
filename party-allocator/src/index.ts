@@ -15,6 +15,9 @@ import { PrometheusExporter } from "@opentelemetry/exporter-prometheus";
 import { AggregationType, MeterProvider } from "@opentelemetry/sdk-metrics";
 import { Counter, Gauge, Histogram } from "@opentelemetry/api";
 import { performance } from "perf_hooks"; // Use high-resolution monotonic clock
+import { withNewTrace } from "./tracing.js";
+import { fetchJson, retry, setTransientErrorListener } from "./retry.js";
+import { AdaptiveConcurrency } from "./adaptive-concurrency.js";
 
 async function timed<T>(metric: Histogram, operation: () => Promise<T>) {
   const startTime = performance.now();
@@ -26,17 +29,30 @@ async function timed<T>(metric: Histogram, operation: () => Promise<T>) {
   }
 }
 
+const scanRetries = 20;
+
 async function getAmuletRules() {
-  const response = await fetch(
-    `${config.scanApiUrl}/api/scan/v0/amulet-rules`,
-    {
-      method: "POST",
-      body: "{}",
-      headers: { "content-type": "application/json" },
+  return retry(
+    "get amulet rules",
+    async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await fetchJson<any>(
+        `${config.scanApiUrl}/api/scan/v0/amulet-rules`,
+        {
+          method: "POST",
+          body: "{}",
+          headers: { "content-type": "application/json" },
+        },
+      );
+      if (!body?.amulet_rules_update) {
+        throw new Error(
+          `Unexpected amulet rules response: ${JSON.stringify(body)}`,
+        );
+      }
+      return body.amulet_rules_update;
     },
+    { maxRetries: scanRetries },
   );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((await response.json()) as any).amulet_rules_update;
 }
 
 async function getSynchronizerId() {
@@ -46,29 +62,55 @@ async function getSynchronizerId() {
 }
 
 async function getOpenRound() {
-  const response = await fetch(
-    `${config.scanApiUrl}/api/scan/v0/open-and-issuing-mining-rounds`,
-    {
-      method: "POST",
-      body: '{"cached_open_mining_round_contract_ids": [], "cached_issuing_round_contract_ids": []}',
-      headers: { "content-type": "application/json" },
+  return retry(
+    "get open round",
+    async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await fetchJson<any>(
+        `${config.scanApiUrl}/api/scan/v0/open-and-issuing-mining-rounds`,
+        {
+          method: "POST",
+          body: '{"cached_open_mining_round_contract_ids": [], "cached_issuing_round_contract_ids": []}',
+          headers: { "content-type": "application/json" },
+        },
+      );
+      if (!body?.open_mining_rounds) {
+        throw new Error(
+          `Unexpected open mining rounds response: ${JSON.stringify(body)}`,
+        );
+      }
+      const round = Object.values(body.open_mining_rounds)
+        .filter((x: any) => new Date(x.contract.payload.opensAt) < new Date())
+        .sort(
+          (a: any, b: any) =>
+            b.contract.payload.round.number - a.contract.payload.round.number,
+        )[0] as any;
+      if (!round) {
+        throw new Error("No open mining round is currently open");
+      }
+      return round;
     },
+    { maxRetries: scanRetries },
   );
-  const body = await response.json();
-  return Object.values(body.open_mining_rounds)
-    .filter((x: any) => new Date(x.contract.payload.opensAt) < new Date())
-    .sort(
-      (a: any, b: any) =>
-        b.contract.payload.round.number - a.contract.payload.round.number,
-    )[0] as any;
 }
 
 async function getValidatorPartyId() {
-  const response = await fetch(
-    `${config.validatorApiUrl}/api/validator/v0/validator-user`,
+  return retry(
+    "get validator party id",
+    async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await fetchJson<any>(
+        `${config.validatorApiUrl}/api/validator/v0/validator-user`,
+      );
+      if (!body?.party_id) {
+        throw new Error(
+          `Unexpected validator user response: ${JSON.stringify(body)}`,
+        );
+      }
+      return body.party_id as string;
+    },
+    { maxRetries: scanRetries },
   );
-  const body = await response.json();
-  return body.party_id;
 }
 
 function toDisclosedContract(c: any): DisclosedContract {
@@ -187,12 +229,10 @@ async function setupPreapproval(
     [],
     command2,
   );
-  await client.retry(
-    "getPreapproval",
-    () => getPreapproval(client, partyId),
-    config.preapprovalRetries,
-    config.preapprovalRetryDelayMs,
-  );
+  await retry("getPreapproval", () => getPreapproval(client, partyId), {
+    maxRetries: config.preapprovalRetries,
+    initialDelayMs: config.preapprovalRetryDelayMs,
+  });
 }
 
 function pubKeyPath(index: number) {
@@ -247,6 +287,8 @@ async function setupParty(
 
 export type Metrics = {
   partiesAllocatedCounter: Counter;
+  partyAllocationFailuresCounter: Counter;
+  parallelism: Gauge;
   totalPartiesAllocated: Gauge;
   partyAllocationLatencyMs: Histogram;
   tapLatencyMs: Histogram;
@@ -280,6 +322,13 @@ function setupMetrics(): Metrics {
   const partiesAllocatedCounter = meter.createCounter("parties_allocated", {
     description: "Counter for number of parties that have been allocated",
   });
+  const partyAllocationFailuresCounter = meter.createCounter(
+    "party_allocation_failures",
+    { description: "Counter for number of failed party setup attempts" },
+  );
+  const parallelism = meter.createGauge("parallelism", {
+    description: "Current number of parties being set up in parallel",
+  });
   const totalPartiesAllocated = meter.createGauge("total_parties_allocated", {
     description: "Total number of parties that have been allocated",
   });
@@ -296,12 +345,16 @@ function setupMetrics(): Metrics {
   });
   return {
     partiesAllocatedCounter,
+    partyAllocationFailuresCounter,
+    parallelism,
     totalPartiesAllocated,
     partyAllocationLatencyMs,
     tapLatencyMs,
     preapprovalLatencyMs,
   };
 }
+
+const maxPartySetupAttempts = 3;
 
 function* partyIndexGenerator(from: number, until: number): Generator<number> {
   for (let index = from; index < until; index++) {
@@ -338,24 +391,83 @@ async function main() {
   await client.grantExecuteAndReadAsAnyPartyRights(config.userId);
 
   const queue = partyIndexGenerator(maxIndex, config.maxParties);
+  const failedParties: number[] = [];
+  const attempts = new Map<number, number>();
   let maxPartyAllocated = maxIndex;
 
-  const worker = async () => {
-    for (const partyIndex of queue) {
-      await setupParty(
-        metrics,
-        client,
-        config.userId,
-        synchronizerId,
-        partyIndex,
-        validatorPartyId,
-      );
-      metrics.partiesAllocatedCounter.add(1);
-      maxPartyAllocated = Math.max(maxPartyAllocated, partyIndex);
-      metrics.totalPartiesAllocated.record(maxPartyAllocated);
+  const concurrency = new AdaptiveConcurrency(
+    config.parallelism,
+    undefined,
+    (limit) => metrics.parallelism.record(limit),
+  );
+  setTransientErrorListener(() => concurrency.recordFailure());
+
+  const setupPartyWithTrace = (partyIndex: number) =>
+    withNewTrace(async () => {
+      const attempt = (attempts.get(partyIndex) ?? 0) + 1;
+      attempts.set(partyIndex, attempt);
+      try {
+        await setupParty(
+          metrics,
+          client,
+          config.userId,
+          synchronizerId,
+          partyIndex,
+          validatorPartyId,
+        );
+        attempts.delete(partyIndex);
+        concurrency.recordSuccess();
+        metrics.partiesAllocatedCounter.add(1);
+        maxPartyAllocated = Math.max(maxPartyAllocated, partyIndex);
+        metrics.totalPartiesAllocated.record(maxPartyAllocated);
+      } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
+        metrics.partyAllocationFailuresCounter.add(1);
+        concurrency.recordFailure();
+        if (attempt < maxPartySetupAttempts) {
+          logger.warn(
+            `Setup for party ${partyIndex} failed (attempt ${attempt}/${maxPartySetupAttempts}), will retry: ${errorMessage}`,
+          );
+          failedParties.push(partyIndex);
+        } else {
+          attempts.delete(partyIndex);
+          logger.error(
+            `Setup for party ${partyIndex} failed after ${attempt} attempts, skipping it: ${errorMessage}`,
+          );
+        }
+      }
+    });
+
+  const nextParty = (): number | undefined => {
+    const failed = failedParties.shift();
+    if (failed !== undefined) {
+      return failed;
     }
+    const next = queue.next();
+    return next.done ? undefined : next.value;
   };
-  await Promise.all(Array.from({ length: config.parallelism }, () => worker()));
+
+  // Dispatch parties while respecting the adaptive concurrency limit.
+  const inFlight = new Set<Promise<void>>();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    while (inFlight.size >= concurrency.limit) {
+      await Promise.race(inFlight);
+    }
+    const partyIndex = nextParty();
+    if (partyIndex === undefined) {
+      if (inFlight.size === 0) {
+        break;
+      }
+      // In-flight setups may still fail and be re-queued.
+      await Promise.race(inFlight);
+      continue;
+    }
+    const task: Promise<void> = setupPartyWithTrace(partyIndex).finally(() =>
+      inFlight.delete(task),
+    );
+    inFlight.add(task);
+  }
   logger.info(`Party allocator, completed. Sleeping`);
   // sleep forever so k8s doesn't restart it over and over.
   // For some reason, nodejs is too smart and await new Promise(() => {}) does not actually work.

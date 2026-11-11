@@ -25,8 +25,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as crypto from "node:crypto";
 import { logger } from "./logger.js";
 import { TokenSource } from "./auth.js";
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { isTransientError, retry, RetryOptions } from "./retry.js";
+import { traceparentHeader } from "./tracing.js";
 
 export class LedgerApiClient {
   private api: DefaultApi;
@@ -51,7 +51,11 @@ export class LedgerApiClient {
               return context;
             },
             pre: async (context: RequestContext) => {
-              logger.debug(`[Request] ${context.getUrl()}`);
+              const traceparent = traceparentHeader();
+              context.setHeaderParam("traceparent", traceparent);
+              logger.debug(
+                `[Request] ${context.getUrl()} traceparent=${traceparent}`,
+              );
               const store = this.als.getStore();
               if (store) {
                 store.url = context.getUrl();
@@ -104,7 +108,8 @@ export class LedgerApiClient {
             logger.info(`Party id ${partyId} is already allocated`);
           }
         }),
-      120, // party allocations take forever so we also retry forever aka 2min
+      // party allocations take forever so we also retry (almost) forever
+      { maxRetries: 120 },
     );
   }
 
@@ -172,8 +177,13 @@ export class LedgerApiClient {
     templateIds: string[],
   ): Promise<CreatedEvent[]> {
     const ledgerEnd = (
-      await this.als.run({ url: undefined }, () =>
-        this.api.getV2StateLedgerEnd(),
+      await this.retry(
+        "get ledger end",
+        () =>
+          this.als.run({ url: undefined }, () =>
+            this.api.getV2StateLedgerEnd(),
+          ),
+        { maxRetries: 5, shouldRetry: isTransientError },
       )
     ).offset;
     const toTemplateFilter = (t: string) => {
@@ -195,8 +205,13 @@ export class LedgerApiClient {
         filtersByParty: Object.fromEntries(parties.map((p) => [p, filters])),
       },
     };
-    const responses = await this.als.run({ url: undefined }, () =>
-      this.api.postV2StateActiveContracts(request),
+    const responses = await this.retry(
+      "query active contracts",
+      () =>
+        this.als.run({ url: undefined }, () =>
+          this.api.postV2StateActiveContracts(request),
+        ),
+      { maxRetries: 5, shouldRetry: isTransientError },
     );
     return responses.flatMap((r) =>
       r.contractEntry!.JsActiveContract.createdEvent
@@ -229,29 +244,8 @@ export class LedgerApiClient {
   async retry<T>(
     description: string,
     task: () => Promise<T>,
-    maxRetries: number = 60,
-    delayMs: number = 1000,
+    options: RetryOptions = {},
   ): Promise<T> {
-    let attempt = 1;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      try {
-        return await task();
-      } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
-        if (attempt < maxRetries) {
-          logger.info(
-            `Task ${description} failed after ${attempt} attempts (max ${maxRetries}): ${errorMessage}`,
-          );
-          await delay(delayMs);
-        } else {
-          logger.error(
-            `Task ${description} failed after ${attempt} attempts, giving up: ${errorMessage}`,
-          );
-          throw e;
-        }
-      }
-      attempt++;
-    }
+    return retry(description, task, options);
   }
 }
