@@ -47,6 +47,13 @@ operatorDeployment:
     spliceRoot: "."
     privateConfigsDir: "cluster/configs/configs-private"
     publicConfigsDir: "cluster/configs/configs"
+svs:
+  sv-1:
+    svApp:
+      additionalEnvVars: !append
+        - name: ADDITIONAL_CONFIG_INITIAL_PROTOCOL_VERSION
+          value: |
+            canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = 35
 validators:
   validator-runbook:
     version: 0.8.0

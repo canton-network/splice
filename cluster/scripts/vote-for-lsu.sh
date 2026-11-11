@@ -109,11 +109,13 @@ for ((i=2; i<=DSO_SIZE; i++)); do
   other_svs+=("sv-$i")
 done
 
-# extra SVs from all the config.yaml files
-extra_svs=$(get_resolved_config | yq '.svs | keys | .[] | select(test("^(default|sv-[0-9]+|sv)$") | not)')
-for sv in $extra_svs; do
-  other_svs+=("$sv")
-done
+# extra SVs from all the config.yaml files, unless they are not deployed
+if [ "${SPLICE_SKIP_EXTRA_SVS:-}" != "true" ]; then
+  extra_svs=$(get_resolved_config | yq '.svs | keys | .[] | select(test("^(default|sv-[0-9]+|sv)$") | not)')
+  for sv in $extra_svs; do
+    other_svs+=("$sv")
+  done
+fi
 
 for sv in "${other_svs[@]}"
 do
