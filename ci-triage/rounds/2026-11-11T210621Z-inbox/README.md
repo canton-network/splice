@@ -39,3 +39,9 @@ or after 3b5b828: 1ee8c88, 08774bc, 915616a, ee8772c (also Canton bump to 3.7.3-
 | g7-misc | 11357 dup 11147 (AF); 11365 dup 10358 (release-line cold compile, #8319 not backported: owner question); 11366 11367 new infra (runner network 16:05-16:24) | closes; comment + close 11366 11367 | open |
 
 Family letters: AV goes to 11354 (previous round g8); g3 proposed AV for 11363, use AW when merging.
+
+Ran 2026-11-11 (user, before the 22:xx export): all duplicate closes (11358 11362 11368 11374 -> 11255; 11371 11372 -> 11303;
+11360 -> 11313; 11361 -> 11187; 11357 -> 11147; 11364 -> 9445; 11365 -> 10358; 11376 -> 11375).
+
+Rule (user, 2026-11-11): refer to other issues as `#NNNN` in comments (and `canton-network/splice#N` for splice PRs) so
+GitHub links them; plain numbers do not link.
