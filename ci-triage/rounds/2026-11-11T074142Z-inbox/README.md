@@ -32,7 +32,7 @@ Job logs of the GHA jobs: `log/inbox-1111/<job id>.log` (gitignored).
 | g3-far | 11353 new, family Y: #8062 test uses splice-amulet 0.1.25 appKind, untagged | comment, retitle, Triaged; user is not the #8062 author (corrected), fix PR splice#8427 opened by the user (its CI failures 2026-11-11 unrelated; the tagged test passed; approved) | ran (user 2026-11-11); INDEX + Y merged |
 | g4-keydl | 11347 new: SvReonboarding sv1 init > 5 min (AM-like DAR repeats) + teardown leak cascade (H) | comment, retitle, Triaged | ran 2026-11-11 (user: comment, Triaged; retitle live); INDEX, AM + H merged |
 | g5-simtime | 11348 dup 11147 (AF, fix PR #8420) | close dup | ran 2026-11-11 (user); INDEX + AF merged |
-| g6-restart | 11346 new: WalletSurviveCantonRestart 2 min tap budget includes restarted participant startup (106 s) | comment, retitle, Triaged | open |
+| g6-restart | 11346 new: WalletSurviveCantonRestart 2 min tap budget includes restarted participant startup (106 s) | comment, retitle, Triaged | ran 2026-11-11 (user); fix branch rautenrieth-da/fix-11346-wallet-restart-tap-budget a4a158b26b (5 min budget, user's choice), PR splice#8444 open |
 | g7-vsc | 11350 dup 11255 (B shape, onboard/sv/sequencer 38 s) | close dup | open |
 | g8-lsu | 11354 new: LsuIntegrationTest validators outlive scan restart, BFT retries exhausted | comment, retitle, assignee nicu-da, Triaged | open |
 
@@ -44,5 +44,7 @@ are reported briefly between groups only.
 Lesson candidates (not yet in lessons/2026-W46.md):
 - 11347: teardown must tolerate a partially started environment (check readiness with the predicate the called code
   needs; run hooks so that close() always happens).
+
+| - | 11359 (manual, meiersi-da) | PR splice#8432 failures caused by the PR: SvDsoStore filter for FeaturedAppConfigUpdateInstruction without versionGuard, NO_TEMPLATES_FOR_PACKAGE_NAME on minimum package config, SV1 bootstrap hangs, teardown cascade | comment (comments/11359.md) | ran 2026-11-11; assigned meiersi-da, In progress; packet not written |
 
 New since the 07:37 export (export 13:12 has 11357, 11358 in Inbox; 11355, 11356 not in Inbox): next round.
