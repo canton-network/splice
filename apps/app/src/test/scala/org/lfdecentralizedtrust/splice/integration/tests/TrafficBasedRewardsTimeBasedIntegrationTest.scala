@@ -286,9 +286,9 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             bobWalletClient.acceptTransferOffer(offerCid)
           }
 
-          // Snapshot the SV participant offset before the round-10 transition so
-          // assertRewardCalcs can walk the AmuletRules_MiningRound_StartIssuing
-          // exercises emitted as rounds close from here on.
+          // Snapshot the SV offset before round-10 opens; later used to walk
+          // the AmuletRules_MiningRound_StartIssuing exercises emitted as
+          // rounds close.
           val round10BeginOffset =
             sv1Backend.participantClientWithAdminToken.ledger_api.state.end()
 
@@ -474,9 +474,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     }
 
     // Opt fields on OpenMiningRoundSummary are only populated under TBAR
-    // minting; the marker/dry-run paths intentionally leave them None.
+    // minting; the dry-run variant intentionally leaves them None.
     if (mintingTrafficBased) {
       assertOpenMiningRoundSummariesForRound10(round10BeginOffset)
+    } else {
+      assertOpenMiningRoundSummariesOptFieldsEmpty(round10BeginOffset)
     }
 
     // Other misc API tests
@@ -1017,43 +1019,45 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       // Round-10 populate-ness is implicit in the numeric `decimalMatches`
       // calls below; skip it here to avoid duplicate failures on the same field.
       exercises.filter(_.round != 10L).foreach { ex =>
-        withClue(s"round ${ex.round}: optIssuancePerFeaturedAppRewardCoupon populated") {
-          ex.summary.optIssuancePerFeaturedAppRewardCoupon.toScala shouldBe defined
-        }
-        withClue(s"round ${ex.round}: optIssuancePerFeaturedAssetRewardCoupon populated") {
-          ex.summary.optIssuancePerFeaturedAssetRewardCoupon.toScala shouldBe defined
-        }
-        withClue(s"round ${ex.round}: optTotalFeaturedAssetRewardCoupons populated") {
-          ex.summary.optTotalFeaturedAssetRewardCoupons.toScala shouldBe defined
-        }
-        withClue(s"round ${ex.round}: optUnclaimedAppRewards populated") {
-          ex.summary.optUnclaimedAppRewards.toScala shouldBe defined
+        summaryOptFields.foreach { case (name, extractor, _) =>
+          withClue(s"round ${ex.round}: $name populated") {
+            extractor(ex.summary).toScala shouldBe defined
+          }
         }
       }
 
-      withClue("round 10: optIssuancePerFeaturedAppRewardCoupon matches scan total") {
-        decimalMatches(
-          round10Summary.optIssuancePerFeaturedAppRewardCoupon,
-          expected.issuancePerFeaturedAppActivity,
-        )
+      summaryOptFields.foreach { case (name, extractor, scanField) =>
+        withClue(s"round 10: $name matches scan total") {
+          decimalMatches(extractor(round10Summary), scanField(expected))
+        }
       }
-      withClue("round 10: optIssuancePerFeaturedAssetRewardCoupon matches scan total") {
-        decimalMatches(
-          round10Summary.optIssuancePerFeaturedAssetRewardCoupon,
-          expected.issuancePerFeaturedAssetActivity,
-        )
+    }
+  }
+
+  /** Assert that every `AmuletRules_MiningRound_StartIssuing` exercise emitted
+    * on the SV participant since `round10BeginOffset` has all four
+    * `OpenMiningRoundSummary` opt fields unset. Used on the dry-run variant.
+    */
+  private def assertOpenMiningRoundSummariesOptFieldsEmpty(
+      round10BeginOffset: Long
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    clue(
+      "OpenMiningRoundSummary opt fields are unset on AmuletRules_MiningRound_StartIssuing exercises (dry-run)"
+    ) {
+      val exercises = eventually() {
+        val exs = openMiningRoundExercisesSince(round10BeginOffset)
+        withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
+          exs should not be empty
+        }
+        exs
       }
-      withClue("round 10: optTotalFeaturedAssetRewardCoupons matches scan total") {
-        decimalMatches(
-          round10Summary.optTotalFeaturedAssetRewardCoupons,
-          expected.totalAppRewardFromAssetActivity,
-        )
-      }
-      withClue("round 10: optUnclaimedAppRewards matches scan total") {
-        decimalMatches(
-          round10Summary.optUnclaimedAppRewards,
-          expected.totalAppRewardUnclaimed,
-        )
+
+      exercises.foreach { ex =>
+        summaryOptFields.foreach { case (name, extractor, _) =>
+          withClue(s"round ${ex.round}: $name unset") {
+            extractor(ex.summary).toScala shouldBe empty
+          }
+        }
       }
     }
   }
@@ -1095,6 +1099,35 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     templateId.exists(id =>
       id.moduleName == expected.getModuleName && id.entityName == expected.getEntityName
     )
+
+  private val summaryOptFields: Seq[
+    (
+        String,
+        OpenMiningRoundSummary => Optional[java.math.BigDecimal],
+        definitions.RewardAccountingActivityTotalsOk => String,
+    )
+  ] = Seq(
+    (
+      "optIssuancePerFeaturedAppRewardCoupon",
+      _.optIssuancePerFeaturedAppRewardCoupon,
+      _.issuancePerFeaturedAppActivity,
+    ),
+    (
+      "optIssuancePerFeaturedAssetRewardCoupon",
+      _.optIssuancePerFeaturedAssetRewardCoupon,
+      _.issuancePerFeaturedAssetActivity,
+    ),
+    (
+      "optTotalFeaturedAssetRewardCoupons",
+      _.optTotalFeaturedAssetRewardCoupons,
+      _.totalAppRewardFromAssetActivity,
+    ),
+    (
+      "optUnclaimedAppRewards",
+      _.optUnclaimedAppRewards,
+      _.totalAppRewardUnclaimed,
+    ),
+  )
 
   /** A decoded `AmuletRules_MiningRound_StartIssuing` exercise, paired with the
     * round number of the `IssuingMiningRound` contract created in the same
