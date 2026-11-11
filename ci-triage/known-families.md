@@ -37,7 +37,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | V | PeriodicTopologySnapshot missing 'scopes' (pekko-connectors 1.3.0) | 10921 (dups 10923, 10891) | fixed on main, #8148 |
 | W | ScanEventHistoryIntegrationTest pre-tap cursor race | 10912 | open, fix PR #8424 |
 | X | PV 37 topology on a PV 36 synchronizer | 10934 (X1), 10927 (X2), 10937 (X3) | X1, X3 fixed; X2 open |
-| Y | test tagged below the Daml packages it needs | 10930, 10933 | open, test tags |
+| Y | test tagged below the Daml packages it needs | 10930, 10933, 11353 | open, test tags |
 | Z | ScanPartyMonitorScript verdict held back by /v0/events cap | 11128 (dups 11136, 11138, 11139, 11158) | open, stephencompall-DA; 5 hits 2026-11-02..03 |
 | AA | LsuIntegrationTest sv4 faucet trigger ERROR during catch-up | 11104 | open, test |
 | AB | BftScanConnection refresh WARN about stopped sv2Scan after suppression ended | 11140 | open, fix PR #8419 |
@@ -628,6 +628,13 @@ State as recorded in the family section, not rechecked against the tracker on 20
     vetting state for batch` lines: 0 in the nightly (11178), 3 in a passing main run (11144). The test assumes
     active == latest, so a version tag only hides it until MainNet reaches 0.1.25; right tag: NoDamlCompatibilityCheck
     (or unvet the active version in the test).
+- 2026-11-11 (11353): SvFrontendIntegrationTest "Grant, Update, Amend and Revoke Featured App Right", untagged,
+  since #8062 fills the splice-amulet 0.1.25 fields appKind/opsParties (from #7627) in the Grant form. Confirm:
+  `voterequest/create resulted in a gRPC StatusRuntimeException: INVALID_ARGUMENT: COMMAND_PREPROCESSING_FAILED`
+  ... `An optional contract field (\"appKind\") with a value of Some may not be dropped during downgrading` in
+  canton_network_test.clog. Its Amend step (SRARC_CreateFeaturedAppConfigUpdateInstruction, #8061) needs
+  splice-dso-governance 0.1.31 too. Fix PR splice#8427 tags it SpliceAmulet_0_1_25. Generic signature of this family
+  on any field: `may not be dropped during downgrading` (precedents 4734, 5292, 7546).
 
 ## Z. ScanPartyMonitorScriptIntegrationTest: private verdict held back by the /v0/events cap (test flake, #8107)
 - Signature: `The script reports alice confirming the private transaction ... List() did not contain element
