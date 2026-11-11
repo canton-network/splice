@@ -84,7 +84,9 @@ import org.lfdecentralizedtrust.splice.scan.store.historystart.{
   ScanHistoryStart,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbActivityRecordMetaStore,
   DbAppActivityRecordStore,
+  DbExtraActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
   DbVotesStore,
@@ -325,6 +327,22 @@ class ScanApp(
         initialRound.toLong,
         loggerFactory,
       )
+      extraActivityRecordStore = new DbExtraActivityRecordStore(
+        storage,
+        updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(
+          AppActivityComputation.ActivityIngestionCodeVersion,
+          config.activityIngestionUserVersion.fold(0)(_.toInt),
+        ),
+        config.isFirstSv,
+        initialRound.toLong,
+        loggerFactory,
+      )
+      activityRecordMetaStore = new DbActivityRecordMetaStore(
+        appActivityRecordStore,
+        extraActivityRecordStore,
+        loggerFactory,
+      )
       appRewardsStore = new DbScanAppRewardsStore(
         storage,
         updateHistory,
@@ -346,7 +364,7 @@ class ScanApp(
         store,
         updateHistory,
         appRewardsStore,
-        appActivityRecordStore,
+        activityRecordMetaStore,
         storage,
         acsSnapshotStore,
         serviceUserPrimaryParty,
@@ -428,7 +446,7 @@ class ScanApp(
         automation,
         updateHistory,
         appRewardsStore,
-        appActivityRecordStore,
+        activityRecordMetaStore,
         acsSnapshotStore,
         scanEventStore,
         store, // TODO(#7728): switch to DbVotesStore once backfilling is ready
