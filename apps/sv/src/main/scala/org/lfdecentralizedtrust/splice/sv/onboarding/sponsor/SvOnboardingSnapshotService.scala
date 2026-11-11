@@ -37,6 +37,7 @@ import java.util.UUID
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 class SvOnboardingSnapshotService(
     config: SvOnboardingSnapshotsConfig,
@@ -225,7 +226,7 @@ class SvOnboardingSnapshotService(
 
   def prepare(key: SnapshotKey, exportTo: Path => Future[Unit])(implicit
       tc: TraceContext
-  ): Future[SvOnboardingSnapshotId] = Future.fromTry(Try(blocking {
+  ): Future[SvOnboardingSnapshotId] = Future(blocking {
     mutex.exclusive {
       if (shuttingDown) throw shutdownError
       val existing = jobs
@@ -262,7 +263,7 @@ class SvOnboardingSnapshotService(
         }
       }
     }
-  }))
+  })
 
   def lookup(id: SvOnboardingSnapshotId)(implicit tc: TraceContext): Option[SnapshotState] =
     blocking {
@@ -273,7 +274,7 @@ class SvOnboardingSnapshotService(
           case Some(Job(_, queuedAt, Some(startedAt))) =>
             Some(SnapshotState.Exporting(queuedAt, startedAt))
           case None =>
-            readSnapshot(id).map {
+            readSnapshot(id).filter(_.createdAt.plus(config.retention.asJava) > clock.now).map {
               case Snapshot(_, Stored.Finished(_, file)) => SnapshotState.Ready(file)
               case Snapshot(_, Stored.Failed(reason)) => SnapshotState.Failed(reason)
               case Snapshot(createdAt, Stored.Unusable(reason)) =>
@@ -288,6 +289,23 @@ class SvOnboardingSnapshotService(
     Future(blocking(mutex.exclusive(removeExpiredNow(now))))
 
   private def runExport(queued: QueuedExport): Future[Done] = {
+    implicit val tc: TraceContext = queued.traceContext
+    Future.delegate(exportAndRecord(queued)).recover { case NonFatal(error) =>
+      logger.warn(s"Onboarding snapshot export ${queued.id} failed", error)
+      Try(blocking(mutex.exclusive {
+        jobs.remove(queued.id).discard
+        recordFailure(queued.id, clock.now, "Snapshot export failed")
+      })).failed.foreach(recordError =>
+        logger.warn(
+          s"Failed to record the failure of onboarding snapshot ${queued.id}",
+          recordError,
+        )
+      )
+      Done
+    }
+  }
+
+  private def exportAndRecord(queued: QueuedExport): Future[Done] = {
     implicit val tc: TraceContext = queued.traceContext
     val start = blocking(mutex.exclusive {
       val running = !shuttingDown

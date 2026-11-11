@@ -8,6 +8,7 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.PositiveFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
@@ -29,7 +30,7 @@ import org.slf4j.event.Level
 import java.nio.file.{Files, Path}
 import java.time.{Duration, Instant}
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.concurrent.{Future, Promise, blocking}
 
 class SvOnboardingSnapshotServiceTest
@@ -59,12 +60,18 @@ class SvOnboardingSnapshotServiceTest
   private def unavailable(lookup: => Option[SnapshotState]) =
     (the[StatusRuntimeException] thrownBy lookup).getStatus.getCode shouldBe Status.Code.UNAVAILABLE
 
+  private class FailingClock extends SimClock(loggerFactory = loggerFactory) {
+    val failing = new AtomicBoolean(false)
+    override def now: CantonTimestamp =
+      if (failing.get()) throw new RuntimeException("clock failed") else super.now
+  }
+
   private def withService(
-      config: Path => SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig(_)
+      config: Path => SvOnboardingSnapshotsConfig = SvOnboardingSnapshotsConfig(_),
+      clock: SimClock = new SimClock(loggerFactory = loggerFactory),
   )(
       test: (SvOnboardingSnapshotService, SimClock, RetryProvider) => Unit
   ): Unit = File.usingTemporaryDirectory() { directory =>
-    val clock = new SimClock(loggerFactory = loggerFactory)
     val retryProvider =
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
     val service =
@@ -400,6 +407,34 @@ class SvOnboardingSnapshotServiceTest
         service.lookup(failedId) shouldBe None
     }
 
+    "keep processing exports when recording a failed export fails" in {
+      val clock = new FailingClock
+      withService(clock = clock) { (service, _, _) =>
+        val exported = Promise[Unit]()
+        val failedId = service.prepare(key("sv1"), writeSnapshot(exported.future)).futureValue
+        eventually()(service.lookup(failedId) should matchPattern {
+          case Some(SnapshotState.Exporting(_, _)) =>
+        })
+        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          {
+            clock.failing.set(true)
+            exported.failure(new RuntimeException("export failed"))
+            eventually()(service.lookup(failedId) shouldBe None)
+          },
+          entries => {
+            forAtLeast(1, entries)(
+              _.warningMessage should include(s"Onboarding snapshot export $failedId failed")
+            )
+            forExactly(1, entries)(_.warningMessage should include("Failed to record the failure"))
+          },
+        )
+        clock.failing.set(false)
+        val next = service.prepare(key("sv2"), writeSnapshot(Future.unit)).futureValue
+        eventually()(service.lookup(next) should matchPattern { case Some(SnapshotState.Ready(_)) =>
+        })
+      }
+    }
+
     "record a snapshot whose file disappeared when cleanup finds it" in withService() {
       (service, clock, _) =>
         val id = service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue
@@ -556,6 +591,7 @@ class SvOnboardingSnapshotServiceTest
         eventually()(service.lookup(id) should matchPattern { case Some(SnapshotState.Ready(_)) =>
         })
         clock.advance(Duration.ofHours(24))
+        service.lookup(id) shouldBe None
         service.prepare(key("sv1"), writeSnapshot(Future.unit)).futureValue should not be id
     }
 
