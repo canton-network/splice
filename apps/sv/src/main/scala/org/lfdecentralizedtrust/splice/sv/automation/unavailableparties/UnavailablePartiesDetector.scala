@@ -86,16 +86,6 @@ class UnavailablePartiesDetector(
   ): Option[PackageVersion] =
     lowestSupportedVersions.getOrElse(party, None)
 
-  private def minVersion(
-      lowestSupportedVersions: Seq[Option[PackageVersion]]
-  ): Option[PackageVersion] =
-    lowestSupportedVersions
-      .foldLeft(Option.empty[Option[PackageVersion]]) {
-        case (None, v) => Some(v)
-        case (Some(acc), v) => Some(if (versionOptionOrdering.lt(v, acc)) v else acc)
-      }
-      .flatten
-
   /** Submits the batches on top of the stack, one at a time, splitting a batch in two on a
     * vetting failure and pushing the halves back onto the stack. Tasks involving parties that get
     * ignored are removed from the whole stack right away.
@@ -172,14 +162,12 @@ class UnavailablePartiesDetector(
           )
           val candidates =
             partiesWithMinimalSupportedVersion(involvedParties, lowestSupportedVersions)
-          val toIgnore = candidates -- protectedParties
           for {
             result <- ignoreParties(candidates).flatMap { toIgnore =>
               if (toIgnore.isEmpty) {
                 logger.warn(
                   s"Not ignoring any party for the failing task, all candidates ($candidates) are protected"
                 )
-                Future.unit
               }
               processRemaining(
                 toIgnore,
@@ -207,9 +195,9 @@ class UnavailablePartiesDetector(
   ): Set[PartyId] = {
     val partyLowestSupportedVersions =
       parties.toSeq.map(p => p -> versionOf(lowestSupportedVersions, p))
-    val min = minVersion(partyLowestSupportedVersions.map(_._2))
+    val min = partyLowestSupportedVersions.map(_._2).minOption.flatten
     partyLowestSupportedVersions.collect {
-      case (p, v) if versionOptionOrdering.equiv(v, min) => p
+      case (p, v) if v == min => p
     }.toSet
   }
 
@@ -276,10 +264,6 @@ object UnavailablePartiesDetector {
       toIgnore: Set[PartyId],
   ): Boolean =
     toIgnore.nonEmpty && batch.exists(c => partiesOf(c).exists(toIgnore.contains))
-
-  // parties without any version sort first
-  private[unavailableparties] val versionOptionOrdering: Ordering[Option[PackageVersion]] =
-    Ordering.Option(Ordering.fromLessThan[PackageVersion](_ < _))
 
   final case class Result(
       submittedTasks: Int,
