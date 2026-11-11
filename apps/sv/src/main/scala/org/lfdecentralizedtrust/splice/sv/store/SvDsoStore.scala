@@ -53,6 +53,7 @@ import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, Synchro
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.FeaturedAppConfigUpdateInstruction
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
@@ -602,6 +603,15 @@ trait SvDsoStore
     splice.amulet.RewardCouponV2,
   ]]]
 
+  /** Returns a random sample of up to `limit` `FeaturedAppConfigUpdateInstruction`,
+    * drawn from an arbitrary (unordered) subset of up to 1000 contracts.
+    * Only instructions whose provider has an active FeaturedAppRight,
+    * each paired with that right's contract ID are fetched.
+    */
+  def listFeaturedAppConfigUpdateInstructionSample(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[Seq[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight]]
+
   /** Returns the histogram for the remaining age (i.e., difference between now and the
     * contract creation time) of all active RewardCouponV2 contracts.
     *
@@ -842,6 +852,15 @@ trait SvDsoStore
     splice.amulet.RewardCouponV2.ContractId,
     splice.amulet.RewardCouponV2,
   ]
+
+  /** Lists all expired `FeaturedAppConfigUpdateInstruction` contracts, regardless of whether their
+    * provider has a `FeaturedAppRight`.
+    */
+  def listExpiredFeaturedAppConfigUpdateInstruction: ListExpiredContracts[
+    FeaturedAppConfigUpdateInstruction.ContractId,
+    FeaturedAppConfigUpdateInstruction,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(FeaturedAppConfigUpdateInstruction.COMPANION)
 
   /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
     * Returns only the parties, not the coupons, to keep the query index-only.
@@ -1354,6 +1373,17 @@ object SvDsoStore {
             Some(contract.payload.trackingCid.toScala.getOrElse(contract.contractId)),
         )
       },
+      mkFilter(FeaturedAppConfigUpdateInstruction.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTbarV1_1(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
       mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso)(
         DsoAcsStoreRowData(_)
       ),
@@ -1791,6 +1821,21 @@ object SvDsoStore {
 
     override def pretty: Pretty[this.type] =
       prettyOfClass(param("state", _.state), param("context", _.context))
+  }
+
+  case class FeaturedAppConfigUpdateInstructionWithRight(
+      instruction: AssignedContract[
+        FeaturedAppConfigUpdateInstruction.ContractId,
+        FeaturedAppConfigUpdateInstruction,
+      ],
+      featuredAppRightCid: splice.amulet.FeaturedAppRight.ContractId,
+  ) extends PrettyPrinting {
+
+    override def pretty: Pretty[this.type] =
+      prettyOfClass(
+        param("instruction", _.instruction),
+        param("featuredAppRightCid", _.featuredAppRightCid.contractId.singleQuoted),
+      )
   }
 
   case class RoundBatch[+T](
