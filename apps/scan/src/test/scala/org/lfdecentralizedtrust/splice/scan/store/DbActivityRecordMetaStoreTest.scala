@@ -229,7 +229,7 @@ class DbActivityRecordMetaStoreTest
       )
       _ <- updateHistory.ingestionSink.initialize()
     } yield {
-      val appStore = new DbAppActivityRecordStore(
+      val facade = new DbActivityRecordMetaStore(
         storage,
         updateHistory,
         versions,
@@ -237,9 +237,10 @@ class DbActivityRecordMetaStoreTest
         initialRound,
         loggerFactory,
       )
-      val facade = new DbActivityRecordMetaStore(
+      val appStore = new DbAppActivityRecordStore(
         storage,
         updateHistory,
+        facade,
         versions,
         isFirstSv,
         initialRound,

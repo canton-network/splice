@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbActivityRecordMetaStore,
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
 }
@@ -156,7 +157,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         )
         .futureValue
       updateHistory.ingestionSink.initialize().futureValue
-      val appActivityRecordStore = new DbAppActivityRecordStore(
+      val metaStore = new DbActivityRecordMetaStore(
         storage,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
@@ -167,7 +168,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
       rewardsStore = new DbScanAppRewardsStore(
         storage,
         updateHistory,
-        appActivityRecordStore,
+        metaStore,
         BigDecimal(0.001),
         loggerFactory,
       )

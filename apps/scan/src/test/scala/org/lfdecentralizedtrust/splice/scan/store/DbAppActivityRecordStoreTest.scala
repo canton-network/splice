@@ -8,6 +8,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.db.DbActivityRecordMetaStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
@@ -1340,9 +1341,18 @@ class DbAppActivityRecordStoreTest
       )
       _ <- updateHistory.ingestionSink.initialize()
     } yield {
+      val metaStore = new DbActivityRecordMetaStore(
+        storage,
+        updateHistory,
+        versions,
+        isFirstSv,
+        initialRound = 0L,
+        loggerFactory,
+      )
       val store = new DbAppActivityRecordStore(
         storage,
         updateHistory,
+        metaStore,
         versions,
         isFirstSv,
         initialRound = 0L,
@@ -1375,9 +1385,18 @@ class DbAppActivityRecordStoreTest
       )
       _ <- updateHistory.ingestionSink.initialize()
     } yield {
+      val metaStore = new DbActivityRecordMetaStore(
+        storage.underlying,
+        updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(1, 0),
+        isFirstSv,
+        initialRound = 0L,
+        loggerFactory,
+      )
       val appStore = new DbAppActivityRecordStore(
         storage.underlying,
         updateHistory,
+        metaStore,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv,
         initialRound = 0L,

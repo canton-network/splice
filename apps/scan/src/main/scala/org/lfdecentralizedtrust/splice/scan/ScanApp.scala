@@ -315,17 +315,6 @@ class ScanApp(
           )
         }
       )
-      appActivityRecordStore = new DbAppActivityRecordStore(
-        storage,
-        updateHistory,
-        DbAppActivityRecordStore.IngestionVersions(
-          AppActivityComputation.ActivityIngestionCodeVersion,
-          config.activityIngestionUserVersion.fold(0)(_.toInt),
-        ),
-        config.isFirstSv,
-        initialRound.toLong,
-        loggerFactory,
-      )
       activityRecordMetaStore = new DbActivityRecordMetaStore(
         storage,
         updateHistory,
@@ -337,10 +326,22 @@ class ScanApp(
         initialRound.toLong,
         loggerFactory,
       )
+      appActivityRecordStore = new DbAppActivityRecordStore(
+        storage,
+        updateHistory,
+        activityRecordMetaStore,
+        DbAppActivityRecordStore.IngestionVersions(
+          AppActivityComputation.ActivityIngestionCodeVersion,
+          config.activityIngestionUserVersion.fold(0)(_.toInt),
+        ),
+        config.isFirstSv,
+        initialRound.toLong,
+        loggerFactory,
+      )
       appRewardsStore = new DbScanAppRewardsStore(
         storage,
         updateHistory,
-        appActivityRecordStore,
+        activityRecordMetaStore,
         config.rewardMintingAllowanceTolerance,
         loggerFactory,
       )
@@ -426,6 +427,7 @@ class ScanApp(
         loggerFactory,
         scanAppMetrics.grpcClientMetrics,
         scanVerdictStore,
+        activityRecordMetaStore,
         domainMigrationId,
         synchronizerId,
         scanAppMetrics.verdictIngestion,

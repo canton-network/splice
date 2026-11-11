@@ -99,6 +99,7 @@ object DbAppActivityRecordStore {
 class DbAppActivityRecordStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
+    metaStore: DbActivityRecordMetaStore,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
     isFirstSv: Boolean,
     initialRound: Long,
@@ -301,7 +302,7 @@ class DbAppActivityRecordStore(
     NonEmpty.from(verdictRowIds) match {
       case None => Future.successful(Map.empty)
       case Some(verdictRowIds) =>
-        startedIngestingAt.flatMap {
+        metaStore.appStartedIngestingAt.flatMap {
           case None => Future.successful(Map.empty)
           case Some(_) =>
             storage
@@ -380,17 +381,20 @@ class DbAppActivityRecordStore(
       _ <- insertRecords
       ensureResult <- earliestRound match {
         case Some(earliest) if hasTrafficSummaries =>
-          ensureMetaDBIO((firstRecordTimeMicros, earliest), lastArchived)
+          metaStore.ensureAppMetaDBIO((firstRecordTimeMicros, earliest), lastArchived)
         case _ =>
           // Either we have no rounds info and this is not firstSV,
           // or we have not started obtaining the traffic summaries yet
           // — skip meta creation.
           // A later verdict batch will create it.
-          DBIO.successful(Resume: MetaCheckResult)
+          DBIO.successful(
+            DbActivityRecordMetaStore.Resume: DbActivityRecordMetaStore.MetaCheckResult
+          )
       }
       _ <- (ensureResult, lastArchivedRoundO) match {
         // We already have meta row, so do the update in place.
-        case (Resume, Some(round)) => updateLastArchivedRoundDBIO(round)
+        case (DbActivityRecordMetaStore.Resume, Some(round)) =>
+          metaStore.updateAppLastArchivedRoundDBIO(round)
         case _ => DBIO.successful(0)
       }
     } yield ()
@@ -461,15 +465,6 @@ class DbAppActivityRecordStore(
           values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
                   $earliestIngestedRound, $lastArchivedRound)
           ON CONFLICT DO NOTHING
-    """.asUpdate
-
-  private def updateLastArchivedRoundDBIO(round: Long) =
-    sql"""update #${Tables.activityRecordMeta}
-          set last_archived_round = $round,
-              last_updated_at = now()
-          where history_id = $historyId
-            and activity_ingestion_code_version = ${ingestionVersions.code}
-            and activity_ingestion_user_version = ${ingestionVersions.user}
     """.asUpdate
 
   @VisibleForTesting
