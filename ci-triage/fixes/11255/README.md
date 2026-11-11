@@ -10,6 +10,7 @@ under `canton/`, and the packets in `../../evidence/`. Nothing here was run or t
 | File | Content |
 |---|---|
 | `README.md` | this file: cause, facts from the code, options, order |
+| `three-shapes-explained.md` | the three failure shapes for readers new to DA BFT |
 | `option-1-canton-test-config.md` | plan: Canton test config (mediator verdict delay, batch re-send) |
 | `option-2-sv-app-sequential-sequencer-onboarding.md` | plan: SV app adds sequencers one at a time |
 | `option-3-simtime-setup-watchdog.md` | plan: advance the sim clock when setup is stuck |
