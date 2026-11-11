@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@canton-network/splice-pulumi-common": "1.0.0",
-    "@kubernetes/client-node": "^1.4.0",
+    "@kubernetes/client-node": "^2.0.0",
     "@types/auth0": "^3.3.11",
     "auth0": "^6.4.0"
   },
