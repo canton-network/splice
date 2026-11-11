@@ -121,5 +121,6 @@ testBuyMemberTraffic_burnReasonIsMemoTag = do
           migrationId = 0
           trafficAmount
           expectedDso = Some app.dso
+          optDSyncTrafficPurchase = None
 
   TextMap.lookup reasonMetaKey (fromSome result.meta).values === Some reason

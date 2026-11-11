@@ -181,6 +181,11 @@ featuredAppRightContextKey = "featured-app-right"
 transferPreapprovalContextKey : Text
 transferPreapprovalContextKey = "transfer-preapproval"
 
+-- | The key of the `RegisteredSynchronizer` in the context of a paymaster's traffic purchase for
+-- its registered synchronizer.
+registeredSynchronizerContextKey : Text
+registeredSynchronizerContextKey = "registered-synchronizer"
+
 -- | The key used to embed all the lock specification in the choice context.
 lockContextKey : Text
 lockContextKey = "lock"

@@ -1,0 +1,587 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Tests for a paymaster buying traffic for its registered synchronizer, both directly through
+-- `AmuletRules_BuyMemberTraffic` and through a token standard transfer to the
+-- `trafficPurchaseReceiver`.
+--
+-- The tests create the `RegisteredSynchronizer` directly as the DSO party. The governance tests
+-- cover creating it by a vote.
+module Splice.Scripts.TestPaymasterTrafficPurchase where
+
+import DA.Assert
+import DA.Foldable (forA_)
+import DA.Optional (fromSome)
+import qualified DA.TextMap as TextMap
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Amulet (ValidatorRewardCoupon(..))
+import Splice.Amulet.TokenApiUtils (reasonMetaKey, registeredSynchronizerContextKey)
+import Splice.AmuletRules
+import Splice.DecentralizedSynchronizer (DSyncTrafficPurchase(..), MemberTraffic(..), RegisteredSynchronizer(..))
+import Splice.ExternalPartyAmuletRules (trafficPurchaseReceiver)
+
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.Utils
+  ( EnrichedFactoryChoice(..), FailureStatusCheck, allocatePartyExact, discloseMany', emptyExtraArgs
+  , expectErrorId, expectMessageContains, queryDisclosure', submitMustFail'', trafficPurchaseMemoPrefix
+  )
+
+import Splice.Scripts.Util
+
+
+-- | Id of the dedicated synchronizer. It is not one of the `requiredSynchronizers`.
+dedicatedSynchronizerId : Text
+dedicatedSynchronizerId = "dedicated-synchronizer::1220dededededededededededededededededededededededededededededede"
+
+-- | The only one of the `requiredSynchronizers` in the test config.
+decentralizedSynchronizerId : Text
+decentralizedSynchronizerId = "decentralized-synchronizer-id-0"
+
+testMemberId : Text
+testMemberId = "PAR::alice-participant::1220abcd"
+
+-- | Bytes bought in each purchase: twice the `minTopupAmount`.
+purchasedBytes : Int
+purchasedBytes = 2_000_000
+
+register : Party -> Text -> Party -> Script (ContractId RegisteredSynchronizer)
+register dso synchronizerId paymaster = submit dso $ createCmd RegisteredSynchronizer with
+  dso
+  synchronizerId
+  paymaster
+  maxActivityWeight = 1.0
+  maxAssetActivityWeight = 0.5
+
+-- | The reason of the burn for a paymaster's purchase of `purchasedBytes`.
+paymasterBurnReason : Text -> Text
+paymasterBurnReason synchronizerId =
+  "splice/memo:purchased-traffic-bytes=" <> show purchasedBytes <> "&member-id=" <>
+  "&synchronizer-id=" <> synchronizerId <> "&migration-id=0"
+
+checkPaymasterTraffic : Party -> Decimal -> Decimal -> Script ()
+checkPaymasterTraffic dso amuletSpent usdSpent = do
+  [(_, traffic)] <- query @MemberTraffic dso
+  traffic === MemberTraffic with
+    dso
+    memberId = ""
+    synchronizerId = dedicatedSynchronizerId
+    migrationId = 0
+    totalPurchased = purchasedBytes
+    numPurchases = 1
+    amuletSpent
+    usdSpent
+
+
+-- | A paymaster's purchase arguments with the registration and the given activity weights.
+dsyncPurchase
+  : ContractId RegisteredSynchronizer -> Optional Decimal -> Optional Decimal -> Optional DSyncTrafficPurchase
+dsyncPurchase registeredSynchronizerCid optAppActivityWeight optAssetActivityWeight =
+  Some DSyncTrafficPurchase with ..
+
+
+-- Direct purchase
+------------------
+
+data DirectSetup = DirectSetup with
+  app : AmuletApp
+  paymaster : AmuletUser
+  other : AmuletUser
+  registrationCid : ContractId RegisteredSynchronizer
+  amuletRulesCid : ContractId AmuletRules
+
+setupDirect : Script DirectSetup
+setupDirect = do
+  d <- setupDefaultAppWithUsers
+  let app = d.app
+  registrationCid <- register app.dso dedicatedSynchronizerId d.provider1.primaryParty
+  (amuletRulesCid, _) <- getAmuletRules app
+  pure DirectSetup with
+    app
+    paymaster = d.provider1
+    other = d.provider2
+    registrationCid
+    amuletRulesCid
+
+-- | `payer`'s purchase of `purchasedBytes` for the dedicated synchronizer with the registration
+-- and the default weights.
+paymasterPurchase : DirectSetup -> AmuletUser -> Script AmuletRules_BuyMemberTraffic
+paymasterPurchase setup payer = do
+  amuletCid <- tap setup.app payer 50.0
+  context <- getTransferContext setup.app payer None
+  pure AmuletRules_BuyMemberTraffic with
+    inputs = [InputAmulet amuletCid]
+    context
+    provider = payer.primaryParty
+    memberId = ""
+    synchronizerId = dedicatedSynchronizerId
+    migrationId = 0
+    trafficAmount = purchasedBytes
+    expectedDso = Some setup.app.dso
+    optDSyncTrafficPurchase = dsyncPurchase setup.registrationCid None None
+
+buyTrafficMustFailWith : FailureStatusCheck -> DirectSetup -> AmuletRules_BuyMemberTraffic -> Script ()
+buyTrafficMustFailWith check setup choiceArg =
+  submitMustFail'' check (actAs choiceArg.provider <> readAs setup.app.dso) $
+    exerciseCmd setup.amuletRulesCid choiceArg
+
+test_direct_paymasterBuysTraffic : Script ()
+test_direct_paymasterBuysTraffic = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  let reason = paymasterBurnReason dedicatedSynchronizerId
+
+  result <-
+    checkTxHistoryV2Reasons [(setup.paymaster.primaryParty, ["split for " <> reason, reason])] $
+    WalletClientV2.extractAndCheckTxHistory [setup.app.dso] $
+      submitResultAndTree (actAs setup.paymaster.primaryParty <> readAs setup.app.dso) $
+        exerciseCmd setup.amuletRulesCid choiceArg
+
+  -- 2MB at 1.0 USD/MB and an amulet price of 1.0 USD
+  result.amuletPaid === 2.0
+  TextMap.lookup reasonMetaKey (fromSome result.meta).values === Some reason
+  checkPaymasterTraffic setup.app.dso 2.0 2.0
+
+-- A paymaster's burn issues a ValidatorRewardCoupon, as a member's traffic purchase does.
+test_direct_paymasterBurnIssuesValidatorRewardCoupon : Script ()
+test_direct_paymasterBurnIssuesValidatorRewardCoupon = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  submit (actAs setup.paymaster.primaryParty <> readAs setup.app.dso) $
+    exerciseCmd setup.amuletRulesCid choiceArg
+  [(_, coupon)] <- query @ValidatorRewardCoupon setup.app.dso
+  coupon.user === setup.paymaster.primaryParty
+  coupon.amount === 2.0
+
+test_direct_acceptsWeightsUpToTheMax : Script ()
+test_direct_acceptsWeightsUpToTheMax = do
+  setup <- setupDirect
+  forA_ [(Some 1.0, Some 0.5), (Some 0.0, Some 0.0), (Some 0.25, None), (None, Some 0.1)] $
+    \(optAppActivityWeight, optAssetActivityWeight) -> do
+      choiceArg <- paymasterPurchase setup setup.paymaster
+      submit (actAs setup.paymaster.primaryParty <> readAs setup.app.dso) $
+        exerciseCmd setup.amuletRulesCid choiceArg with
+          optDSyncTrafficPurchase = dsyncPurchase setup.registrationCid optAppActivityWeight optAssetActivityWeight
+  traffic <- query @MemberTraffic setup.app.dso
+  length traffic === 4
+
+test_direct_rejectsDedicatedSynchronizerWithoutRegistration : Script ()
+test_direct_rejectsDedicatedSynchronizerWithoutRegistration = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/unknown-synchronizer") setup
+    choiceArg with
+      memberId = testMemberId
+      optDSyncTrafficPurchase = None
+
+test_direct_rejectsPayerOtherThanPaymaster : Script ()
+test_direct_rejectsPayerOtherThanPaymaster = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.other
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/not-paymaster") setup choiceArg
+
+test_direct_rejectsSynchronizerOtherThanTheRegistrations : Script ()
+test_direct_rejectsSynchronizerOtherThanTheRegistrations = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/registered-synchronizer-mismatch") setup
+    choiceArg with synchronizerId = "other-synchronizer::1220abab"
+
+test_direct_rejectsWeightOutOfRange : Script ()
+test_direct_rejectsWeightOutOfRange = do
+  setup <- setupDirect
+  forA_ [(Some 1.0000000001, None), (None, Some 0.6), (Some (-0.1), None), (None, Some (-0.1))] $
+    \(optAppActivityWeight, optAssetActivityWeight) -> do
+      choiceArg <- paymasterPurchase setup setup.paymaster
+      buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-activity-weight") setup
+        choiceArg with
+          optDSyncTrafficPurchase = dsyncPurchase setup.registrationCid optAppActivityWeight optAssetActivityWeight
+
+test_direct_rejectsRegistrationForRequiredSynchronizer : Script ()
+test_direct_rejectsRegistrationForRequiredSynchronizer = do
+  setup <- setupDirect
+  registrationCid <- register setup.app.dso decentralizedSynchronizerId setup.paymaster.primaryParty
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/registered-required-synchronizer") setup
+    choiceArg with
+      synchronizerId = decentralizedSynchronizerId
+      optDSyncTrafficPurchase = dsyncPurchase registrationCid None None
+
+-- The top-up minimum also holds for a paymaster's purchase.
+test_direct_rejectsPurchaseBelowTheMinimum : Script ()
+test_direct_rejectsPurchaseBelowTheMinimum = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-topup-amount") setup
+    choiceArg with trafficAmount = purchasedBytes / 4
+
+test_direct_rejectsNonZeroMigrationId : Script ()
+test_direct_rejectsNonZeroMigrationId = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-migration-id") setup
+    choiceArg with migrationId = 1
+
+test_direct_rejectsMemberIdForRegisteredSynchronizer : Script ()
+test_direct_rejectsMemberIdForRegisteredSynchronizer = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-member-id") setup
+    choiceArg with memberId = testMemberId
+
+test_direct_rejectsEmptyMemberIdForDecentralizedSynchronizer : Script ()
+test_direct_rejectsEmptyMemberIdForDecentralizedSynchronizer = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-member-id") setup
+    choiceArg with
+      synchronizerId = decentralizedSynchronizerId
+      optDSyncTrafficPurchase = None
+
+-- A registration that the paymaster signed itself instead of the DSO party doesn't let it buy traffic.
+test_direct_rejectsRegistrationNotSignedByTheDso : Script ()
+test_direct_rejectsRegistrationNotSignedByTheDso = do
+  setup <- setupDirect
+  let paymaster = setup.paymaster.primaryParty
+  forgedRegistrationCid <- register paymaster dedicatedSynchronizerId paymaster
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  buyTrafficMustFailWith (expectMessageContains "Contract group identifier mismatch") setup
+    choiceArg with optDSyncTrafficPurchase = dsyncPurchase forgedRegistrationCid None None
+
+-- The SVs stop a paymaster by archiving its registration.
+test_direct_rejectsArchivedRegistration : Script ()
+test_direct_rejectsArchivedRegistration = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  submit setup.app.dso $ archiveCmd setup.registrationCid
+  trySubmit (actAs setup.paymaster.primaryParty <> readAs setup.app.dso)
+    (exerciseCmd setup.amuletRulesCid choiceArg) >>= expectContractNotFound
+
+-- | Checks that a submission failed because one of its contracts is not active.
+expectContractNotFound : Show a => Either SubmitError a -> Script ()
+expectContractNotFound result = case result of
+  Left (ContractNotFound {}) -> pure ()
+  Left err -> fail $ "Expected ContractNotFound, but got: " <> show err
+  Right value -> fail $ "Expected failure but command succeeded with value: " <> show value
+
+
+-- Token standard purchase
+--------------------------
+
+data TokenStandardSetup = TokenStandardSetup with
+  env : TestRegistries.Env
+  registryV2 : V2.GenericRegistry
+  dso : Party
+  paymaster : Party
+  other : Party
+  registrationCid : ContractId RegisteredSynchronizer
+
+setupTokenStandard : Script TokenStandardSetup
+setupTokenStandard = do
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let dso = env.amuletV2.dso
+  registryV2 <- MultiRegistry.getRegistryApiV2 env.registries env.amuletV2.instrumentId.admin
+  paymaster <- allocatePartyExact "paymaster"
+  other <- allocatePartyExact "other"
+  forA_ [paymaster, other] $ \party -> do
+    WalletClientV2.createBatchingUtility party
+    AmuletRegistryV2.tapFaucet env.amuletV2 party 50.0
+  registrationCid <- register dso dedicatedSynchronizerId paymaster
+  pure TokenStandardSetup with ..
+
+-- | The transfer with which `sender` buys traffic, for 4.0 amulet at an amulet price of 0.5 USD,
+-- i.e., for `purchasedBytes` at 1.0 USD/MB.
+trafficPurchaseTransfer : TokenStandardSetup -> Party -> Text -> Script V2.TransferFactory_Transfer
+trafficPurchaseTransfer setup sender memoParams = do
+  now <- getTime
+  let instrumentId = setup.env.amuletV2.instrumentId
+  inputHoldingCids <- WalletClientV2.listHoldingCids sender instrumentId
+  pure V2.TransferFactory_Transfer with
+    transfer = V2.Transfer with
+      sender = TSU.basicAccount sender
+      receiver = TSU.basicAccount trafficPurchaseReceiver
+      inputHoldingCids
+      amount = 4.0
+      instrumentId
+      requestedAt = now
+      executeBefore = now `addRelTime` days 1
+      meta = Metadata with values = TextMap.fromList [(reasonMetaKey, trafficPurchaseMemoPrefix <> memoParams)]
+    actors = [sender]
+    extraArgs = emptyExtraArgs
+
+-- | The memo of a paymaster's purchase, which leaves out the `member-id`.
+paymasterMemoParams : Text -> Text
+paymasterMemoParams synchronizerId = "synchronizer-id=" <> synchronizerId <> "&migration-id=0"
+
+-- | The registry's transfer factory choice, with the registration added to its choice context.
+transferFactoryChoice
+  : TokenStandardSetup -> Optional (ContractId RegisteredSynchronizer) -> V2.TransferFactory_Transfer
+  -> Script (EnrichedFactoryChoice V2.TransferFactory V2.TransferFactory_Transfer)
+transferFactoryChoice setup = transferFactoryChoiceDisclosedBy setup setup.dso
+
+-- | `transferFactoryChoice` with the registration disclosed by `discloser`, which must see it.
+transferFactoryChoiceDisclosedBy
+  : TokenStandardSetup -> Party -> Optional (ContractId RegisteredSynchronizer) -> V2.TransferFactory_Transfer
+  -> Script (EnrichedFactoryChoice V2.TransferFactory V2.TransferFactory_Transfer)
+transferFactoryChoiceDisclosedBy setup discloser optRegistrationCid choiceArg = do
+  enrichedChoice <- V2.getTransferFactory setup.registryV2 choiceArg
+  case optRegistrationCid of
+    None -> pure enrichedChoice
+    Some registrationCid -> do
+      registrationDisclosure <- queryDisclosure' discloser registrationCid
+      pure enrichedChoice with
+        arg.extraArgs.context.values =
+          TextMap.insert registeredSynchronizerContextKey (AV_ContractId (coerceContractId registrationCid))
+            enrichedChoice.arg.extraArgs.context.values
+        disclosures = enrichedChoice.disclosures <> registrationDisclosure
+
+tokenStandardPurchaseMustFailWith
+  : FailureStatusCheck -> TokenStandardSetup -> Party -> Optional (ContractId RegisteredSynchronizer) -> Text
+  -> Script ()
+tokenStandardPurchaseMustFailWith check setup sender optRegistrationCid memoParams = do
+  enrichedChoice <- trafficPurchaseTransfer setup sender memoParams >>= transferFactoryChoice setup optRegistrationCid
+  submitTokenStandardPurchaseMustFailWith check sender enrichedChoice
+
+submitTokenStandardPurchaseMustFailWith
+  : FailureStatusCheck -> Party -> EnrichedFactoryChoice V2.TransferFactory V2.TransferFactory_Transfer -> Script ()
+submitTokenStandardPurchaseMustFailWith check sender enrichedChoice =
+  submitMustFail'' check (actAs sender <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+test_tokenStandard_paymasterBuysTraffic : Script ()
+test_tokenStandard_paymasterBuysTraffic = do
+  setup <- setupTokenStandard
+  enrichedChoice <-
+    trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId) >>=
+    transferFactoryChoice setup (Some setup.registrationCid)
+
+  (result, changes) <- WalletClientV2.extractAndCheckTxHistory [setup.dso] $
+    submitResultAndTree (actAs setup.paymaster <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+
+  V2.TransferInstructionResult_Completed [] <- pure result.output
+  let reason = paymasterBurnReason dedicatedSynchronizerId
+  TextMap.lookup reasonMetaKey result.meta.values === Some reason
+  WalletClientV2.expectTxHistoryReasons changes
+    [(TSU.basicAccount setup.paymaster, ["split for " <> reason, reason], "")]
+  WalletClientV2.checkBalance setup.paymaster setup.env.amuletV2.instrumentId 46.0
+  checkPaymasterTraffic setup.dso 4.0 2.0
+
+-- A paymaster's burn issues a ValidatorRewardCoupon unless the memo forfeits it, as for a
+-- member's traffic purchase.
+test_tokenStandard_paymasterBurnIssuesValidatorRewardCouponUnlessForfeited : Script ()
+test_tokenStandard_paymasterBurnIssuesValidatorRewardCouponUnlessForfeited = do
+  setup <- setupTokenStandard
+  forA_ ["", "&forfeit-validator-reward-coupon=true"] $ \forfeit -> do
+    enrichedChoice <-
+      trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId <> forfeit) >>=
+      transferFactoryChoice setup (Some setup.registrationCid)
+    submit (actAs setup.paymaster <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  traffic <- query @MemberTraffic setup.dso
+  length traffic === 2
+  [(_, coupon)] <- query @ValidatorRewardCoupon setup.dso
+  coupon.user === setup.paymaster
+  coupon.amount === 4.0
+
+-- A paymaster's memo may give the activity weights, which follow the same rules as a direct purchase's.
+test_tokenStandard_acceptsWeightsUpToTheMax : Script ()
+test_tokenStandard_acceptsWeightsUpToTheMax = do
+  setup <- setupTokenStandard
+  let weightParams =
+        [ "&app-activity-weight=1.0&asset-activity-weight=0.5", "&app-activity-weight=0.0&asset-activity-weight=0.0"
+        , "&app-activity-weight=0.25", "&asset-activity-weight=0.1"
+        ]
+  forA_ weightParams $ \weights -> do
+    enrichedChoice <-
+      trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId <> weights) >>=
+      transferFactoryChoice setup (Some setup.registrationCid)
+    submit (actAs setup.paymaster <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  traffic <- query @MemberTraffic setup.dso
+  length traffic === 4
+
+test_tokenStandard_rejectsWeightOutOfRange : Script ()
+test_tokenStandard_rejectsWeightOutOfRange = do
+  setup <- setupTokenStandard
+  let weightParams =
+        [ "&app-activity-weight=1.0000000001", "&asset-activity-weight=0.6"
+        , "&app-activity-weight=-0.1", "&asset-activity-weight=-0.1"
+        ]
+  forA_ weightParams $ \weights ->
+    tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-activity-weight")
+      setup setup.paymaster (Some setup.registrationCid) (paymasterMemoParams dedicatedSynchronizerId <> weights)
+
+-- Only a paymaster's purchase, which comes with the registration in the choice context, may give
+-- activity weights.
+test_tokenStandard_rejectsWeightsWithoutRegistration : Script ()
+test_tokenStandard_rejectsWeightsWithoutRegistration = do
+  setup <- setupTokenStandard
+  forA_ ["&app-activity-weight=0.5", "&asset-activity-weight=0.5"] $ \weight ->
+    tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/activity-weight-without-registration")
+      setup setup.paymaster None
+      ("member-id=" <> testMemberId <> "&synchronizer-id=" <> decentralizedSynchronizerId <> "&migration-id=0" <> weight)
+
+test_tokenStandard_rejectsDedicatedSynchronizerWithoutRegistration : Script ()
+test_tokenStandard_rejectsDedicatedSynchronizerWithoutRegistration = do
+  setup <- setupTokenStandard
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/unknown-synchronizer")
+    setup setup.paymaster None
+    ("member-id=" <> testMemberId <> "&" <> paymasterMemoParams dedicatedSynchronizerId)
+
+test_tokenStandard_rejectsSenderOtherThanPaymaster : Script ()
+test_tokenStandard_rejectsSenderOtherThanPaymaster = do
+  setup <- setupTokenStandard
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/not-paymaster")
+    setup setup.other (Some setup.registrationCid) (paymasterMemoParams dedicatedSynchronizerId)
+
+test_tokenStandard_rejectsSynchronizerOtherThanTheRegistrations : Script ()
+test_tokenStandard_rejectsSynchronizerOtherThanTheRegistrations = do
+  setup <- setupTokenStandard
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/registered-synchronizer-mismatch")
+    setup setup.paymaster (Some setup.registrationCid) (paymasterMemoParams "other-synchronizer::1220abab")
+
+-- A registration that the paymaster signed itself instead of the DSO party doesn't let it buy traffic.
+test_tokenStandard_rejectsRegistrationNotSignedByTheDso : Script ()
+test_tokenStandard_rejectsRegistrationNotSignedByTheDso = do
+  setup <- setupTokenStandard
+  forgedRegistrationCid <- register setup.paymaster dedicatedSynchronizerId setup.paymaster
+  enrichedChoice <-
+    trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId) >>=
+    transferFactoryChoiceDisclosedBy setup setup.paymaster (Some forgedRegistrationCid)
+  submitTokenStandardPurchaseMustFailWith (expectMessageContains "Contract group identifier mismatch")
+    setup.paymaster enrichedChoice
+
+-- The SVs stop a paymaster by archiving its registration.
+test_tokenStandard_rejectsArchivedRegistration : Script ()
+test_tokenStandard_rejectsArchivedRegistration = do
+  setup <- setupTokenStandard
+  enrichedChoice <-
+    trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId) >>=
+    transferFactoryChoice setup (Some setup.registrationCid)
+  submit setup.dso $ archiveCmd setup.registrationCid
+  trySubmit (actAs setup.paymaster <> discloseMany' enrichedChoice.disclosures)
+    (exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg) >>= expectContractNotFound
+
+test_tokenStandard_rejectsRegistrationForRequiredSynchronizer : Script ()
+test_tokenStandard_rejectsRegistrationForRequiredSynchronizer = do
+  setup <- setupTokenStandard
+  registrationCid <- register setup.dso decentralizedSynchronizerId setup.paymaster
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/registered-required-synchronizer")
+    setup setup.paymaster (Some registrationCid) (paymasterMemoParams decentralizedSynchronizerId)
+
+-- The top-up minimum also holds for a paymaster's purchase.
+test_tokenStandard_rejectsPurchaseBelowTheMinimum : Script ()
+test_tokenStandard_rejectsPurchaseBelowTheMinimum = do
+  setup <- setupTokenStandard
+  choiceArg <- trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId)
+  -- a quarter of the amount buys a quarter of `purchasedBytes`, i.e., half the `minTopupAmount`
+  enrichedChoice <- transferFactoryChoice setup (Some setup.registrationCid)
+    choiceArg with transfer = choiceArg.transfer with amount = 1.0
+  submitTokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/insufficient-topup-amount")
+    setup.paymaster enrichedChoice
+
+test_tokenStandard_rejectsNonZeroMigrationId : Script ()
+test_tokenStandard_rejectsNonZeroMigrationId = do
+  setup <- setupTokenStandard
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-migration-id")
+    setup setup.paymaster (Some setup.registrationCid)
+    ("synchronizer-id=" <> dedicatedSynchronizerId <> "&migration-id=1")
+
+test_tokenStandard_rejectsMemberIdForRegisteredSynchronizer : Script ()
+test_tokenStandard_rejectsMemberIdForRegisteredSynchronizer = do
+  setup <- setupTokenStandard
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-member-id")
+    setup setup.paymaster (Some setup.registrationCid)
+    ("member-id=" <> testMemberId <> "&" <> paymasterMemoParams dedicatedSynchronizerId)
+
+test_tokenStandard_rejectsMissingMemberIdForDecentralizedSynchronizer : Script ()
+test_tokenStandard_rejectsMissingMemberIdForDecentralizedSynchronizer = do
+  setup <- setupTokenStandard
+  tokenStandardPurchaseMustFailWith (expectErrorId "splice.lfdecentralizedtrust.org/invalid-member-id")
+    setup setup.paymaster None (paymasterMemoParams decentralizedSynchronizerId)
+
+
+-- Merging
+----------
+
+-- | Merges the given MemberTraffic contracts as the DSO party, and returns the merged one.
+mergeTraffic : Party -> [ContractId MemberTraffic] -> Script MemberTraffic
+mergeTraffic dso trafficCids = do
+  [(amuletRulesCid, _)] <- query @AmuletRules dso
+  result <- submit dso $ exerciseCmd amuletRulesCid AmuletRules_MergeMemberTrafficContracts with trafficCids
+  [(mergedCid, merged)] <- query @MemberTraffic dso
+  mergedCid === result.mergedTrafficCid
+  pure merged
+
+-- The DSO party merges a paymaster's MemberTraffic contracts into one for the dedicated
+-- synchronizer, as it does a member's traffic contracts.
+test_merge_directPurchases : Script ()
+test_merge_directPurchases = do
+  setup <- setupDirect
+  forA_ [1 .. 3] $ \(_ : Int) -> do
+    choiceArg <- paymasterPurchase setup setup.paymaster
+    submit (actAs setup.paymaster.primaryParty <> readAs setup.app.dso) $
+      exerciseCmd setup.amuletRulesCid choiceArg
+  trafficCids <- map fst <$> query @MemberTraffic setup.app.dso
+  length trafficCids === 3
+  merged <- mergeTraffic setup.app.dso trafficCids
+  -- each purchase is 2MB at 1.0 USD/MB and an amulet price of 1.0 USD
+  merged === MemberTraffic with
+    dso = setup.app.dso
+    memberId = ""
+    synchronizerId = dedicatedSynchronizerId
+    migrationId = 0
+    totalPurchased = 3 * purchasedBytes
+    numPurchases = 3
+    amuletSpent = 6.0
+    usdSpent = 6.0
+
+test_merge_tokenStandardPurchases : Script ()
+test_merge_tokenStandardPurchases = do
+  setup <- setupTokenStandard
+  forA_ [1 .. 2] $ \(_ : Int) -> do
+    enrichedChoice <-
+      trafficPurchaseTransfer setup setup.paymaster (paymasterMemoParams dedicatedSynchronizerId) >>=
+      transferFactoryChoice setup (Some setup.registrationCid)
+    submit (actAs setup.paymaster <> discloseMany' enrichedChoice.disclosures) $
+      exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
+  trafficCids <- map fst <$> query @MemberTraffic setup.dso
+  length trafficCids === 2
+  merged <- mergeTraffic setup.dso trafficCids
+  -- each purchase is 4.0 amulet at an amulet price of 0.5 USD
+  merged === MemberTraffic with
+    dso = setup.dso
+    memberId = ""
+    synchronizerId = dedicatedSynchronizerId
+    migrationId = 0
+    totalPurchased = 2 * purchasedBytes
+    numPurchases = 2
+    amuletSpent = 8.0
+    usdSpent = 4.0
+
+-- A paymaster's traffic contract is not merged with a member's traffic contract, even for the same
+-- synchronizer and migration id.
+test_merge_rejectsPaymasterAndMemberTraffic : Script ()
+test_merge_rejectsPaymasterAndMemberTraffic = do
+  setup <- setupDirect
+  choiceArg <- paymasterPurchase setup setup.paymaster
+  submit (actAs setup.paymaster.primaryParty <> readAs setup.app.dso) $
+    exerciseCmd setup.amuletRulesCid choiceArg
+  [(paymasterTrafficCid, paymasterTraffic)] <- query @MemberTraffic setup.app.dso
+  -- the purchase paths can't create this one, so the DSO party, its sole signatory, creates it
+  memberTrafficCid <- submit setup.app.dso $ createCmd paymasterTraffic with memberId = testMemberId
+  -- the merge result has no Show instance, which submitMustFail'' needs, so this drops it
+  submitMustFail'' (expectMessageContains "Contract group identifier mismatch") (actAs setup.app.dso) $
+    fmap (const ()) $ exerciseCmd setup.amuletRulesCid AmuletRules_MergeMemberTrafficContracts with
+      trafficCids = [paymasterTrafficCid, memberTrafficCid]

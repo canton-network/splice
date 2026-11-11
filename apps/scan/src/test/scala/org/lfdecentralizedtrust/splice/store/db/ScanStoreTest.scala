@@ -1609,6 +1609,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
           domainMigrationId,
           extraTraffic,
           Optional.of(dsoParty.toProtoPrimitive),
+          Optional.empty(),
         ).toValue,
         mkAmuletRules_BuyMemberTrafficResult(
           round = round,

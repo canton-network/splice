@@ -6,10 +6,12 @@ module Splice.ExternalPartyAmuletRules where
 
 import DA.Action
 import DA.Assert
+import DA.Fail
 import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
 import DA.Time
+import DA.Traversable qualified as Traversable
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
@@ -31,7 +33,7 @@ import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
 import Splice.GovernanceLock (assertInPast24Hours, lockManagerParty)
 import Splice.GovernanceLock.Request (governanceLock_transferFactoryV1_transferImpl)
-import Splice.DecentralizedSynchronizer (MemberTrafficPurchase(..), parseTrafficPurchaseMemo)
+import Splice.DecentralizedSynchronizer (DSyncTrafficPurchase(..), MemberTrafficPurchase(..), RegisteredSynchronizer, parseTrafficPurchaseMemo)
 import Splice.Round (OpenMiningRound(..))
 import Splice.Types
 import Splice.Util
@@ -398,13 +400,24 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
   ensureNoAccountMeta "transfer" "receiver" transfer.meta
 
   if transfer.receiver == trafficPurchaseReceiver then do
-    -- TODO(#7561): accept a RegisteredSynchronizer to support dedicated synchronizers.
     purchaseMemo <- case parseTrafficPurchaseMemo (reasonFromMeta transfer.meta) of
       Left err -> fail err
       Right memo -> pure memo
     trafficConfig <- case trafficPurchaseConfigFromConfigState configState of
       None -> fail "The referenced ExternalPartyConfigState carries no traffic purchase configuration"
       Some trafficConfig -> pure trafficConfig
+    -- A paymaster's purchase for its registered synchronizer comes with the registration in the
+    -- choice context (canton-network/splice#7561), and may give its activity weights in the memo.
+    optRegisteredSynchronizerCid <-
+      lookupFromContextU @(ContractId RegisteredSynchronizer) arg.extraArgs.context registeredSynchronizerContextKey
+    when (isNone optRegisteredSynchronizerCid &&
+          (isSome purchaseMemo.appActivityWeight || isSome purchaseMemo.assetActivityWeight)) $
+      failWithStatus (mkActivityWeightWithoutRegistrationFailure purchaseMemo.appActivityWeight purchaseMemo.assetActivityWeight)
+    optPaymasterPurchase <- Traversable.forA optRegisteredSynchronizerCid $ \registeredSynchronizerCid ->
+      fetchPaymasterPurchase dso DSyncTrafficPurchase with
+        registeredSynchronizerCid
+        optAppActivityWeight = purchaseMemo.appActivityWeight
+        optAssetActivityWeight = purchaseMemo.assetActivityWeight
     paymentContext <- unfeaturedPaymentContextFromChoiceContext dso arg.extraArgs.context
     csum <- summarizeAndValidateExternalPartyContext paymentContext dso transfer.sender
     require "Traffic price must be positive" (trafficConfig.trafficPrice > 0.0)
@@ -429,7 +442,7 @@ amulet_transferFactoryV1_transferImpl this actors arg = do
           migrationId = purchaseMemo.migrationId
           trafficAmount = floor (trafficCostUsd * 1e6 / trafficConfig.trafficPrice)
     inputs <- holdingToTransferInputs (ForOwner with dso; owner = transfer.sender) transfer.inputHoldingCids
-    result <- buyMemberTraffic (toInterfaceContractId configStateCid) csum trafficConfig purchase
+    result <- buyMemberTraffic (toInterfaceContractId configStateCid) csum trafficConfig optPaymasterPurchase purchase
       (transfer.amount, trafficCostUsd) inputs
       burnRewardPolicy
     pure Api.Token.TransferInstructionV1.TransferInstructionResult with
