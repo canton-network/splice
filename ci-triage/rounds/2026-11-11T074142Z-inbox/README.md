@@ -22,3 +22,18 @@ Job logs of the GHA jobs: `log/inbox-1111/<job id>.log` (gitignored).
 | g8-lsu | 11354 | logical-sync-upgrade (0) (run 42975175376): checkErrors, `Consensus not reached.` WARN from BftScanConnection in LsuIntegrationTest | AB-like (WARN after suppression)? | 7: flake | open |
 | - | 10479 | cni Purge Unused Databases | - | needs-log since 10-21, re-list | open |
 | - | 10919 | ExpiryWithIgnoredAmuletVersion DB lock | - | owner question, re-list | open |
+
+## Landed (all groups verified against the logs, 2026-11-11 ~08:00 UTC)
+
+| Group | Verdict | Action | State |
+|---|---|---|---|
+| g1-perf | 11351 dup 11321, 11352 dup 11322 (thresholds file: serializeJson rule missing since #8351, VerdictStore seed 3.7 ms) | comment 11322 (comments/11322.md), 2 closes | presented |
+| g2-lsuop | 11349 CircleCI | log request export/11349/ | open |
+| g3-far | 11353 new, family Y: #8062 test uses splice-amulet 0.1.25 appKind, untagged | comment, retitle, assignee meiersi-da, Triaged | open |
+| g4-keydl | 11347 new: SvReonboarding sv1 init > 5 min (AM-like DAR repeats) + teardown leak cascade (H) | comment, retitle, Triaged | open |
+| g5-simtime | 11348 dup 11147 (AF, fix PR #8420) | close dup | open |
+| g6-restart | 11346 new: WalletSurviveCantonRestart 2 min tap budget includes restarted participant startup (106 s) | comment, retitle, Triaged | open |
+| g7-vsc | 11350 dup 11255 (B shape, onboard/sv/sequencer 38 s) | close dup | open |
+| g8-lsu | 11354 new: LsuIntegrationTest validators outlive scan restart, BFT retries exhausted | comment, retitle, assignee nicu-da, Triaged | open |
+
+Merge note: g6 and g8 both proposed family AU. Assign AU to 11346 (g6) and AV to 11354 (g8) when merging.
