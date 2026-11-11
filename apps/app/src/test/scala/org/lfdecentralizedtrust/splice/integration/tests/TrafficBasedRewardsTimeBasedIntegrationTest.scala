@@ -476,7 +476,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     // Opt fields on OpenMiningRoundSummary are only populated under TBAR
     // minting; the dry-run variant intentionally leaves them None.
     if (mintingTrafficBased) {
-      assertOpenMiningRoundSummariesForRound10(round10BeginOffset)
+      // Round 8 is the zero-activity round; round 10 is the main activity round.
+      assertOpenMiningRoundSummariesOptFieldsPopulated(round10BeginOffset, Set(8L, 10L))
     } else {
       assertOpenMiningRoundSummariesOptFieldsEmpty(round10BeginOffset)
     }
@@ -984,41 +985,31 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
   }
 
-  /** Assert that every `AmuletRules_MiningRound_StartIssuing` exercise emitted
-    * on the SV participant since `round10BeginOffset` populates the four
-    * opt fields on `OpenMiningRoundSummary`, and that the round-10 exercise's
-    * opt fields match the scan-side totals numerically.
-    */
-  private def assertOpenMiningRoundSummariesForRound10(
-      round10BeginOffset: Long
+  /** Assert every `AmuletRules_MiningRound_StartIssuing` exercise in the window populates its `OpenMiningRoundSummary` opt fields, with `pinnedRounds` also matched against scan totals. */
+  private def assertOpenMiningRoundSummariesOptFieldsPopulated(
+      beginOffset: Long,
+      pinnedRounds: Set[Long],
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val expected = inside(sv1ScanBackend.getRewardAccountingActivityTotals(10L)) {
-      case GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk(t) =>
-        t
-    }
     clue(
-      "OpenMiningRoundSummary opt fields are populated on AmuletRules_MiningRound_StartIssuing exercises after round 10 opens"
+      "OpenMiningRoundSummary opt fields are populated on AmuletRules_MiningRound_StartIssuing exercises"
     ) {
-      val (exercises, round10Summary) = eventually() {
-        val exs = openMiningRoundExercisesSince(round10BeginOffset)
-        val r10 = exs
-          .find(_.round == 10L)
-          .map(_.summary)
-          .getOrElse(
-            fail(
-              "expected AmuletRules_MiningRound_StartIssuing exercise for round 10 in the window"
-            )
-          )
-        (exs, r10)
+      val exercises = eventually() {
+        val exs = openMiningRoundExercisesSince(beginOffset)
+        pinnedRounds.foreach { r =>
+          withClue(
+            s"expected AmuletRules_MiningRound_StartIssuing exercise for round $r in the window"
+          ) {
+            exs.exists(_.round == r) shouldBe true
+          }
+        }
+        exs
       }
 
       withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
         exercises should not be empty
       }
 
-      // Round-10 populate-ness is implicit in the numeric `decimalMatches`
-      // calls below; skip it here to avoid duplicate failures on the same field.
-      exercises.filter(_.round != 10L).foreach { ex =>
+      exercises.filterNot(ex => pinnedRounds(ex.round)).foreach { ex =>
         summaryOptFields.foreach { case (name, extractor, _) =>
           withClue(s"round ${ex.round}: $name populated") {
             extractor(ex.summary).toScala shouldBe defined
@@ -1026,26 +1017,43 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         }
       }
 
-      summaryOptFields.foreach { case (name, extractor, scanField) =>
-        withClue(s"round 10: $name matches scan total") {
-          decimalMatches(extractor(round10Summary), scanField(expected))
-        }
+      pinnedRounds.foreach(r => assertRoundMatchesScan(exercises, r))
+    }
+  }
+
+  /** Assert `round`'s `OpenMiningRoundSummary` opt fields match scan totals. */
+  private def assertRoundMatchesScan(
+      exercises: Seq[OpenMiningRoundExercise],
+      round: Long,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val summary = exercises
+      .find(_.round == round)
+      .map(_.summary)
+      .getOrElse(
+        fail(
+          s"expected AmuletRules_MiningRound_StartIssuing exercise for round $round in the window"
+        )
+      )
+    val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+      case GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk(t) =>
+        t
+    }
+    summaryOptFields.foreach { case (name, extractor, scanField) =>
+      withClue(s"round $round: $name matches scan total") {
+        decimalMatches(extractor(summary), scanField(totals))
       }
     }
   }
 
-  /** Assert that every `AmuletRules_MiningRound_StartIssuing` exercise emitted
-    * on the SV participant since `round10BeginOffset` has all four
-    * `OpenMiningRoundSummary` opt fields unset. Used on the dry-run variant.
-    */
+  /** Assert every `AmuletRules_MiningRound_StartIssuing` exercise in the window leaves all `OpenMiningRoundSummary` opt fields unset — the dry-run variant's expected state. */
   private def assertOpenMiningRoundSummariesOptFieldsEmpty(
-      round10BeginOffset: Long
+      beginOffset: Long
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     clue(
       "OpenMiningRoundSummary opt fields are unset on AmuletRules_MiningRound_StartIssuing exercises (dry-run)"
     ) {
       val exercises = eventually() {
-        val exs = openMiningRoundExercisesSince(round10BeginOffset)
+        val exs = openMiningRoundExercisesSince(beginOffset)
         withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
           exs should not be empty
         }
@@ -1061,44 +1069,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       }
     }
   }
-
-  /** Assert that an optional java BigDecimal is defined and numerically equal
-    * to the given decimal string at daml Decimal precision (10 fractional
-    * digits). Tolerates scale mismatches (e.g. `3.1` vs `3.10`).
-    */
-  private def decimalMatches(
-      actual: Optional[java.math.BigDecimal],
-      expected: String,
-  ): Unit =
-    withClue(s"expected $expected") {
-      BigDecimal(actual.toScala.value) should beEqualUpTo(BigDecimal(expected), 10)
-    }
-
-  /** Decode a scalapb `Value` (from the ledger-api gRPC client) into a typed
-    * Daml-codegen value, routing through the javaapi `Value` representation
-    * the codegen's `ValueDecoder` expects.
-    */
-  private def decodeScalapb[T](
-      v: com.daml.ledger.api.v2.value.Value,
-      decoder: ValueDecoder[T],
-  ): T =
-    decoder.decode(
-      com.daml.ledger.javaapi.data.Value.fromProto(
-        com.daml.ledger.api.v2.value.Value.toJavaProto(v)
-      )
-    )
-
-  /** True iff `templateId` names the template given by `expected`, ignoring
-    * the package id. Compares module and entity names only, since the
-    * package id varies between upgrade versions.
-    */
-  private def matchesTemplate(
-      templateId: Option[com.daml.ledger.api.v2.value.Identifier],
-      expected: com.daml.ledger.javaapi.data.Identifier,
-  ): Boolean =
-    templateId.exists(id =>
-      id.moduleName == expected.getModuleName && id.entityName == expected.getEntityName
-    )
 
   private val summaryOptFields: Seq[
     (
@@ -1212,6 +1182,44 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       case _ => Seq.empty
     }
   }
+
+  /** Assert that an optional java BigDecimal is defined and numerically equal
+    * to the given decimal string at daml Decimal precision (10 fractional
+    * digits). Tolerates scale mismatches (e.g. `3.1` vs `3.10`).
+    */
+  private def decimalMatches(
+      actual: Optional[java.math.BigDecimal],
+      expected: String,
+  ): Unit =
+    withClue(s"expected $expected") {
+      BigDecimal(actual.toScala.value) should beEqualUpTo(BigDecimal(expected), 10)
+    }
+
+  /** Decode a scalapb `Value` (from the ledger-api gRPC client) into a typed
+    * Daml-codegen value, routing through the javaapi `Value` representation
+    * the codegen's `ValueDecoder` expects.
+    */
+  private def decodeScalapb[T](
+      v: com.daml.ledger.api.v2.value.Value,
+      decoder: ValueDecoder[T],
+  ): T =
+    decoder.decode(
+      com.daml.ledger.javaapi.data.Value.fromProto(
+        com.daml.ledger.api.v2.value.Value.toJavaProto(v)
+      )
+    )
+
+  /** True iff `templateId` names the template given by `expected`, ignoring
+    * the package id. Compares module and entity names only, since the
+    * package id varies between upgrade versions.
+    */
+  private def matchesTemplate(
+      templateId: Option[com.daml.ledger.api.v2.value.Identifier],
+      expected: com.daml.ledger.javaapi.data.Identifier,
+  ): Boolean =
+    templateId.exists(id =>
+      id.moduleName == expected.getModuleName && id.entityName == expected.getEntityName
+    )
 }
 
 object TrafficBasedRewardsTimeBasedIntegrationTestBase {
