@@ -519,3 +519,15 @@ The scheduler only sees the runner pod requests (`resources.requests` of the run
 workflows on one node can together use more CPU than the node has. The large spec values live in the cn-splicenet
 cluster config (`gha.runnerSpecs`, not in the splice repo; the mock config has only tiny); not read here. Node machine
 type not read either.
+
+## 11. Node size (user, 2026-11-11) and what it implies
+
+User: the runner node pool uses `c3d-standard-8` nodes (8 vCPU, 32 GB), with fallback to `c4-standard-32` and
+`n4-standard-32` (32 vCPU, 128 GB) depending on availability. The machine type of `...-eb220c51-dglz` is not in the
+Cloud Monitoring export (its label rows are TimeSeries ID, instance_name, zone, project_id, instance_id).
+Inference, not read: three workflow pods with about 30 GB working set each (section 9) do not fit on 32 GB, so the
+node was one of the 32 vCPU / 128 GB fallbacks; 90 GB of pod memory matches 70% non-evictable plus 20% evictable.
+Since large jobs also run on `c3d-standard-8`, their requests are at most what fits there, so a 32 vCPU fallback
+node can take three or more large jobs (section 10: the scheduler sees only the runner pod requests).
+Not explained: the three pods used about 15-21 cores (5-7 each) while the VM showed 93% of 32 vCPU (about 30 cores);
+not checked whether other pods ran there or whether the kernel spent CPU on memory reclaim.
