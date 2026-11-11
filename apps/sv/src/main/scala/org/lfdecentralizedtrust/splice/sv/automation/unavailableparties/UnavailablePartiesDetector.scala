@@ -60,6 +60,17 @@ class UnavailablePartiesDetector(
         )
       } yield result
 
+  // TODO(#8428): move this to addParties
+  private def withoutProtected(parties: Set[PartyId]): Set[PartyId] = parties -- protectedParties
+
+  private def ignoreParties(
+      parties: Set[PartyId]
+  )(implicit tc: TraceContext): Future[Set[PartyId]] = {
+    val toIgnore = withoutProtected(parties)
+    if (toIgnore.isEmpty) Future.successful(toIgnore)
+    else unavailablePartiesStore.addParties(toIgnore.toSeq).map(_ => toIgnore)
+  }
+
   private def lookupLowestSupportedVersions(
       parties: Set[PartyId]
   )(implicit tc: TraceContext): Future[LowestSupportedVersions] =
@@ -101,7 +112,7 @@ class UnavailablePartiesDetector(
       submit(current).transformWith {
         // On success, remove all involved parties from the unavailable parties store to reset their backoff, go on with rest.
         case Success(_) =>
-          val involvedParties = current.flatMap(partiesOf).toSet -- protectedParties
+          val involvedParties = current.flatMap(partiesOf).toSet
           unavailablePartiesStore
             .removeParties(involvedParties.toSeq)
             .flatMap { restored =>
@@ -123,24 +134,25 @@ class UnavailablePartiesDetector(
         //  - if the batch has more than one task, split it in half and retry both halves.
         //  - if the batch has only one task, mark the parties with the lowest supported version as unavailable.
         case Failure(UnresponsivePartiesFailure(unresponsiveParties))
-            if shrinks(current, partiesOf, unresponsiveParties -- protectedParties) =>
-          val toIgnore = unresponsiveParties -- protectedParties
-          logger.info(
-            s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
-          )
-          unavailablePartiesStore
-            .addParties(toIgnore.toSeq)
-            .flatMap(_ =>
-              processRemaining(
-                toIgnore,
-                current :: rest,
-                partiesOf,
-                submit,
-                lowestSupportedVersions,
-                result,
-                failedTasks = 0,
-              )
+            if shrinks(current, partiesOf, withoutProtected(unresponsiveParties)) =>
+          ignoreParties(unresponsiveParties).flatMap { toIgnore =>
+            logger.info(
+              s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
             )
+            unavailablePartiesStore
+              .addParties(toIgnore.toSeq)
+              .flatMap(_ =>
+                processRemaining(
+                  toIgnore,
+                  current :: rest,
+                  partiesOf,
+                  submit,
+                  lowestSupportedVersions,
+                  result,
+                  failedTasks = 0,
+                )
+              )
+          }
         case Failure(reason @ VettingFailure()) if current.size > 1 =>
           val (left, right) = current.splitAt(current.size / 2)
           logger.info(
@@ -162,24 +174,23 @@ class UnavailablePartiesDetector(
             partiesWithMinimalSupportedVersion(involvedParties, lowestSupportedVersions)
           val toIgnore = candidates -- protectedParties
           for {
-            _ <-
+            result <- ignoreParties(candidates).flatMap { toIgnore =>
               if (toIgnore.isEmpty) {
                 logger.warn(
                   s"Not ignoring any party for the failing task, all candidates ($candidates) are protected"
                 )
                 Future.unit
-              } else {
-                unavailablePartiesStore.addParties(toIgnore.toSeq)
               }
-            result <- processRemaining(
-              toIgnore,
-              rest,
-              partiesOf,
-              submit,
-              lowestSupportedVersions,
-              result,
-              failedTasks = 1,
-            )
+              processRemaining(
+                toIgnore,
+                rest,
+                partiesOf,
+                submit,
+                lowestSupportedVersions,
+                result,
+                failedTasks = 1,
+              )
+            }
           } yield result
         // Not a vetting failure (e.g. contention): fail the task so it is retried as a whole.
         case Failure(reason) =>
