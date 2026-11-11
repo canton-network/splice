@@ -222,7 +222,9 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
       case 'SRARC_GrantFeaturedAppRight':
         return createGrantFeatureAppProposal(
           dsoAction.value.provider,
-          dsoAction.value.activityWeight ?? ''
+          dsoAction.value.activityWeight ?? '',
+          dsoAction.value.appKind ?? '',
+          dsoAction.value.opsParties ?? []
         );
       case 'SRARC_RevokeFeaturedAppRight':
         return createRevokeFeatureAppProposal(dsoAction.value.rightCid);
@@ -254,11 +256,15 @@ function createOffboardMemberProposal(memberToOffboard: string): OffBoardMemberP
 
 function createGrantFeatureAppProposal(
   provider: string,
-  activityWeight: string
+  activityWeight: string,
+  appKind: string,
+  opsParties: string[]
 ): FeatureAppProposal {
   return {
     provider: provider,
     activityWeight: activityWeight,
+    appKind: appKind,
+    opsParties: opsParties,
   };
 }
 
