@@ -1373,12 +1373,16 @@ object SvDsoStore {
             Some(contract.payload.trackingCid.toScala.getOrElse(contract.contractId)),
         )
       },
-      mkFilter(FeaturedAppConfigUpdateInstruction.COMPANION)(co => co.payload.dso == dso) {
-        contract =>
-          DsoAcsStoreRowData(
-            contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
-          )
+      mkFilter(FeaturedAppConfigUpdateInstruction.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsTbarV1_1(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
       },
       mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso)(
         DsoAcsStoreRowData(_)
