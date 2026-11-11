@@ -1,1 +1,38 @@
-!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml) {}
+!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml)
+deployment:
+  projectsToDeploy:
+    - canton-network
+    - infra
+    - observability
+    - sv
+    - sv-canton
+    - validator-runbook
+synchronizerMigration:
+  frozenMigrationId: 0
+  active:
+    id: 0
+    version: 0.9.3
+    sequencer:
+      enableBftSequencer: true
+    releaseReference:
+      repoUrl: https://github.com/canton-network/splice
+      gitReference: refs/heads/nicu/lsu_fix
+      pulumiBaseDir: "cluster/pulumi"
+      pulumiStacksDir: "cluster/stacks/scratchnets"
+      deploymentDir: "cluster/deployment"
+      spliceRoot: "."
+      privateConfigsDir: "cluster/configs/configs-private"
+      publicConfigsDir: "cluster/configs/configs"
+operatorDeployment:
+  reference:
+    repoUrl: https://github.com/canton-network/splice
+    gitReference: refs/heads/nicu/lsu_fix
+    pulumiBaseDir: "cluster/pulumi"
+    pulumiStacksDir: "cluster/stacks/scratchnets"
+    deploymentDir: "cluster/deployment"
+    spliceRoot: "."
+    privateConfigsDir: "cluster/configs/configs-private"
+    publicConfigsDir: "cluster/configs/configs"
+validators:
+  validator-runbook:
+    version: 0.8.0

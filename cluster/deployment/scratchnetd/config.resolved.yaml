@@ -50,6 +50,14 @@ cluster:
       maxNodes: 3
       minNodes: 1
       nodeType: 'n4d-standard-8'
+deployment:
+  projectsToDeploy:
+    - 'canton-network'
+    - 'infra'
+    - 'observability'
+    - 'sv'
+    - 'sv-canton'
+    - 'validator-runbook'
 infra:
   enableSweetSecurity: true
   gkeGateway:
@@ -182,13 +190,13 @@ monitoring:
 operatorDeployment:
   reference:
     deploymentDir: 'cluster/deployment'
-    gitReference: 'refs/heads/main'
+    gitReference: 'refs/heads/nicu/lsu_fix'
     privateConfigsDir: 'cluster/configs/configs-private'
     publicConfigsDir: 'cluster/configs/configs'
-    pulumiBaseDir: 'splice/cluster/pulumi'
-    pulumiStacksDir: 'cluster/stacks/prod'
-    repoUrl: 'https://github.com/DACH-NY/canton-network-internal'
-    spliceRoot: 'splice'
+    pulumiBaseDir: 'cluster/pulumi'
+    pulumiStacksDir: 'cluster/stacks/scratchnets'
+    repoUrl: 'https://github.com/canton-network/splice'
+    spliceRoot: '.'
 pulumiProjectConfig:
   default:
     allowDowngrade: true
@@ -1668,16 +1676,16 @@ synchronizerMigration:
     id: 0
     releaseReference:
       deploymentDir: 'cluster/deployment'
-      gitReference: 'refs/heads/main'
+      gitReference: 'refs/heads/nicu/lsu_fix'
       privateConfigsDir: 'cluster/configs/configs-private'
       publicConfigsDir: 'cluster/configs/configs'
-      pulumiBaseDir: 'splice/cluster/pulumi'
-      pulumiStacksDir: 'cluster/stacks/prod'
+      pulumiBaseDir: 'cluster/pulumi'
+      pulumiStacksDir: 'cluster/stacks/scratchnets'
       repoUrl: 'https://github.com/canton-network/splice'
-      spliceRoot: 'splice'
+      spliceRoot: '.'
     sequencer:
       enableBftSequencer: true
-    version: 'local'
+    version: '0.9.3'
   frozenMigrationId: 0
 validator1:
   deduplicationDuration: '30m'
@@ -1701,6 +1709,7 @@ validators:
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
     partyHint: 'digitalasset-testValidator-1'
+    version: '0.8.0'
     walletGateway:
       enabled: true
       portfolioVersion: '1.12.2'
