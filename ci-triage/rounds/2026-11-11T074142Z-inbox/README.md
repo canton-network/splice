@@ -36,7 +36,7 @@ Job logs of the GHA jobs: `log/inbox-1111/<job id>.log` (gitignored).
 | g7-vsc | 11350 dup 11255 (B shape, onboard/sv/sequencer 38 s) | close dup | ran 2026-11-11 (user); INDEX + B merged |
 | g8-lsu | 11354 new: LsuIntegrationTest validators outlive scan restart, BFT retries exhausted | comment, retitle, assignee nicu-da, Triaged | open |
 
-Merge note: g6 and g8 both proposed family AU. Assign AU to 11346 (g6) and AV to 11354 (g8) when merging.
+Merge note: g6 and g8 both proposed family AU. AU went to 11346 (g6, merged); 11354 (g8) gets AV.
 
 Rule (user, 2026-11-11): one issue at a time. Never present the next group while one is pending; background results
 are reported briefly between groups only.

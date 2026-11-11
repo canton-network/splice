@@ -58,6 +58,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AR | fixed wait for deadline-driven automation shorter than deadline + automation delay + a slow round trip | 11333 | open, fix PR #8411 |
 | AS | SvFrontendIntegrationTest expiring proposal closed by another SV (CloseVoteRequestTrigger paused on sv1 only) | 11186 (dup 11340) | open, fix PR #8417 |
 | AT | frontend test thread stalls minutes inside the only `eventually` attempt; stale first read rethrown after the deadline | 10918 (dup 10920) | open, stall origin unknown, no fix proposed |
+| AU | test retry budget starts before a restarted external Canton process is ready (withCanton does not wait) | 11346 | fix PR splice#8444 (5 min budget) |
 
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
@@ -926,3 +927,13 @@ State as recorded in the family section, not rechecked against the tracker on 20
   docker-large runners; the stalls ended 2.6 s apart (23:26:16.5, 23:26:19.1). No recurrence by 2026-11-10.
   Hardening if it recurs: one more attempt in `FrontendTestCommon.eventually` when the deadline passed during an
   attempt, plus a test-thread stack dump when an attempt exceeds the budget.
+
+## AU. Retry budget includes external process startup (withCanton does not wait)
+- Signature: `Failed clue: We can tap and list after Canton restart and domain reconnection` with `Authorization
+  Failed for alice_wallet_user-... Reason: UNAVAILABLE: io exception` through most of the budget.
+- Confirm: in canton-standalone-wallet-survive-canton-restarts-2.clog.gz, `Listening on 127.0.0.1:27501` more than
+  about 100 s after `Running clue: We can tap and list after Canton restart` in canton_network_test.clog.
+- Mechanism: withCanton spawns the process and runs the body at once; eventuallySucceeds(2.minutes) covers JVM start,
+  participant startup (package metadata view rebuild of about 100 packages on restart) and synchronizer reconnect.
+  Slow runner, budget exhausted.
+- 11346 (2026-11-11, wall-clock-time (5), main 5ccef7f), parent. Fix: splice#8444 raises the budget to 5 min.
