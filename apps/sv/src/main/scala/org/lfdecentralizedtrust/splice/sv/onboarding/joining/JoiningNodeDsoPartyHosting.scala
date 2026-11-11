@@ -59,7 +59,7 @@ class JoiningNodeDsoPartyHosting(
             JoiningNodeDsoPartyHosting.SnapshotDownloadName,
           )
         (for {
-          acsSnapshot <- retryProvider.retry(
+          acsSnapshotFilePath <- retryProvider.retry(
             RetryFor.WaitingOnInitDependency,
             "onboard_dso_party",
             "Onboard to DSO party hosting and decentralized namespace membership",
@@ -80,7 +80,7 @@ class JoiningNodeDsoPartyHosting(
                 _ = logger.info("Disconnecting from all domains")
                 _ <- participantAdminConnection.disconnectFromAllSynchronizers()
                 _ = logger.info("candidate SV participant disconnected from global domain")
-                acsSnapshot <- retryProvider
+                acsSnapshotFilePath <- retryProvider
                   .retry(
                     RetryFor.WaitingOnInitDependencyLong,
                     "authorize_dso_party",
@@ -153,7 +153,7 @@ class JoiningNodeDsoPartyHosting(
                         .asRuntimeException()
                   }
               } yield {
-                acsSnapshot
+                acsSnapshotFilePath
               }).andThen(_ => svConnection.close())
             },
             logger,
@@ -162,7 +162,7 @@ class JoiningNodeDsoPartyHosting(
             "Received Acs snapshot from sponsor, importing into candidate participant"
           )
           _ <- participantAdminConnection.importPartyAcsFromFile(
-            acsSnapshot,
+            acsSnapshotFilePath,
             synchronizerId,
             dsoParty,
           )

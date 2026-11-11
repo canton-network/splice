@@ -24,7 +24,6 @@ import com.digitalasset.canton.topology.ParticipantId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
-import io.grpc.Status
 
 import io.grpc.StatusRuntimeException
 import java.nio.file.Path
@@ -52,51 +51,31 @@ class DsoPartyMigration(
     dsoPartyHosting,
     loggerFactory,
   )
-  private val temporaryCodes = Set(
-    Status.Code.FAILED_PRECONDITION,
-    Status.Code.NOT_FOUND,
-    Status.Code.UNIMPLEMENTED,
-  )
 
   def authorizeParticipantForHostingDsoParty(
       participantId: ParticipantId
   )(implicit tc: TraceContext): EitherT[Future, DsoPartyMigrationFailure, SnapshotKey.Acs] = {
     logger.info(s"Sponsor SV authorizing DSO party to participant $participantId")
-    EitherT(
-      (for {
-        dsoRules <- EitherT.liftF(dsoStore.getDsoRules())
-        // this will wait until the PartyToParticipant state change completed
-        _ <- partyHosting
-          .authorizeDsoPartyToParticipant(
-            dsoRules.domain,
-            participantId,
-          )
-        activationTx <- participantAdminConnection
-          .getDsoPartyToParticipantTransaction(
-            dsoRules.domain,
-            participantId,
-            dsoParty,
-          )
-          .toRight[DsoPartyMigrationFailure](DsoPartyHosting.AcceptedStateNotFound(participantId))
-        activationTime = activationTx.base.validFrom
-        _ = logger.info(
-          s"DSO party was authorized on $participantId, preparing snapshot at time $activationTime."
+    for {
+      dsoRules <- EitherT.liftF(dsoStore.getDsoRules())
+      // this will wait until the PartyToParticipant state change completed
+      _ <- partyHosting
+        .authorizeDsoPartyToParticipant(
+          dsoRules.domain,
+          participantId,
         )
-      } yield SnapshotKey.Acs(dsoRules.domain, dsoParty, activationTime)).value
-        .recoverWith(temporarilyUnavailable(participantId))
-    )
-  }
-
-  private def temporarilyUnavailable[T](
-      participantId: ParticipantId
-  ): PartialFunction[Throwable, Future[T]] = {
-    case e: StatusRuntimeException if temporaryCodes.contains(e.getStatus.getCode) =>
-      Future.failed(
-        Status.UNAVAILABLE
-          .withDescription(s"DSO party authorization for $participantId is temporarily unavailable")
-          .withCause(e)
-          .asRuntimeException()
+      activationTx <- participantAdminConnection
+        .getDsoPartyToParticipantTransaction(
+          dsoRules.domain,
+          participantId,
+          dsoParty,
+        )
+        .toRight[DsoPartyMigrationFailure](DsoPartyHosting.AcceptedStateNotFound(participantId))
+      activationTime = activationTx.base.validFrom
+      _ = logger.info(
+        s"DSO party was authorized on $participantId, preparing snapshot at time $activationTime."
       )
+    } yield SnapshotKey.Acs(dsoRules.domain, dsoParty, activationTime)
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Var"))

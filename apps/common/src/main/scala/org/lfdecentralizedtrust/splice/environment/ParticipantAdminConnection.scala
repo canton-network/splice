@@ -71,7 +71,7 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
 
 import java.nio.file.{Files, Path}
 import java.time.Instant
-import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
 import scala.util.Failure
 
@@ -196,9 +196,7 @@ class ParticipantAdminConnection(
       _ = logger.info(
         show"Exporting ACS snapshot for party $party from domain $synchronizerId at offset $beforeActivationOffset"
       )
-      observer = blocking(
-        new OutputFileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk)
-      )
+      observer = new OutputFileStreamObserver[ExportPartyAcsResponse](File(file), _.chunk)
       _ <- runCmd(
         ParticipantAdminCommands.PartyManagement.ExportPartyAcs(
           party,
