@@ -398,6 +398,7 @@ async function main() {
   const concurrency = new AdaptiveConcurrency(
     config.parallelism,
     undefined,
+    undefined,
     (limit) => metrics.parallelism.record(limit),
   );
   setTransientErrorListener(() => concurrency.recordFailure());

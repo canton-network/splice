@@ -2,18 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import { logger } from "./logger.js";
 
-// AIMD concurrency limit: doubles (slow start) until the first failure, then
-// grows by one per `limit` successes, and halves on failures (at most once per cooldown).
+// Concurrency limit that grows by one per `limit` consecutive successes and
+// shrinks by one on failures (at most once per decreaseCooldownMs).
+// After a failure, it is held for holdAfterFailureMs before growing again.
 export class AdaptiveConcurrency {
   private currentLimit = 1;
   private successStreak = 0;
-  private slowStart = true;
-  private lastDecrease = 0;
+  private lastFailure = Number.NEGATIVE_INFINITY;
+  private lastDecrease = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly maxLimit: number,
-    private readonly decreaseCooldownMs: number = 5000,
+    private readonly decreaseCooldownMs: number = 60_000,
+    private readonly holdAfterFailureMs: number = 5 * 60_000,
     private readonly onChange: (limit: number) => void = () => {},
+    private readonly now: () => number = Date.now,
   ) {
     this.onChange(this.currentLimit);
   }
@@ -23,31 +26,28 @@ export class AdaptiveConcurrency {
   }
 
   recordSuccess(): void {
+    if (this.now() - this.lastFailure < this.holdAfterFailureMs) {
+      return;
+    }
     this.successStreak++;
     if (
       this.successStreak >= this.currentLimit &&
       this.currentLimit < this.maxLimit
     ) {
-      const next = this.slowStart
-        ? this.currentLimit * 2
-        : this.currentLimit + 1;
-      this.setLimit(Math.min(next, this.maxLimit), "increasing");
+      this.setLimit(this.currentLimit + 1, "increasing");
     }
   }
 
   recordFailure(): void {
+    const now = this.now();
+    this.lastFailure = now;
     this.successStreak = 0;
-    this.slowStart = false;
-    const now = Date.now();
     if (now - this.lastDecrease < this.decreaseCooldownMs) {
       return;
     }
     this.lastDecrease = now;
     if (this.currentLimit > 1) {
-      this.setLimit(
-        Math.max(1, Math.floor(this.currentLimit / 2)),
-        "decreasing",
-      );
+      this.setLimit(this.currentLimit - 1, "decreasing");
     }
   }
 
