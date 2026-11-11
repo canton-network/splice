@@ -30,6 +30,13 @@
     - Removed the remaining CometBFT support including the cometbft helm
       charts, docker images and unused `splice-info` values.
 
+  - Daml Changes:
+
+      - `DsoRules_SetSynchronizerNodeConfig` now takes the node states of all other SVs and rejects a config
+        that newly claims a sequencer or mediator id that another SV already claims for the same synchronizer.
+        SV apps pass the node states once this version is vetted.
+
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
