@@ -34,6 +34,11 @@
 
   - Helm charts and Docker images
 
+    - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
+      participant's identity itself, so the chart must be given the same node identifier that
+      the controlling SV or validator app expects, i.e. the previous `nodeIdentifier` of `splice-sv-node`
+      or `splice-validator`. Set it in `participant-values.yaml`.
+
     - `splice-participant`: new value `enableAutoInit`, default `true`. Set it to `false` when the
       participant's identity comes from elsewhere, e.g. while restoring from an identities dump or
       when using an offline root namespace key.
@@ -55,10 +60,7 @@
 
     - Breaking Deployment Changes:
 
-      - `splice-participant`: new required value `nodeIdentifier`. Canton now initializes the
-        participant's identity itself, so the chart must be given the same node identifier that
-        the controlling SV or validator app expects, i.e. the `nodeIdentifier` of `splice-sv-node`
-        or `splice-validator`. Set it in `participant-values.yaml`.
+      - `splice-participant` now requires `nodeIdentifier`.
 
     - Protocol Changes:
 
