@@ -175,6 +175,10 @@ case class ValidatorAppBackendConfig(
     svUser: Option[String] = None,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     enableWallet: Boolean = true,
+    /** The maximum balance (unlocked plus locked) the validator operator party is allowed to hold.
+      * Currently the balance is only monitored against this limit and no action is taken.
+      */
+    maxAllowedOperatorBalance: BigDecimal = BigDecimal(Long.MaxValue),
     sequencerRequestAmplificationPatience: NonNegativeFiniteDuration =
       ValidatorAppBackendConfig.DefaultSequencerRequestAmplificationPatience,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays =
