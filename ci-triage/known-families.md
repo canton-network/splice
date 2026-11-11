@@ -138,6 +138,11 @@ State as recorded in the family section, not rechecked against the tracker on 20
     suites, 11324: 5; 11341: 1, `TOPOLOGY_UNAUTHORIZED_TRANSACTION`). Confirm: zero `has been reset` lines in
     canton_network_test.clog.gz. A hit inside a test body recovers (11325).
   - splice#8356 (blacklisting off in tests, open) covers lost verdict and breaker, not rejected send.
+- Signature (2) on Canton 3.7.3-snapshot.20261109 (11350, 2026-11-11, main 9dd892fe2e, wall-clock-time (7),
+  ValidatorSequencerConnectionIntegrationTest setup): sv3, sv4, sv2 onboard their sequencers through sv1 within 21 s;
+  sv2's add is submitted into the 2 -> 3 step (sv4 newcomer, below strong quorum 03:08:23.5-03:08:46.9) and sv1's
+  handler times out at 38 s waiting for it in SequencerSynchronizerState; the retry succeeds. 10165 merged into 11255
+  (2026-11-08), so close new hits of this WARN as duplicates of 11255.
 
 ## C. False off-boarding conclusion during onboarding state transfer (10048 family) - FIXED
 - Signatures: `Received topology for epoch N, but this node isn't part of it (i.e., it has been off-boarded)` on a

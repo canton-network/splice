@@ -33,7 +33,7 @@ Job logs of the GHA jobs: `log/inbox-1111/<job id>.log` (gitignored).
 | g4-keydl | 11347 new: SvReonboarding sv1 init > 5 min (AM-like DAR repeats) + teardown leak cascade (H) | comment, retitle, Triaged | ran 2026-11-11 (user: comment, Triaged; retitle live); INDEX, AM + H merged |
 | g5-simtime | 11348 dup 11147 (AF, fix PR #8420) | close dup | ran 2026-11-11 (user); INDEX + AF merged |
 | g6-restart | 11346 new: WalletSurviveCantonRestart 2 min tap budget includes restarted participant startup (106 s) | comment, retitle, Triaged | ran 2026-11-11 (user); fix branch rautenrieth-da/fix-11346-wallet-restart-tap-budget a4a158b26b (5 min budget, user's choice), PR splice#8444 open |
-| g7-vsc | 11350 dup 11255 (B shape, onboard/sv/sequencer 38 s) | close dup | open |
+| g7-vsc | 11350 dup 11255 (B shape, onboard/sv/sequencer 38 s) | close dup | ran 2026-11-11 (user); INDEX + B merged |
 | g8-lsu | 11354 new: LsuIntegrationTest validators outlive scan restart, BFT retries exhausted | comment, retitle, assignee nicu-da, Triaged | open |
 
 Merge note: g6 and g8 both proposed family AU. Assign AU to 11346 (g6) and AV to 11354 (g8) when merging.
