@@ -240,7 +240,6 @@ class DbActivityRecordMetaStoreTest
       val facade = new DbActivityRecordMetaStore(
         storage,
         updateHistory,
-        appStore,
         versions,
         isFirstSv,
         initialRound,
