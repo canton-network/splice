@@ -129,19 +129,15 @@ class UnavailablePartiesDetector(
             logger.info(
               s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
             )
-            unavailablePartiesStore
-              .addParties(toIgnore.toSeq)
-              .flatMap(_ =>
-                processRemaining(
-                  toIgnore,
-                  current :: rest,
-                  partiesOf,
-                  submit,
-                  lowestSupportedVersions,
-                  result,
-                  failedTasks = 0,
-                )
-              )
+            processRemaining(
+              toIgnore,
+              current :: rest,
+              partiesOf,
+              submit,
+              lowestSupportedVersions,
+              result,
+              failedTasks = 0,
+            )
           }
         case Failure(reason @ VettingFailure()) if current.size > 1 =>
           val (left, right) = current.splitAt(current.size / 2)
@@ -166,18 +162,19 @@ class UnavailablePartiesDetector(
             result <- ignoreParties(candidates).flatMap { toIgnore =>
               if (toIgnore.isEmpty) {
                 logger.warn(
-                  s"Not ignoring any party for the failing task, all candidates ($candidates) are protected"
+                  s"Not ignoring any party for the failing task, all candidates ($candidates) are protected, failing the batch so it is retried"
                 )
-              }
-              processRemaining(
-                toIgnore,
-                rest,
-                partiesOf,
-                submit,
-                lowestSupportedVersions,
-                result,
-                failedTasks = 1,
-              )
+                Future.failed(reason)
+              } else
+                processRemaining(
+                  toIgnore,
+                  rest,
+                  partiesOf,
+                  submit,
+                  lowestSupportedVersions,
+                  result,
+                  failedTasks = 1,
+                )
             }
           } yield result
         // Not a vetting failure (e.g. contention): fail the task so it is retried as a whole.

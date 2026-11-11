@@ -193,7 +193,7 @@ class UnavailablePartiesDetectorTest
       }
     }
 
-    "never ignore protected parties" in {
+    "fail the batch instead of ignoring protected parties" in {
       val contracts = Seq(Contract("c1", Set(alice, dso)))
       loggerFactory
         .assertLogs(
@@ -202,13 +202,12 @@ class UnavailablePartiesDetectorTest
             Map(alice -> Some(v1), dso -> Some(v2)),
             Set("c1"),
             protectedParties = Set(dso, alice),
-          ),
+          ).failed,
           _.warningMessage should include("all candidates"),
         )
-        .map { case (result, _, store) =>
-          result.ignoredParties shouldBe empty
-          store.listParties().futureValue shouldBe empty
-        }
+        .flatMap(_ => mkStore())
+        .flatMap(_.listParties())
+        .map(_ shouldBe empty)
     }
 
     "not submit contracts of parties ignored while processing the batch" in {
