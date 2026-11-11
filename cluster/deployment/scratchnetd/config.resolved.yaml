@@ -1724,8 +1724,12 @@ validators:
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
+    participant:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_SAVE_PARTICIPANT'
+          value: "canton.participants.participant.parameters.acs-commitments.enable-new-acs-commitment-processor=false\ncanton.participants.participant.parameters.ledger-api-server.indexer.achs-config = null\n"
     partyHint: 'digitalasset-testValidator-1'
-    version: '0.8.0'
+    version: '0.9.3'
     walletGateway:
       enabled: true
       portfolioVersion: '1.12.2'

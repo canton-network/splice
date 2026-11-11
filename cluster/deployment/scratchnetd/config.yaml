@@ -56,4 +56,10 @@ svs:
             canton.sv-apps.sv.local-synchronizer-nodes.current.protocol-version = 35
 validators:
   validator-runbook:
-    version: 0.8.0
+    version: 0.9.3
+    participant:
+      additionalEnvVars:
+        - name: ADDITIONAL_CONFIG_SAVE_PARTICIPANT
+          value: |
+            canton.participants.participant.parameters.acs-commitments.enable-new-acs-commitment-processor=false
+            canton.participants.participant.parameters.ledger-api-server.indexer.achs-config = null
