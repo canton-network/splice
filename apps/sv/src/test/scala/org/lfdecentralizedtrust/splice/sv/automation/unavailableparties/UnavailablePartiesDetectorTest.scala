@@ -249,24 +249,6 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
       }
     }
 
-    "split on an interpretation error caused by a failed downgrade" in {
-      val contracts =
-        Seq(Contract("c1", Set(alice, dso)), Contract("c2", Set(bob, dso)))
-      run(
-        contracts,
-        Map(alice -> Some(v1)),
-        Set("c1"),
-        failure = submissionFailure(
-          reason = "DAML_INTERPRETATION_ERROR",
-          message =
-            s"Interpretation error: ${UnavailablePartiesDetector.VettingFailure.downgradeMessage}",
-        ),
-      ).map { case (result, _, store) =>
-        result.splits shouldBe 1
-        store.listParties().futureValue.toSet shouldBe Set(alice)
-      }
-    }
-
     "fail the whole batch without ignoring anyone on unrelated errors" in {
       val store = new InMemoryUnavailablePartiesStore(Set.empty)
       val contracts =

@@ -251,7 +251,6 @@ object UnavailablePartiesDetector {
       CommandExecutionErrors.Interpreter.UpgradeError.TranslationFailed.id,
     )
 
-    private[unavailableparties] val downgradeMessage = "may not be dropped during downgrading"
     private[unavailableparties] val unknownPackageRoutingMessage =
       "Some packages are not known to all informees"
 
@@ -263,7 +262,7 @@ object UnavailablePartiesDetector {
             (errorCodeId == TransactionRoutingError.TopologyErrors.NoSynchronizerForSubmission.id &&
               Option(ex.getStatus.getDescription).exists(_.contains(unknownPackageRoutingMessage)))
           case _ => false
-        } || Option(ex.getStatus.getDescription).exists(_.contains(downgradeMessage))
+        }
       case _ => false
     }
   }
