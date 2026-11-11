@@ -35,7 +35,7 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
   private val v2 = PackageVersion.assertFromString("0.2.0")
 
   private def submissionFailure(
-      reason: String = "NO_SYNCHRONIZER_FOR_SUBMISSION",
+      reason: String = "PACKAGE_NOT_VETTED_BY_RECIPIENTS",
       message: String = "failure",
   ): StatusRuntimeException =
     StatusProto.toStatusRuntimeException(
@@ -272,8 +272,9 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
         Map(alice -> Some(v1)),
         Set("c1"),
         failure = submissionFailure(
+          reason = "NO_SYNCHRONIZER_FOR_SUBMISSION",
           message =
-            s"No valid synchronizer for submission found. Discarded synchronizers: sync::1: ${UnavailablePartiesDetector.VettingFailure.unknownPackageRoutingMessage} on synchronizer sync::1"
+            s"No valid synchronizer for submission found. Discarded synchronizers: sync::1: ${UnavailablePartiesDetector.VettingFailure.unknownPackageRoutingMessage} on synchronizer sync::1",
         ),
       ).map { case (result, _, store) =>
         result.splits shouldBe 1
@@ -291,8 +292,9 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
         Set("c1"),
         store = store,
         failure = submissionFailure(
+          reason = "NO_SYNCHRONIZER_FOR_SUBMISSION",
           message =
-            "No valid synchronizer for submission found. Discarded synchronizers: sync::1: Parties Set(alice) don't have an active participant on synchronizer sync::1"
+            "No valid synchronizer for submission found. Discarded synchronizers: sync::1: Parties Set(alice) don't have an active participant on synchronizer sync::1",
         ),
       ).failed.map { _ =>
         store.listParties().futureValue shouldBe empty
