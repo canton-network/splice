@@ -1,5 +1,8 @@
+# Copyright (c) 2025 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 sdk-version: 3.5.2
-name: splice-api-credential-registry-v1
+name: splice-api-credential-record-v1
 source: daml
 version: 1.0.0
 dependencies:
@@ -14,5 +17,5 @@ build-options:
 codegen:
   java:
     package-prefix: org.lfdecentralizedtrust.splice.codegen.java
-    decoderClass: org.lfdecentralizedtrust.splice.codegen.java.DecoderSpliceCredentialRegistryV1
+    decoderClass: org.lfdecentralizedtrust.splice.codegen.java.DecoderSpliceApiCredentialRecordV1
     output-directory: target/daml-codegen-java

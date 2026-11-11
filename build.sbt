@@ -108,6 +108,8 @@ lazy val root: Project = (project in file("."))
     `splice-validator-lifecycle-daml`,
     `splice-validator-lifecycle-test-daml`,
     `splice-api-reward-assignment-v1-daml`,
+    `splice-api-credential-record-v1-daml`,
+    `splice-api-credential-registry-publication-v1-daml`,
     `splice-api-token-metadata-v1-daml`,
     `splice-api-token-holding-v1-daml`,
     `splice-api-token-holding-v2-daml`,
@@ -258,7 +260,8 @@ lazy val docs = project
           (`splice-wallet-payments-daml` / Compile / damlBuild).value ++
           (`splice-util-featured-app-proxies-daml` / Compile / damlBuild).value ++
           (`splice-util-token-standard-wallet-daml` / Compile / damlBuild).value ++
-          (`splice-api-credential-registry-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-record-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-registry-publication-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-transfer-events-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
           (`splice-api-token-holding-v1-daml` / Compile / damlBuild).value ++
@@ -341,15 +344,26 @@ lazy val docs = project
     Headers.ApacheDAHeaderSettings,
   )
 
-lazy val `splice-api-credential-registry-v1-daml` =
+// Credential standard
+lazy val `splice-api-credential-record-v1-daml` =
   project
-    .in(file("daml/splice-api-credential-registry-v1"))
+    .in(file("credential-standard/splice-api-credential-record-v1"))
     .enablePlugins(DamlPlugin)
     .settings(
       BuildCommon.damlSettings,
       Compile / damlDependencies :=
-        (`splice-util-daml` / Compile / damlBuild).value ++
-          (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value,
+        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value,
+    )
+
+lazy val `splice-api-credential-registry-publication-v1-daml` =
+  project
+    .in(file("credential-standard/splice-api-credential-registry-publication-v1"))
+    .enablePlugins(DamlPlugin)
+    .settings(
+      BuildCommon.damlSettings,
+      Compile / damlDependencies :=
+        (`splice-api-token-metadata-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-record-v1-daml` / Compile / damlBuild).value,
     )
 
 // Shared token standard code
@@ -935,7 +949,8 @@ lazy val `splice-amulet-daml` =
           (`splice-featured-app-api-v1-daml` / Compile / damlBuild).value ++
           (`splice-featured-app-api-v2-daml` / Compile / damlBuild).value ++
           (`splice-api-reward-assignment-v1-daml` / Compile / damlBuild).value ++
-          (`splice-api-credential-registry-v1-daml` / Compile / damlBuild).value,
+          (`splice-api-credential-record-v1-daml` / Compile / damlBuild).value ++
+          (`splice-api-credential-registry-publication-v1-daml` / Compile / damlBuild).value,
     )
 
 lazy val `splice-test-token-v1-test-daml` =
