@@ -181,7 +181,6 @@ tests:
         sequencerPublicUrl: "https://sequencer.test.com"
         sequencerAddress: "sequencer-test-address"
         mediatorAddress: "mediator-test-address"
-        enableBftSequencer: true
         sequencerPruningConfig:
           enabled: true
           pruningInterval: "1h"
@@ -340,11 +339,10 @@ tests:
           path: spec.template.spec.initContainers[0].image
           value: "secure-registry.example.com/postgres:18-custom"
 
-  - it: "allows overriding all 8 SV secret env vars with raw strings"
+  - it: "allows overriding all 6 SV secret env vars with raw strings"
     set:
       joinWithKeyOnboarding.sponsorApiUrl: "https://sponsor.mock.com"
       joinWithKeyOnboarding.sponsorScanUrl: "https://sponsor-scan.mock.com"
-      cometBFT.externalGovernanceKey: true
       identitiesExport.prefix: "mock-prefix"
       identitiesExport.bucket.bucketName: "mock-bucket"
       identitiesExport.bucket.jsonCredentials: "mock-creds"
@@ -358,8 +356,6 @@ tests:
       secretOverrides.svPublicKey: "vault:kv/data/sv/pub"
       secretOverrides.svPrivateKey: "vault:kv/data/sv/priv"
       persistence.secretOverrides.postgresPassword: "vault:kv/data/sv/pg"
-      cometBFT.secretOverrides.governancePublicKey: "vault:kv/data/sv/comet-pub"
-      cometBFT.secretOverrides.governancePrivateKey: "vault:kv/data/sv/comet-priv"
       identitiesExport.bucket.secretOverrides.jsonCredentials: "vault:kv/data/sv/ids-export"
       periodicTopologySnapshotConfig.location.bucket.secretOverrides.jsonCredentials: "vault:kv/data/sv/topology"
     documentSelector:
@@ -378,12 +374,6 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='mock-sv-init')].env[?(@.name=='PGPASSWORD')].value
           pattern: "vault:kv/data/sv/pg"
-      - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_COMETBFT_GOVERNANCE_PUBLIC_KEY')].value
-          pattern: "vault:kv/data/sv/comet-pub"
-      - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_COMETBFT_GOVERNANCE_PRIVATE_KEY')].value
-          pattern: "vault:kv/data/sv/comet-priv"
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='SPLICE_APP_SV_IDS_BACKUP_BUCKET_SERVICE_ACCOUNT_CREDENTIALS')].value
           pattern: "vault:kv/data/sv/ids-export"
@@ -407,11 +397,6 @@ tests:
       joinWithKeyOnboarding:
         sponsorApiUrl: "https://sponsor.mock.com"
         sponsorScanUrl: "https://sponsor-scan.mock.com"
-      cometBFT:
-        externalGovernanceKey: true
-        secretOverrides:
-          governancePublicKey: "vault:kv/data/sv/comet-pub"
-          governancePrivateKey: "vault:kv/data/sv/comet-priv"
       identitiesExport:
         prefix: "mock-prefix"
         bucket:

@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
-import cats.data.OptionT
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -78,16 +77,15 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
   override protected def isStaleTask(
       task: SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight
   )(implicit tc: TraceContext): Future[Boolean] =
-    (for {
-      _ <- OptionT(
-        store.multiDomainAcsStore.lookupContractById(FeaturedAppConfigUpdateInstruction.COMPANION)(
-          task.instruction.contractId
-        )
+    for {
+      instruction <- store.multiDomainAcsStore.lookupContractById(
+        FeaturedAppConfigUpdateInstruction.COMPANION
+      )(task.instruction.contractId)
+      featuredAppRight <- store.multiDomainAcsStore.lookupContractById(FeaturedAppRight.COMPANION)(
+        task.featuredAppRightCid
       )
-      _ <- OptionT(
-        store.multiDomainAcsStore.lookupContractById(FeaturedAppRight.COMPANION)(
-          task.featuredAppRightCid
-        )
-      )
-    } yield ()).isEmpty
+    } yield (instruction, featuredAppRight) match {
+      case (Some(_), Some(_)) => false
+      case _ => true
+    }
 }

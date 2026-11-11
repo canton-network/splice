@@ -3,15 +3,13 @@
 import * as fs from 'fs';
 import {
   clusterNetwork,
+  config,
   DecentralizedSynchronizerMigrationConfig,
   ExactNamespace,
   externalIpRangesFile,
   installSpliceHelmChart,
 } from '@canton-network/splice-pulumi-common';
-import {
-  approvedSvIdentitiesFile,
-  getChainIdSuffix,
-} from '@canton-network/splice-pulumi-common-sv';
+import { approvedSvIdentitiesFile } from '@canton-network/splice-pulumi-common-sv';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
 import { Resource } from '@pulumi/pulumi';
 import { createHash } from 'crypto';
@@ -56,7 +54,6 @@ export function installInfo(
       },
       synchronizer: {
         current: {
-          chainIdSuffix: getChainIdSuffix(),
           migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
           synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
           version: CnChartVersion.stringify(
@@ -65,7 +62,6 @@ export function installInfo(
         },
         legacy: decentralizedSynchronizerMigrationConfig.legacy
           ? {
-              chainIdSuffix: getChainIdSuffix(),
               migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
               synchronizerSerialId: decentralizedSynchronizerMigrationConfig.legacy.id,
               version: CnChartVersion.stringify(
@@ -75,7 +71,6 @@ export function installInfo(
           : null,
         successor: decentralizedSynchronizerMigrationConfig.upgrade
           ? {
-              chainIdSuffix: getChainIdSuffix(),
               migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
               synchronizerSerialId: decentralizedSynchronizerMigrationConfig.upgrade.id,
               version: CnChartVersion.stringify(

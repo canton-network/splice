@@ -12,11 +12,6 @@ export interface CantonBftSynchronizerNode {
   externalSequencerP2pAddress: string;
 }
 
-// TODO (#8263): remove the CometBFT synchronizer nodes
-export interface CometbftSynchronizerNode {
-  cometbftRpcServiceName: string;
-}
-
 export interface DecentralizedSynchronizerNode {
   migrationId: number;
   readonly namespaceInternalSequencerAddress: string;
@@ -59,20 +54,4 @@ export class CrossStackDecentralizedSynchronizerNode
   }
 
   readonly dependencies: Resource[] = [];
-}
-
-export class CrossStackCometBftDecentralizedSynchronizerNode
-  extends CrossStackDecentralizedSynchronizerNode
-  implements CometbftSynchronizerNode
-{
-  cometbftRpcServiceName: string;
-
-  constructor(
-    migrationId: DomainMigrationIndex,
-    cometbftNodeIdentifier: string,
-    ingressName: string
-  ) {
-    super(migrationId, ingressName);
-    this.cometbftRpcServiceName = `${cometbftNodeIdentifier}-cometbft-rpc`;
-  }
 }

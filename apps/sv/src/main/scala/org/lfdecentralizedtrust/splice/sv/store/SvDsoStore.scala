@@ -4,11 +4,11 @@
 package org.lfdecentralizedtrust.splice.sv.store
 
 import com.digitalasset.canton.tracing.TraceContext
-
 import cats.implicits.toTraverseOps
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
   UnclaimedReward,
 }
@@ -1268,6 +1268,10 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
+  def listFeaturedAppRightsForParties(
+      appParties: Seq[PartyId],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[Contract[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 }
 
 object SvDsoStore {
@@ -1277,6 +1281,7 @@ object SvDsoStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -1293,6 +1298,7 @@ object SvDsoStore {
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       ingestionConfig,
       acsStoreDescriptorUserVersion,
@@ -1832,6 +1838,7 @@ object SvDsoStore {
       roundNumber: Long,
       batch: Seq[T],
   )
+
 }
 
 case class ExpiredRewardCouponsBatch(

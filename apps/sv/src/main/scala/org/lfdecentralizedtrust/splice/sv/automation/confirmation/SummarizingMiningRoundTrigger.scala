@@ -166,33 +166,36 @@ class SummarizingMiningRoundTrigger(
     val faucetCapIsZero = issuanceConfig.optValidatorFaucetCap.toScala
       .exists(_.compareTo(java.math.BigDecimal.ZERO) <= 0)
     for {
-      rewardTotals <-
-        if (useTrafficBasedAppRewards(payload))
-          fetchRewardAccountingTotals(round).map { totals =>
-            RewardTotals(
-              appRewardCoupons = appRewardCouponsFromScanTotals(totals),
-              issuancePerFeaturedAppActivity = BigDecimal(totals.issuancePerFeaturedAppActivity),
-              totalAppRewardUnclaimed = BigDecimal(totals.totalAppRewardUnclaimed),
-              totalAppRewardFromAssetActivity = BigDecimal(totals.totalAppRewardFromAssetActivity),
-              issuancePerFeaturedAssetActivity = BigDecimal(totals.issuancePerFeaturedAssetActivity),
-            )
-          }
-        else
-          store.sumAppRewardCouponsOnDomain(round, domain).map { appRewardCoupons =>
-            RewardTotals(
-              appRewardCoupons = appRewardCoupons,
-              issuancePerFeaturedAppActivity = BigDecimal(0),
-              totalAppRewardUnclaimed = BigDecimal(0),
-              totalAppRewardFromAssetActivity = BigDecimal(0),
-              issuancePerFeaturedAssetActivity = BigDecimal(0),
-            )
-          }
       // Opt fields on OpenMiningRoundSummary were introduced in amulet 0.1.25 with TBARv1.1;
       // populating them with Some(_) on older packages fails choice execution.
       tbarV_1 <- packageVersionSupport.supportsTbarV1_1(
         Seq(dsoParty),
         context.clock.now,
       )
+      rewardTotals <-
+        if (useTrafficBasedAppRewards(payload))
+          fetchRewardAccountingTotals(round).map { totals =>
+            def ifTbarV1_1(value: String) = Option.when(tbarV_1.supported)(BigDecimal(value))
+            RewardTotals(
+              appRewardCoupons = appRewardCouponsFromScanTotals(totals),
+              issuancePerFeaturedAppActivity = ifTbarV1_1(totals.issuancePerFeaturedAppActivity),
+              totalAppRewardUnclaimed = ifTbarV1_1(totals.totalAppRewardUnclaimed),
+              totalAppRewardFromAssetActivity = ifTbarV1_1(totals.totalAppRewardFromAssetActivity),
+              issuancePerFeaturedAssetActivity = ifTbarV1_1(totals.issuancePerFeaturedAssetActivity),
+            )
+          }
+        else
+          store.sumAppRewardCouponsOnDomain(round, domain).map { appRewardCoupons =>
+            RewardTotals(
+              appRewardCoupons = appRewardCoupons,
+              // We must not set these fields, as otherwise they override what the
+              // Daml-level issuance computation computes for marker-based rewards.
+              issuancePerFeaturedAppActivity = None,
+              totalAppRewardUnclaimed = None,
+              totalAppRewardFromAssetActivity = None,
+              issuancePerFeaturedAssetActivity = None,
+            )
+          }
       validatorRewardCoupons <- store.sumValidatorRewardCouponsOnDomain(
         round,
         domain,
@@ -214,13 +217,10 @@ class SummarizingMiningRoundTrigger(
       validatorRewardCoupons = validatorRewardCoupons,
       validatorLivenessActivityRecords = validatorFaucetCoupons + validatorLivenessActivityRecords,
       svRewardCouponsWeightSum = svRewardCouponsWeightSum,
-      optIssuancePerFeaturedAppRewardCoupon =
-        Option.when(tbarV_1.supported)(rewardTotals.issuancePerFeaturedAppActivity),
-      optUnclaimedAppRewards = Option.when(tbarV_1.supported)(rewardTotals.totalAppRewardUnclaimed),
-      optTotalFeaturedAssetRewardCoupons =
-        Option.when(tbarV_1.supported)(rewardTotals.totalAppRewardFromAssetActivity),
-      optIssuancePerFeaturedAssetRewardCoupon =
-        Option.when(tbarV_1.supported)(rewardTotals.issuancePerFeaturedAssetActivity),
+      optIssuancePerFeaturedAppRewardCoupon = rewardTotals.issuancePerFeaturedAppActivity,
+      optUnclaimedAppRewards = rewardTotals.totalAppRewardUnclaimed,
+      optTotalFeaturedAssetRewardCoupons = rewardTotals.totalAppRewardFromAssetActivity,
+      optIssuancePerFeaturedAssetRewardCoupon = rewardTotals.issuancePerFeaturedAssetActivity,
     )
   }
 
@@ -353,10 +353,10 @@ object SummarizingMiningRoundTrigger {
 
   private[confirmation] final case class RewardTotals(
       appRewardCoupons: AppRewardCouponsSum,
-      issuancePerFeaturedAppActivity: BigDecimal,
-      totalAppRewardUnclaimed: BigDecimal,
-      totalAppRewardFromAssetActivity: BigDecimal,
-      issuancePerFeaturedAssetActivity: BigDecimal,
+      issuancePerFeaturedAppActivity: Option[BigDecimal],
+      totalAppRewardUnclaimed: Option[BigDecimal],
+      totalAppRewardFromAssetActivity: Option[BigDecimal],
+      issuancePerFeaturedAssetActivity: Option[BigDecimal],
   )
 
   class SummarizingMiningRoundMetrics(metricsFactory: LabeledMetricsFactory) {

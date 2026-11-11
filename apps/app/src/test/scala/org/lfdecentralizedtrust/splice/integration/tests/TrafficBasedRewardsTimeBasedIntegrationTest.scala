@@ -59,8 +59,6 @@ import scala.util.Random
 // event as described in CIP-104
 //
 // DvP settlement from TokenStandardTest is used here just to confirm distribution of rewards
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -439,6 +437,29 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     assertRewardCalcs(aliceParty, venueParty)
 
+    clue("Issuing rounds have the expected issuancePerFeaturedAppRewardCoupon") {
+      eventually() {
+        val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+        issuingRounds should not be empty
+        issuingRounds.foreach { issuingRound =>
+          val round = issuingRound.contract.payload.round.number.toLong
+          val issuanceRatio =
+            BigDecimal(issuingRound.contract.payload.issuancePerFeaturedAppRewardCoupon)
+          if (mintingTrafficBased) {
+            val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+              case GetRewardAccountingActivityTotalsResponse.members
+                    .RewardAccountingActivityTotalsOk(t) =>
+                t
+            }
+            issuanceRatio shouldBe BigDecimal(totals.issuancePerFeaturedAppActivity) withClue
+              s"Round $round"
+          } else {
+            issuanceRatio should be > BigDecimal(0) withClue s"Round $round"
+          }
+        }
+      }
+    }
+
     // Other misc API tests
     clue("404 for non-existent batch data") {
       sv1ScanBackend.getRewardAccountingBatch(6L, "0" * 64) shouldBe None
@@ -512,13 +533,16 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
     }
 
-    clue("Round 8 scan totals: TBAR v1.1 reward-accounting fields are all zero") {
+    clue(
+      "Round 8 scan totals: TBAR v1.1 reward-accounting fields are zero, except for the unclaimed budget"
+    ) {
       val t = totalsByRound(8L)
       t.totalAssetActivityWeight shouldBe 0L
       BigDecimal(t.totalAppRewardFromAppActivity) shouldBe BigDecimal(0)
       BigDecimal(t.totalAppRewardFromAssetActivity) shouldBe BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAppActivity) shouldBe BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAssetActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.totalAppRewardUnclaimed) should be > BigDecimal(0)
     }
 
     clue("Round 10 scan totals: TBAR v1.1 reward-accounting fields are all non-zero") {
@@ -528,6 +552,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       BigDecimal(t.totalAppRewardFromAssetActivity) should be > BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAppActivity) should be > BigDecimal(0)
       BigDecimal(t.issuancePerFeaturedAssetActivity) should be > BigDecimal(0)
+      // There still is some allowance left-over.
+      BigDecimal(t.totalAppRewardUnclaimed) should be > BigDecimal(0)
     }
 
     // The remaining assertions cover the handling of V2 contracts created on ledger.
@@ -961,6 +987,8 @@ object TrafficBasedRewardsTimeBasedIntegrationTestBase {
   val appRewardCouponThreshold = BigDecimal("50")
 }
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class TrafficBasedRewardsTimeBasedIntegrationTest
     extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
   override protected val rewardConfigMode
@@ -968,6 +996,8 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 }
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class TrafficBasedRewardsDryRunTimeBasedIntegrationTest
     extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
   override protected val rewardConfigMode
