@@ -116,7 +116,7 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
       val contracts =
         Seq(Contract("c1", Set(alice, dso)), Contract("c2", Set(bob, dso)))
       run(contracts, Map.empty, Set.empty).map { case (result, submissions, store) =>
-        result.submittedContracts shouldBe 2
+        result.submittedTasks shouldBe 2
         result.splits shouldBe 0
         submissions should have size 1
         store.listParties().futureValue shouldBe empty
@@ -136,8 +136,8 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
       run(contracts, versions, Set("c3")).map { case (result, submissions, store) =>
         // [c1,c2,c3,c4] -> [c1,c2] + [c3,c4], then [c3,c4] -> [c3] + [c4]
         result.splits shouldBe 2
-        result.failedContracts shouldBe 1
-        result.submittedContracts shouldBe 3
+        result.failedTasks shouldBe 1
+        result.submittedTasks shouldBe 3
         result.ignoredParties shouldBe Set(charlie)
         store.listParties().futureValue.toSet shouldBe Set(charlie)
         // the halves are retried depth-first, left before right
@@ -192,7 +192,7 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
         Contract("c2", Set(charlie, dso)),
       )
       run(contracts, Map.empty, Set.empty, store).map { case (result, submissions, _) =>
-        result.submittedContracts shouldBe 2
+        result.submittedTasks shouldBe 2
         submissions shouldBe Seq(Seq("c1", "c2"))
       }
     }
@@ -219,8 +219,8 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
           // the mediator names the culprit, so there is no need to bisect the batch
           result.splits shouldBe 0
           result.ignoredParties shouldBe Set(charlie)
-          result.failedContracts shouldBe 1
-          result.submittedContracts shouldBe 2
+          result.failedTasks shouldBe 1
+          result.submittedTasks shouldBe 2
           store.listParties().futureValue.toSet shouldBe Set(charlie)
           // the contracts that do not involve charlie are retried right away
           submissions.get() shouldBe Seq(Seq("c1", "c2", "c3"), Seq("c1", "c2"))
@@ -238,7 +238,7 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
           failure = submissionFailure(reason = errorId),
         ).map { case (result, _, store) =>
           result.splits shouldBe 1
-          result.submittedContracts shouldBe 1
+          result.submittedTasks shouldBe 1
           store.listParties().futureValue.toSet shouldBe Set(alice)
         }
       }

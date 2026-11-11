@@ -19,12 +19,12 @@ import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-/** Executes a batch of contracts, isolating unavailable parties via batch splitting.
+/** Executes a batch of tasks, isolating unavailable parties via batch splitting.
   *
   * If a submission is rejected because some parties were unresponsive, those parties are named by the mediator and
   * are ignored directly. Any other failure is isolated by splitting the batch in half and retrying
   * the halves in DFS order. Once a batch of size 1 fails, the parties with the
-  * lowest supported version on that contract are marked as unavailable in the
+  * lowest supported version on that task are marked as unavailable in the
   * [[org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore]], unless they are on the safety
   * list of protected parties.
   * On success, all parties involved in the submitted batch are removed from the store, resetting
@@ -86,7 +86,7 @@ class UnavailablePartiesDetector(
       .flatten
 
   /** Submits the batches on top of the stack, one at a time, splitting a batch in two on a
-    * vetting failure and pushing the halves back onto the stack. Contracts involving parties that get
+    * vetting failure and pushing the halves back onto the stack. Tasks involving parties that get
     * ignored are removed from the whole stack right away.
     */
   private def processSplitBatches[C](
@@ -120,13 +120,13 @@ class UnavailablePartiesDetector(
         // On Failure:
         //  - if the mediator named the unresponsive parties, ignore exactly those: the whole
         //    batch is rejected.
-        //  - if the batch has more than one contract, split it in half and retry both halves.
-        //  - if the batch has only one contract, mark the parties with the lowest supported version as unavailable.
+        //  - if the batch has more than one task, split it in half and retry both halves.
+        //  - if the batch has only one task, mark the parties with the lowest supported version as unavailable.
         case Failure(UnresponsivePartiesFailure(unresponsiveParties))
             if shrinks(current, partiesOf, unresponsiveParties -- protectedParties) =>
           val toIgnore = unresponsiveParties -- protectedParties
           logger.info(
-            s"Batch of ${current.size} contracts was rejected due to unresponsive parties, ignoring $toIgnore"
+            s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
           )
           unavailablePartiesStore
             .addParties(toIgnore.toSeq)
@@ -138,13 +138,13 @@ class UnavailablePartiesDetector(
                 submit,
                 lowestSupportedVersions,
                 result,
-                failedContracts = 0,
+                failedTasks = 0,
               )
             )
         case Failure(reason @ VettingFailure()) if current.size > 1 =>
           val (left, right) = current.splitAt(current.size / 2)
           logger.info(
-            s"Splitting batch of ${current.size} contracts into ${left.size} and ${right.size} after failure: $reason"
+            s"Splitting batch of ${current.size} tasks into ${left.size} and ${right.size} after failure: $reason"
           )
           processSplitBatches(
             left :: right :: rest,
@@ -156,7 +156,7 @@ class UnavailablePartiesDetector(
         case Failure(reason @ VettingFailure()) =>
           val involvedParties = current.headOption.fold(Set.empty[PartyId])(partiesOf)
           logger.info(
-            s"Isolated failure to a single contract with parties $involvedParties: $reason"
+            s"Isolated failure to a single task with parties $involvedParties: $reason"
           )
           val candidates =
             partiesWithMinimalSupportedVersion(involvedParties, lowestSupportedVersions)
@@ -165,7 +165,7 @@ class UnavailablePartiesDetector(
             _ <-
               if (toIgnore.isEmpty) {
                 logger.info(
-                  s"Not ignoring any party for the failing contract, all candidates ($candidates) are protected"
+                  s"Not ignoring any party for the failing task, all candidates ($candidates) are protected"
                 )
                 Future.unit
               } else {
@@ -178,7 +178,7 @@ class UnavailablePartiesDetector(
               submit,
               lowestSupportedVersions,
               result,
-              failedContracts = 1,
+              failedTasks = 1,
             )
           } yield result
         // Not a vetting failure (e.g. contention): fail the task so it is retried as a whole.
@@ -209,7 +209,7 @@ class UnavailablePartiesDetector(
       submit: Seq[C] => Future[Unit],
       lowestSupportedVersions: LowestSupportedVersions,
       result: Result,
-      failedContracts: Int,
+      failedTasks: Int,
   )(implicit tc: TraceContext): Future[Result] = {
     val remaining = stack.map(_.filterNot(c => partiesOf(c).exists(ignored.contains)))
     val dropped = stack.map(_.size).sum - remaining.map(_.size).sum
@@ -218,7 +218,7 @@ class UnavailablePartiesDetector(
       partiesOf,
       submit,
       lowestSupportedVersions,
-      result.addIgnored(ignored, failedContracts = failedContracts + dropped),
+      result.addIgnored(ignored, failedTasks = failedTasks + dropped),
     )
   }
 }
@@ -253,7 +253,7 @@ object UnavailablePartiesDetector {
     }
   }
 
-  /** Ignoring the given parties only pays off if it actually removes contracts from the batch,
+  /** Ignoring the given parties only pays off if it actually removes tasks from the batch,
     * otherwise the very same batch would be resubmitted and we would loop forever.
     */
   private def shrinks[C](
@@ -268,21 +268,21 @@ object UnavailablePartiesDetector {
     Ordering.Option(Ordering.fromLessThan[PackageVersion](_ < _))
 
   final case class Result(
-      submittedContracts: Int,
-      failedContracts: Int,
+      submittedTasks: Int,
+      failedTasks: Int,
       splits: Int,
       ignoredParties: Set[PartyId],
   ) {
-    def addSubmitted(n: Int): Result = copy(submittedContracts = submittedContracts + n)
+    def addSubmitted(n: Int): Result = copy(submittedTasks = submittedTasks + n)
     def addSplit(): Result = copy(splits = splits + 1)
-    def addIgnored(parties: Set[PartyId], failedContracts: Int): Result =
+    def addIgnored(parties: Set[PartyId], failedTasks: Int): Result =
       copy(
         ignoredParties = ignoredParties ++ parties,
-        failedContracts = this.failedContracts + failedContracts,
+        failedTasks = this.failedTasks + failedTasks,
       )
 
     def summary: String =
-      s"submitted $submittedContracts contracts, failed $failedContracts, " +
+      s"submitted $submittedTasks tasks, failed $failedTasks, " +
         s"$splits batch splits, newly ignored parties: ${ignoredParties.size}" +
         (if (ignoredParties.isEmpty) "" else s" ($ignoredParties)")
   }
