@@ -309,24 +309,6 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.High),
       )
     )
-    // Register optional BFT triggers
-    if (triggerContext.config.enableCometbftReconciliation) {
-      registerTrigger(
-        new PublishLocalCometBftNodeConfigTrigger(
-          triggerContext,
-          dsoStore,
-          connection(SpliceLedgerConnectionPriority.High),
-          synchronizerNodeService,
-        )
-      )
-      registerTrigger(
-        new ReconcileCometBftNetworkConfigWithDsoRulesTrigger(
-          triggerContext,
-          dsoStore,
-          synchronizerNodeService,
-        )
-      )
-    }
     registerTrigger(
       new SvOffboardingPartyToParticipantProposalTrigger(
         triggerContext,
@@ -457,7 +439,6 @@ class SvDsoAutomationService(
             synchronizerNodeService.nodes,
             successorSynchronizerNode,
             participantAdminConnection,
-            store,
             config.domainMigrationDumpPath.getOrElse(
               throw new IllegalArgumentException("Domain migration dump path must be set for LSU")
             ),
@@ -510,6 +491,7 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Medium),
         () => getOrCreateOwnScanConnection(),
         () => getOrCreatePeerScanConnection(),
+        packageVersionSupport,
       )
     )
     registerTrigger(
@@ -594,7 +576,6 @@ class SvDsoAutomationService(
       new ReportSvStatusMetricsExportTrigger(
         triggerContext,
         dsoStore,
-        synchronizerNodeService,
       )
     )
     registerTrigger(
@@ -773,9 +754,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[SvOnboardingPartyToParticipantProposalTrigger],
       aTrigger[SvOnboardingSequencerTrigger],
       aTrigger[SvOnboardingMediatorProposalTrigger],
-      aTrigger[PublishLocalCometBftNodeConfigTrigger],
       aTrigger[PublishScanConfigTrigger],
-      aTrigger[ReconcileCometBftNetworkConfigWithDsoRulesTrigger],
       aTrigger[LocalSequencerConnectionsTrigger],
       aTrigger[SequencerPruningTrigger],
       aTrigger[SubmitSvStatusReportTrigger],

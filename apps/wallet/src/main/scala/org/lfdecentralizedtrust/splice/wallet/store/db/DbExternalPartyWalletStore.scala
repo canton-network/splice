@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store.db
 
+import com.digitalasset.canton.topology.SynchronizerId
 import scala.concurrent.Future
 
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
@@ -44,6 +45,7 @@ object DbExternalPartyWalletStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -62,6 +64,7 @@ object DbExternalPartyWalletStore {
           loggerFactory = loggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,
@@ -100,6 +103,7 @@ class DbExternalPartyWalletStore private (
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -115,6 +119,7 @@ class DbExternalPartyWalletStore private (
       acsStoreDescriptor = DbExternalPartyWalletStore.acsStoreDescriptor(key, participantId),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
     )
     with ExternalPartyWalletStore

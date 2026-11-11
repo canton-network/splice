@@ -6,7 +6,7 @@ import sbt.*
 /** Copied from Canton OSS repo. */
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
-  val canton_library_version = "3.7.0-snapshot.20261022.20797.0.vd0a4e6f2"
+  val canton_library_version = "3.7.1"
   // Canton does some sbt magic that depends on this field called version even though it is not explicitly used.
   val version = canton_library_version
   val daml_language_versions = Seq("2.1")
@@ -25,7 +25,7 @@ object CantonDependencies {
   lazy val pekko_http_version = "1.2.0"
   lazy val auth0_java = "com.auth0" % "java-jwt" % "4.2.1"
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
-  lazy val grpc_version = "1.81.0"
+  lazy val grpc_version = "1.85.0"
   lazy val logback_version = "1.6.3"
   lazy val slf4j_version = "2.0.6"
   lazy val log4j_version = "2.25.5"
@@ -33,11 +33,12 @@ object CantonDependencies {
   lazy val pprint_version = "0.9.3"
   // if you update the slick version, please also update our forked code in common/slick.util.*
   lazy val slick_version = "3.5.2"
-  lazy val bouncy_castle_version = "1.83"
+  lazy val bouncy_castle_version = "1.86"
 
   lazy val pureconfig_version = "0.14.0"
 
-  lazy val circe_version = "0.14.2"
+  lazy val circe_version = "0.14.17"
+  lazy val circe_generic_extras_version = "0.14.4"
 
   lazy val scalatest_version = "3.2.19"
   lazy val scalacheck_version = "1.15.4"
@@ -212,27 +213,26 @@ object CantonDependencies {
 
   lazy val circe_core = "io.circe" %% "circe-core" % circe_version
   lazy val circe_generic = "io.circe" %% "circe-generic" % circe_version
-  lazy val circe_generic_extras = "io.circe" %% "circe-generic-extras" % circe_version
+  lazy val circe_generic_extras =
+    "io.circe" %% "circe-generic-extras" % circe_generic_extras_version
 
   lazy val tink = "com.google.crypto.tink" % "tink" % "1.12.0" excludeAll (
     ExclusionRule(organization = "com.google.guava", name = "guava-jdk5"),
     ExclusionRule(organization = "com.amazonaws", name = "aws-java-sdk-kms")
   )
 
-  lazy val opentelemetry_version = "1.60.1"
-  lazy val opentelemetry_java_instrumentation_version = "2.26.1"
+  lazy val opentelemetry_version = "1.67.0"
+  lazy val opentelemetry_java_instrumentation_version = "2.33.0"
   lazy val opentelemetry_api = "io.opentelemetry" % "opentelemetry-api" % opentelemetry_version
   lazy val opentelemetry_sdk = "io.opentelemetry" % "opentelemetry-sdk" % opentelemetry_version
   lazy val opentelemetry_sdk_autoconfigure =
     "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % opentelemetry_version
   lazy val opentelemetry_prometheus =
     "io.opentelemetry" % "opentelemetry-exporter-prometheus" % s"$opentelemetry_version-alpha"
-  lazy val opentelemetry_zipkin =
-    "io.opentelemetry" % "opentelemetry-exporter-zipkin" % opentelemetry_version
   lazy val opentelemetry_instrumentation_grpc =
     "io.opentelemetry.instrumentation" % "opentelemetry-grpc-1.6" % s"$opentelemetry_java_instrumentation_version-alpha"
   lazy val opentelemetry_instrumentation_runtime_metrics =
-    "io.opentelemetry.instrumentation" % "opentelemetry-runtime-telemetry-java17" % s"$opentelemetry_java_instrumentation_version-alpha"
+    "io.opentelemetry.instrumentation" % "opentelemetry-runtime-telemetry" % s"$opentelemetry_java_instrumentation_version-alpha"
   lazy val opentelemetry_instrumentation_hikari =
     "io.opentelemetry.instrumentation" % "opentelemetry-hikaricp-3.0" % s"$opentelemetry_java_instrumentation_version-alpha"
   lazy val opentelemetry_proto = "io.opentelemetry" % "opentelemetry-proto" % "1.7.1-alpha"

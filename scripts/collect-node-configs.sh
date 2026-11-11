@@ -74,11 +74,10 @@ fi
 # ---------------------------------------------------------------------------
 
 # The container images of the nodes we collect configs from. Everything else in
-# the namespace (postgres, cometbft, web UIs, ...) is skipped.
+# the namespace (postgres, web UIs, ...) is skipped.
 node_images=(
   canton-participant
   canton-sequencer
-  canton-cometbft-sequencer
   canton-mediator
   sv-app
   validator-app

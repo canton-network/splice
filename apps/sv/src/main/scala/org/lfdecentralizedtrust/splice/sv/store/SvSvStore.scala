@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.store
 
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 
 import com.digitalasset.daml.lf.data.Time.Timestamp
@@ -100,6 +101,7 @@ object SvSvStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -116,6 +118,7 @@ object SvSvStore {
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       ingestionConfig,
       acsStoreDescriptorUserVersion,

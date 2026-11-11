@@ -877,6 +877,7 @@ class DbVotesStoreTest
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         domainMigrationId,
+        synchronizerId = dummyDomain,
         participantId = participantId,
         IngestionConfig(),
         new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
@@ -897,8 +898,6 @@ class DbVotesStoreTest
         case InitializeAcsAtLatestOffset | InitializeAcsAtOffset(_) =>
           scanStore.multiDomainAcsStore.testIngestionSink.ingestAcs(
             nextOffset(),
-            Seq.empty,
-            Seq.empty,
             Seq.empty,
           )
       }

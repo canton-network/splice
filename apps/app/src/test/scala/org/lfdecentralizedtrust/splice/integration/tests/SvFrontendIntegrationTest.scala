@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
   ARC_DsoRules,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_CreateFeaturedAppConfigUpdateInstruction,
   SRARC_OffboardSv,
   SRARC_SetConfig,
 }
@@ -580,7 +581,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "Grant, Update and Revoke Featured App Right" in { implicit env =>
+    "Grant, Update, Amend and Revoke Featured App Right" in { implicit env =>
       val providerParty = sv3Backend.getDsoInfo().svParty
       val providerPartyId = providerParty.toProtoPrimitive
       val activityWeight = BigDecimal("2.5")
@@ -648,6 +649,47 @@ class SvFrontendIntegrationTest
           featuredAppRight.value.payload.activityWeight.toScala.map(
             BigDecimal(_)
           ) shouldBe Some(newActivityWeight)
+        }
+      }
+
+      val amendedActivityWeight = BigDecimal("3.5")
+      val amendProposalContractId = assertCreateProposal(
+        "SRARC_CreateFeaturedAppConfigUpdateInstruction",
+        "amend-featured-app",
+      ) { implicit webDriver =>
+        // Entering the provider auto-resolves its single right and prepopulates the form
+        // (the rightCid picker is hidden); wait for that prepopulation before editing.
+        fillOutTextField("amend-featured-app-partyId", providerPartyId)
+        eventually() {
+          inside(find(id("amend-featured-app-activityWeight"))) { case Some(element) =>
+            element.underlying.getAttribute("value") should not be empty
+          }
+        }
+        inside(find(id("amend-featured-app-activityWeight"))) { case Some(element) =>
+          element.underlying.clear()
+        }
+        fillOutTextField("amend-featured-app-activityWeight", amendedActivityWeight.toString)
+      }
+
+      clue("the created instruction vote request carries the amended config") {
+        eventually() {
+          val request = sv1Backend
+            .listVoteRequests()
+            .find(getTrackingId(_).contractId == amendProposalContractId)
+            .value
+          inside(request.payload.action) { case arc: ARC_DsoRules =>
+            inside(arc.dsoAction) { case srarc: SRARC_CreateFeaturedAppConfigUpdateInstruction =>
+              inside(
+                srarc.dsoRules_CreateFeaturedAppConfigUpdateInstructionValue.updates.asScala.toList
+              ) { case single :: Nil =>
+                single._1 shouldBe providerPartyId
+                single._2.baseConfig.activityWeight.toScala
+                  .map(BigDecimal(_)) shouldBe Some(newActivityWeight)
+                single._2.newConfig.activityWeight.toScala
+                  .map(BigDecimal(_)) shouldBe Some(amendedActivityWeight)
+              }
+            }
+          }
         }
       }
 

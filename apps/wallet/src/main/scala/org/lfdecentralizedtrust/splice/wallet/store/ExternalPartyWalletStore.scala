@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store
 
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
@@ -135,6 +136,7 @@ object ExternalPartyWalletStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -150,6 +152,7 @@ object ExternalPartyWalletStore {
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       ingestionConfig,
       defaultLimit,

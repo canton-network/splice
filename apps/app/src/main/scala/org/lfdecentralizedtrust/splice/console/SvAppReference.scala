@@ -94,16 +94,6 @@ abstract class SvAppReference(
       httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }
 
-  @Help.Summary("Make a CometBFT Json RPC request")
-  def cometBftJsonRpcRequest(
-      id: definitions.CometBftJsonRpcRequestId,
-      method: definitions.CometBftJsonRpcRequest.Method,
-      params: Map[String, io.circe.Json] = Map.empty,
-  ): definitions.CometBftJsonRpcResponse =
-    consoleEnvironment.run {
-      httpCommand(HttpSvPublicAppClient.CometBftJsonRpcRequest(id, method, params))
-    }
-
   def onboardSvPartyMigrationAuthorize(
       participantId: ParticipantId,
       candidateParty: PartyId,

@@ -7,7 +7,6 @@ import cats.implicits.{
   catsSyntaxTuple2Semigroupal,
   catsSyntaxTuple3Semigroupal,
   catsSyntaxTuple4Semigroupal,
-  toTraverseOps,
 }
 import cats.syntax.functorFilter.*
 import com.daml.grpc.adapter.ExecutionSequencerFactory
@@ -134,16 +133,14 @@ class SV1Initializer(
         SvDsoAutomationService,
     )
   ] = {
+    val initConnection = ledgerClient.readOnlyConnection(
+      this.getClass.getSimpleName,
+      loggerFactory,
+    )
+    val cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
+      SvCantonIdentifierConfig.default(config)
+    )
     for {
-      _ <- synchronizerNodeService.nodes.current.cometbftNode
-        .traverse(_.rotateGenesisGovernanceKeyForSV1(sv1Config.name))
-      initConnection = ledgerClient.readOnlyConnection(
-        this.getClass.getSimpleName,
-        loggerFactory,
-      )
-      cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
-        SvCantonIdentifierConfig.default(config)
-      )
       _ <-
         if (!config.shouldSkipSynchronizerInitialization) {
           SynchronizerNodeInitializer.initializeLocalCantonNodesWithNewIdentities(
@@ -251,20 +248,21 @@ class SV1Initializer(
       ).tupled
       storeKey = SvStore.Key(svParty, dsoParty)
       domainMigrationId <- resolveDomainMigrationId(Future.successful(0L))
+      synchronizerId = psid.logical
       svStore <- newSvStore(
         storeKey,
         domainMigrationId,
+        synchronizerId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
+        synchronizerId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
-      psid <- participantAdminConnection.getPhysicalSynchronizerId(config.domains.global.alias)
-      synchronizerId = psid.logical
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
         synchronizerId,
         initConnection,
@@ -293,7 +291,7 @@ class SV1Initializer(
         connection,
         upgradesConfig,
       )
-      // NOTE: we assume that DSO party, cometBft node, sequencer, and mediator nodes are initialized as
+      // NOTE: we assume that DSO party, sequencer, and mediator nodes are initialized as
       // part of deployment and the running of bootstrap scripts. Here we just check that the DSO party
       // is allocated, as a stand-in for all of these actions.
       _ <- retryProvider.waitUntil(
@@ -348,12 +346,6 @@ class SV1Initializer(
           withDsoStore.foundDso(initialRound)
         },
         logger,
-      )
-      _ <- ensureCometBftGovernanceKeysAreSet(
-        synchronizerNodeService.nodes.current.cometbftNode,
-        svParty,
-        dsoStore,
-        dsoAutomation,
       )
       // Only start the triggers once DsoRules and AmuletRules have been bootstrapped
       _ = dsoAutomation.registerPostOnboardingTriggers()
@@ -703,7 +695,6 @@ class SV1Initializer(
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(
-                    synchronizerNodeService.nodes.current.cometbftNode,
                     synchronizerNodeService.nodes.current,
                     config.scan,
                     psid,

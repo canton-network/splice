@@ -82,10 +82,6 @@ case class AutomationConfig(
     /** Only intended for testing. Allows disabling archival of closed rounds.
       */
     enableClosedRoundArchival: Boolean = true,
-    /** Only intended for testing. Allows disabling cometbft config
-      * publish/reconcile automation.
-      */
-    enableCometbftReconciliation: Boolean = true,
     /** List of triggers (identified by the name of the corresponding scala
       * class) that start in a paused state. Unless such a trigger is resumed manually, it is
       * guaranteed to never perform any work.

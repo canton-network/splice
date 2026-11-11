@@ -49,6 +49,8 @@ jobs:
           commit_sha: ${{ inputs.commit_sha }}
           pr_number: ${{ inputs.pr_number }}
         with:
+          # Otherwise the result is JSON-encoded, i.e., wrapped in literal double quotes
+          result-encoding: string
           retries: 3
           script: |
             const { commit_sha, pr_number } = process.env;

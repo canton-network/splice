@@ -171,7 +171,6 @@
         "synchronizers": {
           "additionalLegacy": [
             {
-              "enableBftSequencer": true,
               "mediatorAddress": "global-domain-7-mediator",
               "sequencerAddress": "global-domain-7-sequencer",
               "sequencerPruningConfig": {
@@ -183,7 +182,6 @@
             }
           ],
           "current": {
-            "enableBftSequencer": true,
             "mediatorAddress": "global-domain-9-mediator",
             "sequencerAddress": "global-domain-9-sequencer",
             "sequencerPruningConfig": {
@@ -194,7 +192,6 @@
             "sequencerPublicUrl": "https://sequencer-9.sv-1.mock.global.canton.network.digitalasset.com"
           },
           "legacy": {
-            "enableBftSequencer": true,
             "mediatorAddress": "global-domain-8-mediator",
             "sequencerAddress": "global-domain-8-sequencer",
             "sequencerPruningConfig": {
@@ -206,7 +203,6 @@
           },
           "skipInitialization": true,
           "successor": {
-            "enableBftSequencer": true,
             "mediatorAddress": "global-domain-10-mediator",
             "sequencerAddress": "global-domain-10-sequencer",
             "sequencerPruningConfig": {
