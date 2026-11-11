@@ -488,3 +488,34 @@ is this node, its write ops fell from about 1000-1400/min to 310-360/min during 
 a disk cap. Reading: the VM CPU went from 58% (18:45) to 79%, 91%, 93% (18:46-18:48) and 74% (18:49), back to 41% at
 18:51, matching the slow window 18:45:22-18:49:18. GKE allocatable utilization (about 50%) and VM utilization
 disagree; not resolved. The third pod and the node machine type are not identified.
+
+## 10. How runner pods are packed onto nodes (splice main, cluster/pulumi/gha/src/runners.ts)
+
+```
+git show FETCH_HEAD:cluster/pulumi/gha/src/runners.ts | sed -n '329,334p;391,402p'
+```
+```
+// A note about resources: We create two pods per workflow: the runner pod and the workflow pod.
+// They have implicit affinity between them as they communicate via a shared local PVC.
+// The runner starts first, so even though it is quite lightweight, it already pins the node
+// on which both will run. We therefore set the resource requests of the runner pod to be the
+// request we actually need for the workflow. The limits are set on the workflow pod, to actually
+// have the higher bound on actual usage.
+                    resources: {
+                      // See note above on resource requests and limits.
+                      requests: {
+                        // We set the requests to a tiny non-zero number, just to prevent k8s from
+                        // using the limits as the requests values.
+                        cpu: '1m',
+                        memory: '1m',
+                        'ephemeral-storage': '1',
+                      },
+                      limits: resources
+                        ? singleResourcesSpecFromConfig(resources.limits)
+                        : undefined,
+```
+The scheduler only sees the runner pod requests (`resources.requests` of the runner spec); the workflow pod requests
+1m and may use up to `resources.limits`. If the large spec has a CPU limit above its CPU request, three large
+workflows on one node can together use more CPU than the node has. The large spec values live in the cn-splicenet
+cluster config (`gha.runnerSpecs`, not in the splice repo; the mock config has only tiny); not read here. Node machine
+type not read either.
