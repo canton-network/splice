@@ -56,8 +56,6 @@ class UnavailablePartiesDetector(
           parties,
           submit,
           lowestSupportedVersions,
-          // the fetched batch is already filtered by the store
-          Set.empty,
           Result.empty,
         )
       } yield result
@@ -88,121 +86,104 @@ class UnavailablePartiesDetector(
       .flatten
 
   /** Submits the batches on top of the stack, one at a time, splitting a batch in two on a
-    * vetting failure and pushing the halves back onto the stack. Parties that get ignored along the way
-    * are carried in `ignoredParties`, so that later batches skip the contracts involving them.
+    * vetting failure and pushing the halves back onto the stack. Contracts involving parties that get
+    * ignored are removed from the whole stack right away.
     */
   private def processSplitBatches[C](
       stack: List[Seq[C]],
       partiesOf: C => Set[PartyId],
       submit: Seq[C] => Future[Unit],
       lowestSupportedVersions: LowestSupportedVersions,
-      ignoredParties: Set[PartyId],
       result: Result,
   )(implicit tc: TraceContext): Future[Result] = stack match {
-    // If the stack is empty, we are done and return the accumulated result.
     case Nil => Future.successful(result)
-    // If the stack is not empty, we pop the top batch and submit it.
-    case head :: rest =>
-      // contracts involving parties that got ignored while processing earlier sub-batches must not be re-submitted
-      val current = head.filterNot(c => partiesOf(c).exists(ignoredParties.contains))
-      if (current.isEmpty) {
-        processSplitBatches(
-          rest,
-          partiesOf,
-          submit,
-          lowestSupportedVersions,
-          ignoredParties,
-          result,
-        )
-      } else {
-        submit(current).transformWith {
-          // On success, remove all involved parties from the unavailable parties store to reset their backoff, go on with rest.
-          case Success(_) =>
-            val involvedParties = current.flatMap(partiesOf).toSet -- protectedParties
-            unavailablePartiesStore
-              .removeParties(involvedParties.toSeq)
-              .flatMap { restored =>
-                if (restored.nonEmpty)
-                  logger.info(
-                    s"Submission succeeded, recovered ${restored.size} unavailable parties: $restored"
-                  )
-                processSplitBatches(
-                  rest,
-                  partiesOf,
-                  submit,
-                  lowestSupportedVersions,
-                  ignoredParties,
-                  result.addSubmitted(current.size),
+    case current :: rest =>
+      submit(current).transformWith {
+        // On success, remove all involved parties from the unavailable parties store to reset their backoff, go on with rest.
+        case Success(_) =>
+          val involvedParties = current.flatMap(partiesOf).toSet -- protectedParties
+          unavailablePartiesStore
+            .removeParties(involvedParties.toSeq)
+            .flatMap { restored =>
+              if (restored.nonEmpty)
+                logger.info(
+                  s"Submission succeeded, recovered ${restored.size} unavailable parties: $restored"
                 )
-              }
-          // On Failure:
-          //  - if the mediator named the unresponsive parties, ignore exactly those: the whole
-          //    batch is rejected.
-          //  - if the batch has more than one contract, split it in half and retry both halves.
-          //  - if the batch has only one contract, mark the parties with the lowest supported version as unavailable.
-          case Failure(UnresponsivePartiesFailure(unresponsiveParties))
-              if shrinks(current, partiesOf, unresponsiveParties -- protectedParties) =>
-            val toIgnore = unresponsiveParties -- protectedParties
-            val remaining = current.filterNot(c => partiesOf(c).exists(toIgnore.contains))
-            logger.info(
-              s"Batch of ${current.size} contracts was rejected due to unresponsive parties, ignoring $toIgnore"
-            )
-            unavailablePartiesStore
-              .addParties(toIgnore.toSeq)
-              .flatMap(_ =>
-                processSplitBatches(
-                  remaining :: rest,
-                  partiesOf,
-                  submit,
-                  lowestSupportedVersions,
-                  ignoredParties ++ toIgnore,
-                  result.addIgnored(toIgnore, failedContracts = current.size - remaining.size),
-                )
-              )
-          case Failure(reason @ VettingFailure()) if current.size > 1 =>
-            val (left, right) = current.splitAt(current.size / 2)
-            logger.info(
-              s"Splitting batch of ${current.size} contracts into ${left.size} and ${right.size} after failure: $reason"
-            )
-            processSplitBatches(
-              left :: right :: rest,
-              partiesOf,
-              submit,
-              lowestSupportedVersions,
-              ignoredParties,
-              result.addSplit(),
-            )
-          case Failure(reason @ VettingFailure()) =>
-            val involvedParties = current.headOption.fold(Set.empty[PartyId])(partiesOf)
-            logger.info(
-              s"Isolated failure to a single contract with parties $involvedParties: $reason"
-            )
-            val candidates =
-              partiesWithMinimalSupportedVersion(involvedParties, lowestSupportedVersions)
-            val toIgnore = candidates -- protectedParties
-            for {
-              _ <-
-                if (toIgnore.isEmpty) {
-                  logger.info(
-                    s"Not ignoring any party for the failing contract, all candidates ($candidates) are protected"
-                  )
-                  Future.unit
-                } else {
-                  unavailablePartiesStore.addParties(toIgnore.toSeq)
-                }
-              result <- processSplitBatches(
+              processSplitBatches(
                 rest,
                 partiesOf,
                 submit,
                 lowestSupportedVersions,
-                ignoredParties ++ toIgnore,
-                result.addIgnored(toIgnore, failedContracts = 1),
+                result.addSubmitted(current.size),
               )
-            } yield result
-          // Not a vetting failure (e.g. contention): fail the task so it is retried as a whole.
-          case Failure(reason) =>
-            Future.failed(reason)
-        }
+            }
+        // On Failure:
+        //  - if the mediator named the unresponsive parties, ignore exactly those: the whole
+        //    batch is rejected.
+        //  - if the batch has more than one contract, split it in half and retry both halves.
+        //  - if the batch has only one contract, mark the parties with the lowest supported version as unavailable.
+        case Failure(UnresponsivePartiesFailure(unresponsiveParties))
+            if shrinks(current, partiesOf, unresponsiveParties -- protectedParties) =>
+          val toIgnore = unresponsiveParties -- protectedParties
+          logger.info(
+            s"Batch of ${current.size} contracts was rejected due to unresponsive parties, ignoring $toIgnore"
+          )
+          unavailablePartiesStore
+            .addParties(toIgnore.toSeq)
+            .flatMap(_ =>
+              processRemaining(
+                toIgnore,
+                current :: rest,
+                partiesOf,
+                submit,
+                lowestSupportedVersions,
+                result,
+                failedContracts = 0,
+              )
+            )
+        case Failure(reason @ VettingFailure()) if current.size > 1 =>
+          val (left, right) = current.splitAt(current.size / 2)
+          logger.info(
+            s"Splitting batch of ${current.size} contracts into ${left.size} and ${right.size} after failure: $reason"
+          )
+          processSplitBatches(
+            left :: right :: rest,
+            partiesOf,
+            submit,
+            lowestSupportedVersions,
+            result.addSplit(),
+          )
+        case Failure(reason @ VettingFailure()) =>
+          val involvedParties = current.headOption.fold(Set.empty[PartyId])(partiesOf)
+          logger.info(
+            s"Isolated failure to a single contract with parties $involvedParties: $reason"
+          )
+          val candidates =
+            partiesWithMinimalSupportedVersion(involvedParties, lowestSupportedVersions)
+          val toIgnore = candidates -- protectedParties
+          for {
+            _ <-
+              if (toIgnore.isEmpty) {
+                logger.info(
+                  s"Not ignoring any party for the failing contract, all candidates ($candidates) are protected"
+                )
+                Future.unit
+              } else {
+                unavailablePartiesStore.addParties(toIgnore.toSeq)
+              }
+            result <- processRemaining(
+              toIgnore,
+              rest,
+              partiesOf,
+              submit,
+              lowestSupportedVersions,
+              result,
+              failedContracts = 1,
+            )
+          } yield result
+        // Not a vetting failure (e.g. contention): fail the task so it is retried as a whole.
+        case Failure(reason) =>
+          Future.failed(reason)
       }
   }
 
@@ -219,6 +200,26 @@ class UnavailablePartiesDetector(
     partyLowestSupportedVersions.collect {
       case (p, v) if versionOptionOrdering.equiv(v, min) => p
     }.toSet
+  }
+
+  private def processRemaining[C](
+      ignored: Set[PartyId],
+      stack: List[Seq[C]],
+      partiesOf: C => Set[PartyId],
+      submit: Seq[C] => Future[Unit],
+      lowestSupportedVersions: LowestSupportedVersions,
+      result: Result,
+      failedContracts: Int,
+  )(implicit tc: TraceContext): Future[Result] = {
+    val remaining = stack.map(_.filterNot(c => partiesOf(c).exists(ignored.contains)))
+    val dropped = stack.map(_.size).sum - remaining.map(_.size).sum
+    processSplitBatches(
+      remaining.filter(_.nonEmpty),
+      partiesOf,
+      submit,
+      lowestSupportedVersions,
+      result.addIgnored(ignored, failedContracts = failedContracts + dropped),
+    )
   }
 }
 
