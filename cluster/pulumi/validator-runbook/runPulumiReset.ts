@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { validatorRunbookStackName } from '@canton-network/splice-pulumi-common-validator';
+import { validatorRunbookStackName } from '@canton-network/splice-pulumi-common-validator/src/config';
 import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 
 import { PulumiAbortController, stack } from '../pulumi';
