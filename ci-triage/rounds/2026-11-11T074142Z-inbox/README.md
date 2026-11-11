@@ -28,8 +28,8 @@ Job logs of the GHA jobs: `log/inbox-1111/<job id>.log` (gitignored).
 | Group | Verdict | Action | State |
 |---|---|---|---|
 | g1-perf | 11351 dup 11321, 11352 dup 11322 (thresholds file: serializeJson rule missing since #8351, VerdictStore seed 3.7 ms) | comment 11322 (comments/11322.md), 2 closes | ran 2026-11-11 (user: 11322 comment posted, 11351 11352 closed as dups) |
-| g2-lsuop | 11349 CircleCI | log request export/11349/ | open |
-| g3-far | 11353 new, family Y: #8062 test uses splice-amulet 0.1.25 appKind, untagged | comment, retitle, Triaged; user is not the #8062 author (corrected), fix branch rautenrieth-da/fix-11353-featured-app-right-version-tag in progress | open |
+| g2-lsuop | 11349 new: RateLimitPreflight extra ACS call after the 2/s bucket refilled (svda1Scan, 1.15 s gap) | comment, retitle, assignee nicu-da, Triaged | presented |
+| g3-far | 11353 new, family Y: #8062 test uses splice-amulet 0.1.25 appKind, untagged | comment, retitle, Triaged; user is not the #8062 author (corrected), fix PR splice#8427 opened by the user | open |
 | g4-keydl | 11347 new: SvReonboarding sv1 init > 5 min (AM-like DAR repeats) + teardown leak cascade (H) | comment, retitle, Triaged | open |
 | g5-simtime | 11348 dup 11147 (AF, fix PR #8420) | close dup | open |
 | g6-restart | 11346 new: WalletSurviveCantonRestart 2 min tap budget includes restarted participant startup (106 s) | comment, retitle, Triaged | open |
