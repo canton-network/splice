@@ -362,6 +362,7 @@ class ScanApp(
         amuletAppParameters.upgradesConfig,
         packageVersionSupport,
         historyReadiness,
+        kvStore,
       )
       _ = automation.registerHistoryStartTrigger(historyStart)
       scanVerdictStore = DbScanVerdictStore(
