@@ -29,7 +29,7 @@ export const SvAppVotesHooksProvider: React.FC<React.PropsWithChildren> = ({ chi
     useDsoInfos(): UseQueryResult<DsoInfo> {
       return useSvAppDsoInfos();
     },
-    useSvInfo(): UseQueryResult<SvInfo> {
+    useSvInfo(): UseQueryResult<Partial<SvInfo>> {
       // The sv-app has both DsoInfo and SvInfo in a single endpoint
       return useSvAppDsoInfos();
     },

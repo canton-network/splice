@@ -18,7 +18,7 @@ import App from '../App';
 import { SvAdminClientProvider } from '../contexts/SvAdminServiceContext';
 import { SvAppGovernanceReadClientProvider } from '../contexts/GovernanceReadClientContext';
 import { SvAppVotesHooksProvider } from '../contexts/SvAppVotesHooksContext';
-import { requireOperatorAuth, SvConfigProvider, useSvConfig } from '../utils';
+import { requireOperatorConfig, SvConfigProvider, useSvConfig } from '../utils';
 import { UserEvent } from '@testing-library/user-event';
 import { scanUrl } from './setup/setup';
 
@@ -35,14 +35,14 @@ const testQueryClient = new QueryClient({
 
 const WrapperProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const config = useSvConfig();
-  const auth = requireOperatorAuth(config);
+  const { auth, testAuth } = requireOperatorConfig(config);
   const navigate = useNavigate();
 
   return (
     <ThemeProvider theme={theme}>
       <AuthProvider authConf={auth} redirect={(path: string) => navigate(path)}>
         <QueryClientProvider client={testQueryClient}>
-          <UserProvider authConf={auth} testAuthConf={config.testAuth}>
+          <UserProvider authConf={auth} testAuthConf={testAuth}>
             <SvClientProvider url={config.services.sv.url}>
               <SvAppVotesHooksProvider>
                 <SvAdminClientProvider url={config.services.sv.url}>

@@ -13,107 +13,94 @@ import { PollingStrategy } from '@canton-network/splice-common-frontend-utils';
 import React from 'react';
 import { z } from 'zod';
 
-type SvServicesConfig = {
-  sv: z.infer<typeof serviceSchema>;
+const httpUrlSchema = z.url({
+  protocol: /^https?$/,
+  error: 'dappMode.scanUrl must be an absolute http:// or https:// URL',
+});
+
+const scanUrlRequired = 'dappMode.scanUrl is required when dappMode.enabled';
+
+// Normalised once here (trimmed, trailing slashes stripped) so consumers can use it as a base URL directly.
+const scanUrlSchema = z
+  .string({ error: scanUrlRequired })
+  .trim()
+  .min(1, { error: scanUrlRequired })
+  .pipe(httpUrlSchema)
+  .transform(url => url.replace(/\/+$/, ''));
+
+// Fields shared by both modes; validated once, so their errors are reported directly whatever the mode.
+const commonConfigSchema = z.object({
+  spliceInstanceNames: spliceInstanceNamesSchema,
+  pollInterval: pollIntervalSchema,
+  services: z.object({
+    sv: serviceSchema,
+  }),
+});
+
+// Operator mode: logs in against the SV app. A `dappMode` block with `enabled: false` (or none) selects it;
+// any other `dappMode` fields are ignored.
+const operatorModeSchema = z.object({
+  auth: authSchema,
+  testAuth: testAuthSchema.optional(),
+  dappMode: z
+    .object({
+      enabled: z
+        .literal(false, {
+          error: 'dappMode.enabled must be true (dApp mode) or false (operator mode)',
+        })
+        .default(false),
+    })
+    .optional(),
+});
+
+// dApp mode: read-only, no login, governance is read from Scan. `auth`/`testAuth` are ignored and dropped.
+const dappModeSchema = z.object({
+  dappMode: z.object({
+    enabled: z.literal(true),
+    scanUrl: scanUrlSchema,
+  }),
+});
+
+const authRequired =
+  'auth is required in operator mode; for the read-only dApp mode set dappMode.enabled: true and dappMode.scanUrl instead';
+
+const isDappModeSelected = (input: unknown): boolean => {
+  const dappMode =
+    typeof input === 'object' && input !== null ? Reflect.get(input, 'dappMode') : undefined;
+  return (
+    typeof dappMode === 'object' && dappMode !== null && Reflect.get(dappMode, 'enabled') === true
+  );
 };
 
-type AuthConfig = z.infer<typeof authSchema>;
-type TestAuthConfig = z.infer<typeof testAuthSchema>;
-
-type SvConfig = {
-  // Always present in operator mode (enforced by `configScheme`); absent in dApp mode.
-  auth?: AuthConfig;
-  testAuth?: TestAuthConfig;
-  spliceInstanceNames: z.infer<typeof spliceInstanceNamesSchema>;
-  services: SvServicesConfig;
-  pollInterval?: z.infer<typeof pollIntervalSchema>;
-  dappMode?: z.infer<typeof dappModeSchema>;
-};
-
-export interface DappModeConfig {
-  scanUrl: string;
-}
-
-const httpUrlSchema = z.url({ protocol: /^https?$/ });
-
-const dappModeSchema = z
-  .object({
-    enabled: z.boolean().default(false),
-    scanUrl: z.string().optional(),
-  })
-  .superRefine((d, ctx) => {
-    if (!d.enabled) {
-      return;
+// The mode is picked from `dappMode.enabled` (exactly `true` selects dApp mode) and only that mode's fields are
+// validated. A plain z.union would hide e.g. a bad auth block or a missing scanUrl behind a generic "matches
+// neither variant" error, because the other variant always fails too.
+const modeConfigSchema = z
+  .unknown()
+  .transform(
+    (input, ctx): z.output<typeof operatorModeSchema> | z.output<typeof dappModeSchema> => {
+      const result = isDappModeSelected(input)
+        ? dappModeSchema.safeParse(input)
+        : operatorModeSchema.safeParse(input, {
+            error: issue =>
+              issue.path?.length === 1 && issue.path[0] === 'auth' && issue.input === undefined
+                ? authRequired
+                : undefined,
+          });
+      if (result.success) {
+        return result.data;
+      }
+      result.error.issues.forEach(issue => ctx.addIssue({ ...issue }));
+      return z.NEVER;
     }
-    const scanUrl = d.scanUrl?.trim() ?? '';
-    if (scanUrl.length === 0) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['scanUrl'],
-        message: 'dappMode.scanUrl is required when dappMode.enabled',
-      });
-    } else if (!httpUrlSchema.safeParse(scanUrl).success) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['scanUrl'],
-        message: 'dappMode.scanUrl must be an absolute http:// or https:// URL',
-      });
-    }
-  })
-  .optional();
+  );
 
-const isDappModeEnabled = (cfg: { dappMode?: { enabled?: boolean } }): boolean =>
-  cfg.dappMode?.enabled === true;
+export const configScheme = commonConfigSchema.and(modeConfigSchema);
 
-// `ConfigProvider` requires a `ZodObject`, so `auth`/`testAuth` are accepted as-is at the field level
-// and validated by the object-level check below: required in operator mode, ignored and dropped in dApp mode.
-export const configScheme = z
-  .object({
-    auth: z.custom<AuthConfig>().optional(),
-    testAuth: z.custom<TestAuthConfig>().optional(),
-    spliceInstanceNames: spliceInstanceNamesSchema,
-    pollInterval: pollIntervalSchema,
-    services: z.object({
-      sv: serviceSchema,
-    }),
-    dappMode: dappModeSchema,
-  })
-  .superRefine((cfg, ctx) => {
-    if (isDappModeEnabled(cfg)) {
-      return;
-    }
-    if (cfg.auth === undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['auth'],
-        message: 'auth is required unless dappMode.enabled',
-      });
-    } else {
-      authSchema
-        .safeParse(cfg.auth)
-        .error?.issues.forEach(issue => ctx.addIssue({ ...issue, path: ['auth', ...issue.path] }));
-    }
-    if (cfg.testAuth !== undefined) {
-      testAuthSchema
-        .safeParse(cfg.testAuth)
-        .error?.issues.forEach(issue =>
-          ctx.addIssue({ ...issue, path: ['testAuth', ...issue.path] })
-        );
-    }
-  })
-  .overwrite(cfg => {
-    if (isDappModeEnabled(cfg)) {
-      return { ...cfg, auth: undefined, testAuth: undefined };
-    }
-    // Replace the raw values with their parsed form; on failure the check above has already reported the issues.
-    const auth = authSchema.safeParse(cfg.auth);
-    const testAuth = testAuthSchema.optional().safeParse(cfg.testAuth);
-    return {
-      ...cfg,
-      auth: auth.success ? auth.data : cfg.auth,
-      testAuth: testAuth.success ? testAuth.data : cfg.testAuth,
-    };
-  });
+export type SvConfig = z.infer<typeof configScheme>;
+export type OperatorSvConfig = z.infer<typeof commonConfigSchema> &
+  z.infer<typeof operatorModeSchema>;
+export type DappModeConfig = z.infer<typeof dappModeSchema>['dappMode'];
 
 export const ConfigContext = React.createContext<SvConfig | undefined>(undefined);
 
@@ -129,22 +116,17 @@ export const SvConfigProvider: React.FC<{
 
 export const useSvConfig: () => SvConfig = () => useConfig<SvConfig>(ConfigContext);
 
-// `configScheme` guarantees `auth` outside dApp mode, so this only narrows the type for operator-mode code.
-export const requireOperatorAuth: (config: SvConfig) => AuthConfig = config => {
-  if (config.auth === undefined) {
+// Narrows the config to operator mode; throws in dApp mode, where there is no auth config.
+export const requireOperatorConfig: (config: SvConfig) => OperatorSvConfig = config => {
+  if (!('auth' in config)) {
     throw new Error('auth config is required in operator mode');
   }
-  return config.auth;
+  return config;
 };
 
-// Returns undefined in operator mode.
-export const getDappModeConfig: (config: SvConfig) => DappModeConfig | undefined = config => {
-  const dappMode = config.dappMode;
-  if (!dappMode?.enabled || dappMode.scanUrl === undefined) {
-    return undefined;
-  }
-  return { scanUrl: dappMode.scanUrl.trim().replace(/\/+$/, '') };
-};
+// Returns the parsed `dappMode` block itself (a stable reference), or undefined in operator mode.
+export const getDappModeConfig: (config: SvConfig) => DappModeConfig | undefined = config =>
+  config.dappMode?.enabled ? config.dappMode : undefined;
 
 export const useDappModeConfig: () => DappModeConfig | undefined = () =>
   getDappModeConfig(useSvConfig());

@@ -21,7 +21,11 @@ export type GovernanceReadClient = Pick<
   | 'lookupFeaturedAppRightByContractId'
   | 'listAmuletPriceVotes'
   | 'featureSupport'
-> & { getDsoInfo: () => Promise<GetDsoInfoResponse> };
+> & { getDsoInfo: () => Promise<GovernanceDsoInfoResponse> };
+
+/** The SV app's DSO info with the viewer's SV identity optional. */
+export type GovernanceDsoInfoResponse = Omit<GetDsoInfoResponse, 'sv_user' | 'sv_party_id'> &
+  Partial<Pick<GetDsoInfoResponse, 'sv_user' | 'sv_party_id'>>;
 
 const GovernanceReadClientContext = React.createContext<GovernanceReadClient | undefined>(
   undefined

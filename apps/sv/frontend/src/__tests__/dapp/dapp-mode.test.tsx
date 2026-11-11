@@ -4,7 +4,7 @@ import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import { renderDappApp } from '../helpers';
-import { activeProposalCid } from '../mocks/constants';
+import { activeProposalCid, svPartyId, voteRequests } from '../mocks/constants';
 import { scanUrl, server, svUrl } from '../setup/setup';
 
 describe('SV UI in dApp mode', () => {
@@ -45,14 +45,56 @@ describe('SV UI in dApp mode', () => {
   });
   test('renders governance from Scan', async () => {
     renderDappApp('/');
-    const section = await screen.findByTestId('action-required-section');
-    expect(await within(section).findAllByTestId('action-required-card')).not.toHaveLength(0);
+    const section = await screen.findByTestId('inflight-proposals-section-table');
+    expect(await within(section).findAllByTestId('inflight-proposals-row')).not.toHaveLength(0);
+  });
+  test('shows no "you" affordances on the governance page', async () => {
+    renderDappApp('/');
+    const inflight = await screen.findByTestId('inflight-proposals-section-table');
+    expect(await within(inflight).findAllByTestId('inflight-proposals-row')).not.toHaveLength(0);
+    expect(screen.queryByTestId('action-required-section')).not.toBeInTheDocument();
+    expect(screen.queryByText('Action Required')).not.toBeInTheDocument();
+    expect(screen.queryByText('YOUR VOTE')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('inflight-proposals-row-your-vote')).not.toBeInTheDocument();
+    expect(document.getElementById('nav-badge-governance-count')).toBeNull();
   });
   test('details page is read-only', async () => {
     renderDappApp(`/governance/proposals/${activeProposalCid}`);
     expect(await screen.findByTestId('proposal-details-your-vote')).toBeInTheDocument();
     expect(screen.getByText('Voting is read-only in this view.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /accept|reject|submit/i })).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('proposal-details-vote')).not.toHaveLength(0);
+    expect(screen.queryByTestId('proposal-details-voter-party-id-badge')).not.toBeInTheDocument();
+  });
+  test('details page marks no vote as yours', async () => {
+    // A vote by the SV whose identity the mocked DSO info carries: in dApp mode it is not the viewer.
+    const activeRequest = voteRequests.dso_rules_vote_requests.find(
+      vr => vr.contract_id === activeProposalCid
+    )!;
+    const withSvVote = {
+      ...activeRequest,
+      payload: {
+        ...(activeRequest.payload as object),
+        votes: [
+          ['Digital-Asset-2', { sv: svPartyId, accept: true, reason: { url: '', body: 'mine?' } }],
+        ],
+      },
+    };
+    server.use(
+      http.get(`${scanUrl}/v0/voterequests/:id`, () =>
+        HttpResponse.json({ dso_rules_vote_request: withSvVote })
+      )
+    );
+    renderDappApp(`/governance/proposals/${activeProposalCid}`);
+    expect(await screen.findByText('mine?')).toBeInTheDocument();
+    const voters = screen
+      .getAllByTestId('proposal-details-voter-party-id-value')
+      .map(e => e.textContent);
+    expect(voters).toContain(svPartyId);
+    expect(screen.queryByTestId('proposal-details-voter-party-id-badge')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('your-vote-edit-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('your-vote-form')).not.toBeInTheDocument();
+    expect(screen.getByText('Voting is read-only in this view.')).toBeInTheDocument();
   });
   test('redirects the create-proposal page to governance', async () => {
     renderDappApp('/governance/proposals/create');
@@ -79,5 +121,33 @@ describe('SV UI in dApp mode', () => {
     await vi.advanceTimersByTimeAsync(3_000);
     expect(screen.getByText('Cannot reach Scan')).toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+  test('keeps the UI when Scan fails after a successful load', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    onTestFinished(() => consoleError.mockRestore());
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderDappApp('/');
+    await screen.findByTestId('governance-page-header-title');
+
+    let failedCalls = 0;
+    server.use(
+      http.get(`${scanUrl}/v0/feature-support`, () => {
+        failedCalls++;
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+    // Past the next poll (1 s) and its 3 retries (~7 s backoff), so the query ends in error.
+    await vi.waitFor(
+      async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(failedCalls).toBeGreaterThanOrEqual(4);
+      },
+      { timeout: 10_000 }
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(screen.queryByText('Cannot reach Scan')).not.toBeInTheDocument();
+    expect(screen.getByTestId('governance-page-header-title')).toBeInTheDocument();
+    expect(within(screen.getByRole('navigation')).getByText('Governance')).toBeInTheDocument();
   });
 });

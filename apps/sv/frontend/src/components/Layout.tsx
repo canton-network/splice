@@ -50,8 +50,11 @@ const pageSx = {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const config = useSvConfig();
   const dappMode = useDappModeConfig();
-  // undefined in dApp mode, which mounts no UserProvider
-  const logout = React.useContext(UserContext)?.logout;
+  // dApp mode mounts no UserProvider (no login, no logout); operator mode always does.
+  const userState = React.useContext(UserContext);
+  if (dappMode === undefined && userState === undefined) {
+    throw new Error('UserProvider must be mounted in operator mode');
+  }
   const location = useLocation();
   const featureSupport = useFeatureSupport();
 
@@ -59,18 +62,22 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const svInfoQuery = votesHooks.useSvInfo();
   const listVoteRequestsQuery = votesHooks.useListDsoRulesVoteRequests();
   const svPartyId = svInfoQuery.data?.svPartyId;
-  const actionsPending = listVoteRequestsQuery.data?.filter(
-    vr => vr.payload.votes.entriesArray().find(e => e[1].sv === svPartyId) === undefined
-  );
+  const actionsPending =
+    svPartyId === undefined
+      ? undefined
+      : listVoteRequestsQuery.data?.filter(
+          vr => vr.payload.votes.entriesArray().find(e => e[1].sv === svPartyId) === undefined
+        );
 
-  // dApp mode has no auth flow that would surface a failing backend, so show Scan errors explicitly.
-  // react-query resets a query that never had data back to 'pending' on every poll refetch, so
-  // isError alone would flip back to the spinner; errorUpdateCount survives that reset. Checked
-  // before isLoading; once a refetch succeeds, data is defined and the shell renders.
+  // dApp mode has no auth flow that would surface a failing backend, so show Scan errors explicitly,
+  // but only while nothing has loaded yet: a failed poll after a successful load keeps the last
+  // data and must not replace the UI. react-query resets a query that never had data back to
+  // 'pending' on every poll refetch, so isError alone would flip back to the spinner;
+  // errorUpdateCount survives that reset. Checked before isLoading.
   const scanFailed =
-    dappMode &&
-    (featureSupport.isError ||
-      (featureSupport.errorUpdateCount > 0 && featureSupport.data === undefined));
+    dappMode !== undefined &&
+    featureSupport.data === undefined &&
+    (featureSupport.isError || featureSupport.errorUpdateCount > 0);
   if (scanFailed) {
     return (
       <Box sx={pageSx}>
@@ -109,7 +116,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <GlobalStyles styles={partyIdScrollGlobalStyles} />
       <PartyIdScrollTracks />
       <NetworkBanner />
-      <SvNavigationShell navLinks={navLinks} onLogout={logout} pageName={pageName} />
+      <SvNavigationShell navLinks={navLinks} onLogout={userState?.logout} pageName={pageName} />
 
       <Box sx={{ flex: 1, pb: 3 }}>
         <Container maxWidth={false} sx={contentShellSx}>

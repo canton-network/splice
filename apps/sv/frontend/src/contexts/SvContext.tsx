@@ -12,7 +12,8 @@ import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { useDappModeConfig } from '../utils';
 import { useGovernanceReadClient } from './GovernanceReadClientContext';
 
-export const useDsoInfos = (): UseQueryResult<DsoInfo & SvInfo> => {
+/** svUser and svPartyId are undefined when there is no viewer SV (read-only mode). */
+export const useDsoInfos = (): UseQueryResult<DsoInfo & Partial<SvInfo>> => {
   const { getDsoInfo } = useGovernanceReadClient();
   const dappMode = useDappModeConfig();
   // The SV app's /v1/dso endpoint requires authentication; Scan's (dApp mode) does not.
@@ -24,8 +25,9 @@ export const useDsoInfos = (): UseQueryResult<DsoInfo & SvInfo> => {
     queryFn: async () => {
       const resp = await getDsoInfo();
       return {
-        svUser: resp.sv_user,
-        svPartyId: resp.sv_party_id,
+        // An empty identity is no identity: never let '' become a "you".
+        svUser: resp.sv_user || undefined,
+        svPartyId: resp.sv_party_id || undefined,
         dsoPartyId: resp.dso_party_id,
         votingThreshold: BigInt(resp.voting_threshold),
         amuletRules: Contract.decodeOpenAPI(resp.amulet_rules.contract, AmuletRules),

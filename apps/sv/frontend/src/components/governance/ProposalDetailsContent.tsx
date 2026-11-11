@@ -62,7 +62,6 @@ import {
   VOTE_REASON_URL_LABEL,
 } from '../../utils/constants';
 import { formatDatetimeWithOffset } from '../../utils/dateFormat';
-import { useDappModeConfig } from '../../utils';
 
 /** True when a proposal changed fields that are locked/disabled in the create UI (e.g. emergency API). */
 export function hasAlteredDisabledFields(changes: ConfigChange[]): boolean {
@@ -72,7 +71,7 @@ export function hasAlteredDisabledFields(changes: ConfigChange[]): boolean {
 dayjs.extend(relativeTime);
 
 export interface ProposalDetailsContentProps {
-  currentSvPartyId: string;
+  currentSvPartyId: string | undefined;
   contractId: ContractId<VoteRequest>;
   proposalDetails: ProposalDetails;
   votingInformation: ProposalVotingInformation;
@@ -86,7 +85,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
   const votesHooks = useVotesHooks();
   const dsoInfoQuery = useDsoInfos();
-  const dappMode = useDappModeConfig();
+  const isReadOnly = votesHooks.isReadOnly;
 
   const isClosed = !proposalDetails.isVoteRequest || votingInformation.status === 'Rejected';
 
@@ -161,8 +160,8 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
   const hasVoted = yourVote?.vote === 'accepted' || yourVote?.vote === 'rejected';
   const isEditingVote = editFormKey > 0;
   const isOpen = proposalDetails.isVoteRequest && !isClosed;
-  // dApp mode: keep the section visible for open proposals, but never mount the form.
-  const showYourVoteSection = dappMode
+  // Read-only mode: keep the section visible for open proposals, but never mount the form.
+  const showYourVoteSection = isReadOnly
     ? isOpen
     : isOpen && (!hasVoted || isEditingVote || voteSubmitted);
 
@@ -495,7 +494,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 isYou={vote.isYou}
                 isClosed={isClosed}
                 onEdit={
-                  !dappMode && vote.isYou && hasVoted && !isClosed
+                  !isReadOnly && vote.isYou && hasVoted && !isClosed
                     ? () => setEditFormKey(k => k + 1)
                     : undefined
                 }
@@ -519,13 +518,15 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             centered
             ref={yourVoteSectionRef}
           >
-            {dappMode ? (
+            {isReadOnly ? (
               <Typography>Voting is read-only in this view.</Typography>
             ) : (
               <ProposalVoteForm
                 key={editFormKey}
                 voteRequestContractId={contractId}
-                currentSvPartyId={currentSvPartyId}
+                // Casting a vote needs only the SV app session, not the party; '' as before if
+                // the party is not known yet.
+                currentSvPartyId={currentSvPartyId ?? ''}
                 onSubmissionStart={() => setVoteSubmitted(true)}
                 votes={votes}
               />
