@@ -48,7 +48,8 @@ Branch `rautenrieth-da/ci-triage-2026-11-02`, started from main c95027ee5f. Cont
 triage branch `ray/ci-triage-2026-09-15` (2026-09-08 to 2026-11-02), which has the earlier README, handover and
 onboarding.
 
-Current round: `rounds/2026-11-11T074142Z-inbox/` (export 2026-11-11 07:37, 11 items).
+Current round: `rounds/2026-11-11T210621Z-inbox/` (export 2026-11-11 21:05, 24 items).
+Previous: `rounds/2026-11-11T074142Z-inbox/` (export 2026-11-11 07:37, 11 items; g8 11354 not yet presented).
 Handover note for the next agent: `HANDOVER-2026-11-09.md`.
 Previous: `rounds/2026-11-07T155023Z-bft/` (export 2026-11-07 15:47, 29 items).
 Queue and per-item state in its README. Earlier: `rounds/2026-11-03T131520Z/`.
