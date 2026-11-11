@@ -25,3 +25,17 @@ or after 3b5b828: 1ee8c88, 08774bc, 915616a, ee8772c (also Canton bump to 3.7.3-
 | g8-cni | 11369 11370 11377 11378 | canton-network-internal: artifacts_push; backup_status_cluster; backup_cluster (two issues, one run 43074272995) | - | log request (no access) | open |
 | - | 10479 | cni Purge Unused Databases | - | needs-log since 10-21, re-list | open |
 | - | 10919 | ExpiryWithIgnoredAmuletVersion DB lock | - | owner question, re-list | open |
+
+## Landed (agents finished 2026-11-11 ~22:30 UTC; not yet verified against the logs or presented)
+
+| Group | Verdict | Suggested action | State |
+|---|---|---|---|
+| g1-simtime-init | 11358 11362 11368 11374 dup 11255 (1 -> 4 topology step under simtime: mediator-add signatures rejected, joining SV waits for mediator traffic; skipped reset fails later suites) | 4 closes, one-line comment each | open |
+| g2-rflsu | 11371 11372 dup 11303 (AK pre-DR 300 s sequencing cutoff); not #8432, not hard broken (4 of 34 jobs) | close dups, comment 11303 (comments/11303.md), assignee rautenrieth-da suggested (#8234) | open |
+| g3-init-wct | 11363 new: re-onboarded sv4 sequencer, peers keep old sequencer id on reused P2P endpoint (Canton BFT, like 10011); 11373 new: sv3 init > 5 min on slow runner (AM shape) + B blast radius | comments, retitles, Triaged; 11363 assignee martinflorian-da suggested | open |
+| g4-bootstrap | 11360 dup 11313 (L, close vote after DAR upload burst, sv1 sequencer blacklisted; fix PR #8412 open) | close dup | open |
+| g5-wct | 11364 dup 9445 (client echo of GetConnectedSynchronizers INTERNAL); 11375 new infra (4 min slowdown in two pods); 11376 dup 11375 | close 11364, 11376; comment/retitle/Triaged 11375 | open |
+| g6-fe | 11361 dup 11187 (F, ANS search button stale; fix PR #8418 open) | close dup | open |
+| g7-misc | 11357 dup 11147 (AF); 11365 dup 10358 (release-line cold compile, #8319 not backported: owner question); 11366 11367 new infra (runner network 16:05-16:24) | closes; comment + close 11366 11367 | open |
+
+Family letters: AV goes to 11354 (previous round g8); g3 proposed AV for 11363, use AW when merging.
