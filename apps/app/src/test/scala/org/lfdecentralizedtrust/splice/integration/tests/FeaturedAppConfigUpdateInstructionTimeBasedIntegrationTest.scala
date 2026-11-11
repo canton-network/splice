@@ -51,7 +51,7 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
       val newWeight = new java.math.BigDecimal(2)
 
       clue("before the vote, the provider's featured app right has no activity weight set") {
-        listedActivityWeight(providerParty) shouldBe None
+        lookupActivityWeight(providerParty) shouldBe None
       }
 
       actAndCheck(
@@ -74,7 +74,7 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
       )(
         "scan lists the featured app right with the updated weight and the instruction is archived",
         _ => {
-          listedActivityWeight(providerParty).exists(_.compareTo(newWeight) == 0) shouldBe true
+          lookupActivityWeight(providerParty).exists(_.compareTo(newWeight) == 0) shouldBe true
           sv1Backend.appState.dsoStore
             .listFeaturedAppConfigUpdateInstructionSample()
             .futureValue shouldBe empty
@@ -118,24 +118,18 @@ class FeaturedAppConfigUpdateInstructionTimeBasedIntegrationTest
           sv1Backend.appState.dsoStore
             .listFeaturedAppConfigUpdateInstructionSample()
             .futureValue shouldBe empty
-          listedFeaturedAppRight(providerParty) should not be empty
-          listedActivityWeight(providerParty) shouldBe None
+          sv1ScanBackend.lookupFeaturedAppRight(providerParty) should not be empty
+          lookupActivityWeight(providerParty) shouldBe None
         },
       )
   }
 
-  // Reads the provider's right through scan's list endpoint, as a user of scan would.
-  private def listedFeaturedAppRight(providerParty: PartyId)(implicit
-      env: SpliceTestConsoleEnvironment
-  ) =
-    sv1ScanBackend
-      .listFeaturedAppRights()
-      .find(_.payload.provider == providerParty.toProtoPrimitive)
-
-  private def listedActivityWeight(providerParty: PartyId)(implicit
+  private def lookupActivityWeight(providerParty: PartyId)(implicit
       env: SpliceTestConsoleEnvironment
   ): Option[java.math.BigDecimal] =
-    listedFeaturedAppRight(providerParty).flatMap(_.payload.activityWeight.toScala)
+    sv1ScanBackend
+      .lookupFeaturedAppRight(providerParty)
+      .flatMap(_.payload.activityWeight.toScala)
 
   private def setupProviderWithFeaturedAppRight()(implicit
       env: SpliceTestConsoleEnvironment

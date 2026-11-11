@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import cats.data.OptionT
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -13,12 +13,11 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.FeaturedAppConfigUpdateInstruction
-import ExecuteFeaturedAppConfigUpdateInstructionTrigger.*
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -29,25 +28,31 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
     ec: ExecutionContext,
     tracer: Tracer,
     mat: Materializer,
-) extends PollingParallelTaskExecutionTrigger[Task]
-    with SvTaskBasedTrigger[Task] {
+) extends PollingParallelTaskExecutionTrigger[
+      SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight
+    ]
+    with SvTaskBasedTrigger[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight] {
   private val store = svTaskContext.dsoStore
 
-  override protected def retrieveTasks()(implicit tc: TraceContext): Future[Seq[Task]] = {
-    store
-      .listFeaturedAppConfigUpdateInstructionSample(PageLimit.tryCreate(context.config.parallelism))
-      .map(_.map(Task(_)))
-  }
+  override protected def retrieveTasks()(implicit
+      tc: TraceContext
+  ): Future[Seq[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight]] =
+    store.listFeaturedAppConfigUpdateInstructionSample(
+      PageLimit.tryCreate(context.config.parallelism)
+    )
 
-  override protected def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+  override protected def completeTaskAsDsoDelegate(
+      task: SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight,
+      controller: String,
+  )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
     for {
       dsoRules <- store.getDsoRules()
       cmd = dsoRules.exercise(
         _.exerciseDsoRules_ExecuteFeaturedAppConfigUpdateInstruction(
-          task.data.instruction.contractId,
-          task.data.featuredAppRightCid,
+          task.instruction.contractId,
+          task.featuredAppRightCid,
           controller,
         )
       )
@@ -61,7 +66,7 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
         .noDedup
         .withSynchronizerId(dsoRules.domain)
         .yieldUnit()
-    } yield TaskSuccess(s"Executed update for provider ${task.data.instruction.payload.provider}")
+    } yield TaskSuccess(s"Executed update for provider ${task.instruction.payload.provider}")
   }
 
   /** Check whether a task has become stale and can be skipped.
@@ -70,22 +75,19 @@ class ExecuteFeaturedAppConfigUpdateInstructionTrigger(
     * as there can be concurrent actions submitted to the ledger that make the task stale;
     * e.g., another party archiving a contract representing a request.
     */
-  override protected def isStaleTask(task: Task)(implicit tc: TraceContext): Future[Boolean] =
-    store.multiDomainAcsStore
-      .lookupContractById(FeaturedAppConfigUpdateInstruction.COMPANION)(
-        task.data.instruction.contractId
+  override protected def isStaleTask(
+      task: SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight
+  )(implicit tc: TraceContext): Future[Boolean] =
+    (for {
+      _ <- OptionT(
+        store.multiDomainAcsStore.lookupContractById(FeaturedAppConfigUpdateInstruction.COMPANION)(
+          task.instruction.contractId
+        )
       )
-      .map(_.isEmpty)
-}
-
-object ExecuteFeaturedAppConfigUpdateInstructionTrigger {
-  final case class Task(
-      data: SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight
-  ) extends PrettyPrinting {
-    override def pretty: Pretty[this.type] =
-      prettyOfClass(
-        param("instruction", _.data.instruction.contractId.contractId.singleQuoted),
-        param("featuredAppRight", _.data.featuredAppRightCid.contractId.singleQuoted),
+      _ <- OptionT(
+        store.multiDomainAcsStore.lookupContractById(FeaturedAppRight.COMPANION)(
+          task.featuredAppRightCid
+        )
       )
-  }
+    } yield ()).isEmpty
 }

@@ -1819,7 +1819,14 @@ object SvDsoStore {
         FeaturedAppConfigUpdateInstruction,
       ],
       featuredAppRightCid: splice.amulet.FeaturedAppRight.ContractId,
-  )
+  ) extends PrettyPrinting {
+
+    override def pretty: Pretty[this.type] =
+      prettyOfClass(
+        param("instruction", _.instruction),
+        param("featuredAppRightCid", _.featuredAppRightCid.contractId.singleQuoted),
+      )
+  }
 
   case class RoundBatch[+T](
       roundNumber: Long,
