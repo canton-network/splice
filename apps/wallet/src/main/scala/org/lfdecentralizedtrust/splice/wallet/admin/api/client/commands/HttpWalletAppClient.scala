@@ -237,7 +237,9 @@ object HttpWalletAppClient {
         headers: List[HttpHeader],
     ): EitherT[Future, Either[Throwable, HttpResponse], http.SelfGrantFeatureAppRightResponse] =
       client.selfGrantFeatureAppRight(
-        Option.when(appKind.isDefined || activityWeight.isDefined || opsParties.isDefined)(
+        // Always send a request object: the generated client encodes a missing body as `null`,
+        // which the server fails to decode as a SelfGrantFeaturedAppRightRequest.
+        Some(
           definitions.SelfGrantFeaturedAppRightRequest(
             appKind = appKind.map(FeaturedAppKindUtil.fromDaml),
             activityWeight = activityWeight.map(Codec.encode(_)),
