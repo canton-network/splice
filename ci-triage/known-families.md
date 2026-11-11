@@ -18,7 +18,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | E | missing backports to release lines | per backport | check first on release-line runs |
 | F | frontend test infrastructure | 10156, 10141, 10145, 10157, 10143 | fixed on main |
 | G | tests pass, one log line fails checkErrors | 10438, 10084, 10140, 10144, 10147, 10612, 10606, 10676, 10495, 10142, 11155 | mixed, see section |
-| H | evidence loss (sys.exit, teardown cascade) | 10137, 10139, 10183, 10088, 10180, 10176 | fix branches open |
+| H | evidence loss (sys.exit, teardown cascade) | 10137, 10139, 10183, 10088, 10180, 10176, 11347 | fix branches open |
 | H2 | LSU: validator init against a non-active psid | 10088, 10174, 10180 | 10174 fixed, 10180 closed (no repro) |
 | H3 | trigger pause timeout (TriggerTestUtil.scala:93) | 10175, 10176 | 10175 fixed |
 | I | test races (venue, bulk storage, traffic, external party, sv4 sequencer, sequencer reconnect) | 8784, 10149, 10179, 10690, 10691, 11238 | mixed |
@@ -51,7 +51,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AJ | scan `claimed by multiple SVs` WARN from sv2-4 scans after the suppression ended on sv1Scan | 11304 (dups 11307, 11309, 11316, 11327) | fixed, #8389 |
 | AK | RollForwardLsuDR pre-DR SV onboarding past the 300 s sequencing cutoff (BFT since #8234) | 11303 (dups 11312, 11328, 11336) | open, test budget |
 | AL | AppUpgradeIntegrationTest base-version nodes not initialized within the 5 min initial wait | 11301 (dup 11302) | open, fix PR #8414 |
-| AM | SV init slower than a fixed wait; a quarter of the DAR uploads are repeats | 11299 | open, splice dedup + test timeout |
+| AM | SV init slower than a fixed wait; a quarter of the DAR uploads are repeats | 11299, 11347 | open, splice dedup + test timeout |
 | AN | cimain SV backup snapshots a CometBFT volume on CantonBFT (backup script defaults enableBftSequencer to false) | 10332 (dups 11297 11298 11314 11315) | open, splice script fix |
 | AP | ManualSignatureIntegrationTest validator OTK check gives up before or during alice's key rotation | 11232 (dup 11318) | fixed, #8391 |
 | AQ | cilr weekly SV catch-up: orderer restored a day behind (cantonBft backup rule), monitor 999 s fallback claims it | 11194 (also 10843) | open, splice backup selection + cni monitor |
@@ -246,6 +246,10 @@ State as recorded in the family section, not rechecked against the tracker on 20
   `Failed to reset decentralized namespace`; the test had timed out during bundled-node init (family AL) and stopped sv3
   right after its sequencer joined the ordering topology (epoch 41 at 15:18:00.355, size 3, strong quorum 3, sv3 first
   leader, no later epoch). Confirming grep: `zcat canton_network_test.clog.gz | tail -1` is the reset ERROR.
+- 11347 (2026-11-11, teardown leak cascade): UpdateHistorySanityCheckPlugin filters scans by `is_initialized`
+  (node running) and then calls `scan.automation`, which needs the app state; a scan still initializing (sv2Scan in
+  `Get primary party`, waiting for sv1) throws `Node doesn't have any app state` and the cascade follows. Fix
+  candidate: filter on app health active, or run beforeEnvironmentDestroyed inside the `try` (canton change).
 
 ## H2. LSU: validator init against a non-active psid
 - 10088-B (5-min hang, infinite retry) -> fixed by #7311 (WARN + skip). 10174: the WARN fails checkErrors because #7311's
@@ -834,6 +838,10 @@ State as recorded in the family section, not rechecked against the tracker on 20
   before the batch. Grep for repeats: `Processing package upload of` per participant and DAR name in the Canton log.
 - 11299 (2026-11-09, main dbcb0c14ca, simtime (5)), first hit. Fixes in the order the user chose: dedup the upload
   list by package id, then raise the timeout at line 72.
+- 11347 (2026-11-11, key-download (0), main 2ef0423979): sv1 (founding SV) init in SvReonboardingIntegrationTest
+  exceeds startAllSync's 5 min waitForInitialization; 87 DAR uploads (22 repeats) took 190 s at 7.5 s mean. Confirm:
+  `Timeout while waiting for initialization of sv1` while the sv1 log shows `Sending upload dar for` or the DsoRules
+  bootstrap still running.
 
 ## AN. cimain SV backup snapshots a CometBFT volume on a CantonBFT cluster (node-backup.sh `enableBftSequencer // false`)
 - Signature: cni `Deploy cimain` (earlier CircleCI deploy_basic) `Backup cluster (sv-1|sv-da-1)`: `Backing up
