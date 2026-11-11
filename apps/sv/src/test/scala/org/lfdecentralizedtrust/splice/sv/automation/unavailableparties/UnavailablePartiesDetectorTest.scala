@@ -3,25 +3,34 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.unavailableparties
 
-import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.error.MediatorError
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import com.google.rpc.{Code, ErrorInfo, Status}
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
-import org.lfdecentralizedtrust.splice.store.InMemoryUnavailablePartiesStore
-import org.scalatest.wordspec.AsyncWordSpec
+import org.lfdecentralizedtrust.splice.store.{StoreTestBase, UnavailablePartiesStore}
+import org.lfdecentralizedtrust.splice.store.db.{
+  DbUnavailablePartiesStore,
+  SplicePostgresTest,
+  StoreDescriptor,
+}
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
+import scala.concurrent.duration.*
 
-class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
+class UnavailablePartiesDetectorTest
+    extends StoreTestBase
+    with HasExecutionContext
+    with SplicePostgresTest {
 
   import UnavailablePartiesDetectorTest.Contract
-
-  private implicit val tc: TraceContext = TraceContext.empty
 
   private def party(name: String): PartyId =
     PartyId.tryFromProtoPrimitive(s"$name::1220deadbeef")
@@ -33,6 +42,31 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
 
   private val v1 = PackageVersion.assertFromString("0.1.0")
   private val v2 = PackageVersion.assertFromString("0.2.0")
+
+  private val storeDescriptor = StoreDescriptor(
+    version = 1,
+    name = "UnavailablePartiesDetectorTest",
+    party = dsoParty,
+    participant = mkParticipantId("participant"),
+    key = Map(),
+  )
+
+  private val ignoreDuration = NonNegativeFiniteDuration(1.hour)
+
+  private def mkStore(
+      initialParties: Set[PartyId] = Set.empty
+  ): Future[DbUnavailablePartiesStore] =
+    for {
+      store <- DbUnavailablePartiesStore(
+        storeDescriptor,
+        storage,
+        ignoreDuration,
+        ignoreDuration,
+        wallClock,
+        loggerFactory,
+      )
+      _ <- store.addParties(initialParties.toSeq)
+    } yield store
 
   private def submissionFailure(
       reason: String = "PACKAGE_NOT_VETTED_BY_RECIPIENTS",
@@ -74,7 +108,7 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
     )
 
   private def splitting(
-      store: InMemoryUnavailablePartiesStore,
+      store: UnavailablePartiesStore,
       versions: Map[PartyId, Option[PackageVersion]],
       protectedParties: Set[PartyId] = Set(dso),
   ) =
@@ -89,12 +123,12 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
       contracts: Seq[Contract],
       versions: Map[PartyId, Option[PackageVersion]],
       failingContracts: Set[String],
-      store: InMemoryUnavailablePartiesStore = new InMemoryUnavailablePartiesStore(Set.empty),
+      store: Future[DbUnavailablePartiesStore] = mkStore(),
       protectedParties: Set[PartyId] = Set(dso),
       failure: => StatusRuntimeException = submissionFailure(),
   ): Future[
-    (UnavailablePartiesDetector.Result, Seq[Seq[String]], InMemoryUnavailablePartiesStore)
-  ] = {
+    (UnavailablePartiesDetector.Result, Seq[Seq[String]], DbUnavailablePartiesStore)
+  ] = store.flatMap { store =>
     val submissions = new AtomicReference[Seq[Seq[String]]](Seq.empty)
     splitting(store, versions, protectedParties)
       .processBatch[Contract](
@@ -191,45 +225,46 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
     }
 
     "not load the ignore list from the store, relying on the fetched batch being filtered" in {
-      val store = new InMemoryUnavailablePartiesStore(Set(charlie))
       val contracts = Seq(
         Contract("c1", Set(alice, dso)),
         Contract("c2", Set(charlie, dso)),
       )
-      run(contracts, Map.empty, Set.empty, store).map { case (result, submissions, _) =>
-        result.submittedTasks shouldBe 2
-        submissions shouldBe Seq(Seq("c1", "c2"))
+      run(contracts, Map.empty, Set.empty, mkStore(Set(charlie))).map {
+        case (result, submissions, _) =>
+          result.submittedTasks shouldBe 2
+          submissions shouldBe Seq(Seq("c1", "c2"))
       }
     }
 
     "ignore the parties reported as unresponsive without splitting" in {
-      val store = new InMemoryUnavailablePartiesStore(Set.empty)
-      val submissions = new AtomicReference[Seq[Seq[String]]](Seq.empty)
-      val contracts = Seq(
-        Contract("c1", Set(alice, dso)),
-        Contract("c2", Set(bob, dso)),
-        Contract("c3", Set(charlie, dso)),
-      )
-      splitting(store, Map.empty)
-        .processBatch[Contract](
-          contracts,
-          _.parties,
-          batch => {
-            submissions.updateAndGet(_ :+ batch.map(_.id))
-            if (batch.exists(_.id == "c3")) Future.failed(unresponsiveParties(charlie))
-            else Future.unit
-          },
+      mkStore().flatMap { store =>
+        val submissions = new AtomicReference[Seq[Seq[String]]](Seq.empty)
+        val contracts = Seq(
+          Contract("c1", Set(alice, dso)),
+          Contract("c2", Set(bob, dso)),
+          Contract("c3", Set(charlie, dso)),
         )
-        .map { result =>
-          // the mediator names the culprit, so there is no need to bisect the batch
-          result.splits shouldBe 0
-          result.ignoredParties shouldBe Set(charlie)
-          result.failedTasks shouldBe 1
-          result.submittedTasks shouldBe 2
-          store.listParties().futureValue.toSet shouldBe Set(charlie)
-          // the contracts that do not involve charlie are retried right away
-          submissions.get() shouldBe Seq(Seq("c1", "c2", "c3"), Seq("c1", "c2"))
-        }
+        splitting(store, Map.empty)
+          .processBatch[Contract](
+            contracts,
+            _.parties,
+            batch => {
+              submissions.updateAndGet(_ :+ batch.map(_.id))
+              if (batch.exists(_.id == "c3")) Future.failed(unresponsiveParties(charlie))
+              else Future.unit
+            },
+          )
+          .map { result =>
+            // the mediator names the culprit, so there is no need to bisect the batch
+            result.splits shouldBe 0
+            result.ignoredParties shouldBe Set(charlie)
+            result.failedTasks shouldBe 1
+            result.submittedTasks shouldBe 2
+            store.listParties().futureValue.toSet shouldBe Set(charlie)
+            // the contracts that do not involve charlie are retried right away
+            submissions.get() shouldBe Seq(Seq("c1", "c2", "c3"), Seq("c1", "c2"))
+          }
+      }
     }
 
     UnavailablePartiesDetector.VettingFailure.vettingErrorIds.foreach { errorId =>
@@ -250,18 +285,14 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
     }
 
     "fail the whole batch without ignoring anyone on unrelated errors" in {
-      val store = new InMemoryUnavailablePartiesStore(Set.empty)
       val contracts =
         Seq(Contract("c1", Set(alice, dso)), Contract("c2", Set(bob, dso)))
       run(
         contracts,
         Map(alice -> Some(v1)),
         Set("c1"),
-        store = store,
         failure = submissionFailure(reason = "CONTRACT_NOT_ACTIVE"),
-      ).failed.map { _ =>
-        store.listParties().futureValue shouldBe empty
-      }
+      ).failed.flatMap(_ => mkStore()).flatMap(_.listParties()).map(_ shouldBe empty)
     }
 
     "split on NO_SYNCHRONIZER_FOR_SUBMISSION caused by unknown packages" in {
@@ -283,25 +314,35 @@ class UnavailablePartiesDetectorTest extends AsyncWordSpec with BaseTest {
     }
 
     "fail the whole batch on NO_SYNCHRONIZER_FOR_SUBMISSION for other reasons" in {
-      val store = new InMemoryUnavailablePartiesStore(Set.empty)
       val contracts =
         Seq(Contract("c1", Set(alice, dso)), Contract("c2", Set(bob, dso)))
       run(
         contracts,
         Map(alice -> Some(v1)),
         Set("c1"),
-        store = store,
         failure = submissionFailure(
           reason = "NO_SYNCHRONIZER_FOR_SUBMISSION",
           message =
             "No valid synchronizer for submission found. Discarded synchronizers: sync::1: Parties Set(alice) don't have an active participant on synchronizer sync::1",
         ),
-      ).failed.map { _ =>
-        store.listParties().futureValue shouldBe empty
+      ).failed.flatMap(_ => mkStore()).flatMap(_.listParties()).map(_ shouldBe empty)
+    }
+
+    "stay stack safe when isolating thousands of failing tasks" in {
+      val n = 5000
+      val contracts = (0 until n).map(i => Contract(s"c$i", Set(party(s"p$i"))))
+      run(contracts, Map.empty, contracts.map(_.id).toSet).map { case (result, _, _) =>
+        result.splits shouldBe n - 1
+        result.failedTasks shouldBe n
       }
     }
 
   }
+
+  override protected def cleanDb(
+      storage: DbStorage
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] =
+    resetAllAppTables(storage)
 }
 
 object UnavailablePartiesDetectorTest {
