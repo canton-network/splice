@@ -1084,7 +1084,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     val metaStore = new DbActivityRecordMetaStore(
       storage.underlying,
       updateHistory,
-      DbAppActivityRecordStore.IngestionVersions(1, 0),
+      DbActivityRecordMetaStore.IngestionVersions(1, 0),
       false,
       initialRound = 0L,
       loggerFactory,
@@ -1096,7 +1096,6 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         storage.underlying,
         updateHistory,
         metaStore,
-        DbAppActivityRecordStore.IngestionVersions(1, 0),
         false,
         initialRound = 0L,
         loggerFactory,

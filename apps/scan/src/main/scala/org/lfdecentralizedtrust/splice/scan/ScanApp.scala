@@ -318,7 +318,7 @@ class ScanApp(
       activityRecordMetaStore = new DbActivityRecordMetaStore(
         storage,
         updateHistory,
-        DbAppActivityRecordStore.IngestionVersions(
+        DbActivityRecordMetaStore.IngestionVersions(
           AppActivityComputation.ActivityIngestionCodeVersion,
           config.activityIngestionUserVersion.fold(0)(_.toInt),
         ),
@@ -330,10 +330,6 @@ class ScanApp(
         storage,
         updateHistory,
         activityRecordMetaStore,
-        DbAppActivityRecordStore.IngestionVersions(
-          AppActivityComputation.ActivityIngestionCodeVersion,
-          config.activityIngestionUserVersion.fold(0)(_.toInt),
-        ),
         config.isFirstSv,
         initialRound.toLong,
         loggerFactory,

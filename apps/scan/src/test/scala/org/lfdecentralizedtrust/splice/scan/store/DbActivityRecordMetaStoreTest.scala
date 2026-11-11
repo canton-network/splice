@@ -50,7 +50,7 @@ class DbActivityRecordMetaStoreTest
         // Seed both meta rows and advance last_archived_round past
         // earliest_ingested_round + 1 for both. App-side earliest-complete: 5.
         // Extra-side earliest-complete: 7.
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 6L, Some(7L))
         combined <- facade.earliestRoundWithCompleteAppActivity()
       } yield {
@@ -61,7 +61,7 @@ class DbActivityRecordMetaStoreTest
     "return None for earliestRoundWithCompleteAppActivity when only one side has reached completeness" in {
       for {
         (facade, appStore) <- newStores(initialRound = 5L)
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
         combined <- facade.earliestRoundWithCompleteAppActivity()
       } yield {
         combined shouldBe None
@@ -72,7 +72,7 @@ class DbActivityRecordMetaStoreTest
       for {
         (facade, appStore) <- newStores(initialRound = 5L)
         // App-side latest-complete: 10. Extra-side latest-complete: 8.
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, Some(8L))
         combined <- facade.latestRoundWithCompleteAppActivity()
       } yield {
@@ -83,7 +83,7 @@ class DbActivityRecordMetaStoreTest
     "return None for latestRoundWithCompleteAppActivity when only one side has a last_archived_round" in {
       for {
         (facade, appStore) <- newStores(initialRound = 5L)
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
         // Extra-side meta present, but no last_archived_round yet.
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
         combined <- facade.latestRoundWithCompleteAppActivity()
@@ -98,7 +98,7 @@ class DbActivityRecordMetaStoreTest
         // Both meta rows present with earliest_ingested_round = 4, so
         // each side alone reports CannotProvide for round 4 and
         // Undetermined for round 20. The combined result must agree.
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
         atEarliest <- facade.ingestionStatusForRound(4L)
         beyond <- facade.ingestionStatusForRound(20L)
@@ -115,7 +115,7 @@ class DbActivityRecordMetaStoreTest
         // on the app side alone). Extra-side earliest-ingested 25 (round
         // 20 is BELOW it → CannotProvide on the extra side). The combined
         // response must adopt extra's CannotProvide.
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 25L, None)
         combined <- facade.ingestionStatusForRound(20L)
       } yield {
@@ -126,7 +126,7 @@ class DbActivityRecordMetaStoreTest
     "report Undetermined for ingestionStatusForRound when neither side places the round below its earliest ingested" in {
       for {
         (facade, appStore) <- newStores(initialRound = 5L)
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
         combined <- facade.ingestionStatusForRound(20L)
       } yield {
@@ -137,7 +137,7 @@ class DbActivityRecordMetaStoreTest
     "take the min of startedIngestingAt when both sides have a value" in {
       for {
         (facade, appStore) <- newStores(initialRound = 5L)
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 1000L, 4L, None)
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 1000L, 4L, None)
         _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 500L, 4L, None)
         combined <- facade.startedIngestingAt
       } yield {
@@ -148,7 +148,7 @@ class DbActivityRecordMetaStoreTest
     "fall back to the single non-None startedIngestingAt when only one side has a meta row" in {
       for {
         (facade, appStore) <- newStores(initialRound = 5L)
-        _ <- appStore.insertActivityRecordMetaForTesting(1, 0, 1000L, 4L, None)
+        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 1000L, 4L, None)
         combined <- facade.startedIngestingAt
       } yield {
         combined shouldBe Some(1000L)
@@ -206,8 +206,8 @@ class DbActivityRecordMetaStoreTest
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
   private def newStores(
-      versions: DbAppActivityRecordStore.IngestionVersions =
-        DbAppActivityRecordStore.IngestionVersions(1, 0),
+      versions: DbActivityRecordMetaStore.IngestionVersions =
+        DbActivityRecordMetaStore.IngestionVersions(1, 0),
       isFirstSv: Boolean = false,
       initialRound: Long = 0L,
   ): Future[(DbActivityRecordMetaStore, DbAppActivityRecordStore)] = {
@@ -241,7 +241,6 @@ class DbActivityRecordMetaStoreTest
         storage,
         updateHistory,
         facade,
-        versions,
         isFirstSv,
         initialRound,
         loggerFactory,

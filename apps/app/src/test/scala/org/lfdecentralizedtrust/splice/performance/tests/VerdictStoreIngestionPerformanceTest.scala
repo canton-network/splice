@@ -109,7 +109,7 @@ class VerdictStoreIngestionPerformanceTest(
         val metaStore = new DbActivityRecordMetaStore(
           storage,
           updateHistory,
-          DbAppActivityRecordStore.IngestionVersions(
+          DbActivityRecordMetaStore.IngestionVersions(
             AppActivityComputation.ActivityIngestionCodeVersion,
             0,
           ),
@@ -121,10 +121,6 @@ class VerdictStoreIngestionPerformanceTest(
           storage,
           updateHistory,
           metaStore,
-          DbAppActivityRecordStore.IngestionVersions(
-            AppActivityComputation.ActivityIngestionCodeVersion,
-            0,
-          ),
           isFirstSv = false,
           initialRound = 0L,
           loggerFactory,

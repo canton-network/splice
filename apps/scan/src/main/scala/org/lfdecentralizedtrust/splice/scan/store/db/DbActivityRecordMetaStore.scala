@@ -23,6 +23,11 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object DbActivityRecordMetaStore {
 
+  /** Code + user ingestion-version pair. One tuple applies to both activity
+    * sides; each side's meta row is keyed by `(history_id, code, user)`.
+    */
+  final case class IngestionVersions(code: Int, user: Int)
+
   /** Metadata row for extra-activity ingestion (CIP-0104 extension hook).
     * Owned here because the facade is the sole reader/writer of
     * `extra_app_activity_record_meta`.
@@ -104,7 +109,7 @@ object DbActivityRecordMetaStore {
 class DbActivityRecordMetaStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
-    val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
+    val ingestionVersions: DbActivityRecordMetaStore.IngestionVersions,
     isFirstSv: Boolean,
     initialRound: Long,
     override protected val loggerFactory: NamedLoggerFactory,
