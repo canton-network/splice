@@ -89,7 +89,7 @@ check_public() {
       return 0
     fi
 
-    echo "Attempt $attempt/$max_attempts failed for ${target} (transient error, retrying in 5s...)"
+    echo "Attempt $attempt/$max_attempts failed for ${target} (transient error, retrying in 5s..)"
     if [ "$attempt" -eq "$max_attempts" ]; then
       record_failure "$artifact_type" "$name" "$target" "$output" "$settings_url"
       return 0
