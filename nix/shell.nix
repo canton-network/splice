@@ -109,6 +109,7 @@ let
     skopeo
     sphinx
     sphinx-lint
+    sqlite
     tinyproxy
     tmux
     toxiproxy
