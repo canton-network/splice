@@ -44,7 +44,7 @@ State as recorded in the family section, not rechecked against the tracker on 20
 | AC | WalletMetricsTest trigger.completed lookup matches success + noop series | 10732 (dup 11143) | open, test fix proposed |
 | AD | TBAR test reads per-round totals while a parallel backlog computation is still committing | 11144 | open, test fix proposed |
 | AE | frontend login helper misses already-logged-in state on a slow page load | 11161 | open, test fix proposed |
-| AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (dup 11291; related 10475) | open, fix PR #8420 |
+| AF | sim-clock jump timeouts trip the SV medium-priority circuit breaker | 11147 (dups 11291, 11348; related 10475) | open, fix PR #8420 |
 | AG | first Postgres connection > 5 s at shard start, createDatabase retry WARN | 10739, 11141 | open, test config fix proposed |
 | AH | SequencerPruningIntegrationTest disables the shared participants at the global sequencer | 11165 | open, owner suggested martinflorian-da |
 | AI | SUBMISSION_ALREADY_IN_FLIGHT trips the validator circuit breaker | 9752 (dups 10300, 11173; 11240 via B) | closed 9752, fix cni#2785 status unknown |
@@ -726,9 +726,11 @@ State as recorded in the family section, not rechecked against the tracker on 20
   wall time after the failure, so SpliceCircuitBreaker's 15 min (sim) `resetFailuresAfter` check never fires, and the
   count builds across steps to the test max-failures 20 (`include/svs/_sv.conf`). LOCAL_VERDICT_TIMEOUT (category 2)
   is not ignored.
-- Hits: parent 11147 (2026-11-02, main 136e2e3160, 3 steps), 11291 (2026-11-09, main ab36803c8a, 4 steps, dup). Both
-  in docker-canton-simtime (0), ScanNewNetworkBackfillingTimeBasedIntegrationTest, sv2. 2 of 97 post-merge main runs
-  in a week. Fix in the test: `circuitBreakers = CircuitBreakersConfig.never` for all SV apps
+- Hits: parent 11147 (2026-11-02, main 136e2e3160, 3 steps), 11291 (2026-11-09, main ab36803c8a, 4 steps, dup),
+  11348 (2026-11-11, main 2ef0423, 3 steps, dup, sv1). All in docker-canton-simtime (0),
+  ScanNewNetworkBackfillingTimeBasedIntegrationTest; sv2 in the first two, sv1 in 11348 (any SV app can trip).
+  2 of 97 post-merge main runs in the week to 11-09; 2 of 82 runs 2026-11-04..11. Fix PR splice#8420 (open) covers
+  all SV apps. Fix in the test: `circuitBreakers = CircuitBreakersConfig.never` for all SV apps
   (ConfigTransforms.updateAllSvAppConfigs_), as LsuIntegrationTest does for sv4. Not on main as of 885cd84668.
   No ignore pattern. (The 11-05 count of 47 failures in one jump was wrong: it counted all sv2 priorities.)
 

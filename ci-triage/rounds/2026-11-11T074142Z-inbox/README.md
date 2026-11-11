@@ -31,7 +31,7 @@ Job logs of the GHA jobs: `log/inbox-1111/<job id>.log` (gitignored).
 | g2-lsuop | 11349 new: RateLimitPreflight extra ACS call after the 2/s bucket refilled (svda1Scan, 1.15 s gap) | comment, retitle, assignee nicu-da, Triaged; fix branch rautenrieth-da/fix-11349-ratelimit-preflight-burst-assert c18ab50e16 ready | comment + retitle ran; export 13:12: In progress, assignee rautenrieth-da |
 | g3-far | 11353 new, family Y: #8062 test uses splice-amulet 0.1.25 appKind, untagged | comment, retitle, Triaged; user is not the #8062 author (corrected), fix PR splice#8427 opened by the user (its CI failures 2026-11-11 unrelated; the tagged test passed; approved) | ran (user 2026-11-11); INDEX + Y merged |
 | g4-keydl | 11347 new: SvReonboarding sv1 init > 5 min (AM-like DAR repeats) + teardown leak cascade (H) | comment, retitle, Triaged | ran 2026-11-11 (user: comment, Triaged; retitle live); INDEX, AM + H merged |
-| g5-simtime | 11348 dup 11147 (AF, fix PR #8420) | close dup | open |
+| g5-simtime | 11348 dup 11147 (AF, fix PR #8420) | close dup | ran 2026-11-11 (user); INDEX + AF merged |
 | g6-restart | 11346 new: WalletSurviveCantonRestart 2 min tap budget includes restarted participant startup (106 s) | comment, retitle, Triaged | open |
 | g7-vsc | 11350 dup 11255 (B shape, onboard/sv/sequencer 38 s) | close dup | open |
 | g8-lsu | 11354 new: LsuIntegrationTest validators outlive scan restart, BFT retries exhausted | comment, retitle, assignee nicu-da, Triaged | open |
