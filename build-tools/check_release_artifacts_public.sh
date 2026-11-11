@@ -59,7 +59,7 @@ check_public() {
 
   local target="docker://${registry}/${name}:${VERSION}"
 
-  # Dynamically derive org and URL-encoded package path from the GHCR registry string
+  # derive org and URL-encoded package path from the GHCR registry string
   local reg_path="${registry#ghcr.io/}"
   local org="${reg_path%%/*}"
   local pkg_prefix="${reg_path#*/}"
