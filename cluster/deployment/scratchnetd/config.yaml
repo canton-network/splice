@@ -23,6 +23,20 @@ synchronizerMigration:
       spliceRoot: "."
       privateConfigsDir: "cluster/configs/configs-private"
       publicConfigsDir: "cluster/configs/configs"
+  upgrade:
+    id: 1
+    version: 0.9.3
+    sequencer:
+      enableBftSequencer: true
+    releaseReference:
+      repoUrl: https://github.com/canton-network/splice
+      gitReference: refs/heads/nicu/lsu_fix
+      pulumiBaseDir: "cluster/pulumi"
+      pulumiStacksDir: "cluster/stacks/scratchnets"
+      deploymentDir: "cluster/deployment"
+      spliceRoot: "."
+      privateConfigsDir: "cluster/configs/configs-private"
+      publicConfigsDir: "cluster/configs/configs"
 operatorDeployment:
   reference:
     repoUrl: https://github.com/canton-network/splice

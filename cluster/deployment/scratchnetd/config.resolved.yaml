@@ -1687,6 +1687,20 @@ synchronizerMigration:
       enableBftSequencer: true
     version: '0.9.3'
   frozenMigrationId: 0
+  upgrade:
+    id: 1
+    releaseReference:
+      deploymentDir: 'cluster/deployment'
+      gitReference: 'refs/heads/nicu/lsu_fix'
+      privateConfigsDir: 'cluster/configs/configs-private'
+      publicConfigsDir: 'cluster/configs/configs'
+      pulumiBaseDir: 'cluster/pulumi'
+      pulumiStacksDir: 'cluster/stacks/scratchnets'
+      repoUrl: 'https://github.com/canton-network/splice'
+      spliceRoot: '.'
+    sequencer:
+      enableBftSequencer: true
+    version: '0.9.3'
 validator1:
   deduplicationDuration: '30m'
   logging:
