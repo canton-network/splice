@@ -233,12 +233,23 @@ object UnavailablePartiesDetector {
 
   private[unavailableparties] object VettingFailure {
     private[unavailableparties] val vettingErrorIds: Set[String] = Set(
+      // Raised by the submitting participant before sending the transaction: a participant hosting an
+      // informee hasn't vetted a package the transaction uses.
       TransactionProcessor.SubmissionErrors.PackageNotVettedByRecipients.id,
+      // Raised before interpretation: topology-aware package selection finds no version of a package
+      // that is vetted by the participants of all involved parties.
       CommandExecutionErrors.PackageSelectionFailed.id,
+      // Raised during interpretation when a contract is used at a different package version than it was
+      // created with, and its signatories, observers or key differ under that version.
       CommandExecutionErrors.Interpreter.UpgradeError.ValidationFailed.id,
+      // Raised during interpretation when a contract can't be converted to the selected package version,
+      // e.g. downgrading it to the version a party vetted would drop a set optional field.
       CommandExecutionErrors.Interpreter.UpgradeError.TranslationFailed.id,
     )
 
+    // NO_SYNCHRONIZER_FOR_SUBMISSION is raised by routing for several reasons: no active participant,
+    // a disconnected synchronizer, an unsupported protocol version, or packages unknown to an informee.
+    // Only the last one is a vetting issue, so only that message is matched.
     private[unavailableparties] val unknownPackageRoutingMessage =
       "Some packages are not known to all informees"
 
