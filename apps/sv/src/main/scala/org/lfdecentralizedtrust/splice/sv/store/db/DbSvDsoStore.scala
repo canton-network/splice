@@ -917,11 +917,11 @@ class DbSvDsoStore private (
       result <- storage
         .query(
           (sql"""
-             select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+             select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated(
               "sample."
             )}, sample.fa_right_cid
              from (
-               select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+               select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated(
               "acs."
             )},
                       fa_right.contract_id as fa_right_cid
@@ -949,7 +949,7 @@ class DbSvDsoStore private (
              ) sample
              order by random()
              limit ${sqlLimit(limit)}
-           """).as[(AcsQueries.SelectFromAcsTableWithStateResult, String)],
+           """).as[(AcsQueries.SelectFromAcsTableResult, String)],
           "listFeaturedAppConfigUpdateInstructionSample",
         )
       limited = applyLimit("listFeaturedAppConfigUpdateInstructionSample", limit, result)
