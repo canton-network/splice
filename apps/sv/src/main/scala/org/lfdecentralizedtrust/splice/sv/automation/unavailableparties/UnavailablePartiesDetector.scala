@@ -164,7 +164,7 @@ class UnavailablePartiesDetector(
           for {
             _ <-
               if (toIgnore.isEmpty) {
-                logger.info(
+                logger.warn(
                   s"Not ignoring any party for the failing task, all candidates ($candidates) are protected"
                 )
                 Future.unit
