@@ -15,9 +15,10 @@ export interface FeaturedAppGrantWarnings {
 
 // Non-blocking warnings for the grant form (#7665). Mirrors the backend checks but is advisory:
 // (a) provider already has a FeaturedAppRight (granting another duplicates it), and
-// (b) chosen opsParties overlap with an in-flight vote request. The backend still rejects on
-// submit; these just surface the conflict earlier. The provider query only fires on a fully
-// valid party id, so it does not run per keystroke.
+// (b) chosen opsParties overlap with an in-flight vote request.
+// The backend still validates on submit independent of the UI but these just surface the conflict earlier.
+// Refer to `FeaturedAppRightValidator.scala` file for the backend validation logic.
+// The provider query only fires on a fully valid party id, so it does not run per keystroke.
 export const useFeaturedAppGrantWarnings = (
   provider: string,
   opsParties: string[]
@@ -51,6 +52,6 @@ export const useInFlightOpsPartiesOverlap = (opsParties: string[]): string | und
   );
   const overlap = opsParties.filter(p => inFlight.has(p));
   return overlap.length > 0
-    ? `These ops parties are already referenced by a pending vote request: ${overlap.join(', ')}`
+    ? `These app operations parties are already referenced by a pending vote request: ${overlap.join(', ')}`
     : undefined;
 };

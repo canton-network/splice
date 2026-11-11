@@ -114,7 +114,7 @@ class ReconcileDynamicSynchronizerParametersTrigger(
     val currentParameters = currentState.mapping.parameters
     if (currentParameters.mediatorDeduplicationTimeout < requiredMinMediatorDeduplicationTimeout) {
       logger.info(
-        s"Current mediator deduplication timeout is ${currentParameters.mediatorDeduplicationTimeout}, to change to preparationTimeRecordTimeTolerance $config.preparationTimeRecordTimeTolerance it must be at least $requiredMinMediatorDeduplicationTimeout"
+        s"Current mediator deduplication timeout is ${currentParameters.mediatorDeduplicationTimeout}, to change to preparationTimeRecordTimeTolerance ${config.preparationTimeRecordTimeTolerance} it must be at least $requiredMinMediatorDeduplicationTimeout"
       )
       None
     } else {
@@ -134,7 +134,7 @@ class ReconcileDynamicSynchronizerParametersTrigger(
         Some(internalPreparationTimeRecordTimeTolerance)
       } else {
         logger.info(
-          s"preparationTimeRecordTimeTolerance can only be changed to $config.preparationTimeRecordTimeTolerance at $minSafeChangePoint, current domain time is $domainTime"
+          s"preparationTimeRecordTimeTolerance can only be changed to ${config.preparationTimeRecordTimeTolerance} at $minSafeChangePoint, current domain time is $domainTime"
         )
         None
       }

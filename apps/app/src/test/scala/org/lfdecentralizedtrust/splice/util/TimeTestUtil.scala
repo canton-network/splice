@@ -95,12 +95,25 @@ trait TimeTestUtil extends TestCommon {
       advancedTo: CantonTimestamp
   )(implicit env: SpliceTestConsoleEnvironment): Unit = {
     val target = advancedTo.minusSeconds(1)
-    sv1Backend.participantClientWithAdminToken.testing.await_synchronizer_time(
-      decentralizedSynchronizerId,
-      target,
-      timeout = NonNegativeDuration.ofSeconds(60),
+    // Participants observe the synchronizer time independently, e.g., one may still be served
+    // a timestamp from before the time jump while others have moved on, so we wait for all of them.
+    val participants =
+      (env.svs.local.filter(_.is_running).map(_.participantClientWithAdminToken) ++
+        env.scans.local.filter(_.is_running).map(_.participantClientWithAdminToken) ++
+        env.validators.local.filter(_.is_running).map(_.participantClientWithAdminToken) ++
+        env.splitwells.local.filter(_.is_running).map(_.participantClientWithAdminToken))
+        .distinctBy(p => (p.config.adminApi.address, p.config.adminApi.port))
+        .filter(_.synchronizers.is_connected(decentralizedSynchronizerAlias))
+    participants.foreach(
+      _.testing.await_synchronizer_time(
+        decentralizedSynchronizerId,
+        target,
+        timeout = NonNegativeDuration.ofSeconds(60),
+      )
     )
-    logger.info(s"Global synchronizer time reached $target after advancing time")
+    logger.info(
+      s"Global synchronizer time reached $target on ${participants.size} participants after advancing time"
+    )
   }
 
   /** This function advances time past the opening time of the next round and waits for the DSO round management automation for open, summarizing

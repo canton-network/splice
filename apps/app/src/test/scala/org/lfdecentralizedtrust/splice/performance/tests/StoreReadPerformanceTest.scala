@@ -5,6 +5,7 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.HasIngestionSink
 import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 
 import io.circe.Json
@@ -43,6 +44,8 @@ abstract class StoreReadPerformanceTest(
       loggerFactory,
       ingestionConfig,
     ) {
+
+  override type Store <: HasIngestionSink
 
   protected def readOperations(
       store: Store,
@@ -122,6 +125,9 @@ abstract class StoreReadPerformanceTest(
       ),
     )
 
+    println(
+      s"${this.getClass.getName}: Read metrics for '$opName':\n${metricsJson.spaces2}"
+    )
     writeMetricsFile(metricsJson, "store-read-perf-metrics", "Read", opName = Some(opName))
   }
 
@@ -135,19 +141,34 @@ abstract class StoreReadPerformanceTest(
       accF.flatMap { acc =>
         val wallBefore = System.nanoTime()
         val cpuBefore = getProcessCpuTimeNs
+        val dbSeqBefore = dbExecSeq
         op.execute(tc).map { _ =>
           val wallAfter = System.nanoTime()
           val cpuAfter = getProcessCpuTimeNs
+          val db = dbExecWindow(dbSeqBefore)
+          val wait = dbWaitWindow(dbSeqBefore)
           val duration = wallAfter - wallBefore
           val cpuDeltaNs = math.max(cpuAfter - cpuBefore, 0L)
+          val dbExecNs = db.totalNanos
+          val dbWaitNs = wait.totalNanos
           val heapUsed = getHeapUsedBytes
           val cpuToWallClockRatio =
             if (duration > 0) BigDecimal(cpuDeltaNs) / BigDecimal(duration) else BigDecimal(0)
 
           val msg =
-            f"Read '${op.name}': time=${BigDecimal(duration) / 1e6}%.2f ms, updateSize=$updateSizeBytes bytes, numUpdates=${txs.size}"
+            f"Read '${op.name}': time=${BigDecimal(duration) / 1e6}%.2f ms, " +
+              f"dbWait=${BigDecimal(dbWaitNs) / 1e6}%.2f ms, " +
+              f"dbExec=${BigDecimal(dbExecNs) / 1e6}%.2f ms, " +
+              f"nonDb=${BigDecimal(math.max(duration - dbWaitNs - dbExecNs, 0L)) / 1e6}%.2f ms, " +
+              f"dbQueries=${db.count}, maxDbQuery=${BigDecimal(db.maxNanos) / 1e6}%.2f ms, " +
+              f"updateSize=$updateSizeBytes bytes, numUpdates=${txs.size}"
           logger.info(msg)
           println(s"${this.getClass.getName}: $msg")
+          val breakdown = db.breakdown.toSeq
+            .sortBy { case (_, (_, ns)) => -ns }
+            .map { case (cs, (c, ns)) => f"$cs: n=$c, ${BigDecimal(ns) / 1e6}%.2f ms" }
+            .mkString("; ")
+          println(s"${this.getClass.getName}:   DB query breakdown [$breakdown]")
 
           val m = StoreReadPerfMetrics(
             totalTimeNs = BigDecimal(duration),

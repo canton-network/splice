@@ -273,7 +273,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               >
                 {field => (
                   <field.TextField
-                    title="Activity Weight"
+                    title="App Composition Weight"
                     id={`${testIdPrefix}-activityWeight`}
                     subtitle="Optional. Leave blank to use the default weight"
                   />
@@ -285,7 +285,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               <form.AppField name="appKind">
                 {field => (
                   <field.SelectField
-                    title="App Kind"
+                    title="App Category"
                     id={`${testIdPrefix}-appKind`}
                     options={appKindSelectOptions()}
                   />
@@ -306,7 +306,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 {field => (
                   <OpsPartiesField
                     id={`${testIdPrefix}-opsParties`}
-                    title="Ops Parties"
+                    title="App Operations Parties"
                     subtitle="Optional. Parties whose submissions count as this app's activity."
                     value={field.state.value}
                     onChange={field.handleChange}

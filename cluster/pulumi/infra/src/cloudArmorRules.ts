@@ -123,6 +123,40 @@ function wafSignatureCondition(context: string, signature: WafSignature): string
   );
 }
 
+export function wafExcludedHostsCondition(
+  group: WafRuleGroup,
+  globalExcludedHostPrefixes: string[],
+  clusterHostname: string
+): string | undefined {
+  const conditions = [
+    hostCondition(
+      `${group.name}/excluded-hosts`,
+      clusterHostname,
+      globalExcludedHostPrefixes.length > 0
+        ? {
+            hostPrefixRegex: globalExcludedHostPrefixes
+              .map(prefix => prefix.toLowerCase())
+              .join('|'),
+            perNodeHost: false,
+          }
+        : undefined
+    ),
+    hostCondition(
+      `${group.name}/excluded-per-node-hosts`,
+      clusterHostname,
+      group.excludedHostPrefixes.length > 0
+        ? {
+            hostPrefixRegex: group.excludedHostPrefixes
+              .map(prefix => prefix.toLowerCase())
+              .join('|'),
+            perNodeHost: true,
+          }
+        : undefined
+    ),
+  ].filter((condition): condition is string => condition !== undefined);
+  return conditions.length > 0 ? conditions.join(' || ') : undefined;
+}
+
 /**
  * Builds the match expression of a WAF rule: the request matches if any of the
  * group's signatures fires.

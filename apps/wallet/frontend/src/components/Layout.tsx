@@ -20,7 +20,14 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
   const config = useWalletConfig();
   return (
-    <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" minHeight="100vh">
+    <Box
+      sx={{
+        bgcolor: 'colors.neutral.20',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+      }}
+    >
       <Container maxWidth="xl">
         <Header
           title={config.spliceInstanceNames.amuletName + ' Wallet'}
@@ -34,7 +41,7 @@ export const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
             { name: 'FAQs', path: 'faqs' },
           ]}
         >
-          <Stack direction="row" alignItems="center" spacing={1} paddingLeft={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', paddingLeft: 1 }}>
             <CurrentUser key="current-user" />
             <FeaturedAppRight key="featured-app-right" />
             <TransferPreapproval key="transfer-preapproval" />
@@ -48,7 +55,7 @@ export const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
         <Hero />
       </Container>
 
-      <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
+      <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
         <Container maxWidth="lg">{props.children}</Container>
       </Box>
     </Box>
@@ -59,16 +66,23 @@ export const BasicLayout: React.FC<LayoutProps> = (props: LayoutProps) => {
   const config = useWalletConfig();
   return (
     <Container maxWidth="lg" sx={{ marginTop: 4 }}>
-      <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" minHeight="100vh">
+      <Box
+        sx={{
+          bgcolor: 'colors.neutral.20',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '100vh',
+        }}
+      >
         <Container maxWidth="xl">
           <Header title={config.spliceInstanceNames.amuletName + ' Wallet'} navLinks={[]}>
-            <Stack direction="row" alignItems="center" spacing={1} paddingLeft={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', paddingLeft: 1 }}>
               <LogoutButton key="logout-button" />
             </Stack>
           </Header>
         </Container>
 
-        <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
+        <Box sx={{ bgcolor: 'colors.neutral.15', flex: 1 }}>
           <Container maxWidth="lg">{props.children}</Container>
         </Box>
       </Box>

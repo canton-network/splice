@@ -49,7 +49,6 @@
         },
         "synchronizer": {
           "current": {
-            "chainIdSuffix": "4",
             "migrationId": 2,
             "synchronizerSerialId": 9
           }

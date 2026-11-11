@@ -30,7 +30,7 @@ import {
 import { CommonProposalFormData, ConfigFormData } from '../../utils/types';
 import dayjs from 'dayjs';
 import { useDsoInfos } from '../../contexts/SvContext';
-import { useMemo, useState } from 'react';
+import { JSX, useMemo, useState } from 'react';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { buildAmuletConfigChanges } from '../../utils/buildAmuletConfigChanges';
 import { useAppForm } from '../../hooks/form';

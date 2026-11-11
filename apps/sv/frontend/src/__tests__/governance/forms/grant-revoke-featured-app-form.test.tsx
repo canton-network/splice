@@ -117,7 +117,9 @@ describe('Grant Featured App Form', () => {
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-    expect(submitButton).not.toBeDisabled();
+    await waitFor(() => {
+      expect(submitButton).not.toBeDisabled();
+    });
   });
 
   test('expiry date must be in the future', async () => {
@@ -349,7 +351,7 @@ describe('Grant Featured App Form', () => {
     await user.type(screen.getByTestId('grant-featured-app-url'), 'https://example.com');
     await user.type(screen.getByTestId('grant-featured-app-idValue'), 'a-party-id::1014912492');
 
-    // add one ops party
+    // add one app operations party
     await user.click(screen.getByTestId('grant-featured-app-opsParties-add'));
     await user.type(
       screen.getByTestId('grant-featured-app-opsParties-row-0'),

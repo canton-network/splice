@@ -162,7 +162,7 @@ const GroupSetup: React.FC<GroupSetupProps> = ({
           const encodedInvite = JSON.stringify({ ...invite, domainId });
           return (
             <ListItem className="invites-list-item" key={invite.contractId}>
-              <Stack direction="row" alignItems="baseline">
+              <Stack direction="row" sx={{ alignItems: 'baseline' }}>
                 <Typography variant="button">{invite.payload.group.id.unpack}</Typography>
                 <Button
                   variant="contained"

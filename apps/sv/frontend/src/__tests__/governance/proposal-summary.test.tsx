@@ -160,7 +160,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('grantRight-party-id-copy-button')).toBeInTheDocument();
 
     expect(screen.getByTestId('grantRightActivityWeight-title').textContent).toBe(
-      'Activity Weight'
+      'App Composition Weight'
     );
     expect(screen.getByTestId('grantRightActivityWeight-field').textContent).toBe(activityWeight);
   });

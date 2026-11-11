@@ -218,6 +218,17 @@ trait ScanStore
     ]]
   ]
 
+  /** Lists the active `GovernanceLock`s with the given contract key, largest
+    * amount first.
+    */
+  def listGovernanceLocksByKey(
+      key: splice.governancelock.GovernanceLockKey,
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[Seq[ContractWithState[
+    splice.governancelock.GovernanceLock.ContractId,
+    splice.governancelock.GovernanceLock,
+  ]]]
+
   def lookupTransferCommandCounterByParty(
       partyId: PartyId
   )(implicit tc: TraceContext): Future[
@@ -262,6 +273,7 @@ object ScanStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       cacheConfigs: ScanCacheConfig,
       metrics: DbScanStoreMetrics,
@@ -283,6 +295,7 @@ object ScanStore {
         loggerFactory,
         retryProvider,
         migrationId,
+        synchronizerId,
         participantId,
         ingestionConfig,
         metrics,
@@ -519,6 +532,17 @@ object ScanStore {
         },
         mkFilter(splice.governancelock.substitution.GovernanceLockSubstitution.COMPANION)(
           co => co.payload.target.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
+          },
+        )(contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          )
+        ),
+        mkFilter(splice.governancelock.transfer.GovernanceLockTransfer.COMPANION)(
+          co => co.payload.source.dso == dso,
           versionGuard = { case (pkgVersionSupport, now) =>
             (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(key.dsoParty), now)(tc)
           },

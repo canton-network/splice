@@ -8,6 +8,7 @@ import {
   KmsConfigSchema,
   LogLevelSchema,
   K8sResourceSchema,
+  TopologyKeyMonitorConfigSchema,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
@@ -16,6 +17,7 @@ import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/c
 import util from 'node:util';
 import { z } from 'zod';
 
+import { FlywayMigrationToWaitForSchema } from './bigQueryFlywayMigration';
 import { TopologySnapshotSchema } from './config';
 import {
   CloudSqlWithOverrideConfigSchema,
@@ -29,11 +31,11 @@ import {
 } from './physicalSynchronizerConfig';
 import { CatchupTestSchema } from './testing';
 
+// TODO(#7741): remove once mainnet is on >= 0.10.2
 const SvCometbftConfigSchema = z
   .object({
     nodeId: z.string().optional(),
     validatorKeyAddress: z.string().optional(),
-    // defaults to {svName}-cometbft-keys if not set
     keysGcpSecret: z.string().optional(),
     enableStateSync: z.boolean().optional(),
     resources: K8sResourceSchema,
@@ -44,11 +46,10 @@ const SvCometbftConfigSchema = z
         ttlSeconds: z.number().optional(),
       })
       .optional(),
-    // Ad-hoc Helm values to be merged (nested) into the values passed to the splice-cometbft chart.
-    // Values provided here override values computed by pulumi for the same nested key.
     additionalHelmValues: z.record(z.string(), z.any()).optional(),
   })
   .strict();
+
 const CantonPruningSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -86,7 +87,7 @@ const SvAppConfigSchema = z
     auth0: Auth0ConfigSchema.optional(),
     // defaults to {svName}-id if not set
     svIdKeyGcpSecret: z.string().optional(),
-    // defaults to {svName}-cometbft-governance-key if not set
+    // TODO(#7741): remove once mainnet is on >= 0.10.2
     cometBftGovernanceKeyGcpSecret: z.string().optional(),
     permissionedSynchronizer: z.boolean().optional(),
     // Map of package name -> list of versions to explicitly unvet
@@ -123,6 +124,7 @@ export const ScanBigQueryConfigSchema = z
         message: 'Value must be an exact number of days, expressed in seconds',
       })
       .default(7 * SECONDS_PER_DAY),
+    flywayMigrationToWaitFor: FlywayMigrationToWaitForSchema,
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 
@@ -154,7 +156,7 @@ const SvValidatorAppConfigSchema = z
     resources: K8sResourceSchema,
   })
   .and(ValidatorAppConfigSchema);
-// https://docs.cometbft.com/main/explanation/core/running-in-production
+// // TODO(#7741): remove once mainnet is on >= 0.10.2
 const CometbftLogLevelSchema = z.enum(['info', 'error', 'debug', 'none']);
 // things here are declared optional even when they aren't, to allow partial overrides of defaults
 // TODO(DACH-NY/canton-network-internal#4859) the above is no longer true since defaults were removed.
@@ -163,6 +165,7 @@ const SingleSvConfigSchema = z
   .object({
     publicName: z.string().optional(),
     subdomain: z.string().optional(),
+    // TODO(#7741): remove, unused
     cometbft: SvCometbftConfigSchema.optional(),
     participant: SvParticipantConfigSchema.optional(),
     sequencer: SvSequencerConfigSchema.prefault({}),
@@ -175,6 +178,7 @@ const SingleSvConfigSchema = z
     validatorApp: SvValidatorAppConfigSchema.optional(),
     pruning: z
       .object({
+        // TODO(#7741): remove, unused
         cometbft: z
           .object({
             retainBlocks: z.number(),
@@ -204,11 +208,13 @@ const SingleSvConfigSchema = z
         // Falls back to `apiRequestLogLevel` when not specified
         cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
+        // TODO(#7741): remove, unused
         cometbftLogLevel: CometbftLogLevelSchema.optional(),
         cometbftExtraLogLevelFlags: z.string().optional(),
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
+    topologyKeyMonitor: TopologyKeyMonitorConfigSchema.optional(),
     testing: z.object({ catchup: CatchupTestSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })

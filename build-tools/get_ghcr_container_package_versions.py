@@ -182,7 +182,7 @@ class GithubPackageClient:
             return ""
 
         # Extract URLs and their relation types from the Link header
-        matches = re.findall(r'<([^>]+)>;\s*rel="([^"]+)"', link_header)
+        matches: list[tuple[str, str]] = re.findall(r'<([^>]+)>;\s*rel="([^"]+)"', link_header)
 
         # Look for the link with rel="next"
         for url, rel in matches:
@@ -252,7 +252,7 @@ def collect_package_versions(client: GithubPackageClient, packages: List[str],
     return result
 
 
-def main():
+def main() -> None:
     """Main function."""
     parser = argparse.ArgumentParser(description="Retrieve container package versions from GitHub Container Registry")
     parser.add_argument("-o", "--organization", required=True, help="GitHub organization")

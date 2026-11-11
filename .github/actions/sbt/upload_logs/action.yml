@@ -19,20 +19,24 @@ runs:
   steps:
     - name: Pack logfiles
       shell: bash
+      env:
+        SPLICE_ROOT: ${{ inputs.splice_root }}
       run: |
         if [[ -d log ]]; then
           # pigz fails if there is no file to compress, which can be the case if Canton just rolled its logs
-          pigz -r ${{ inputs.splice_root }}/log/* || true
+          pigz -r "$SPLICE_ROOT"/log/* || true
         fi
 
     - name: Move potential additional debugging artifacts to log directory
       shell: bash
+      env:
+        SPLICE_ROOT: ${{ inputs.splice_root }}
       run: |
         mkdir -p log
         # When Java crashes, it sometimes saves an error report such as hs_err_pid*.log to the working directory.
-        mv ${{ inputs.splice_root }}/*.log log/ || true
+        mv "$SPLICE_ROOT"/*.log log/ || true
         # Possible locations of core dumps (/ is apparently a default, but who knows)
-        mv ${{ inputs.splice_root }}/core* log/ || true
+        mv "$SPLICE_ROOT"/core* log/ || true
         mv /core* log/ || true
 
     # Certain characters are disallowed in artifact filenames in GHA, so we need to sanitize them
@@ -55,8 +59,8 @@ runs:
         name: ${{ inputs.name }}-runner
         path: /logs
 
-    - name: Upload runner temp directory
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-      with:
-        name: ${{ inputs.name }}-runner-temp
-        path: /__w/_temp
+    # - name: Upload runner temp directory
+    #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+    #   with:
+    #     name: ${{ inputs.name }}-runner-temp
+    #     path: /__w/_temp

@@ -105,13 +105,7 @@ class SplitwellApp(
         loggerFactory,
       )
     }
-    participantAdminConnection = new ParticipantAdminConnection(
-      config.participantClient.adminApi,
-      amuletAppParameters.loggingConfig.api,
-      loggerFactory,
-      metrics.grpcClientMetrics,
-      retryProvider,
-    )
+    participantAdminConnection = createParticipantAdminConnection()
     participantId <- appInitStep("Get participant id") {
       participantAdminConnection.getParticipantId()
     }
@@ -119,6 +113,15 @@ class SplitwellApp(
     storeKey = SplitwellStore.Key(providerParty = partyId)
     domainMigrationId <- appInitStep(s"Resolving domain migration id") {
       resolveDomainMigrationId(scanConnection)
+    }
+    preferredSynchronizerId <- appInitStep("Get preferred splitwell synchronizer id") {
+      retryProvider.getValueWithRetries(
+        RetryFor.WaitingOnInitDependency,
+        "preferred_splitwell_synchronizer_id",
+        "preferred splitwell synchronizer id from participant",
+        participantAdminConnection.getSynchronizerId(config.domains.splitwell.preferred.alias),
+        logger,
+      )
     }
     store <- SplitwellStore(
       storeKey,
@@ -128,6 +131,7 @@ class SplitwellApp(
       loggerFactory,
       retryProvider,
       domainMigrationId,
+      preferredSynchronizerId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,

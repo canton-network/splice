@@ -88,7 +88,7 @@ export function runSvCantonForSvs<T>(
           id: id,
           version: activeVersion,
           sequencer: {
-            enableBftSequencer: false,
+            enableBftSequencer: true,
             dedicatedBftSequencerDb: true,
           },
         };

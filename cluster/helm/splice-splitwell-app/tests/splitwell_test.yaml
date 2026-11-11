@@ -40,7 +40,7 @@ tests:
     set:
       imageRepo: "secure-registry.example.com"
       imageName: "custom-splitwell"
-      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      persistence.initImageName: "secure-registry.example.com/postgres:18-custom"
       scanAddress: "dummy"
       participantHost: "dummy"
       persistence.host: "dummy"
@@ -54,7 +54,7 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-splitwell:"
       - equal:
           path: spec.template.spec.initContainers[0].image
-          value: "secure-registry.example.com/postgres:14-custom"
+          value: "secure-registry.example.com/postgres:18-custom"
 
   - it: "allows overriding splitwell database secret env vars with raw strings"
     set:

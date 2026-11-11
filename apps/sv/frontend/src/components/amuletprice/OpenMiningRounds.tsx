@@ -40,7 +40,7 @@ const OpenMiningRounds: React.FC = () => {
 
   return (
     <>
-      <Typography mt={6} variant="h4">
+      <Typography variant="h4" sx={{ mt: 6 }}>
         Open Mining Rounds
       </Typography>
       <TableContainer>

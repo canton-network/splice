@@ -36,10 +36,8 @@ trait GovernanceLockTest extends TokenStandardTest {
 
   private def instantToMicros(i: Instant): Long = ChronoUnit.MICROS.between(Instant.EPOCH, i)
 
-  protected def truncateInstant(i: Instant): Instant = i.truncatedTo(ChronoUnit.SECONDS)
-
   private def formatInstant(i: Instant): String =
-    DateTimeFormatter.ISO_INSTANT.format(truncateInstant(i))
+    DateTimeFormatter.ISO_INSTANT.format(i.truncatedTo(ChronoUnit.MICROS))
 
   sealed abstract class LockKind(val kind: String)
   case object SuperValidatorLock extends LockKind("sv-lock")
@@ -134,6 +132,14 @@ trait GovernanceLockTest extends TokenStandardTest {
     makeLockMemo(
       commonLockMemoEntries(lockKind, lockSubject) ++
         Map(lockStatusMetaKey -> lockStatus.status)
+    )
+
+  /** The memo of a pending transfer of a lock that is not vesting */
+  def makeAcceptTransferLockMemo(lockKind: LockKind, lockSubject: String): String =
+    makeLockMemo(
+      List("request" -> "accept-to-transfer-lock") ++
+        commonLockMemoEntries(lockKind, lockSubject) ++
+        Map(lockStatusMetaKey -> Locked.status)
     )
 
   // Using a Map so order doesn't matter when comparing below
@@ -448,6 +454,20 @@ trait GovernanceLockTest extends TokenStandardTest {
           transferAmount,
           Some(durationToRelTime(vestingPeriod)),
           Some(vestingEndTime),
+        )
+      )
+
+    /** Propose a transfer of part of a vesting GovernanceLock, keeping its
+      * vesting schedule
+      */
+    final def transferVestingLock(lock: governancelock.GovernanceLock) =
+      new TransferLock((newLockOwner, transferAmount) =>
+        (
+          Vesting,
+          newLockOwner,
+          transferAmount,
+          Some(vestingLockSpecification(lock).vestingPeriod),
+          Some(vestingLockSpecification(lock).endTime),
         )
       )
   }

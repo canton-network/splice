@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from dockerfile_parse import DockerfileParser
+from dockerfile_parse import DockerfileParser  # type: ignore[import-untyped]  # no stubs available
 
 # Matches concrete image references that pin a digest, e.g. ubuntu:24.04@sha256:<digest>
 # This intentionally does not match references that use variable digests
@@ -29,13 +29,11 @@ IMAGE_SHA256_MAP = {
 }
 
 # List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check
-IGNORED_FILE_PATTERNS = [
-    re.compile(r"^cluster/images/cometbft/Dockerfile$"),
-    re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$"),
-]
+IGNORED_FILE_PATTERNS: list[re.Pattern[str]] = []
 
 VERSION_VAR_IMAGES = {
     "POSTGRES_VERSION": "postgres",
+    "NGINX_VERSION": "nginx/nginx-unprivileged",
 }
 
 
@@ -46,7 +44,7 @@ def main() -> int:
     # The set semantics of the dict keys give us deduplication for free.
     refs_by_file: dict[tuple[str, str, str], str] = {}
 
-    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them.
+    # Dockerfiles may use variable digests (e.g. ARG $image_sha256), so parse all of them.
     for file in _tracked_dockerfiles():
         path = Path(file)
         if not path.is_file() or _file_is_ignored(file):
@@ -64,12 +62,12 @@ def main() -> int:
 
     failures = 0
     for (image, tag, digest), file in refs_by_file.items():
-        ref = f"{image}:{tag}@sha256:{digest}"
-        print(f"Inspecting {ref} (from {file})")
+        image_ref = f"{image}:{tag}@sha256:{digest}"
+        print(f"Inspecting {image_ref} (from {file})")
         if _inspect(image, digest):
-            print(f"  OK: {ref} is multi-arch")
+            print(f"  OK: {image_ref} is multi-arch")
         else:
-            print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
+            print(f"ERROR: {image_ref} (from {file}) is not pinned to a multi-arch digest")
             failures += 1
 
     if failures > 0:
@@ -83,10 +81,6 @@ def main() -> int:
 def _setup_env() -> None:
     """Export lowercase aliases for Dockerfile ARG references"""
     os.environ.setdefault("canton_version", os.environ.get("CANTON_VERSION", ""))
-    os.environ.setdefault(
-        "cometbft_version", os.environ.get("COMETBFT_RELEASE_VERSION", "")
-    )
-    os.environ.setdefault("cometbft_sha", os.environ.get("COMETBFT_IMAGE_SHA256", ""))
 
 
 def _image_sha256_for(file: str) -> str | None:

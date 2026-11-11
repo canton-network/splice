@@ -34,7 +34,7 @@ describe('The Information page', () => {
     render(<AppWithConfig />);
     expect(await screen.findByText('DSO Info')).toBeDefined();
     expect(await screen.findByText(`${config.spliceInstanceNames.amuletName} Info`)).toBeDefined();
-    expect(await screen.findByText('CometBFT Debug Info')).toBeDefined();
+    expect(await screen.findByText('Domain Node Status')).toBeDefined();
   });
 
   test('has a General section with SVs information', async () => {

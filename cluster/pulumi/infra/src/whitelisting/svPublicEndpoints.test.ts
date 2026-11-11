@@ -39,8 +39,6 @@ describe('the SV OpenAPI specs', () => {
     expect(paths['validators']).toContain('/api/sv/version');
     const allPaths = exposedAudiences.flatMap(audience => paths[audience]);
     // endpoints with an audience of none must not be whitelisted
-    expect(allPaths).not.toContain('/api/sv/v0/admin/domain/cometbft/status');
-    expect(allPaths).not.toContain('/api/sv/v0/admin/domain/cometbft/json-rpc');
     // non-public endpoints must not be whitelisted
     expect(allPaths).not.toContain('/api/sv/v0/admin/sv/votes');
     expect(allPaths).not.toContain('/api/sv/readyz');

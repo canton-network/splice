@@ -61,7 +61,8 @@ class RollForwardLsuDRIntegrationTest
   override protected lazy val runTokenStandardCliSanityCheck = false
 
   override def dbsSuffix = "lsu_dr"
-  override def usesDbs = super.usesDbs ++ super.usesDbs.map(_ + "beforedr")
+  private def beforeDrDbsSuffix = "lsu_drbeforedr"
+  override def usesDbs = super.usesDbs ++ svDbs(beforeDrDbsSuffix)
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(5, Minutes)))
 
@@ -170,6 +171,7 @@ class RollForwardLsuDRIntegrationTest
                   .modify(c => c.copy(legacy = c.current.some))
             ),
           ),
+        // TODO (#8263): remove, EnvironmentDefinition already enables DA BFT for all nodes
         (_, config) => ConfigTransforms.withBftSequencers(_.contains("Local"))(config),
       )
       .addConfigTransform((_, config) =>
@@ -201,13 +203,12 @@ class RollForwardLsuDRIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = false,
       logSuffix = "roll-forward-lsu-before-dr",
       // LSU exports the sequencer and mediator keys
       enableKeyDownload = true,
       extraSequencerConfig =
         Seq(s"parameters.lsu-repair.global-max-sequencing-time-exclusive=${maxSequencingTime}"),
-      overrideSvDbsSuffix = Some("lsu_drbeforedr"),
+      overrideSvDbsSuffix = Some(beforeDrDbsSuffix),
     )() {
       val allNodes = Seq[AppBackendReference](
         sv1ScanBackend,
@@ -261,7 +262,6 @@ class RollForwardLsuDRIntegrationTest
           None,
         ),
         participants = false,
-        enableBftSequencer = true,
         logSuffix = "roll-forward-lsu-dr",
         // LSU exports the sequencer and mediator keys
         enableKeyDownload = true,

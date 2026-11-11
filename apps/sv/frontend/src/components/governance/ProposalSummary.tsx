@@ -176,17 +176,17 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             />
             <ProposalReviewField
               id="grantRightActivityWeight"
-              label="Activity Weight"
+              label="App Composition Weight"
               value={props.activityWeight}
             />
             <ProposalReviewField
               id="grantRightAppKind"
-              label="App Kind"
-              value={props.appKind || 'Default (General)'}
+              label="App Category"
+              value={props.appKind || 'Default (unset)'}
             />
             <ProposalReviewField
               id="grantRightOpsParties"
-              label="Ops Parties"
+              label="App Operations Parties"
               value={
                 <OpsPartiesDisplay
                   parties={props.opsParties.filter(p => p.trim() !== '')}
@@ -280,7 +280,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             )}
             <ProposalReviewField
               id="amendOpsParties"
-              label="Ops Parties Changes"
+              label="Changes to App Operations Parties"
               value={
                 <OpsPartiesDiff
                   added={props.opsAdded}

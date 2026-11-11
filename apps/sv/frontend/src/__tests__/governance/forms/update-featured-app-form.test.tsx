@@ -83,7 +83,7 @@ describe('Update Featured App Form', () => {
     const actionInput = screen.getByTestId('update-featured-app-action');
     expect(actionInput).toBeInTheDocument();
     expect(actionInput.textContent).toBe(
-      'Update Featured Application Metadata (before Splice 0.10.0)'
+      'Update Featured Application Metadata (use before Splice 0.10.0)'
     );
 
     const summaryInput = screen.getByTestId('update-featured-app-summary');

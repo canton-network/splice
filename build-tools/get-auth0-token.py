@@ -4,24 +4,25 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
-from auth0.authentication import GetToken
-from auth0.management import Auth0
+from auth0.authentication import GetToken  # type: ignore[import-untyped]  # no stubs available
+from auth0.management import Auth0  # type: ignore[import-untyped]  # no stubs available
 import datetime
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
+from kubernetes import client, config  # type: ignore[import-untyped]  # no stubs available
+from kubernetes.client.rest import ApiException  # type: ignore[import-untyped]  # no stubs available
 import os
 import subprocess
 import base64
 import json
-import jsonpickle
+import jsonpickle  # type: ignore[import-untyped]  # no stubs available
 import sys
 import re
 import time
+from typing import Any
 
 MIN_EXPIRATION_DELTA = datetime.timedelta(days=2)
 CACHE_SECRET_NAME = "auth0-preflight-token-cache-v2"
 
-def info(*args, **kwargs):
+def info(*args: Any, **kwargs: Any) -> None:
   # Printing into to stderr, so that stdout is only the token
   print(*args, file=sys.stderr, **kwargs)
 
@@ -42,7 +43,7 @@ class Auth0Domain:
     self.mgmt_client_secret = mgmt_client_secret
 
 
-def is_legacy_infra(infra_outputs: dict) -> bool:
+def is_legacy_infra(infra_outputs: dict[str, Any]) -> bool:
   return "appToClientId" in infra_outputs["auth0"]["cantonNetwork"]
 
 class Auth0AppAndAudience:
@@ -50,9 +51,9 @@ class Auth0AppAndAudience:
   pulumi_stack: str
   domain: Auth0Domain
   audience: str
-  pulumi_infra_outputs: None | dict = None
+  pulumi_infra_outputs: None | dict[str, Any] = None
 
-  def get_pulumi_infra_outputs(self) -> dict:
+  def get_pulumi_infra_outputs(self) -> dict[str, Any]:
     if self.pulumi_infra_outputs is None:
       info("Getting outputs from Pulumi infra stack")
       cncluster_pulumi_res = subprocess.run(["cncluster", "pulumi", "infra", "stack", "output", "--json"], stdout=subprocess.PIPE)
@@ -61,7 +62,7 @@ class Auth0AppAndAudience:
       self.pulumi_infra_outputs = json.loads(infra_outputs_str)
     return self.pulumi_infra_outputs
 
-  def init_pulumi_stack(self, args: argparse.Namespace) -> str:
+  def init_pulumi_stack(self, args: argparse.Namespace) -> None:
     if args.namespace == "sv":
       self.pulumi_stack = "svRunbook"
     elif args.namespace == "validator":
@@ -72,7 +73,7 @@ class Auth0AppAndAudience:
     info(f"Pulumi stack: {self.pulumi_stack}")
 
 
-  def init_client_id(self, args: argparse.Namespace):
+  def init_client_id(self, args: argparse.Namespace) -> None:
     if args.client_id:
       self.client_id = args.client_id
     else:
@@ -127,7 +128,7 @@ class Auth0AppAndAudience:
 
     info(f"Client ID: {self.client_id}")
 
-  def init_auth0_domain(self, args: argparse.Namespace):
+  def init_auth0_domain(self, args: argparse.Namespace) -> None:
     domain = args.auth0_domain
     if not domain:
       infra_outputs = self.get_pulumi_infra_outputs()
@@ -147,9 +148,10 @@ class Auth0AppAndAudience:
 
     info(f"auth0 domain: {self.auth0_domain.domain}")
 
-  def get_app(self, args: argparse.Namespace):
+  def get_app(self, args: argparse.Namespace) -> str | None:
     if args.app:
-      return args.app
+      app: str = args.app
+      return app
     else:
       infra_outputs = self.get_pulumi_infra_outputs()
       if is_legacy_infra(infra_outputs):
@@ -182,9 +184,10 @@ class Auth0AppAndAudience:
               raise ValueError(f"Unknown client_id: {self.client_id}")
           else:
             raise ValueError(f"Unknown client_id: {self.client_id}")
+    return None
 
 
-  def init_audience(self, args: argparse.Namespace):
+  def init_audience(self, args: argparse.Namespace) -> None:
     if args.audience:
       self.audience = args.audience
     else:
@@ -218,7 +221,7 @@ class Token:
   access_token: str
   expires_at: datetime.datetime
 
-  def __init__(self, token):
+  def __init__(self, token: dict[str, Any]) -> None:
     self.access_token = token['access_token']
     expires_in = token['expires_in']
     self.expires_at = datetime.datetime.now() + datetime.timedelta(seconds=expires_in)
@@ -262,16 +265,16 @@ class AppTokens:
 class Cache:
   data: dict[str, AppTokens]
 
-  def __init__(self):
+  def __init__(self) -> None:
     self.data = {}
 
-  def get_access_token(self, app: Auth0AppAndAudience):
+  def get_access_token(self, app: Auth0AppAndAudience) -> str:
     if app.client_id not in self.data:
       self.data[app.client_id] = AppTokens(app.client_id)
     return self.data[app.client_id].get_access_token(app)
 
 
-def main(args: argparse.Namespace):
+def main(args: argparse.Namespace) -> None:
   config.load_kube_config()
   k = client.CoreV1Api()
   try:
@@ -308,7 +311,7 @@ def main(args: argparse.Namespace):
       info(f"Failed to save cache (attempt {attempt + 1}/{max_retries}): {e}")
       time.sleep(5)
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument('--namespace', required=False, help="The namespace for which to fetch the token. Either client_id or namespace & app must be provided")
   parser.add_argument('--app', required=False, help="The app for which to fetch the token. Either client_id or namespace & app must be provided")

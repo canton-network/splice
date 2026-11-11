@@ -27,8 +27,10 @@ import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.cors.scaladsl.CorsDirectives.*
+import org.apache.pekko.http.cors.scaladsl.model.HttpOriginMatcher
 import org.apache.pekko.http.cors.scaladsl.settings.CorsSettings
 import org.apache.pekko.http.scaladsl.model.HttpMethods
+import org.apache.pekko.http.scaladsl.model.headers.HttpOrigin
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.directives.BasicDirectives
 import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTraceContext
@@ -523,14 +525,10 @@ class ValidatorApp(
     )
   }
 
-  private def withParticipantAdminConnection[T](f: ParticipantAdminConnection => Future[T]) = {
-    val participantAdminConnection = new ParticipantAdminConnection(
-      config.participantClient.adminApi,
-      amuletAppParameters.loggingConfig.api,
-      loggerFactory,
-      metrics.grpcClientMetrics,
-      retryProvider,
-    )
+  private def withParticipantAdminConnection[T](
+      f: ParticipantAdminConnection => Future[T]
+  ) = {
+    val participantAdminConnection = createParticipantAdminConnection()
     f(participantAdminConnection).andThen { _ => participantAdminConnection.close() }
   }
 
@@ -598,13 +596,7 @@ class ValidatorApp(
         if (config.automation.topologyMetricsPollingInterval.isDefined)
           readOnlyLedgerConnection.grantReadAsAnyParty(config.ledgerApiUser)
         else Future.unit
-      participantAdminConnection = new ParticipantAdminConnection(
-        config.participantClient.adminApi,
-        amuletAppParameters.loggingConfig.api,
-        loggerFactory,
-        metrics.grpcClientMetrics,
-        retryProvider,
-      )
+      participantAdminConnection = createParticipantAdminConnection()
       participantIdentitiesStore = new NodeIdentitiesStore(
         participantAdminConnection,
         config.participantIdentitiesBackup.map(_ -> clock),
@@ -660,12 +652,14 @@ class ValidatorApp(
         validatorParty = validatorParty,
         dsoParty = dsoParty,
       )
+      synchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
       store <- ValidatorStore(
         key,
         storage,
         loggerFactory,
         retryProvider,
         domainMigrationId,
+        synchronizerId,
         participantId,
         config.automation.ingestion,
         config.parameters.defaultLimit,
@@ -688,7 +682,6 @@ class ValidatorApp(
         com.google.protobuf.duration.Duration
           .toJavaProto(DurationConversion.toProto(config.deduplicationDuration.asJavaApproximation))
       )
-      synchronizerId <- scanConnection.getAmuletRulesDomain()(traceContext)
       cantonIdentifierConfig =
         ValidatorCantonIdentifierConfig.resolvedNodeIdentifierConfig(config)
       _ <- ParticipantInitializer.ensureInitializedWithRotatedOTK(
@@ -947,8 +940,13 @@ class ValidatorApp(
         loggerFactory,
       )
 
-      route = cors(
+      route = (handleRejections(corsRejectionHandler) & cors(
         CorsSettings(ac)
+          .withAllowedOrigins(
+            config.allowedOrigins.fold[HttpOriginMatcher](HttpOriginMatcher.*)(origins =>
+              HttpOriginMatcher(origins.map(HttpOrigin(_))*)
+            )
+          )
           .withAllowedMethods(
             List(
               HttpMethods.DELETE,
@@ -959,7 +957,7 @@ class ValidatorApp(
             )
           )
           .withExposedHeaders(Seq("traceparent"))
-      ) {
+      )) {
         withTraceContext { implicit traceContext =>
           HttpErrorHandler(loggerFactory)(traceContext) {
             concat(

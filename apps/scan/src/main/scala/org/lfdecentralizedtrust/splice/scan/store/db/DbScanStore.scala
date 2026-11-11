@@ -34,6 +34,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.{
+  GovernanceLock,
+  GovernanceLockKey,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -54,7 +58,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
-  AcsQueries,
+  SingleSynchronizerAcsQueries,
   AcsTables,
   DbTxLogAppStore,
   TxLogQueries,
@@ -72,6 +76,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
+  GovernanceLockUtil,
   PackageQualifiedName,
   QualifiedName,
   TemplateJsonDecoder,
@@ -110,6 +115,7 @@ object DbScanStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       storeMetrics: DbScanStoreMetrics,
@@ -136,6 +142,7 @@ object DbScanStore {
           loggerFactory = loggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,
@@ -199,6 +206,7 @@ class DbScanStore private (
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -222,12 +230,13 @@ class DbScanStore private (
         DbScanStore.txLogStoreDescriptor(key, participantId, txLogStoreDescriptorUserVersion),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
       additionalIngestionSinks = additionalIngestionSinks,
     )
     with ScanStore
     with AcsTables
-    with AcsQueries
+    with SingleSynchronizerAcsQueries
     with TxLogQueries[TxLogEntry]
     with UpdateHistoryQueries
     with FlagCloseableAsync
@@ -437,6 +446,43 @@ class DbScanStore private (
         )
     } yield contractWithStateFromRow(TransferPreapproval.COMPANION)(row)).value
   }
+
+  override def listGovernanceLocksByKey(
+      key: GovernanceLockKey,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[ContractWithState[GovernanceLock.ContractId, GovernanceLock]]] =
+    waitUntilAcsIngested {
+      val (lockType, lockSubject) =
+        GovernanceLockUtil.specificationTypeAndSubject(key.specification)
+      val specification = payloadJsonFromDefinedDataType(key.specification)
+      for {
+        rows <- storage.query(
+          selectFromAcsTableWithState(
+            ScanTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            GovernanceLock.COMPANION,
+            // The type and subject use the index, but only the specification
+            // also matches the vesting period and end time.
+            additionalWhere = sql"""
+              and governance_lock_type = ${lengthLimited(lockType.storeValue)}
+              and governance_lock_subject = ${lengthLimited(lockSubject)}
+              and create_arguments->>'owner' = ${key.owner}
+              and create_arguments->'specification' = $specification
+            """,
+            orderLimit = sql"""
+              order by (create_arguments->>'amount')::numeric desc, event_number
+              limit ${sqlLimit(limit)}
+            """,
+          ),
+          "listGovernanceLocksByKey",
+        )
+      } yield applyLimit("listGovernanceLocksByKey", limit, rows).map(
+        contractWithStateFromRow(GovernanceLock.COMPANION)(_)
+      )
+    }
 
   override def lookupTransferCommandCounterByParty(
       partyId: PartyId

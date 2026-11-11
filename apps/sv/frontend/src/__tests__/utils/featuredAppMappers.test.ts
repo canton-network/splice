@@ -130,7 +130,7 @@ describe('appKindSelectOptions', () => {
     expect(opts.map(o => o.value)).toContain('FAK_Basic');
     expect(opts.map(o => o.value)).toContain('FAK_AssetMoving');
     // values stay the raw DAML constructors; keys are friendly labels
-    expect(opts.find(o => o.value === 'FAK_Basic')?.key).toBe('Basic');
-    expect(opts.find(o => o.value === 'FAK_AssetMoving')?.key).toBe('Asset Moving');
+    expect(opts.find(o => o.value === 'FAK_Basic')?.key).toBe('Basic Featured App');
+    expect(opts.find(o => o.value === 'FAK_AssetMoving')?.key).toBe('Featured Asset-Moving App');
   });
 });

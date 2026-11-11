@@ -3,7 +3,6 @@
 
 app_charts := \
 	splice-cluster-ingress-runbook \
-	splice-cometbft \
 	cn-docs \
 	splice-global-domain \
 	splice-istio-gateway \
@@ -15,6 +14,7 @@ app_charts := \
 	splice-splitwell-app \
 	splice-splitwell-web-ui \
 	splice-sv-node \
+	splice-topology-key-monitor \
 	splice-validator \
 	splice-info
 

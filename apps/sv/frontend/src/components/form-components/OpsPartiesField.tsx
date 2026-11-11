@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Button, IconButton, Stack, TextField, Typography } from '@mui/material';
-import { DeleteOutline } from '@mui/icons-material';
+import { DeleteOutlined } from '@mui/icons-material';
 import {
   CREATE_PROPOSAL_FIELD_HELPER_SX,
   CREATE_PROPOSAL_FIELD_LABEL_SX,
@@ -70,14 +70,16 @@ export const OpsPartiesField: React.FC<OpsPartiesFieldProps> = props => {
               value={row}
               onChange={e => setRow(i, e.target.value)}
               onBlur={onBlur}
-              inputProps={{ 'data-testid': `${id}-row-${i}`, 'aria-label': `${title} ${i + 1}` }}
+              slotProps={{
+                htmlInput: { 'data-testid': `${id}-row-${i}`, 'aria-label': `${title} ${i + 1}` },
+              }}
             />
             <IconButton
-              aria-label="remove ops party"
+              aria-label="remove app operations party"
               data-testid={`${id}-remove-${i}`}
               onClick={() => removeRow(i)}
             >
-              <DeleteOutline />
+              <DeleteOutlined />
             </IconButton>
           </Box>
         ))}

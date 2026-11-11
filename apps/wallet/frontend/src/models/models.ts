@@ -144,10 +144,7 @@ export interface DevelopmentFundCoupon {
 }
 
 export type ArchivedDevelopmentFundCouponStatusEnum =
-  | 'claimed'
-  | 'withdrawn'
-  | 'rejected'
-  | 'expired';
+  'claimed' | 'withdrawn' | 'rejected' | 'expired';
 
 export interface CouponHistoryEvent {
   id: string;

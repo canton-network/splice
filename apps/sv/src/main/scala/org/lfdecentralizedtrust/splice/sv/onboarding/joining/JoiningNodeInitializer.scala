@@ -233,12 +233,14 @@ class JoiningNodeInitializer(
       svStore <- newSvStore(
         storeKey,
         domainMigrationId,
+        decentralizedSynchronizerId,
         participantId,
         svAcsStoreDescriptorUserVersion,
       )
       dsoStore <- newDsoStore(
         svStore.key,
         domainMigrationId,
+        decentralizedSynchronizerId,
         participantId,
         dsoAcsStoreDescriptorUserVersion,
       )
@@ -264,10 +266,6 @@ class JoiningNodeInitializer(
         )
       )
       currentNode <- synchronizerNodeService.activeSynchronizerNode()
-      // We need to first wait to ensure the CometBFT node is caught up
-      // If the CometBFT node is not caught up and we start the CometBFT triggers, if the network doesn't have any
-      // fault tolerance then it might be blocked until the CometBFT node is caught up.
-      _ <- waitUntilCometBftNodeHasCaughtUp(currentNode)
       withSvStore = new WithSvStore(
         svAutomation,
         new JoiningNodeDsoPartyHosting(
@@ -361,12 +359,6 @@ class JoiningNodeInitializer(
       _ <- establishInitialRound(
         connection,
         upgradesConfig,
-      )
-      _ <- ensureCometBftGovernanceKeysAreSet(
-        currentNode.cometbftNode,
-        svParty,
-        dsoStore,
-        dsoAutomation,
       )
       // Set autoConnect=true now that DSO party migration is complete
       _ <- participantAdminConnection.modifySynchronizerConnectionConfig(
@@ -489,7 +481,6 @@ class JoiningNodeInitializer(
       _ <- (
         waitForSvParticipantToBeOnboarded(dsoPartyId, decentralizedSynchronizer),
         waitForDsoSvRole(dsoStore),
-        waitUntilCometBftNodeIsValidator(currentNode),
       ).tupled
       _ <-
         if (!config.shouldSkipSynchronizerInitialization) {
@@ -710,62 +701,6 @@ class JoiningNodeInitializer(
       },
       logger,
     )
-  }
-
-  private def waitUntilCometBftNodeIsValidator(activeNode: LocalSynchronizerNode) = {
-    activeNode.cometbftNode
-      .map(_.cometBftClient)
-      .map(cometBftClient =>
-        retryProvider.waitUntil(
-          RetryFor.WaitingOnInitDependency,
-          "cometbft_is_validator",
-          "CometBFT node is a validator",
-          cometBftClient
-            .nodeStatus()
-            .map { status =>
-              if (status.validatorInfo.votingPower.toDouble == 0) {
-                throw Status.FAILED_PRECONDITION
-                  .withDescription(
-                    s"CometBFT node is not a validator; voting power is 0."
-                  )
-                  .asRuntimeException()
-              }
-            },
-          logger,
-        )
-      )
-      .getOrElse({
-        logger.info("No CometBFT node found, so not waiting on CometBFT validator.")
-        Future.unit
-      })
-  }
-
-  private def waitUntilCometBftNodeHasCaughtUp(activeNode: LocalSynchronizerNode) = {
-    activeNode.cometbftNode
-      .map(_.cometBftClient)
-      .map(cometBftClient =>
-        retryProvider.waitUntil(
-          RetryFor.WaitingOnInitDependency,
-          "cometbft_up_to_date",
-          "CometBFT node has caught up",
-          cometBftClient
-            .nodeStatus()
-            .map { status =>
-              if (status.syncInfo.catchingUp) {
-                throw Status.FAILED_PRECONDITION
-                  .withDescription(
-                    s"CometBFT node is still catching up; currently at block ${status.syncInfo.latestBlockHeight}."
-                  )
-                  .asRuntimeException()
-              }
-            },
-          logger,
-        )
-      )
-      .getOrElse({
-        logger.info("No CometBFT node found, so not waiting on CometBFT sync.")
-        Future.unit
-      })
   }
 
   /** Private class to share svStore, dsoPartyHosting, and global domain-id

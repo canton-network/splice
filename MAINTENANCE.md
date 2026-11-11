@@ -1,16 +1,5 @@
 # Bumping External Dependencies
 
-## Bumping CometBFT
-
-1. Update the version in the `nix/cometbft-driver-sources.json` file
-2. Download the corresponding `canton-drivers-proto-<version>.jar` file from
-   JFrog, at `https://digitalasset.jfrog.io/ui/native/canton-drivers/com/digitalasset/canton/drivers/canton-drivers-proto/<version>/canton-drivers-proto-<version>.jar`,
-   and save it under `nix/vendored`.
-3. Update the symlink from `nix/vendored/canton-drivers-proto.jar` to point to the newly downloaded jar.
-4. Delete the older `canton-drivers-proto-<old-version>.jar` file from `nix/vendored`.
-
-// TODO(#1296): once we pull the file from s3 in nix instead of vendoring it in this repo, update the section above (should be just step 1).
-
 ## Bumping Canton
 
 1. Choose the Canton version you wish to upgrade to.
@@ -46,7 +35,7 @@ Initial setup:
 1. Check out the [Canton **Open Source** repo](https://github.com/digital-asset/canton)
 2. Define the environment variable used in the commands below using `export PATH_TO_CANTON_OSS=<your-canton-oss-repo-path>`. This can be added to your private env vars.
 
-Current Canton commit: `59bfa4ae22e7b32461d61d24febe8738a5ee2360`
+Current Canton commit: `b71386ee517c6640d5ab5a8138f1436454c53380`
 
 1. Checkout the **current Canton commit listed above** in the Canton open source repo from above, so we can diff our current fork against this checkout.
 2. Change to your checkout of the Splice repo and execute the following steps:

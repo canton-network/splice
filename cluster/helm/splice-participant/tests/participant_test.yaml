@@ -225,6 +225,23 @@ tests:
       - equal:
           path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_KEY_DOWNLOAD')].value
           value: canton.parameters.enable-key-download = yes
+  - it: "does not enable repair commands by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS')]
+  - it: "supports enabling repair commands"
+    set:
+      enableRepairCommands: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='participant')].env[?(@.name=='ADDITIONAL_CONFIG_ENABLE_REPAIR_COMMANDS')].value
+          value: canton.features.enable-repair-commands = yes
   - it: "pvc creates persistent volume claim and volume mount"
     set:
       pvc:
@@ -341,7 +358,7 @@ tests:
     set:
       imageRepo: "secure-registry.example.com"
       imageName: "custom-participant"
-      persistence.initImageName: "secure-registry.example.com/postgres:14-custom"
+      persistence.initImageName: "secure-registry.example.com/postgres:18-custom"
       persistence.enablePgInitContainer: true
     documentSelector:
       path: kind
@@ -352,7 +369,7 @@ tests:
           pattern: "^secure-registry\\.example\\.com/custom-participant:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.example.com/postgres:14-custom"
+          value: "secure-registry.example.com/postgres:18-custom"
 
   - it: "allows overriding participant database secret env vars with raw strings"
     set:

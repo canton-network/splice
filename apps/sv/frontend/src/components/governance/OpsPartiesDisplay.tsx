@@ -21,7 +21,7 @@ export const OpsPartiesDisplay: React.FC<{
 }> = ({ parties, idPrefix }) =>
   parties === null || parties.length === 0 ? (
     <Typography variant="body2" color="text.secondary" data-testid={`${idPrefix}-none`}>
-      None — uses default (no ops parties)
+      None — uses default (no app operations parties)
     </Typography>
   ) : (
     <Stack spacing={1} data-testid={idPrefix}>

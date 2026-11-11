@@ -11,7 +11,7 @@ import { TransferOffers } from '../components/TransferOffers';
 
 const Transactions: React.FC = () => {
   return (
-    <Box marginTop={4}>
+    <Box sx={{ marginTop: 4 }}>
       <DevNetOnly>
         <Tap />
       </DevNetOnly>

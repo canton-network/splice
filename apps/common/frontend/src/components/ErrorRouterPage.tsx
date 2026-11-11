@@ -10,29 +10,41 @@ const ErrorRouterPage: React.FC = () => {
 
   return (
     <Box
-      sx={{ flex: 1 }}
-      display="flex"
-      height="100%"
-      flexDirection="column"
-      justifyContent="space-between"
-      alignItems="center"
+      sx={{
+        display: 'flex',
+        height: '100%',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flex: 1,
+      }}
     >
-      <Box display="flex" flexDirection="column" alignItems="center" height="100%" marginTop={8}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          height: '100%',
+          marginTop: 8,
+        }}
+      >
         <Typography variant="h1">Something went wrong!</Typography>
 
         <Box
-          marginTop={4}
-          marginBottom={2}
-          display="flex"
-          flexDirection="column"
-          alignItems="center"
+          sx={{
+            marginTop: 4,
+            marginBottom: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}
         >
           <Typography variant="h5">An unexpected error has occurred.</Typography>
         </Box>
 
         <Typography variant="body1">{error?.statusText || error?.message}</Typography>
 
-        <Box marginTop={8}>
+        <Box sx={{ marginTop: 8 }}>
           <Link component={RouterLink} variant="pill" to="/">
             Return to Home
           </Link>

@@ -20,7 +20,7 @@ export const SwitchOverTimesValue: React.FC<SwitchOverTimesValueProps> = ({
 
   if (entries.length === 0) {
     return (
-      <Typography variant="body2" fontFamily="monospace" data-testid={testId}>
+      <Typography variant="body2" data-testid={testId} sx={{ fontFamily: 'monospace' }}>
         {SWITCH_OVER_UNSET_LABEL}
       </Typography>
     );
@@ -32,7 +32,7 @@ export const SwitchOverTimesValue: React.FC<SwitchOverTimesValueProps> = ({
       sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, textAlign: 'left' }}
     >
       {entries.map(entry => (
-        <Typography key={entry.key} variant="body2" fontFamily="monospace">
+        <Typography key={entry.key} variant="body2" sx={{ fontFamily: 'monospace' }}>
           {entry.key} → {entry.time}
         </Typography>
       ))}
