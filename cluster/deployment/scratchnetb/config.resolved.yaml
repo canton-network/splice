@@ -307,7 +307,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -378,7 +378,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -452,7 +452,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -523,7 +523,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -594,7 +594,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -665,7 +665,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -736,7 +736,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -807,7 +807,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -878,7 +878,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -949,7 +949,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1020,7 +1020,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1091,7 +1091,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1162,7 +1162,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1233,7 +1233,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1304,7 +1304,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1375,7 +1375,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1446,7 +1446,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1518,7 +1518,7 @@ svs:
           memory: '2Gi'
     sequencer:
       cloudSql:
-        backupStartTime: '06:00'
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:

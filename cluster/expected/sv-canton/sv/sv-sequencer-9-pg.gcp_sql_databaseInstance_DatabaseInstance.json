@@ -10,7 +10,7 @@
       "backupConfiguration": {
         "enabled": true,
         "pointInTimeRecoveryEnabled": true,
-        "startTime": "06:00"
+        "startTime": "02:00"
       },
       "databaseFlags": [
         {

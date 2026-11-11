@@ -30,7 +30,7 @@ validatorApp:
 # cantonBft must be backed up before the sequencer each day (restore needs cantonBft backup <= sequencer backup)
 sequencer:
   cloudSql:
-    backupStartTime: '06:00'
+    backupStartTime: '02:00'
 cantonBft:
   cloudSql:
     backupStartTime: '00:00'
