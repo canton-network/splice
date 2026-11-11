@@ -19,7 +19,11 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{
+  DomainTimeSynchronization,
+  KeyValueStore,
+  UpdateHistory,
+}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
@@ -57,6 +61,7 @@ class ScanAutomationService(
     upgradesConfig: UpgradesConfig,
     packageVersionSupport: PackageVersionSupport,
     historyReadiness: HistoryReadiness,
+    kvStore: KeyValueStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -166,6 +171,7 @@ class ScanAutomationService(
       new PruneAcsSnapshotsTrigger(
         snapshotStore,
         scanStorageConfigV1,
+        kvStore,
         triggerContext,
       )
     )
