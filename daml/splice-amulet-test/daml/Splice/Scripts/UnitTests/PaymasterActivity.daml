@@ -1,0 +1,58 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Unit tests for the activity a paymaster earns for a traffic purchase for its registered
+-- synchronizer.
+module Splice.Scripts.UnitTests.PaymasterActivity where
+
+import DA.Assert ((===))
+
+import Daml.Script
+
+import Splice.DecentralizedSynchronizer (PaymasterActivity(..), PaymasterPurchase(..), RegisteredSynchronizer(..), paymasterActivity)
+
+testParty : Text -> Party
+testParty name =
+  let Some p = partyFromText (name <> "::1220000000000000000000000000000000000000000000000000000000000000abcd")
+  in p
+
+testPaymaster : Party
+testPaymaster = testParty "paymaster"
+
+purchaseWithWeights : Decimal -> Decimal -> PaymasterPurchase
+purchaseWithWeights appActivityWeight assetActivityWeight = PaymasterPurchase with
+  registration = RegisteredSynchronizer with
+    dso = testParty "dso"
+    synchronizerId = "dedicated-synchronizer::1220dede"
+    paymaster = testPaymaster
+    maxActivityWeight = 3.0
+    maxAssetActivityWeight = 3.0
+  appActivityWeight
+  assetActivityWeight
+
+activityFor : Int -> Int -> PaymasterActivity
+activityFor app asset = PaymasterActivity with
+  appActivity = [(testPaymaster, app)]
+  assetActivity = [(testPaymaster, asset)]
+
+test_paymasterActivity_isBytesTimesWeight : Script ()
+test_paymasterActivity_isBytesTimesWeight = script do
+  paymasterActivity (purchaseWithWeights 1.0 0.5) 2_000_000 === activityFor 2_000_000 1_000_000
+  paymasterActivity (purchaseWithWeights 0.5 1.0) 2_000_000 === activityFor 1_000_000 2_000_000
+
+test_paymasterActivity_weightAboveOne : Script ()
+test_paymasterActivity_weightAboveOne = script do
+  paymasterActivity (purchaseWithWeights 2.5 1.25) 1_000_000 === activityFor 2_500_000 1_250_000
+
+test_paymasterActivity_zeroWeight : Script ()
+test_paymasterActivity_zeroWeight = script do
+  paymasterActivity (purchaseWithWeights 0.0 0.0) 1_000_000 === activityFor 0 0
+
+test_paymasterActivity_roundsDown : Script ()
+test_paymasterActivity_roundsDown = script do
+  paymasterActivity (purchaseWithWeights 0.5 0.3333333333) 1_000_001 === activityFor 500_000 333_333
+  paymasterActivity (purchaseWithWeights 0.9999999999 0.0000000001) 1_000_000 === activityFor 999_999 0
+
+test_paymasterActivity_zeroBytes : Script ()
+test_paymasterActivity_zeroBytes = script do
+  paymasterActivity (purchaseWithWeights 1.0 0.5) 0 === activityFor 0 0

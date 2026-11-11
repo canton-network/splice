@@ -5,6 +5,7 @@
 module Splice.DecentralizedSynchronizer where
 
 import DA.Action (foldlA)
+import DA.Optional (fromOptional)
 import qualified DA.Set as Set
 import DA.Text as T
 import qualified DA.TextMap as TextMap
@@ -59,7 +60,8 @@ validAmuletDecentralizedSynchronizerConfig config =
 -- | The state of the extra synchronizer traffic purchases of a sequencer sv.
 template MemberTraffic with
     dso : Party
-    memberId : Text -- ^ The id of the sequencer member (participant or mediator) for which traffic has been purchased
+    memberId : Text -- ^ The id of the sequencer member (participant or mediator) for which traffic has been purchased.
+      -- Empty for traffic that a paymaster purchased for its registered synchronizer as a whole.
     synchronizerId : Text -- ^ The id of the synchronizer for which this contract tracks purchased extra traffic
     migrationId : Int -- ^ The migration id of the synchronizer for which this contract tracks purchased extra traffic
     totalPurchased : Int -- ^ The number of bytes of extra traffic purchased
@@ -69,12 +71,13 @@ template MemberTraffic with
   where
     signatory dso
 
+    -- The `memberId` may be empty, see its description. A purchase for the decentralized
+    -- synchronizer must name a member, which `validateBuyMemberTrafficInputs` checks.
     ensure totalPurchased >= 0
       && numPurchases >= 0
       && amuletSpent >= 0.0
       && usdSpent >= 0.0
       && migrationId >= 0
-      && not (T.isEmpty memberId)
       && not (T.isEmpty synchronizerId)
 
 
@@ -102,28 +105,39 @@ data TrafficPurchaseMemo = TrafficPurchaseMemo with
     synchronizerId : Text
     migrationId : Int
     forfeitValidatorRewardCoupon : Bool
+    appActivityWeight : Optional Decimal
+    assetActivityWeight : Optional Decimal
   deriving (Eq, Show)
 
 trafficPurchaseMemoPrefix : Text
 trafficPurchaseMemoPrefix = "splice/memo:"
 
 -- | Parse the purchase arguments from memo tag using url query param style:
--- `splice/memo:member-id=...&synchronizer-id=...&migration-id=...[&forfeit-validator-reward-coupon=true|false]`.
+-- `splice/memo:[member-id=...&]synchronizer-id=...&migration-id=...[&forfeit-validator-reward-coupon=true|false]`
+-- `[&app-activity-weight=...][&asset-activity-weight=...]`.
+-- A memo without a `member-id` parses to an empty `memberId`. Only a paymaster's purchase for its
+-- registered synchronizer may leave it out, which `validateBuyMemberTrafficInputs` checks. The
+-- activity weights are those of `DSyncTrafficPurchase`, so only such a purchase may give them.
 parseTrafficPurchaseMemo : Text -> Either Text TrafficPurchaseMemo
 parseTrafficPurchaseMemo memo = do
   params <- case T.stripPrefix trafficPurchaseMemoPrefix memo of
     None -> Left $ "Traffic purchase memo must start with " <> trafficPurchaseMemoPrefix
     Some params -> Right params
   fields <- foldlA addField TextMap.empty (T.splitOn "&" params)
-  memberId <- requiredField fields "member-id"
+  let memberId = fromOptional "" (TextMap.lookup "member-id" fields)
   synchronizerId <- requiredField fields "synchronizer-id"
   migrationId <- requiredField fields "migration-id" >>= parseIntField "migration-id"
   forfeitValidatorRewardCoupon <- case TextMap.lookup "forfeit-validator-reward-coupon" fields of
     None -> Right False
     Some value -> parseBoolField "forfeit-validator-reward-coupon" value
+  appActivityWeight <- optionalDecimalField fields "app-activity-weight"
+  assetActivityWeight <- optionalDecimalField fields "asset-activity-weight"
   pure TrafficPurchaseMemo with ..
   where
-    knownKeys = ["member-id", "synchronizer-id", "migration-id", "forfeit-validator-reward-coupon"]
+    knownKeys =
+      [ "member-id", "synchronizer-id", "migration-id", "forfeit-validator-reward-coupon"
+      , "app-activity-weight", "asset-activity-weight"
+      ]
     addField fields field = case T.splitOn "=" field of
       [key, value]
         | not (key `elem` knownKeys) ->
@@ -142,6 +156,11 @@ parseTrafficPurchaseMemo memo = do
       "true" -> Right True
       "false" -> Right False
       _ -> Left $ "Expected true or false for " <> key <> " in traffic purchase memo, got: " <> value
+    optionalDecimalField fields key = case TextMap.lookup key fields of
+      None -> Right None
+      Some value -> case T.parseDecimal value of
+        None -> Left $ "Expected a decimal for " <> key <> " in traffic purchase memo, got: " <> value
+        Some parsed -> Right (Some parsed)
 
 trafficPurchaseReason : MemberTrafficPurchase -> Text
 trafficPurchaseReason purchase =
@@ -249,3 +268,45 @@ template RegisteredSynchronizer with
 
 instance HasCheckedFetch RegisteredSynchronizer ForDso where
     contractGroupId RegisteredSynchronizer{..} = ForDso with ..
+
+-- | The arguments of a paymaster's traffic purchase for its registered dedicated synchronizer.
+data DSyncTrafficPurchase = DSyncTrafficPurchase with
+    registeredSynchronizerCid : ContractId RegisteredSynchronizer
+      -- ^ The registration of the dedicated synchronizer to buy traffic for. The provider must be
+      -- its paymaster, which pays for the synchronizer as a whole: the purchase's `memberId` must
+      -- be empty and its `migrationId` 0. The synchronizer must be the registration's, and must not
+      -- be one of the `requiredSynchronizers`.
+    optAppActivityWeight : Optional Decimal
+      -- ^ The weight with which each purchased byte earns the paymaster app activity. Defaults to
+      -- the registration's `maxActivityWeight`, and must not be negative or above it.
+    optAssetActivityWeight : Optional Decimal
+      -- ^ The weight with which each purchased byte earns the paymaster asset activity. Defaults
+      -- to the registration's `maxAssetActivityWeight`, and must not be negative or above it.
+  deriving (Eq, Show, Serializable)
+
+-- | A paymaster's traffic purchase for its registered synchronizer.
+data PaymasterPurchase = PaymasterPurchase with
+    registration : RegisteredSynchronizer
+      -- ^ The registration of the synchronizer the traffic is purchased for.
+    appActivityWeight : Decimal
+      -- ^ The weight with which each purchased byte earns the paymaster app activity.
+    assetActivityWeight : Decimal
+      -- ^ The weight with which each purchased byte earns the paymaster asset activity.
+  deriving (Eq, Show)
+
+-- | The CIP-0104 activity that a paymaster earns for a traffic purchase for its registered
+-- synchronizer. It has the shape of the arguments of the CIP-0104 `ActivityRecorder`
+-- hook, with one entry for the paymaster in each list.
+data PaymasterActivity = PaymasterActivity with
+    appActivity : [(Party, Int)]
+    assetActivity : [(Party, Int)]
+  deriving (Eq, Show)
+
+-- | The activity that `trafficAmount` purchased bytes earn the paymaster. Each byte earns the
+-- purchase's weight in app and in asset activity, and each total is rounded down.
+paymasterActivity : PaymasterPurchase -> Int -> PaymasterActivity
+paymasterActivity PaymasterPurchase{..} trafficAmount = PaymasterActivity with
+    appActivity = [(registration.paymaster, weighted appActivityWeight)]
+    assetActivity = [(registration.paymaster, weighted assetActivityWeight)]
+  where
+    weighted weight = floor (intToDecimal trafficAmount * weight)

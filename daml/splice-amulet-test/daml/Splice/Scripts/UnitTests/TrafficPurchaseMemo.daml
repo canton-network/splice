@@ -29,6 +29,8 @@ expectedMemo = TrafficPurchaseMemo with
   synchronizerId = testSynchronizerId
   migrationId = 3
   forfeitValidatorRewardCoupon = False
+  appActivityWeight = None
+  assetActivityWeight = None
 
 memoParams : Text
 memoParams =
@@ -90,6 +92,16 @@ test_parseMemo_rejectsMissingKey : Script ()
 test_parseMemo_rejectsMissingKey = script do
   parse (trafficPurchaseMemoPrefix <> "member-id=" <> testMemberId <> "&synchronizer-id=" <> testSynchronizerId) ===
     Left "Missing key in traffic purchase memo: migration-id"
+  parse (trafficPurchaseMemoPrefix <> "member-id=" <> testMemberId <> "&migration-id=3") ===
+    Left "Missing key in traffic purchase memo: synchronizer-id"
+
+-- A paymaster's purchase for its registered synchronizer leaves out the `member-id`.
+test_parseMemo_memberIdIsOptional : Script ()
+test_parseMemo_memberIdIsOptional = script do
+  parse (trafficPurchaseMemoPrefix <> "synchronizer-id=" <> testSynchronizerId <> "&migration-id=3") ===
+    Right (expectedMemo with memberId = "")
+  parse (trafficPurchaseMemoPrefix <> "member-id=&synchronizer-id=" <> testSynchronizerId <> "&migration-id=3") ===
+    Right (expectedMemo with memberId = "")
 
 test_parseMemo_rejectsUnknownKey : Script ()
 test_parseMemo_rejectsUnknownKey = script do
@@ -113,3 +125,23 @@ test_parseMemo_rejectsNonIntegerValues = script do
     isRejected $ parse $
       trafficPurchaseMemoPrefix <> "member-id=" <> testMemberId <> "&synchronizer-id=" <> testSynchronizerId <>
       "&migration-id=latest"
+
+-- A paymaster's purchase may give its activity weights.
+test_parseMemo_activityWeights : Script ()
+test_parseMemo_activityWeights = script do
+  parse (completeMemo <> "&app-activity-weight=0.25&asset-activity-weight=0") ===
+    Right (expectedMemo with appActivityWeight = Some 0.25; assetActivityWeight = Some 0.0)
+  parse (completeMemo <> "&asset-activity-weight=1.5") ===
+    Right (expectedMemo with assetActivityWeight = Some 1.5)
+  -- the parser doesn't check the range, `validateBuyMemberTrafficInputs` does
+  parse (completeMemo <> "&app-activity-weight=-0.1") ===
+    Right (expectedMemo with appActivityWeight = Some (-0.1))
+
+test_parseMemo_rejectsInvalidActivityWeights : Script ()
+test_parseMemo_rejectsInvalidActivityWeights = script do
+  parse (completeMemo <> "&app-activity-weight=half") ===
+    Left "Expected a decimal for app-activity-weight in traffic purchase memo, got: half"
+  parse (completeMemo <> "&asset-activity-weight=") ===
+    Left "Expected a decimal for asset-activity-weight in traffic purchase memo, got: "
+  assertMsg "duplicate app-activity-weight key is rejected" $ isRejected $
+    parse $ completeMemo <> "&app-activity-weight=0.1&app-activity-weight=0.2"
