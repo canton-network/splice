@@ -908,6 +908,8 @@ class DbSvDsoStore private (
       assignedContractFromRow(splice.amulet.RewardCouponV2.COMPANION)(_)
     )
 
+  // `featured_app_right_provider is not null` lets the planner use the partial index
+  // dso_acs_store_sid_mid_pn_tid_farp.
   override def listFeaturedAppConfigUpdateInstructionSample(limit: Limit)(implicit
       tc: TraceContext
   ): Future[Seq[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight]] =
@@ -925,8 +927,6 @@ class DbSvDsoStore private (
                       fa_right.contract_id as fa_right_cid
                from #${DsoTables.acsTableName} acs
                cross join lateral (
-                 -- `featured_app_right_provider is not null` lets the planner use the partial index
-                 -- dso_acs_store_sid_mid_pn_tid_farp.
                  select r.contract_id
                  from #${DsoTables.acsTableName} r
                  where r.store_id = acs.store_id
