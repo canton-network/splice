@@ -56,7 +56,7 @@ class PublishScanConfigTrigger(
       tc: TraceContext
   ): Future[Seq[PublishScanConfigTrigger.PublishLocalConfigTask]] =
     (for {
-      case (rulesAndState, synchronizerNodeConfig) <- getCometBftNodeConfigDsoState(
+      case (rulesAndState, synchronizerNodeConfig) <- getSynchronizerNodeConfigDsoState(
         store,
         store.key.svParty,
       )

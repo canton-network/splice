@@ -93,7 +93,6 @@ export interface SvAdminClient {
   listAmuletPriceVotes: () => Promise<ListAmuletPriceVotesResponse>;
   updateDesiredAmuletPrice: (amuletPrice: BigNumber) => Promise<void>;
   listOpenMiningRounds: () => Promise<ListOpenMiningRoundsResponse>;
-  getCometBftNodeDebug: () => Promise<openapi.CometBftNodeDumpOrErrorResponse>;
   getSequencerNodeStatus: () => Promise<openapi.NodeStatus>;
   getMediatorNodeStatus: () => Promise<openapi.NodeStatus>;
   featureSupport: () => Promise<openapi.FeatureSupportResponse>;
@@ -233,9 +232,6 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
       },
       listOpenMiningRounds: async (): Promise<ListOpenMiningRoundsResponse> => {
         return await svAdminClient.listOpenMiningRounds();
-      },
-      getCometBftNodeDebug: async (): Promise<openapi.CometBftNodeDumpOrErrorResponse> => {
-        return await svAdminClient.getCometBftNodeDebugDump();
       },
       getSequencerNodeStatus: async (): Promise<openapi.NodeStatus> => {
         return await svAdminClient.getSequencerNodeStatus();

@@ -39,6 +39,10 @@ export const listTransferOffersResponse = z.object({
 
 export type ListTransferOffersResponse = z.infer<typeof listTransferOffersResponse>;
 
+export const featuredAppKind = z.enum(['basic', 'asset_moving', 'asset']);
+
+export type FeaturedAppKind = z.infer<typeof featuredAppKind>;
+
 export const userStatusResponse = z.object({
   party_id: z.string(),
   user_onboarded: z.boolean(),
@@ -47,3 +51,51 @@ export const userStatusResponse = z.object({
 });
 
 export type UserStatusResponse = z.infer<typeof userStatusResponse>;
+
+// Only the fields we need of a Splice.Amulet:FeaturedAppRight contract, in the Daml JSON encoding.
+// Unset optional fields are null. Unknown values don't fail the decoding.
+export const lookupFeaturedAppRightResponse = z.object({
+  featured_app_right: z
+    .object({
+      payload: z.object({
+        appKind: z.string().nullish(),
+        activityWeight: z.string().nullish(),
+        opsParties: z.array(z.string()).nullish(),
+      }),
+    })
+    .optional(),
+});
+
+export type LookupFeaturedAppRightResponse = z.infer<typeof lookupFeaturedAppRightResponse>;
+
+// Only the fields we need of the Splice.AmuletRules:AmuletRules contract
+export const getAmuletRulesProxyResponse = z.object({
+  amulet_rules: z.object({
+    contract: z.object({
+      payload: z.object({
+        configSchedule: z.object({
+          initialValue: z.object({
+            packageConfig: z.object({
+              wallet: z.string(),
+            }),
+          }),
+        }),
+      }),
+    }),
+  }),
+});
+
+export type GetAmuletRulesProxyResponse = z.infer<typeof getAmuletRulesProxyResponse>;
+
+export const damlFeaturedAppKinds: Record<FeaturedAppKind, string> = {
+  basic: 'FAK_Basic',
+  asset_moving: 'FAK_AssetMoving',
+  asset: 'FAK_Asset',
+};
+
+/** The wanted configuration of a featured app right, unset fields are left to the Daml defaults */
+export type FeaturedAppRightSpec = {
+  kind?: FeaturedAppKind;
+  weight?: number;
+  opsParties?: string[];
+};
