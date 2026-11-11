@@ -415,3 +415,76 @@ Successfully assigned gha-runners-splice/self-hosted-k8s-large-runner-r82nt to g
 ```
 Both pods ran on the same node. Which resource saturated (CPU, memory, disk) is not verified: node metrics for
 18:44-18:50 UTC are not checked. Whether CPU limits equal requests for the large-runner pods is not checked.
+
+## 9. Node metrics from Cloud Monitoring (user exports, 2026-11-11)
+
+The user reported from Prometheus (not exported): per pod CPU 5-7 cores for both runner pods; CPU throttling peak 0.9
+for r82nt around 18:42; memory working set about 30 GB per pod; a third large workflow pod on the node with equal
+utilization; node_* (node-exporter) metrics absent; GKE node_cpu_allocatable_utilization peaks around 50%,
+node_memory_allocatable_utilization 70% non-evictable plus 20% evictable.
+
+Exports in `export/11375/` (Metrics Explorer CSV). VM CPU utilization of the node, per minute (script in the
+scratchpad, parses the CSV header rows and selects the column of instance_name = the node):
+```
+python3 -I gcm.py 'VM_Instance_-_CPU_utilization_[MEAN].csv' 'Disk_write_operations_(filtered)_[SUM].csv' 'Disk_read_operations_(filtered)_[SUM].csv'
+```
+```
+instance_id 3965588400284177265
+== VM_Instance_-_CPU_utilization_[MEAN].csv cols ['gke-cn-splicenet-cn-apps-node-pool-3--eb220c51-dglz']
+18:38      0.41
+18:39      0.46
+18:40      0.48
+18:41      0.58
+18:42      0.57
+18:43      0.62
+18:44      0.59
+18:45      0.58
+18:46      0.79
+18:47      0.91
+18:48      0.93
+18:49      0.74
+18:50         -
+18:51      0.41
+18:52      0.13
+18:53      0.02
+== Disk_write_operations_(filtered)_[SUM].csv cols ['-']
+18:38   1015.82
+18:39   1015.97
+18:40   1057.03
+18:41   1146.85
+18:42   1110.00
+18:43   1008.45
+18:44   1197.88
+18:45   1435.97
+18:46    701.42
+18:47    358.50
+18:48    311.23
+18:49    353.12
+18:50    353.13
+18:51   1286.62
+18:52   1716.12
+18:53    441.92
+== Disk_read_operations_(filtered)_[SUM].csv cols ['-']
+18:38      9.13
+18:39     34.60
+18:40     25.10
+18:41     18.48
+18:42     21.02
+18:43     23.50
+18:44     12.47
+18:45      6.87
+18:46      5.63
+18:47      4.57
+18:48      0.60
+18:49      8.45
+18:50      8.47
+18:51    101.17
+18:52     28.73
+18:53      1.13
+```
+The node (instance_id 3965588400284177265) has no series in `Disk_average_io_queue_depth_[MEAN].csv` or
+`Peak_disk_write_ops_[MEAN].csv`. The filter of the two `(filtered)` disk charts is not recorded in the export; if it
+is this node, its write ops fell from about 1000-1400/min to 310-360/min during the window, which is less load, not
+a disk cap. Reading: the VM CPU went from 58% (18:45) to 79%, 91%, 93% (18:46-18:48) and 74% (18:49), back to 41% at
+18:51, matching the slow window 18:45:22-18:49:18. GKE allocatable utilization (about 50%) and VM utilization
+disagree; not resolved. The third pod and the node machine type are not identified.
