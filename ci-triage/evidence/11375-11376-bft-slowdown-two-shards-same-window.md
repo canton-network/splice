@@ -370,3 +370,48 @@ for q in '"auto-expire payment requests"' 'WalletExpirationsIntegrationTest' 'Sv
   OR "self-hosted-k8s-large-runner-8vqj4-workflow")'`; the node is in the entry labels, not in the default format).
   Worth a look only if a second run shows simultaneous slow epochs on several shards.
 - Lesson: none (infra one-off).
+
+## 8. Both pods on one node; the slowdown hit every process in the pod (added in the main thread, 2026-11-11)
+
+Trivial GET status/health handlers in the test JVM (a separate process from Canton) per minute, both shards:
+```
+cd log; for f in 11375/logs-wall-clock-time-5/canton_network_test.clog.gz 11376/logs-wall-clock-time-9/canton_network_test.clog.gz; do echo "== $f"; zcat $f | grep -a 'Responding with status code: 200 OK, took' | grep -aE 'GET /(api/[a-z]+/)?(status|readyz|livez|health|version|v0/status)' | sed -E 's/.*"@timestamp":"2026-11-11T([0-9:]{5})[^"]*".*took ([0-9]+) ms.*/\1 \2/' | awk '{m=$1; n[m]++; s[m]+=$2; if($2>mx[m])mx[m]=$2} END{for(k in n) printf "%s n=%d avg=%.1fms max=%dms\n",k,n[k],s[k]/n[k],mx[k]}' | sort | awk '$1>="18:40" && $1<="18:53"'; done
+```
+```
+== 11375/logs-wall-clock-time-5/canton_network_test.clog.gz
+18:40 n=44 avg=0.0ms max=1ms
+18:41 n=22 avg=0.0ms max=1ms
+18:42 n=25 avg=0.8ms max=19ms
+18:43 n=53 avg=0.0ms max=1ms
+18:44 n=60 avg=0.0ms max=1ms
+18:45 n=26 avg=0.2ms max=2ms
+18:46 n=36 avg=7.8ms max=113ms
+18:47 n=26 avg=22.3ms max=148ms
+18:48 n=5 avg=2.2ms max=7ms
+18:49 n=26 avg=0.1ms max=1ms
+== 11376/logs-wall-clock-time-9/canton_network_test.clog.gz
+18:40 n=15 avg=0.0ms max=0ms
+18:41 n=5 avg=0.0ms max=0ms
+18:42 n=16 avg=0.0ms max=0ms
+18:43 n=37 avg=0.0ms max=1ms
+18:44 n=26 avg=0.0ms max=0ms
+18:45 n=45 avg=2.8ms max=34ms
+18:46 n=28 avg=4.0ms max=31ms
+18:47 n=7 avg=9.0ms max=35ms
+18:48 n=7 avg=4.6ms max=32ms
+18:49 n=47 avg=0.0ms max=1ms
+18:50 n=49 avg=0.2ms max=8ms
+```
+
+Node of each runner pod, k8s Scheduled events (user ran this on the host, project da-cn-splice, 2026-11-11):
+```
+gcloud logging read 'timestamp>="2026-11-11T18:00:00Z" AND timestamp<="2026-11-11T18:55:00Z" AND (resource.type="k8s_pod") AND (resource.labels.namespace_name="gha-runners-splice") AND (resource.labels.pod_name=("self-hosted-k8s-large-runner-r82nt-workflow" OR "self-hosted-k8s-large-runner-8vqj4-workflow")) AND (jsonPayload.reason="Scheduled")' --project da-cn-splice --order asc --limit 200 --format 'value(timestamp,severity,resource.labels.service_name,resource.labels.function_name,httpRequest.status,textPayload,jsonPayload.message)'
+```
+```
+2026-11-11 18:03:28.000
+Successfully assigned gha-runners-splice/self-hosted-k8s-large-runner-8vqj4 to gke-cn-splicenet-cn-apps-node-pool-3--eb220c51-dglz
+2026-11-11 18:03:29.000
+Successfully assigned gha-runners-splice/self-hosted-k8s-large-runner-r82nt to gke-cn-splicenet-cn-apps-node-pool-3--eb220c51-dglz
+```
+Both pods ran on the same node. Which resource saturated (CPU, memory, disk) is not verified: node metrics for
+18:44-18:50 UTC are not checked. Whether CPU limits equal requests for the large-runner pods is not checked.
