@@ -5,6 +5,7 @@
     "active": true,
     "alias": "sequencer-bft-pg",
     "cloudSqlConfig": {
+      "backupStartTime": "00:00",
       "databaseVersion": "POSTGRES_18",
       "enableAutoBackups": true,
       "enabled": true,
