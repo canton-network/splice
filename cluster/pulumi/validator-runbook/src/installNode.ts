@@ -200,13 +200,19 @@ async function installValidator(
   }
 
   const nodeIdentifier = validatorConfig.nodeIdentifier || validatorConfig.partyHint;
+  // On a dump restore the participant ends up named newParticipantId, so that is
+  // what the chart should carry, even though nothing reads it in that case.
+  const participantNodeIdentifier =
+    participantBootstrapDumpSecret && validatorConfig.newParticipantId
+      ? validatorConfig.newParticipantId
+      : nodeIdentifier;
 
   const participantAddress = (
     await installParticipant(
       validatorConfig,
       xns,
       auth0Client.getCfg(),
-      nodeIdentifier,
+      participantNodeIdentifier,
       !participantBootstrapDumpSecret,
       false, // We don't currently support non-auth for validator-runbook
       validatorVersion,
