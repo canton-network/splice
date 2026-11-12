@@ -25,6 +25,7 @@ class DbUnavailablePartiesStore(
     baseDuration: NonNegativeFiniteDuration,
     maxIgnoreDuration: NonNegativeFiniteDuration,
     clock: Clock,
+    protectedParties: Set[PartyId] = Set.empty,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     val ec: ExecutionContext,
@@ -39,8 +40,12 @@ class DbUnavailablePartiesStore(
   private val baseMicros = baseDuration.underlying.toMicros
   private val maxMicros = maxIgnoreDuration.underlying.toMicros
 
-  override def addParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Unit] =
-    addPartiesAt(parties, clock.now.toMicros)
+  override def addParties(
+      parties: Seq[PartyId]
+  )(implicit tc: TraceContext): Future[Set[PartyId]] = {
+    val partiesToIgnore = parties.toSet -- protectedParties
+    addPartiesAt(partiesToIgnore.toSeq, clock.now.toMicros).map(_ => partiesToIgnore)
+  }
 
   override def listParties()(implicit tc: TraceContext): Future[Seq[PartyId]] =
     listPartiesAt(clock.now.toMicros)
@@ -117,6 +122,7 @@ object DbUnavailablePartiesStore {
       baseDuration: NonNegativeFiniteDuration,
       maxIgnoreDuration: NonNegativeFiniteDuration,
       clock: Clock,
+      protectedParties: Set[PartyId],
       loggerFactory: NamedLoggerFactory,
   )(implicit
       ec: ExecutionContext,
@@ -133,6 +139,7 @@ object DbUnavailablePartiesStore {
           baseDuration,
           maxIgnoreDuration,
           clock,
+          protectedParties,
           loggerFactory,
         )
       )

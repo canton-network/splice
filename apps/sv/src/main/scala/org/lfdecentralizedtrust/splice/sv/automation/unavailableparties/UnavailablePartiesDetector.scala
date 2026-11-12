@@ -36,7 +36,6 @@ import scala.util.{Failure, Success}
 class UnavailablePartiesDetector(
     lookupSupportedVersion: PartyId => TraceContext => Future[Option[PackageVersion]],
     unavailablePartiesStore: UnavailablePartiesStore,
-    protectedParties: Set[PartyId],
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends NamedLogging {
@@ -64,15 +63,10 @@ class UnavailablePartiesDetector(
         )
       } yield result
 
-  // TODO(#8428): move this to addParties
-  private def withoutProtected(parties: Set[PartyId]): Set[PartyId] = parties -- protectedParties
-
   private def ignoreParties(
       parties: Set[PartyId]
   )(implicit tc: TraceContext): Future[Set[PartyId]] = {
-    val toIgnore = withoutProtected(parties)
-    if (toIgnore.isEmpty) Future.successful(toIgnore)
-    else unavailablePartiesStore.addParties(toIgnore.toSeq).map(_ => toIgnore)
+    unavailablePartiesStore.addParties(parties.toSeq)
   }
 
   private def lookupLowestSupportedVersions(
@@ -138,7 +132,7 @@ class UnavailablePartiesDetector(
         //  - if the batch has more than one task, split it in half and retry both halves.
         //  - if the batch has only one task, mark the parties with the lowest supported version as unavailable.
         case Failure(UnresponsivePartiesFailure(unresponsiveParties))
-            if shrinks(current, partiesOf, withoutProtected(unresponsiveParties)) =>
+            if shrinks(current, partiesOf, unresponsiveParties) =>
           ignoreParties(unresponsiveParties).flatMap { toIgnore =>
             logger.info(
               s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
