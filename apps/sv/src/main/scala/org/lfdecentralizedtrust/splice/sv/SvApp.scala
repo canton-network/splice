@@ -968,8 +968,8 @@ object SvApp {
     action match {
       case arc: ARC_DsoRules =>
         arc.dsoAction match {
-          // Daml does not check the synchronizer id, but a malformed one breaks the SV and Scan
-          // ingestion of the registration once its paymaster pays for traffic.
+          // Daml does not check the synchronizer id. A malformed one can't name a real synchronizer,
+          // and the SV and Scan stores can't index its paymaster's traffic, so it's never merged.
           case register: SRARC_RegisterSynchronizer =>
             SynchronizerId
               .fromString(register.dsoRules_RegisterSynchronizerValue.synchronizerId)

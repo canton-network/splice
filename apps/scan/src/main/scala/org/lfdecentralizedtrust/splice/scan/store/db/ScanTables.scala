@@ -59,6 +59,7 @@ object ScanTables extends AcsTables {
       walletParty: Option[PartyId] = None,
       governanceLockType: Option[String] = None,
       governanceLockSubject: Option[String] = None,
+      registeredSynchronizerId: Option[SynchronizerId] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       ScanAcsStoreRowData.IndexColumns.round -> round,
@@ -84,6 +85,7 @@ object ScanTables extends AcsTables {
       ScanAcsStoreRowData.IndexColumns.governance_lock_subject -> governanceLockSubject.map(
         lengthLimited
       ),
+      ScanAcsStoreRowData.IndexColumns.registered_synchronizer_id -> registeredSynchronizerId,
     )
   }
 
@@ -112,6 +114,7 @@ object ScanTables extends AcsTables {
       val wallet_party = "wallet_party"
       val governance_lock_type = "governance_lock_type"
       val governance_lock_subject = "governance_lock_subject"
+      val registered_synchronizer_id = "registered_synchronizer_id"
       val All = Seq(
         round,
         validator,
@@ -132,6 +135,7 @@ object ScanTables extends AcsTables {
         wallet_party,
         governance_lock_type,
         governance_lock_subject,
+        registered_synchronizer_id,
       )
     }
   }

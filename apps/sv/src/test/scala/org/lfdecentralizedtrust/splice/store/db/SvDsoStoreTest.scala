@@ -2321,6 +2321,75 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
     }
 
+    "listPaymasterTrafficContracts" should {
+
+      "list the paymaster contracts of a dedicated synchronizer" in {
+        val member = ParticipantId("member", Namespace(Fingerprint.tryFromString(s"dummy")))
+        val goodContracts = (1 to 3).map(n => paymasterTraffic(dummy2Domain, n.toLong))
+        val badContracts = (4 to 6).map(n => paymasterTraffic(dummyDomain, n.toLong)) ++
+          (7 to 9).map(n => memberTraffic(member, dummy2Domain, n.toLong))
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            goodContracts ++ badContracts
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listPaymasterTrafficContracts(
+            dummy2Domain,
+            PageLimit.tryCreate(100),
+          )
+        } yield result should contain theSameElementsAs goodContracts
+      }
+
+      "skip a contract with an invalid synchronizer id" in {
+        val invalidContract = memberTrafficContract("", "not-a-synchronizer-id", 1L, 0L)
+        val goodContract = paymasterTraffic(dummy2Domain, 2L)
+        for {
+          store <- mkStore()
+          // ingesting the invalid contract must not fail, so the good one is ingested after it
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(invalidContract, goodContract)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listPaymasterTrafficContracts(
+            dummy2Domain,
+            PageLimit.tryCreate(100),
+          )
+        } yield result should contain theSameElementsAs Seq(goodContract)
+      }
+
+      "include the paymaster contracts at migration id 0 on a later migration" in {
+        val member = ParticipantId("member", Namespace(Fingerprint.tryFromString(s"dummy")))
+        val laterMigrationId = domainMigrationId + 1
+        val paymasterContract = paymasterTraffic(dummy2Domain, 1L)
+        val oldMemberContract = memberTraffic(member, dummyDomain, 2L)
+        val memberContract = memberTraffic(member, dummyDomain, 3L, laterMigrationId)
+        for {
+          store <- mkStore(laterMigrationId)
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(paymasterContract, oldMemberContract, memberContract)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          paymasterResult <- store.listPaymasterTrafficContracts(
+            dummy2Domain,
+            PageLimit.tryCreate(100),
+          )
+          memberResult <- store.listMemberTrafficContracts(
+            StoreMemberId(member),
+            dummyDomain,
+            PageLimit.tryCreate(100),
+          )
+        } yield {
+          paymasterResult should contain theSameElementsAs Seq(paymasterContract)
+          memberResult should contain theSameElementsAs Seq(memberContract)
+        }
+      }
+
+    }
+
     "getTotalPurchasedMemberTraffic" should {
 
       "return the sum over all traffic contracts for the member" in {
@@ -2561,16 +2630,34 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       ),
     )
 
+  private def paymasterTraffic(
+      synchronizerId: SynchronizerId,
+      totalPurchased: Long,
+  ) = memberTrafficContract("", synchronizerId.toProtoPrimitive, totalPurchased, 0L)
+
   private def memberTraffic(
       member: Member,
       synchronizerId: SynchronizerId,
       totalPurchased: Long,
+      migrationId: Long = domainMigrationId,
+  ) = memberTrafficContract(
+    member.toProtoPrimitive,
+    synchronizerId.toProtoPrimitive,
+    totalPurchased,
+    migrationId,
+  )
+
+  private def memberTrafficContract(
+      memberId: String,
+      synchronizerId: String,
+      totalPurchased: Long,
+      migrationId: Long,
   ) = {
     val template = new MemberTraffic(
       dsoParty.toProtoPrimitive,
-      member.toProtoPrimitive,
-      synchronizerId.toProtoPrimitive,
-      domainMigrationId,
+      memberId,
+      synchronizerId,
+      migrationId,
       totalPurchased,
       1,
       numeric(1.0),
@@ -2735,6 +2822,8 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
   protected def mkStore(): Future[SvDsoStore]
 
+  protected def mkStore(migrationId: Long): Future[SvDsoStore]
+
   lazy val acsOffset = nextOffset()
   lazy val domain = dummyDomain.toProtoPrimitive
   lazy val storeSvParty = providerParty(42)
@@ -2747,7 +2836,9 @@ class DbSvDsoStoreTest
     with AcsJdbcTypes
     with AcsTables {
 
-  override protected def mkStore(): Future[DbSvDsoStore] = {
+  override protected def mkStore(): Future[DbSvDsoStore] = mkStore(domainMigrationId)
+
+  override protected def mkStore(migrationId: Long): Future[DbSvDsoStore] = {
     val packageSignatures =
       ResourceTemplateDecoder.loadPackageSignaturesFromResources(
         DarResources.amulet.all ++
@@ -2763,7 +2854,7 @@ class DbSvDsoStoreTest
         storage,
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-        domainMigrationId,
+        migrationId,
         participantId = mkParticipantId("SvDsoStoreTest"),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

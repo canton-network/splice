@@ -61,10 +61,15 @@ class ReconcileSequencerLimitWithMemberTrafficTrigger(
     Member
       .fromProtoPrimitive_(memberTraffic.payload.memberId)
       .fold(
-        err => {
-          // Skip contracts with invalid member ids
-          Future.successful(TaskSuccess(s"Skipping MemberTraffic with invalid memberId: ${err}"))
-        },
+        err =>
+          if (SvDsoStore.isPaymasterTraffic(memberTraffic.payload))
+            // A paymaster pays for a dedicated synchronizer as a whole, not for a sequencer member.
+            Future.successful(
+              TaskSuccess("Skipping a paymaster's MemberTraffic, which has no sequencer member")
+            )
+          else
+            // Skip contracts with invalid member ids
+            Future.successful(TaskSuccess(s"Skipping MemberTraffic with invalid memberId: ${err}")),
         memberId => {
           val synchronizerId = SynchronizerId.tryFromString(memberTraffic.payload.synchronizerId)
           synchronizerNodeService.sequencerAdminConnection().flatMap { sequencerAdminConnection =>

@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   TransferPreapproval,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsRules}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.RegisteredSynchronizer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
@@ -203,6 +204,11 @@ class CachingScanStore(
       cacheConfig.cachedByParty,
       store.lookupTransferCommandCounterByParty,
     ).get(partyId)
+
+  override def lookupRegisteredSynchronizer(synchronizerId: SynchronizerId)(implicit
+      tc: TraceContext
+  ): Future[Option[ContractWithState[RegisteredSynchronizer.ContractId, RegisteredSynchronizer]]] =
+    store.lookupRegisteredSynchronizer(synchronizerId)
 
   override def lookupLatestTransferCommandEvents(sender: PartyId, nonce: Long, limit: Int)(implicit
       tc: TraceContext

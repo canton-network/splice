@@ -83,6 +83,7 @@ org.lfdecentralizedtrust.splice.util.PolicyTest
 org.lfdecentralizedtrust.splice.util.SpliceCircuitBreakerTest
 org.lfdecentralizedtrust.splice.util.SpliceRateLimiterTest
 org.lfdecentralizedtrust.splice.util.SpliceUtilTest
+org.lfdecentralizedtrust.splice.util.TokenStandardMetadataTest
 org.lfdecentralizedtrust.splice.util.TransactionTreeExtensionsTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegenTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecProtobufTest

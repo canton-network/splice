@@ -1624,6 +1624,33 @@ class DbSvDsoStore private (
     )
   }
 
+  override def listPaymasterTrafficContracts(
+      synchronizerId: SynchronizerId,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[MemberTraffic.ContractId, MemberTraffic]]] = waitUntilAcsIngested {
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            MemberTraffic.COMPANION,
+            // indexed by dso_acs_store_sid_mid_pn_tid_mtd. Only a paymaster can buy traffic for a
+            // synchronizer that isn't required, with an empty member id and migration id 0.
+            where = sql"""member_traffic_member is null
+                      and member_traffic_domain = $synchronizerId""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listPaymasterTrafficContracts",
+        )
+    } yield applyLimit("listPaymasterTrafficContracts", limit, result).map(
+      contractFromRow(MemberTraffic.COMPANION)(_)
+    )
+  }
+
   override def listNonObserverRewardCouponsV2ProvidersSample(
       limit: Limit
   )(implicit

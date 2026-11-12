@@ -278,6 +278,26 @@ object SqlIndexInitializationTrigger {
         """,
       ),
     IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
+    // Scan's lookup of a dedicated synchronizer's registration for a paymaster's traffic purchase
+    IndexAction
+      .Create(
+        indexName = "scan_acs_store_sid_mid_pn_tid_rsi",
+        createAction = sqlu"""
+          create index concurrently if not exists scan_acs_store_sid_mid_pn_tid_rsi
+          on scan_acs_store (store_id, migration_id, package_name, template_id_qualified_name, registered_synchronizer_id)
+          where registered_synchronizer_id is not null
+        """,
+      ),
+    // the SV app's lookup of a paymaster's MemberTraffic contracts, which have no member, for merging
+    IndexAction
+      .Create(
+        indexName = "dso_acs_store_sid_mid_pn_tid_mtd",
+        createAction = sqlu"""
+          create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_mtd
+          on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, member_traffic_domain)
+          where member_traffic_member is null and member_traffic_domain is not null
+        """,
+      ),
   )
 
   private def governanceLockTypeAndSubjectIndexAction(tableName: String): IndexAction =

@@ -238,6 +238,20 @@ trait ScanStore
     ]]
   ]
 
+  /** The registration of the dedicated synchronizer with the given id, if there is one. Nothing
+    * on the ledger makes a registration unique for its synchronizer id: by convention the SVs
+    * register a synchronizer at most once. With several, this returns the most recently created
+    * one, the same on every Scan.
+    */
+  def lookupRegisteredSynchronizer(
+      synchronizerId: SynchronizerId
+  )(implicit tc: TraceContext): Future[
+    Option[ContractWithState[
+      splice.decentralizedsynchronizer.RegisteredSynchronizer.ContractId,
+      splice.decentralizedsynchronizer.RegisteredSynchronizer,
+    ]]
+  ]
+
   def lookupLatestTransferCommandEvents(
       sender: PartyId,
       nonce: Long,
@@ -415,8 +429,10 @@ object ScanStore {
                 _ => None,
                 member => Some(StoreMemberId(member)),
               ),
+            // as for the member id, we ignore an invalid synchronizer id, e.g., a registered
+            // synchronizer's malformed id, instead of killing the ingestion pipeline
             memberTrafficDomain =
-              Some(SynchronizerId.tryFromString(contract.payload.synchronizerId)),
+              SynchronizerId.fromString(contract.payload.synchronizerId).toOption,
             totalTrafficPurchased = Some(contract.payload.totalPurchased),
           )
         },
@@ -560,6 +576,20 @@ object ScanStore {
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract
+          )
+        },
+        mkFilter(splice.decentralizedsynchronizer.RegisteredSynchronizer.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsDedicatedSynchronizers(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            // as for MemberTraffic, we ignore an invalid synchronizer id instead of killing the
+            // ingestion pipeline
+            registeredSynchronizerId =
+              SynchronizerId.fromString(contract.payload.synchronizerId).toOption,
           )
         },
       ),

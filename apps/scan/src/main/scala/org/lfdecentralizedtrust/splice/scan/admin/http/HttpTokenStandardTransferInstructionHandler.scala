@@ -8,7 +8,7 @@ import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.splice
@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DarResourcesUtil,
   GovernanceLockUtil,
   TokenStandardAccount,
+  TokenStandardMetadata,
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2
@@ -80,6 +81,10 @@ class HttpTokenStandardTransferInstructionHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         dsoRules <- store.getDsoRules()
+        optRegisteredSynchronizer <- lookupTrafficPurchaseRegistration(
+          transferInstr.transfer.receiver,
+          transferInstr.transfer.meta,
+        )
         result <- buildTransferFactory(
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.sender),
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.receiver),
@@ -97,7 +102,8 @@ class HttpTokenStandardTransferInstructionHandler(
               kind,
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
-                  "transfer-preapproval" -> optTransferPreapproval
+                  "transfer-preapproval" -> optTransferPreapproval,
+                  TokenStandardMetadata.registeredSynchronizerContextKey -> optRegisteredSynchronizer,
                 )
                 .addFeaturedAppRight(clock, dsoRules.payload, optFeaturedAppRight)
                 .disclose(externalPartyAmuletRules.contract)
@@ -189,6 +195,10 @@ class HttpTokenStandardTransferInstructionHandler(
           body.excludeDebugFields.getOrElse(false)
         )
         dsoRules <- store.getDsoRules()
+        optRegisteredSynchronizer <- lookupTrafficPurchaseRegistration(
+          TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.receiver),
+          transferInstr.transfer.meta,
+        )
         result <- buildTransferFactory(
           PartyId.tryFromProtoPrimitive(
             TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.sender)
@@ -210,7 +220,8 @@ class HttpTokenStandardTransferInstructionHandler(
               kind,
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
-                  "transfer-preapproval" -> optTransferPreapproval
+                  "transfer-preapproval" -> optTransferPreapproval,
+                  TokenStandardMetadata.registeredSynchronizerContextKey -> optRegisteredSynchronizer,
                 )
                 .addFeaturedAppRight(clock, dsoRules.payload, optFeaturedAppRight)
                 .disclose(externalPartyAmuletRules.contract)
@@ -277,6 +288,29 @@ class HttpTokenStandardTransferInstructionHandler(
       }
     }
   }
+
+  /** The registration of the dedicated synchronizer that a traffic purchase's memo names, which a
+    * paymaster's purchase for its registered synchronizer needs in its choice context. None for any
+    * other transfer, and for a memo whose synchronizer id doesn't parse. The Daml code checks that
+    * the sender is the registration's paymaster.
+    */
+  private def lookupTrafficPurchaseRegistration(
+      receiver: String,
+      meta: metadatav1.Metadata,
+  )(implicit tc: TraceContext): Future[Option[ContractWithState[
+    splice.decentralizedsynchronizer.RegisteredSynchronizer.ContractId,
+    splice.decentralizedsynchronizer.RegisteredSynchronizer,
+  ]]] =
+    Option
+      .when(receiver == TokenStandardMetadata.trafficPurchaseReceiver)(
+        meta.values.asScala.get(TokenStandardMetadata.reasonMetaKey)
+      )
+      .flatten
+      .flatMap(TokenStandardMetadata.trafficPurchaseMemoSynchronizerId)
+      .flatMap(SynchronizerId.fromString(_).toOption) match {
+      case None => Future.successful(None)
+      case Some(synchronizerId) => store.lookupRegisteredSynchronizer(synchronizerId)
+    }
 
   private def buildTransferFactory[FactoryResponse](
       sender: PartyId,
