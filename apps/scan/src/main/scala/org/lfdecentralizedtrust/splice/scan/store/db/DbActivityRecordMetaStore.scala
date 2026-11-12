@@ -79,6 +79,27 @@ object DbActivityRecordMetaStore {
       else
         Resume
   }
+
+  /** Four-case branch table for `ingestionStatusForRound`. Pure decision
+    * over `(isFirstSv, earliestIngested, roundNumber)`:
+    *   - meta present, round within ingested range → `CannotProvide`
+    *     (we should have data; a peer likely does — delegate)
+    *   - meta present, round beyond ingested boundary → `Undetermined`
+    *     (ingestion catching up; retry)
+    *   - meta absent on a late-joining Scan (`!isFirstSv`) → `CannotProvide`
+    *   - meta absent on firstSV (startup race before the first insert) →
+    *     `Undetermined`
+    */
+  def ingestionStatusFor(
+      isFirstSv: Boolean,
+      earliestIngested: Option[Long],
+      roundNumber: Long,
+  ): RoundIngestionStatus = earliestIngested match {
+    case Some(earliest) if roundNumber <= earliest => RoundIngestionStatus.CannotProvide
+    case Some(_) => RoundIngestionStatus.Undetermined
+    case None if !isFirstSv => RoundIngestionStatus.CannotProvide
+    case None => RoundIngestionStatus.Undetermined
+  }
 }
 
 /** Implementation of `ActivityRecordMetaStore`, owning the meta surface for
@@ -161,7 +182,13 @@ class DbActivityRecordMetaStore(
 
   override def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
     appStartedIngestingAt
-      .zip(extraStartedIngestingAt)
+      .zip(
+        cachedStartedIngestingAt(
+          extraStartedIngestingAtRef,
+          lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user)
+            .map(_.map(_.startedIngestingAt)),
+        )
+      )
       .map {
         case (Some(a), Some(e)) => Some(math.min(a, e))
         case (someA, None) => someA
@@ -172,7 +199,14 @@ class DbActivityRecordMetaStore(
       tc: TraceContext
   ): Future[Option[Long]] =
     appEarliestRoundWithCompleteAppActivity()
-      .zip(extraEarliestRoundWithCompleteAppActivity())
+      .zip(
+        readMetaOptLong(
+          Tables.extraActivityRecordMeta,
+          "m.earliest_ingested_round + 1",
+          "and m.last_archived_round >= m.earliest_ingested_round + 1",
+          "extraActivity.earliestRoundWithCompleteAppActivity",
+        )
+      )
       .map {
         case (Some(a), Some(e)) => Some(math.max(a, e))
         case _ => None
@@ -182,7 +216,14 @@ class DbActivityRecordMetaStore(
       tc: TraceContext
   ): Future[Option[Long]] =
     appLatestRoundWithCompleteAppActivity()
-      .zip(extraLatestRoundWithCompleteAppActivity())
+      .zip(
+        readMetaOptLong(
+          Tables.extraActivityRecordMeta,
+          "m.last_archived_round",
+          "",
+          "extraActivity.latestRoundWithCompleteAppActivity",
+        )
+      )
       .map {
         case (Some(a), Some(e)) => Some(math.min(a, e))
         case _ => None
@@ -192,7 +233,17 @@ class DbActivityRecordMetaStore(
       tc: TraceContext
   ): Future[RoundIngestionStatus] =
     appIngestionStatusForRound(roundNumber)
-      .zip(extraIngestionStatusForRound(roundNumber))
+      .zip(
+        metaIngestionStatus(
+          readMetaOptLong(
+            Tables.extraActivityRecordMeta,
+            "m.earliest_ingested_round",
+            "",
+            "extraActivity.earliestIngestedRound",
+          ),
+          roundNumber,
+        )
+      )
       .map {
         case (RoundIngestionStatus.CannotProvide, _) => RoundIngestionStatus.CannotProvide
         case (_, RoundIngestionStatus.CannotProvide) => RoundIngestionStatus.CannotProvide
@@ -387,46 +438,6 @@ class DbActivityRecordMetaStore(
       "extraActivity.lookupExtraActivityRecordMeta",
     )(codeVersion, userVersion)
 
-  private def extraStartedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
-    cachedStartedIngestingAt(
-      extraStartedIngestingAtRef,
-      lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user)
-        .map(_.map(_.startedIngestingAt)),
-    )
-
-  private def extraEarliestIngestedRound()(implicit tc: TraceContext): Future[Option[Long]] =
-    readMetaOptLong(
-      Tables.extraActivityRecordMeta,
-      "m.earliest_ingested_round",
-      "",
-      "extraActivity.earliestIngestedRound",
-    )
-
-  private def extraEarliestRoundWithCompleteAppActivity()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]] =
-    readMetaOptLong(
-      Tables.extraActivityRecordMeta,
-      "m.earliest_ingested_round + 1",
-      "and m.last_archived_round >= m.earliest_ingested_round + 1",
-      "extraActivity.earliestRoundWithCompleteAppActivity",
-    )
-
-  private def extraLatestRoundWithCompleteAppActivity()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]] =
-    readMetaOptLong(
-      Tables.extraActivityRecordMeta,
-      "m.last_archived_round",
-      "",
-      "extraActivity.latestRoundWithCompleteAppActivity",
-    )
-
-  private def extraIngestionStatusForRound(roundNumber: Long)(implicit
-      tc: TraceContext
-  ): Future[RoundIngestionStatus] =
-    metaIngestionStatus(extraEarliestIngestedRound(), roundNumber)
-
   private val extraStartedIngestingAtRef = new AtomicReference[Option[Long]](None)
   private val extraMetaChecked = new AtomicBoolean(false)
 
@@ -471,31 +482,11 @@ class DbActivityRecordMetaStore(
       label,
     )
 
-  /** Shared `ingestionStatusForRound` branch logic for both sides.
-    * `earliestF` is the side-specific `earliestIngestedRound()` query.
-    */
   private def metaIngestionStatus(
       earliestF: Future[Option[Long]],
       roundNumber: Long,
   ): Future[RoundIngestionStatus] =
-    earliestF.map {
-      case Some(earliestIngested) if roundNumber <= earliestIngested =>
-        // We should have data for this round but no root hash exists:
-        // a peer likely does, so delegate.
-        RoundIngestionStatus.CannotProvide
-      case Some(_) =>
-        // Meta row present but round is beyond our ingested boundary —
-        // ingestion is still catching up; retry.
-        RoundIngestionStatus.Undetermined
-      case None if !isFirstSv =>
-        // Late-joining Scan with no ingestion boundary of its own —
-        // peers do have one, so delegate.
-        RoundIngestionStatus.CannotProvide
-      case None =>
-        // firstSV during initial ingestion (brief startup window before
-        // the meta row is inserted) — retry.
-        RoundIngestionStatus.Undetermined
-    }
+    earliestF.map(ingestionStatusFor(isFirstSv, _, roundNumber))
 
   /** Lookup a full meta row, polymorphic in the row type (each side's
     * `GetResult` is in scope).
