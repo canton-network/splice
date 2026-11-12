@@ -18,14 +18,21 @@
 //
 // Outputs:
 //   SNAPSHOT_OUT          one line per topology transaction
-//   SNAPSHOT_MEMBERS_OUT  one line per sequencer member (from the sequencer snapshot's status)
+//   SNAPSHOT_MEMBERS_OUT  one line per sequencer member, with its status, its latest traffic
+//                         purchase and consumption, and the time of its last event
 //
 // Optional env vars:
 //   SNAPSHOT_HEADER_OUT  file for the static synchronizer parameters + the rest of the
-//                        sequencer snapshot (JSON), without the members
+//                        sequencer snapshot (JSON), without the per-member data
 //   SNAPSHOT_LIMIT       stop after this many messages (for quick probing)
 
-import com.digitalasset.canton.synchronizer.sequencer.OnboardingStateForSequencerV2
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.synchronizer.sequencer.{
+  OnboardingStateForSequencerV2,
+  SequencerMemberStatus,
+  SequencerSnapshot,
+}
+import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.topology.store.StoredTopologyTransaction.GenericStoredTopologyTransaction
 import com.github.luben.zstd.ZstdInputStream
 import io.circe.Json
@@ -183,6 +190,61 @@ def txToJson(stored: GenericStoredTopologyTransaction): Json = {
   )
 }
 
+def tsJson(ts: CantonTimestamp): Json = Json.fromString(ts.toInstant.toString)
+def optTsJson(ts: Option[CantonTimestamp]): Json = ts.fold(Json.Null)(tsJson)
+
+// One flat row per member, joining the sequencer's member status, the member's latest traffic
+// purchase and consumption, and the timestamp of the last event the sequencer delivered to it.
+// A member can be missing from any of these sources, in which case those columns are null.
+def memberRows(snapshot: SequencerSnapshot): Seq[Json] = {
+  val statuses = snapshot.status.members.toSeq.groupBy(_.member)
+  val purchased = snapshot.trafficPurchased.groupBy(_.member)
+  val consumed = snapshot.trafficConsumed.groupBy(_.member)
+  val members =
+    (statuses.keySet ++ purchased.keySet ++ consumed.keySet ++ snapshot.previousTimestamps.keySet).toSeq
+      .sortBy(_.toProtoPrimitive)
+  members.map { member =>
+    def single[A](entries: Map[Member, Seq[A]], name: String): Option[A] =
+      entries.get(member).map {
+        case Seq(a) => a
+        case many => sys.error(s"Member $member has ${many.size} $name entries")
+      }
+    val (status, registeredAt, lastAcknowledged) = single(statuses, "status") match {
+      case Some(SequencerMemberStatus.Active(_, registered, acked)) =>
+        ("active", Some(registered), acked)
+      case Some(SequencerMemberStatus.Disabled(_, registered, acked)) =>
+        ("disabled", registered, acked)
+      case Some(SequencerMemberStatus.Onboarding(_)) => ("onboarding", None, None)
+      case None => ("unknown", None, None)
+    }
+    if (status == "unknown") stats("members_without_status") += 1
+    val p = single(purchased, "traffic purchased")
+    val c = single(consumed, "traffic consumed")
+    Json.obj(
+      "member" -> Json.fromString(member.toProtoPrimitive),
+      "member_type" -> Json.fromString(member.code.threeLetterId.unwrap),
+      "status" -> Json.fromString(status),
+      "registered_at" -> optTsJson(registeredAt),
+      "last_acknowledged" -> optTsJson(lastAcknowledged),
+      "traffic_purchased_serial" -> p.fold(Json.Null)(x => Json.fromInt(x.serial.value)),
+      "extra_traffic_purchased" -> p.fold(Json.Null)(x =>
+        Json.fromLong(x.extraTrafficPurchased.value)
+      ),
+      "traffic_purchased_at" -> optTsJson(p.map(_.sequencingTimestamp)),
+      "extra_traffic_consumed" -> c.fold(Json.Null)(x =>
+        Json.fromLong(x.extraTrafficConsumed.value)
+      ),
+      "base_traffic_remainder" -> c.fold(Json.Null)(x =>
+        Json.fromLong(x.baseTrafficRemainder.value)
+      ),
+      "last_consumed_cost" -> c.fold(Json.Null)(x => Json.fromLong(x.lastConsumedCost.value)),
+      "traffic_consumed_at" -> optTsJson(c.map(_.sequencingTimestamp)),
+      // timestamp of the last event the sequencer delivered to this member
+      "last_event_at" -> optTsJson(snapshot.previousTimestamps.get(member).flatten),
+    )
+  }
+}
+
 val in = new BufferedInputStream(new ZstdInputStream(new FileInputStream(inPath)), 1 << 20)
 val out = new BufferedWriter(new FileWriter(outPath), 1 << 20)
 val membersOut = new BufferedWriter(new FileWriter(membersOutPath))
@@ -202,21 +264,28 @@ try {
             out.write('\n')
           case None =>
             stats("header_messages") += 1
-            val sequencerSnapshot = state.sequencerSnapshot.map(_.toProtoV31)
-            val members =
-              sequencerSnapshot.flatMap(_.status).fold(Seq.empty[GeneratedMessage])(_.members)
-            members.foreach { member =>
-              membersOut.write(protoToJson(member).noSpaces)
+            val rows = state.sequencerSnapshot.fold(Seq.empty[Json])(memberRows)
+            rows.foreach { row =>
+              membersOut.write(row.noSpaces)
               membersOut.write('\n')
             }
-            stats("members") += members.size.toLong
+            stats("members") += rows.size.toLong
             headerOutPath.foreach { path =>
+              // the per-member data is in the members file
               val header = Json.obj(
                 "static_synchronizer_parameters" -> state.staticSynchronizerParameters
                   .fold(Json.Null)(p => protoToJson(p.toProtoV30)),
-                "sequencer_snapshot" -> sequencerSnapshot.fold(Json.Null)(s =>
-                  protoToJson(s.copy(status = s.status.map(_.copy(members = Seq.empty))))
-                ),
+                "sequencer_snapshot" -> state.sequencerSnapshot.fold(Json.Null) { snapshot =>
+                  val s = snapshot.toProtoV31
+                  protoToJson(
+                    s.copy(
+                      status = s.status.map(_.copy(members = Seq.empty)),
+                      trafficPurchased = Seq.empty,
+                      trafficConsumed = Seq.empty,
+                      memberPreviousTimestamps = Seq.empty,
+                    )
+                  )
+                },
               )
               val w = new FileWriter(path)
               try w.write(header.spaces2)
