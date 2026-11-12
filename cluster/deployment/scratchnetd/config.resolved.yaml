@@ -263,6 +263,9 @@ sv:
           tokensPerFill: 10000
 svs:
   sv:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -303,6 +306,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -329,6 +334,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-1:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -369,6 +377,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -398,6 +408,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-10:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -438,6 +451,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -464,6 +479,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-11:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -504,6 +522,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -530,6 +550,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-12:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -570,6 +593,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -596,6 +621,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-13:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -636,6 +664,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -662,6 +692,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-14:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -702,6 +735,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -728,6 +763,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-15:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -768,6 +806,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -794,6 +834,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-16:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -834,6 +877,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -860,6 +905,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-2:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -900,6 +948,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -926,6 +976,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-3:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -966,6 +1019,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -992,6 +1047,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-4:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1032,6 +1090,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1058,6 +1118,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-5:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1098,6 +1161,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1124,6 +1189,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-6:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1164,6 +1232,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1190,6 +1260,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-7:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1230,6 +1303,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1256,6 +1331,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-8:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1296,6 +1374,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1322,6 +1402,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-9:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1362,6 +1445,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:
@@ -1388,6 +1473,9 @@ svs:
         requests:
           memory: '2Gi'
   sv-da-1:
+    cantonBft:
+      cloudSql:
+        backupStartTime: '00:00'
     logging:
       apiRequestLogLevel: 'DEBUG'
       appsAsync: false
@@ -1429,6 +1517,8 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      cloudSql:
+        backupStartTime: '02:00'
       enableAntiAffinity: false
       resources:
         limits:

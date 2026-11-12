@@ -43,7 +43,7 @@ describe('validateOpsParties', () => {
     expect(validateOpsParties([alice, alice], provider)).toBeTruthy();
   });
 
-  it('rejects the provider as its own ops party', () => {
+  it('rejects the provider as its own app operations party', () => {
     expect(validateOpsParties([alice, provider], provider)).toBeTruthy();
   });
 

@@ -11,6 +11,7 @@ import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.RewardCouponV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules, VoteRequest}
@@ -95,6 +96,11 @@ class ScanIntegrationTest
         ConfigTransforms.updateInitialTickDuration(NonNegativeFiniteDuration.ofMillis(500))(config)
       )
       .withTrafficTopupsEnabled
+
+  // The RewardCouponV2 test creates the coupon directly as the DSO.
+  override protected lazy val sanityChecksIgnoredRootCreates = Seq(
+    RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID
+  )
 
   "getAcsSnapshot respects custom timeout" in { implicit env =>
     loggerFactory.assertLogsUnordered(
@@ -292,6 +298,47 @@ class ScanIntegrationTest
         )),
       )
     }
+  }
+
+  "serve RewardCouponV2 created event blobs via getRewardCouponsV2Disclosures" taggedAs Tags.SpliceAmulet_0_1_19 in {
+    implicit env =>
+      val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
+      // A contract of a different template, which the endpoint must omit.
+      val amuletRulesCid = sv1ScanBackend.getAmuletRules().contractId.contractId
+
+      // CollectRewardsAndMergeAmuletsTrigger is paused for this suite, so the coupon is not minted away.
+      val (_, couponCid) = actAndCheck(
+        "Create a RewardCouponV2 for bob's validator",
+        createRewardCouponsV2(Seq((bobValidatorParty, BigDecimal(1.0), None))),
+      )(
+        "The DSO store ingests the coupon",
+        _ =>
+          sv1Backend.appState.dsoStore
+            .listRewardCouponsV2()
+            .futureValue
+            .filter(_.payload.provider == bobValidatorParty.toProtoPrimitive)
+            .loneElement
+            .contractId
+            .contractId,
+      )
+
+      clue("Scan serves the created event blob for the active coupon and omits non-matches") {
+        eventually() {
+          val disclosures =
+            sv1ScanBackend.getRewardCouponsV2Disclosures(Seq(couponCid, amuletRulesCid))
+          disclosures.keySet shouldBe Set(couponCid)
+          disclosures(couponCid).size should be > 0
+        }
+      }
+
+      clue("Requests exceeding the 100 contract-id limit are rejected with 400") {
+        assertThrowsAndLogsCommandFailures(
+          sv1ScanBackend.getRewardCouponsV2Disclosures(Seq.fill(101)(couponCid)),
+          _.errorMessage should (include("HTTP 400 Bad Request") and include(
+            "Expected 'contract_ids' to contain at most 100 items, but contained 101."
+          )),
+        )
+      }
   }
 
   "return bft sequencers" in { implicit env =>
