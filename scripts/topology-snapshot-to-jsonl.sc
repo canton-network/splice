@@ -6,7 +6,7 @@
 // `OnboardingStateForSequencerV2.parseDelimitedFromTrusted`, so all versioned-wrapper handling and
 // mapping validation is Canton's.
 //
-// Usage, from the nix dev shell (`direnv exec . <cmd>`), which provides `canton`:
+// Usage:
 //   SNAPSHOT_IN=/path/onboarding-state.zst SNAPSHOT_OUT=/path/out.jsonl \
 //   SNAPSHOT_MEMBERS_OUT=/path/members.jsonl \
 //   SNAPSHOT_SCHEMA_OUT=/path/out-schema.json SNAPSHOT_MEMBERS_SCHEMA_OUT=/path/members-schema.json \
@@ -29,7 +29,7 @@
 // Optional env vars:
 //   SNAPSHOT_HEADER_OUT  file for the static synchronizer parameters + the rest of the
 //                        sequencer snapshot (JSON), without the per-member data
-//   SNAPSHOT_LIMIT       stop after this many messages (for quick probing)
+//   SNAPSHOT_LIMIT       stop after this many messages (useful for debugging)
 
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.synchronizer.sequencer.{
