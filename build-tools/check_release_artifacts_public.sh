@@ -82,7 +82,7 @@ check_public() {
       return 0
     fi
 
-    # Short-circuit on permanent access errors (401/403) to avoid wasted retry delays
+    # Short-circuit on permanent access errors (401/403) to avoid wasted retry delay
     if grep -qiE 'unauthorized|denied|forbidden|manifest unknown|not found' <<<"$output"; then
       echo "Permanent access error detected (skipping retries): ${target}"
       record_failure "$artifact_type" "$name" "$target" "$output" "$settings_url"
