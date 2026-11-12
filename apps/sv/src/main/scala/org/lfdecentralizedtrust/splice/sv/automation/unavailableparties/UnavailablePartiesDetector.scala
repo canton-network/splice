@@ -21,6 +21,9 @@ import scala.util.{Failure, Success}
 
 /** Executes a batch of tasks, isolating unavailable parties via batch splitting.
   *
+  * The batch is pre-sorted ascending by the lowest package version supported by the informees of
+  * each task, so that tasks likely to fail are grouped together and isolated by fewer splits
+  * instead of being spread across halves that would otherwise succeed.
   * If a submission is rejected because some parties were unresponsive, those parties are named by the mediator and
   * are ignored directly. Any other failure is isolated by splitting the batch in half and retrying
   * the halves in DFS order. Once a batch of size 1 fails, the parties with the
@@ -49,10 +52,11 @@ class UnavailablePartiesDetector(
     else
       for {
         // the lowest supported versions are looked up once per party for the whole batch
-        // and reused by the split batches for the failure attribution
+        // and reused by the split batches for both the pre-sorting and the failure attribution
         lowestSupportedVersions <- lookupLowestSupportedVersions(batch.flatMap(parties).toSet)
+        sortedBatch = sortBySupportedVersionAscending(batch, parties, lowestSupportedVersions)
         result <- processSplitBatches(
-          List(batch),
+          List(sortedBatch),
           parties,
           submit,
           lowestSupportedVersions,
@@ -79,6 +83,16 @@ class UnavailablePartiesDetector(
         lookupSupportedVersion(p)(tc).map(p -> _)
       )
       .map(_.toMap)
+
+  /** Sorts the tasks ascending by the minimal package version supported by all informees. Tasks
+    * for which no version could be determined (None) are placed at the front.
+    */
+  private def sortBySupportedVersionAscending[C](
+      batch: Seq[C],
+      parties: C => Set[PartyId],
+      lowestSupportedVersions: LowestSupportedVersions,
+  ): Seq[C] =
+    batch.sortBy(c => parties(c).toSeq.map(versionOf(lowestSupportedVersions, _)).minOption.flatten)
 
   private def versionOf(
       lowestSupportedVersions: LowestSupportedVersions,
