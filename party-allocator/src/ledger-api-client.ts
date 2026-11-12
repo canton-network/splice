@@ -25,8 +25,18 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as crypto from "node:crypto";
 import { logger } from "./logger.js";
 import { TokenSource } from "./auth.js";
-import { isTransientError, retry, RetryOptions } from "./retry.js";
+import {
+  cantonErrorCode,
+  isTransientError,
+  retry,
+  RetryOptions,
+} from "./retry.js";
 import { traceparentHeader } from "./tracing.js";
+
+export type SubmissionInputs = {
+  command: Command;
+  disclosedContracts: DisclosedContract[];
+};
 
 export class LedgerApiClient {
   private api: DefaultApi;
@@ -39,7 +49,7 @@ export class LedgerApiClient {
         authMethods: {
           default: new HttpAuthAuthentication({
             getToken(): Promise<string> | string {
-              return Promise.resolve(tokenSource.getToken());
+              return tokenSource.getToken();
             },
           }),
         },
@@ -108,73 +118,98 @@ export class LedgerApiClient {
             logger.info(`Party id ${partyId} is already allocated`);
           }
         }),
-      // party allocations take forever so we also retry (almost) forever
-      { maxRetries: 120 },
+      // party allocations take forever so we also retry (almost) forever, including on errors
+      // that look permanent as they can be caused by the allocation still being in progress.
+      {
+        maxRetries: 120,
+        shouldRetry: () => true,
+        task: "allocate external party",
+      },
     );
   }
 
+  // Prepares, signs and executes a transaction. On failure, the whole submission is retried
+  // with fresh inputs, e.g. to replace disclosed contracts that have been archived in the meantime.
+  // All attempts share one command id so command deduplication prevents executing it twice.
   async submitTransaction(
     description: string,
     synchronizerId: string,
     actAs: string,
     privateKey: string,
-    disclosedContracts: DisclosedContract[],
-    command: Command,
+    inputs: () => Promise<SubmissionInputs>,
+    options: RetryOptions = {},
   ): Promise<void> {
-    const preparedTransaction = await this.retry(`prepare ${description}`, () =>
-      this.als.run({ url: undefined }, () =>
-        this.api.postV2InteractiveSubmissionPrepare({
-          userId: "",
-          actAs: [actAs],
-          readAs: [],
-          disclosedContracts,
-          commandId: crypto.randomUUID(),
-          synchronizerId,
-          verboseHashing: false,
-          packageIdSelectionPreference: [],
-          commands: [command],
-        }),
-      ),
-    );
-    const deduplicationPeriod = new DeduplicationPeriod2();
-    deduplicationPeriod.Empty = {};
-    const signature = crypto.sign(
-      null,
-      Buffer.from(preparedTransaction.preparedTransactionHash!, "base64"),
-      privateKey,
-    );
-
-    return this.retry(`execute ${description}`, () =>
-      this.als.run({ url: undefined }, () =>
-        this.api.postV2InteractiveSubmissionExecute({
-          deduplicationPeriod,
-          submissionId: crypto.randomUUID(),
-          userId: "",
-          hashingSchemeVersion: preparedTransaction.hashingSchemeVersion!,
-          preparedTransaction: preparedTransaction.preparedTransaction!,
-          partySignatures: {
-            signatures: [
-              {
-                party: actAs,
+    const commandId = crypto.randomUUID();
+    return this.retry(
+      `submit ${description}`,
+      async () => {
+        const { command, disclosedContracts } = await inputs();
+        const preparedTransaction = await this.als.run({ url: undefined }, () =>
+          this.api.postV2InteractiveSubmissionPrepare({
+            userId: "",
+            actAs: [actAs],
+            readAs: [],
+            disclosedContracts,
+            commandId,
+            synchronizerId,
+            verboseHashing: false,
+            packageIdSelectionPreference: [],
+            commands: [command],
+          }),
+        );
+        const deduplicationPeriod = new DeduplicationPeriod2();
+        deduplicationPeriod.Empty = {};
+        const signature = crypto.sign(
+          null,
+          Buffer.from(preparedTransaction.preparedTransactionHash!, "base64"),
+          privateKey,
+        );
+        try {
+          await this.als.run({ url: undefined }, () =>
+            this.api.postV2InteractiveSubmissionExecute({
+              deduplicationPeriod,
+              submissionId: crypto.randomUUID(),
+              userId: "",
+              hashingSchemeVersion: preparedTransaction.hashingSchemeVersion!,
+              preparedTransaction: preparedTransaction.preparedTransaction!,
+              partySignatures: {
                 signatures: [
                   {
-                    format: "SIGNATURE_FORMAT_RAW",
-                    signingAlgorithmSpec: "SIGNING_ALGORITHM_SPEC_ED25519",
-                    signature: signature.toString("base64"),
-                    signedBy: actAs.split("::")[1],
+                    party: actAs,
+                    signatures: [
+                      {
+                        format: "SIGNATURE_FORMAT_RAW",
+                        signingAlgorithmSpec: "SIGNING_ALGORITHM_SPEC_ED25519",
+                        signature: signature.toString("base64"),
+                        signedBy: actAs.split("::")[1],
+                      },
+                    ],
                   },
                 ],
               },
-            ],
-          },
-        }),
-      ),
+            }),
+          );
+        } catch (e: unknown) {
+          if (cantonErrorCode(e) === "DUPLICATE_COMMAND") {
+            logger.info(
+              `Command ${commandId} for ${description} was already accepted`,
+            );
+            return;
+          }
+          throw e;
+        }
+      },
+      options,
     );
   }
 
   async queryContracts(
     parties: string[],
     templateIds: string[],
+    retryOptions: RetryOptions = {
+      maxRetries: 5,
+      shouldRetry: isTransientError,
+    },
   ): Promise<CreatedEvent[]> {
     const ledgerEnd = (
       await this.retry(
@@ -183,7 +218,7 @@ export class LedgerApiClient {
           this.als.run({ url: undefined }, () =>
             this.api.getV2StateLedgerEnd(),
           ),
-        { maxRetries: 5, shouldRetry: isTransientError },
+        retryOptions,
       )
     ).offset;
     const toTemplateFilter = (t: string) => {
@@ -211,7 +246,7 @@ export class LedgerApiClient {
         this.als.run({ url: undefined }, () =>
           this.api.postV2StateActiveContracts(request),
         ),
-      { maxRetries: 5, shouldRetry: isTransientError },
+      retryOptions,
     );
     return responses.flatMap((r) =>
       r.contractEntry!.JsActiveContract.createdEvent
@@ -238,6 +273,7 @@ export class LedgerApiClient {
             rights: [{ kind: executeRight }, { kind: readRight }],
           }),
         ),
+      { task: "grant user rights" },
     );
   }
 
