@@ -45,7 +45,6 @@ describe('SV UI routing in operator mode', () => {
   test('renders the create-proposal page', async () => {
     const user = userEvent.setup();
     renderOperatorApp('/governance/proposals/create');
-    // Log in with the test auth (as in sv.test.tsx); the login form replaces the page in place.
     expect(await screen.findByText('Log In')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox'), 'sv1');
     await user.click(screen.getByRole('button', { name: 'Log In' }));

@@ -10,9 +10,11 @@ export class ConfigProvider<T extends z.ZodType> extends Component<{
   configScheme: T;
   configContext: Context<z.infer<T> | undefined>;
 }> {
+  // Parsed once, so consumers can use the config object as a hook dependency.
+  private config: z.infer<T> = new ConfigReader(this.props.configScheme).loadConfig();
+
   render(): React.JSX.Element {
-    const configReader = new ConfigReader(this.props.configScheme);
-    const config = configReader.loadConfig();
+    const config = this.config;
     const ConfigContext = this.props.configContext;
     return <ConfigContext.Provider value={config}>{this.props.children}</ConfigContext.Provider>;
   }

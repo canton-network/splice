@@ -38,9 +38,10 @@ describe('SV UI in dApp mode', () => {
       if (request.url.startsWith(svUrl)) svCalls.push(request.url);
     };
     server.events.on('request:start', listener);
+    onTestFinished(() => server.events.removeListener('request:start', listener));
     renderDappApp('/');
-    await screen.findByTestId('governance-page-header-title');
-    server.events.removeListener('request:start', listener);
+    const section = await screen.findByTestId('inflight-proposals-section-table');
+    expect(await within(section).findAllByTestId('inflight-proposals-row')).not.toHaveLength(0);
     expect(svCalls).toEqual([]);
   });
   test('renders governance from Scan', async () => {

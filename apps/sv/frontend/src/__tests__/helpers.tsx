@@ -35,7 +35,7 @@ const testQueryClient = new QueryClient({
 
 const WrapperProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const config = useSvConfig();
-  const { auth, testAuth } = requireOperatorConfig(config);
+  const { auth, testAuth, services } = requireOperatorConfig(config);
   const navigate = useNavigate();
 
   return (
@@ -43,9 +43,9 @@ const WrapperProviders: React.FC<{ children: React.ReactNode }> = ({ children })
       <AuthProvider authConf={auth} redirect={(path: string) => navigate(path)}>
         <QueryClientProvider client={testQueryClient}>
           <UserProvider authConf={auth} testAuthConf={testAuth}>
-            <SvClientProvider url={config.services.sv.url}>
+            <SvClientProvider url={services.sv.url}>
               <SvAppVotesHooksProvider>
-                <SvAdminClientProvider url={config.services.sv.url}>
+                <SvAdminClientProvider url={services.sv.url}>
                   <SvAppGovernanceReadClientProvider>{children}</SvAppGovernanceReadClientProvider>
                 </SvAdminClientProvider>
               </SvAppVotesHooksProvider>
@@ -76,7 +76,6 @@ export async function navigateToGovernancePage(user: UserEvent): Promise<void> {
   await user.click(screen.getByTestId('navlink-governance'));
 }
 
-/** Renders <App/> with window.splice_config.dappMode = { enabled: true, scanUrl } for the test, restoring the config afterwards. */
 export const renderDappApp: (initialPath?: string) => void = (initialPath = '/') => {
   // Mutate in place: the common config reader captures the window.splice_config object at module
   // load, so assigning a new object would not be seen by SvConfigProvider.

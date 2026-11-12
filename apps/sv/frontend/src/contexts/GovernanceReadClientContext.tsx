@@ -23,7 +23,6 @@ export type GovernanceReadClient = Pick<
   | 'featureSupport'
 > & { getDsoInfo: () => Promise<GovernanceDsoInfoResponse> };
 
-/** The SV app's DSO info with the viewer's SV identity optional. */
 export type GovernanceDsoInfoResponse = Omit<GetDsoInfoResponse, 'sv_user' | 'sv_party_id'> &
   Partial<Pick<GetDsoInfoResponse, 'sv_user' | 'sv_party_id'>>;
 
@@ -47,7 +46,6 @@ export const useGovernanceReadClient: () => GovernanceReadClient = () => {
   return client;
 };
 
-/** Operator mode: composes useSvAdminClient() and useSvClient().getDsoInfo. Must be mounted inside both providers. */
 export const SvAppGovernanceReadClientProvider: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {

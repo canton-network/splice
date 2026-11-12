@@ -28,18 +28,17 @@ const scanUrlSchema = z
   .pipe(httpUrlSchema)
   .transform(url => url.replace(/\/+$/, ''));
 
-// Fields shared by both modes; validated once, so their errors are reported directly whatever the mode.
 const commonConfigSchema = z.object({
   spliceInstanceNames: spliceInstanceNamesSchema,
   pollInterval: pollIntervalSchema,
-  services: z.object({
-    sv: serviceSchema,
-  }),
 });
 
 // Operator mode: logs in against the SV app. A `dappMode` block with `enabled: false` (or none) selects it;
 // any other `dappMode` fields are ignored.
 const operatorModeSchema = z.object({
+  services: z.object({
+    sv: serviceSchema,
+  }),
   auth: authSchema,
   testAuth: testAuthSchema.optional(),
   dappMode: z
@@ -53,7 +52,8 @@ const operatorModeSchema = z.object({
     .optional(),
 });
 
-// dApp mode: read-only, no login, governance is read from Scan. `auth`/`testAuth` are ignored and dropped.
+// dApp mode: read-only, no login, no SV app; governance is read from Scan. `services`, `auth` and `testAuth`
+// are ignored and dropped.
 const dappModeSchema = z.object({
   dappMode: z.object({
     enabled: z.literal(true),
@@ -116,7 +116,7 @@ export const SvConfigProvider: React.FC<{
 
 export const useSvConfig: () => SvConfig = () => useConfig<SvConfig>(ConfigContext);
 
-// Narrows the config to operator mode; throws in dApp mode, where there is no auth config.
+// Narrows the config to operator mode; throws in dApp mode, where there is no auth or SV app config.
 export const requireOperatorConfig: (config: SvConfig) => OperatorSvConfig = config => {
   if (!('auth' in config)) {
     throw new Error('auth config is required in operator mode');
@@ -127,6 +127,8 @@ export const requireOperatorConfig: (config: SvConfig) => OperatorSvConfig = con
 // Returns the parsed `dappMode` block itself (a stable reference), or undefined in operator mode.
 export const getDappModeConfig: (config: SvConfig) => DappModeConfig | undefined = config =>
   config.dappMode?.enabled ? config.dappMode : undefined;
+
+export const useOperatorConfig: () => OperatorSvConfig = () => requireOperatorConfig(useSvConfig());
 
 export const useDappModeConfig: () => DappModeConfig | undefined = () =>
   getDappModeConfig(useSvConfig());
