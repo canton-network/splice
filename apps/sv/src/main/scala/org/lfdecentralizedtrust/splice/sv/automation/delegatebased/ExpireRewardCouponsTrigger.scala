@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,

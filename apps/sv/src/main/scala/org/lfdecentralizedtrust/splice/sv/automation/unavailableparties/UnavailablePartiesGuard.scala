@@ -1,14 +1,13 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
+package org.lfdecentralizedtrust.splice.sv.automation.unavailableparties
 
-import com.digitalasset.base.error.utils.ErrorDetails
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.SvTaskBasedTrigger
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
-import io.grpc.protobuf.StatusProto
 import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -114,7 +113,9 @@ trait UnavailablePartiesGuard extends NamedLogging {
   ): PartialFunction[Throwable, Future[TaskOutcome]] = {
     case ex: StatusRuntimeException
         if enabled && svConfig.parameters.enabledFeatures.naiveUnresponsivePartiesAutoIgnore =>
-      val toIgnore = withoutDsoParty(extractUnresponsiveParties(ex))
+      val toIgnore = withoutDsoParty(
+        UnresponsiveParties.fromThrowable(ex).getOrElse(Set.empty)
+      )
       if (toIgnore.isEmpty) {
         Future.failed(ex)
       } else {
@@ -131,13 +132,5 @@ trait UnavailablePartiesGuard extends NamedLogging {
   // never ignore the DSO party itself: it is a stakeholder on every DSO contract
   private def withoutDsoParty(parties: Set[PartyId]): Set[PartyId] =
     parties - svTaskContext.dsoStore.key.dsoParty
-
-  private def extractUnresponsiveParties(ex: StatusRuntimeException): Set[PartyId] = {
-    val statusProto = StatusProto.fromThrowable(ex)
-    val errorDetails = ErrorDetails.from(statusProto)
-    errorDetails
-      .collectFirst { case UnresponsiveParties(parties) => parties }
-      .getOrElse(Set.empty)
-  }
 
 }
