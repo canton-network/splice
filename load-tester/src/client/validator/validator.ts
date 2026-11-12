@@ -8,13 +8,18 @@ import { HttpClient } from '../http';
 import {
   AcceptTransferOfferResponse,
   CreateTransferOfferResponse,
+  FeaturedAppRightSpec,
+  GetAmuletRulesProxyResponse,
   GetBalanceResponse,
   ListTransferOffersResponse,
+  LookupFeaturedAppRightResponse,
   UserStatusResponse,
   acceptTransferOfferResponse,
   createTransferOfferResponse,
+  getAmuletRulesProxyResponse,
   getBalanceResponse,
   listTransferOffersResponse,
+  lookupFeaturedAppRightResponse,
   userStatusResponse,
 } from './models';
 
@@ -24,11 +29,11 @@ export class ValidatorClient {
 
   private token: string;
   /** Expected featured app status
-   * true: this party should be featured
+   * FeaturedAppRightSpec: this party should be featured with exactly the given config
    * false: this party should not be featured
    * undefined: do not attempt to modify the featured app status of this party
    */
-  public featured: boolean | undefined;
+  public featured: FeaturedAppRightSpec | false | undefined;
   private _partyId: string | undefined;
 
   private headers = (): Record<string, string> => ({
@@ -36,7 +41,11 @@ export class ValidatorClient {
     Authorization: `Bearer ${this.token}`,
   });
 
-  constructor(validatorBaseUrl: string, token: string, featured: boolean | undefined) {
+  constructor(
+    validatorBaseUrl: string,
+    token: string,
+    featured: FeaturedAppRightSpec | false | undefined,
+  ) {
     this.validatorBaseUrl = validatorBaseUrl;
     this.token = token;
     this.featured = featured;
@@ -65,6 +74,33 @@ export class ValidatorClient {
       } catch (error) {
         throw new Error(`Error registering validator: ${error}`);
       }
+    },
+
+    // -*--- SCAN PROXY APIS ------------------------------------------------------*-
+    scanProxy: {
+      getAmuletRules: (): GetAmuletRulesProxyResponse | undefined => {
+        return this.http.get
+          .success(`${this.validatorBaseUrl}/api/validator/v0/scan-proxy/amulet-rules`, null, {
+            headers: this.headers(),
+          })
+          .then(resp => jsonStringDecoder(getAmuletRulesProxyResponse, resp.body));
+      },
+      lookupFeaturedAppRight: (
+        providerPartyId: string,
+      ): LookupFeaturedAppRightResponse | undefined => {
+        return this.http.get
+          .success(
+            `${this.validatorBaseUrl}/api/validator/v0/scan-proxy/featured-apps/${encodeURIComponent(providerPartyId)}`,
+            null,
+            {
+              headers: this.headers(),
+              tags: {
+                name: `${this.validatorBaseUrl}/api/validator/v0/scan-proxy/featured-apps/{provider_party_id}`,
+              },
+            },
+          )
+          .then(resp => jsonStringDecoder(lookupFeaturedAppRightResponse, resp.body));
+      },
     },
 
     // -*--- WALLET APIS ----------------------------------------------------------*-
@@ -153,10 +189,15 @@ export class ValidatorClient {
           })
           .then(resp => jsonStringDecoder(userStatusResponse, resp.body));
       },
-      selfGrantFeatureAppRight: (): void => {
+      selfGrantFeatureAppRight: (spec: FeaturedAppRightSpec): void => {
         this.http.post.success(
           `${this.validatorBaseUrl}/api/validator/v0/wallet/self-grant-feature-app-right`,
-          null,
+          // undefined fields are omitted
+          JSON.stringify({
+            app_kind: spec.kind,
+            activity_weight: spec.weight?.toString(),
+            ops_party_ids: spec.opsParties,
+          }),
           { retry: false, headers: this.headers() },
         );
       },

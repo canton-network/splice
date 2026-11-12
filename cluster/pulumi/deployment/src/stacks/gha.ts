@@ -24,6 +24,6 @@ export function installGithubActionsStack(
   gcpSecret: k8s.core.v1.Secret
 ): void {
   if (deploymentConf.projectsToDeploy.has('gha')) {
-    createStackCR('gha', 'gha', namespace, false, reference, envRefs, gcpSecret);
+    createStackCR('gha', 'gha', namespace, reference, envRefs, gcpSecret);
   }
 }

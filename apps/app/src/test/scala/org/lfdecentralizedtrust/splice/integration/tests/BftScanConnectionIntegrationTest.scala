@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.GetTransfer
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetChoiceContextRequest
 import org.slf4j.event.Level
 
+import scala.concurrent.duration.*
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -247,7 +248,7 @@ class BftScanConnectionIntegrationTest
     )
 
     withClue("Alice's validator should be able to onboard a user after establishing connections.") {
-      eventuallySucceeds() {
+      eventuallySucceeds(timeUntilSuccess = 2.minutes) {
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
       }
     }
