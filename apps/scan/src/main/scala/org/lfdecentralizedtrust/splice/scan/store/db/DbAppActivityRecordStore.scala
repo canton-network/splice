@@ -47,12 +47,7 @@ object DbAppActivityRecordStore {
 }
 
 /** Row store for the TBAR app-side activity records, backed by
-  * `app_activity_record_store`. Rows arrive via verdict ingestion
-  * (`DbScanVerdictStore`) which drives the orchestrator
-  * `insertAppActivityRecordsDBIO` below: it writes rows atomically with
-  * the meta-row bookkeeping, delegating the meta DBIOs to
-  * `DbActivityRecordMetaStore` (the sole owner of
-  * `app_activity_record_meta`).
+  * `app_activity_record_store`.
   */
 class DbAppActivityRecordStore(
     storage: DbStorage,

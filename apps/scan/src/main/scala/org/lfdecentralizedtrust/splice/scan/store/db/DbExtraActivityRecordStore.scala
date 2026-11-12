@@ -22,13 +22,9 @@ object DbExtraActivityRecordStore {
 
   /** Extra activity record contributed by an
     * `ActivityRecorder_DsoRecordActivity` exercise (CIP-0104 amendment).
-    *
-    * `history_id` is injected from the store's `UpdateHistory` on insert
-    * and omitted here. The DB PK is `(history_id, round_number,
-    * record_time)` — a PoC stand-in for a proper source-event identity.
-    * Mirrors the shape of
-    * `DbAppActivityRecordStore.AppAndAssetActivityRecordT` modulo the
-    * source-side keying.
+    * `history_id` is injected from the store's `UpdateHistory` on insert.
+    * The DB PK is `(history_id, round_number, record_time)` — a PoC
+    * stand-in for a proper source-event identity.
     */
   final case class ExtraActivityRecordT(
       roundNumber: Long,
@@ -40,13 +36,9 @@ object DbExtraActivityRecordStore {
   )
 }
 
-/** Row-focused store for extra-activity records contributed by the CIP-0104
-  * amendment's `ActivityRecorder_DsoRecordActivity` choice. Writes rows to
-  * `extra_app_activity_record_store` and supports a round-trip read for
-  * tests. The meta-row surface (`extra_app_activity_record_meta` — reads,
-  * writes, `startAndEnsureMeta` bootstrap, archive bumping) lives on
-  * `DbActivityRecordMetaStore`, which is the sole implementor of the
-  * `ActivityRecordMetaStore` trait.
+/** Row store for extra-activity records contributed by the CIP-0104
+  * amendment's `ActivityRecorder_DsoRecordActivity` choice, backed by
+  * `extra_app_activity_record_store`.
   */
 class DbExtraActivityRecordStore(
     storage: DbStorage,
@@ -116,8 +108,8 @@ class DbExtraActivityRecordStore(
         )
       )
 
-  /** Read every extra activity record for this store's `history_id`, ordered
-    * by `(round_number, record_time)`. Round-trip helper only.
+  /** Read every row for this store's `history_id`, ordered by
+    * `(round_number, record_time)`.
     */
   @VisibleForTesting
   def getRecordsForTesting()(implicit tc: TraceContext): Future[Seq[ExtraActivityRecordT]] =

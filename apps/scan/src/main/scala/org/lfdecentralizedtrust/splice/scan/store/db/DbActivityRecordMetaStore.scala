@@ -28,9 +28,8 @@ object DbActivityRecordMetaStore {
     */
   final case class IngestionVersions(code: Int, user: Int)
 
-  /** Metadata row for extra-activity ingestion (CIP-0104 extension hook).
-    * Owned here because the facade is the sole reader/writer of
-    * `extra_app_activity_record_meta`.
+  /** Metadata row for extra-activity ingestion (CIP-0104 extension hook),
+    * read from and written to `extra_app_activity_record_meta`.
     */
   final case class ExtraActivityRecordMetaT(
       historyId: Long,
@@ -41,10 +40,8 @@ object DbActivityRecordMetaStore {
       lastArchivedRound: Option[Long],
   )
 
-  /** Metadata row for app-side activity ingestion (TBAR).
-    * Owned here as the facade becomes the sole reader/writer of
-    * `app_activity_record_meta`; `DbAppActivityRecordStore.AppActivityRecordMetaT`
-    * will be deleted in the next sub-step of the fold.
+  /** Metadata row for app-side activity ingestion (TBAR), read from and
+    * written to `app_activity_record_meta`.
     */
   final case class AppActivityRecordMetaT(
       historyId: Long,
@@ -89,7 +86,7 @@ object DbActivityRecordMetaStore {
   * `ActivityRecordMetaStore` trait as a combined view over the two sides.
   *
   * The two concrete row stores (`DbAppActivityRecordStore`,
-  * `DbExtraActivityRecordStore`) no longer touch their meta tables; they
+  * `DbExtraActivityRecordStore`) do not touch their meta tables; they
   * consume the per-side meta helpers on this facade. Row-level case classes
   * and insert/read paths stay with the concrete stores.
   *
@@ -520,15 +517,10 @@ class DbActivityRecordMetaStore(
       )
     )
 
-  /** Bootstrap the extra-side meta row with the PoC stub for
-    * `earliest_ingested_round`.
-    *
-    * The CIP-0104 extension-hook design doc derives
-    * `earliest_ingested_round` for non-first SVs from
-    * `DsoRules.svSwitchOverTimes["cip-104/enable-extra-activity-after"]`.
-    * That switchover-time key does not yet exist on splice-side `DsoRules`,
-    * so this PoC always uses `initialRound - 1`. Replace with the real
-    * rule once the Daml-side key lands.
+  /** Bootstrap the extra-side meta row. Uses `initialRound - 1` as the
+    * `earliest_ingested_round` — a PoC stub for the CIP-0104 extension
+    * hook's intended rule, which derives the value for non-first SVs from
+    * a `DsoRules.svSwitchOverTimes` key not yet present on splice-side.
     */
   def startAndEnsureExtraMeta(startedIngestingAt: Long)(implicit
       tc: TraceContext
@@ -563,9 +555,8 @@ class DbActivityRecordMetaStore(
 
   /** Select one Long (or NULL) from a meta table, keyed by
     * `(history_id, activity_ingestion_code_version, activity_ingestion_user_version)`.
-    * Caller provides the `select` expression (e.g. `m.earliest_ingested_round + 1`),
-    * any additional WHERE conjunction (empty string if none), and the
-    * operation label for tracing. Covers 8 of the 10 meta-read query paths.
+    * `columnExpr` is spliced into the SELECT (e.g. `m.earliest_ingested_round + 1`);
+    * `extraWhere` is spliced after the key conjunctions (empty string if none).
     */
   private def readMetaOptLong(
       table: String,
