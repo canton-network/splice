@@ -15,11 +15,9 @@ into BigQuery, replacing the tables' previous contents:
    contents.
 5. Check that each load wrote as many rows as its JSONL file has.
 
-Needs `canton` on the PATH and the google-cloud-storage and google-cloud-bigquery Python
-packages, all of which the repo's nix dev shell provides. Authenticates with Application
-Default Credentials (locally: `gcloud auth application-default login`). Example:
+Usage:
 
-  direnv exec . scripts/topology-snapshot-to-bigquery.py \\
+  scripts/topology-snapshot-to-bigquery.py \\
     --snapshot-location gs://<snapshot-bucket>/<prefix> \\
     --project-id <project-id> --dataset <dataset> --location <location> \\
     --export-location gs://<bucket>/<prefix>
