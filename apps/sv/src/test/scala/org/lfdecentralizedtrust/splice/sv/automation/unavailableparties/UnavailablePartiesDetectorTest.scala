@@ -168,20 +168,33 @@ class UnavailablePartiesDetectorTest
       val versions =
         Map(alice -> Some(v2), bob -> Some(v2), charlie -> Some(v1), dso -> Some(v2))
       run(contracts, versions, Set("c3")).map { case (result, submissions, store) =>
-        // [c1,c2,c3,c4] -> [c1,c2] + [c3,c4], then [c3,c4] -> [c3] + [c4]
+        // [c3,c1,c2,c4] -> [c3,c1] + [c2,c4], then [c3,c1] -> [c3] + [c1]
         result.splits shouldBe 2
         result.failedTasks shouldBe 1
         result.submittedTasks shouldBe 3
         result.ignoredParties shouldBe Set(charlie)
         store.listParties().futureValue.toSet shouldBe Set(charlie)
-        // the halves are retried depth-first, left before right
+        // the failing contract is tried first since it has the lowest version,
+        // and the halves are retried depth-first, left before right
         submissions shouldBe Seq(
-          Seq("c1", "c2", "c3", "c4"),
-          Seq("c1", "c2"),
-          Seq("c3", "c4"),
+          Seq("c3", "c1", "c2", "c4"),
+          Seq("c3", "c1"),
           Seq("c3"),
-          Seq("c4"),
+          Seq("c1"),
+          Seq("c2", "c4"),
         )
+      }
+    }
+
+    "pre-sort the batch ascending by lowest supported version, unknown versions first" in {
+      val contracts = Seq(
+        Contract("c1", Set(alice, dso)),
+        Contract("c2", Set(bob, dso)),
+        Contract("c3", Set(charlie, dso)),
+      )
+      val versions = Map(alice -> Some(v2), bob -> None, charlie -> Some(v1), dso -> Some(v2))
+      run(contracts, versions, Set.empty).map { case (_, submissions, _) =>
+        submissions shouldBe Seq(Seq("c2", "c3", "c1"))
       }
     }
 
