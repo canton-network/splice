@@ -12,13 +12,6 @@ window.splice_config = {
     },
   },
   pollInterval: "${SPLICE_APP_UI_POLL_INTERVAL}",
-  // dApp mode: governance-only UI that reads from Scan and needs no SV app.
-  // SPLICE_APP_UI_DAPP_MODE_ENABLED is normalised to true/false by docker-entrypoint.sh (unset means false);
-  // the auth block is ignored when it is true.
-  dappMode: {
-    enabled: ${SPLICE_APP_UI_DAPP_MODE_ENABLED},
-    scanUrl: "${SPLICE_APP_UI_DAPP_MODE_SCAN_URL}",
-  },
   spliceInstanceNames: {
     networkName: "${SPLICE_APP_UI_NETWORK_NAME}",
     networkFaviconUrl: "${SPLICE_APP_UI_NETWORK_FAVICON_URL}",
