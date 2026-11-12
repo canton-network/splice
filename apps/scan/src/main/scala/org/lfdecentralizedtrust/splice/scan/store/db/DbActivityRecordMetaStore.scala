@@ -154,7 +154,7 @@ class DbActivityRecordMetaStore(
 
   import DbActivityRecordMetaStore.*
 
-  private object Tables {
+  private[store] object Tables {
     val appActivityRecordMeta = "app_activity_record_meta"
     val extraActivityRecordMeta = "extra_app_activity_record_meta"
   }
@@ -205,9 +205,8 @@ class DbActivityRecordMetaStore(
   override def earliestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] =
-    appMeta
-      .earliestRoundWithCompleteAppActivity()
-      .zip(extraMeta.earliestRoundWithCompleteAppActivity())
+    earliestCompleteRoundOf(Tables.appActivityRecordMeta)
+      .zip(earliestCompleteRoundOf(Tables.extraActivityRecordMeta))
       .map {
         case (Some(a), Some(e)) => Some(math.max(a, e))
         case _ => None
@@ -216,9 +215,8 @@ class DbActivityRecordMetaStore(
   override def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] =
-    appMeta
-      .latestRoundWithCompleteAppActivity()
-      .zip(extraMeta.latestRoundWithCompleteAppActivity())
+    latestCompleteRoundOf(Tables.appActivityRecordMeta)
+      .zip(latestCompleteRoundOf(Tables.extraActivityRecordMeta))
       .map {
         case (Some(a), Some(e)) => Some(math.min(a, e))
         case _ => None
@@ -227,8 +225,10 @@ class DbActivityRecordMetaStore(
   override def ingestionStatusForRound(roundNumber: Long)(implicit
       tc: TraceContext
   ): Future[RoundIngestionStatus] =
-    metaIngestionStatus(appMeta.earliestIngestedRound(), roundNumber)
-      .zip(metaIngestionStatus(extraMeta.earliestIngestedRound(), roundNumber))
+    metaIngestionStatus(earliestIngestedRoundOf(Tables.appActivityRecordMeta), roundNumber)
+      .zip(
+        metaIngestionStatus(earliestIngestedRoundOf(Tables.extraActivityRecordMeta), roundNumber)
+      )
       .map {
         case (RoundIngestionStatus.CannotProvide, _) => RoundIngestionStatus.CannotProvide
         case (_, RoundIngestionStatus.CannotProvide) => RoundIngestionStatus.CannotProvide
@@ -237,37 +237,50 @@ class DbActivityRecordMetaStore(
 
   // ============ Per-side meta readers ============
 
-  /** Column-read helpers scoped to a single meta table. Both sides share
-    * the SQL templates; the per-side instance supplies the table name.
+  private[store] def earliestIngestedRoundOf(
+      table: String
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    runQuerySingle(
+      sql"""select m.earliest_ingested_round
+            from #$table m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = ${ingestionVersions.code}
+              and m.activity_ingestion_user_version = ${ingestionVersions.user}
+      """.as[Option[Long]].headOption.map(_.flatten),
+      s"$table.earliestIngestedRound",
+    )
+
+  /** The first ingested round may be partial, so the earliest complete
+    * round is `earliest_ingested_round + 1`. Returns only once that round
+    * has been archived.
     */
-  private[store] class MetaReader(table: String) {
-    def earliestIngestedRound()(implicit tc: TraceContext): Future[Option[Long]] =
-      readMetaOptLong(table, "m.earliest_ingested_round", "", s"$table.earliestIngestedRound")
+  private[store] def earliestCompleteRoundOf(
+      table: String
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    runQuerySingle(
+      sql"""select m.earliest_ingested_round + 1
+            from #$table m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = ${ingestionVersions.code}
+              and m.activity_ingestion_user_version = ${ingestionVersions.user}
+              and m.last_archived_round >= m.earliest_ingested_round + 1
+      """.as[Option[Long]].headOption.map(_.flatten),
+      s"$table.earliestRoundWithCompleteAppActivity",
+    )
 
-    /** The first ingested round may be partial, so the earliest complete
-      * round is `earliest_ingested_round + 1`. Returns only once that round
-      * has been archived.
-      */
-    def earliestRoundWithCompleteAppActivity()(implicit tc: TraceContext): Future[Option[Long]] =
-      readMetaOptLong(
-        table,
-        "m.earliest_ingested_round + 1",
-        "and m.last_archived_round >= m.earliest_ingested_round + 1",
-        s"$table.earliestRoundWithCompleteAppActivity",
-      )
-
-    /** Latest round with complete activity (= `last_archived_round`). */
-    def latestRoundWithCompleteAppActivity()(implicit tc: TraceContext): Future[Option[Long]] =
-      readMetaOptLong(
-        table,
-        "m.last_archived_round",
-        "",
-        s"$table.latestRoundWithCompleteAppActivity",
-      )
-  }
-
-  private[store] val appMeta = new MetaReader(Tables.appActivityRecordMeta)
-  private[store] val extraMeta = new MetaReader(Tables.extraActivityRecordMeta)
+  /** Latest round with complete activity (= `last_archived_round`). */
+  private[store] def latestCompleteRoundOf(
+      table: String
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    runQuerySingle(
+      sql"""select m.last_archived_round
+            from #$table m
+            where m.history_id = $historyId
+              and m.activity_ingestion_code_version = ${ingestionVersions.code}
+              and m.activity_ingestion_user_version = ${ingestionVersions.user}
+      """.as[Option[Long]].headOption.map(_.flatten),
+      s"$table.latestRoundWithCompleteAppActivity",
+    )
 
   // ============ App-side meta ============
 
@@ -437,28 +450,6 @@ class DbActivityRecordMetaStore(
           tsO
         }
     }
-
-  /** Select one Long (or NULL) from a meta table, keyed by
-    * `(history_id, activity_ingestion_code_version, activity_ingestion_user_version)`.
-    * `columnExpr` is spliced into the SELECT (e.g. `m.earliest_ingested_round + 1`);
-    * `extraWhere` is spliced after the key conjunctions (empty string if none).
-    */
-  private def readMetaOptLong(
-      table: String,
-      columnExpr: String,
-      extraWhere: String,
-      label: String,
-  )(implicit tc: TraceContext): Future[Option[Long]] =
-    runQuerySingle(
-      sql"""select #$columnExpr
-            from #$table m
-            where m.history_id = $historyId
-              and m.activity_ingestion_code_version = ${ingestionVersions.code}
-              and m.activity_ingestion_user_version = ${ingestionVersions.user}
-              #$extraWhere
-      """.as[Option[Long]].headOption.map(_.flatten),
-      label,
-    )
 
   private def metaIngestionStatus(
       earliestF: Future[Option[Long]],

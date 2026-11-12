@@ -620,7 +620,7 @@ class DbAppActivityRecordStoreTest
         // Only round 10 has activity; rounds 11 and 12 have zero records but
         // their archival makes them complete.
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(12L))
-        result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+        result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
       } yield {
         result.value shouldBe 11L
       }
@@ -641,7 +641,7 @@ class DbAppActivityRecordStoreTest
             ("round-0", 0L),
             ("round-1", 1L),
           )
-          result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
         } yield {
           // query returns -1 + 1 = 0
           result.value shouldBe 0L
@@ -654,7 +654,7 @@ class DbAppActivityRecordStoreTest
           baseTs = CantonTimestamp.now()
           _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, -1L, None)
           _ <- insertRecordsForRounds(store, historyId, baseTs, ("round-0", 0L))
-          result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
         } yield {
           result shouldBe None
         }
@@ -684,7 +684,7 @@ class DbAppActivityRecordStoreTest
             ("round-10", 10L),
             ("round-11", 11L),
           )
-          result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
         } yield {
           result.value shouldBe 11L
         }
@@ -707,7 +707,7 @@ class DbAppActivityRecordStoreTest
             ("round-10", 10L),
             ("round-11", 11L),
           )
-          result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
         } yield {
           // Query reads version 2 meta (earliest_ingested_round = 10),
           // returns Some(11).
@@ -952,7 +952,7 @@ class DbAppActivityRecordStoreTest
         // Simulate: meta created with earliestRound = 5 (from lastArchivedRound),
         // then lastArchivedRound advances to 7
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 1000000L, 5L, Some(7L))
-        result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+        result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
       } yield {
         result.value shouldBe 6L
       }
@@ -964,7 +964,7 @@ class DbAppActivityRecordStoreTest
         // Fresh network: earliestRound = -1 (no lastArchivedRound at meta creation),
         // then lastArchivedRound advances to 0 after first round closes
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 1000000L, -1L, Some(0L))
-        result <- metaStore.appMeta.earliestRoundWithCompleteAppActivity()
+        result <- metaStore.earliestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
       } yield {
         result.value shouldBe 0L
       }
@@ -985,7 +985,7 @@ class DbAppActivityRecordStoreTest
           ("no-meta-11", 11L),
         )
         // No meta row — latestRound returns None, consistent with earliestRound
-        result <- metaStore.appMeta.latestRoundWithCompleteAppActivity()
+        result <- metaStore.latestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
       } yield {
         result shouldBe None
       }
@@ -997,7 +997,7 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
         _ <- insertRecordsForRounds(store, historyId, baseTs, ("gap-10", 10L))
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(12L))
-        result <- metaStore.appMeta.latestRoundWithCompleteAppActivity()
+        result <- metaStore.latestCompleteRoundOf(metaStore.Tables.appActivityRecordMeta)
       } yield {
         result.value shouldBe 12L
       }

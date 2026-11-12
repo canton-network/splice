@@ -206,8 +206,9 @@ class DbActivityRecordMetaStoreTest
   }
 
   // ============ Per-side meta semantics ============
-  // Each test runs twice — once against appMeta, once against extraMeta —
-  // to pin that MetaReader's SQL template is correct regardless of table.
+  // Each test runs twice — once against the app meta table, once against
+  // the extra meta table — to pin that each shared SQL is correct regardless
+  // of which side it reads.
 
   "earliestRoundWithCompleteAppActivity on either side" should {
     sides.foreach { case (sideName, pickSide) =>
@@ -215,7 +216,7 @@ class DbActivityRecordMetaStoreTest
         for {
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
-          result <- side.reader.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(side.table)
         } yield result shouldBe None
       }
 
@@ -224,7 +225,7 @@ class DbActivityRecordMetaStoreTest
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
           _ <- side.insertMeta(1, 0, 1000L, 0L, None)
-          result <- side.reader.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(side.table)
         } yield result shouldBe None
       }
 
@@ -233,7 +234,7 @@ class DbActivityRecordMetaStoreTest
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
           _ <- side.insertMeta(1, 0, 1000L, 42L, Some(42L))
-          result <- side.reader.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(side.table)
         } yield result shouldBe None
       }
 
@@ -242,7 +243,7 @@ class DbActivityRecordMetaStoreTest
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
           _ <- side.insertMeta(1, 0, 1000L, 42L, Some(43L))
-          result <- side.reader.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(side.table)
         } yield result.value shouldBe 43L
       }
 
@@ -252,7 +253,7 @@ class DbActivityRecordMetaStoreTest
           side = pickSide(metaStore)
           _ <- side.insertMeta(0, 0, 1000L, 10L, Some(15L))
           _ <- side.insertMeta(1, 0, 2000L, 20L, Some(25L))
-          result <- side.reader.earliestRoundWithCompleteAppActivity()
+          result <- metaStore.earliestCompleteRoundOf(side.table)
         } yield result.value shouldBe 21L
       }
 
@@ -264,7 +265,7 @@ class DbActivityRecordMetaStoreTest
           side2 = pickSide(metaStore2)
           _ <- side2.insertMeta(1, 0, 1000L, 10L, Some(11L))
           _ <- side1.insertMeta(1, 0, 3000L, 50L, None)
-          result <- side1.reader.earliestRoundWithCompleteAppActivity()
+          result <- metaStore1.earliestCompleteRoundOf(side1.table)
         } yield result shouldBe None
       }
     }
@@ -276,7 +277,7 @@ class DbActivityRecordMetaStoreTest
         for {
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
-          result <- side.reader.earliestIngestedRound()
+          result <- metaStore.earliestIngestedRoundOf(side.table)
         } yield result shouldBe None
       }
 
@@ -285,7 +286,7 @@ class DbActivityRecordMetaStoreTest
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
           _ <- side.insertMeta(1, 0, 1000L, 42L, None)
-          result <- side.reader.earliestIngestedRound()
+          result <- metaStore.earliestIngestedRoundOf(side.table)
         } yield result.value shouldBe 42L
       }
 
@@ -295,7 +296,7 @@ class DbActivityRecordMetaStoreTest
           side = pickSide(metaStore)
           _ <- side.insertMeta(0, 0, 1000L, 10L, Some(15L))
           _ <- side.insertMeta(1, 0, 2000L, 20L, None)
-          result <- side.reader.earliestIngestedRound()
+          result <- metaStore.earliestIngestedRoundOf(side.table)
         } yield result.value shouldBe 20L
       }
 
@@ -306,7 +307,7 @@ class DbActivityRecordMetaStoreTest
           side1 = pickSide(metaStore1)
           side2 = pickSide(metaStore2)
           _ <- side2.insertMeta(1, 0, 1000L, 10L, Some(11L))
-          result <- side1.reader.earliestIngestedRound()
+          result <- metaStore1.earliestIngestedRoundOf(side1.table)
         } yield result shouldBe None
       }
     }
@@ -318,7 +319,7 @@ class DbActivityRecordMetaStoreTest
         for {
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
-          result <- side.reader.latestRoundWithCompleteAppActivity()
+          result <- metaStore.latestCompleteRoundOf(side.table)
         } yield result shouldBe None
       }
 
@@ -327,7 +328,7 @@ class DbActivityRecordMetaStoreTest
           (metaStore, _) <- newStores()
           side = pickSide(metaStore)
           _ <- side.insertMeta(1, 0, 1000L, 42L, None)
-          result <- side.reader.latestRoundWithCompleteAppActivity()
+          result <- metaStore.latestCompleteRoundOf(side.table)
         } yield result shouldBe None
       }
 
@@ -338,7 +339,7 @@ class DbActivityRecordMetaStoreTest
           side1 = pickSide(metaStore1)
           side2 = pickSide(metaStore2)
           _ <- side2.insertMeta(1, 0, 1000L, 10L, Some(11L))
-          result <- side1.reader.latestRoundWithCompleteAppActivity()
+          result <- metaStore1.latestCompleteRoundOf(side1.table)
         } yield result shouldBe None
       }
     }
@@ -352,7 +353,7 @@ class DbActivityRecordMetaStoreTest
         earliestIngestedRound: Long,
         lastArchivedRound: Option[Long],
     ): Future[Unit]
-    def reader: DbActivityRecordMetaStore#MetaReader
+    def table: String
   }
 
   private val sides: Seq[(String, DbActivityRecordMetaStore => SideFixture)] = Seq(
@@ -372,7 +373,7 @@ class DbActivityRecordMetaStoreTest
             earliestIngestedRound,
             lastArchivedRound,
           )
-        def reader = metaStore.appMeta
+        def table = metaStore.Tables.appActivityRecordMeta
       }
     },
     "extra" -> { (metaStore: DbActivityRecordMetaStore) =>
@@ -391,7 +392,7 @@ class DbActivityRecordMetaStoreTest
             earliestIngestedRound,
             lastArchivedRound,
           )
-        def reader = metaStore.extraMeta
+        def table = metaStore.Tables.extraActivityRecordMeta
       }
     },
   )
