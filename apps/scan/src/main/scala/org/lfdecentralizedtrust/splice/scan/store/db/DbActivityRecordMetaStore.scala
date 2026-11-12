@@ -202,14 +202,24 @@ class DbActivityRecordMetaStore(
         case (None, someE) => someE
       }
 
+  // PoC note: when the extra-side meta row is absent (no CIP-0104 ingestion
+  // writer yet on this network), extra is treated as "not participating" and
+  // the combine defers to app-side alone. This keeps `RewardComputationTrigger`
+  // emitting tasks on networks that haven't enabled the hook. Once the
+  // extra-side ingestion service lands, this stance will be revisited as part
+  // of the switchover-time (A1) design — meta presence alone is a crude
+  // proxy for "hook is live."
+
   override def earliestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]] =
     earliestCompleteRoundOf(Tables.appActivityRecordMeta)
       .zip(earliestCompleteRoundOf(Tables.extraActivityRecordMeta))
+      .zip(lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user))
       .map {
-        case (Some(a), Some(e)) => Some(math.max(a, e))
-        case _ => None
+        case ((appE, _), None) => appE
+        case ((Some(a), Some(e)), Some(_)) => Some(math.max(a, e))
+        case ((_, _), Some(_)) => None
       }
 
   override def latestRoundWithCompleteAppActivity()(implicit
@@ -217,22 +227,30 @@ class DbActivityRecordMetaStore(
   ): Future[Option[Long]] =
     latestCompleteRoundOf(Tables.appActivityRecordMeta)
       .zip(latestCompleteRoundOf(Tables.extraActivityRecordMeta))
+      .zip(lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user))
       .map {
-        case (Some(a), Some(e)) => Some(math.min(a, e))
-        case _ => None
+        case ((appL, _), None) => appL
+        case ((Some(a), Some(e)), Some(_)) => Some(math.min(a, e))
+        case ((_, _), Some(_)) => None
       }
 
   override def ingestionStatusForRound(roundNumber: Long)(implicit
       tc: TraceContext
   ): Future[RoundIngestionStatus] =
-    metaIngestionStatus(earliestIngestedRoundOf(Tables.appActivityRecordMeta), roundNumber)
-      .zip(
-        metaIngestionStatus(earliestIngestedRoundOf(Tables.extraActivityRecordMeta), roundNumber)
-      )
+    earliestIngestedRoundOf(Tables.appActivityRecordMeta)
+      .zip(earliestIngestedRoundOf(Tables.extraActivityRecordMeta))
       .map {
-        case (RoundIngestionStatus.CannotProvide, _) => RoundIngestionStatus.CannotProvide
-        case (_, RoundIngestionStatus.CannotProvide) => RoundIngestionStatus.CannotProvide
-        case _ => RoundIngestionStatus.Undetermined
+        case (appEarliest, None) =>
+          // Extra side not participating — defer to app's status.
+          ingestionStatusFor(isFirstSv, appEarliest, roundNumber)
+        case (appEarliest, extraEarliest) =>
+          val appStatus = ingestionStatusFor(isFirstSv, appEarliest, roundNumber)
+          val extraStatus = ingestionStatusFor(isFirstSv, extraEarliest, roundNumber)
+          (appStatus, extraStatus) match {
+            case (RoundIngestionStatus.CannotProvide, _) => RoundIngestionStatus.CannotProvide
+            case (_, RoundIngestionStatus.CannotProvide) => RoundIngestionStatus.CannotProvide
+            case _ => RoundIngestionStatus.Undetermined
+          }
       }
 
   // ============ Per-side meta readers ============
@@ -444,12 +462,6 @@ class DbActivityRecordMetaStore(
           tsO
         }
     }
-
-  private def metaIngestionStatus(
-      earliestF: Future[Option[Long]],
-      roundNumber: Long,
-  ): Future[RoundIngestionStatus] =
-    earliestF.map(ingestionStatusFor(isFirstSv, _, roundNumber))
 
   /** Lookup a full meta row, polymorphic in the row type (each side's
     * `GetResult` is in scope).

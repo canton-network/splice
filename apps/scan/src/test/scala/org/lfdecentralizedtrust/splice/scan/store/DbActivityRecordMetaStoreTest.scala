@@ -59,10 +59,28 @@ class DbActivityRecordMetaStoreTest
       }
     }
 
-    "return None for earliestRoundWithCompleteAppActivity when only one side has reached completeness" in {
+    "defer earliestRoundWithCompleteAppActivity to the app side when the extra meta row is absent" in {
+      // PoC: extra has no meta row → extra is "not participating" and the
+      // combine reports app-side's earliest-complete alone. This keeps
+      // `RewardComputationTrigger` emitting tasks on networks that haven't
+      // enabled the hook.
       for {
         (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
+        combined <- metaStore.earliestRoundWithCompleteAppActivity()
+      } yield {
+        combined shouldBe Some(5L)
+      }
+    }
+
+    "return None for earliestRoundWithCompleteAppActivity when extra meta is present but incomplete" in {
+      // Extra meta row exists but has no last_archived_round → strict combine
+      // returns None. (Mirror of the extra-absent case above: once extra is
+      // participating, both sides must be complete.)
+      for {
+        (metaStore, _) <- newStores(initialRound = 5L)
+        _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
+        _ <- metaStore.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
         combined <- metaStore.earliestRoundWithCompleteAppActivity()
       } yield {
         combined shouldBe None
@@ -81,15 +99,26 @@ class DbActivityRecordMetaStoreTest
       }
     }
 
-    "return None for latestRoundWithCompleteAppActivity when only one side has a last_archived_round" in {
+    "return None for latestRoundWithCompleteAppActivity when extra meta is present but incomplete" in {
+      // Extra-side meta present, but no last_archived_round yet. Extra is
+      // participating, so the strict combine returns None.
       for {
         (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
-        // Extra-side meta present, but no last_archived_round yet.
         _ <- metaStore.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
         combined <- metaStore.latestRoundWithCompleteAppActivity()
       } yield {
         combined shouldBe None
+      }
+    }
+
+    "defer latestRoundWithCompleteAppActivity to the app side when the extra meta row is absent" in {
+      for {
+        (metaStore, _) <- newStores(initialRound = 5L)
+        _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
+        combined <- metaStore.latestRoundWithCompleteAppActivity()
+      } yield {
+        combined shouldBe Some(10L)
       }
     }
 
@@ -132,6 +161,21 @@ class DbActivityRecordMetaStoreTest
         combined <- metaStore.ingestionStatusForRound(20L)
       } yield {
         combined shouldBe RoundIngestionStatus.Undetermined
+      }
+    }
+
+    "defer ingestionStatusForRound to the app side when the extra meta row is absent" in {
+      // PoC: extra has no meta row → combine reports whatever the app side
+      // alone reports. On a network with no hook ingestion, this prevents the
+      // combine from poisoning the status to CannotProvide.
+      for {
+        (metaStore, _) <- newStores(initialRound = 5L)
+        _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
+        atEarliest <- metaStore.ingestionStatusForRound(4L)
+        beyond <- metaStore.ingestionStatusForRound(20L)
+      } yield {
+        atEarliest shouldBe RoundIngestionStatus.CannotProvide
+        beyond shouldBe RoundIngestionStatus.Undetermined
       }
     }
 
