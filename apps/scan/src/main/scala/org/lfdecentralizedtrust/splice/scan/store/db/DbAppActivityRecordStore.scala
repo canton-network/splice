@@ -212,8 +212,8 @@ class DbAppActivityRecordStore(
   }
 
   /** Insert activity records only, without meta row management.
-    * Tests manage meta rows separately via the facade's
-    * `insertAppActivityRecordMetaForTesting`.
+    * Tests manage meta rows separately via
+    * `DbActivityRecordMetaStore.insertAppActivityRecordMetaForTesting`.
     */
   @VisibleForTesting
   def insertAppActivityRecordsForTesting(

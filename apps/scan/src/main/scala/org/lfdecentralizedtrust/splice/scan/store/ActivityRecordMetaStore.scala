@@ -9,8 +9,8 @@ import scala.concurrent.Future
 
 /** Store interface for activity-record-meta queries across the TBAR
   * app-side store and the CIP-0104 extension hook's extra-activity store.
-  * Implemented by `DbActivityRecordMetaStore` (the facade over both
-  * concrete stores). Decouples callers from the DB implementations.
+  * Implemented by `DbActivityRecordMetaStore`, which owns both meta
+  * tables and returns a combined view to callers.
   */
 trait ActivityRecordMetaStore {
 

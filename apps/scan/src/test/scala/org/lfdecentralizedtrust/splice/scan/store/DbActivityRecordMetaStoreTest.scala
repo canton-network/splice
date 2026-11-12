@@ -17,6 +17,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, SplicePostgresTest}
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
 import scala.concurrent.Future
 
@@ -157,19 +158,20 @@ class DbActivityRecordMetaStoreTest
 
     // ============ Extra-side meta ownership ============
 
-    "bootstrap the extra-side meta row via startAndEnsureExtraMeta with the PoC earliestIngestedRound stub" in {
+    "insert a new extra-side meta row on first ensureExtraMetaDBIO" in {
       val startedAt = 123456L
-      val initialRound = 7L
+      val earliestRound = 6L
       for {
-        (facade, _) <- newStores(initialRound = initialRound)
-        _ <- facade.startAndEnsureExtraMeta(startedAt)
+        (facade, _) <- newStores(initialRound = 7L)
+        result <- runEnsureExtraMeta(facade, (startedAt, earliestRound))
         loaded <- facade.lookupExtraActivityRecordMeta(1, 0)
       } yield {
+        result shouldBe DbActivityRecordMetaStore.InsertMeta
         val meta = loaded.value
         meta.codeVersion shouldBe 1
         meta.userVersion shouldBe 0
         meta.startedIngestingAt shouldBe startedAt
-        meta.earliestIngestedRound shouldBe initialRound - 1
+        meta.earliestIngestedRound shouldBe earliestRound
         meta.lastArchivedRound shouldBe None
       }
     }
@@ -192,7 +194,7 @@ class DbActivityRecordMetaStoreTest
     "advance last_archived_round via bumpExtraLastArchivedRoundForTesting" in {
       for {
         (facade, _) <- newStores(initialRound = 7L)
-        _ <- facade.startAndEnsureExtraMeta(startedIngestingAt = 100L)
+        _ <- facade.insertExtraActivityRecordMetaForTesting(1, 0, 100L, 6L, None)
         reloadedBefore <- facade.lookupExtraActivityRecordMeta(1, 0)
         _ <- facade.bumpExtraLastArchivedRoundForTesting(round = 12L)
         reloadedAfter <- facade.lookupExtraActivityRecordMeta(1, 0)
@@ -234,7 +236,6 @@ class DbActivityRecordMetaStoreTest
         updateHistory,
         versions,
         isFirstSv,
-        initialRound,
         loggerFactory,
       )
       val appStore = new DbAppActivityRecordStore(
@@ -248,6 +249,18 @@ class DbActivityRecordMetaStoreTest
       (facade, appStore)
     }
   }
+
+  private def runEnsureExtraMeta(
+      facade: DbActivityRecordMetaStore,
+      ingestionStart: (Long, Long),
+      lastArchivedRoundO: Option[Long] = None,
+  ): Future[DbActivityRecordMetaStore.MetaCheckResult] =
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        facade.ensureExtraMetaDBIO(ingestionStart, lastArchivedRoundO, exitOnDowngrade = false),
+        "test.ensureExtraMeta",
+      )
+    )
 
   override protected def cleanDb(
       storage: DbStorage

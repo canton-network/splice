@@ -1347,7 +1347,6 @@ class DbAppActivityRecordStoreTest
         updateHistory,
         versions,
         isFirstSv,
-        initialRound = 0L,
         loggerFactory,
       )
       val store = new DbAppActivityRecordStore(
@@ -1390,7 +1389,6 @@ class DbAppActivityRecordStoreTest
         updateHistory,
         DbActivityRecordMetaStore.IngestionVersions(1, 0),
         isFirstSv,
-        initialRound = 0L,
         loggerFactory,
       )
       val appStore = new DbAppActivityRecordStore(

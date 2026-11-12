@@ -1086,7 +1086,6 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       updateHistory,
       DbActivityRecordMetaStore.IngestionVersions(1, 0),
       false,
-      initialRound = 0L,
       loggerFactory,
     )
     new DbScanVerdictStore(

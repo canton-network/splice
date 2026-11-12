@@ -114,7 +114,6 @@ class VerdictStoreIngestionPerformanceTest(
             0,
           ),
           isFirstSv = false,
-          initialRound = 0L,
           loggerFactory,
         )
         val appActivityStore = new DbAppActivityRecordStore(

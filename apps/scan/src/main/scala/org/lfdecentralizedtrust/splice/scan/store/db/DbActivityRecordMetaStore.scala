@@ -28,10 +28,10 @@ object DbActivityRecordMetaStore {
     */
   final case class IngestionVersions(code: Int, user: Int)
 
-  /** Metadata row for extra-activity ingestion (CIP-0104 extension hook),
-    * read from and written to `extra_app_activity_record_meta`.
+  /** Metadata row for app-side activity ingestion (TBAR), read from and
+    * written to `app_activity_record_meta`.
     */
-  final case class ExtraActivityRecordMetaT(
+  final case class AppActivityRecordMetaT(
       historyId: Long,
       codeVersion: Int,
       userVersion: Int,
@@ -40,10 +40,13 @@ object DbActivityRecordMetaStore {
       lastArchivedRound: Option[Long],
   )
 
-  /** Metadata row for app-side activity ingestion (TBAR), read from and
-    * written to `app_activity_record_meta`.
+  /** Metadata row for extra-activity ingestion (CIP-0104 extension hook),
+    * read from and written to `extra_app_activity_record_meta`.
+    *
+    * POC: identical to `AppActivityRecordMetaT` pending the open decision
+    * on whether the extra meta table keeps `code_version` / `user_version`.
     */
-  final case class AppActivityRecordMetaT(
+  final case class ExtraActivityRecordMetaT(
       historyId: Long,
       codeVersion: Int,
       userVersion: Int,
@@ -78,17 +81,17 @@ object DbActivityRecordMetaStore {
   }
 }
 
-/** Facade owning the meta surface for both activity-record sides: the TBAR
-  * app side (`app_activity_record_meta`, fed from verdict ingestion via
-  * `DbAppActivityRecordStore`'s orchestrator) and the CIP-0104 extension
-  * hook side (`extra_app_activity_record_meta`, fed from
-  * `ActivityRecorder_DsoRecordActivity` exercises). Implements the
-  * `ActivityRecordMetaStore` trait as a combined view over the two sides.
+/** Implementation of `ActivityRecordMetaStore`, owning the meta surface for
+  * both activity-record sides: the TBAR app side (`app_activity_record_meta`,
+  * fed from verdict ingestion via `DbAppActivityRecordStore`'s orchestrator)
+  * and the CIP-0104 extension hook side (`extra_app_activity_record_meta`,
+  * fed from `ActivityRecorder_DsoRecordActivity` exercises). The trait
+  * methods return a combined view across the two sides.
   *
   * The two concrete row stores (`DbAppActivityRecordStore`,
   * `DbExtraActivityRecordStore`) do not touch their meta tables; they
-  * consume the per-side meta helpers on this facade. Row-level case classes
-  * and insert/read paths stay with the concrete stores.
+  * consume the per-side meta helpers here. Row-level case classes and
+  * insert/read paths stay with the concrete stores.
   *
   * Combine semantics:
   *   - `earliestRoundWithCompleteAppActivity`: max of the two sides —
@@ -98,7 +101,7 @@ object DbActivityRecordMetaStore {
   *     frontier is bounded by whichever side is slower. Returns None if
   *     either side is None.
   *   - `ingestionStatusForRound`: if either side reports `CannotProvide`,
-  *     the facade returns `CannotProvide` (caller should delegate to BFT).
+  *     the result is `CannotProvide` (caller should delegate to BFT).
   *     Otherwise `Undetermined` (either or both sides still catching up).
   *   - `startedIngestingAt`: the earlier of the two start times when both
   *     are available; the single non-None value otherwise.
@@ -108,7 +111,6 @@ class DbActivityRecordMetaStore(
     updateHistory: UpdateHistory,
     val ingestionVersions: DbActivityRecordMetaStore.IngestionVersions,
     isFirstSv: Boolean,
-    initialRound: Long,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends ActivityRecordMetaStore
@@ -197,20 +199,130 @@ class DbActivityRecordMetaStore(
         case _ => RoundIngestionStatus.Undetermined
       }
 
-  // ============ App-side meta reads ============
-
-  private val appStartedIngestingAtRef = new AtomicReference[Option[Long]](None)
+  // ============ App-side meta ============
 
   def appStartedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
-    appStartedIngestingAtRef.get() match {
-      case some @ Some(_) => Future.successful(some)
-      case None =>
-        lookupAppActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
-          val tsO = metaO.map(_.startedIngestingAt)
-          tsO.foreach(ts => appStartedIngestingAtRef.compareAndSet(None, Some(ts)))
-          tsO
+    cachedStartedIngestingAt(
+      appStartedIngestingAtRef,
+      lookupAppActivityRecordMeta(ingestionVersions.code, ingestionVersions.user)
+        .map(_.map(_.startedIngestingAt)),
+    )
+
+  /** DBIO action that checks/inserts the app-side meta row.
+    *
+    * @param ingestionStart `(firstRecordTimeMicros, earliestRound)` for the
+    *                       batch that triggers meta creation.
+    * @param lastArchivedRoundO last archived round to store when inserting
+    *                           a new meta row.
+    */
+  def ensureAppMetaDBIO(
+      ingestionStart: (Long, Long),
+      lastArchivedRoundO: Option[Long] = None,
+      exitOnDowngrade: Boolean = true,
+  )(implicit tc: TraceContext): DBIO[MetaCheckResult] = {
+    val codeVersion = ingestionVersions.code
+    val userVersion = ingestionVersions.user
+    val (firstRecordTimeMicros, earliestRound) = ingestionStart
+    if (appMetaChecked.get()) DBIO.successful(Resume)
+    else {
+      for {
+        maxVersions <- sql"""select max(activity_ingestion_code_version),
+                                    max(activity_ingestion_user_version)
+                             from #${Tables.appActivityRecordMeta}
+                             where history_id = $historyId
+                       """
+          .as[(Option[Int], Option[Int])]
+          .headOption
+          .map(_.flatMap {
+            case (Some(c), Some(u)) => Some((c, u))
+            case _ => None
+          })
+        result <- checkMetaVersions(maxVersions, codeVersion, userVersion) match {
+          case InsertMeta =>
+            insertAppActivityRecordMetaDBIO(
+              codeVersion,
+              userVersion,
+              firstRecordTimeMicros,
+              earliestRound,
+              lastArchivedRoundO,
+            ).map { _ =>
+              logger.info(
+                s"App activity ingestion inserted new meta row for " +
+                  s"codeVersion=$codeVersion, userVersion=$userVersion."
+              )
+              appMetaChecked.set(true)
+              InsertMeta: MetaCheckResult
+            }
+          case Resume =>
+            logger.info(
+              s"App activity ingestion resumed with existing meta row for " +
+                s"codeVersion=$codeVersion, userVersion=$userVersion."
+            )
+            DBIO.successful {
+              appMetaChecked.set(true)
+              Resume: MetaCheckResult
+            }
+          case d: DowngradeDetected =>
+            logger.error(
+              s"App activity ingestion version downgrade detected: " +
+                s"running=(${d.runningCode},${d.runningUser}), stored=(${d.storedCode},${d.storedUser}). " +
+                s"Make sure you did not accidentally remove or downgrade the 'activity-ingestion-user-version' field" +
+                s"in the scan app config. Shutting down to prevent data corruption."
+            )
+            if (exitOnDowngrade) {
+              sys.exit(1)
+            } else {
+              DBIO.successful(d: MetaCheckResult)
+            }
         }
+      } yield result
     }
+  }
+
+  def updateAppLastArchivedRoundDBIO(round: Long) =
+    sql"""update #${Tables.appActivityRecordMeta}
+          set last_archived_round = $round,
+              last_updated_at = now()
+          where history_id = $historyId
+            and activity_ingestion_code_version = ${ingestionVersions.code}
+            and activity_ingestion_user_version = ${ingestionVersions.user}
+    """.asUpdate
+
+  @VisibleForTesting
+  def insertAppActivityRecordMetaForTesting(
+      codeVersion: Int,
+      userVersion: Int,
+      startedIngestingAt: Long,
+      earliestIngestedRound: Long,
+      lastArchivedRound: Option[Long],
+  )(implicit tc: TraceContext): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update_(
+        insertAppActivityRecordMetaDBIO(
+          codeVersion,
+          userVersion,
+          startedIngestingAt,
+          earliestIngestedRound,
+          lastArchivedRound,
+        ),
+        "appActivity.insertAppActivityRecordMeta",
+      )
+    )
+
+  private[store] def lookupAppActivityRecordMeta(codeVersion: Int, userVersion: Int)(implicit
+      tc: TraceContext
+  ): Future[Option[AppActivityRecordMetaT]] =
+    runQuerySingle(
+      sql"""select history_id, activity_ingestion_code_version,
+                   activity_ingestion_user_version, started_ingesting_at,
+                   earliest_ingested_round, last_archived_round
+            from #${Tables.appActivityRecordMeta}
+            where history_id = $historyId
+              and activity_ingestion_code_version = $codeVersion
+              and activity_ingestion_user_version = $userVersion
+      """.as[AppActivityRecordMetaT].headOption,
+      "appActivity.lookupAppActivityRecordMeta",
+    )
 
   private[store] def appEarliestIngestedRound()(implicit
       tc: TraceContext
@@ -284,23 +396,6 @@ class DbActivityRecordMetaStore(
           .asRuntimeException()
     }
 
-  // ============ App-side meta writes ============
-
-  def lookupAppActivityRecordMeta(codeVersion: Int, userVersion: Int)(implicit
-      tc: TraceContext
-  ): Future[Option[AppActivityRecordMetaT]] =
-    runQuerySingle(
-      sql"""select history_id, activity_ingestion_code_version,
-                   activity_ingestion_user_version, started_ingesting_at,
-                   earliest_ingested_round, last_archived_round
-            from #${Tables.appActivityRecordMeta}
-            where history_id = $historyId
-              and activity_ingestion_code_version = $codeVersion
-              and activity_ingestion_user_version = $userVersion
-      """.as[AppActivityRecordMetaT].headOption,
-      "appActivity.lookupAppActivityRecordMeta",
-    )
-
   private def insertAppActivityRecordMetaDBIO(
       codeVersion: Int,
       userVersion: Int,
@@ -317,46 +412,19 @@ class DbActivityRecordMetaStore(
           ON CONFLICT DO NOTHING
     """.asUpdate
 
-  @VisibleForTesting
-  def insertAppActivityRecordMetaForTesting(
-      codeVersion: Int,
-      userVersion: Int,
-      startedIngestingAt: Long,
-      earliestIngestedRound: Long,
-      lastArchivedRound: Option[Long],
-  )(implicit tc: TraceContext): Future[Unit] =
-    futureUnlessShutdownToFuture(
-      storage.update_(
-        insertAppActivityRecordMetaDBIO(
-          codeVersion,
-          userVersion,
-          startedIngestingAt,
-          earliestIngestedRound,
-          lastArchivedRound,
-        ),
-        "appActivity.insertAppActivityRecordMeta",
-      )
-    )
-
-  def updateAppLastArchivedRoundDBIO(round: Long) =
-    sql"""update #${Tables.appActivityRecordMeta}
-          set last_archived_round = $round,
-              last_updated_at = now()
-          where history_id = $historyId
-            and activity_ingestion_code_version = ${ingestionVersions.code}
-            and activity_ingestion_user_version = ${ingestionVersions.user}
-    """.asUpdate
-
+  private val appStartedIngestingAtRef = new AtomicReference[Option[Long]](None)
   private val appMetaChecked = new AtomicBoolean(false)
 
-  /** DBIO action that checks/inserts the app-side meta row.
+  // ============ Extra-side meta ============
+
+  /** DBIO action that checks/inserts the extra-side meta row.
     *
     * @param ingestionStart `(firstRecordTimeMicros, earliestRound)` for the
     *                       batch that triggers meta creation.
     * @param lastArchivedRoundO last archived round to store when inserting
     *                           a new meta row.
     */
-  def ensureAppMetaDBIO(
+  def ensureExtraMetaDBIO(
       ingestionStart: (Long, Long),
       lastArchivedRoundO: Option[Long] = None,
       exitOnDowngrade: Boolean = true,
@@ -364,12 +432,12 @@ class DbActivityRecordMetaStore(
     val codeVersion = ingestionVersions.code
     val userVersion = ingestionVersions.user
     val (firstRecordTimeMicros, earliestRound) = ingestionStart
-    if (appMetaChecked.get()) DBIO.successful(Resume)
+    if (extraMetaChecked.get()) DBIO.successful(Resume)
     else {
       for {
         maxVersions <- sql"""select max(activity_ingestion_code_version),
                                     max(activity_ingestion_user_version)
-                             from #${Tables.appActivityRecordMeta}
+                             from #${Tables.extraActivityRecordMeta}
                              where history_id = $historyId
                        """
           .as[(Option[Int], Option[Int])]
@@ -380,7 +448,7 @@ class DbActivityRecordMetaStore(
           })
         result <- checkMetaVersions(maxVersions, codeVersion, userVersion) match {
           case InsertMeta =>
-            insertAppActivityRecordMetaDBIO(
+            insertExtraActivityRecordMetaDBIO(
               codeVersion,
               userVersion,
               firstRecordTimeMicros,
@@ -388,24 +456,24 @@ class DbActivityRecordMetaStore(
               lastArchivedRoundO,
             ).map { _ =>
               logger.info(
-                s"App activity ingestion inserted new meta row for " +
+                s"Extra activity ingestion inserted new meta row for " +
                   s"codeVersion=$codeVersion, userVersion=$userVersion."
               )
-              appMetaChecked.set(true)
+              extraMetaChecked.set(true)
               InsertMeta: MetaCheckResult
             }
           case Resume =>
             logger.info(
-              s"App activity ingestion resumed with existing meta row for " +
+              s"Extra activity ingestion resumed with existing meta row for " +
                 s"codeVersion=$codeVersion, userVersion=$userVersion."
             )
             DBIO.successful {
-              appMetaChecked.set(true)
+              extraMetaChecked.set(true)
               Resume: MetaCheckResult
             }
           case d: DowngradeDetected =>
             logger.error(
-              s"App activity ingestion version downgrade detected: " +
+              s"Extra activity ingestion version downgrade detected: " +
                 s"running=(${d.runningCode},${d.runningUser}), stored=(${d.storedCode},${d.storedUser}). " +
                 s"Make sure you did not accidentally remove or downgrade the 'activity-ingestion-user-version' field" +
                 s"in the scan app config. Shutting down to prevent data corruption."
@@ -420,20 +488,72 @@ class DbActivityRecordMetaStore(
     }
   }
 
-  // ============ Extra-side meta reads (private helpers) ============
+  /** Intended consumer: the future `ScanExtraActivityIngestionService`, to
+    * advance `last_archived_round` per batch / OffsetCheckpoint. No
+    * in-tree production caller today; only the `ForTesting` helper below.
+    */
+  def updateExtraLastArchivedRoundDBIO(round: Long) =
+    sql"""update #${Tables.extraActivityRecordMeta}
+          set last_archived_round = $round,
+              last_updated_at = now()
+          where history_id = $historyId
+            and activity_ingestion_code_version = ${ingestionVersions.code}
+            and activity_ingestion_user_version = ${ingestionVersions.user}
+    """.asUpdate
 
-  private val extraStartedIngestingAtRef = new AtomicReference[Option[Long]](None)
+  @VisibleForTesting
+  def insertExtraActivityRecordMetaForTesting(
+      codeVersion: Int,
+      userVersion: Int,
+      startedIngestingAt: Long,
+      earliestIngestedRound: Long,
+      lastArchivedRound: Option[Long],
+  )(implicit tc: TraceContext): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update_(
+        insertExtraActivityRecordMetaDBIO(
+          codeVersion,
+          userVersion,
+          startedIngestingAt,
+          earliestIngestedRound,
+          lastArchivedRound,
+        ),
+        "extraActivity.insertExtraActivityRecordMeta",
+      )
+    )
+
+  @VisibleForTesting
+  def bumpExtraLastArchivedRoundForTesting(round: Long)(implicit
+      tc: TraceContext
+  ): Future[Unit] =
+    futureUnlessShutdownToFuture(
+      storage.update_(
+        updateExtraLastArchivedRoundDBIO(round),
+        "extraActivity.updateLastArchivedRound",
+      )
+    )
+
+  private[store] def lookupExtraActivityRecordMeta(codeVersion: Int, userVersion: Int)(implicit
+      tc: TraceContext
+  ): Future[Option[ExtraActivityRecordMetaT]] =
+    runQuerySingle(
+      sql"""select history_id, activity_ingestion_code_version,
+                   activity_ingestion_user_version, started_ingesting_at,
+                   earliest_ingested_round, last_archived_round
+            from #${Tables.extraActivityRecordMeta}
+            where history_id = $historyId
+              and activity_ingestion_code_version = $codeVersion
+              and activity_ingestion_user_version = $userVersion
+      """.as[ExtraActivityRecordMetaT].headOption,
+      "extraActivity.lookupExtraActivityRecordMeta",
+    )
 
   private def extraStartedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
-    extraStartedIngestingAtRef.get() match {
-      case some @ Some(_) => Future.successful(some)
-      case None =>
-        lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
-          val tsO = metaO.map(_.startedIngestingAt)
-          tsO.foreach(ts => extraStartedIngestingAtRef.compareAndSet(None, Some(ts)))
-          tsO
-        }
-    }
+    cachedStartedIngestingAt(
+      extraStartedIngestingAtRef,
+      lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user)
+        .map(_.map(_.startedIngestingAt)),
+    )
 
   private def extraEarliestIngestedRound()(implicit tc: TraceContext): Future[Option[Long]] =
     readMetaOptLong(
@@ -468,23 +588,6 @@ class DbActivityRecordMetaStore(
   ): Future[RoundIngestionStatus] =
     metaIngestionStatus(extraEarliestIngestedRound(), roundNumber)
 
-  // ============ Extra-side meta writes ============
-
-  def lookupExtraActivityRecordMeta(codeVersion: Int, userVersion: Int)(implicit
-      tc: TraceContext
-  ): Future[Option[ExtraActivityRecordMetaT]] =
-    runQuerySingle(
-      sql"""select history_id, activity_ingestion_code_version,
-                   activity_ingestion_user_version, started_ingesting_at,
-                   earliest_ingested_round, last_archived_round
-            from #${Tables.extraActivityRecordMeta}
-            where history_id = $historyId
-              and activity_ingestion_code_version = $codeVersion
-              and activity_ingestion_user_version = $userVersion
-      """.as[ExtraActivityRecordMetaT].headOption,
-      "extraActivity.lookupExtraActivityRecordMeta",
-    )
-
   private def insertExtraActivityRecordMetaDBIO(
       codeVersion: Int,
       userVersion: Int,
@@ -501,62 +604,27 @@ class DbActivityRecordMetaStore(
           ON CONFLICT DO NOTHING
     """.asUpdate
 
-  @VisibleForTesting
-  def insertExtraActivityRecordMetaForTesting(
-      codeVersion: Int,
-      userVersion: Int,
-      startedIngestingAt: Long,
-      earliestIngestedRound: Long,
-      lastArchivedRound: Option[Long],
-  )(implicit tc: TraceContext): Future[Unit] =
-    futureUnlessShutdownToFuture(
-      storage.update_(
-        insertExtraActivityRecordMetaDBIO(
-          codeVersion,
-          userVersion,
-          startedIngestingAt,
-          earliestIngestedRound,
-          lastArchivedRound,
-        ),
-        "extraActivity.insertExtraActivityRecordMeta",
-      )
-    )
+  private val extraStartedIngestingAtRef = new AtomicReference[Option[Long]](None)
+  private val extraMetaChecked = new AtomicBoolean(false)
 
-  /** Bootstrap the extra-side meta row. Uses `initialRound - 1` as the
-    * `earliest_ingested_round` — a PoC stub for the CIP-0104 extension
-    * hook's intended rule, which derives the value for non-first SVs from
-    * a `DsoRules.svSwitchOverTimes` key not yet present on splice-side.
+  // ============ Shared helpers ============
+
+  /** Cache-when-non-None helper for `started_ingesting_at`: once `lookup`
+    * observes a Some, the cached value is returned without further lookups
+    * (the column is monotonic-set-once).
     */
-  def startAndEnsureExtraMeta(startedIngestingAt: Long)(implicit
-      tc: TraceContext
-  ): Future[Unit] =
-    insertExtraActivityRecordMetaForTesting(
-      codeVersion = ingestionVersions.code,
-      userVersion = ingestionVersions.user,
-      startedIngestingAt = startedIngestingAt,
-      earliestIngestedRound = initialRound - 1,
-      lastArchivedRound = None,
-    )
-
-  def updateExtraLastArchivedRoundDBIO(round: Long) =
-    sql"""update #${Tables.extraActivityRecordMeta}
-          set last_archived_round = $round,
-              last_updated_at = now()
-          where history_id = $historyId
-            and activity_ingestion_code_version = ${ingestionVersions.code}
-            and activity_ingestion_user_version = ${ingestionVersions.user}
-    """.asUpdate
-
-  @VisibleForTesting
-  def bumpExtraLastArchivedRoundForTesting(round: Long)(implicit
-      tc: TraceContext
-  ): Future[Unit] =
-    futureUnlessShutdownToFuture(
-      storage.update_(
-        updateExtraLastArchivedRoundDBIO(round),
-        "extraActivity.updateLastArchivedRound",
-      )
-    )
+  private def cachedStartedIngestingAt(
+      cache: AtomicReference[Option[Long]],
+      lookup: => Future[Option[Long]],
+  ): Future[Option[Long]] =
+    cache.get() match {
+      case some @ Some(_) => Future.successful(some)
+      case None =>
+        lookup.map { tsO =>
+          tsO.foreach(ts => cache.compareAndSet(None, Some(ts)))
+          tsO
+        }
+    }
 
   /** Select one Long (or NULL) from a meta table, keyed by
     * `(history_id, activity_ingestion_code_version, activity_ingestion_user_version)`.
