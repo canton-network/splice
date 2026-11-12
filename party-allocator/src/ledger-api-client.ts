@@ -25,8 +25,18 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as crypto from "node:crypto";
 import { logger } from "./logger.js";
 import { TokenSource } from "./auth.js";
+import {
+  cantonErrorCode,
+  isTransientError,
+  retry,
+  RetryOptions,
+} from "./retry.js";
+import { traceparentHeader } from "./tracing.js";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export type SubmissionInputs = {
+  command: Command;
+  disclosedContracts: DisclosedContract[];
+};
 
 export class LedgerApiClient {
   private api: DefaultApi;
@@ -39,7 +49,7 @@ export class LedgerApiClient {
         authMethods: {
           default: new HttpAuthAuthentication({
             getToken(): Promise<string> | string {
-              return Promise.resolve(tokenSource.getToken());
+              return tokenSource.getToken();
             },
           }),
         },
@@ -51,7 +61,11 @@ export class LedgerApiClient {
               return context;
             },
             pre: async (context: RequestContext) => {
-              logger.debug(`[Request] ${context.getUrl()}`);
+              const traceparent = traceparentHeader();
+              context.setHeaderParam("traceparent", traceparent);
+              logger.debug(
+                `[Request] ${context.getUrl()} traceparent=${traceparent}`,
+              );
               const store = this.als.getStore();
               if (store) {
                 store.url = context.getUrl();
@@ -104,76 +118,107 @@ export class LedgerApiClient {
             logger.info(`Party id ${partyId} is already allocated`);
           }
         }),
-      120, // party allocations take forever so we also retry forever aka 2min
+      // party allocations take forever so we also retry (almost) forever, including on errors
+      // that look permanent as they can be caused by the allocation still being in progress.
+      {
+        maxRetries: 120,
+        shouldRetry: () => true,
+        task: "allocate external party",
+      },
     );
   }
 
+  // Prepares, signs and executes a transaction. On failure, the whole submission is retried
+  // with fresh inputs, e.g. to replace disclosed contracts that have been archived in the meantime.
+  // All attempts share one command id so command deduplication prevents executing it twice.
   async submitTransaction(
     description: string,
     synchronizerId: string,
     actAs: string,
     privateKey: string,
-    disclosedContracts: DisclosedContract[],
-    command: Command,
+    inputs: () => Promise<SubmissionInputs>,
+    options: RetryOptions = {},
   ): Promise<void> {
-    const preparedTransaction = await this.retry(`prepare ${description}`, () =>
-      this.als.run({ url: undefined }, () =>
-        this.api.postV2InteractiveSubmissionPrepare({
-          userId: "",
-          actAs: [actAs],
-          readAs: [],
-          disclosedContracts,
-          commandId: crypto.randomUUID(),
-          synchronizerId,
-          verboseHashing: false,
-          packageIdSelectionPreference: [],
-          commands: [command],
-        }),
-      ),
-    );
-    const deduplicationPeriod = new DeduplicationPeriod2();
-    deduplicationPeriod.Empty = {};
-    const signature = crypto.sign(
-      null,
-      Buffer.from(preparedTransaction.preparedTransactionHash!, "base64"),
-      privateKey,
-    );
-
-    return this.retry(`execute ${description}`, () =>
-      this.als.run({ url: undefined }, () =>
-        this.api.postV2InteractiveSubmissionExecute({
-          deduplicationPeriod,
-          submissionId: crypto.randomUUID(),
-          userId: "",
-          hashingSchemeVersion: preparedTransaction.hashingSchemeVersion!,
-          preparedTransaction: preparedTransaction.preparedTransaction!,
-          partySignatures: {
-            signatures: [
-              {
-                party: actAs,
+    const commandId = crypto.randomUUID();
+    return this.retry(
+      `submit ${description}`,
+      async () => {
+        const { command, disclosedContracts } = await inputs();
+        const preparedTransaction = await this.als.run({ url: undefined }, () =>
+          this.api.postV2InteractiveSubmissionPrepare({
+            userId: "",
+            actAs: [actAs],
+            readAs: [],
+            disclosedContracts,
+            commandId,
+            synchronizerId,
+            verboseHashing: false,
+            packageIdSelectionPreference: [],
+            commands: [command],
+          }),
+        );
+        const deduplicationPeriod = new DeduplicationPeriod2();
+        deduplicationPeriod.Empty = {};
+        const signature = crypto.sign(
+          null,
+          Buffer.from(preparedTransaction.preparedTransactionHash!, "base64"),
+          privateKey,
+        );
+        try {
+          await this.als.run({ url: undefined }, () =>
+            this.api.postV2InteractiveSubmissionExecute({
+              deduplicationPeriod,
+              submissionId: crypto.randomUUID(),
+              userId: "",
+              hashingSchemeVersion: preparedTransaction.hashingSchemeVersion!,
+              preparedTransaction: preparedTransaction.preparedTransaction!,
+              partySignatures: {
                 signatures: [
                   {
-                    format: "SIGNATURE_FORMAT_RAW",
-                    signingAlgorithmSpec: "SIGNING_ALGORITHM_SPEC_ED25519",
-                    signature: signature.toString("base64"),
-                    signedBy: actAs.split("::")[1],
+                    party: actAs,
+                    signatures: [
+                      {
+                        format: "SIGNATURE_FORMAT_RAW",
+                        signingAlgorithmSpec: "SIGNING_ALGORITHM_SPEC_ED25519",
+                        signature: signature.toString("base64"),
+                        signedBy: actAs.split("::")[1],
+                      },
+                    ],
                   },
                 ],
               },
-            ],
-          },
-        }),
-      ),
+            }),
+          );
+        } catch (e: unknown) {
+          if (cantonErrorCode(e) === "DUPLICATE_COMMAND") {
+            logger.info(
+              `Command ${commandId} for ${description} was already accepted`,
+            );
+            return;
+          }
+          throw e;
+        }
+      },
+      options,
     );
   }
 
   async queryContracts(
     parties: string[],
     templateIds: string[],
+    retryOptions: RetryOptions = {
+      maxRetries: 5,
+      shouldRetry: isTransientError,
+    },
   ): Promise<CreatedEvent[]> {
     const ledgerEnd = (
-      await this.als.run({ url: undefined }, () =>
-        this.api.getV2StateLedgerEnd(),
+      await this.retry(
+        "get ledger end",
+        () =>
+          this.als.run({ url: undefined }, () =>
+            this.api.getV2StateLedgerEnd(),
+          ),
+        retryOptions,
       )
     ).offset;
     const toTemplateFilter = (t: string) => {
@@ -195,8 +240,13 @@ export class LedgerApiClient {
         filtersByParty: Object.fromEntries(parties.map((p) => [p, filters])),
       },
     };
-    const responses = await this.als.run({ url: undefined }, () =>
-      this.api.postV2StateActiveContracts(request),
+    const responses = await this.retry(
+      "query active contracts",
+      () =>
+        this.als.run({ url: undefined }, () =>
+          this.api.postV2StateActiveContracts(request),
+        ),
+      retryOptions,
     );
     return responses.flatMap((r) =>
       r.contractEntry!.JsActiveContract.createdEvent
@@ -223,35 +273,15 @@ export class LedgerApiClient {
             rights: [{ kind: executeRight }, { kind: readRight }],
           }),
         ),
+      { task: "grant user rights" },
     );
   }
 
   async retry<T>(
     description: string,
     task: () => Promise<T>,
-    maxRetries: number = 60,
-    delayMs: number = 1000,
+    options: RetryOptions = {},
   ): Promise<T> {
-    let attempt = 1;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      try {
-        return await task();
-      } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
-        if (attempt < maxRetries) {
-          logger.info(
-            `Task ${description} failed after ${attempt} attempts (max ${maxRetries}): ${errorMessage}`,
-          );
-          await delay(delayMs);
-        } else {
-          logger.error(
-            `Task ${description} failed after ${attempt} attempts, giving up: ${errorMessage}`,
-          );
-          throw e;
-        }
-      }
-      attempt++;
-    }
+    return retry(description, task, options);
   }
 }
