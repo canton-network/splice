@@ -177,6 +177,7 @@ data AmuletRules_MigrateContractStateSchemaResult = AmuletRules_MigrateContractS
   deriving (Show, Eq, Serializable)
 
 -- | The latest contract state schema version that AmuletRules can be migrated to.
+-- When bumping this also update the value in SV app trigger (TODO: add trigger name?)
 latestContractStateSchemaVersion : Int
 latestContractStateSchemaVersion = 1
 
