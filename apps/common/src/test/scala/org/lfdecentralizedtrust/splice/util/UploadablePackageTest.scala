@@ -8,6 +8,9 @@ import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.scalatest.wordspec.AnyWordSpec
 
+import java.net.URI
+import java.nio.file.Files
+import java.util.jar.{JarEntry, JarOutputStream}
 import scala.util.Using
 
 class UploadablePackageTest extends AnyWordSpec with BaseTest {
@@ -23,6 +26,32 @@ class UploadablePackageTest extends AnyWordSpec with BaseTest {
   "darSizeBytes" should {
     "be the number of bytes of a classpath DAR" in {
       UploadablePackage.fromResource(wallet).darSizeBytes shouldBe walletBytes.size.toLong
+    }
+  }
+
+  "resourceSizeBytes" should {
+    "be the uncompressed size of a jar entry and of a file" in {
+      val content = Array.fill[Byte](10000)(7) // compresses well, so the sizes differ
+      val dir = Files.createTempDirectory("uploadable-package-test")
+      val file = dir.resolve("x.dar")
+      val jarPath = dir.resolve("dars.jar")
+      try {
+        Files.write(file, content)
+        Using.resource(new JarOutputStream(Files.newOutputStream(jarPath))) { jar =>
+          jar.putNextEntry(new JarEntry("x.dar"))
+          jar.write(content)
+          jar.closeEntry()
+        }
+        Files.size(jarPath) should be < content.length.toLong
+        UploadablePackage.resourceSizeBytes(
+          URI.create(s"jar:${jarPath.toUri}!/x.dar").toURL
+        ) shouldBe content.length.toLong
+        UploadablePackage.resourceSizeBytes(file.toUri.toURL) shouldBe content.length.toLong
+      } finally {
+        Files.deleteIfExists(file)
+        Files.deleteIfExists(jarPath)
+        Files.deleteIfExists(dir)
+      }
     }
   }
 

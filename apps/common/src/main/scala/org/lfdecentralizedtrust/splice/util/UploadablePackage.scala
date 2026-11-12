@@ -42,27 +42,31 @@ object UploadablePackage {
       override val packageId = resource.packageId
       override val resourcePath = resource.path
 
-      override def darSizeBytes: Long = {
-        val url = resourceUrl
-        val size =
-          // getContentLengthLong would also work for file: URLs, but before
-          // JDK 26 it leaves a FileInputStream open there
-          // (https://bugs.openjdk.org/browse/JDK-8367561).
-          if (url.getProtocol == "file") Files.size(Paths.get(url.toURI))
-          else
-            url.openConnection() match {
-              case jar: JarURLConnection =>
-                // reads the entry size from the jar's central directory; an
-                // uncached JarFile is only released by closing a stream, so
-                // close it here
-                try jar.getContentLengthLong
-                finally if (!jar.getUseCaches) jar.getJarFile.close()
-              case other => other.getContentLengthLong
-            }
-        if (size >= 0) size
-        else Using.resource(inputStream())(_.transferTo(OutputStream.nullOutputStream()))
-      }
+      override def darSizeBytes: Long = resourceSizeBytes(resourceUrl)
     }
+  }
+
+  /** The size in bytes of the resource at `url`, without reading it
+    * where the protocol allows.
+    */
+  private[util] def resourceSizeBytes(url: URL): Long = {
+    val size =
+      // getContentLengthLong would also work for file: URLs, but before
+      // JDK 26 it leaves a FileInputStream open there
+      // (https://bugs.openjdk.org/browse/JDK-8367561).
+      if (url.getProtocol == "file") Files.size(Paths.get(url.toURI))
+      else
+        url.openConnection() match {
+          case jar: JarURLConnection =>
+            // reads the entry size from the jar's central directory; an
+            // uncached JarFile is only released by closing a stream, so
+            // close it here
+            try jar.getContentLengthLong
+            finally if (!jar.getUseCaches) jar.getJarFile.close()
+          case other => other.getContentLengthLong
+        }
+    if (size >= 0) size
+    else Using.resource(url.openStream())(_.transferTo(OutputStream.nullOutputStream()))
   }
   def fromByteString(name: String, bs: ByteString): UploadablePackage = {
     val pkgId = DarUtil.readPackageId(name, bs.newInput)
