@@ -711,6 +711,8 @@ object SpliceConfig {
     implicit val unavailablePartiesBackoffParametersReader
         : ConfigReader[UnavailablePartiesBackoffParameters] =
       deriveReader[UnavailablePartiesBackoffParameters]
+    implicit val svOnboardingSnapshotsConfigReader: ConfigReader[SvOnboardingSnapshotsConfig] =
+      deriveReader[SvOnboardingSnapshotsConfig]
     implicit val svConfigReader: ConfigReader[SvAppBackendConfig] =
       deriveReader[SvAppBackendConfig].emap { conf =>
         def checkFoundDsoConfig(check: (SvAppBackendConfig, FoundDso) => Boolean) =
@@ -1243,6 +1245,8 @@ object SpliceConfig {
     implicit val unavailablePartiesBackoffParametersWriter
         : ConfigWriter[UnavailablePartiesBackoffParameters] =
       deriveWriter[UnavailablePartiesBackoffParameters]
+    implicit val svOnboardingSnapshotsConfigWriter: ConfigWriter[SvOnboardingSnapshotsConfig] =
+      deriveWriter[SvOnboardingSnapshotsConfig]
     implicit val svConfigWriter: ConfigWriter[SvAppBackendConfig] =
       deriveWriter[SvAppBackendConfig]
 

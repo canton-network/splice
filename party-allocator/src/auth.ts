@@ -6,30 +6,49 @@ import { logger } from "./logger.js";
 const expiryMarginMs = 60 * 1000;
 
 export interface TokenSource {
-  getToken(): string;
+  getToken(): Promise<string>;
 }
 
 class StaticTokenSource implements TokenSource {
   constructor(private readonly token: string) {}
-  getToken(): string {
+  async getToken(): Promise<string> {
     return this.token;
   }
 }
 
-class ClientCredentialsTokenSource implements TokenSource {
+type Token = { accessToken: string; expiresAtMs: number };
+
+// Fetches a new token once the current one is about to expire. Concurrent callers share a single refresh.
+export class ClientCredentialsTokenSource implements TokenSource {
+  private token: Promise<Token> | undefined;
+
   constructor(
-    private readonly token: string,
-    private readonly expiresAtMs: number,
+    private readonly fetchToken: () => Promise<Token>,
+    private readonly now: () => number = Date.now,
   ) {}
-  getToken(): string {
-    if (Date.now() >= this.expiresAtMs - expiryMarginMs) {
-      // We don't bother implementing token refresh, just crash and refresh a new token on restart.
-      logger.error(
-        "Access token expired, exiting to request a new token on restart",
-      );
-      process.exit(1);
+
+  async getToken(): Promise<string> {
+    if (this.token) {
+      const current = await this.token.catch(() => undefined);
+      if (current && this.now() < current.expiresAtMs - expiryMarginMs) {
+        return current.accessToken;
+      }
     }
-    return this.token;
+    return (await this.refresh()).accessToken;
+  }
+
+  private refresh(): Promise<Token> {
+    const pending = this.token;
+    const refreshed = (async () => {
+      const current = await pending?.catch(() => undefined);
+      // Another caller may have refreshed the token while we were waiting.
+      if (current && this.now() < current.expiresAtMs - expiryMarginMs) {
+        return current;
+      }
+      return this.fetchToken();
+    })();
+    this.token = refreshed;
+    return refreshed;
   }
 }
 
@@ -51,8 +70,8 @@ async function getTokenEndpoint(wellKnownConfigUrl: string): Promise<string> {
 
 async function requestToken(
   auth: ClientCredentialsAuthConfig,
-): Promise<ClientCredentialsTokenSource> {
-  const tokenEndpoint = await getTokenEndpoint(auth.wellKnownConfigUrl);
+  tokenEndpoint: string,
+): Promise<Token> {
   logger.info(
     `Requesting token for client id ${auth.clientId} from ${tokenEndpoint}`,
   );
@@ -89,7 +108,7 @@ async function requestToken(
   logger.info(
     `Got token valid for ${body.expires_in}s, expiring at ${new Date(expiresAtMs).toISOString()}`,
   );
-  return new ClientCredentialsTokenSource(body.access_token, expiresAtMs);
+  return { accessToken: body.access_token, expiresAtMs };
 }
 
 export async function tokenSourceFromConfig(
@@ -98,7 +117,14 @@ export async function tokenSourceFromConfig(
   switch (auth.type) {
     case "static":
       return new StaticTokenSource(auth.token);
-    case "client-credentials":
-      return requestToken(auth);
+    case "client-credentials": {
+      const tokenEndpoint = await getTokenEndpoint(auth.wellKnownConfigUrl);
+      const tokenSource = new ClientCredentialsTokenSource(() =>
+        requestToken(auth, tokenEndpoint),
+      );
+      // Fail at startup if the credentials are wrong.
+      await tokenSource.getToken();
+      return tokenSource;
+    }
   }
 }
