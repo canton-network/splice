@@ -6,7 +6,7 @@ import sbt.*
 /** Copied from Canton OSS repo. */
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
-  val canton_library_version = "3.7.1"
+  val canton_library_version = "3.7.2"
   // Canton does some sbt magic that depends on this field called version even though it is not explicitly used.
   val version = canton_library_version
   val daml_language_versions = Seq("2.1")
