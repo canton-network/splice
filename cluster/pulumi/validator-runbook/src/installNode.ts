@@ -243,7 +243,7 @@ async function installValidator(
       {
         MIGRATION_ID: DecentralizedSynchronizerUpgradeConfig.activeMigrationId.toString(),
         SPONSOR_SV_URL: `https://sv.sv-2.${CLUSTER_HOSTNAME}`,
-        YOUR_VALIDATOR_NODE_NAME: nodeIdentifier,
+        YOUR_VALIDATOR_NODE_NAME: participantNodeIdentifier,
         TRUSTED_SCAN_URL: `https://scan.sv-2.${CLUSTER_HOSTNAME}`,
       }
     ),
