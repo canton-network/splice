@@ -422,6 +422,7 @@ async function installSvAndValidator(
     },
     ...synchronizerValues,
     additionalEnvVars: (defaultScanValues.additionalEnvVars || [])
+      .concat(svConfig.scanApp?.additionalEnvVars || [])
       .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
       .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
