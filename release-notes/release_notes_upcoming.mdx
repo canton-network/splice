@@ -75,6 +75,18 @@
     created event blobs for active `Splice.Amulet:RewardCouponV2` contracts (up to
     100 contract IDs per request) for use by external reward-sharing automation.
 
+  - SV App
+
+    - Joining SVs now download the DSO party ACS from their sponsor as a file instead of receiving it in memory,
+      so onboarding works with large snapshots. SVs that restrict SV app ingress must allow other SVs to reach
+      the new `/v0/onboard/sv/party-migration/prepare` and `/v0/onboard/sv/download/{id}` endpoints.
+
+  - Deployment
+
+    - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
+      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
+      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,

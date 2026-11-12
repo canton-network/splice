@@ -67,12 +67,16 @@ org.lfdecentralizedtrust.splice.store.db.InternedStringStoreTest
 org.lfdecentralizedtrust.splice.store.db.LegacyAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
 org.lfdecentralizedtrust.splice.store.db.TablePerAcsSnapshotStoreTest
+org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClientTest
+org.lfdecentralizedtrust.splice.sv.admin.http.OnboardSvSnapshotHandlerTest
 org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTriggerTest
 org.lfdecentralizedtrust.splice.sv.automation.confirmation.SummarizingMiningRoundTriggerTest
 org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.SvOffboardingPartyToParticipantProposalTriggerTest
 org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingPartyToParticipantProposalTriggerTest
 org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesDetectorTest
 org.lfdecentralizedtrust.splice.sv.onboarding.SequencerBftPeerReconcilerSpec
+org.lfdecentralizedtrust.splice.sv.onboarding.joining.SvOnboardingSnapshotDownloadTest
+org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotServiceTest
 org.lfdecentralizedtrust.splice.sv.util.SvOnboardingTokenTest
 org.lfdecentralizedtrust.splice.sv.util.WeightDistributionForSvTest
 org.lfdecentralizedtrust.splice.unit.http.HttpClientProxyTest
