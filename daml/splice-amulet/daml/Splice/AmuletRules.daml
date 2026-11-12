@@ -1945,8 +1945,8 @@ validateBuyMemberTrafficInputs trafficConfig optPaymasterPurchase purchase = do
           Left $ mkInvalidMemberIdFailure
             ("Traffic for registered synchronizer " <> registration.synchronizerId <> " must have an empty memberId")
             purchase.memberId
-      | not (isAllowedWeight appActivityWeight registration.maxActivityWeight) =
-          Left $ mkInvalidActivityWeightFailure "app activity weight" appActivityWeight registration.maxActivityWeight
+      | not (isAllowedWeight appActivityWeight registration.maxAppActivityWeight) =
+          Left $ mkInvalidActivityWeightFailure "app activity weight" appActivityWeight registration.maxAppActivityWeight
       | not (isAllowedWeight assetActivityWeight registration.maxAssetActivityWeight) =
           Left $ mkInvalidActivityWeightFailure "asset activity weight" assetActivityWeight registration.maxAssetActivityWeight
       | otherwise = Right ()
@@ -1964,7 +1964,7 @@ fetchPaymasterPurchase dso DSyncTrafficPurchase{..} = do
   registration <- fetchReferenceData (ForDso dso) registeredSynchronizerCid
   pure PaymasterPurchase with
     registration
-    appActivityWeight = fromOptional registration.maxActivityWeight optAppActivityWeight
+    appActivityWeight = fromOptional registration.maxAppActivityWeight optAppActivityWeight
     assetActivityWeight = fromOptional registration.maxAssetActivityWeight optAssetActivityWeight
 
 -- | Burn amulet to buy extra traffic on a synchronizer, for a member of the decentralized

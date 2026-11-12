@@ -212,7 +212,7 @@ validSynchronizerActivityWeight weight = weight >= 0.0
 validRegisteredSynchronizer : RegisteredSynchronizer -> Bool
 validRegisteredSynchronizer RegisteredSynchronizer{..} =
   not (T.isEmpty synchronizerId)
-  && validSynchronizerActivityWeight maxActivityWeight
+  && validSynchronizerActivityWeight maxAppActivityWeight
   && validSynchronizerActivityWeight maxAssetActivityWeight
 
 data RegisteredSynchronizer_UpdateResult = RegisteredSynchronizer_UpdateResult with
@@ -239,7 +239,7 @@ template RegisteredSynchronizer with
     paymaster : Party
       -- ^ The party paying for the synchronizer's traffic on the decentralized synchronizer.
       -- Observes the registration, so it can read it from its own ledger.
-    maxActivityWeight : Decimal
+    maxAppActivityWeight : Decimal
       -- ^ Highest weight with which traffic paid for this synchronizer earns CIP-0104 app
       -- activity. See `validSynchronizerActivityWeight` for the allowed range.
     maxAssetActivityWeight : Decimal
@@ -256,13 +256,13 @@ template RegisteredSynchronizer with
     choice RegisteredSynchronizer_Update : RegisteredSynchronizer_UpdateResult
       with
         newPaymaster : Party
-        newMaxActivityWeight : Decimal
+        newMaxAppActivityWeight : Decimal
         newMaxAssetActivityWeight : Decimal
       controller dso
       do
         registeredSynchronizerCid <- create this with
           paymaster = newPaymaster
-          maxActivityWeight = newMaxActivityWeight
+          maxAppActivityWeight = newMaxAppActivityWeight
           maxAssetActivityWeight = newMaxAssetActivityWeight
         pure RegisteredSynchronizer_UpdateResult with registeredSynchronizerCid
 
@@ -278,7 +278,7 @@ data DSyncTrafficPurchase = DSyncTrafficPurchase with
       -- be one of the `requiredSynchronizers`.
     optAppActivityWeight : Optional Decimal
       -- ^ The weight with which each purchased byte earns the paymaster app activity. Defaults to
-      -- the registration's `maxActivityWeight`, and must not be negative or above it.
+      -- the registration's `maxAppActivityWeight`, and must not be negative or above it.
     optAssetActivityWeight : Optional Decimal
       -- ^ The weight with which each purchased byte earns the paymaster asset activity. Defaults
       -- to the registration's `maxAssetActivityWeight`, and must not be negative or above it.

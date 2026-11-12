@@ -286,7 +286,7 @@ function createRegisterSynchronizerProposal(
   return {
     synchronizerId: register.synchronizerId,
     paymaster: register.paymaster,
-    maxActivityWeight: register.maxActivityWeight,
+    maxAppActivityWeight: register.maxAppActivityWeight,
     maxAssetActivityWeight: register.maxAssetActivityWeight,
   };
 }
@@ -305,7 +305,7 @@ function createUpdateSynchronizerRegistrationProposal({
     registeredSynchronizerCid,
     newFields: {
       paymaster: update.newPaymaster,
-      maxActivityWeight: update.newMaxActivityWeight,
+      maxAppActivityWeight: update.newMaxAppActivityWeight,
       maxAssetActivityWeight: update.newMaxAssetActivityWeight,
     },
   };

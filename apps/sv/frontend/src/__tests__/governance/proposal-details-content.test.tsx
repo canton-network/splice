@@ -1552,7 +1552,7 @@ describe('Dedicated synchronizer votes', () => {
         registeredSynchronizerCid,
         newFields: {
           paymaster: activeSynchronizerRegistrationPayload.paymaster,
-          maxActivityWeight: '2.5000000000',
+          maxAppActivityWeight: '2.5000000000',
           maxAssetActivityWeight: activeSynchronizerRegistrationPayload.maxAssetActivityWeight,
         },
       } as UpdateSynchronizerRegistrationProposal,
@@ -1566,7 +1566,7 @@ describe('Dedicated synchronizer votes', () => {
       proposal: {
         synchronizerId: 'dedicated::1220deadbeef',
         paymaster: 'paymaster::1220feedface',
-        maxActivityWeight: '1.0000000000',
+        maxAppActivityWeight: '1.0000000000',
         maxAssetActivityWeight: '0.2500000000',
       } as RegisterSynchronizerProposal,
     } as ProposalDetails);
@@ -1583,7 +1583,7 @@ describe('Dedicated synchronizer votes', () => {
     expect(screen.getByTestId('proposal-details-paymaster-party-id')).toHaveTextContent(
       'paymaster::1220feedface'
     );
-    expect(screen.getByTestId('proposal-details-maxActivityWeight').textContent).toBe('1.0');
+    expect(screen.getByTestId('proposal-details-maxAppActivityWeight').textContent).toBe('1.0');
     expect(screen.getByTestId('proposal-details-maxAssetActivityWeight').textContent).toBe('0.25');
   });
 

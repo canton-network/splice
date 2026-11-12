@@ -273,9 +273,9 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               }
             />
             <ProposalReviewField
-              id="maxActivityWeight"
-              label={registrationFields.maxActivityWeight.label}
-              value={props.fields.maxActivityWeight}
+              id="maxAppActivityWeight"
+              label={registrationFields.maxAppActivityWeight.label}
+              value={props.fields.maxAppActivityWeight}
             />
             <ProposalReviewField
               id="maxAssetActivityWeight"

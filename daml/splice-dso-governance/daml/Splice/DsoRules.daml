@@ -1990,7 +1990,7 @@ template DsoRules with
       with
         synchronizerId : Text -- ^ Id of the dedicated synchronizer to register.
         paymaster : Party -- ^ The party paying for the synchronizer's traffic.
-        maxActivityWeight : Decimal
+        maxAppActivityWeight : Decimal
           -- ^ Highest weight with which the synchronizer's traffic earns app activity.
         maxAssetActivityWeight : Decimal
           -- ^ Highest weight with which the synchronizer's traffic earns asset activity.
@@ -2000,7 +2000,7 @@ template DsoRules with
           dso
           synchronizerId
           paymaster
-          maxActivityWeight
+          maxAppActivityWeight
           maxAssetActivityWeight
         pure DsoRules_RegisterSynchronizerResult with registeredSynchronizerCid
 

@@ -60,7 +60,7 @@ register dso synchronizerId paymaster = submit dso $ createCmd RegisteredSynchro
   dso
   synchronizerId
   paymaster
-  maxActivityWeight = 1.0
+  maxAppActivityWeight = 1.0
   maxAssetActivityWeight = 0.5
 
 -- | The reason of the burn for a paymaster's purchase of `purchasedBytes`.
