@@ -48,7 +48,9 @@
         "id": 9
       },
       "participantClient": {
-        "adminApi": {}
+        "adminApi": {
+          "disableAuth": false
+        }
       },
       "participantHost": "participant",
       "persistence": {

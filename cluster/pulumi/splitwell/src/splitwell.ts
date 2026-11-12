@@ -124,7 +124,7 @@ export async function installSplitwell(
       pvc: persistentHeapDumpsPvc(),
       participantClient: {
         adminApi: {
-          disableAuth: splitwellConfig?.participant?.disableParticipantAdminApiAuth,
+          disableAuth: splitwellConfig?.participant?.disableParticipantAdminApiAuth ?? false,
         },
       },
     },
