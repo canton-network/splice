@@ -7,7 +7,6 @@ import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.db.DbActivityRecordMetaStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbActivityRecordMetaStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
@@ -845,51 +844,6 @@ class DbAppActivityRecordStoreTest
         result <- facade1.appEarliestIngestedRound()
       } yield {
         result shouldBe None
-      }
-    }
-  }
-
-  "ingestionStatusForRound" should {
-
-    "return CannotProvide when meta row absent and isFirstSv=false" in {
-      for {
-        (store, facade, _) <- newStore(isFirstSv = false)
-        result <- facade.appIngestionStatusForRound(5L)
-      } yield {
-        result shouldBe RoundIngestionStatus.CannotProvide
-      }
-    }
-
-    "return Undetermined when meta row absent and isFirstSv=true" in {
-      for {
-        (store, facade, _) <- newStore(isFirstSv = true)
-        result <- facade.appIngestionStatusForRound(5L)
-      } yield {
-        result shouldBe RoundIngestionStatus.Undetermined
-      }
-    }
-
-    "return CannotProvide when meta row present and roundNumber <= earliestIngested" in {
-      for {
-        (store, facade, _) <- newStore()
-        baseTs = CantonTimestamp.now()
-        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
-        atBoundary <- facade.appIngestionStatusForRound(10L)
-        below <- facade.appIngestionStatusForRound(5L)
-      } yield {
-        atBoundary shouldBe RoundIngestionStatus.CannotProvide
-        below shouldBe RoundIngestionStatus.CannotProvide
-      }
-    }
-
-    "return Undetermined when meta row present and roundNumber > earliestIngested" in {
-      for {
-        (store, facade, _) <- newStore()
-        baseTs = CantonTimestamp.now()
-        _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
-        result <- facade.appIngestionStatusForRound(15L)
-      } yield {
-        result shouldBe RoundIngestionStatus.Undetermined
       }
     }
   }

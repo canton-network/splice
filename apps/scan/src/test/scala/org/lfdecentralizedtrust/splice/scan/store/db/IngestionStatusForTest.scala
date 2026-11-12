@@ -28,12 +28,20 @@ class IngestionStatusForTest extends AnyWordSpec with BaseTest {
     }
 
     "return CannotProvide when meta present and round equals earliest (boundary)" in {
-      ingestionStatusFor(isFirstSv = false, earliestIngested = Some(10L), roundNumber = 10L) shouldBe
+      ingestionStatusFor(
+        isFirstSv = false,
+        earliestIngested = Some(10L),
+        roundNumber = 10L,
+      ) shouldBe
         RoundIngestionStatus.CannotProvide
     }
 
     "return Undetermined when meta present and round is beyond earliest" in {
-      ingestionStatusFor(isFirstSv = false, earliestIngested = Some(10L), roundNumber = 15L) shouldBe
+      ingestionStatusFor(
+        isFirstSv = false,
+        earliestIngested = Some(10L),
+        roundNumber = 15L,
+      ) shouldBe
         RoundIngestionStatus.Undetermined
     }
 
