@@ -48,6 +48,8 @@ class ExpiredAmuletAllocationTrigger(
     with SvTaskBasedTrigger[Task]
     with UnavailablePartiesGuard {
 
+  override protected def usesBatchSplitting: Boolean = true
+
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit

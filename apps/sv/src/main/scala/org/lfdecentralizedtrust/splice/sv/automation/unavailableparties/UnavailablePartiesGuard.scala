@@ -20,6 +20,9 @@ trait UnavailablePartiesGuard extends NamedLogging {
   protected def unavailablePartiesStore: UnavailablePartiesStore
   protected def svTaskContext: SvTaskBasedTrigger.Context
 
+  // triggers that submit through submitBatchWithSplitting; the detector then restores parties itself
+  protected def usesBatchSplitting: Boolean = false
+
   // the in-memory store has no backoff and holds the manually ignored parties, which must not be restored
   private def batchSplittingEnabled: Boolean = {
     val features = svConfig.parameters.enabledFeatures
@@ -97,7 +100,8 @@ trait UnavailablePartiesGuard extends NamedLogging {
   ): Future[TaskOutcome] =
     outcome match {
       case _: TaskSuccess
-          if svConfig.parameters.enabledFeatures.enablePersistedUnavailableParties =>
+          if svConfig.parameters.enabledFeatures.enablePersistedUnavailableParties &&
+            !(usesBatchSplitting && batchSplittingEnabled) =>
         unavailablePartiesStore
           .removeParties(stakeholders.toSeq)
           .map { restored =>

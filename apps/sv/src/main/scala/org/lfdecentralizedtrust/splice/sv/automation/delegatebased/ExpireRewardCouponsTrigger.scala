@@ -55,6 +55,8 @@ class ExpireRewardCouponsTrigger(
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
     with UnavailablePartiesGuard {
+
+  override protected def usesBatchSplitting: Boolean = true
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit

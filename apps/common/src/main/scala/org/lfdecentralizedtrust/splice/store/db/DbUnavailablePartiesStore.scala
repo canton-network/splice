@@ -79,16 +79,8 @@ class DbUnavailablePartiesStore(
         .map(_.discard)
     }
 
-  override def removeParties(parties: Seq[PartyId])(implicit
-      tc: TraceContext
-  ): Future[Seq[PartyId]] =
-    removePartiesAt(parties, clock.now.toMicros)
-
-  // Removes parties after a successful submission, only once their ignore window has elapsed,
-  // so that parties ignored during the same task are not restored right away.
-  private[splice] def removePartiesAt(parties: Seq[PartyId], nowMicros: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[PartyId]] =
+  // Removes specific parties from the table upon successful transaction processing.
+  def removeParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Seq[PartyId]] =
     if (parties.isEmpty) Future.successful(Seq.empty)
     else {
       val partyArray = parties.distinct.toArray
@@ -96,7 +88,6 @@ class DbUnavailablePartiesStore(
         .queryAndUpdate(
           sql"""delete from dso_unavailable_parties
                 where party = any($partyArray) and store_id = $storeId
-                  and updated_at + ignore_duration <= $nowMicros
                 returning party""".asUpdateReturning[PartyId],
           "removeParties",
         )
