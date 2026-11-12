@@ -8,6 +8,7 @@
 //
 // Usage, from the nix dev shell (`direnv exec . <cmd>`), which provides `canton`:
 //   SNAPSHOT_IN=/path/onboarding-state.zst SNAPSHOT_OUT=/path/out.jsonl \
+//   SNAPSHOT_MEMBERS_OUT=/path/members.jsonl \
 //     canton run scripts/topology-snapshot-to-jsonl.sc --no-tty \
 //     -C canton.remote-participants.unused.admin-api.port=1,canton.remote-participants.unused.ledger-api.port=2
 //
@@ -15,8 +16,13 @@
 // so the `-C` flag defines a dummy remote participant that the script never connects to.
 // The input is streamed, so a small heap is enough (e.g. JAVA_OPTS=-Xmx256m).
 //
+// Outputs:
+//   SNAPSHOT_OUT          one line per topology transaction
+//   SNAPSHOT_MEMBERS_OUT  one line per sequencer member (from the sequencer snapshot's status)
+//
 // Optional env vars:
-//   SNAPSHOT_HEADER_OUT  file for the static synchronizer parameters + sequencer snapshot (JSON)
+//   SNAPSHOT_HEADER_OUT  file for the static synchronizer parameters + the rest of the
+//                        sequencer snapshot (JSON), without the members
 //   SNAPSHOT_LIMIT       stop after this many messages (for quick probing)
 
 import com.digitalasset.canton.synchronizer.sequencer.OnboardingStateForSequencerV2
@@ -35,6 +41,7 @@ def requireEnv(name: String): String =
 
 val inPath = requireEnv("SNAPSHOT_IN")
 val outPath = requireEnv("SNAPSHOT_OUT")
+val membersOutPath = requireEnv("SNAPSHOT_MEMBERS_OUT")
 val headerOutPath = sys.env.get("SNAPSHOT_HEADER_OUT")
 val limit = sys.env.get("SNAPSHOT_LIMIT").map(_.toLong).getOrElse(Long.MaxValue)
 
@@ -178,6 +185,7 @@ def txToJson(stored: GenericStoredTopologyTransaction): Json = {
 
 val in = new BufferedInputStream(new ZstdInputStream(new FileInputStream(inPath)), 1 << 20)
 val out = new BufferedWriter(new FileWriter(outPath), 1 << 20)
+val membersOut = new BufferedWriter(new FileWriter(membersOutPath))
 val start = System.nanoTime()
 var n = 0L
 try {
@@ -194,12 +202,21 @@ try {
             out.write('\n')
           case None =>
             stats("header_messages") += 1
+            val sequencerSnapshot = state.sequencerSnapshot.map(_.toProtoV31)
+            val members =
+              sequencerSnapshot.flatMap(_.status).fold(Seq.empty[GeneratedMessage])(_.members)
+            members.foreach { member =>
+              membersOut.write(protoToJson(member).noSpaces)
+              membersOut.write('\n')
+            }
+            stats("members") += members.size.toLong
             headerOutPath.foreach { path =>
               val header = Json.obj(
                 "static_synchronizer_parameters" -> state.staticSynchronizerParameters
                   .fold(Json.Null)(p => protoToJson(p.toProtoV30)),
-                "sequencer_snapshot" -> state.sequencerSnapshot
-                  .fold(Json.Null)(s => protoToJson(s.toProtoV31)),
+                "sequencer_snapshot" -> sequencerSnapshot.fold(Json.Null)(s =>
+                  protoToJson(s.copy(status = s.status.map(_.copy(members = Seq.empty))))
+                ),
               )
               val w = new FileWriter(path)
               try w.write(header.spaces2)
@@ -212,6 +229,7 @@ try {
   }
 } finally {
   out.close()
+  membersOut.close()
   in.close()
 }
 
