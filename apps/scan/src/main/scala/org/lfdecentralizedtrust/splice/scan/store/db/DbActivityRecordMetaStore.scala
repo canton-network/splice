@@ -301,7 +301,7 @@ class DbActivityRecordMetaStore(
       "appActivity.lookupAppActivityRecordMeta",
     )
 
-  def insertAppActivityRecordMetaDBIO(
+  private def insertAppActivityRecordMetaDBIO(
       codeVersion: Int,
       userVersion: Int,
       startedIngestingAt: Long,
@@ -422,13 +422,18 @@ class DbActivityRecordMetaStore(
 
   // ============ Extra-side meta reads (private helpers) ============
 
+  private val extraStartedIngestingAtRef = new AtomicReference[Option[Long]](None)
+
   private def extraStartedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
-    readMetaOptLong(
-      Tables.extraActivityRecordMeta,
-      "m.started_ingesting_at",
-      "",
-      "extraActivity.startedIngestingAt",
-    )
+    extraStartedIngestingAtRef.get() match {
+      case some @ Some(_) => Future.successful(some)
+      case None =>
+        lookupExtraActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
+          val tsO = metaO.map(_.startedIngestingAt)
+          tsO.foreach(ts => extraStartedIngestingAtRef.compareAndSet(None, Some(ts)))
+          tsO
+        }
+    }
 
   private def extraEarliestIngestedRound()(implicit tc: TraceContext): Future[Option[Long]] =
     readMetaOptLong(
@@ -480,7 +485,7 @@ class DbActivityRecordMetaStore(
       "extraActivity.lookupExtraActivityRecordMeta",
     )
 
-  def insertExtraActivityRecordMetaDBIO(
+  private def insertExtraActivityRecordMetaDBIO(
       codeVersion: Int,
       userVersion: Int,
       startedIngestingAt: Long,
