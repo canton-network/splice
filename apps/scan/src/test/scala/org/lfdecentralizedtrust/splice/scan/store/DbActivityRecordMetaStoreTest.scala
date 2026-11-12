@@ -205,6 +205,197 @@ class DbActivityRecordMetaStoreTest
     }
   }
 
+  // ============ Per-side meta semantics ============
+  // Each test runs twice — once against appMeta, once against extraMeta —
+  // to pin that MetaReader's SQL template is correct regardless of table.
+
+  "earliestRoundWithCompleteAppActivity on either side" should {
+    sides.foreach { case (sideName, pickSide) =>
+      s"[$sideName] return None when no meta record exists" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          result <- side.reader.earliestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+
+      s"[$sideName] return None when last_archived_round is not set" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(1, 0, 1000L, 0L, None)
+          result <- side.reader.earliestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+
+      s"[$sideName] return None while only the first ingested round has been archived" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(1, 0, 1000L, 42L, Some(42L))
+          result <- side.reader.earliestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+
+      s"[$sideName] return the second ingested round once it has been archived" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(1, 0, 1000L, 42L, Some(43L))
+          result <- side.reader.earliestRoundWithCompleteAppActivity()
+        } yield result.value shouldBe 43L
+      }
+
+      s"[$sideName] use current meta row when multiple meta rows exist" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(0, 0, 1000L, 10L, Some(15L))
+          _ <- side.insertMeta(1, 0, 2000L, 20L, Some(25L))
+          result <- side.reader.earliestRoundWithCompleteAppActivity()
+        } yield result.value shouldBe 21L
+      }
+
+      s"[$sideName] only consider the meta row from own history_id" in {
+        for {
+          (facade1, _) <- newStores()
+          (facade2, _) <- newStores()
+          side1 = pickSide(facade1)
+          side2 = pickSide(facade2)
+          _ <- side2.insertMeta(1, 0, 1000L, 10L, Some(11L))
+          _ <- side1.insertMeta(1, 0, 3000L, 50L, None)
+          result <- side1.reader.earliestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+    }
+  }
+
+  "earliestIngestedRound on either side" should {
+    sides.foreach { case (sideName, pickSide) =>
+      s"[$sideName] return None when no meta record exists" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          result <- side.reader.earliestIngestedRound()
+        } yield result shouldBe None
+      }
+
+      s"[$sideName] return the earliest ingested round even when last_archived_round is not set" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(1, 0, 1000L, 42L, None)
+          result <- side.reader.earliestIngestedRound()
+        } yield result.value shouldBe 42L
+      }
+
+      s"[$sideName] use the current version's meta row when multiple meta rows exist" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(0, 0, 1000L, 10L, Some(15L))
+          _ <- side.insertMeta(1, 0, 2000L, 20L, None)
+          result <- side.reader.earliestIngestedRound()
+        } yield result.value shouldBe 20L
+      }
+
+      s"[$sideName] only consider the meta row from own history_id" in {
+        for {
+          (facade1, _) <- newStores()
+          (facade2, _) <- newStores()
+          side1 = pickSide(facade1)
+          side2 = pickSide(facade2)
+          _ <- side2.insertMeta(1, 0, 1000L, 10L, Some(11L))
+          result <- side1.reader.earliestIngestedRound()
+        } yield result shouldBe None
+      }
+    }
+  }
+
+  "latestRoundWithCompleteAppActivity on either side" should {
+    sides.foreach { case (sideName, pickSide) =>
+      s"[$sideName] return None when no meta row exists" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          result <- side.reader.latestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+
+      s"[$sideName] return None when last_archived_round is not set" in {
+        for {
+          (facade, _) <- newStores()
+          side = pickSide(facade)
+          _ <- side.insertMeta(1, 0, 1000L, 42L, None)
+          result <- side.reader.latestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+
+      s"[$sideName] only consider the meta row from own history_id" in {
+        for {
+          (facade1, _) <- newStores()
+          (facade2, _) <- newStores()
+          side1 = pickSide(facade1)
+          side2 = pickSide(facade2)
+          _ <- side2.insertMeta(1, 0, 1000L, 10L, Some(11L))
+          result <- side1.reader.latestRoundWithCompleteAppActivity()
+        } yield result shouldBe None
+      }
+    }
+  }
+
+  private sealed trait SideFixture {
+    def insertMeta(
+        codeVersion: Int,
+        userVersion: Int,
+        startedIngestingAt: Long,
+        earliestIngestedRound: Long,
+        lastArchivedRound: Option[Long],
+    ): Future[Unit]
+    def reader: DbActivityRecordMetaStore#MetaReader
+  }
+
+  private val sides: Seq[(String, DbActivityRecordMetaStore => SideFixture)] = Seq(
+    "app" -> { (facade: DbActivityRecordMetaStore) =>
+      new SideFixture {
+        def insertMeta(
+            codeVersion: Int,
+            userVersion: Int,
+            startedIngestingAt: Long,
+            earliestIngestedRound: Long,
+            lastArchivedRound: Option[Long],
+        ): Future[Unit] =
+          facade.insertAppActivityRecordMetaForTesting(
+            codeVersion,
+            userVersion,
+            startedIngestingAt,
+            earliestIngestedRound,
+            lastArchivedRound,
+          )
+        def reader = facade.appMeta
+      }
+    },
+    "extra" -> { (facade: DbActivityRecordMetaStore) =>
+      new SideFixture {
+        def insertMeta(
+            codeVersion: Int,
+            userVersion: Int,
+            startedIngestingAt: Long,
+            earliestIngestedRound: Long,
+            lastArchivedRound: Option[Long],
+        ): Future[Unit] =
+          facade.insertExtraActivityRecordMetaForTesting(
+            codeVersion,
+            userVersion,
+            startedIngestingAt,
+            earliestIngestedRound,
+            lastArchivedRound,
+          )
+        def reader = facade.extraMeta
+      }
+    },
+  )
+
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
   private def newStores(
