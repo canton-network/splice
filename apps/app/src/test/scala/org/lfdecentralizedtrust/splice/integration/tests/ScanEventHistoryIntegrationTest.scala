@@ -26,10 +26,6 @@ import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.metrics.MetricValue
 import monocle.macros.syntax.lens.*
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
-  ConfigurableApp,
-  updateAutomationConfig,
-}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 
 class ScanEventHistoryIntegrationTest
