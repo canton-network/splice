@@ -10,7 +10,7 @@
     },
     "spec": {
       "backend": "gs://da-cn-pulumi-dev-stacks",
-      "continueResyncOnCommitMatch": true,
+      "continueResyncOnCommitMatch": false,
       "destroyOnFinalize": false,
       "envRefs": {
         "AUTH0_CN_MANAGEMENT_API_CLIENT_ID": {
@@ -107,8 +107,6 @@
           "name": "splice-node-active"
         }
       },
-      "refresh": true,
-      "resyncFrequencySeconds": 300,
       "retryMaxBackoffDurationSeconds": 900,
       "retryOnUpdateConflict": true,
       "serviceAccountName": "sv-runbook-sa",

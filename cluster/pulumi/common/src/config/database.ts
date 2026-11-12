@@ -19,6 +19,7 @@ export const CloudSqlConfigSchema = z.object({
   enterprisePlus: z.boolean(),
   flags: z.record(z.string(), z.string()).default({}),
   enableAutoBackups: z.boolean().default(true),
+  backupStartTime: z.string().optional(),
   databaseVersion: z.string().default('POSTGRES_18'),
 });
 export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;

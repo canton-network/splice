@@ -5,6 +5,7 @@
     "active": false,
     "alias": "sequencer-pg",
     "cloudSqlConfig": {
+      "backupStartTime": "02:00",
       "databaseVersion": "POSTGRES_18",
       "enableAutoBackups": true,
       "enabled": true,
