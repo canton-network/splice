@@ -201,7 +201,10 @@ def main() -> None:
         help="BigQuery location, used if the dataset has to be created (e.g. EU, europe-west6)",
     )
     parser.add_argument(
-        "--export-bucket", required=True, help="GCS bucket for the JSONL files"
+        "--export-bucket",
+        required=True,
+        type=lambda b: b.removeprefix("gs://").strip("/"),
+        help="GCS bucket for the JSONL files, as a name or gs://<name>",
     )
     parser.add_argument("--export-prefix", default="topology-export")
     parser.add_argument("--transactions-table", default="topology_transactions")
