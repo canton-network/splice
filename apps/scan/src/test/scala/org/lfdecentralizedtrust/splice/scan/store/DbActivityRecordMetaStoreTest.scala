@@ -47,7 +47,7 @@ class DbActivityRecordMetaStoreTest
 
     "bound earliestRoundWithCompleteAppActivity by max of the two sides" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         // Seed both meta rows and advance last_archived_round past
         // earliest_ingested_round + 1 for both. App-side earliest-complete: 5.
         // Extra-side earliest-complete: 7.
@@ -61,7 +61,7 @@ class DbActivityRecordMetaStoreTest
 
     "return None for earliestRoundWithCompleteAppActivity when only one side has reached completeness" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(5L))
         combined <- metaStore.earliestRoundWithCompleteAppActivity()
       } yield {
@@ -71,7 +71,7 @@ class DbActivityRecordMetaStoreTest
 
     "bound latestRoundWithCompleteAppActivity by min of the two sides" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         // App-side latest-complete: 10. Extra-side latest-complete: 8.
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
         _ <- metaStore.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, Some(8L))
@@ -83,7 +83,7 @@ class DbActivityRecordMetaStoreTest
 
     "return None for latestRoundWithCompleteAppActivity when only one side has a last_archived_round" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, Some(10L))
         // Extra-side meta present, but no last_archived_round yet.
         _ <- metaStore.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
@@ -95,7 +95,7 @@ class DbActivityRecordMetaStoreTest
 
     "report CannotProvide for ingestionStatusForRound when either side does" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         // Both meta rows present with earliest_ingested_round = 4, so
         // each side alone reports CannotProvide for round 4 and
         // Undetermined for round 20. The combined result must agree.
@@ -111,7 +111,7 @@ class DbActivityRecordMetaStoreTest
 
     "report CannotProvide for ingestionStatusForRound when the extra side is behind" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         // App-side earliest-ingested 4 (so round 20 looks Undetermined
         // on the app side alone). Extra-side earliest-ingested 25 (round
         // 20 is BELOW it → CannotProvide on the extra side). The combined
@@ -126,7 +126,7 @@ class DbActivityRecordMetaStoreTest
 
     "report Undetermined for ingestionStatusForRound when neither side places the round below its earliest ingested" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 100L, 4L, None)
         _ <- metaStore.insertExtraActivityRecordMetaForTesting(1, 0, 200L, 4L, None)
         combined <- metaStore.ingestionStatusForRound(20L)
@@ -137,7 +137,7 @@ class DbActivityRecordMetaStoreTest
 
     "take the min of startedIngestingAt when both sides have a value" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 1000L, 4L, None)
         _ <- metaStore.insertExtraActivityRecordMetaForTesting(1, 0, 500L, 4L, None)
         combined <- metaStore.startedIngestingAt
@@ -148,7 +148,7 @@ class DbActivityRecordMetaStoreTest
 
     "fall back to the single non-None startedIngestingAt when only one side has a meta row" in {
       for {
-        (metaStore, appStore) <- newStores(initialRound = 5L)
+        (metaStore, _) <- newStores(initialRound = 5L)
         _ <- metaStore.insertAppActivityRecordMetaForTesting(1, 0, 1000L, 4L, None)
         combined <- metaStore.startedIngestingAt
       } yield {

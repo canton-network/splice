@@ -45,9 +45,12 @@ class IngestionStatusForTest extends AnyWordSpec with BaseTest {
         RoundIngestionStatus.Undetermined
     }
 
-    "ignore isFirstSv when meta is present" in {
+    "ignore isFirstSv when meta is present and round is below earliest" in {
       ingestionStatusFor(isFirstSv = true, earliestIngested = Some(10L), roundNumber = 5L) shouldBe
         RoundIngestionStatus.CannotProvide
+    }
+
+    "ignore isFirstSv when meta is present and round is beyond earliest" in {
       ingestionStatusFor(isFirstSv = true, earliestIngested = Some(10L), roundNumber = 15L) shouldBe
         RoundIngestionStatus.Undetermined
     }
