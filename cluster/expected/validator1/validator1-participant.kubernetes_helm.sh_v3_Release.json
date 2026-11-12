@@ -58,6 +58,7 @@
         "name": "cn-mocknet"
       },
       "disableAuth": true,
+      "enableAutoInit": true,
       "enableHealthProbes": true,
       "enableKeyDownload": false,
       "enablePostgresMetrics": true,
@@ -88,6 +89,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "validator1",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

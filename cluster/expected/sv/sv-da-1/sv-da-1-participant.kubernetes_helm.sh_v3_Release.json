@@ -61,6 +61,7 @@
         "hostname": "mock.global.canton.network.digitalasset.com",
         "name": "cn-mocknet"
       },
+      "enableAutoInit": true,
       "enableHealthProbes": true,
       "enableKeyDownload": true,
       "enablePostgresMetrics": true,
@@ -93,6 +94,7 @@
       "metrics": {
         "enable": true
       },
+      "nodeIdentifier": "Digital-Asset-1",
       "participantAdminUserNameFrom": {
         "secretKeyRef": {
           "key": "ledger-api-user",

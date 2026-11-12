@@ -116,6 +116,17 @@ spec:
         - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
           value: canton.participants.participant.monitoring.http-health-server.port = 5071
         {{- end }}
+        - name: CANTON_PARTICIPANT_IDENTIFIER
+          value: {{ .Values.nodeIdentifier | quote }}
+        {{- if not .Values.enableAutoInit }}
+        # `identity = null` first: Canton merges config files, so without it the
+        # auto-init `identity.identifier` would survive and be rejected.
+        - name: ADDITIONAL_CONFIG_MANUAL_INIT
+          value: |
+            canton.participants.participant.init.identity = null
+            canton.participants.participant.init.identity = { type = manual }
+            canton.participants.participant.init.generate-topology-transactions-and-keys = false
+        {{- end }}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
         ports:

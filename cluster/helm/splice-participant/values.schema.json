@@ -6,9 +6,15 @@
     "imageRepo",
     "participantAdminUserNameFrom",
     "persistence",
-    "imageName"
+    "imageName",
+    "nodeIdentifier",
+    "enableAutoInit"
   ],
   "properties": {
+    "nodeIdentifier": {
+      "type": "string",
+      "minLength": 1
+    },
     "securityContexts": {
       "type": ["object"],
       "properties": {
@@ -168,6 +174,9 @@
       "type": "boolean"
     },
     "enableKeyDownload": {
+      "type": "boolean"
+    },
+    "enableAutoInit": {
       "type": "boolean"
     },
     "enableRepairCommands": {

@@ -198,11 +198,22 @@ async function installValidator(
         'Set `participant.enableRepairCommands: true` for this node in config.yaml.'
     );
   }
+
+  const nodeIdentifier = validatorConfig.nodeIdentifier || validatorConfig.partyHint;
+  // On a dump restore the participant ends up named newParticipantId, so that is
+  // what the chart should carry, even though nothing reads it in that case.
+  const participantNodeIdentifier =
+    participantBootstrapDumpSecret && validatorConfig.newParticipantId
+      ? validatorConfig.newParticipantId
+      : nodeIdentifier;
+
   const participantAddress = (
     await installParticipant(
       validatorConfig,
       xns,
       auth0Client.getCfg(),
+      participantNodeIdentifier,
+      !participantBootstrapDumpSecret,
       false, // We don't currently support non-auth for validator-runbook
       validatorVersion,
       postgres,
@@ -232,7 +243,7 @@ async function installValidator(
       {
         MIGRATION_ID: DecentralizedSynchronizerUpgradeConfig.activeMigrationId.toString(),
         SPONSOR_SV_URL: `https://sv.sv-2.${CLUSTER_HOSTNAME}`,
-        YOUR_VALIDATOR_NODE_NAME: validatorConfig.nodeIdentifier || validatorConfig.partyHint,
+        YOUR_VALIDATOR_NODE_NAME: participantNodeIdentifier,
         TRUSTED_SCAN_URL: `https://scan.sv-2.${CLUSTER_HOSTNAME}`,
       }
     ),

@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.util
 
 import org.lfdecentralizedtrust.splice.console.SvAppBackendReference
+import org.lfdecentralizedtrust.splice.sv.config.SvCantonIdentifierConfig
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.tracing.TraceContext
@@ -48,6 +49,10 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
       extraParticipantsEnvMap: Map[String, String] = Map.empty,
       extraSequencerConfig: Seq[String] = Seq.empty,
       enableKeyDownload: Boolean = false,
+      // The SVs whose participant should NOT be initialized by Canton, because
+      // the test sets that participant's identity up itself. Every other SV
+      // participant auto-initializes, as in production.
+      manualInitParticipants: Set[Int] = Set.empty,
   )(extraEnv: (String, String)*)(test: => A)(implicit tc: TraceContext): A = {
 
     def conditionalConf(condition: Boolean, filename: String) =
@@ -60,11 +65,21 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
     val configs =
       Seq(testResourcesPath / "include" / "canton-basic.conf") ++
         conditionalConf(svs123 && participants, "standalone-participants-sv123.conf") ++
+        (1 to 3).flatMap(i =>
+          conditionalConf(
+            svs123 && participants && manualInitParticipants.contains(i),
+            s"standalone-participant-sv${i}-manual-init.conf",
+          )
+        ) ++
         conditionalConf(
           svs123 && sequencersMediators,
           "standalone-sequencers-mediators-sv123.conf",
         ) ++
         conditionalConf(sv4 && participants, "standalone-participant-sv4.conf") ++
+        conditionalConf(
+          sv4 && participants && manualInitParticipants.contains(4),
+          "standalone-participant-sv4-manual-init.conf",
+        ) ++
         conditionalConf(sv4 && sequencersMediators, "standalone-sequencer-mediator-sv4.conf") ++
         extraParticipantsConfigFileNames.toList.map(testResourcesPath / _)
 
@@ -73,6 +88,27 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
         .productElement(index - 1)
         .asInstanceOf[Option[SvAppBackendReference]]
         .map(s"SV${index}_ADMIN_USER" -> _.config.ledgerApiUser)
+    }
+
+    // Canton auto-initializes these participants, so it needs the same node
+    // identifier the SV app expects. Tests may rename it, e.g. through
+    // `withCantonNodeNameSuffix`, so we read it off the app config.
+    //
+    // This is mandatory in the participant configs, and stays mandatory even
+    // for an SV in `manualInitParticipants`: the participant is built by
+    // concatenating substitutions, so Canton resolves the identifier before the
+    // manual-init override drops it. That is fine because it is emitted from the
+    // same backend `Option` as `SV<n>_ADMIN_USER`, which those configs already
+    // require - any SV whose participant config is loaded has a backend here.
+    def participantIdentifierEnv(index: Integer) = {
+      adminUsersFromSvBackends
+        .productElement(index - 1)
+        .asInstanceOf[Option[SvAppBackendReference]]
+        .map(backend =>
+          s"SV${index}_PARTICIPANT_IDENTIFIER" -> backend.config.cantonIdentifierConfig
+            .getOrElse(SvCantonIdentifierConfig.default(backend.config))
+            .participant
+        )
     }
 
     val dbNamesEnv = {
@@ -103,6 +139,7 @@ trait StandaloneCanton extends PostgresAroundEach with NamedLogging with Process
     val allExtraEnv =
       (extraEnv ++
         (1 to 4).flatMap(adminUserEnv(_)) ++
+        (1 to 4).flatMap(participantIdentifierEnv(_)) ++
         portsEnv ++
         dbNamesEnv) ++ extraParticipantsEnvMap.toList
 

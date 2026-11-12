@@ -15,12 +15,23 @@ import org.lfdecentralizedtrust.splice.console.{
   WalletAppClientReference,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.validator.config.ValidatorCantonIdentifierConfig
 import com.digitalasset.canton.topology.{PartyId, PhysicalSynchronizerId, SynchronizerId}
 import com.digitalasset.canton.SynchronizerAlias
 
 // TODO(DACH-NY/canton-network-node#736): these should eventually be defined analogue to Canton's `participant1` references etc
 // however, this is likely only possible once we depend on Canton as a library
 trait CommonAppInstanceReferences {
+
+  /** The Canton node identifier a validator app expects its participant to have.
+    * Mirrors what the app itself computes in `ValidatorApp`, so that tests
+    * configuring a standalone participant cannot drift from the app config.
+    */
+  def participantIdentifier(validator: ValidatorAppBackendReference): String =
+    ValidatorCantonIdentifierConfig
+      .resolvedNodeIdentifierConfig(validator.config)
+      .participant
+
   def decentralizedSynchronizerId(implicit env: SpliceTestConsoleEnvironment): SynchronizerId =
     sv1Backend.participantClientWithAdminToken.synchronizers
       .id_of(
