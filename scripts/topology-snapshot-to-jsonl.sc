@@ -6,9 +6,14 @@
 // `OnboardingStateForSequencerV2.parseDelimitedFromTrusted`, so all versioned-wrapper handling and
 // mapping validation is Canton's.
 //
-// Usage (no nodes needed):
+// Usage, from the nix dev shell (`direnv exec . <cmd>`), which provides `canton`:
 //   SNAPSHOT_IN=/path/onboarding-state.zst SNAPSHOT_OUT=/path/out.jsonl \
-//     canton run scripts/topology-snapshot-to-jsonl.sc
+//     canton run scripts/topology-snapshot-to-jsonl.sc --no-tty \
+//     -C canton.remote-participants.unused.admin-api.port=1,canton.remote-participants.unused.ledger-api.port=2
+//
+// No nodes need to be running. Canton refuses to start without at least one node in its config,
+// so the `-C` flag defines a dummy remote participant that the script never connects to.
+// The input is streamed, so a small heap is enough (e.g. JAVA_OPTS=-Xmx256m).
 //
 // Optional env vars:
 //   SNAPSHOT_HEADER_OUT  file for the static synchronizer parameters + sequencer snapshot (JSON)
