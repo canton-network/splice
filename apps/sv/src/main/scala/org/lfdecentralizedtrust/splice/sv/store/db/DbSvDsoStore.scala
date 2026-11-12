@@ -70,6 +70,7 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.instruction.FeaturedAppConfigUpdateInstruction
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import slick.jdbc.GetResult
@@ -906,6 +907,58 @@ class DbSvDsoStore private (
     } yield limited.map(
       assignedContractFromRow(splice.amulet.RewardCouponV2.COMPANION)(_)
     )
+
+  // `featured_app_right_provider is not null` lets the planner use the partial index
+  // dso_acs_store_sid_mid_pn_tid_farp.
+  override def listFeaturedAppConfigUpdateInstructionSample(limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight]] =
+    for {
+      result <- storage
+        .query(
+          (sql"""
+             select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated(
+              "sample."
+            )}, sample.fa_right_cid
+             from (
+               select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated(
+              "acs."
+            )},
+                      fa_right.contract_id as fa_right_cid
+               from #${DsoTables.acsTableName} acs
+               cross join lateral (
+                 select r.contract_id
+                 from #${DsoTables.acsTableName} r
+                 where r.store_id = acs.store_id
+                   and r.migration_id = acs.migration_id
+                   and r.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+                   and r.template_id_qualified_name = ${QualifiedName(
+              FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+                   and r.featured_app_right_provider is not null
+                   and r.featured_app_right_provider = acs.create_arguments->>'provider'
+                 limit 1
+               ) fa_right
+               where acs.store_id = $acsStoreId
+                 and acs.migration_id = $domainMigrationId
+                 and acs.package_name = ${FeaturedAppConfigUpdateInstruction.PACKAGE_NAME}
+                 and acs.template_id_qualified_name = ${QualifiedName(
+              FeaturedAppConfigUpdateInstruction.TEMPLATE_ID_WITH_PACKAGE_ID
+            )}
+               limit 1000
+             ) sample
+             order by random()
+             limit ${sqlLimit(limit)}
+           """).as[(AcsQueries.SelectFromAcsTableResult, String)],
+          "listFeaturedAppConfigUpdateInstructionSample",
+        )
+      limited = applyLimit("listFeaturedAppConfigUpdateInstructionSample", limit, result)
+    } yield limited.map { case (row, rightCid) =>
+      SvDsoStore.FeaturedAppConfigUpdateInstructionWithRight(
+        assignedContractFromRow(FeaturedAppConfigUpdateInstruction.COMPANION)(row),
+        new FeaturedAppRight.ContractId(rightCid),
+      )
+    }
 
   override def getRewardCouponsV2AgeHistogram(
       t1: FiniteDuration,

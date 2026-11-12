@@ -3233,6 +3233,137 @@ class DbSvDsoStoreTest
 
   }
 
+  private def featuredAppConfigUpdateInstruction(
+      provider: PartyId,
+      expiresAt: Instant,
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    splice.dso.instruction.FeaturedAppConfigUpdateInstruction.ContractId,
+    splice.dso.instruction.FeaturedAppConfigUpdateInstruction,
+  ] = {
+    val emptyConfig = new splice.amulet.FeaturedAppConfig(
+      Optional.empty(),
+      Optional.empty(),
+      Optional.empty(),
+    )
+    contract(
+      identifier =
+        splice.dso.instruction.FeaturedAppConfigUpdateInstruction.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId =
+        new splice.dso.instruction.FeaturedAppConfigUpdateInstruction.ContractId(contractId),
+      payload = new splice.dso.instruction.FeaturedAppConfigUpdateInstruction(
+        dso.toProtoPrimitive,
+        provider.toProtoPrimitive,
+        new splice.amulet.FeaturedAppRight_UpdateConfig(emptyConfig, emptyConfig),
+        expiresAt,
+      ),
+    )
+  }
+
+  "listExpiredFeaturedAppConfigUpdateInstruction" should {
+
+    "return all expired instructions, whether or not their provider has a FeaturedAppRight, and exclude those of another DSO" in {
+      val unfeaturedProvider = userParty(1)
+      val featuredProvider = userParty(2)
+      val unfeaturedInstruction =
+        featuredAppConfigUpdateInstruction(unfeaturedProvider, time(2).toInstant)
+      // Expiry is unconditional: having a right must not keep an instruction alive.
+      val featuredInstruction =
+        featuredAppConfigUpdateInstruction(featuredProvider, time(2).toInstant)
+      // The 'dso' party differs from mkStore()'s, so this is never ingested and must not show up.
+      val otherDsoInstruction =
+        featuredAppConfigUpdateInstruction(
+          unfeaturedProvider,
+          time(2).toInstant,
+          dso = userParty(4),
+        )
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(featuredAppRight(featuredProvider))(store.multiDomainAcsStore)
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(
+            unfeaturedInstruction,
+            featuredInstruction,
+            otherDsoInstruction,
+          )
+        )(dummyDomain.create(_)(store.multiDomainAcsStore))
+      } yield {
+        def cidsAt(t: CantonTimestamp) = store
+          .listExpiredFeaturedAppConfigUpdateInstruction(t, PageLimit.tryCreate(10))(
+            TraceContext.empty
+          )
+          .futureValue
+          .map(_.contract.contractId)
+
+        // 'contract_expires_at < now' is strict: an instruction is not expired at its own expiresAt.
+        cidsAt(time(2)) should be(empty)
+        cidsAt(time(3)) should contain theSameElementsAs Seq(
+          unfeaturedInstruction.contractId,
+          featuredInstruction.contractId,
+        )
+      }
+    }
+  }
+
+  "listFeaturedAppConfigUpdateInstructionSample" should {
+
+    "return only instructions whose provider has a FeaturedAppRight, paired with that right" in {
+      val featuredProvider = userParty(1)
+      val unfeaturedProvider = userParty(2)
+      val doublyFeaturedProvider = userParty(3)
+      val featuredRight = featuredAppRight(featuredProvider)
+      // Two rights for one provider: the instruction must still be returned only once.
+      val doubleRights = Seq(
+        featuredAppRight(doublyFeaturedProvider),
+        featuredAppRight(doublyFeaturedProvider),
+      )
+      val featuredInstruction =
+        featuredAppConfigUpdateInstruction(featuredProvider, time(2).toInstant)
+      val unfeaturedInstruction =
+        featuredAppConfigUpdateInstruction(unfeaturedProvider, time(2).toInstant)
+      val doublyFeaturedInstruction =
+        featuredAppConfigUpdateInstruction(doublyFeaturedProvider, time(2).toInstant)
+      // The 'dso' party differs from mkStore()'s, so this is never ingested and must not show up.
+      val otherDsoInstruction =
+        featuredAppConfigUpdateInstruction(
+          featuredProvider,
+          time(2).toInstant,
+          dso = userParty(4),
+        )
+      for {
+        store <- mkStore()
+        _ <- MonadUtil.sequentialTraverse(featuredRight +: doubleRights)(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(
+            featuredInstruction,
+            unfeaturedInstruction,
+            doublyFeaturedInstruction,
+            otherDsoInstruction,
+          )
+        )(dummyDomain.create(_)(store.multiDomainAcsStore))
+        result <- store.listFeaturedAppConfigUpdateInstructionSample(PageLimit.tryCreate(10))(
+          TraceContext.empty
+        )
+      } yield {
+        val byInstruction: Seq[(String, String)] =
+          result.map(r => r.instruction.contractId.contractId -> r.featuredAppRightCid.contractId)
+        byInstruction.map(_._1) should contain theSameElementsAs Seq(
+          featuredInstruction.contractId.contractId,
+          doublyFeaturedInstruction.contractId.contractId,
+        )
+        byInstruction.toMap.get(featuredInstruction.contractId.contractId) shouldBe Some(
+          featuredRight.contractId.contractId
+        )
+        doubleRights.map(_.contractId.contractId) should contain(
+          byInstruction.toMap.apply(doublyFeaturedInstruction.contractId.contractId)
+        )
+      }
+    }
+  }
+
   "listVoteRequestsReadyToBeClosed" should {
 
     val votesAccept =

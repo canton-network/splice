@@ -27,3 +27,10 @@ validatorApp:
       memory: '2Gi'
     limits:
       memory: '4Gi'
+# cantonBft must be backed up before the sequencer each day (restore needs cantonBft backup <= sequencer backup)
+sequencer:
+  cloudSql:
+    backupStartTime: '02:00'
+cantonBft:
+  cloudSql:
+    backupStartTime: '00:00'
