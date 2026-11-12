@@ -661,6 +661,8 @@ object ScanHttpEncodings {
   def fromDamlValueEncoding(encoding: definitions.DamlValueEncoding): ScanHttpEncodings =
     encoding match {
       case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
+      case definitions.DamlValueEncoding.members.CompactJsonNoTrailingNulls =>
+        CompactJsonScanHttpEncodings.noTrailingNulls()
       case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
     }
 
@@ -978,8 +980,13 @@ object RemoveFieldLabels {
 case class CompactJsonScanHttpEncodings(
     transformValue: javaApi.Value => javaApi.Value,
     transformRecord: javaApi.DamlRecord => javaApi.DamlRecord,
+    dropTrailingNulls: Boolean = false,
 ) extends ScanHttpEncodings {
   import org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegen
+
+  private def maybeTrim(value: javaApi.Value, json: Json): Json =
+    if (dropTrailingNulls) DropTrailingNulls.trim(value, json) else json
+
   override def encodeContractPayload(
       event: javaApi.CreatedEvent
   )(implicit elc: ErrorLoggingContext): Json =
@@ -990,7 +997,7 @@ case class CompactJsonScanHttpEncodings(
           elc.error(s"Failed to encode contract payload: $err")
           encodeValueFallback(err, event.getArguments)
         },
-        tryParseJson,
+        json => maybeTrim(event.getArguments, tryParseJson(json)),
       )
 
   override def encodeChoiceArgument(
@@ -1003,7 +1010,7 @@ case class CompactJsonScanHttpEncodings(
           elc.error(s"Failed to encode choice argument: $err")
           encodeValueFallback(err, event.getChoiceArgument)
         },
-        tryParseJson,
+        json => maybeTrim(event.getChoiceArgument, tryParseJson(json)),
       )
 
   override def encodeExerciseResult(
@@ -1016,7 +1023,7 @@ case class CompactJsonScanHttpEncodings(
           elc.error(s"Failed to encode exercise result: $err")
           encodeValueFallback(err, event.getExerciseResult)
         },
-        tryParseJson,
+        json => maybeTrim(event.getExerciseResult, tryParseJson(json)),
       )
 
   override def decodeContractPayload(
@@ -1067,6 +1074,14 @@ case class CompactJsonScanHttpEncodings(
 // A lossy, but much easier to process, encoding. Should be used for all endpoints not used for backfilling Scan.
 object CompactJsonScanHttpEncodings {
   def apply() = new CompactJsonScanHttpEncodings(RemoveFieldLabels.value, RemoveFieldLabels.record)
+
+  // Like `apply()`, but drops trailing null fields from records, so that the output does not depend
+  // on which version of the codegen was used to encode a value.
+  def noTrailingNulls() = new CompactJsonScanHttpEncodings(
+    RemoveFieldLabels.value,
+    RemoveFieldLabels.record,
+    dropTrailingNulls = true,
+  )
 }
 
 // A lossless, but harder to process, encoding. Should be used only for backfilling Scan.

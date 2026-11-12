@@ -160,10 +160,14 @@ object ScanStorageConfig {
 
     lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](CompactJson, ProtobufJson)
 
-    def fromDamlValueEncoding(damlValueEncoding: definitions.DamlValueEncoding): Encoding =
+    /** None for encodings that are not (yet) supported by bulk storage */
+    def fromDamlValueEncoding(
+        damlValueEncoding: definitions.DamlValueEncoding
+    ): Option[Encoding] =
       damlValueEncoding match {
-        case definitions.DamlValueEncoding.members.CompactJson => CompactJson
-        case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJson
+        case definitions.DamlValueEncoding.members.CompactJson => Some(CompactJson)
+        case definitions.DamlValueEncoding.members.ProtobufJson => Some(ProtobufJson)
+        case definitions.DamlValueEncoding.members.CompactJsonNoTrailingNulls => None
       }
   }
 }

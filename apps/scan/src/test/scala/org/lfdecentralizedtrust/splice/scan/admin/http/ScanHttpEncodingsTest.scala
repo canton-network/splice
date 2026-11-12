@@ -6,6 +6,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.util.HexString
 import com.google.protobuf.ByteString
+import io.circe.Json
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   amulet as amuletCodegen,
@@ -922,6 +923,103 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       ) { case httpApi.UpdateHistoryItem.members.UpdateHistoryTransaction(value) =>
         value.externalTransactionHash shouldBe None
       }
+    }
+  }
+
+  "CompactJsonScanHttpEncodings.noTrailingNulls" should {
+    val validator = mkPartyId("validator")
+    val sponsor = mkPartyId("sponsor")
+    val licenseContract = validatorLicense(validator, sponsor)
+    val partyFields =
+      licenseContract.payload.toValue.getFields.asScala.toList.take(3).map(_.getValue)
+    val metadata = licenseContract.payload.toValue.getFields.asScala.toList(4).getValue
+
+    def eventWithFields(fields: Seq[javaApi.Value]): javaApi.CreatedEvent = {
+      val e = toCreatedEvent(licenseContract)
+      new javaApi.CreatedEvent(
+        e.getWitnessParties,
+        e.getOffset,
+        e.getNodeId,
+        e.getTemplateId,
+        e.getPackageName,
+        e.getContractId,
+        new javaApi.DamlRecord(fields.map(new javaApi.DamlRecord.Field(_)).asJava),
+        e.getCreatedEventBlob,
+        e.getInterfaceViews,
+        e.getFailedInterfaceViews,
+        e.getContractKey,
+        e.getSignatories,
+        e.getObservers,
+        e.getCreatedAt,
+        e.isAcsDelta,
+        e.getRepresentativePackageId,
+      )
+    }
+
+    val compact = CompactJsonScanHttpEncodings()
+    val noTrailingNulls = CompactJsonScanHttpEncodings.noTrailingNulls()
+    val none = javaApi.DamlOptional.EMPTY
+
+    // ValidatorLicense ends with the optional fields faucetState, metadata and lastActiveAt.
+    // An older version of the template that does not have them (or a participant that omits
+    // trailing None fields) produces records with fewer fields.
+    val partyFieldsJson = Json.obj(
+      "validator" -> Json.fromString(validator.toProtoPrimitive),
+      "sponsor" -> Json.fromString(sponsor.toProtoPrimitive),
+      "dso" -> Json.fromString(dsoParty.toProtoPrimitive),
+    )
+
+    "encode the same JSON for records with and without trailing None fields" in {
+      val withExplicitNones = eventWithFields(partyFields ++ Seq(none, none, none))
+      val withoutNones = eventWithFields(partyFields)
+
+      noTrailingNulls.encodeContractPayload(withExplicitNones) shouldBe partyFieldsJson
+      noTrailingNulls.encodeContractPayload(withoutNones) shouldBe partyFieldsJson
+
+      // The plain compact encoding writes the fields known to the codegen, whether present or not
+      val compactJson = partyFieldsJson.deepMerge(
+        Json.obj(
+          "faucetState" -> Json.Null,
+          "metadata" -> Json.Null,
+          "lastActiveAt" -> Json.Null,
+        )
+      )
+      compact.encodeContractPayload(withExplicitNones) shouldBe compactJson
+      compact.encodeContractPayload(withoutNones) shouldBe compactJson
+    }
+
+    "keep null fields that are followed by a non-null field" in {
+      val event = eventWithFields(partyFields ++ Seq(none, metadata, none))
+      val json = noTrailingNulls.encodeContractPayload(event)
+      json shouldBe compact.encodeContractPayload(event).mapObject(_.remove("lastActiveAt"))
+      json.hcursor.downField("faucetState").focus shouldBe Some(Json.Null)
+      json.hcursor.downField("metadata").focus.exists(!_.isNull) shouldBe true
+      json.hcursor.downField("lastActiveAt").focus shouldBe None
+    }
+
+    "decode the output, with trailing nulls dropped, to the same contract" in {
+      val event = toCreatedEvent(licenseContract)
+      val json = noTrailingNulls.encodeContractPayload(event)
+      noTrailingNulls.decodeContractPayload(event.getTemplateId, json) shouldBe
+        RemoveFieldLabels.record(licenseContract.payload.toValue)
+      val withoutNones = eventWithFields(partyFields)
+      val jsonWithoutNones = noTrailingNulls.encodeContractPayload(withoutNones)
+      val decoded = noTrailingNulls.decodeContractPayload(event.getTemplateId, jsonWithoutNones)
+      decoded.getFields.asScala.toList.take(3).map(_.getValue) shouldBe partyFields
+      decoded.getFields.asScala.toList.drop(3).map(_.getValue) shouldBe List(none, none, none)
+    }
+
+    "be selected by the compact_json_no_trailing_nulls encoding" in {
+      val event = eventWithFields(partyFields)
+      ScanHttpEncodings
+        .fromDamlValueEncoding(DamlValueEncoding.CompactJsonNoTrailingNulls)
+        .encodeContractPayload(event) shouldBe partyFieldsJson
+      ScanHttpEncodings
+        .fromDamlValueEncoding(DamlValueEncoding.CompactJson)
+        .encodeContractPayload(event)
+        .hcursor
+        .downField("lastActiveAt")
+        .focus shouldBe Some(Json.Null)
     }
   }
 }

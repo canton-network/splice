@@ -23,6 +23,7 @@ org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutorTest
 org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnectionTest
 org.lfdecentralizedtrust.splice.scan.admin.api.client.DsoSequencerDeduplicationTest
 org.lfdecentralizedtrust.splice.scan.admin.api.client.SingleScanConnectionTest
+org.lfdecentralizedtrust.splice.scan.admin.http.DropTrailingNullsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.GeneratedScanRouteDropNullsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodingsTest
 org.lfdecentralizedtrust.splice.scan.admin.http.UpdateHistoryOmitNullStringComplianceTest

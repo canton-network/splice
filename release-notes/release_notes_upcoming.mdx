@@ -14,6 +14,17 @@
       that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
       `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
 
+  - Scan App
+
+    - Add the `compact_json_no_trailing_nulls` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`
+      parameter of the update history and event history endpoints.
+      It is the same as `compact_json`, except that trailing `null` fields of Daml records are omitted.
+      With `compact_json`, values created before a Daml upgrade that appended optional fields can be
+      returned with or without those fields (as `null`), depending on the version of the Scan app serving the request.
+      `compact_json_no_trailing_nulls` returns the same JSON regardless of the Scan version.
+      `compact_json` remains the default for now. Clients that compare responses across Scan instances should switch to
+      the new encoding.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
