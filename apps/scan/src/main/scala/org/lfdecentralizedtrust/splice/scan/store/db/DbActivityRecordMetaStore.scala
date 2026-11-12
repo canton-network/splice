@@ -93,14 +93,6 @@ object DbActivityRecordMetaStore {
   * consume the per-side meta helpers here. Row-level case classes and
   * insert/read paths stay with the concrete stores.
   *
-  * The per-side meta methods (`ensureAppMetaDBIO` / `ensureExtraMetaDBIO`,
-  * `lookupAppActivityRecordMeta` / `lookupExtraActivityRecordMeta`, etc.)
-  * are thin wrappers over private side-agnostic helpers. One-sided
-  * divergence (e.g. the open question of whether the extra meta table
-  * keeps `code_version` / `user_version`) is accommodated by unwiring the
-  * diverging wrapper from the shared helper and giving it its own body —
-  * the other side keeps consuming the helper unchanged.
-  *
   * Combine semantics:
   *   - `earliestRoundWithCompleteAppActivity`: max of the two sides —
   *     completeness from genesis requires BOTH to have reached the round.
@@ -349,9 +341,8 @@ class DbActivityRecordMetaStore(
       "Extra activity ingestion",
     )(ingestionStart, lastArchivedRoundO, exitOnDowngrade)
 
-  /** Intended consumer: the future `ScanExtraActivityIngestionService`, to
-    * advance `last_archived_round` per batch / OffsetCheckpoint. No
-    * in-tree production caller today; only the `ForTesting` helper below.
+  /** Intended consumer: `ScanExtraActivityIngestionService`, which
+    * advances `last_archived_round` per batch / OffsetCheckpoint.
     */
   def updateExtraLastArchivedRoundDBIO(round: Long) =
     updateLastArchivedRoundDBIO(Tables.extraActivityRecordMeta)(round)
@@ -507,9 +498,7 @@ class DbActivityRecordMetaStore(
     }
 
   /** Lookup a full meta row, polymorphic in the row type (each side's
-    * `GetResult` is in scope). The SELECT list and WHERE clause are
-    * identical today; a side that drops either (e.g. extra loses the
-    * version columns) unwires its wrapper and writes its own SQL.
+    * `GetResult` is in scope).
     */
   private def lookupMeta[Meta: GetResult](
       table: String,
@@ -528,9 +517,7 @@ class DbActivityRecordMetaStore(
     )
 
   /** Insert a meta row (version-triple keyed, idempotent via
-    * `ON CONFLICT DO NOTHING`). Side wrappers partially apply with their
-    * table; a side that diverges on the column set or key columns writes
-    * its own INSERT.
+    * `ON CONFLICT DO NOTHING`).
     */
   private def insertMetaDBIO(table: String)(
       codeVersion: Int,
@@ -549,7 +536,7 @@ class DbActivityRecordMetaStore(
     """.asUpdate
 
   /** Update `last_archived_round` on a meta row (key via the version
-    * triple). Side wrappers partially apply with their table.
+    * triple).
     */
   private def updateLastArchivedRoundDBIO(table: String)(round: Long) =
     sql"""update #$table
