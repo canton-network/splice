@@ -232,7 +232,7 @@ class DbActivityRecordMetaStore(
   override def ingestionStatusForRound(roundNumber: Long)(implicit
       tc: TraceContext
   ): Future[RoundIngestionStatus] =
-    appIngestionStatusForRound(roundNumber)
+    metaIngestionStatus(appEarliestIngestedRound(), roundNumber)
       .zip(
         metaIngestionStatus(
           readMetaOptLong(
@@ -338,11 +338,6 @@ class DbActivityRecordMetaStore(
       "",
       "appActivity.latestRoundWithCompleteAppActivity",
     )
-
-  private[store] def appIngestionStatusForRound(roundNumber: Long)(implicit
-      tc: TraceContext
-  ): Future[RoundIngestionStatus] =
-    metaIngestionStatus(appEarliestIngestedRound(), roundNumber)
 
   /** Assert that all activity records for roundNumber have been ingested
     * on the app side. The round must be greater than earliest_ingested_round
