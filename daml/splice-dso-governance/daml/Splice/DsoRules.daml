@@ -411,6 +411,11 @@ data DsoRules_AmuletRules_ConvertFeaturedAppActivityMarkersResult = DsoRules_Amu
     result : AmuletRules_ConvertFeaturedAppActivityMarkersResult
   deriving (Serializable)
 
+data DsoRules_AmuletRules_MigrateContractStateSchemaResult = DsoRules_AmuletRules_MigrateContractStateSchemaResult
+  with
+    result : AmuletRules_MigrateContractStateSchemaResult
+  deriving (Serializable)
+
 data DsoRules_CreateUnallocatedUnclaimedActivityRecordResult = DsoRules_CreateUnallocatedUnclaimedActivityRecordResult with
     unallocatedUnclaimedActivityRecordCid : ContractId UnallocatedUnclaimedActivityRecord
   deriving (Serializable)
@@ -1863,6 +1868,17 @@ template DsoRules with
         void $ fetchChecked (ForDso with dso) amuletRulesCid
         result <- exercise amuletRulesCid argument
         pure DsoRules_AmuletRules_ConvertFeaturedAppActivityMarkersResult with result
+
+    nonconsuming choice DsoRules_AmuletRules_MigrateContractStateSchema : DsoRules_AmuletRules_MigrateContractStateSchemaResult
+      with
+        amuletRulesCid : ContractId AmuletRules
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) amuletRulesCid
+        result <- exercise amuletRulesCid AmuletRules_MigrateContractStateSchema
+        pure DsoRules_AmuletRules_MigrateContractStateSchemaResult with result
 
     -- Unallocated unclaimed activity record
     ----------------------------------------

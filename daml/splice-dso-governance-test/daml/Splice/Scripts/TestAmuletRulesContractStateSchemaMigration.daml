@@ -1,0 +1,47 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestAmuletRulesContractStateSchemaMigration where
+
+import DA.Assert
+import Daml.Script
+
+import Splice.ActivityRecorder
+import Splice.AmuletRules
+import Splice.DsoRules
+
+import Splice.Scripts.DsoTestUtils
+
+testAmuletRulesContractStateSchemaMigration : Script ()
+testAmuletRulesContractStateSchemaMigration = do
+  (_app, dso, (sv1, _sv2, _sv3, _)) <- initMainNet
+  nonSv <- allocateParty "nonSv"
+
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
+  amuletRules.contractStateSchemaVersion === None
+  [] <- query @ActivityRecorder dso
+
+  -- only SV can call migrate
+  submitMustFail (actAs nonSv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AmuletRules_MigrateContractStateSchema with
+    amuletRulesCid
+    sv = nonSv
+
+  result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AmuletRules_MigrateContractStateSchema with
+    amuletRulesCid
+    sv = sv1
+
+  [(newAmuletRulesCid, newAmuletRules)] <- query @AmuletRules dso
+  newAmuletRulesCid === result.result.newAmuletRulesCid
+  newAmuletRules.contractStateSchemaVersion === Some latestContractStateSchemaVersion
+
+  [(activityRecorderCid, activityRecorder)] <- query @ActivityRecorder dso
+  result.result.activityRecorderCid === Some activityRecorderCid
+  activityRecorder.dso === dso
+
+  -- After reaching latestContractStateSchemaVersion calling migrate fails
+  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_AmuletRules_MigrateContractStateSchema with
+    amuletRulesCid = newAmuletRulesCid
+    sv = sv1
+
+  pure ()
