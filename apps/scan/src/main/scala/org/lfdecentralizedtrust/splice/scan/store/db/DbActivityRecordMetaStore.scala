@@ -342,28 +342,22 @@ class DbActivityRecordMetaStore(
   private[store] def appAssertCompleteActivity(roundNumber: Long)(implicit
       tc: TraceContext
   ): Future[Unit] =
-    runQuerySingle(
-      sql"""select m.earliest_ingested_round, m.last_archived_round
-            from #${Tables.appActivityRecordMeta} m
-            where m.history_id = $historyId
-              and m.activity_ingestion_code_version = ${ingestionVersions.code}
-              and m.activity_ingestion_user_version = ${ingestionVersions.user}
-      """.as[(Long, Option[Long])].headOption,
-      "appActivity.assertCompleteActivity",
-    ).map {
-      case Some((earliest, Some(lastArchived)))
-          if roundNumber > earliest && roundNumber <= lastArchived =>
-        ()
-      case metaO =>
-        val (earliestO, lastArchivedO) =
-          metaO.fold((Option.empty[Long], Option.empty[Long])) { case (e, l) => (Some(e), l) }
-        throw Status.FAILED_PRECONDITION
-          .withDescription(
-            s"Incomplete app activity for round $roundNumber: we require " +
-              s"earliest_ingested_round < round <= last_archived_round, but " +
-              s"earliest_ingested_round=$earliestO, last_archived_round=$lastArchivedO"
-          )
-          .asRuntimeException()
+    lookupAppActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
+      val earliestO = metaO.map(_.earliestIngestedRound)
+      val lastArchivedO = metaO.flatMap(_.lastArchivedRound)
+      (earliestO, lastArchivedO) match {
+        case (Some(earliest), Some(lastArchived))
+            if roundNumber > earliest && roundNumber <= lastArchived =>
+          ()
+        case _ =>
+          throw Status.FAILED_PRECONDITION
+            .withDescription(
+              s"Incomplete app activity for round $roundNumber: we require " +
+                s"earliest_ingested_round < round <= last_archived_round, but " +
+                s"earliest_ingested_round=$earliestO, last_archived_round=$lastArchivedO"
+            )
+            .asRuntimeException()
+      }
     }
 
   private val appStartedIngestingAtRef = new AtomicReference[Option[Long]](None)

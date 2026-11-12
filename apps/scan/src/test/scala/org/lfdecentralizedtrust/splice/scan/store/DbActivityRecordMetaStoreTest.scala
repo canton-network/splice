@@ -210,6 +210,58 @@ class DbActivityRecordMetaStoreTest
   // the extra meta table — to pin that each shared SQL is correct regardless
   // of which side it reads.
 
+  private sealed trait SideFixture {
+    def insertMeta(
+        codeVersion: Int,
+        userVersion: Int,
+        startedIngestingAt: Long,
+        earliestIngestedRound: Long,
+        lastArchivedRound: Option[Long],
+    ): Future[Unit]
+    def table: String
+  }
+
+  private val sides: Seq[(String, DbActivityRecordMetaStore => SideFixture)] = Seq(
+    "app" -> { (metaStore: DbActivityRecordMetaStore) =>
+      new SideFixture {
+        def insertMeta(
+            codeVersion: Int,
+            userVersion: Int,
+            startedIngestingAt: Long,
+            earliestIngestedRound: Long,
+            lastArchivedRound: Option[Long],
+        ): Future[Unit] =
+          metaStore.insertAppActivityRecordMetaForTesting(
+            codeVersion,
+            userVersion,
+            startedIngestingAt,
+            earliestIngestedRound,
+            lastArchivedRound,
+          )
+        def table = metaStore.Tables.appActivityRecordMeta
+      }
+    },
+    "extra" -> { (metaStore: DbActivityRecordMetaStore) =>
+      new SideFixture {
+        def insertMeta(
+            codeVersion: Int,
+            userVersion: Int,
+            startedIngestingAt: Long,
+            earliestIngestedRound: Long,
+            lastArchivedRound: Option[Long],
+        ): Future[Unit] =
+          metaStore.insertExtraActivityRecordMetaForTesting(
+            codeVersion,
+            userVersion,
+            startedIngestingAt,
+            earliestIngestedRound,
+            lastArchivedRound,
+          )
+        def table = metaStore.Tables.extraActivityRecordMeta
+      }
+    },
+  )
+
   "earliestRoundWithCompleteAppActivity on either side" should {
     sides.foreach { case (sideName, pickSide) =>
       s"[$sideName] return None when no meta record exists" in {
@@ -344,58 +396,6 @@ class DbActivityRecordMetaStoreTest
       }
     }
   }
-
-  private sealed trait SideFixture {
-    def insertMeta(
-        codeVersion: Int,
-        userVersion: Int,
-        startedIngestingAt: Long,
-        earliestIngestedRound: Long,
-        lastArchivedRound: Option[Long],
-    ): Future[Unit]
-    def table: String
-  }
-
-  private val sides: Seq[(String, DbActivityRecordMetaStore => SideFixture)] = Seq(
-    "app" -> { (metaStore: DbActivityRecordMetaStore) =>
-      new SideFixture {
-        def insertMeta(
-            codeVersion: Int,
-            userVersion: Int,
-            startedIngestingAt: Long,
-            earliestIngestedRound: Long,
-            lastArchivedRound: Option[Long],
-        ): Future[Unit] =
-          metaStore.insertAppActivityRecordMetaForTesting(
-            codeVersion,
-            userVersion,
-            startedIngestingAt,
-            earliestIngestedRound,
-            lastArchivedRound,
-          )
-        def table = metaStore.Tables.appActivityRecordMeta
-      }
-    },
-    "extra" -> { (metaStore: DbActivityRecordMetaStore) =>
-      new SideFixture {
-        def insertMeta(
-            codeVersion: Int,
-            userVersion: Int,
-            startedIngestingAt: Long,
-            earliestIngestedRound: Long,
-            lastArchivedRound: Option[Long],
-        ): Future[Unit] =
-          metaStore.insertExtraActivityRecordMetaForTesting(
-            codeVersion,
-            userVersion,
-            startedIngestingAt,
-            earliestIngestedRound,
-            lastArchivedRound,
-          )
-        def table = metaStore.Tables.extraActivityRecordMeta
-      }
-    },
-  )
 
   private val storeCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
