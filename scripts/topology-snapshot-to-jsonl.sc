@@ -166,8 +166,19 @@ def nullable(name: String, bqType: String, description: String) =
   Column(name, bqType, "NULLABLE", description)
 
 val txSchema = Seq(
+  required(
+    "row_number",
+    "INTEGER",
+    "0-based position of the transaction in the snapshot, which is the order of the topology store",
+  ),
   required("sequenced", "TIMESTAMP", "When the transaction was sequenced"),
   required("valid_from", "TIMESTAMP", "Effective time from which the transaction is valid"),
+  required(
+    "batch_idx",
+    "INTEGER",
+    "Position among the transactions with the same valid_from; (valid_from, batch_idx) is unique." +
+      " Not in the snapshot itself: rebuilt from the row order, as Canton does when importing it",
+  ),
   nullable(
     "valid_until",
     "TIMESTAMP",
@@ -241,7 +252,23 @@ def writeFile(path: String, content: String): Unit = {
   finally w.close()
 }
 
-def txToJson(stored: GenericStoredTopologyTransaction): Json = {
+// The snapshot doesn't contain the topology store's batch_idx, but lists the transactions in store
+// order. Rebuild it the way Canton does on import (DbTopologyStore.bulkInsert): the position within
+// each run of transactions with the same valid_from.
+var lastValidFrom: Option[CantonTimestamp] = None
+var batchIdx = -1L
+def nextBatchIdx(validFrom: CantonTimestamp): Long = {
+  lastValidFrom match {
+    case Some(last) if validFrom == last => batchIdx += 1
+    case Some(last) if validFrom < last =>
+      sys.error(s"Snapshot is unordered: valid_from $validFrom comes after $last")
+    case _ => batchIdx = 0
+  }
+  lastValidFrom = Some(validFrom)
+  batchIdx
+}
+
+def txToJson(stored: GenericStoredTopologyTransaction, rowNumber: Long): Json = {
   val signed = stored.transaction
   val tx = signed.transaction
   // TopologyMapping proto is a oneof wrapper with exactly one field set, e.g. {"party_to_participant": {...}}
@@ -264,8 +291,10 @@ def txToJson(stored: GenericStoredTopologyTransaction): Json = {
   val signedJson = protoToJson(signed.toProtoV30).mapObject(_.add("transaction", transactionJson))
 
   Json.obj(
+    "row_number" -> Json.fromLong(rowNumber),
     "sequenced" -> Json.fromString(stored.sequenced.value.toInstant.toString),
     "valid_from" -> Json.fromString(stored.validFrom.value.toInstant.toString),
+    "batch_idx" -> Json.fromLong(nextBatchIdx(stored.validFrom.value)),
     "valid_until" -> stored.validUntil.fold(Json.Null)(t =>
       Json.fromString(t.value.toInstant.toString)
     ),
@@ -353,6 +382,7 @@ val out = new BufferedWriter(new FileWriter(outPath), 1 << 20)
 val membersOut = new BufferedWriter(new FileWriter(membersOutPath))
 val start = System.nanoTime()
 var n = 0L
+var txRows = 0L
 try {
   var done = false
   while (!done && n < limit) {
@@ -363,8 +393,9 @@ try {
         n += 1
         state.topologySnapshot match {
           case Some(stored) =>
-            out.write(checkColumns(txToJson(stored), txSchema).noSpaces)
+            out.write(checkColumns(txToJson(stored, txRows), txSchema).noSpaces)
             out.write('\n')
+            txRows += 1
           case None =>
             stats("header_messages") += 1
             val rows = state.sequencerSnapshot.fold(Seq.empty[Json])(memberRows)
