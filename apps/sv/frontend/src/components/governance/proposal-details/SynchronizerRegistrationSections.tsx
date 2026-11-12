@@ -75,7 +75,7 @@ const WeightItem = ({
   weight,
 }: {
   idPrefix: string;
-  field: 'maxActivityWeight' | 'maxAssetActivityWeight';
+  field: 'maxAppActivityWeight' | 'maxAssetActivityWeight';
   weight: string;
 }) => (
   <DetailItem
@@ -105,8 +105,8 @@ export const RegisterSynchronizerSection: React.FC<RegisterSynchronizerSectionPr
       <PartyItem idPrefix={idPrefix} field="paymaster" partyId={proposal.paymaster} />
       <WeightItem
         idPrefix={idPrefix}
-        field="maxActivityWeight"
-        weight={proposal.maxActivityWeight}
+        field="maxAppActivityWeight"
+        weight={proposal.maxAppActivityWeight}
       />
       <WeightItem
         idPrefix={idPrefix}

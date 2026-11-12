@@ -252,7 +252,7 @@ describe('Review Proposal Component', () => {
     synchronizerId: 'dedicated::1220deadbeef',
     fields: {
       paymaster: 'paymaster::1220feedface',
-      maxActivityWeight: '1.0000000000',
+      maxAppActivityWeight: '1.0000000000',
       maxAssetActivityWeight: '0.5000000000',
     },
   };
@@ -269,7 +269,11 @@ describe('Review Proposal Component', () => {
         effectiveDate={effectiveDate}
         formType="register-synchronizer"
         synchronizerId={registration.synchronizerId}
-        fields={{ ...registration.fields, maxActivityWeight: '1.0', maxAssetActivityWeight: '2.5' }}
+        fields={{
+          ...registration.fields,
+          maxAppActivityWeight: '1.0',
+          maxAssetActivityWeight: '2.5',
+        }}
         onEdit={() => {}}
         onSubmit={() => {}}
       />
@@ -282,7 +286,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('paymaster-party-id-value').textContent).toBe(
       registration.fields.paymaster
     );
-    expect(screen.getByTestId('maxActivityWeight-field').textContent).toBe('1.0');
+    expect(screen.getByTestId('maxAppActivityWeight-field').textContent).toBe('1.0');
     expect(screen.getByTestId('maxAssetActivityWeight-field').textContent).toBe('2.5');
   });
 
@@ -328,7 +332,7 @@ describe('Review Proposal Component', () => {
         effectiveDate={effectiveDate}
         formType="update-synchronizer-registration"
         registration={registration}
-        newFields={{ ...registration.fields, maxActivityWeight: '2.5' }}
+        newFields={{ ...registration.fields, maxAppActivityWeight: '2.5' }}
         onEdit={() => {}}
         onSubmit={() => {}}
       />
@@ -341,7 +345,9 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('registrationChanges-title').textContent).toBe('Proposed Changes');
     // Only the changed value is listed.
     expect(screen.getAllByTestId('config-change')).toHaveLength(1);
-    expect(screen.getByTestId('config-change-field-label').textContent).toBe('Max Activity Weight');
+    expect(screen.getByTestId('config-change-field-label').textContent).toBe(
+      'Max App Activity Weight'
+    );
     expect(screen.getByTestId('config-change-current-value').textContent).toBe('1.0');
     expect(screen.getByTestId('config-change-new-value').textContent).toBe('2.5');
   });

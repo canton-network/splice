@@ -101,7 +101,7 @@ export const UpdateSynchronizerRegistrationForm: React.FC = _ => {
               registeredSynchronizerCid: resolved.contractId as ContractId<RegisteredSynchronizer>,
               update: {
                 newPaymaster: proposed.paymaster,
-                newMaxActivityWeight: proposed.maxActivityWeight,
+                newMaxAppActivityWeight: proposed.maxAppActivityWeight,
                 newMaxAssetActivityWeight: proposed.maxAssetActivityWeight,
               },
             },

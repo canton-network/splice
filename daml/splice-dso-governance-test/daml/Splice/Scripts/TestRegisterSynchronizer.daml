@@ -21,26 +21,26 @@ testSynchronizerId : Text
 testSynchronizerId = "dedicated-sync::1220dededededededededededededededededededededededededededededede"
 
 registerAction : Party -> Decimal -> Decimal -> ActionRequiringConfirmation
-registerAction paymaster maxActivityWeight maxAssetActivityWeight =
-  registerActionFor testSynchronizerId paymaster maxActivityWeight maxAssetActivityWeight
+registerAction paymaster maxAppActivityWeight maxAssetActivityWeight =
+  registerActionFor testSynchronizerId paymaster maxAppActivityWeight maxAssetActivityWeight
 
 registerActionFor : Text -> Party -> Decimal -> Decimal -> ActionRequiringConfirmation
-registerActionFor synchronizerId paymaster maxActivityWeight maxAssetActivityWeight =
+registerActionFor synchronizerId paymaster maxAppActivityWeight maxAssetActivityWeight =
   ARC_DsoRules with
     dsoAction = SRARC_RegisterSynchronizer DsoRules_RegisterSynchronizer with
       synchronizerId
       paymaster
-      maxActivityWeight
+      maxAppActivityWeight
       maxAssetActivityWeight
 
 updateAction : ContractId RegisteredSynchronizer -> Party -> Decimal -> Decimal -> ActionRequiringConfirmation
-updateAction registeredSynchronizerCid newPaymaster newMaxActivityWeight newMaxAssetActivityWeight =
+updateAction registeredSynchronizerCid newPaymaster newMaxAppActivityWeight newMaxAssetActivityWeight =
   ARC_DsoRules with
     dsoAction = SRARC_UpdateSynchronizerRegistration DsoRules_UpdateSynchronizerRegistration with
       registeredSynchronizerCid
       update = RegisteredSynchronizer_Update with
         newPaymaster
-        newMaxActivityWeight
+        newMaxAppActivityWeight
         newMaxAssetActivityWeight
 
 archiveAction : ContractId RegisteredSynchronizer -> ActionRequiringConfirmation
@@ -89,7 +89,7 @@ test_RegisterSynchronizer_viaVote = do
     dso
     synchronizerId = testSynchronizerId
     paymaster
-    maxActivityWeight = 1.0
+    maxAppActivityWeight = 1.0
     maxAssetActivityWeight = 0.5
 
   -- The paymaster observes the registration. An unrelated party does not.
@@ -117,7 +117,7 @@ test_UpdateSynchronizerRegistration_viaVote = do
     dso
     synchronizerId = testSynchronizerId
     paymaster = newPaymaster
-    maxActivityWeight = 0.25
+    maxAppActivityWeight = 0.25
     maxAssetActivityWeight = 0.0
 
   -- The new paymaster sees the registration, the old one no longer does.
@@ -169,7 +169,7 @@ test_RegisterSynchronizer_acceptsZeroAndAboveOneWeights = do
   -- 0.0 is allowed, and there is no upper bound.
   initiateAndAcceptVote app svs $ registerAction paymaster 0.0 2.0
   (_, registration) <- onlyRegistration dso
-  registration.maxActivityWeight === 0.0
+  registration.maxAppActivityWeight === 0.0
   registration.maxAssetActivityWeight === 2.0
 
 -- | An update cannot set an empty synchronizer id, as it keeps the registration's id, so only the
@@ -193,5 +193,5 @@ test_UpdateSynchronizerRegistration_rejectsNegativeWeights = do
   -- 0.0 is allowed, and there is no upper bound.
   initiateAndAcceptVote app svs $ updateAction registrationCid paymaster 2.0 0.0
   (_, updated) <- onlyRegistration dso
-  updated.maxActivityWeight === 2.0
+  updated.maxAppActivityWeight === 2.0
   updated.maxAssetActivityWeight === 0.0

@@ -29,7 +29,7 @@ vi.mock('../../../hooks/useListVoteRequests', () => ({
 
 const validSynchronizerId = 'dedicated::1220deadbeef';
 const validPaymaster = 'paymaster::1220feedface';
-const weightFields = ['maxActivityWeight', 'maxAssetActivityWeight'] as const;
+const weightFields = ['maxAppActivityWeight', 'maxAssetActivityWeight'] as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,7 +54,7 @@ describe('Register Dedicated Synchronizer Form', () => {
 
     expect(screen.getByTestId('register-synchronizer-synchronizer-id')).toBeInTheDocument();
     expect(screen.getByTestId('register-synchronizer-paymaster')).toBeInTheDocument();
-    expect(screen.getByTestId('register-synchronizer-maxActivityWeight')).toBeInTheDocument();
+    expect(screen.getByTestId('register-synchronizer-maxAppActivityWeight')).toBeInTheDocument();
     expect(screen.getByTestId('register-synchronizer-maxAssetActivityWeight')).toBeInTheDocument();
 
     const summarySubtitle = screen.getByTestId('register-synchronizer-summary-subtitle');
@@ -203,7 +203,7 @@ describe('Register Dedicated Synchronizer Form', () => {
 
     await screen.findByTestId('proposal-review');
     expect(screen.getByTestId('synchronizerId-field').textContent).toBe(validSynchronizerId);
-    expect(screen.getByTestId('maxActivityWeight-field').textContent).toBe('1.0');
+    expect(screen.getByTestId('maxAppActivityWeight-field').textContent).toBe('1.0');
     expect(screen.getByTestId('maxAssetActivityWeight-field').textContent).toBe('0.25');
 
     await user.click(submitButton); // submit proposal
@@ -217,7 +217,7 @@ describe('Register Dedicated Synchronizer Form', () => {
           value: {
             synchronizerId: validSynchronizerId,
             paymaster: validPaymaster,
-            maxActivityWeight: '1.0',
+            maxAppActivityWeight: '1.0',
             maxAssetActivityWeight: '0.25',
           },
         },

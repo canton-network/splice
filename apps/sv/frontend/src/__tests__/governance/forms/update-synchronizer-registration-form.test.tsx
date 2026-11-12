@@ -30,14 +30,14 @@ vi.mock('../../../hooks/useListVoteRequests', () => ({
 const synchronizerId = activeSynchronizerRegistrationPayload.synchronizerId;
 const registrationCid = activeSynchronizerRegistration.contract_id;
 const prefix = 'update-synchronizer-registration';
-const weightInput = `${prefix}-maxActivityWeight`;
+const weightInput = `${prefix}-maxAppActivityWeight`;
 
 const duplicateRegistration = {
   ...activeSynchronizerRegistration,
   contract_id: registrationCid.replace(/^00a1/, '00b2'),
   payload: {
     ...activeSynchronizerRegistrationPayload,
-    maxActivityWeight: '0.6000000000',
+    maxAppActivityWeight: '0.6000000000',
   },
 };
 const duplicateCid = duplicateRegistration.contract_id;
@@ -86,7 +86,7 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
       registrationCid
     );
     expect(
-      screen.getByTestId(`${prefix}-resolved-current-maxActivityWeight-field`).textContent
+      screen.getByTestId(`${prefix}-resolved-current-maxAppActivityWeight-field`).textContent
     ).toBe('1.0');
     await waitFor(() => expect(screen.getByTestId(weightInput).getAttribute('value')).toBe('1.0'));
     expect(screen.getByTestId(`${prefix}-maxAssetActivityWeight`).getAttribute('value')).toBe(
@@ -349,7 +349,7 @@ describe('Update Dedicated Synchronizer Registration Form', () => {
             registeredSynchronizerCid: registrationCid,
             update: {
               newPaymaster: 'new-paymaster::1220abcdef',
-              newMaxActivityWeight: '1.0',
+              newMaxAppActivityWeight: '1.0',
               newMaxAssetActivityWeight: '0.5',
             },
           },

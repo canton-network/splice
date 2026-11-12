@@ -25,7 +25,7 @@ purchaseWithWeights appActivityWeight assetActivityWeight = PaymasterPurchase wi
     dso = testParty "dso"
     synchronizerId = "dedicated-synchronizer::1220dede"
     paymaster = testPaymaster
-    maxActivityWeight = 3.0
+    maxAppActivityWeight = 3.0
     maxAssetActivityWeight = 3.0
   appActivityWeight
   assetActivityWeight

@@ -46,7 +46,7 @@ export const ResolvedSynchronizerRegistrationFields: React.FC<
       value={registration.contractId}
     />
     {showWeights &&
-      (['maxActivityWeight', 'maxAssetActivityWeight'] as const).map(key => (
+      (['maxAppActivityWeight', 'maxAssetActivityWeight'] as const).map(key => (
         <ProposalReviewField
           key={key}
           id={`${id}-current-${key}`}

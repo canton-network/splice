@@ -76,7 +76,7 @@ export const RegisterSynchronizerForm: React.FC = _ => {
     synchronizerId: '',
     fields: {
       paymaster: '',
-      maxActivityWeight: DEFAULT_ACTIVITY_WEIGHT,
+      maxAppActivityWeight: DEFAULT_ACTIVITY_WEIGHT,
       maxAssetActivityWeight: DEFAULT_ACTIVITY_WEIGHT,
     },
   };

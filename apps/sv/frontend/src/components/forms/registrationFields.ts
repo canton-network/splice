@@ -52,8 +52,8 @@ export const registrationFields: RegistrationFieldSpecs = {
     'Paymaster',
     "The party paying for the synchronizer's traffic on the decentralized synchronizer"
   ),
-  maxActivityWeight: weightField(
-    'Max Activity Weight',
+  maxAppActivityWeight: weightField(
+    'Max App Activity Weight',
     'Highest weight with which traffic paid for this synchronizer earns app activity. At least 0.'
   ),
   maxAssetActivityWeight: weightField(
