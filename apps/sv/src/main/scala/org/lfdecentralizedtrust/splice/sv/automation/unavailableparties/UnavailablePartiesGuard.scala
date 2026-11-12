@@ -8,10 +8,15 @@ import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
-import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
+import org.lfdecentralizedtrust.splice.automation.{
+  BatchedMultiDomainExpiredContractTrigger,
+  ScheduledTaskTrigger,
+  TaskOutcome,
+  TaskSuccess,
+}
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
+import org.lfdecentralizedtrust.splice.util.{AssignedContract, UnresponsiveParties}
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -20,48 +25,99 @@ trait UnavailablePartiesGuard extends NamedLogging {
   protected def unavailablePartiesStore: UnavailablePartiesStore
   protected def svTaskContext: SvTaskBasedTrigger.Context
 
-  // triggers that submit through submitBatchWithSplitting; the detector then restores parties itself
-  protected def usesBatchSplitting: Boolean = false
-
   // the in-memory store has no backoff and holds the manually ignored parties, which must not be restored
   private def batchSplittingEnabled: Boolean = {
     val features = svConfig.parameters.enabledFeatures
     features.enableVettingFailureBatchSplitting && features.enablePersistedUnavailableParties
   }
 
-  /** Submits the given batch, isolating vetting failures by recursively splitting the batch
-    * and marking the parties on the lowest Amulet version of the offending contract
-    * as unavailable.
-    * Requires both `enableVettingFailureBatchSplitting` and `enablePersistedUnavailableParties`,
-    * otherwise the batch is submitted as a whole.
+  /** Completes the task like [[completeUnlessAmuletVersionIgnored]]. With
+    * `enableVettingFailureBatchSplitting` and `enablePersistedUnavailableParties` set, a failing
+    * task is instead narrowed to sub-batches of its contracts, isolating vetting failures and
+    * marking the parties on the lowest Amulet version of the offending contract as unavailable.
+    * In that case the parties are restored by the [[UnavailablePartiesDetector]] for the
+    * sub-batches that succeeded only.
     */
-  protected def submitBatchWithSplitting[C](
+  protected def completeWithBatchSplitting[Task, C](
+      vettedVersion: String,
+      task: Task,
       contracts: Seq[C],
-      parties: C => Set[PartyId],
-      ignoreParties: Boolean = true,
-  )(submit: Seq[C] => Future[Unit])(implicit
+      partiesOf: C => Set[PartyId],
+      narrow: (Task, Seq[C]) => Task,
+  )(complete: Task => Future[TaskOutcome])(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[TaskOutcome] =
-    if (!ignoreParties || !batchSplittingEnabled) {
-      submit(contracts)
-        .map(_ => TaskSuccess(s"submitted batch of ${contracts.size} contracts"))
-    } else {
+  ): Future[TaskOutcome] = {
+    val stakeholders = contracts.flatMap(partiesOf).toSet
+    if (!batchSplittingEnabled)
+      completeUnlessAmuletVersionIgnored(
+        vettedVersion,
+        stakeholders,
+        ignoreUnresponsiveParties = true,
+      )(complete(task))
+    else if (amuletVersionIgnored(vettedVersion))
+      ignoreAmuletVersion(vettedVersion, stakeholders)
+    else
       new UnavailablePartiesDetector(
         party =>
           traceContext =>
             svTaskContext.vettingLookupService.lookupVettingState(
               party,
               PackageIdResolver.Package.SpliceAmulet,
-            )(
-              traceContext
-            ),
+            )(traceContext),
         unavailablePartiesStore,
         loggerFactory,
       )
-        .processBatch(contracts, parties, submit)
+        .processBatch[C](
+          contracts,
+          partiesOf,
+          (subBatch: Seq[C]) => complete(narrow(task, subBatch)).map(_ => ()),
+        )
         .map(result => TaskSuccess(result.summary))
-    }
+  }
+
+  protected def completeExpiryBatchWithSplitting[TCid, T](
+      task: ScheduledTaskTrigger.ReadyTask[BatchedMultiDomainExpiredContractTrigger.Batch[TCid, T]],
+      stakeholdersOf: T => Seq[PartyId],
+  )(
+      complete: ScheduledTaskTrigger.ReadyTask[
+        BatchedMultiDomainExpiredContractTrigger.Batch[TCid, T]
+      ] => Future[TaskOutcome]
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[TaskOutcome] =
+    completeWithBatchSplitting(
+      task.work.vettedVersion.toString,
+      task,
+      task.work.expiredContracts,
+      (c: AssignedContract[TCid, T]) => stakeholdersOf(c.payload).toSet,
+      (
+          t: ScheduledTaskTrigger.ReadyTask[
+            BatchedMultiDomainExpiredContractTrigger.Batch[TCid, T]
+          ],
+          subBatch: Seq[AssignedContract[TCid, T]],
+      ) =>
+        t.copy(work =
+          t.work.copy(
+            expiredContracts = subBatch,
+            stakeholders = subBatch.flatMap(c => stakeholdersOf(c.payload)).toSet,
+          )
+        ),
+    )(complete)
+
+  private def amuletVersionIgnored(vettedVersion: String): Boolean =
+    svConfig.allIgnoredAmuletVersions.contains(vettedVersion) &&
+      svConfig.parameters.enabledFeatures.ignorePartyIdWithIgnoredAmulet
+
+  private def ignoreAmuletVersion(vettedVersion: String, stakeholders: Set[PartyId])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[TaskOutcome] =
+    unavailablePartiesStore
+      .addParties(stakeholders.toSeq)
+      .map(ignoredParties =>
+        TaskSuccess(
+          s"Skipped batch with ignored version $vettedVersion: added ${ignoredParties.size} parties to ignore list: $ignoredParties"
+        )
+      )
 
   protected def completeUnlessAmuletVersionIgnored(
       vettedVersion: String,
@@ -71,22 +127,11 @@ trait UnavailablePartiesGuard extends NamedLogging {
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[TaskOutcome] =
-    if (
-      svConfig.allIgnoredAmuletVersions.contains(vettedVersion) &&
-      svConfig.parameters.enabledFeatures.ignorePartyIdWithIgnoredAmulet
-    ) {
-      unavailablePartiesStore
-        .addParties(stakeholders.toSeq)
-        .map(ignoredParties =>
-          TaskSuccess(
-            s"Skipped batch with ignored version $vettedVersion: added ${ignoredParties.size} parties to ignore list: $ignoredParties"
-          )
-        )
-    } else {
+    if (amuletVersionIgnored(vettedVersion)) ignoreAmuletVersion(vettedVersion, stakeholders)
+    else
       task
         .flatMap(recoverUnavailableParties(stakeholders))
         .recoverWith(recoverUnresponsiveParties(ignoreUnresponsiveParties))
-    }
 
   /** Provisional retry reset: once a submission involving previously unavailable parties
     * succeeds, they are removed from the store so that their backoff starts from the base
@@ -100,8 +145,7 @@ trait UnavailablePartiesGuard extends NamedLogging {
   ): Future[TaskOutcome] =
     outcome match {
       case _: TaskSuccess
-          if svConfig.parameters.enabledFeatures.enablePersistedUnavailableParties &&
-            !(usesBatchSplitting && batchSplittingEnabled) =>
+          if svConfig.parameters.enabledFeatures.enablePersistedUnavailableParties =>
         unavailablePartiesStore
           .removeParties(stakeholders.toSeq)
           .map { restored =>

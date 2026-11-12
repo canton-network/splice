@@ -48,18 +48,14 @@ class ExpiredAmuletTransferInstructionTrigger(
     with SvTaskBasedTrigger[Task]
     with UnavailablePartiesGuard {
 
-  override protected def usesBatchSplitting: Boolean = true
-
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeUnlessAmuletVersionIgnored(
-      task.work.vettedVersion.toString,
-      task.work.stakeholders,
-      ignoreUnresponsiveParties = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+    completeExpiryBatchWithSplitting(task, getStakeholders)(
+      completeExpiryTaskAsDsoDelegate(_, controller)
+    )
   }
 
   private def completeExpiryTaskAsDsoDelegate(
@@ -109,50 +105,47 @@ class ExpiredAmuletTransferInstructionTrigger(
                 }
             }
 
+            inputs = inputsWithParties.map(_._1)
+
+            informees = inputsWithParties.flatMap(_._2).toSet + store.key.dsoParty
+
             res <-
-              if (inputsWithParties.isEmpty) {
+              if (inputs.isEmpty) {
                 Future.successful(
                   TaskSuccess("No vetted expired transfer instructions to process")
                 )
               } else {
-                submitBatchWithSplitting(
-                  inputsWithParties,
-                  (c: (
-                      splice.amuletrules.AmuletRules_ExpireTransferInstructionInput,
-                      Set[PartyId],
-                  )) => c._2,
-                ) { batch =>
-                  val inputs = batch.map(_._1)
-                  val informees = batch.flatMap(_._2).toSet + store.key.dsoParty
-                  val choiceArg: splice.amuletrules.AmuletRules_Amulet_ExpireTransferInstructions =
-                    new splice.amuletrules.AmuletRules_Amulet_ExpireTransferInstructions(
-                      dsoRules.payload.dso,
-                      inputs.asJava,
-                      informees.map(_.toProtoPrimitive).toList.asJava,
-                    )
+                val choiceArg: splice.amuletrules.AmuletRules_Amulet_ExpireTransferInstructions =
+                  new splice.amuletrules.AmuletRules_Amulet_ExpireTransferInstructions(
+                    dsoRules.payload.dso,
+                    inputs.asJava,
+                    informees.map(_.toProtoPrimitive).toList.asJava,
+                  )
 
-                  svTaskContext
-                    .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
-                    .submit(
-                      Seq(store.key.svParty),
-                      Seq(store.key.dsoParty),
-                      update = dsoRules
-                        .exercise(
-                          _.exerciseDsoRules_Amulet_ExpireTransferInstructions(
-                            amuletRules.contractId,
-                            choiceArg,
-                            controller,
-                          )
+                svTaskContext
+                  .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
+                  .submit(
+                    Seq(store.key.svParty),
+                    Seq(store.key.dsoParty),
+                    update = dsoRules
+                      .exercise(
+                        _.exerciseDsoRules_Amulet_ExpireTransferInstructions(
+                          amuletRules.contractId,
+                          choiceArg,
+                          controller,
                         )
-                        .update
-                        .commands()
-                        .asScala
-                        .toSeq,
-                    )
-                    .noDedup
-                    .withSynchronizerId(dsoRules.domain)
-                    .yieldUnit()
-                }
+                      )
+                      .update
+                      .commands()
+                      .asScala
+                      .toSeq,
+                  )
+                  .noDedup
+                  .withSynchronizerId(dsoRules.domain)
+                  .yieldUnit()
+                  .map(_ =>
+                    TaskSuccess(s"archived batch of ${inputs.size} expired transfer instructions")
+                  )
               }
           } yield res
         }

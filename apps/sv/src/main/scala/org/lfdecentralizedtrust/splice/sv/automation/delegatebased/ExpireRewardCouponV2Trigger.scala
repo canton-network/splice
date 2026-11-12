@@ -42,18 +42,14 @@ class ExpireRewardCouponV2Trigger(
     )
     with SvTaskBasedTrigger[Task]
     with UnavailablePartiesGuard {
-
-  override protected def usesBatchSplitting: Boolean = true
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] =
-    completeUnlessAmuletVersionIgnored(
-      task.work.vettedVersion.toString,
-      task.work.stakeholders,
-      ignoreUnresponsiveParties = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+    completeExpiryBatchWithSplitting(task, getStakeholders)(
+      completeExpiryTaskAsDsoDelegate(_, controller)
+    )
 
   private def completeExpiryTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
@@ -68,46 +64,38 @@ class ExpireRewardCouponV2Trigger(
         )
       )
     } else {
+      val cids = expiredCoupons.map(_.contractId).asJava
+      val expiryInformees = (task.work.stakeholders - store.key.dsoParty)
+        .map(_.toProtoPrimitive)
+        .toSeq
+        .distinct
+        .sorted
       for {
         dsoRules <- store.getDsoRules()
         amuletRules <- store.getAmuletRules()
-        outcome <- submitBatchWithSplitting(
-          expiredCoupons,
-          (co: ExpiredCoupon) => getStakeholders(co.payload).toSet,
-        ) { coupons =>
-          val cids = coupons.map(_.contractId).asJava
-          val expiryInformees =
-            (coupons.flatMap(co => getStakeholders(co.payload)).toSet - store.key.dsoParty)
-              .map(_.toProtoPrimitive)
-              .toSeq
-              .sorted
-          val cmd = dsoRules.exercise(
-            _.exerciseDsoRules_ClaimExpiredRewardsV2(
-              amuletRules.contractId,
-              new AmuletRules_ClaimExpiredRewardsV2(
-                cids,
-                expiryInformees.asJava,
-              ),
-              controller,
-            )
+        cmd = dsoRules.exercise(
+          _.exerciseDsoRules_ClaimExpiredRewardsV2(
+            amuletRules.contractId,
+            new AmuletRules_ClaimExpiredRewardsV2(
+              cids,
+              expiryInformees.asJava,
+            ),
+            controller,
           )
-          svTaskContext
-            .connection(SpliceLedgerConnectionPriority.Low)
-            .submit(
-              Seq(store.key.svParty),
-              Seq(store.key.dsoParty),
-              cmd,
-            )
-            .noDedup
-            .withSynchronizerId(dsoRules.domain)
-            .yieldUnit()
-        }
-      } yield outcome
+        )
+        _ <- svTaskContext
+          .connection(SpliceLedgerConnectionPriority.Low)
+          .submit(
+            Seq(store.key.svParty),
+            Seq(store.key.dsoParty),
+            cmd,
+          )
+          .noDedup
+          .withSynchronizerId(dsoRules.domain)
+          .yieldUnit()
+      } yield TaskSuccess(s"archived ${expiredCoupons.size} expired reward coupons v2")
     }
   }
-
-  private type ExpiredCoupon =
-    org.lfdecentralizedtrust.splice.util.AssignedContract[CouponCid, Coupon]
 
 }
 

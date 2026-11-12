@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
 import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -49,8 +48,6 @@ class ExpiredAmuletAllocationV2Trigger(
     with SvTaskBasedTrigger[ExpiredAmuletAllocationV2Trigger.Task]
     with UnavailablePartiesGuard {
 
-  override protected def usesBatchSplitting: Boolean = true
-
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(
@@ -59,11 +56,9 @@ class ExpiredAmuletAllocationV2Trigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeUnlessAmuletVersionIgnored(
-      task.work.vettedVersion.toString,
-      task.work.stakeholders,
-      ignoreUnresponsiveParties = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+    completeExpiryBatchWithSplitting(task, ExpiredAmuletAllocationV2Trigger.getStakeholders)(
+      completeExpiryTaskAsDsoDelegate(_, controller)
+    )
   }
 
   private def completeExpiryTaskAsDsoDelegate(
@@ -71,6 +66,7 @@ class ExpiredAmuletAllocationV2Trigger(
       controller: String,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val stakeholders = task.work.stakeholders
+    val informees = stakeholders - store.key.dsoParty
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsAmuletAllocationV2(
         stakeholders.toSeq,
@@ -112,58 +108,48 @@ class ExpiredAmuletAllocationV2Trigger(
                   ChoiceContextWithDisclosures.emptyMetadata,
                 ),
               )
-              val cancellation = new org.lfdecentralizedtrust.splice.codegen.java.da.types.Tuple2(
+              new org.lfdecentralizedtrust.splice.codegen.java.da.types.Tuple2(
                 allocation.contractId.toInterface(
                   splice.api.token.allocationv2.Allocation.INTERFACE
                 ),
                 cancel,
               )
-              (
-                cancellation,
-                ExpiredAmuletAllocationV2Trigger.getStakeholders(allocation.payload).toSet,
+            }
+            expireAllocations =
+              new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocationsV2(
+                cancellations.asJava,
+                informees.map(_.toProtoPrimitive).toList.asJava,
               )
-            }
-            res <- submitBatchWithSplitting(
-              cancellations,
-              (c: (Cancellation, Set[PartyId])) => c._2,
-            ) { batch =>
-              val informees = batch.flatMap(_._2).toSet - store.key.dsoParty
-              val expireAllocations =
-                new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocationsV2(
-                  batch.map(_._1).asJava,
-                  informees.map(_.toProtoPrimitive).toList.asJava,
-                )
-              svTaskContext
-                .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
-                .submit(
-                  Seq(store.key.svParty),
-                  Seq(store.key.dsoParty),
-                  update = dsoRules
-                    .exercise(
-                      _.exerciseDsoRules_ExpireAmuletAllocationsV2(
-                        extAmuletRules.contract.contractId,
-                        expireAllocations,
-                        controller,
-                      )
+            res <- svTaskContext
+              .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
+              .submit(
+                Seq(store.key.svParty),
+                Seq(store.key.dsoParty),
+                update = dsoRules
+                  .exercise(
+                    _.exerciseDsoRules_ExpireAmuletAllocationsV2(
+                      extAmuletRules.contract.contractId,
+                      expireAllocations,
+                      controller,
                     )
-                    .update
-                    .commands()
-                    .asScala
-                    .toSeq,
+                  )
+                  .update
+                  .commands()
+                  .asScala
+                  .toSeq,
+              )
+              .noDedup
+              .withSynchronizerId(dsoRules.domain)
+              .yieldUnit()
+              .map(_ =>
+                TaskSuccess(
+                  s"archived batch of ${task.work.expiredContracts.size} expired Amulet Allocations"
                 )
-                .noDedup
-                .withSynchronizerId(dsoRules.domain)
-                .yieldUnit()
-            }
+              )
           } yield res
         }
     } yield res
   }
-
-  private type Cancellation = org.lfdecentralizedtrust.splice.codegen.java.da.types.Tuple2[
-    splice.api.token.allocationv2.Allocation.ContractId,
-    splice.api.token.allocationv2.Allocation_Cancel,
-  ]
 
 }
 

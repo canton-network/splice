@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.sv.store.ExpiredRewardCouponsBatch
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.MonadUtil
@@ -55,8 +56,6 @@ class ExpireRewardCouponsTrigger(
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
     with UnavailablePartiesGuard {
-
-  override protected def usesBatchSplitting: Boolean = true
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
@@ -165,18 +164,35 @@ class ExpireRewardCouponsTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = ValidatorCoupons.getInformeesFromContracts(task.batch.validatorCoupons) ++
-      AppRewardCoupons.getInformeesFromContracts(task.batch.appCoupons) ++
-      SvRewardCoupons.getInformeesFromContracts(task.batch.svRewardCoupons) ++
-      ValidatorFaucetCoupons.getInformeesFromContracts(task.batch.validatorFaucets) ++
-      ValidatorLivenessActivityRecords.getInformeesFromContracts(
-        task.batch.validatorLivenessActivityRecords
-      )
-    completeUnlessAmuletVersionIgnored(
+    def withParties[T](coupons: Seq[Contract[?, T]], stakeholders: ContractStakeholders[T]) =
+      coupons.map(c => (c.contractId.contractId, stakeholders.getStakeholders(c.payload).toSet))
+    val batch = task.batch
+    val coupons =
+      withParties(batch.validatorCoupons, ValidatorCoupons) ++
+        withParties(batch.appCoupons, AppRewardCoupons) ++
+        withParties(batch.svRewardCoupons, SvRewardCoupons) ++
+        withParties(batch.validatorFaucets, ValidatorFaucetCoupons) ++
+        withParties(batch.validatorLivenessActivityRecords, ValidatorLivenessActivityRecords)
+    completeWithBatchSplitting(
       task.vettedAmuletVersion.toString,
-      informees,
-      ignoreUnresponsiveParties = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+      task,
+      coupons,
+      (c: (String, Set[PartyId])) => c._2,
+      (t: Task, subBatch: Seq[(String, Set[PartyId])]) => {
+        val cids = subBatch.map(_._1).toSet
+        def keep[C <: Contract[?, ?]](cs: Seq[C]) =
+          cs.filter(c => cids.contains(c.contractId.contractId))
+        t.copy(batch =
+          t.batch.copy(
+            validatorCoupons = keep(t.batch.validatorCoupons),
+            appCoupons = keep(t.batch.appCoupons),
+            svRewardCoupons = keep(t.batch.svRewardCoupons),
+            validatorFaucets = keep(t.batch.validatorFaucets),
+            validatorLivenessActivityRecords = keep(t.batch.validatorLivenessActivityRecords),
+          )
+        )
+      },
+    )(completeExpiryTaskAsDsoDelegate(_, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
@@ -186,14 +202,14 @@ class ExpireRewardCouponsTrigger(
     for {
       dsoRules <- store.getDsoRules()
       amuletRules <- store.getAmuletRules()
-      outcomes <- expireRewardCouponsForRound(
+      numCoupons <- expireRewardCouponsForRound(
         expiredRewardsTask.batch,
         dsoRules,
         amuletRules,
         Optional.of(controller),
       )
     } yield TaskSuccess(
-      show"Expired old reward coupons for closed round ${expiredRewardsTask}: ${outcomes.mkString("; ").unquoted}"
+      show"Expired ${numCoupons} old reward coupons for closed round ${expiredRewardsTask}"
     )
   }
 
@@ -204,123 +220,111 @@ class ExpireRewardCouponsTrigger(
       controller: Optional[String],
   )(implicit
       tc: TraceContext
-  ): Future[Seq[String]] = {
-    val round = expiredRewardsTask.closedRoundCid
-    def noCids[C] = Seq.empty[C].asJava
-
-    // Submits one ClaimExpiredRewards command per (sub-)batch of a single coupon type,
-    // splitting the batch on failures to isolate the offending contracts.
-    def expireWithSplitting[TCid, T](
-        kind: String,
-        coupons: Seq[Contract[TCid, T]],
-        stakeholders: ContractStakeholders[T],
-    )(mkArg: java.util.List[TCid] => AmuletRules_ClaimExpiredRewards): Future[Option[String]] =
-      if (coupons.isEmpty) Future.successful(None)
-      else
-        submitBatchWithSplitting(
-          coupons,
-          (c: Contract[TCid, T]) => stakeholders.getStakeholders(c.payload).toSet,
-        ) { batch =>
+  ): Future[Int] = {
+    val validatorRewardCmd = Seq(
+      dsoRules.exercise(
+        _.exerciseDsoRules_ClaimExpiredRewards(
+          amuletRules.contractId,
+          new AmuletRules_ClaimExpiredRewards(
+            expiredRewardsTask.closedRoundCid,
+            expiredRewardsTask.validatorCoupons.map(_.contractId).asJava,
+            Seq.empty.asJava,
+            Seq.empty.asJava,
+            None.toJava,
+            None.toJava,
+          ),
+          controller,
+        )
+      )
+    ).filter(_ => expiredRewardsTask.validatorCoupons.nonEmpty)
+    val validatorFaucetCmd = Seq(
+      dsoRules.exercise(
+        _.exerciseDsoRules_ClaimExpiredRewards(
+          amuletRules.contractId,
+          new AmuletRules_ClaimExpiredRewards(
+            expiredRewardsTask.closedRoundCid,
+            Seq.empty.asJava,
+            Seq.empty.asJava,
+            Seq.empty.asJava,
+            Some(expiredRewardsTask.validatorFaucets.map(_.contractId).asJava).toJava,
+            None.toJava,
+          ),
+          controller,
+        )
+      )
+    ).filter(_ => expiredRewardsTask.validatorFaucets.nonEmpty)
+    val validatorLivenessActivityRecordCmd = Seq(
+      dsoRules.exercise(
+        _.exerciseDsoRules_ClaimExpiredRewards(
+          amuletRules.contractId,
+          new AmuletRules_ClaimExpiredRewards(
+            expiredRewardsTask.closedRoundCid,
+            Seq.empty.asJava,
+            Seq.empty.asJava,
+            Seq.empty.asJava,
+            None.toJava,
+            Some(
+              expiredRewardsTask.validatorLivenessActivityRecords.map(_.contractId).asJava
+            ).toJava,
+          ),
+          controller,
+        )
+      )
+    ).filter(_ => expiredRewardsTask.validatorLivenessActivityRecords.nonEmpty)
+    val appRewardCmd = Seq(
+      dsoRules.exercise(
+        _.exerciseDsoRules_ClaimExpiredRewards(
+          amuletRules.contractId,
+          new AmuletRules_ClaimExpiredRewards(
+            expiredRewardsTask.closedRoundCid,
+            Seq.empty.asJava,
+            expiredRewardsTask.appCoupons.map(_.contractId).asJava,
+            Seq.empty.asJava,
+            None.toJava,
+            None.toJava,
+          ),
+          controller,
+        )
+      )
+    ).filter(_ => expiredRewardsTask.appCoupons.nonEmpty)
+    val svRewardCmd = Seq(
+      dsoRules.exercise(
+        _.exerciseDsoRules_ClaimExpiredRewards(
+          amuletRules.contractId,
+          new AmuletRules_ClaimExpiredRewards(
+            expiredRewardsTask.closedRoundCid,
+            Seq.empty.asJava,
+            Seq.empty.asJava,
+            expiredRewardsTask.svRewardCoupons.map(_.contractId).asJava,
+            None.toJava,
+            None.toJava,
+          ),
+          controller,
+        )
+      )
+    ).filter(_ => expiredRewardsTask.svRewardCoupons.nonEmpty)
+    val cmds = Seq(
+      validatorRewardCmd,
+      appRewardCmd,
+      svRewardCmd,
+      validatorFaucetCmd,
+      validatorLivenessActivityRecordCmd,
+    ).flatten
+    for {
+      _ <- Future.sequence(
+        cmds.map(cmd =>
           svTaskContext
             .connection(SpliceLedgerConnectionPriority.Low)
             .submit(
               Seq(store.key.svParty),
               Seq(store.key.dsoParty),
-              dsoRules.exercise(
-                _.exerciseDsoRules_ClaimExpiredRewards(
-                  amuletRules.contractId,
-                  mkArg(batch.map(c => c.contractId: TCid).asJava),
-                  controller,
-                )
-              ),
+              cmd,
             )
             .noDedup
-            .yieldUnit()
-        }.map(outcome => Some(s"$kind: $outcome"))
-
-    // The store query only produces batches with exactly one of the coupon types set,
-    // so running these sequentially does not lose any parallelism.
-    MonadUtil
-      .sequentialTraverse(
-        Seq[() => Future[Option[String]]](
-          () =>
-            expireWithSplitting(
-              "validator coupons",
-              expiredRewardsTask.validatorCoupons,
-              ValidatorCoupons,
-            )(cids =>
-              new AmuletRules_ClaimExpiredRewards(
-                round,
-                cids,
-                noCids,
-                noCids,
-                None.toJava,
-                None.toJava,
-              )
-            ),
-          () =>
-            expireWithSplitting(
-              "app coupons",
-              expiredRewardsTask.appCoupons,
-              AppRewardCoupons,
-            )(cids =>
-              new AmuletRules_ClaimExpiredRewards(
-                round,
-                noCids,
-                cids,
-                noCids,
-                None.toJava,
-                None.toJava,
-              )
-            ),
-          () =>
-            expireWithSplitting(
-              "sv reward coupons",
-              expiredRewardsTask.svRewardCoupons,
-              SvRewardCoupons,
-            )(cids =>
-              new AmuletRules_ClaimExpiredRewards(
-                round,
-                noCids,
-                noCids,
-                cids,
-                None.toJava,
-                None.toJava,
-              )
-            ),
-          () =>
-            expireWithSplitting(
-              "validator faucets",
-              expiredRewardsTask.validatorFaucets,
-              ValidatorFaucetCoupons,
-            )(cids =>
-              new AmuletRules_ClaimExpiredRewards(
-                round,
-                noCids,
-                noCids,
-                noCids,
-                Some(cids).toJava,
-                None.toJava,
-              )
-            ),
-          () =>
-            expireWithSplitting(
-              "validator liveness activity records",
-              expiredRewardsTask.validatorLivenessActivityRecords,
-              ValidatorLivenessActivityRecords,
-            )(cids =>
-              new AmuletRules_ClaimExpiredRewards(
-                round,
-                noCids,
-                noCids,
-                noCids,
-                None.toJava,
-                Some(cids).toJava,
-              )
-            ),
+            .yieldResult()
         )
-      )(_())
-      .map(_.flatten)
+      )
+    } yield expiredRewardsTask.validatorCoupons.size + expiredRewardsTask.appCoupons.size + expiredRewardsTask.validatorFaucets.size + expiredRewardsTask.svRewardCoupons.size + expiredRewardsTask.validatorLivenessActivityRecords.size
   }
 }
 
