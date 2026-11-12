@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import cats.data.OptionT
 import org.lfdecentralizedtrust.splice.automation.{
   ScheduledTaskTrigger,
