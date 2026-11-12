@@ -31,25 +31,6 @@ import {
 } from './physicalSynchronizerConfig';
 import { CatchupTestSchema } from './testing';
 
-// TODO(#7741): remove once mainnet is on >= 0.10.2
-const SvCometbftConfigSchema = z
-  .object({
-    nodeId: z.string().optional(),
-    validatorKeyAddress: z.string().optional(),
-    keysGcpSecret: z.string().optional(),
-    enableStateSync: z.boolean().optional(),
-    resources: K8sResourceSchema,
-    mempool: z
-      .object({
-        size: z.number().optional(),
-        deduplicationCacheSize: z.number().optional(),
-        ttlSeconds: z.number().optional(),
-      })
-      .optional(),
-    additionalHelmValues: z.record(z.string(), z.any()).optional(),
-  })
-  .strict();
-
 const CantonPruningSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -87,8 +68,6 @@ const SvAppConfigSchema = z
     auth0: Auth0ConfigSchema.optional(),
     // defaults to {svName}-id if not set
     svIdKeyGcpSecret: z.string().optional(),
-    // TODO(#7741): remove once mainnet is on >= 0.10.2
-    cometBftGovernanceKeyGcpSecret: z.string().optional(),
     permissionedSynchronizer: z.boolean().optional(),
     // Map of package name -> list of versions to explicitly unvet
     additionalPackagesToUnvet: z.record(z.string(), z.array(z.string())).optional(),
@@ -156,8 +135,6 @@ const SvValidatorAppConfigSchema = z
     resources: K8sResourceSchema,
   })
   .and(ValidatorAppConfigSchema);
-// // TODO(#7741): remove once mainnet is on >= 0.10.2
-const CometbftLogLevelSchema = z.enum(['info', 'error', 'debug', 'none']);
 // things here are declared optional even when they aren't, to allow partial overrides of defaults
 // TODO(DACH-NY/canton-network-internal#4859) the above is no longer true since defaults were removed.
 //   We should remove .optional() from required fields.
@@ -165,8 +142,6 @@ const SingleSvConfigSchema = z
   .object({
     publicName: z.string().optional(),
     subdomain: z.string().optional(),
-    // TODO(#7741): remove, unused
-    cometbft: SvCometbftConfigSchema.optional(),
     participant: SvParticipantConfigSchema.optional(),
     sequencer: SvSequencerConfigSchema.prefault({}),
     mediator: SvMediatorConfigSchema.prefault({}),
@@ -178,12 +153,6 @@ const SingleSvConfigSchema = z
     validatorApp: SvValidatorAppConfigSchema.optional(),
     pruning: z
       .object({
-        // TODO(#7741): remove, unused
-        cometbft: z
-          .object({
-            retainBlocks: z.number(),
-          })
-          .optional(),
         sequencer: z
           .object({
             enabled: z.boolean().optional(),
@@ -208,9 +177,6 @@ const SingleSvConfigSchema = z
         // Falls back to `apiRequestLogLevel` when not specified
         cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
-        // TODO(#7741): remove, unused
-        cometbftLogLevel: CometbftLogLevelSchema.optional(),
-        cometbftExtraLogLevelFlags: z.string().optional(),
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),
