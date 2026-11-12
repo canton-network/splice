@@ -10,7 +10,7 @@ into BigQuery, replacing the tables' previous contents:
 1. Take the snapshot from a local file, or download the latest complete one from the snapshot
    bucket.
 2. Decode it into JSONL + BigQuery schemas with scripts/topology-snapshot-to-jsonl.sc.
-3. Upload the JSONL files to a GCS bucket.
+3. Upload the JSONL files (transactions.jsonl, members.jsonl) to a GCS location.
 4. Create the BigQuery dataset if it doesn't exist, and load both tables, replacing their
    contents.
 5. Check that each load wrote as many rows as its JSONL file has.
@@ -22,7 +22,7 @@ Default Credentials (locally: `gcloud auth application-default login`). Example:
   direnv exec . scripts/topology-snapshot-to-bigquery.py \\
     --snapshot-location gs://<snapshot-bucket>/<prefix> \\
     --project-id <project-id> --dataset <dataset> --location <location> \\
-    --export-bucket <bucket>
+    --export-location gs://<bucket>/<prefix>
 """
 
 import argparse
@@ -192,7 +192,7 @@ def main() -> None:
     parser.add_argument(
         "--project-id",
         required=True,
-        help="GCP project ID (not name) for BigQuery and the export bucket",
+        help="GCP project ID (not name) for BigQuery and the GCS clients",
     )
     parser.add_argument("--dataset", required=True, help="BigQuery dataset")
     parser.add_argument(
@@ -201,12 +201,12 @@ def main() -> None:
         help="BigQuery location, used if the dataset has to be created (e.g. EU, europe-west6)",
     )
     parser.add_argument(
-        "--export-bucket",
+        "--export-location",
         required=True,
-        type=lambda b: b.removeprefix("gs://").strip("/"),
-        help="GCS bucket for the JSONL files, as a name or gs://<name>",
+        type=lambda loc: "gs://" + loc.removeprefix("gs://").strip("/"),
+        help="Where to upload the JSONL files: gs://<bucket> or gs://<bucket>/<prefix>"
+        " (the gs:// is optional). The files are written directly there.",
     )
-    parser.add_argument("--export-prefix", default="topology-export")
     parser.add_argument("--transactions-table", default="topology_transactions")
     parser.add_argument("--members-table", default="sequencer_members")
     parser.add_argument(
@@ -264,9 +264,8 @@ def main() -> None:
         dataset.location = args.location
         bq_client.create_dataset(dataset, exists_ok=True)
 
-        prefix = f"gs://{args.export_bucket}/{args.export_prefix.strip('/')}"
         for table in (transactions, members):
-            uri = f"{prefix}/{table.jsonl.name}"
+            uri = f"{args.export_location}/{table.jsonl.name}"
             upload(storage_client, table.jsonl, uri)
             written = load_table(bq_client, args.dataset, table, uri)
             expected = count_lines(table.jsonl)
