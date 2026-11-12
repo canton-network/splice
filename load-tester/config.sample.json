@@ -1,6 +1,10 @@
 {
   "usersPerValidator": 10,
-  "featuredUsersPerValidator": 1,
+  "featuredAppRights": [
+    {},
+    { "kind": "asset_moving", "weight": 2, "parties": [3] },
+    { "kind": "asset", "weight": 0.5 }
+  ],
   "isDevNet": "$IS_DEVNET",
   "validators": [
     {

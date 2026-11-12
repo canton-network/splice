@@ -219,6 +219,33 @@ abstract class ScanStoreTest
       }
     }
 
+    "RewardCouponV2 ingestion" should {
+
+      "ingest RewardCouponV2 of the DSO and make them retrievable by contract id" in {
+        val coupon1 = rewardCouponV2(round = 1, provider = userParty(1))
+        val coupon2 = rewardCouponV2(round = 2, provider = userParty(2))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(coupon1)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(coupon2)(store.multiDomainAcsStore)
+          found <- store.multiDomainAcsStore.lookupContractsById(
+            amuletCodegen.RewardCouponV2.COMPANION
+          )(
+            Seq(
+              coupon1.contractId,
+              coupon2.contractId,
+              new amuletCodegen.RewardCouponV2.ContractId(nextCid()),
+            )
+          )
+        } yield {
+          found.map(_.contract.contractId.contractId) should contain theSameElementsAs Seq(
+            coupon1.contractId.contractId,
+            coupon2.contractId.contractId,
+          )
+        }
+      }
+    }
+
     testGovernanceLockIngestion(user1, dsoParty, userParty(2), () => mkStore())
 
     "ingest GovernanceLockTransfers of the DSO and skip those of other parties" in {

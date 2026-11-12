@@ -7,8 +7,11 @@ import { useDsoInfos } from '../../contexts/SvContext';
 import dayjs from 'dayjs';
 import {
   activityWeightToOptional,
+  appKindSelectOptions,
+  appKindToOptional,
   createProposalActions,
   getInitialExpiration,
+  opsPartiesToOptional,
 } from '../../utils/governance';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
@@ -32,18 +35,21 @@ import {
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
+  validateOpsParties,
   validatePartyId,
   validateSummary,
   validateUrl,
 } from './formValidators';
 import { FormLayout } from './FormLayout';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
+import { OpsPartiesField } from '../form-components/OpsPartiesField';
 import { useEffect, useState } from 'react';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import { useFeaturedAppRightPicker } from '../../hooks/useFeaturedAppRightPicker';
+import { GrantWarnings } from './GrantWarnings';
 
 type ProviderId = string;
 type FeaturedAppRightId = string;
@@ -53,6 +59,8 @@ interface ExtraFormField {
   partyId: ProviderId;
   rightCid: FeaturedAppRightId;
   activityWeight: string;
+  appKind: string;
+  opsParties: string[];
 }
 
 export type GrantRevokeFeaturedAppFormData = CommonProposalFormData & ExtraFormField;
@@ -124,6 +132,8 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     partyId: '',
     rightCid: '',
     activityWeight: '',
+    appKind: '',
+    opsParties: [],
   };
 
   const form = useAppForm({
@@ -142,9 +152,8 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               value: {
                 provider: formValues.idValue,
                 activityWeight: activityWeightToOptional(formValues.activityWeight),
-                // TODO(#7665): make these fields editable
-                appKind: null,
-                opsParties: null,
+                appKind: appKindToOptional(formValues.appKind),
+                opsParties: opsPartiesToOptional(formValues.opsParties),
               },
             },
           },
@@ -214,6 +223,8 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             formType={reviewFormKey}
             grantRight={form.state.values.idValue}
             activityWeight={form.state.values.activityWeight}
+            appKind={form.state.values.appKind}
+            opsParties={form.state.values.opsParties}
             providerPartyId={form.state.values.partyId}
             revokeRight={form.state.values.rightCid}
             onEdit={() => setShowConfirmation(false)}
@@ -262,12 +273,60 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               >
                 {field => (
                   <field.TextField
-                    title="Activity Weight"
+                    title="App Composition Weight"
                     id={`${testIdPrefix}-activityWeight`}
                     subtitle="Optional. Leave blank to use the default weight"
                   />
                 )}
               </form.AppField>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.AppField name="appKind">
+                {field => (
+                  <field.SelectField
+                    title="App Category"
+                    id={`${testIdPrefix}-appKind`}
+                    options={appKindSelectOptions()}
+                  />
+                )}
+              </form.AppField>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.Field
+                name="opsParties"
+                validators={{
+                  // No onChangeListenTo on idValue: idValue has an async validator, and
+                  // re-validating opsParties on every idValue change prevents canSubmit from
+                  // settling. provider-not-in-opsParties is still enforced on submit.
+                  onChange: ({ value }) => validateOpsParties(value, form.state.values.idValue),
+                }}
+              >
+                {field => (
+                  <OpsPartiesField
+                    id={`${testIdPrefix}-opsParties`}
+                    title="App Operations Parties"
+                    subtitle="Optional. Parties whose submissions count as this app's activity."
+                    value={field.state.value}
+                    onChange={field.handleChange}
+                    onBlur={field.handleBlur}
+                    error={field.state.meta.errors?.[0]}
+                  />
+                )}
+              </form.Field>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.Subscribe
+                selector={state => ({
+                  provider: state.values.idValue,
+                  opsParties: state.values.opsParties,
+                })}
+                children={({ provider, opsParties }) => (
+                  <GrantWarnings provider={provider} opsParties={opsParties} />
+                )}
+              />
             )}
 
             {formAction === 'SRARC_RevokeFeaturedAppRight' && (
