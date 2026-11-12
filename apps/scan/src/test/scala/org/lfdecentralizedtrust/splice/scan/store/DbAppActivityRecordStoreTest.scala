@@ -609,7 +609,7 @@ class DbAppActivityRecordStoreTest
     "return None when no meta record exists" in {
       for {
         (store, facade, _) <- newStore()
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -619,7 +619,7 @@ class DbAppActivityRecordStoreTest
       for {
         (store, facade, _) <- newStore()
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 0L, 0L, None)
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -630,7 +630,7 @@ class DbAppActivityRecordStoreTest
         (store, facade, _) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 42L, Some(42L))
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -641,7 +641,7 @@ class DbAppActivityRecordStoreTest
         (store, facade, _) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 42L, Some(43L))
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result.value shouldBe 43L
       }
@@ -655,7 +655,7 @@ class DbAppActivityRecordStoreTest
         // Only round 10 has activity; rounds 11 and 12 have zero records but
         // their archival makes them complete.
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(12L))
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result.value shouldBe 11L
       }
@@ -675,7 +675,7 @@ class DbAppActivityRecordStoreTest
           20L,
           Some(25L),
         )
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         // Should use the current meta row (round 20), not the old one (round 10)
         result.value shouldBe 21L
@@ -696,7 +696,7 @@ class DbAppActivityRecordStoreTest
           50L,
           None,
         )
-        result <- facade1.appEarliestRoundWithCompleteAppActivity()
+        result <- facade1.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -717,7 +717,7 @@ class DbAppActivityRecordStoreTest
             ("round-0", 0L),
             ("round-1", 1L),
           )
-          result <- facade.appEarliestRoundWithCompleteAppActivity()
+          result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
         } yield {
           // query returns -1 + 1 = 0
           result.value shouldBe 0L
@@ -730,7 +730,7 @@ class DbAppActivityRecordStoreTest
           baseTs = CantonTimestamp.now()
           _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, -1L, None)
           _ <- insertRecordsForRounds(store, historyId, baseTs, ("round-0", 0L))
-          result <- facade.appEarliestRoundWithCompleteAppActivity()
+          result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
         } yield {
           result shouldBe None
         }
@@ -760,7 +760,7 @@ class DbAppActivityRecordStoreTest
             ("round-10", 10L),
             ("round-11", 11L),
           )
-          result <- facade.appEarliestRoundWithCompleteAppActivity()
+          result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
         } yield {
           result.value shouldBe 11L
         }
@@ -783,7 +783,7 @@ class DbAppActivityRecordStoreTest
             ("round-10", 10L),
             ("round-11", 11L),
           )
-          result <- facade.appEarliestRoundWithCompleteAppActivity()
+          result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
         } yield {
           // Query reads version 2 meta (earliest_ingested_round = 10),
           // returns Some(11).
@@ -798,7 +798,7 @@ class DbAppActivityRecordStoreTest
     "return None when no meta record exists" in {
       for {
         (store, facade, _) <- newStore()
-        result <- facade.appEarliestIngestedRound()
+        result <- facade.appMeta.earliestIngestedRound()
       } yield {
         result shouldBe None
       }
@@ -811,7 +811,7 @@ class DbAppActivityRecordStoreTest
         // Unlike earliestRoundWithCompleteAppActivity, this does not require any
         // archival to have happened yet.
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 42L, None)
-        result <- facade.appEarliestIngestedRound()
+        result <- facade.appMeta.earliestIngestedRound()
       } yield {
         result.value shouldBe 42L
       }
@@ -829,7 +829,7 @@ class DbAppActivityRecordStoreTest
           20L,
           None,
         )
-        result <- facade.appEarliestIngestedRound()
+        result <- facade.appMeta.earliestIngestedRound()
       } yield {
         result.value shouldBe 20L
       }
@@ -841,7 +841,7 @@ class DbAppActivityRecordStoreTest
         (store2, facade2, _) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- facade2.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
-        result <- facade1.appEarliestIngestedRound()
+        result <- facade1.appMeta.earliestIngestedRound()
       } yield {
         result shouldBe None
       }
@@ -1083,7 +1083,7 @@ class DbAppActivityRecordStoreTest
         // Simulate: meta created with earliestRound = 5 (from lastArchivedRound),
         // then lastArchivedRound advances to 7
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 1000000L, 5L, Some(7L))
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result.value shouldBe 6L
       }
@@ -1095,7 +1095,7 @@ class DbAppActivityRecordStoreTest
         // Fresh network: earliestRound = -1 (no lastArchivedRound at meta creation),
         // then lastArchivedRound advances to 0 after first round closes
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, 1000000L, -1L, Some(0L))
-        result <- facade.appEarliestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.earliestRoundWithCompleteAppActivity()
       } yield {
         result.value shouldBe 0L
       }
@@ -1107,7 +1107,7 @@ class DbAppActivityRecordStoreTest
     "return None when no meta row exists" in {
       for {
         (store, facade, _) <- newStore()
-        result <- facade.appLatestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.latestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -1125,7 +1125,7 @@ class DbAppActivityRecordStoreTest
           ("no-meta-11", 11L),
         )
         // No meta row — latestRound returns None, consistent with earliestRound
-        result <- facade.appLatestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.latestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -1141,7 +1141,7 @@ class DbAppActivityRecordStoreTest
           42L,
           None,
         )
-        result <- facade.appLatestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.latestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
@@ -1153,7 +1153,7 @@ class DbAppActivityRecordStoreTest
         baseTs = CantonTimestamp.now()
         _ <- insertRecordsForRounds(store, historyId, baseTs, ("gap-10", 10L))
         _ <- facade.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(12L))
-        result <- facade.appLatestRoundWithCompleteAppActivity()
+        result <- facade.appMeta.latestRoundWithCompleteAppActivity()
       } yield {
         result.value shouldBe 12L
       }
@@ -1165,7 +1165,7 @@ class DbAppActivityRecordStoreTest
         (store2, facade2, _) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- facade2.insertAppActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
-        result <- facade1.appLatestRoundWithCompleteAppActivity()
+        result <- facade1.appMeta.latestRoundWithCompleteAppActivity()
       } yield {
         result shouldBe None
       }
