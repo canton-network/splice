@@ -38,6 +38,8 @@ The current test runs a workload of 10 users per validator that iteratively perf
 
 These options are configured by passing in a JSON string via the environment, and parsed in `src/settings.ts`.
 
+`featuredAppRights` configures which users self-grant a featured app right: user `i` of each validator gets the right described by entry `i`, users without an entry are not featured. Each entry can set the `kind` (`basic`, `asset_moving` or `asset`), the activity `weight`, and the ops `parties` (as indices of other users of the same validator). Unset fields are left to the Daml defaults. Setting any of them requires splice-wallet >= 0.1.26: on networks with an older splice-wallet version in the `AmuletRules` package config, the load tester grants default (basic) rights to the configured users instead. The load tester cancels and re-grants rights that don't match their entry.
+
 ## Cluster Deployment
 
 The load test is deployed as a Kubernetes `Deployment` in the `load-tester` namespace, running continuously in clusters that have it enabled. Configuration is managed via `cluster/pulumi/canton-network/src/scheduleLoadGenerator.ts` and the cluster's YAML config.
