@@ -21,6 +21,18 @@ Each party that is allocated is setup through the following steps:
 3. Create a `TransferPreapprovalProposal` through prepare/execute.
 4. Wait for the validator automation to accept the proposal and the preapproval to be created.
 
+A failed setup is retried up to 3 times. Setups that have not finished are marked by an `<index>_pending`
+file in the key directory and are resumed after a restart. A retried setup reuses the key of the party
+and skips the steps that have already completed.
+
+The number of parties set up in parallel adapts to errors up to the configured `parallelism`.
+
+## Tests
+
+```
+npm test
+```
+
 ## Cluster Deployment
 
 To enable the party allocator to run against the validator runbook enable it through the following setting in `config.yaml`.

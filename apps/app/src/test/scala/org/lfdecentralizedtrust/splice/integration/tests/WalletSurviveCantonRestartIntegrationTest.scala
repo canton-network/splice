@@ -70,7 +70,8 @@ class WalletSurviveCantonRestartIntegrationTest
               {
                 // Due to the circuit breaker kicking in, this might take a bit longer to succeed after some failures due to the disconnect
                 // Disable suppressErrors to avoid nested loggerFactory calls
-                eventuallySucceeds(2.minutes, suppressErrors = false) {
+                // The budget also covers the restarted participant's startup, as withCanton does not wait for it
+                eventuallySucceeds(5.minutes, suppressErrors = false) {
                   aliceWalletClient.tap(2)
                 }
                 aliceWalletClient.list()
