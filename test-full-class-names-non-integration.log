@@ -82,6 +82,7 @@ org.lfdecentralizedtrust.splice.sv.util.WeightDistributionForSvTest
 org.lfdecentralizedtrust.splice.unit.http.HttpClientProxyTest
 org.lfdecentralizedtrust.splice.unit.store.db.AcsJdbcTypesTest
 org.lfdecentralizedtrust.splice.util.AmuletConfigScheduleTest
+org.lfdecentralizedtrust.splice.util.DarResourcesUtilTest
 org.lfdecentralizedtrust.splice.util.ExerciseNodeTest
 org.lfdecentralizedtrust.splice.util.GovernanceLockUtilTest
 org.lfdecentralizedtrust.splice.util.IpCidrRateLimitsTest
@@ -90,6 +91,7 @@ org.lfdecentralizedtrust.splice.util.SpliceCircuitBreakerTest
 org.lfdecentralizedtrust.splice.util.SpliceRateLimiterTest
 org.lfdecentralizedtrust.splice.util.SpliceUtilTest
 org.lfdecentralizedtrust.splice.util.TransactionTreeExtensionsTest
+org.lfdecentralizedtrust.splice.util.UploadablePackageTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegenTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecProtobufTest
 org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnectorTest
