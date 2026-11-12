@@ -2,6 +2,13 @@
 
 {/* Add all release notes in this section */}
 
+  - Scan App
+
+    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true`
+      (Helm value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the per-table ACS
+      snapshots older than the window, except the daily snapshot that bulk storage exports. Later releases extend this
+      setting to the daily snapshots once they are in bulk storage.
+
   - SV App
 
     - Joining SVs now download the DSO party ACS from their sponsor as a file instead of receiving it in memory,
