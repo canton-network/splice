@@ -18,7 +18,7 @@ function usage() {
   echo "  -F               same as -f, but does not start cometBFT, but rather assumes it is already running"
   echo "  -e               start canton using the canton provided BFT sequencer"
   echo "  -m               collect metrics and send them to our CI prometheus instance"
-  echo "  -t               zero base traffic rate on the splitwell synchronizer"
+  echo "  -t               traffic control with a zero base traffic rate on the splitwell synchronizer"
   echo "  -c <canton>      start a custom canton binary instead of the one on the PATH"
   echo "  -B <script>      path to a custom canton bootstrap script"
   echo "  -k               allow downloading private keys via the admin API (needed, e.g., for identities dumps)"
@@ -105,7 +105,7 @@ do
         -t)
             splitwell_max_base_traffic_amount=0
             logFileHint=canton-standalone-sync-operator
-            echo "starting canton with a zero base traffic rate on the splitwell synchronizer"
+            echo "starting canton with traffic control and a zero base traffic rate on the splitwell synchronizer"
             ;;
         -B)
             bootstrapScriptPath="$2"

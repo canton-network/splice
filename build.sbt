@@ -2573,7 +2573,7 @@ updateTestConfigForParallelRuns := {
     name contains "LsuIntegrationTest"
   def isLSURollForwardTest(name: String): Boolean =
     name contains "RollForwardLsu"
-  // These run in their own CI job with a zero base traffic rate on the splitwell synchronizer;
+  // These run in their own CI job with traffic control and a zero base traffic rate on the splitwell synchronizer;
   // see start-canton.sh -t.
   def isSyncOperatorTest(name: String): Boolean =
     name contains "SyncOperator"
