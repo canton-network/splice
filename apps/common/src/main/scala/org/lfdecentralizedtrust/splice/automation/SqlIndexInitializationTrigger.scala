@@ -264,6 +264,15 @@ object SqlIndexInitializationTrigger {
           where reward_beneficiary_is_observer = false
         """,
       ),
+    IndexAction
+      .Create(
+        indexName = "dso_acs_store_sid_mid_pn_tid_farp",
+        createAction = sqlu"""
+          create index concurrently if not exists dso_acs_store_sid_mid_pn_tid_farp
+          on dso_acs_store (store_id, migration_id, package_name, template_id_qualified_name, featured_app_right_provider)
+          where featured_app_right_provider is not null
+        """,
+      ),
     governanceLockTypeAndSubjectIndexAction("dso_acs_store"),
     governanceLockTypeAndSubjectIndexAction("scan_acs_store"),
     governanceLockTypeAndSubjectIndexAction("user_wallet_acs_store"),
