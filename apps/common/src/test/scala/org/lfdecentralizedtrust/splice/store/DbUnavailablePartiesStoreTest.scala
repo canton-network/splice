@@ -197,11 +197,23 @@ class DbUnavailablePartiesStoreTest
 
     "removeParties" should {
 
+      "not remove parties whose ignore window is still active" in {
+        for {
+          store <- mkStore()
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          deleted <- store.removePartiesAt(Seq(userParty(1)), atSeconds(1) - 1)
+          parties <- store.listPartiesAt(atSeconds(1) - 1)
+        } yield {
+          deleted shouldBe empty
+          parties should contain theSameElementsAs Seq(userParty(1))
+        }
+      }
+
       "remove only the given parties" in {
         for {
           store <- mkStore()
           _ <- store.addPartiesAt(Seq(userParty(1), userParty(2), userParty(3)), atSeconds(0))
-          deleted <- store.removeParties(Seq(userParty(1), userParty(3)))
+          deleted <- store.removePartiesAt(Seq(userParty(1), userParty(3)), atSeconds(1))
           parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted should contain theSameElementsAs Seq(userParty(1), userParty(3))
@@ -213,7 +225,7 @@ class DbUnavailablePartiesStoreTest
         for {
           store <- mkStore()
           _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
-          deleted <- store.removeParties(Seq(userParty(99)))
+          deleted <- store.removePartiesAt(Seq(userParty(99)), atSeconds(1))
           parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe empty
@@ -225,7 +237,7 @@ class DbUnavailablePartiesStoreTest
         for {
           store <- mkStore()
           _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
-          deleted <- store.removeParties(Seq.empty)
+          deleted <- store.removePartiesAt(Seq.empty, atSeconds(1))
           parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe empty
@@ -237,7 +249,7 @@ class DbUnavailablePartiesStoreTest
         for {
           store <- mkStore()
           _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
-          deleted <- store.removeParties(Seq(userParty(1), userParty(99)))
+          deleted <- store.removePartiesAt(Seq(userParty(1), userParty(99)), atSeconds(1))
         } yield deleted should contain theSameElementsAs Seq(userParty(1))
       }
 
@@ -248,7 +260,7 @@ class DbUnavailablePartiesStoreTest
           // the entry is no longer listed, but is still present and must be removable,
           // since that is what resets the backoff
           stillListed <- store.listPartiesAt(atSeconds(1))
-          deleted <- store.removeParties(Seq(userParty(1)))
+          deleted <- store.removePartiesAt(Seq(userParty(1)), atSeconds(1))
         } yield {
           stillListed shouldBe empty
           deleted should contain theSameElementsAs Seq(userParty(1))
@@ -260,7 +272,7 @@ class DbUnavailablePartiesStoreTest
           store <- mkStore()
           _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // 1s => expires at 1s
           _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(1)) // 2s => expires at 3s
-          deleted <- store.removeParties(Seq(userParty(1)))
+          deleted <- store.removePartiesAt(Seq(userParty(1)), atSeconds(3))
           afterRemoval <- store.listPartiesAt(atSeconds(1))
           _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(3))
           justBefore <- store.listPartiesAt(atSeconds(4) - 1)
@@ -279,7 +291,7 @@ class DbUnavailablePartiesStoreTest
           store2 <- mkStore(storeDescriptor2)
           _ <- store1.addPartiesAt(Seq(userParty(1)), atSeconds(0))
           _ <- store2.addPartiesAt(Seq(userParty(1)), atSeconds(0))
-          deleted <- store1.removeParties(Seq(userParty(1)))
+          deleted <- store1.removePartiesAt(Seq(userParty(1)), atSeconds(1))
           parties1 <- store1.listPartiesAt(atSeconds(0))
           parties2 <- store2.listPartiesAt(atSeconds(0))
         } yield {
