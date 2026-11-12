@@ -30,6 +30,11 @@ object DbActivityRecordMetaStore {
 
   /** Metadata row for app-side activity ingestion (TBAR), read from and
     * written to `app_activity_record_meta`.
+    *
+    * POC: intentionally a separate type from `ExtraActivityRecordMetaT`
+    * despite identical fields today. Kept distinct pending the open
+    * design question on whether the extra meta table keeps
+    * `code_version` / `user_version`.
     */
   final case class AppActivityRecordMetaT(
       historyId: Long,
@@ -43,8 +48,10 @@ object DbActivityRecordMetaStore {
   /** Metadata row for extra-activity ingestion (CIP-0104 extension hook),
     * read from and written to `extra_app_activity_record_meta`.
     *
-    * POC: identical to `AppActivityRecordMetaT` pending the open decision
-    * on whether the extra meta table keeps `code_version` / `user_version`.
+    * POC: intentionally a separate type from `AppActivityRecordMetaT`
+    * despite identical fields today. Kept distinct pending the open
+    * design question on whether the extra meta table keeps
+    * `code_version` / `user_version`.
     */
   final case class ExtraActivityRecordMetaT(
       historyId: Long,
