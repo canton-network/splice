@@ -39,6 +39,7 @@ import com.digitalasset.canton.synchronizer.sequencer.{
 }
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.topology.store.StoredTopologyTransaction.GenericStoredTopologyTransaction
+import com.digitalasset.canton.version.ProtoVersion
 import com.github.luben.zstd.ZstdInputStream
 import io.circe.Json
 import scalapb.GeneratedMessage
@@ -190,12 +191,17 @@ val txSchema = Seq(
   required("mapping_code", "STRING", "Mapping type, e.g. party_to_participant"),
   required("namespace", "STRING", "Namespace of the mapping"),
   nullable("uid", "STRING", "Unique identifier of the mapping, if it has one"),
-  required("mapping", "JSON", "The mapping, in Canton's current proto JSON encoding"),
+  required(
+    "mapping",
+    "JSON",
+    "The mapping as proto JSON, in the proto version of the transaction's protocol version",
+  ),
   required(
     "signed_transaction",
     "JSON",
-    "The full signed transaction (transaction, signatures, proposal flag) in Canton's current" +
-      " proto JSON encoding, with the transaction decoded instead of serialized bytes",
+    "The full signed transaction (transaction, signatures, proposal flag) as proto JSON, in the" +
+      " proto version of its protocol version, with the transaction decoded instead of serialized" +
+      " bytes",
   ),
   required("is_proposal", "BOOLEAN", "Whether the transaction is a proposal"),
   Column("signed_by", "STRING", "REPEATED", "Fingerprints of the long-term keys that signed it"),
@@ -268,15 +274,34 @@ def nextBatchIdx(validFrom: CantonTimestamp): Long = {
   batchIdx
 }
 
+// Canton picks a class's proto version from the protocol version it was created for, and new
+// protocol versions bring new protos (e.g. TopologyTransaction v31 for PV37, which adds hosting
+// states to PartyToParticipant). Serialize with that same version instead of a fixed one, so the
+// JSON shows what is in the snapshot, and a newer snapshot doesn't fail or lose data.
+def versioned(what: String, version: ProtoVersion)(
+    byVersion: PartialFunction[Int, Either[String, GeneratedMessage]]
+): GeneratedMessage =
+  byVersion.lift(version.v) match {
+    case Some(Right(p)) => p
+    case Some(Left(err)) => sys.error(s"Failed to serialize $what: $err")
+    case None => sys.error(s"Unsupported proto version $version for $what; update this script")
+  }
+
 def txToJson(stored: GenericStoredTopologyTransaction, rowNumber: Long): Json = {
   val signed = stored.transaction
   val tx = signed.transaction
   // TopologyMapping proto is a oneof wrapper with exactly one field set, e.g. {"party_to_participant": {...}}
-  val (mappingCode, mappingJson) = tx.mapping.toProtoV30 match {
-    case Right(p) =>
-      protoToJson(p).asObject.flatMap(_.toList.headOption).getOrElse(("unknown", Json.Null))
-    case Left(err) => sys.error(s"Failed to serialize mapping ${tx.mapping}: $err")
+  val transactionProto = versioned(s"transaction $tx", tx.protoVersion) {
+    case 30 => tx.toProtoV30
+    case 31 => tx.toProtoV31
   }
+  val transactionJson = protoToJson(transactionProto)
+  val (mappingCode, mappingJson) = transactionJson.hcursor
+    .downField("mapping")
+    .focus
+    .flatMap(_.asObject)
+    .flatMap(_.toList.headOption)
+    .getOrElse(sys.error(s"Transaction without a mapping: $tx"))
   val active = stored.validUntil.isEmpty
   val (all, act) = byCode(mappingCode)
   byCode(mappingCode) = (all + 1, act + (if (active) 1 else 0))
@@ -284,11 +309,10 @@ def txToJson(stored: GenericStoredTopologyTransaction, rowNumber: Long): Json = 
   if (stored.rejectionReason.isDefined) stats("rejected") += 1
   // The signed transaction proto holds the transaction as serialized bytes; replace those with the
   // decoded transaction so the whole thing is queryable JSON.
-  val transactionJson = tx.toProtoV30 match {
-    case Right(p) => protoToJson(p)
-    case Left(err) => sys.error(s"Failed to serialize transaction $tx: $err")
+  val signedProto = versioned(s"signed transaction $signed", signed.protoVersion) { case 30 =>
+    Right(signed.toProtoV30)
   }
-  val signedJson = protoToJson(signed.toProtoV30).mapObject(_.add("transaction", transactionJson))
+  val signedJson = protoToJson(signedProto).mapObject(_.add("transaction", transactionJson))
 
   Json.obj(
     "row_number" -> Json.fromLong(rowNumber),
@@ -408,17 +432,35 @@ try {
               // the per-member data is in the members file
               val header = Json.obj(
                 "static_synchronizer_parameters" -> state.staticSynchronizerParameters
-                  .fold(Json.Null)(p => protoToJson(p.toProtoV30)),
+                  .fold(Json.Null) { p =>
+                    protoToJson(versioned("static synchronizer parameters", p.protoVersion) {
+                      case 30 => Right(p.toProtoV30)
+                      case 31 => Right(p.toProtoV31)
+                      case 32 => Right(p.toProtoV32)
+                    })
+                  },
                 "sequencer_snapshot" -> state.sequencerSnapshot.fold(Json.Null) { snapshot =>
-                  val s = snapshot.toProtoV31
-                  protoToJson(
-                    s.copy(
-                      status = s.status.map(_.copy(members = Seq.empty)),
-                      trafficPurchased = Seq.empty,
-                      trafficConsumed = Seq.empty,
-                      memberPreviousTimestamps = Seq.empty,
-                    )
-                  )
+                  protoToJson(versioned("sequencer snapshot", snapshot.protoVersion) {
+                    case 30 =>
+                      snapshot.toProtoV30.map(s =>
+                        s.copy(
+                          status = s.status.map(_.copy(members = Seq.empty)),
+                          trafficPurchased = Seq.empty,
+                          trafficConsumed = Seq.empty,
+                          memberPreviousTimestamps = Seq.empty,
+                        )
+                      )
+                    case 31 =>
+                      val s = snapshot.toProtoV31
+                      Right(
+                        s.copy(
+                          status = s.status.map(_.copy(members = Seq.empty)),
+                          trafficPurchased = Seq.empty,
+                          trafficConsumed = Seq.empty,
+                          memberPreviousTimestamps = Seq.empty,
+                        )
+                      )
+                  })
                 },
               )
               writeFile(path, header.spaces2)
