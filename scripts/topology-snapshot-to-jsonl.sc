@@ -180,6 +180,12 @@ val txSchema = Seq(
   required("namespace", "STRING", "Namespace of the mapping"),
   nullable("uid", "STRING", "Unique identifier of the mapping, if it has one"),
   required("mapping", "JSON", "The mapping, in Canton's current proto JSON encoding"),
+  required(
+    "signed_transaction",
+    "JSON",
+    "The full signed transaction (transaction, signatures, proposal flag) in Canton's current" +
+      " proto JSON encoding, with the transaction decoded instead of serialized bytes",
+  ),
   required("is_proposal", "BOOLEAN", "Whether the transaction is a proposal"),
   Column("signed_by", "STRING", "REPEATED", "Fingerprints of the long-term keys that signed it"),
   required("tx_hash", "STRING", "Canton's topology transaction hash"),
@@ -249,6 +255,13 @@ def txToJson(stored: GenericStoredTopologyTransaction): Json = {
   byCode(mappingCode) = (all + 1, act + (if (active) 1 else 0))
   if (signed.isProposal) stats("proposals") += 1
   if (stored.rejectionReason.isDefined) stats("rejected") += 1
+  // The signed transaction proto holds the transaction as serialized bytes; replace those with the
+  // decoded transaction so the whole thing is queryable JSON.
+  val transactionJson = tx.toProtoV30 match {
+    case Right(p) => protoToJson(p)
+    case Left(err) => sys.error(s"Failed to serialize transaction $tx: $err")
+  }
+  val signedJson = protoToJson(signed.toProtoV30).mapObject(_.add("transaction", transactionJson))
 
   Json.obj(
     "sequenced" -> Json.fromString(stored.sequenced.value.toInstant.toString),
@@ -263,6 +276,7 @@ def txToJson(stored: GenericStoredTopologyTransaction): Json = {
     "namespace" -> Json.fromString(tx.mapping.namespace.toProtoPrimitive),
     "uid" -> tx.mapping.maybeUid.fold(Json.Null)(u => Json.fromString(u.toProtoPrimitive)),
     "mapping" -> mappingJson,
+    "signed_transaction" -> signedJson,
     "is_proposal" -> Json.fromBoolean(signed.isProposal),
     "signed_by" -> Json.fromValues(
       signed.signatures.toSeq
