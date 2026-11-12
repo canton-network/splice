@@ -12,7 +12,6 @@ import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { useDappModeConfig } from '../utils';
 import { useGovernanceReadClient } from './GovernanceReadClientContext';
 
-/** svUser and svPartyId are undefined when there is no viewer SV (read-only mode). */
 export const useDsoInfos = (): UseQueryResult<DsoInfo & Partial<SvInfo>> => {
   const { getDsoInfo } = useGovernanceReadClient();
   const dappMode = useDappModeConfig();
@@ -25,9 +24,8 @@ export const useDsoInfos = (): UseQueryResult<DsoInfo & Partial<SvInfo>> => {
     queryFn: async () => {
       const resp = await getDsoInfo();
       return {
-        // An empty identity is no identity: never let '' become a "you".
-        svUser: resp.sv_user || undefined,
-        svPartyId: resp.sv_party_id || undefined,
+        svUser: resp.sv_user,
+        svPartyId: resp.sv_party_id,
         dsoPartyId: resp.dso_party_id,
         votingThreshold: BigInt(resp.voting_threshold),
         amuletRules: Contract.decodeOpenAPI(resp.amulet_rules.contract, AmuletRules),

@@ -87,6 +87,20 @@ describe('dappMode config', () => {
     const parsed = configScheme.parse({ ...withoutAuth, dappMode: dappModeEnabled });
     expect(getDappModeConfig(parsed)).toEqual(dappModeEnabled);
   });
+  test('enabled: true does not require an SV app url', () => {
+    const { services: _services, ...withoutServices } = baseConfig;
+    const parsed = configScheme.parse({ ...withoutServices, dappMode: dappModeEnabled });
+    expect(getDappModeConfig(parsed)).toEqual(dappModeEnabled);
+    expect('services' in parsed).toBe(false);
+  });
+  test('operator mode requires an SV app url', () => {
+    const { services: _services, ...withoutServices } = baseConfig;
+    expectSingleIssue(
+      withoutServices,
+      ['services'],
+      'Invalid input: expected object, received undefined'
+    );
+  });
   test('operator mode requires an auth block', () => {
     const { auth: _auth, ...withoutAuth } = baseConfig;
     expectSingleIssue(

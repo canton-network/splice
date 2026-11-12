@@ -71,9 +71,8 @@ const OperatorProviders: React.FC<React.PropsWithChildren> = ({ children }) => {
   const config = useSvConfig();
   const refetchInterval = useConfigPollInterval();
   const navigate = useNavigate();
-  // refetchInterval comes from config and does not change at runtime, so create the client once.
   const [queryClient] = useState(() => makeQueryClient(refetchInterval));
-  const { auth, testAuth } = requireOperatorConfig(config);
+  const { auth, testAuth, services } = requireOperatorConfig(config);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -81,9 +80,9 @@ const OperatorProviders: React.FC<React.PropsWithChildren> = ({ children }) => {
         <QueryClientProvider client={queryClient}>
           <QueryDevtools />
           <UserProvider authConf={auth} testAuthConf={testAuth}>
-            <SvClientProvider url={config.services.sv.url}>
+            <SvClientProvider url={services.sv.url}>
               <SvAppVotesHooksProvider>
-                <SvAdminClientProvider url={config.services.sv.url}>
+                <SvAdminClientProvider url={services.sv.url}>
                   <SvAppGovernanceReadClientProvider>{children}</SvAppGovernanceReadClientProvider>
                 </SvAdminClientProvider>
               </SvAppVotesHooksProvider>
@@ -101,13 +100,11 @@ const ScanGovernanceReadClientProvider: React.FC<React.PropsWithChildren> = ({ c
   return <GovernanceReadClientProvider client={client}>{children}</GovernanceReadClientProvider>;
 };
 
-/** dApp mode: no login, no SV app; governance reads come from Scan. */
 const DappProviders: React.FC<React.PropsWithChildren<{ dappMode: DappModeConfig }>> = ({
   dappMode,
   children,
 }) => {
   const refetchInterval = useConfigPollInterval();
-  // refetchInterval comes from config and does not change at runtime, so create the client once.
   const [queryClient] = useState(() => makeQueryClient(refetchInterval));
 
   return (
@@ -137,7 +134,6 @@ const createRouter = (config: SvConfig) => {
   const dappMode = getDappModeConfig(config);
   const operator = dappMode ? undefined : requireOperatorConfig(config);
   const toGovernance = <Navigate to="/governance/proposals" replace />;
-  // dApp mode serves only the read-only governance pages; every operator-only page redirects there.
   const operatorOnly = (page: React.ReactElement) => (dappMode ? toGovernance : page);
 
   return createBrowserRouter(
@@ -179,7 +175,6 @@ const createRouter = (config: SvConfig) => {
 
 const App: React.FC = () => {
   const config = useSvConfig();
-  // The parsed config does not change at runtime, so the router is only rebuilt if the config object does.
   const router = useMemo(() => createRouter(config), [config]);
 
   return (

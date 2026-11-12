@@ -7,7 +7,7 @@ import 'react-json-pretty/themes/monikai.css';
 import { useDsoInfos } from '../contexts/SvContext';
 import { useMediatorStatus } from '../hooks/useMediatorStatus';
 import { useSequencerStatus } from '../hooks/useSequencerStatus';
-import { useSvConfig } from '../utils';
+import { useOperatorConfig } from '../utils';
 
 const WithProvider: React.FC = () => {
   const dsoInfoQuery = useDsoInfos();
@@ -24,7 +24,7 @@ const WithProvider: React.FC = () => {
 };
 
 const DsoWithContexts: React.FC = () => {
-  const config = useSvConfig();
+  const config = useOperatorConfig();
   return (
     <SvClientProvider url={config.services.sv.url}>
       <WithProvider />
