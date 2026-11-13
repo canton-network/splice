@@ -6,7 +6,6 @@ import _ from 'lodash';
 
 import { Auth0ClientAccessToken } from './auth0types';
 
-// TODO: tests
 export type FixedTokensCache = {
   tokens: Record<ClientId, ClientTokens>;
   persisted: boolean;
@@ -40,10 +39,9 @@ export async function getOrUpdateToken(
        * (configured in the configuration of the ledger-api API in auth0).
        */
       const tokenValiditySeconds = (newToken.expiry.getTime() - Date.now()) / 1000;
-      await pulumi.log.error(
+      await fatalError(
         `Auth0 access token issued with expiry of [${tokenValiditySeconds}s], too short to meet the required token lifetime of [${REQUIRED_TOKEN_LIFETIME_SECONDS}s].`
       );
-      process.exit(1);
     }
 
     await pulumi.log.debug(
@@ -84,42 +82,17 @@ function addTimeSeconds(t: Date, seconds: number): Date {
  * valid. It is currently eight days, based on the seven day life of
  * TestNet and a short additional grace period.
  */
-const REQUIRED_TOKEN_LIFETIME_SECONDS = 8 * 86400;
+export const REQUIRED_TOKEN_LIFETIME_SECONDS = 8 * 86400;
 
 export async function loadFixedTokesCache(k8sClient: K8sClientV1): Promise<FixedTokensCache> {
   await pulumi.log.debug('Loading fixed tokens cache...');
 
+  let cacheSecret;
   try {
-    const cacheSecret = await k8sClient.readNamespacedSecret({
+    cacheSecret = await k8sClient.readNamespacedSecret({
       name: getCacheSecretName(),
       namespace: 'default',
     });
-
-    const { version, ...data } = cacheSecret.data ?? {};
-
-    const parsedVersion =
-      version !== undefined ? Number.parseInt(Buffer.from(version, 'base64').toString('ascii')) : 0;
-
-    await pulumi.log.debug(`Detected fixed tokens cache format version [${parsedVersion}].`);
-
-    let tokens: FixedTokensCache['tokens'];
-    switch (parsedVersion) {
-      case 0:
-        tokens = parseFixedTokensCacheV0(data);
-        break;
-      case 1:
-        tokens = parseFixedTokensCacheV1(data);
-        break;
-      default:
-        throw new Error(); // TODO
-    }
-
-    await pulumi.log.debug('Fixed tokens cache loaded.');
-
-    return {
-      tokens,
-      persisted: true,
-    };
   } catch (e) {
     await pulumi.log.warn('No fixed tokens cache secret found.');
 
@@ -128,6 +101,34 @@ export async function loadFixedTokesCache(k8sClient: K8sClientV1): Promise<Fixed
       persisted: false,
     };
   }
+
+  const { version, ...data } = cacheSecret.data ?? {};
+
+  const parsedVersion =
+    version !== undefined ? Number.parseInt(Buffer.from(version, 'base64').toString('ascii')) : 0;
+
+  await pulumi.log.debug(`Detected fixed tokens cache format version [${parsedVersion}].`);
+
+  let tokens: FixedTokensCache['tokens'];
+  switch (parsedVersion) {
+    case 0:
+      tokens = parseFixedTokensCacheV0(data);
+      break;
+    case 1:
+      tokens = parseFixedTokensCacheV1(data);
+      break;
+    default:
+      await fatalError(`Unknown fixed tokens cache format version [${parsedVersion}].`);
+      tokens = {}; // this shouldn't be needed but TS gets confused about awaiting on Promise<never>
+      break;
+  }
+
+  await pulumi.log.debug('Fixed tokens cache loaded.');
+
+  return {
+    tokens,
+    persisted: true,
+  };
 }
 
 function parseFixedTokensCacheV0(data: Record<string, string>): FixedTokensCache['tokens'] {
@@ -161,9 +162,7 @@ export async function persistFixedTokensCache(
 
   await pulumi.log.debug('Persisting fixed tokens cache...');
 
-  const data = _.mapValues(cache.tokens, clientTokens =>
-    Buffer.from(JSON.stringify(clientTokens)).toString('base64')
-  );
+  const data = _.mapValues(cache.tokens, clientTokens => encodeSecretValue(clientTokens));
 
   const secretBody = {
     apiVersion: 'v1',
@@ -173,7 +172,7 @@ export async function persistFixedTokensCache(
     },
     data: {
       ...data,
-      version: Buffer.from('1').toString('base64'),
+      version: encodeSecretValue(1),
     },
   };
 
@@ -197,16 +196,25 @@ export async function persistFixedTokensCache(
         body: secretBody,
       });
     } catch (e) {
-      await pulumi.log.error(`Persisting fixed tokens cache failed: ${JSON.stringify(e)}`);
-      process.exit(1);
+      await fatalError(`Persisting fixed tokens cache failed: ${JSON.stringify(e)}`);
     }
   }
 
+  cache.persisted = true;
   await pulumi.log.debug('Fixed tokens cache persisted successfully.');
+}
+
+export function encodeSecretValue(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64');
 }
 
 // Each Pulumi stack gets its own cache secret to avoid concurrent write races
 // when multiple stacks (e.g., validator1, splitwell) run in parallel.
-function getCacheSecretName(): string {
+export function getCacheSecretName(): string {
   return `auth0-fixed-token-cache-${pulumi.getProject()}-${pulumi.getStack()}`;
+}
+
+async function fatalError(message: string): Promise<never> {
+  await pulumi.log.error(message);
+  return Promise.reject(new Error(message));
 }
