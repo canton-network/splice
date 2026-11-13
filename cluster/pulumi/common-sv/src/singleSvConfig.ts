@@ -17,6 +17,7 @@ import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/c
 import util from 'node:util';
 import { z } from 'zod';
 
+import { FlywayMigrationToWaitForSchema } from './bigQueryFlywayMigration';
 import { TopologySnapshotSchema } from './config';
 import {
   CloudSqlWithOverrideConfigSchema,
@@ -30,26 +31,6 @@ import {
 } from './physicalSynchronizerConfig';
 import { CatchupTestSchema } from './testing';
 
-const SvCometbftConfigSchema = z
-  .object({
-    nodeId: z.string().optional(),
-    validatorKeyAddress: z.string().optional(),
-    // defaults to {svName}-cometbft-keys if not set
-    keysGcpSecret: z.string().optional(),
-    enableStateSync: z.boolean().optional(),
-    resources: K8sResourceSchema,
-    mempool: z
-      .object({
-        size: z.number().optional(),
-        deduplicationCacheSize: z.number().optional(),
-        ttlSeconds: z.number().optional(),
-      })
-      .optional(),
-    // Ad-hoc Helm values to be merged (nested) into the values passed to the splice-cometbft chart.
-    // Values provided here override values computed by pulumi for the same nested key.
-    additionalHelmValues: z.record(z.string(), z.any()).optional(),
-  })
-  .strict();
 const CantonPruningSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -87,8 +68,6 @@ const SvAppConfigSchema = z
     auth0: Auth0ConfigSchema.optional(),
     // defaults to {svName}-id if not set
     svIdKeyGcpSecret: z.string().optional(),
-    // defaults to {svName}-cometbft-governance-key if not set
-    cometBftGovernanceKeyGcpSecret: z.string().optional(),
     permissionedSynchronizer: z.boolean().optional(),
     // Map of package name -> list of versions to explicitly unvet
     additionalPackagesToUnvet: z.record(z.string(), z.array(z.string())).optional(),
@@ -124,6 +103,7 @@ export const ScanBigQueryConfigSchema = z
         message: 'Value must be an exact number of days, expressed in seconds',
       })
       .default(7 * SECONDS_PER_DAY),
+    flywayMigrationToWaitFor: FlywayMigrationToWaitForSchema,
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 
@@ -155,8 +135,6 @@ const SvValidatorAppConfigSchema = z
     resources: K8sResourceSchema,
   })
   .and(ValidatorAppConfigSchema);
-// https://docs.cometbft.com/main/explanation/core/running-in-production
-const CometbftLogLevelSchema = z.enum(['info', 'error', 'debug', 'none']);
 // things here are declared optional even when they aren't, to allow partial overrides of defaults
 // TODO(DACH-NY/canton-network-internal#4859) the above is no longer true since defaults were removed.
 //   We should remove .optional() from required fields.
@@ -164,7 +142,6 @@ const SingleSvConfigSchema = z
   .object({
     publicName: z.string().optional(),
     subdomain: z.string().optional(),
-    cometbft: SvCometbftConfigSchema.optional(),
     participant: SvParticipantConfigSchema.optional(),
     sequencer: SvSequencerConfigSchema.prefault({}),
     mediator: SvMediatorConfigSchema.prefault({}),
@@ -176,11 +153,6 @@ const SingleSvConfigSchema = z
     validatorApp: SvValidatorAppConfigSchema.optional(),
     pruning: z
       .object({
-        cometbft: z
-          .object({
-            retainBlocks: z.number(),
-          })
-          .optional(),
         sequencer: z
           .object({
             enabled: z.boolean().optional(),
@@ -205,8 +177,6 @@ const SingleSvConfigSchema = z
         // Falls back to `apiRequestLogLevel` when not specified
         cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
-        cometbftLogLevel: CometbftLogLevelSchema.optional(),
-        cometbftExtraLogLevelFlags: z.string().optional(),
       })
       .optional(),
     periodicSnapshots: z.object({ topology: TopologySnapshotSchema.optional() }).optional(),

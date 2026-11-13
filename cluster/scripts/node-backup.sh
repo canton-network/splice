@@ -116,6 +116,10 @@ function backup_cloudsql() {
     if [ $backup_exit_code -ne 0 ]; then
       if [[ $output == *"another operation was already in progress"* ]]; then
         _error_msg "Backup failed due to another operation in progress, retrying: $output"
+      elif [[ $output == *"is taking longer than expected. You can continue waiting for the operation by running"* ]]; then
+        _info "Backup is taking longer than expected, awaiting operation completion..."
+        op_id=$(echo "$output" | grep -oE 'operations/[a-f0-9-]+' | cut -d/ -f2)
+        gcloud beta sql operations wait "$op_id" --timeout=3000
       else
         _error_msg "$output"
       fi
@@ -219,15 +223,9 @@ function backup_component() {
   echo "Backing up $component in namespace $namespace with migration_id $migration_id"
 
   if [ "$component" == "$requested_component" ] || [ -z "$requested_component" ]; then
-    if [ "$component" == "cometbft-$migration_id" ]; then
-      local cometbft_pvc_name
-      cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
-      backup_pvc "cometBFT" "$namespace" "$cometbft_pvc_name" "$migration_id"
-    else
-      local db_name
-      db_name=$(create_component_instance "$component" "$migration_id" "$namespace")
-      SPLICE_SV=$namespace SPLICE_MIGRATION_ID=$migration_id backup_postgres "$component" "$namespace" "$db_name-pg" "$migration_id" "$stack"
-    fi
+    local db_name
+    db_name=$(create_component_instance "$component" "$migration_id" "$namespace")
+    SPLICE_SV=$namespace SPLICE_MIGRATION_ID=$migration_id backup_postgres "$component" "$namespace" "$db_name-pg" "$migration_id" "$stack"
   else
     _info "Skipping backup of $component, not requested"
   fi
@@ -243,15 +241,9 @@ function wait_for_backup() {
   stack=$(get_stack_for_namespace_component "$namespace" "$component")
 
   if [ "$component" == "$requested_component" ] || [ -z "$requested_component" ]; then
-    if [ "$component" == "cometbft-$migration_id" ]; then
-      local cometbft_pvc_name
-      cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
-      wait_for_pvc_backup "cometBFT" "$namespace" "$cometbft_pvc_name"
-    else
-      local instance
-      instance=$(create_component_instance "$component" "$migration_id" "$namespace")
-      wait_for_postgres_backup "$component" "$namespace" "$instance-pg" "$migration_id" "$stack"
-    fi
+    local instance
+    instance=$(create_component_instance "$component" "$migration_id" "$namespace")
+    wait_for_postgres_backup "$component" "$namespace" "$instance-pg" "$migration_id" "$stack"
   else
     _info "Skipping waiting for backup of $component, not requested"
   fi
@@ -273,15 +265,6 @@ function main() {
 
   local config
   config=$(get_resolved_config)
-
-  # Determine whether the BFT sequencer is enabled for the migration being backed up.
-  local bft_sequencer_enabled
-  bft_sequencer_enabled=$(echo "$config" | yq "
-    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
-      + (.synchronizerMigration.archived // [])
-      + (.synchronizerMigration.additionalLegacy // []))
-    | map(select(.id == $migration_id))
-    | .[0].sequencer.enableBftSequencer // false")
 
   # TODO(#9361): support multiple domains / non-default-ID'd ones
   if [ "$1" == "validator" ]; then
@@ -305,11 +288,6 @@ function main() {
     backup_component "$namespace" "cn-apps" "$requested_component" "$migration_id"
     backup_component "$namespace" "mediator" "$requested_component" "$migration_id"
     backup_component "$namespace" "sequencer" "$requested_component" "$migration_id"
-    if [ "$bft_sequencer_enabled" == "true" ]; then
-      _info "BFT sequencer is enabled for migration $migration_id, skipping CometBFT backup"
-    else
-      backup_component "$namespace" "cometbft-$migration_id" "$requested_component" "$migration_id"
-    fi
 
     wait_for_backup "$namespace" "cn-apps" "$requested_component" "$migration_id"
 
@@ -319,9 +297,6 @@ function main() {
     wait_for_backup "$namespace" "participant" "$requested_component" "$migration_id"
     wait_for_backup "$namespace" "mediator" "$requested_component" "$migration_id"
     wait_for_backup "$namespace" "sequencer" "$requested_component" "$migration_id"
-    if [ "$bft_sequencer_enabled" != "true" ]; then
-      wait_for_backup "$namespace" "cometbft-$migration_id" "$requested_component" "$migration_id"
-    fi
   else
     usage
     exit 1

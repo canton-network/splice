@@ -2,14 +2,24 @@
 
 {/* Add all release notes in this section */}
 
-  - Docker images
+  - Scan App
 
-    - Upgrade base image to 1.0.19
+    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
+      value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
+      per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
+      releases extend this setting to the daily snapshots once they are in bulk storage.
 
-  - Validator App
+  - SV App
 
-    - `synchronizer-topology.num-parties` metric now includes also parties not hosted on any participant. This also fixes an issue where those were deducted from the metric on update,
-      but then inconsistently added back in an app restart.
+    - Joining SVs now download the DSO party ACS from their sponsor as a file instead of receiving it in memory,
+      so onboarding works with large snapshots. SVs that restrict SV app ingress must allow other SVs to reach
+      the new `/v0/onboard/sv/party-migration/prepare` and `/v0/onboard/sv/download/{id}` endpoints.
+
+  - Deployment
+
+    - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
+      that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
+      `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
 
 ## Upcoming for next minor release (template):
 

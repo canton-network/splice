@@ -55,19 +55,16 @@
         },
         "synchronizer": {
           "current": {
-            "chainIdSuffix": "4",
             "migrationId": 2,
             "synchronizerSerialId": 9,
             "version": "0.3.20"
           },
           "legacy": {
-            "chainIdSuffix": "4",
             "migrationId": 2,
             "synchronizerSerialId": 8,
             "version": "0.3.20"
           },
           "successor": {
-            "chainIdSuffix": "4",
             "migrationId": 2,
             "synchronizerSerialId": 10,
             "version": "0.3.21"

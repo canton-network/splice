@@ -11,6 +11,11 @@ chart:
   # Override for testing labels
   version: 0.1.1
   appVersion: 0.1.0
+set:
+  # Things we need just to pass the schema
+  sequencer:
+    driver:
+      type: cantonbft
 tests:
   - it: "sets labels as expected"
     documentSelector:
@@ -157,7 +162,7 @@ tests:
     set:
       imageRepo: "secure-registry.com"
       mediator.imageName: "approved-mediator"
-      mediator.persistence.initImageName: "secure-registry.com/postgres:14-hardened"
+      mediator.persistence.initImageName: "secure-registry.com/postgres:18-hardened"
     documentSelector:
       path: kind
       value: Deployment
@@ -167,7 +172,7 @@ tests:
           pattern: "^secure-registry.com/approved-mediator:"
       - equal:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].image
-          value: "secure-registry.com/postgres:14-hardened"
+          value: "secure-registry.com/postgres:18-hardened"
 
   - it: "allows overriding mediator database secret env vars with raw strings"
     set:

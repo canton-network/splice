@@ -79,9 +79,12 @@ class SvInitializationIntegrationTest extends SvIntegrationTestBase {
 
     clue("sv will connect to all domains during initialization.") {
       sv4Backend.startSync()
-      inside(sv4Backend.participantClient.synchronizers.list_connected()) {
-        case Seq(listConnectedDomainsResult) =>
-          listConnectedDomainsResult.synchronizerId shouldBe decentralizedSynchronizerId
+      // The validator may briefly disconnect while it adds further sequencers, so poll.
+      eventually() {
+        inside(sv4Backend.participantClient.synchronizers.list_connected()) {
+          case Seq(listConnectedDomainsResult) =>
+            listConnectedDomainsResult.synchronizerId shouldBe decentralizedSynchronizerId
+        }
       }
     }
   }

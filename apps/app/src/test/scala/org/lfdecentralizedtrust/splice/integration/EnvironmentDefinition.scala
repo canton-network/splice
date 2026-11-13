@@ -69,10 +69,9 @@ case class EnvironmentDefinition(
 
   override def loggerFactory: SuppressingLogger = SuppressingLogger(getClass)
   override val configTransforms: Seq[SpliceConfig => SpliceConfig] = {
-    // add the BFT sequencers config transform to the front if enabled to ensure that it modifies the ports before any other transforms updates the ports
-    if (ConfigTransforms.IsTheCantonSequencerBFTEnabled)
-      ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
-    else configTransformsWithContext(context)
+    // TODO (#8263): enable DA BFT in the test app configs instead of through this config transform
+    // add the BFT sequencers config transform to the front to ensure that it modifies the ports before any other transforms updates the ports
+    ConfigTransforms.withBftSequencers() +: this.configTransformsWithContext(context)
   }
   def updateTestingConfig(
       update: TestingConfigInternal => TestingConfigInternal
@@ -246,6 +245,7 @@ case class EnvironmentDefinition(
     copy(
       preAppStart = implicit env => {
         participants(env).foreach { p =>
+          p.synchronizers.reconnect_all(ignoreFailures = false)
           p.synchronizers.list_connected().foreach { connected =>
             val currentVettedPackages = p.topology.vetted_packages.list(
               store = Some(TopologyStoreId.Synchronizer(connected.synchronizerId)),
@@ -355,6 +355,7 @@ case class EnvironmentDefinition(
       )(config)
     )
 
+  // TODO (#8263): remove, DA BFT is always enabled (see configTransforms)
   def withBftSequencers(namePredicate: String => Boolean = _ => true): EnvironmentDefinition =
     addConfigTransformToFront((_, config) =>
       ConfigTransforms.withBftSequencers(namePredicate)(config)
@@ -565,6 +566,7 @@ case class EnvironmentDefinition(
           )(conf)
       )
       .withSequencerConnectionsFromScanDisabled(10_000)
+      .addConfigTransform((_, conf) => ConfigTransforms.disableBftBlacklisting()(conf))
 
   override def createTestConsole(
       environment: SpliceEnvironment,

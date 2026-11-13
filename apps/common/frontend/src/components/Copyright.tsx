@@ -5,6 +5,8 @@ import * as React from 'react';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 
+const currentYear = new Date().getFullYear();
+
 const Copyright: React.FC = () => (
   <Typography
     variant="body1"
@@ -15,7 +17,7 @@ const Copyright: React.FC = () => (
     <Link color="inherit" href="https://digitalasset.com/">
       Digital Asset
     </Link>{' '}
-    {new Date().getFullYear()}.
+    {currentYear}.
   </Typography>
 );
 

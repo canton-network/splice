@@ -31,7 +31,7 @@ persistence:
   port: 5432
   user: cnadmin
   secretName: "postgres-secrets"
-  initImageName: "postgres:14"
+  initImageName: "postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6"
 #  secretOverrides:
 #    postgresPassword: ""
   # The user version of the ACS store (optional), a positive integer,
@@ -81,6 +81,11 @@ logLevel: DEBUG
 #     endpoint:
 #     secretName:
 # publicUrl:
+
+# ACS snapshot pruning (needs a finite analyzable time window)
+# pruning:
+#   snapshots:
+#     enabled: true
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true

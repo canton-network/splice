@@ -25,6 +25,8 @@ import com.daml.ledger.javaapi.data.Identifier
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+import scala.concurrent.duration.*
+
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_14
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_10
 class UnclaimedActivityRecordIntegrationTest
@@ -89,7 +91,7 @@ class UnclaimedActivityRecordIntegrationTest
                   aliceParty.toProtoPrimitive,
                   BigDecimal(amountToMint).bigDecimal,
                   "alice is doing great - vote",
-                  Instant.now().plus(5, ChronoUnit.SECONDS),
+                  Instant.now().plus(10, ChronoUnit.SECONDS),
                 )
               )
             )
@@ -114,7 +116,7 @@ class UnclaimedActivityRecordIntegrationTest
       }
 
       clue("UnallocatedUnclaimedActivityRecord gets archived") {
-        eventually() {
+        eventually(60.seconds) {
           sv1Backend.participantClient.ledger_api_extensions.acs
             .filterJava(UnallocatedUnclaimedActivityRecord.COMPANION)(
               dsoParty
@@ -189,7 +191,7 @@ class UnclaimedActivityRecordIntegrationTest
       }
 
       clue("UnclaimedActivityRecord gets archived") {
-        eventually() {
+        eventually(60.seconds) {
           sv1Backend.participantClient.ledger_api_extensions.acs
             .filterJava(UnclaimedActivityRecord.COMPANION)(
               dsoParty

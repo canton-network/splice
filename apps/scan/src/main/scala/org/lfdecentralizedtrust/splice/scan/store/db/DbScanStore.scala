@@ -58,7 +58,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
-  AcsQueries,
+  SingleSynchronizerAcsQueries,
   AcsTables,
   DbTxLogAppStore,
   TxLogQueries,
@@ -115,6 +115,7 @@ object DbScanStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       domainMigrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       storeMetrics: DbScanStoreMetrics,
@@ -141,6 +142,7 @@ object DbScanStore {
           loggerFactory = loggerFactory,
           retryProvider = retryProvider,
           domainMigrationId = domainMigrationId,
+          synchronizerId = synchronizerId,
           participantId = participantId,
           ingestionConfig = ingestionConfig,
           storeIds,
@@ -204,6 +206,7 @@ class DbScanStore private (
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
     val domainMigrationId: Long,
+    synchronizerId: SynchronizerId,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeIds: DbMultiDomainAcsStore.StoreIds,
@@ -227,12 +230,13 @@ class DbScanStore private (
         DbScanStore.txLogStoreDescriptor(key, participantId, txLogStoreDescriptorUserVersion),
       storeIds = storeIds,
       migrationId = domainMigrationId,
+      synchronizerId = synchronizerId,
       ingestionConfig = ingestionConfig,
       additionalIngestionSinks = additionalIngestionSinks,
     )
     with ScanStore
     with AcsTables
-    with AcsQueries
+    with SingleSynchronizerAcsQueries
     with TxLogQueries[TxLogEntry]
     with UpdateHistoryQueries
     with FlagCloseableAsync
@@ -520,7 +524,7 @@ class DbScanStore private (
               additionalWhere = sql"""
                     and featured_app_right_provider = $providerPartyId
                  """,
-              orderLimit = sql"limit 1",
+              orderLimit = sql"order by acs.created_at desc, acs.contract_id limit 1",
             ).headOption,
             "findFeaturedAppRight",
           )
@@ -544,7 +548,8 @@ class DbScanStore private (
             additionalWhere = sql"""
                   and featured_app_right_provider = $providerPartyId
                """,
-            orderLimit = sql"""order by event_number limit ${sqlLimit(limit)}""",
+            orderLimit =
+              sql"""order by acs.created_at desc, acs.contract_id limit ${sqlLimit(limit)}""",
           ),
           "listFeaturedAppRightsByProvider",
         )

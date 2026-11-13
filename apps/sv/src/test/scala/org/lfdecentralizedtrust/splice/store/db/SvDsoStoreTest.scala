@@ -39,8 +39,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ansentrycont
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
   SRARC_AddSv,
+  SRARC_CreateFeaturedAppConfigUpdateInstruction,
+  SRARC_GrantFeaturedAppRight,
   SRARC_OffboardSv,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.da.types.Tuple2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingConfirmed,
@@ -65,7 +68,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore.{IdleAnsSubscription, RoundBatch}
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStore
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore}
-import org.lfdecentralizedtrust.splice.sv.util.SvUtil
+import org.lfdecentralizedtrust.splice.sv.util.{FeaturedAppRightValidator, SvUtil}
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
   Contract,
@@ -81,6 +84,8 @@ import scala.jdk.CollectionConverters.*
 import scala.util.Random
 
 abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
+
+  def ops(ps: PartyId*): Option[Seq[PartyId]] = Some(ps.toSeq)
 
   "SvDsoStore" should {
 
@@ -511,6 +516,389 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
+
+    "lookupFeaturedAppRightWithOffset with several rights for the provider" should {
+      "return the newest one, breaking ties by contract id" in {
+        val t1 = Instant.parse("2024-03-01T10:00:00Z")
+        val t2 = t1.plusSeconds(1)
+        val older = featuredAppRight(userParty(1), validContractId(1)).copy(createdAt = t1)
+        val newerHighCid =
+          featuredAppRight(userParty(1), validContractId(3)).copy(createdAt = t2)
+        val newerLowCid =
+          featuredAppRight(userParty(1), validContractId(2)).copy(createdAt = t2)
+        val otherProvider =
+          featuredAppRight(userParty(2), validContractId(4)).copy(createdAt = t2.plusSeconds(1))
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(newerHighCid, older, newerLowCid, otherProvider))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.lookupFeaturedAppRightWithOffset(userParty(1))
+        } yield result.value.map(_.contract) shouldBe Some(newerLowCid)
+      }
+    }
+
+    "findFeaturedAppRightsForParties" should {
+      "return empty when the query set is empty" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRightsForParties(Seq.empty)
+        } yield result shouldBe empty
+      }
+
+      "return the right whose opsParties overlap the query set" in {
+        val cid = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(
+              providerParty(1),
+              contractId = cid,
+              opsParties = ops(userParty(1), userParty(2)),
+            )
+          )(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRightsForParties(Seq(userParty(2), userParty(3)))
+        } yield result.map(_.contractId.contractId).toSet shouldBe Set(cid)
+      }
+
+      "return empty when there is no overlap" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRightsForParties(Seq(userParty(3)))
+        } yield result shouldBe empty
+      }
+
+      "return every right a party appears on" in {
+        val cid1 = nextCid()
+        val cid2 = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), contractId = cid1, opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(2), contractId = cid2, opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRightsForParties(Seq(userParty(1)))
+        } yield result.map(_.contractId.contractId).toSet shouldBe Set(cid1, cid2)
+      }
+
+      "ignore rights with None or empty opsParties" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = None)
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(2), opsParties = Some(Seq.empty))
+          )(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRightsForParties(Seq(userParty(1)))
+        } yield result shouldBe empty
+      }
+
+      "return a right whose provider overlaps the query set" in {
+        val cid = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRightsForParties(Seq(providerParty(1)))
+        } yield result.map(_.contractId.contractId).toSet shouldBe Set(cid)
+      }
+    }
+
+    "validateFeaturedAppRightAction" should {
+      def opsList(ps: Seq[PartyId]): Optional[java.util.List[String]] =
+        Optional.of(ps.map(_.toProtoPrimitive).asJava)
+
+      def grantAction(provider: PartyId, opsParties: Seq[PartyId]): ARC_DsoRules =
+        new ARC_DsoRules(
+          new SRARC_GrantFeaturedAppRight(
+            new DsoRules_GrantFeaturedAppRight(
+              provider.toProtoPrimitive,
+              Optional.empty(),
+              Optional.empty(),
+              opsList(opsParties),
+            )
+          )
+        )
+
+      def config(opsParties: Seq[PartyId]): splice.amulet.FeaturedAppConfig =
+        new splice.amulet.FeaturedAppConfig(
+          Optional.empty(),
+          Optional.empty(),
+          opsList(opsParties),
+        )
+
+      def amendAction(
+          provider: PartyId,
+          baseOps: Seq[PartyId],
+          newOps: Seq[PartyId],
+      ): ARC_DsoRules =
+        new ARC_DsoRules(
+          new SRARC_CreateFeaturedAppConfigUpdateInstruction(
+            new DsoRules_CreateFeaturedAppConfigUpdateInstruction(
+              Collections.singletonList(
+                new Tuple2(
+                  provider.toProtoPrimitive,
+                  new splice.amulet.FeaturedAppRight_UpdateConfig(config(baseOps), config(newOps)),
+                )
+              )
+            )
+          )
+        )
+
+      def updateConfig(
+          baseOps: Seq[PartyId],
+          newOps: Seq[PartyId],
+      ): splice.amulet.FeaturedAppRight_UpdateConfig =
+        new splice.amulet.FeaturedAppRight_UpdateConfig(config(baseOps), config(newOps))
+
+      // all entries (primary + additional) go into a single `updates` list.
+      def amendActionMulti(
+          primary: (PartyId, Seq[PartyId], Seq[PartyId]),
+          additional: Seq[(PartyId, Seq[PartyId], Seq[PartyId])],
+      ): ARC_DsoRules =
+        new ARC_DsoRules(
+          new SRARC_CreateFeaturedAppConfigUpdateInstruction(
+            new DsoRules_CreateFeaturedAppConfigUpdateInstruction(
+              (new Tuple2(primary._1.toProtoPrimitive, updateConfig(primary._2, primary._3)) +:
+                additional.map { case (p, b, n) =>
+                  new Tuple2(p.toProtoPrimitive, updateConfig(b, n))
+                }).asJava
+            )
+          )
+        )
+
+      "reject a grant when the provider already has a right" in {
+        val cid = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(featuredAppRight(providerParty(1), contractId = cid))(
+            store.multiDomainAcsStore
+          )
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(1), Seq(userParty(1))),
+            store,
+          )
+        } yield result shouldBe Left(s"parties already in use: ${providerParty(1)} (on right $cid)")
+      }
+
+      "accept a clean grant with no conflicts" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(2), Seq(userParty(5))),
+            store,
+          )
+        } yield result shouldBe Right(())
+      }
+
+      "reject a grant whose opsParties are already in use by another right" in {
+        val cid = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(2), Seq(userParty(1))),
+            store,
+          )
+        } yield result shouldBe Left(s"parties already in use: ${userParty(1)} (on right $cid)")
+      }
+
+      // a proposed opsParty equals another right's provider
+      "reject a grant whose opsParty is another right's provider" in {
+        val cid = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(featuredAppRight(providerParty(1), contractId = cid))(
+            store.multiDomainAcsStore
+          )
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(2), Seq(providerParty(1))),
+            store,
+          )
+        } yield result shouldBe Left(s"parties already in use: ${providerParty(1)} (on right $cid)")
+      }
+
+      // the proposed provider equals another right's opsParty
+      "reject a grant whose provider is another right's opsParty" in {
+        val cid = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), contractId = cid, opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(userParty(1), Seq(userParty(5))),
+            store,
+          )
+        } yield result shouldBe Left(s"parties already in use: ${userParty(1)} (on right $cid)")
+      }
+
+      "reject a grant with duplicate opsParties in the request" in {
+        for {
+          store <- mkStore()
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(2), Seq(userParty(1), userParty(1))),
+            store,
+          )
+        } yield result shouldBe Left(
+          s"duplicate exist in opsParties, in the config update request for provider: ${providerParty(2)}"
+        )
+      }
+
+      "reject a grant where the provider is its own opsParty" in {
+        for {
+          store <- mkStore()
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            grantAction(providerParty(2), Seq(providerParty(2))),
+            store,
+          )
+        } yield result shouldBe Left(
+          s"provider specified in opsParties, in the config update request for provider: ${providerParty(2)}"
+        )
+      }
+
+      "reject an amend when no right exists for the provider" in {
+        for {
+          store <- mkStore()
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            amendAction(providerParty(9), Seq.empty, Seq(userParty(1))),
+            store,
+          )
+        } yield result shouldBe Left(
+          s"no FeaturedAppRight found for provider: ${providerParty(9).toProtoPrimitive}"
+        )
+      }
+
+      "reject an amend whose changed opsParties conflict with another right" in {
+        val cid2 = nextCid()
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(2), contractId = cid2, opsParties = ops(userParty(2)))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            amendAction(providerParty(1), Seq(userParty(1)), Seq(userParty(2))),
+            store,
+          )
+        } yield result shouldBe Left(s"parties already in use: ${userParty(2)} (on right $cid2)")
+      }
+
+      "accept an amend that keeps the current opsParties (new == base)" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            amendAction(providerParty(1), Seq(userParty(1)), Seq(userParty(1))),
+            store,
+          )
+        } yield result shouldBe Right(())
+      }
+
+      "reject an amend whose additional updates conflict with another right" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(2), opsParties = ops(userParty(2)))
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(3), opsParties = ops(userParty(3)))
+          )(store.multiDomainAcsStore)
+          // primary (provider1) keeps [u1]; the additional update moves provider2 to [u3],
+          // which collides with provider3's existing [u3].
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            amendActionMulti(
+              (providerParty(1), Seq(userParty(1)), Seq(userParty(1))),
+              Seq((providerParty(2), Seq(userParty(2)), Seq(userParty(3)))),
+            ),
+            store,
+          )
+        } yield result.isLeft shouldBe true
+      }
+
+      "accept an amend whose primary and additional updates are all conflict-free" in {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(1), opsParties = ops(userParty(1)))
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            featuredAppRight(providerParty(2), opsParties = ops(userParty(2)))
+          )(store.multiDomainAcsStore)
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            amendActionMulti(
+              (providerParty(1), Seq(userParty(1)), Seq(userParty(1))),
+              Seq((providerParty(2), Seq(userParty(2)), Seq(userParty(2)))),
+            ),
+            store,
+          )
+        } yield result shouldBe Right(())
+      }
+
+      "accept a non-featured-app action" in {
+        for {
+          store <- mkStore()
+          result <- FeaturedAppRightValidator.validateFeaturedAppRightAction(
+            removeUserAction,
+            store,
+          )
+        } yield result shouldBe Right(())
+      }
+    }
+
+    "resolveOps" should {
+      "keep the current parties when new == base" in {
+        Future.successful(
+          FeaturedAppRightValidator.resolveOps(
+            baseParties = Seq(userParty(1)),
+            currentParties = Seq(userParty(1), userParty(2)),
+            proposedParties = Seq(userParty(1)),
+          ) shouldBe Seq(userParty(1), userParty(2))
+        )
+      }
+
+      "use the proposed parties when new != base" in {
+        Future.successful(
+          FeaturedAppRightValidator.resolveOps(
+            baseParties = Seq(userParty(1)),
+            currentParties = Seq(userParty(1)),
+            proposedParties = Seq(userParty(2)),
+          ) shouldBe Seq(userParty(2))
+        )
+      }
+
+      "treat None and empty as equal, keeping current" in {
+        Future.successful(
+          FeaturedAppRightValidator.resolveOps(
+            baseParties = Seq.empty,
+            currentParties = Seq(userParty(1)),
+            proposedParties = Seq.empty,
+          ) shouldBe Seq(userParty(1))
+        )
+      }
+    }
 
     "getOpenMiningRoundTriple" should {
 
@@ -2696,13 +3084,14 @@ class DbSvDsoStoreTest
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         domainMigrationId,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("SvDsoStoreTest"),
         IngestionConfig(),
         defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       )(parallelExecutionContext, implicitly, implicitly, implicitly)
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
       _ <- store.multiDomainAcsStore.testIngestionSink
-        .ingestAcs(acsOffset, Seq.empty, Seq.empty, Seq.empty)
+        .ingestAcs(acsOffset, Seq.empty)
       _ <- store.domains.ingestionSink.ingestConnectedDomains(
         Map(SynchronizerAlias.tryCreate(domain) -> dummyDomain)
       )
@@ -2863,6 +3252,137 @@ class DbSvDsoStoreTest
       }
     }
 
+  }
+
+  private def featuredAppConfigUpdateInstruction(
+      provider: PartyId,
+      expiresAt: Instant,
+      dso: PartyId = dsoParty,
+      contractId: String = nextCid(),
+  ): Contract[
+    splice.dso.instruction.FeaturedAppConfigUpdateInstruction.ContractId,
+    splice.dso.instruction.FeaturedAppConfigUpdateInstruction,
+  ] = {
+    val emptyConfig = new splice.amulet.FeaturedAppConfig(
+      Optional.empty(),
+      Optional.empty(),
+      Optional.empty(),
+    )
+    contract(
+      identifier =
+        splice.dso.instruction.FeaturedAppConfigUpdateInstruction.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId =
+        new splice.dso.instruction.FeaturedAppConfigUpdateInstruction.ContractId(contractId),
+      payload = new splice.dso.instruction.FeaturedAppConfigUpdateInstruction(
+        dso.toProtoPrimitive,
+        provider.toProtoPrimitive,
+        new splice.amulet.FeaturedAppRight_UpdateConfig(emptyConfig, emptyConfig),
+        expiresAt,
+      ),
+    )
+  }
+
+  "listExpiredFeaturedAppConfigUpdateInstruction" should {
+
+    "return all expired instructions, whether or not their provider has a FeaturedAppRight, and exclude those of another DSO" in {
+      val unfeaturedProvider = userParty(1)
+      val featuredProvider = userParty(2)
+      val unfeaturedInstruction =
+        featuredAppConfigUpdateInstruction(unfeaturedProvider, time(2).toInstant)
+      // Expiry is unconditional: having a right must not keep an instruction alive.
+      val featuredInstruction =
+        featuredAppConfigUpdateInstruction(featuredProvider, time(2).toInstant)
+      // The 'dso' party differs from mkStore()'s, so this is never ingested and must not show up.
+      val otherDsoInstruction =
+        featuredAppConfigUpdateInstruction(
+          unfeaturedProvider,
+          time(2).toInstant,
+          dso = userParty(4),
+        )
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(featuredAppRight(featuredProvider))(store.multiDomainAcsStore)
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(
+            unfeaturedInstruction,
+            featuredInstruction,
+            otherDsoInstruction,
+          )
+        )(dummyDomain.create(_)(store.multiDomainAcsStore))
+      } yield {
+        def cidsAt(t: CantonTimestamp) = store
+          .listExpiredFeaturedAppConfigUpdateInstruction(t, PageLimit.tryCreate(10))(
+            TraceContext.empty
+          )
+          .futureValue
+          .map(_.contract.contractId)
+
+        // 'contract_expires_at < now' is strict: an instruction is not expired at its own expiresAt.
+        cidsAt(time(2)) should be(empty)
+        cidsAt(time(3)) should contain theSameElementsAs Seq(
+          unfeaturedInstruction.contractId,
+          featuredInstruction.contractId,
+        )
+      }
+    }
+  }
+
+  "listFeaturedAppConfigUpdateInstructionSample" should {
+
+    "return only instructions whose provider has a FeaturedAppRight, paired with that right" in {
+      val featuredProvider = userParty(1)
+      val unfeaturedProvider = userParty(2)
+      val doublyFeaturedProvider = userParty(3)
+      val featuredRight = featuredAppRight(featuredProvider)
+      // Two rights for one provider: the instruction must still be returned only once.
+      val doubleRights = Seq(
+        featuredAppRight(doublyFeaturedProvider),
+        featuredAppRight(doublyFeaturedProvider),
+      )
+      val featuredInstruction =
+        featuredAppConfigUpdateInstruction(featuredProvider, time(2).toInstant)
+      val unfeaturedInstruction =
+        featuredAppConfigUpdateInstruction(unfeaturedProvider, time(2).toInstant)
+      val doublyFeaturedInstruction =
+        featuredAppConfigUpdateInstruction(doublyFeaturedProvider, time(2).toInstant)
+      // The 'dso' party differs from mkStore()'s, so this is never ingested and must not show up.
+      val otherDsoInstruction =
+        featuredAppConfigUpdateInstruction(
+          featuredProvider,
+          time(2).toInstant,
+          dso = userParty(4),
+        )
+      for {
+        store <- mkStore()
+        _ <- MonadUtil.sequentialTraverse(featuredRight +: doubleRights)(
+          dummyDomain.create(_)(store.multiDomainAcsStore)
+        )
+        _ <- MonadUtil.sequentialTraverse(
+          Seq(
+            featuredInstruction,
+            unfeaturedInstruction,
+            doublyFeaturedInstruction,
+            otherDsoInstruction,
+          )
+        )(dummyDomain.create(_)(store.multiDomainAcsStore))
+        result <- store.listFeaturedAppConfigUpdateInstructionSample(PageLimit.tryCreate(10))(
+          TraceContext.empty
+        )
+      } yield {
+        val byInstruction: Seq[(String, String)] =
+          result.map(r => r.instruction.contractId.contractId -> r.featuredAppRightCid.contractId)
+        byInstruction.map(_._1) should contain theSameElementsAs Seq(
+          featuredInstruction.contractId.contractId,
+          doublyFeaturedInstruction.contractId.contractId,
+        )
+        byInstruction.toMap.get(featuredInstruction.contractId.contractId) shouldBe Some(
+          featuredRight.contractId.contractId
+        )
+        doubleRights.map(_.contractId.contractId) should contain(
+          byInstruction.toMap.apply(doublyFeaturedInstruction.contractId.contractId)
+        )
+      }
+    }
   }
 
   "listVoteRequestsReadyToBeClosed" should {

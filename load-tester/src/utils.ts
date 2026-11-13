@@ -5,7 +5,9 @@ import { randomIntBetween, randomItem } from 'https://jslib.k6.io/k6-utils/1.4.0
 import { sleep } from 'k6';
 import { z } from 'zod';
 
+import { FeaturedAppRightSpec } from './client/validator/models';
 import { ValidatorClient } from './client/validator/validator';
+import settings from './settings';
 import { ValidatorConf } from './test/generate-load';
 
 export function jsonStringDecoder<Z extends z.ZodTypeAny = z.ZodNever>(
@@ -56,8 +58,8 @@ export function pickTwoRandomUsers(validators: ValidatorConf[]): {
     const senderToken = validator1.userTokens[senderIndex];
     const recipientToken = validator2.userTokens[recipientIndex];
 
-    const senderFeatured = validator1.userFeatured[senderIndex];
-    const recipientFeatured = validator2.userFeatured[recipientIndex];
+    const senderFeatured = featuredAppRightSpec(validator1, senderIndex);
+    const recipientFeatured = featuredAppRightSpec(validator2, recipientIndex);
 
     const adminClient = new ValidatorClient(
       validator1.walletBaseUrl,
@@ -74,7 +76,7 @@ export function pickTwoRandomUsers(validators: ValidatorConf[]): {
     return { adminClient, senderClient, recipientClient };
   } else {
     const validatorConf: ValidatorConf = validators[0];
-    const { adminToken, walletBaseUrl, userTokens, userFeatured } = validatorConf;
+    const { adminToken, walletBaseUrl, userTokens } = validatorConf;
 
     // Pick two random users from that validator
     const [senderIndex, recipientIndex] = pickTwoRandom(userTokens.length);
@@ -82,8 +84,8 @@ export function pickTwoRandomUsers(validators: ValidatorConf[]): {
     const senderToken = userTokens[senderIndex];
     const recipientToken = userTokens[recipientIndex];
 
-    const senderFeatured = userFeatured[senderIndex];
-    const recipientFeatured = userFeatured[recipientIndex];
+    const senderFeatured = featuredAppRightSpec(validatorConf, senderIndex);
+    const recipientFeatured = featuredAppRightSpec(validatorConf, recipientIndex);
 
     const adminClient = new ValidatorClient(walletBaseUrl, adminToken, undefined);
     const senderClient = new ValidatorClient(walletBaseUrl, senderToken, senderFeatured);
@@ -91,6 +93,89 @@ export function pickTwoRandomUsers(validators: ValidatorConf[]): {
 
     return { adminClient, senderClient, recipientClient };
   }
+}
+
+// Setting any field of a self-granted featured app right requires splice-wallet >= 0.1.26
+const minWalletVersionForFeaturedAppConfig = [0, 1, 26];
+const walletVersionCacheMs = 10 * 60 * 1000;
+// Per walletBaseUrl, cached per VU
+const featuredAppConfigSupportCache: Map<string, { supported: boolean; checkedAt: number }> =
+  new Map();
+
+function isVersionAtLeast(version: string, minVersion: number[]): boolean {
+  const parts = version.split('.').map(Number);
+  for (let i = 0; i < minVersion.length; i++) {
+    const part = parts[i] ?? 0;
+    if (Number.isNaN(part)) {
+      console.warn(`Cannot parse package version ${version}`);
+      return false;
+    }
+    if (part !== minVersion[i]) {
+      return part > minVersion[i];
+    }
+  }
+  return true;
+}
+
+// Whether the network's voted splice-wallet version supports configuring featured app rights.
+// Returns undefined if that can't be determined right now.
+function supportsFeaturedAppConfig(validator: ValidatorConf): boolean | undefined {
+  const cached = featuredAppConfigSupportCache.get(validator.walletBaseUrl);
+  if (cached && Date.now() - cached.checkedAt < walletVersionCacheMs) {
+    return cached.supported;
+  }
+  const walletVersion = new ValidatorClient(
+    validator.walletBaseUrl,
+    validator.adminToken,
+    undefined,
+  ).v0.scanProxy.getAmuletRules()?.amulet_rules.contract.payload.configSchedule.initialValue
+    .packageConfig.wallet;
+  if (walletVersion === undefined) {
+    return undefined;
+  }
+  const supported = isVersionAtLeast(walletVersion, minWalletVersionForFeaturedAppConfig);
+  if (!supported) {
+    console.log(
+      `splice-wallet ${walletVersion} doesn't support configuring featured app rights, falling back to default rights`,
+    );
+  }
+  featuredAppConfigSupportCache.set(validator.walletBaseUrl, { supported, checkedAt: Date.now() });
+  return supported;
+}
+
+// The wanted featured app status of the given user, see ValidatorClient.featured.
+// Configured rights fall back to a default (basic) right on networks that don't support
+// configuring them. Returns undefined (don't touch the featured app status) if that can't be
+// determined, or if an ops party can't be resolved yet because that user hasn't been onboarded.
+function featuredAppRightSpec(
+  validator: ValidatorConf,
+  userIndex: number,
+): FeaturedAppRightSpec | false | undefined {
+  const config = settings.featuredAppRights[userIndex];
+  if (config === undefined) {
+    return false;
+  }
+  const { kind, weight, parties } = config;
+  if (kind === undefined && weight === undefined && parties === undefined) {
+    return {};
+  }
+  const supported = supportsFeaturedAppConfig(validator);
+  if (supported === undefined) {
+    return undefined;
+  } else if (!supported) {
+    return {};
+  }
+  if (parties === undefined) {
+    return { kind, weight };
+  }
+  const opsParties = parties.map(i =>
+    new ValidatorClient(validator.walletBaseUrl, validator.userTokens[i], undefined).partyId(),
+  );
+  if (opsParties.some(p => !p)) {
+    console.log(`Not all ops parties of user ${userIndex} are onboarded yet`);
+    return undefined;
+  }
+  return { kind, weight, opsParties: opsParties as string[] };
 }
 
 export function syncRetryUntil<A>(

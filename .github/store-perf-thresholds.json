@@ -19,6 +19,16 @@
       "max": 600000000000
     }
   },
+  "VerdictStoreIngestionPerformanceTest": {
+    "_comment_avg_item_time_ns": "newly added test with no 30d history yet; seeded conservatively from the initial test runs on 2026-Nov-11. Need to recalculate as median*(1+ noise_margin + safety_margin) of last 30d once data is collected.",
+    "splice_perf_ingestion_avg_item_time_ns": {
+      "max": 13000000
+    },
+    "_comment_total_time_ns": "our hard max is 1h, but we set it to 10m to detect the trends earlier",
+    "splice_perf_ingestion_total_time_ns": {
+      "max": 600000000000
+    }
+  },
   "UpdateHistoryIngestionPerformanceTest": {
     "_comment_avg_item_time_ns": "median*(1+ noise_margin + safety_margin) of last 30d. noise_margin=(p95-median)/median, safety_margin=10%. calculated on 2026-Oct-20",
     "splice_perf_ingestion_avg_item_time_ns": {
@@ -47,6 +57,16 @@
     "_comment_total_time_ns": "hard max same as avg_item_time_ns, as we read 1 item",
     "splice_perf_read_total_time_ns": {
       "max": 441300000
+    }
+  },
+  "UpdateHistoryReadPerformanceTest-serializeJson": {
+    "_comment_avg_item_time_ns": "newly added test with no 30d history yet; seeded conservatively from the initial test runs on 2026-Nov-11. Need to recalculate as median*(1+ noise_margin + safety_margin) of last 30d once data is collected.",
+    "splice_perf_read_avg_item_time_ns": {
+      "max": 426000000
+    },
+    "_comment_total_time_ns": "hard max same as avg_item_time_ns, as we read 1 item",
+    "splice_perf_read_total_time_ns": {
+      "max": 426000000
     }
   }
 }

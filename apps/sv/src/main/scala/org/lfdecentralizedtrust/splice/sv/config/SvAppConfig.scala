@@ -134,9 +134,7 @@ object SvOnboardingConfig {
       // dry-run) via a config transform in ConfigTransforms.defaults().
       initialRewardConfig: Option[InitialRewardConfig] = Some(InitialRewardConfig()),
       initialSvOperationsSwitchOverTimes: Option[Map[String, CantonTimestamp]] = Some(
-        Map(
-          SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
-        )
+        SwitchOverTimes.defaultSvOperationsSwitchOverTimes
       ),
       initialProtocolVersion: ProtocolVersion = ProtocolVersion.v37,
       initialGovernanceLockConfig: Option[InitialGovernanceLockConfig] = None,
@@ -271,6 +269,9 @@ final case class InitialRewardConfig(
     batchSize: Long = 100,
     rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
     appRewardCouponThreshold: BigDecimal = BigDecimal("0.5"),
+    extraFeaturedAssetActivityWeight: Option[BigDecimal] = None,
+    maxExtraFeaturedAssetActivityWeightPerAsset: Option[BigDecimal] = None,
+    dsoAppActivityWeight: Option[BigDecimal] = None,
 ) {
   def toRewardConfig: splice.amuletconfig.RewardConfig = {
     def parseVersion(s: String): splice.amuletconfig.RewardVersion = s match {
@@ -280,6 +281,8 @@ final case class InitialRewardConfig(
         splice.amuletconfig.RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
       case other => throw new IllegalArgumentException(s"Unknown RewardVersion: $other")
     }
+    def opt(v: Option[BigDecimal]): java.util.Optional[java.math.BigDecimal] =
+      v.map(_.bigDecimal).toJava
     new splice.amuletconfig.RewardConfig(
       parseVersion(mintingVersion),
       dryRunVersion
@@ -290,10 +293,9 @@ final case class InitialRewardConfig(
         rewardCouponTimeToLiveMicros
       ),
       appRewardCouponThreshold.bigDecimal,
-      // TODO(#7837): allow setting these fields
-      java.util.Optional.empty(),
-      java.util.Optional.empty(),
-      java.util.Optional.empty(),
+      opt(extraFeaturedAssetActivityWeight),
+      opt(maxExtraFeaturedAssetActivityWeightPerAsset),
+      opt(dsoAppActivityWeight),
     )
   }
 }
@@ -566,6 +568,7 @@ case class SvAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
+    onboardingSnapshots: SvOnboardingSnapshotsConfig,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
@@ -611,26 +614,6 @@ object SvAppBackendConfig {
 
 }
 
-case class SvCometBftConfig(
-    enabled: Boolean = false,
-    connectionUri: String = "",
-    // `None` means that we will be abusing the SV participant for generating and storing that key
-    // (which doesn't work if the participant uses an external KMS).
-    governanceKey: Option[CometBftGovernanceKey] = None,
-)
-
-case class CometBftGovernanceKey(
-    // both base64 encoded
-    publicKey: String,
-    privateKey: String,
-)
-object CometBftGovernanceKey {
-  def hideConfidential(config: CometBftGovernanceKey): CometBftGovernanceKey = {
-    val hidden = "****"
-    config.copy(privateKey = hidden)
-  }
-}
-
 // Removes unnecessary data from the Sequencer that is earlier than the configured retention period
 final case class SequencerPruningConfig(
     // this defines how frequent the prune command is being called to the sequencer
@@ -658,6 +641,7 @@ final case class SvSequencerConfig(
     // TODO (#845): consider reading config value from participant instead of configuring here
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
+    // TODO (#8263): remove once DA BFT is the only supported sequencer
     isCantonBftSequencer: Boolean = false,
     cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
@@ -705,7 +689,6 @@ final case class SvScanConfig(
 final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
-    cometBftConfig: Option[SvCometBftConfig] = None,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration =
@@ -780,4 +763,11 @@ final case class UnavailablePartiesBackoffParameters(
     baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
     // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
     maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
+)
+
+final case class SvOnboardingSnapshotsConfig(
+    directory: Path,
+    retention: PositiveFiniteDuration = PositiveFiniteDuration.ofHours(24),
+    parallelism: PositiveInt = PositiveInt.one,
+    queueSize: PositiveInt = PositiveInt.tryCreate(4),
 )

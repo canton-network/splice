@@ -26,7 +26,6 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.Topol
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.{
   InMemoryUnavailablePartiesStore,
@@ -40,7 +39,6 @@ import org.lfdecentralizedtrust.splice.store.db.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
-import org.lfdecentralizedtrust.splice.sv.cometbft.{CometBftNode, CometBftRequestSigner}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
   FoundDso,
   JoinWithKey,
@@ -51,7 +49,6 @@ import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.util.{DsoInfo, TemplateJsonDecoder}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.jdk.CollectionConverters.*
 
 trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNodeConfigClient {
 
@@ -86,6 +83,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected def newSvStore(
       key: SvStore.Key,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
@@ -99,6 +97,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     loggerFactory,
     retryProvider,
     migrationId,
+    synchronizerId,
     participantId,
     config.automation.ingestion,
     config.parameters.defaultLimit,
@@ -138,6 +137,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
   protected def newDsoStore(
       key: SvStore.Key,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       acsStoreDescriptorUserVersion: Option[Long],
   )(implicit
@@ -152,6 +152,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       config.automation.ingestion,
       config.parameters.defaultLimit,
@@ -236,63 +237,6 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     retryProvider,
     loggerFactory,
   )
-
-  protected def ensureCometBftGovernanceKeysAreSet(
-      cometBftNode: Option[CometBftNode],
-      svParty: PartyId,
-      dsoStore: SvDsoStore,
-      dsoAutomation: SvDsoAutomationService,
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
-    cometBftNode match {
-      case Some(cometBftNode) =>
-        for {
-          _ <- retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "updated_node_config_dso_state",
-            "Governance keys are updated in the dso state",
-            for {
-              (rulesAndState, synchronizerNodeConfig) <- getCometBftNodeConfigDsoState(
-                dsoStore,
-                svParty,
-              ).getOrElse(throw new RuntimeException("No DSO rules with SV node state found"))
-              governanceKeysPubKey = synchronizerNodeConfig match {
-                case Some(synchronizerNodeConfig) =>
-                  synchronizerNodeConfig.cometBft.governanceKeys.asScala.map(_.pubKey).toSeq
-                case None => Seq.empty
-              }
-              genesisKeysPubKey = CometBftRequestSigner.genesisSigner.publicKeyBase64
-              governanceKeyNotUpdatedInDsoState = governanceKeysPubKey.contains(
-                genesisKeysPubKey
-              )
-              _ = if (governanceKeyNotUpdatedInDsoState) {
-                for {
-                  localSvNodeConfig <- cometBftNode.getLocalNodeConfig()
-                  newSvNodeConfig = getNewSynchronizerNodeConfig(
-                    synchronizerNodeConfig,
-                    localSvNodeConfig,
-                  )
-                  _ <- updateSynchronizerNodeConfig(
-                    rulesAndState,
-                    newSvNodeConfig,
-                    dsoStore,
-                    dsoAutomation.connection(SpliceLedgerConnectionPriority.High),
-                  )
-                } yield ()
-              }
-            } yield {
-              if (governanceKeyNotUpdatedInDsoState)
-                throw Status.FAILED_PRECONDITION
-                  .withDescription(
-                    "New governance keys is not in the dso state"
-                  )
-                  .asRuntimeException()
-            },
-            logger,
-          )
-        } yield ()
-      case None => Future.unit
-    }
-  }
 
   protected def isOnboardedInDsoRules(
       svcStore: SvDsoStore

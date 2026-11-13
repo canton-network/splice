@@ -9,7 +9,7 @@ import com.digitalasset.canton.logging.TracedLogger
 import org.lfdecentralizedtrust.splice.automation.TriggerContext
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
+  AcsSnapshotInfo,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
 }
@@ -79,7 +79,7 @@ object AcsSnapshotTrigger {
       mayStart: (Long) => Future[Boolean],
       getLastIngestedRecordTime: (Long) => Option[CantonTimestamp],
       getIncrementalSnapshot: () => Future[Option[IncrementalAcsSnapshot]],
-      getLatestSnapshot: (Long) => Future[Option[AcsSnapshot]],
+      getLatestSnapshot: (Long) => Future[Option[AcsSnapshotInfo]],
       getMinRecordTime: (Long) => Future[Option[CantonTimestamp]],
       storageConfig: ScanStorageConfig,
       updateInterval: java.time.Duration,

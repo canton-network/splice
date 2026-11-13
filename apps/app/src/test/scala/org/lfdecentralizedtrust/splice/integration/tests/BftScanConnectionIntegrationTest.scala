@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.GetTransfer
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.GetChoiceContextRequest
 import org.slf4j.event.Level
 
+import scala.concurrent.duration.*
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -94,8 +95,15 @@ class BftScanConnectionIntegrationTest
       ),
     )
 
-    eventuallySucceeds() {
-      aliceAnsExternalClient.listAnsEntries()
+    // aliceValidator keeps retrying the stopped sv2Scan every 60 s, so stop it while the
+    // resulting warnings are still suppressed instead of leaving that to the teardown. The wallet
+    // of the onboarded user may not be usable immediately, so retry the call inside the same
+    // suppression (disabling suppressErrors of eventuallySucceeds to avoid nesting).
+    loggerFactory.suppressWarningsAndErrors {
+      eventuallySucceeds(suppressErrors = false) {
+        aliceAnsExternalClient.listAnsEntries()
+      }
+      aliceValidatorBackend.stop()
     }
   }
 
@@ -240,7 +248,7 @@ class BftScanConnectionIntegrationTest
     )
 
     withClue("Alice's validator should be able to onboard a user after establishing connections.") {
-      eventuallySucceeds() {
+      eventuallySucceeds(timeUntilSuccess = 2.minutes) {
         aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
       }
     }

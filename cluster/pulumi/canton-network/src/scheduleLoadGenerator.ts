@@ -85,7 +85,10 @@ export function scheduleLoadGenerator(auth0Client: Auth0Client, dependencies: Re
         config: JSON.stringify({
           isDevNet,
           usersPerValidator: loadTesterConfig.usersPerValidator,
-          featuredUsersPerValidator: loadTesterConfig.featuredUsersPerValidator,
+          featuredAppRights: loadTesterConfig.featuredAppRights,
+          // Ignored by the load tester, which uses featuredAppRights instead.
+          // Only passed for load tester images that predate featuredAppRights.
+          featuredUsersPerValidator: loadTesterConfig.featuredAppRights.length,
           validators,
           test: {
             duration: `365d`,
