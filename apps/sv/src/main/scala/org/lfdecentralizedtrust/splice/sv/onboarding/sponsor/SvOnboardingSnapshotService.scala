@@ -101,13 +101,9 @@ class SvOnboardingSnapshotService(
             else if (!Files.isRegularFile(file) || Files.size(file) != persisted.size)
               Stored.Unusable("Snapshot file size has changed")
             else
-              persisted.sha256Base64 match {
-                case None => Stored.Unusable("Snapshot has no SHA-256 digest")
-                case Some(encoded) =>
-                  SvOnboardingSnapshotSha256.canonicalBase64(encoded) match {
-                    case Some(sha256Base64) => Stored.Finished(persisted.key, file, sha256Base64)
-                    case None => Stored.Unusable("Snapshot has an invalid SHA-256 digest")
-                  }
+              SvOnboardingSnapshotSha256.canonicalBase64(persisted.sha256Base64) match {
+                case Some(sha256Base64) => Stored.Finished(persisted.key, file, sha256Base64)
+                case None => Stored.Unusable("Snapshot has an invalid SHA-256 digest")
               }
           Some(Snapshot(timestamp(persisted.createdAt), stored))
         } else None
@@ -337,7 +333,7 @@ class SvOnboardingSnapshotService(
                       job.key,
                       clock.now.toInstant.toString,
                       Files.size(queued.file),
-                      Some(sha256Base64),
+                      sha256Base64,
                     )
                     writeAtomically(queued.file.getParent, "metadata", metadata.asJson.noSpaces)
                   }
@@ -430,7 +426,7 @@ object SvOnboardingSnapshotService {
       key: SnapshotKey,
       createdAt: String,
       size: Long,
-      sha256Base64: Option[String],
+      sha256Base64: String,
   )
   private implicit val encoder: Encoder[PersistedSnapshot] = deriveEncoder
   private implicit val decoder: Decoder[PersistedSnapshot] = deriveDecoder

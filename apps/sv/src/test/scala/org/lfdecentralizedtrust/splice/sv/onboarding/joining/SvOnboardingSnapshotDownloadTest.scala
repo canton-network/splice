@@ -74,6 +74,22 @@ class SvOnboardingSnapshotDownloadTest
       reprDigest,
     )
 
+  private def corruptFull =
+    OnboardSvDownloadResponse.OK(
+      HttpEntity(ContentTypes.`application/octet-stream`, content),
+      reprDigestOf("other".getBytes),
+    )
+
+  private def corruptTail =
+    OnboardSvDownloadResponse.PartialContent(
+      HttpEntity(
+        ContentTypes.`application/octet-stream`,
+        Array.fill(content.length - 4)('x'.toByte),
+      ),
+      Some(ContentRange(4L, content.length - 1L, content.length.toLong)),
+      digest,
+    )
+
   private class Interrupted(bytes: Int) {
     private val cut = Promise[ByteString]()
     private val data = Source.single(ByteString(content.take(bytes))) ++ Source.future(cut.future)
@@ -513,20 +529,56 @@ class SvOnboardingSnapshotDownloadTest
       }
     }
 
-    "discard a full download whose bytes do not match its digest" in withDownload {
+    "stop without retrying when a full download does not match its digest" in withDownload {
       snapshotDownload =>
-        val id = SvOnboardingSnapshotId("id")
-        val corrupt = OnboardSvDownloadResponse.OK(
-          HttpEntity(ContentTypes.`application/octet-stream`, content),
-          reprDigestOf("other".getBytes),
+        val sponsor = new UnreliableSponsor(Right(corruptFull), Right(full()))
+        downloadWithRetries(
+          snapshotDownload,
+          "id",
+          sponsor,
+        ).failed.futureValue.getMessage should include(
+          "after a full download"
         )
-        val sponsor = new Sponsor(corrupt, full())
-        failsUnavailable(snapshotDownload.download(id, sponsor.download))
         Files.exists(snapshotDownload.directory.resolve("snapshot")) shouldBe false
+        sponsor.requests shouldBe Seq("id" -> 0L)
+    }
+
+    "download again from the start when a resumed download does not match its digest" in withDownload {
+      snapshotDownload =>
+        val interrupted = new Interrupted(4)
+        interrupted.after(
+          snapshotDownload,
+          snapshotDownload.download(
+            SvOnboardingSnapshotId("id"),
+            new Sponsor(interrupted.response).download,
+          ),
+        )
+        val sponsor = new UnreliableSponsor(Right(corruptTail), Right(full()))
         Files.readAllBytes(
-          snapshotDownload.download(id, sponsor.download).futureValue
+          downloadWithRetries(snapshotDownload, "id", sponsor).futureValue
         ) shouldBe content
-        sponsor.requests shouldBe Seq("id" -> 0L, "id" -> 0L)
+        sponsor.requests shouldBe Seq("id" -> 4L, "id" -> 0L)
+    }
+
+    "stop when the download from the start also does not match its digest" in withDownload {
+      snapshotDownload =>
+        val interrupted = new Interrupted(4)
+        interrupted.after(
+          snapshotDownload,
+          snapshotDownload.download(
+            SvOnboardingSnapshotId("id"),
+            new Sponsor(interrupted.response).download,
+          ),
+        )
+        val sponsor = new UnreliableSponsor(Right(corruptTail), Right(corruptFull), Right(full()))
+        downloadWithRetries(
+          snapshotDownload,
+          "id",
+          sponsor,
+        ).failed.futureValue.getMessage should include(
+          "after a full download"
+        )
+        sponsor.requests shouldBe Seq("id" -> 4L, "id" -> 0L)
     }
 
     "accept an unpadded digest and a digest listed with other algorithms" in withDownload {
@@ -669,8 +721,12 @@ class SvOnboardingSnapshotDownloadTest
         val metadata = first.directory.resolve("metadata.json")
         Seq(
           "not json",
-          """{"id":"id","createdAt":"1970-01-01T00:00:00Z","size":10}""",
-          s"""{"id":"id","createdAt":"${Instant.now()}","sha256Base64":"not-base64!","length":10}""",
+          s"""{"id":"id","createdAt":"1970-01-01T00:00:00Z","state":{"Complete":{"sha256Base64":"${Base64.getEncoder
+              .encodeToString(
+                MessageDigest.getInstance("SHA-256").digest(content)
+              )}","size":10}}}""",
+          s"""{"id":"id","createdAt":"${Instant
+              .now()}","state":{"Receiving":{"sha256Base64":"not-base64!","length":10}}}""",
         ).foreach { invalid =>
           Files.writeString(metadata, invalid)
           val sponsor = new Sponsor(full())

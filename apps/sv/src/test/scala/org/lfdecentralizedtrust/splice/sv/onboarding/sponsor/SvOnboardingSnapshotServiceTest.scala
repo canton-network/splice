@@ -639,22 +639,10 @@ class SvOnboardingSnapshotServiceTest
         }
     }
 
-    "export ACS and sequencer snapshots stored without a valid digest again" in File
+    "export snapshots stored with an invalid digest again" in File
       .usingTemporaryDirectory() { directory =>
         withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
-          val sequencer = sequencerKey("seq1")
-          val noDigest = "Snapshot has no SHA-256 digest"
           Seq[(SnapshotKey, String, String)](
-            (
-              key("sv1"),
-              """{"Acs":{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z"}}""",
-              noDigest,
-            ),
-            (
-              sequencer,
-              s"""{"SequencerOnboardingState":{"synchronizerId":"synchronizer::dummy","sequencerId":"${sequencer.sequencerId.toProtoPrimitive}"}}""",
-              noDigest,
-            ),
             (
               key("sv2"),
               s"""{"Acs":{"synchronizerId":"synchronizer::dummy","party":"sv2::dummy","activationTime":"1970-01-01T00:00:00Z"}},"sha256Base64":"${Base64.getEncoder
@@ -687,39 +675,56 @@ class SvOnboardingSnapshotServiceTest
         }
       }
 
-    "ignore ACS metadata written before sequencer snapshots were supported and export again" in File
+    "ignore metadata written in an older format and export again" in File
       .usingTemporaryDirectory() { directory =>
         withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
-          val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
-          val exportDirectory = (directory / "exports" / id.value).createDirectories()
-          (exportDirectory / "snapshot").writeText("snapshot")
-          (exportDirectory / "metadata.json").writeText(
-            s"""{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z","createdAt":"${clock.now.toInstant}","size":8}"""
-          )
-          val exports = new AtomicInteger()
-          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-            {
-              service.lookup(id) shouldBe None
-              val newId = service
-                .prepare(
-                  key("sv1"),
-                  file => {
-                    exports.incrementAndGet()
-                    writeSnapshot(Future.unit)(file)
-                  },
+          val sequencer = sequencerKey("seq1")
+          val createdAt = clock.now.toInstant
+          Seq[(SnapshotKey, String)](
+            (
+              key("sv1"),
+              s"""{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z","createdAt":"$createdAt","size":8}""",
+            ),
+            (
+              key("sv2"),
+              s"""{"key":{"Acs":{"synchronizerId":"synchronizer::dummy","party":"sv2::dummy","activationTime":"1970-01-01T00:00:00Z"}},"createdAt":"$createdAt","size":8}""",
+            ),
+            (
+              sequencer,
+              s"""{"key":{"SequencerOnboardingState":{"synchronizerId":"synchronizer::dummy","sequencerId":"${sequencer.sequencerId.toProtoPrimitive}"}},"createdAt":"$createdAt","size":8}""",
+            ),
+          ).foreach { case (snapshotKey, metadata) =>
+            val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
+            val exportDirectory = (directory / "exports" / id.value).createDirectories()
+            (exportDirectory / "snapshot").writeText("snapshot")
+            (exportDirectory / "metadata.json").writeText(metadata)
+            val exports = new AtomicInteger()
+            loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+              {
+                service.lookup(id) shouldBe None
+                val newId = service
+                  .prepare(
+                    snapshotKey,
+                    file => {
+                      exports.incrementAndGet()
+                      writeSnapshot(Future.unit)(file)
+                    },
+                  )
+                  .futureValue
+                newId should not be id
+                eventually()(service.lookup(newId) should matchPattern {
+                  case Some(SnapshotState.Ready(_, _)) =>
+                })
+              },
+              entries => {
+                entries should not be empty
+                forAll(entries)(
+                  _.warningMessage should include("Cannot recover onboarding snapshot")
                 )
-                .futureValue
-              newId should not be id
-              eventually()(service.lookup(newId) should matchPattern {
-                case Some(SnapshotState.Ready(_, _)) =>
-              })
-            },
-            entries => {
-              entries should not be empty
-              forAll(entries)(_.warningMessage should include("Cannot recover onboarding snapshot"))
-            },
-          )
-          exports.get() shouldBe 1
+              },
+            )
+            exports.get() shouldBe 1
+          }
         }
       }
 

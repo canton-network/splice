@@ -61,9 +61,14 @@ final class SvOnboardingSnapshotDownload private (
     Try {
       val metadata =
         decode[DownloadMetadata](Files.readString(metadataFile)).fold(throw _, identity)
+      val storedSha256Base64 = metadata.state match {
+        case DownloadState.Started => None
+        case DownloadState.Receiving(sha256Base64, _) => Some(sha256Base64)
+        case DownloadState.Complete(sha256Base64, _) => Some(sha256Base64)
+      }
       Option.when(
         metadata.id == id.value &&
-          metadata.sha256Base64.forall(stored =>
+          storedSha256Base64.forall(stored =>
             SvOnboardingSnapshotSha256.canonicalBase64(stored).contains(stored)
           ) &&
           Instant.parse(metadata.createdAt).plus(config.retention.asJava).isAfter(Instant.now())
@@ -75,25 +80,21 @@ final class SvOnboardingSnapshotDownload private (
       downloadFrom: (SvOnboardingSnapshotId, Long) => Future[OnboardSvDownloadResponse],
   )(implicit ec: ExecutionContext, mat: Materializer): Future[Path] =
     Future(blocking {
-      val previous = readMetadata(id)
-      if (
-        previous.exists(metadata =>
-          metadata.size.exists(size => Files.isRegularFile(file) && Files.size(file) == size) &&
-            metadata.sha256Base64.contains(fileSha256Base64())
-        )
-      ) None
-      else
-        previous.filter(metadata =>
-          metadata.size.isEmpty && metadata.sha256Base64.isDefined && Files.isRegularFile(file)
-        ) match {
-          case Some(metadata) => Some(metadata -> Files.size(file))
-          case None =>
-            Files.createDirectories(directory)
-            Files.deleteIfExists(file).discard
-            val metadata = DownloadMetadata(id.value, Instant.now().toString, None, None, None)
-            writeMetadata(metadata)
-            Some(metadata -> 0L)
-        }
+      readMetadata(id) match {
+        case Some(DownloadMetadata(_, _, DownloadState.Complete(sha256Base64, size)))
+            if Files.isRegularFile(file) && Files.size(file) == size &&
+              fileSha256Base64() == sha256Base64 =>
+          None
+        case Some(metadata @ DownloadMetadata(_, _, _: DownloadState.Receiving))
+            if Files.isRegularFile(file) =>
+          Some(metadata -> Files.size(file))
+        case _ =>
+          Files.createDirectories(directory)
+          Files.deleteIfExists(file).discard
+          val metadata = DownloadMetadata(id.value, Instant.now().toString, DownloadState.Started)
+          writeMetadata(metadata)
+          Some(metadata -> 0L)
+      }
     }).flatMap {
       case None => Future.successful(file)
       case Some((previous, offset)) =>
@@ -124,21 +125,20 @@ final class SvOnboardingSnapshotDownload private (
         )
       case OnboardSvDownloadResponse.OK(entity, reprDigest) =>
         withSha256(id, entity, reprDigest) { sha256Base64 =>
-          val metadata =
-            previous.copy(
-              sha256Base64 = Some(sha256Base64),
-              length = entity.contentLengthOption,
-              size = None,
-            )
-          writeAndVerify(entity, metadata, append = false)
+          val receiving = DownloadState.Receiving(sha256Base64, entity.contentLengthOption)
+          writeAndVerify(id, entity, previous, receiving, resumed = false)
         }
       case OnboardSvDownloadResponse.PartialContent(entity, contentRange, reprDigest) =>
         withSha256(id, entity, reprDigest) { sha256Base64 =>
-          contentRange match {
-            case Some(ContentRange.Default(first, _, length))
-                if first == offset && previous.sha256Base64.contains(sha256Base64) &&
-                  previous.length.forall(expected => length.contains(expected)) =>
-              writeAndVerify(entity, previous.copy(length = length), append = true)
+          (previous.state, contentRange) match {
+            case (
+                  DownloadState.Receiving(expectedSha256Base64, expectedLength),
+                  Some(ContentRange.Default(first, _, length)),
+                )
+                if first == offset && expectedSha256Base64 == sha256Base64 &&
+                  expectedLength.forall(expected => length.contains(expected)) =>
+              val receiving = DownloadState.Receiving(sha256Base64, length)
+              writeAndVerify(id, entity, previous, receiving, resumed = true)
             case _ =>
               cancel(entity)
               restart(
@@ -147,8 +147,11 @@ final class SvOnboardingSnapshotDownload private (
           }
         }
       case OnboardSvDownloadResponse.RangeNotSatisfiable =>
-        if (previous.sha256Base64.isDefined && previous.length.contains(offset)) verify(previous)
-        else restart(s"range from offset $offset is not satisfiable")
+        previous.state match {
+          case receiving @ DownloadState.Receiving(_, Some(length)) if length == offset =>
+            verify(id, previous, receiving, resumed = true)
+          case _ => restart(s"range from offset $offset is not satisfiable")
+        }
     }
 
   private def withSha256(
@@ -175,18 +178,23 @@ final class SvOnboardingSnapshotDownload private (
   private def cancel(entity: ResponseEntity)(implicit mat: Materializer): Unit =
     entity.dataBytes.runWith(Sink.cancelled).discard
 
-  private def writeAndVerify(entity: ResponseEntity, metadata: DownloadMetadata, append: Boolean)(
-      implicit
+  private def writeAndVerify(
+      id: SvOnboardingSnapshotId,
+      entity: ResponseEntity,
+      previous: DownloadMetadata,
+      receiving: DownloadState.Receiving,
+      resumed: Boolean,
+  )(implicit
       ec: ExecutionContext,
       mat: Materializer,
   ): Future[Unit] =
-    Future(blocking(writeMetadata(metadata)))
+    Future(blocking(writeMetadata(previous.copy(state = receiving))))
       .recoverWith { case NonFatal(e) =>
         cancel(entity)
         Future.failed(e)
       }
-      .flatMap(_ => write(entity, append))
-      .flatMap(_ => verify(metadata))
+      .flatMap(_ => write(entity, append = resumed))
+      .flatMap(_ => verify(id, previous, receiving, resumed))
 
   private def write(entity: ResponseEntity, append: Boolean)(implicit
       ec: ExecutionContext,
@@ -209,26 +217,35 @@ final class SvOnboardingSnapshotDownload private (
         )
       }
 
-  private def verify(metadata: DownloadMetadata)(implicit ec: ExecutionContext): Future[Unit] =
+  private def verify(
+      id: SvOnboardingSnapshotId,
+      previous: DownloadMetadata,
+      receiving: DownloadState.Receiving,
+      resumed: Boolean,
+  )(implicit ec: ExecutionContext): Future[Unit] =
     Future {
       blocking {
         val size = Files.size(file)
-        metadata.length.filter(_ != size).foreach { expected =>
+        receiving.length.filter(_ != size).foreach { expected =>
           throw Status.UNAVAILABLE
             .withDescription(s"Downloaded $size bytes of onboarding snapshot, expected $expected")
             .asRuntimeException()
         }
         val actual = fileSha256Base64()
-        if (!metadata.sha256Base64.contains(actual)) {
+        if (actual != receiving.sha256Base64) {
           Files.delete(file)
-          throw Status.UNAVAILABLE
-            .withDescription(
-              s"SHA-256 $actual of onboarding snapshot does not match Repr-Digest ${metadata.sha256Base64
-                  .getOrElse("<missing>")}"
+          val mismatch =
+            s"SHA-256 $actual of onboarding snapshot $id does not match Repr-Digest ${receiving.sha256Base64}"
+          if (resumed)
+            throw Status.UNAVAILABLE
+              .withDescription(s"$mismatch after resuming; downloading it again from the start")
+              .asRuntimeException()
+          else
+            throw new RetryProvider.QuietNonRetryableException(
+              s"$mismatch after a full download. Check the sponsor's snapshot and any proxy between the SVs."
             )
-            .asRuntimeException()
         }
-        writeMetadata(metadata.copy(size = Some(size)))
+        writeMetadata(previous.copy(state = DownloadState.Complete(actual, size)))
       }
     }
 
@@ -276,13 +293,22 @@ final class SvOnboardingSnapshotDownload private (
 
 object SvOnboardingSnapshotDownload {
 
-  private final case class DownloadMetadata(
-      id: String,
-      createdAt: String,
-      sha256Base64: Option[String],
-      length: Option[Long],
-      size: Option[Long],
-  )
+  private sealed trait DownloadState
+  private object DownloadState {
+    case object Started extends DownloadState
+    final case class Receiving(sha256Base64: String, length: Option[Long]) extends DownloadState
+    final case class Complete(sha256Base64: String, size: Long) extends DownloadState
+  }
+  private implicit val startedEncoder: Encoder[DownloadState.Started.type] = deriveEncoder
+  private implicit val startedDecoder: Decoder[DownloadState.Started.type] = deriveDecoder
+  private implicit val receivingEncoder: Encoder[DownloadState.Receiving] = deriveEncoder
+  private implicit val receivingDecoder: Decoder[DownloadState.Receiving] = deriveDecoder
+  private implicit val completeEncoder: Encoder[DownloadState.Complete] = deriveEncoder
+  private implicit val completeDecoder: Decoder[DownloadState.Complete] = deriveDecoder
+  private implicit val stateEncoder: Encoder[DownloadState] = deriveEncoder
+  private implicit val stateDecoder: Decoder[DownloadState] = deriveDecoder
+
+  private final case class DownloadMetadata(id: String, createdAt: String, state: DownloadState)
   private implicit val encoder: Encoder[DownloadMetadata] = deriveEncoder
   private implicit val decoder: Decoder[DownloadMetadata] = deriveDecoder
 
