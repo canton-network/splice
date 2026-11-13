@@ -1,5 +1,30 @@
 # CI triage state
 
+## Triage 2026-11-12 to 2026-11-13
+
+stephencompall-DA, explicit lists 11354-11421, plus the 11363 and 11373 packets and the open INDEX and family merges
+of the 2026-11-11 inbox round. Packets in `evidence/`, rows in `evidence/INDEX.tsv`, families AV-BB in
+`known-families.md`; the new 11255 shapes are in family B. Approved comments, retitles and duplicate closes were posted
+by the triager; Status changes stayed with the reviewer. Handover: `HANDOVER-2026-11-13.md`.
+
+`lessons/2026-W46.md` sources: 1 11354; 2 11331 (also 11313, 11333, 11226); 3 11238; 4 11186, 10912; 5 11274;
+6 11363; 7 11187.
+
+Open as of 2026-11-13:
+- 11255: fix PR splice#8363 open (one SV sequencer onboarding at a time in tests). Every post-merge main run from
+  ee0c92e0fd to 09f5cc4b78 (2026-11-13 10:30-16:45) failed a shard of it, rejected-send shape at the 1 -> 4 step on
+  Canton 3.7.3 and 3.7.4-snapshot.20261112. 11395: splice#8356 disables blacklisting only in simtime; wall-clock
+  needs it too.
+- 11418: main python_tests hard broken by #7359; fix PR splice#8486 open; `set_status.py Inbox Triaged 11418` not run.
+- Test fixes proposed, not written: 11373 (AM), 11384 (AX), 11392 (BA), 11404 (H2 variant C, retry the vetting read).
+- 11303 (AK) recurs: 11396, 11419.
+- Canton: 11363 gap (AW) remains after the test mitigation splice#8465.
+- Infra, need owners: 11379 (AY), 11382 (AZ), 11403 (Flux GitRepository never produces an artifact, cause open);
+  backup_status Devnet recurrences 11397, 11417 (parent 11233).
+- Cause open, no fix proposed: 11405 (BB).
+- One-offs still open: 11375 (host slowdown on two shards, Triaged), 11367 (runner network blip; close not
+  planned proposed, not run).
+
 ## Triage 2026-11-09 to 2026-11-10
 
 stephencompall-DA, explicit lists 11287-11345 plus a re-check of older inbox items. Packets in `evidence/`, rows in
@@ -50,7 +75,7 @@ onboarding.
 
 Current round: `rounds/2026-11-11T210621Z-inbox/` (export 2026-11-11 21:05, 24 items).
 Previous: `rounds/2026-11-11T074142Z-inbox/` (export 2026-11-11 07:37, 11 items; g8 11354 not yet presented).
-Handover note for the next agent: `HANDOVER-2026-11-09.md`.
+Handover note for the next triager: `HANDOVER-2026-11-13.md`.
 Previous: `rounds/2026-11-07T155023Z-bft/` (export 2026-11-07 15:47, 29 items).
 Queue and per-item state in its README. Earlier: `rounds/2026-11-03T131520Z/`.
 Previous round `rounds/2026-11-02T153358Z-singles/`: its commands did not run (export 2026-11-03).
@@ -59,11 +84,11 @@ Taken over from the previous triage branch:
 - all packets, now in `evidence/` (index: `evidence/INDEX.tsv`, built from its README and the 2026-11-02 one); its
   round READMEs and host-command files in `rounds/` (one directory per round, named by its start time);
 - `known-families.md` (moved from its skill copy, plus an index at the top);
-- not taken over: its skill copies (`skill/ci-triage`, superseded by `skills/ci-triage/`; `skill/ci-triage-inbox`,
-  superseded by `skills/ci-triage-inbox/`, its script is `scripts/inbox_from_timelines.py`;
+- not taken over: its skill copies (`skill/ci-triage`, superseded by `.claude/skills/ci-triage/`; `skill/ci-triage-inbox`,
+  superseded by `.claude/skills/ci-triage-inbox/`, its script is `.claude/skills/ci-triage/scripts/inbox_from_timelines.py`;
   `sandbox-sbt-env.sh`, nix store paths of an older template image).
 
-Access (`scripts/probe_access.py`, 2026-11-03 evening, after the sandbox was re-created): cn-test-failures issues
+Access (`probe_access.py`, 2026-11-03 evening, after the sandbox was re-created): cn-test-failures issues
 and splice via `gh api` (sandbox token of rautenrieth-da; `gh issue view` works too). No `ghx`; canton-network-internal
 and CircleCI logs only as user downloads. Board (project 48, Status) not readable: host only.
 The token is a sandbox secret: re-creating the sandbox wipes it (the user sets it again).

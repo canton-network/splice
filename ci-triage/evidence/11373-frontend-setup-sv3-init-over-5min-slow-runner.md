@@ -128,6 +128,7 @@ after its own start.
 
 ```
 zcat canton_network_test.clog.gz | grep -a 'SvFrontendIntegrationTest/config=1e48a2a8/SV=sv3"' | grep -aE 'app initialization: [A-Z]' | sed -E 's/.*"@timestamp":"([^"]+)","message":"([^"]{0,150}).*/\1 \2/' | awk '!seen[substr($0,26)]++'
+# (selected lines)
 ```
 ```
 2026-11-11T18:06:16.521Z sv3 app initialization: Starting initialization
@@ -155,7 +156,16 @@ zcat canton_network_test.clog.gz | grep -a 'SvFrontendIntegrationTest/config=1e4
 1 last 2026-11-11T18:11:03.520Z 2026-11-11T18:11:03.520Z DSO party is now hosted in the candidate SV participant PAR::sv3::12203308a4f3...", INFO
 1 last 2026-11-11T18:11:14.238Z 2026-11-11T18:11:14.238Z Success: the DsoRules and AmuletRules are visible", INFO
 1 last 2026-11-11T18:11:14.317Z 2026-11-11T18:11:14.317Z Proposing participant PAR::sv3::12203308a4f3... be promoted to Submission rights for the DSO party, will wait for it to take effect.", INFO
+1 last 2026-11-11T18:11:21.652Z 2026-11-11T18:11:21.652Z Onboarding sequencer", INFO
+1 last 2026-11-11T18:11:22.552Z 2026-11-11T18:11:22.552Z Onboarding sequencer SEQ::sv3::12203fe38808... through sponsoring SV", INFO
+1 last 2026-11-11T18:11:22.802Z 2026-11-11T18:11:22.802Z Adding mediator MediatorToOnboard(synchronizerId = global-domain::1220ecc32eed..., mediatorId = MED::sv3::12202011287f..., sequencerId = SEQ::s
+1 last 2026-11-11T18:11:24.030Z 2026-11-11T18:11:24.030Z Success: Add mediator MED::sv3::12202011287f...", INFO
+1 last 2026-11-11T18:11:26.490Z 2026-11-11T18:11:26.490Z Onboarded sequencer SEQ::sv3::12203fe38808...", INFO
+1 last 2026-11-11T18:11:26.532Z 2026-11-11T18:11:26.532Z Stopping sv3 node", INFO
 ```
+
+So at the timeout (18:11:23.123) sv3 was onboarding its sequencer through the sponsor and adding its mediator; both
+steps completed after the timeout, before the shutdown reached sv3 (18:11:26.532).
 
 Where sv3's 5 min went: 10 s waiting for its user, 57 s loading package signatures (section 5), 74 s waiting for the
 sponsor sv1 (initialized at 18:08:34.8), 83 s vetting/uploading DARs, 40 s DSO party migration, then the sequencer
@@ -251,7 +261,8 @@ sv3Participant uploads 87 mean 2.6s max 7.6s
 sv4Participant uploads 87 mean 3.1s max 6.9s
 ```
 
-No Daml, DAR resource or Canton pin change between 11347's sha (2ef0423979, same 87/22 counts) and this one:
+No Daml, DAR resource or Canton pin change between 11347's sha (2ef0423979, same 87/22 counts) and this one, nor
+between the baseline sha of section 5 (1844b95301, an ancestor, 16 commits) and this one:
 
 ```
 git log --format='%h %ad %s' --date=iso-strict 2ef0423979..08774bc437 -- daml '*DarResources*.scala' 'apps/common/src/main/resources/dar' | head
@@ -261,6 +272,18 @@ git show 08774bc43753ccf96b42bdfc56ea8fa63685bc73:nix/canton-sources.json | grep
   "version": "3.7.3-snapshot.20261109.20894.0.ve6e6c252",
 ```
 (first command: no output)
+
+```
+git merge-base --is-ancestor 1844b95301 08774bc437 && echo ancestor; git log --oneline 1844b95301..08774bc437 | wc -l
+git log --format='%h %ad %s' --date=iso-strict 1844b95301..08774bc437 -- daml '*DarResources*.scala' 'apps/common/src/main/resources/dar' nix/canton-sources.json | head
+git show 1844b95301:nix/canton-sources.json | grep -m1 version
+```
+```
+ancestor
+16
+  "version": "3.7.3-snapshot.20261109.20894.0.ve6e6c252",
+```
+(second command: no output)
 
 ## 7. Later suites: no namespace reset after the setup failure, sv1 cannot allocate the DSO party
 
@@ -279,8 +302,19 @@ rejectionReason = Not fully authorized\n
      84 PartyToParticipant(partyId = DSO-e806ca3d
 ```
 
-(5 DSO parties = the 5 later suites; sv1 retried `Check whether Party DSO-53a4c808-53a4c808::... is allocated on
-PAR::sv1::...` 172 times until 18:16:41 in WalletPaymentFrontendIntegrationTest.) This is the setup-failure blast
+(5 DSO parties = the 5 later suites.) In WalletPaymentFrontendIntegrationTest sv1 checked `Check whether Party
+DSO-53a4c808-53a4c808::... is allocated on PAR::sv1::...` 86 times without success, until 18:16:41 (each failed check
+logs two lines):
+
+```
+zcat canton_network_test.clog.gz | grep -a "The operation 'Check whether Party DSO-53a4c808" | grep -a 'PAR::sv1' | grep -aoE "is allocated on PAR::sv1[^']*' (has failed with an exception|failed with a retryable error)" | sed -E 's/.*\x27 //' | sort | uniq -c
+zcat canton_network_test.clog.gz | grep -a 'Check whether Party DSO-53a4c808' | grep -a 'is allocated on' | grep -a 'PAR::sv1' | tail -1 | cut -c1-40
+```
+```
+     86 failed with a retryable error
+     86 has failed with an exception
+{"@timestamp":"2026-11-11T18:16:41.212Z"
+``` This is the setup-failure blast
 radius of family B: `EnvironmentSetup.manualCreateEnvironment` only closes the fixture on a setup failure, so the
 ResetDecentralizedNamespace plugin never runs.
 
@@ -297,7 +331,8 @@ zcat canton_network_test.clog.gz canton.clog.gz | grep -ac 'NO_TEMPLATES_FOR_PAC
 
 ## 9. Frequency and duplicate check
 
-frontend-wall-clock-time (2) on post-merge main since 2026-11-09 (same loop as 11363 packet section 8):
+frontend-wall-clock-time (2) on post-merge main since 2026-11-09 (same loop and runs.txt as 11363 packet section 8:
+44 runs created 2026-11-09 to 2026-11-11T22:30Z; re-run 2026-11-12 by the verifier with the same counts):
 
 ```
 grep 'frontend-wall-clock-time' log/11373/jobs-fwct2-kd0.txt | awk '{c[$4]++} END{for(k in c) print c[k], k}'

@@ -4,8 +4,7 @@ This folder exists only on the shared triage branch (the current one is named in
 merged.
 It holds the triage of failed CI jobs filed in `DACH-NY/cn-test-failures`.
 
-Skills (not discovered from here; install once per sandbox with
-`ln -s $PWD/ci-triage/skills/* ~/.claude/skills/`):
+Skills (in `.claude/skills/`, merged in from main):
 - `ci-triage`: triage one issue into an evidence packet and one suggested action on the issue.
 - `ci-triage-inbox`: the triage agent, for Status Inbox. Triages the groups in parallel, then presents them one at a
   time: cause, evidence, the suggested action with its commands and comment bodies; the user reviews and runs it.
@@ -26,13 +25,13 @@ ref = a cn-test-failures issue number.
 | Path | Content |
 |---|---|
 | `evidence/<ref>-<slug>.md` | evidence packets, one per issue or per group of issues |
-| `evidence/INDEX.tsv` | one row per triaged ref; columns in `skills/ci-triage/references/packet-template.md` |
+| `evidence/INDEX.tsv` | one row per triaged ref; columns in `.claude/skills/ci-triage/references/packet-template.md` |
 | `known-families.md` | flake families with signature and confirming grep; check before any deep analysis |
 | `STATE.md` | triage state: current round, log requests, open owner questions |
 | `lessons/<YYYY>-W<ww>.md` | weekly lessons for the splice engineers: test-code patterns behind the week's failures (ISO week) |
 | `rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` | one directory per inbox round: findings, commands handed out, open ends |
-| `skills/` | the three skills; command recipes in `skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
-| `scripts/` | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic) |
+| `.claude/skills/ci-triage*/` (repo root) | the three skills, from main; command recipes in `.claude/skills/ci-triage/references/recipes.md`, comment shape in `issue-comment.md` |
+| `.claude/skills/ci-triage/scripts/` (repo root) | scripts for the non-trivial recipes (exports, Status changes, inbox heuristic), from main |
 | `export/` | gitignored; issue exports and logs the user saves on the host |
 
 Paths cited in older issue comments (e.g. `ci-triage/2026-11-02/singles-b.md`) may have moved, possibly more than
@@ -88,7 +87,7 @@ one line per item why it has its rank.
 
 Policy: the triage may read cn-test-failures (issues), canton-network-internal (contents, Actions, pull requests),
 DACH-NY/canton (contents) and splice (public). It never writes: issue changes, closes and the board (project 48)
-are commands the user runs on the host (recipes 10 and 12, `scripts/close_duplicates.py`). Fine-grained tokens
+are commands the user runs on the host (recipes 10 and 12, `close_duplicates.py`). Fine-grained tokens
 cannot grant a single project, so the board is only ever read and changed from the user's host `gh` (token with
 `project` scope, SSO-authorized for DACH-NY; "Resource protected by organization SAML enforcement" means the SSO
 grant is missing).
@@ -105,7 +104,7 @@ permissions. So pick the method per capability, best first:
    the user pastes; for Canton source the public mirror and release jars (recipe 6). CircleCI logs are always a
    user download.
 
-At the start of a session run `ci-triage/scripts/probe_access.py`. It prints the router state and, per
+At the start of a session run `.claude/skills/ci-triage/scripts/probe_access.py`. It prints the router state and, per
 capability, which method works; tell the user which method you use for what. When the task needs a capability that only a
 workaround covers, tell the user once what would fix it, then continue with the workaround if they cannot:
 - router answers `401` but `ghx` is missing: run `/run/sandbox/source/gh-cred-router/sandbox-setup.sh DACH-NY`
@@ -130,7 +129,7 @@ is missing or newer than the export.
 ## Conventions (these override defaults)
 
 - Never modify issues or the board, even if a route would allow it. Print the commands for the user (below);
-  Status changes use `scripts/set_status.py` (recipe 12).
+  Status changes use `set_status.py` (recipe 12).
 - Never infer tracking information by elimination (which issue belongs to which run or job). Ask.
 - Issue comments stand on their own (reader: a senior engineer, no access to the triage branch): never cite packet
   paths; inline the decisive log lines in backticks or summarize them.
@@ -138,7 +137,9 @@ is missing or newer than the export.
 - No AI attribution anywhere (no Co-Authored-By, no "generated with"). `Signed-off-by` is the only trailer.
 - Commits: one subject line plus `-s`. `[skip ci]` on the triage branch (never on a PR branch: it makes the PR
   unmergeable), `[ci]` on fix branches, `[static]` for lint-only.
-- The triage branch carries only `ci-triage/`. Never commit memory files or CLAUDE.md files outside `ci-triage/`.
+- The triage branch commits only `ci-triage/`; everything else arrives by merging main. Never commit memory files or
+  CLAUDE.md files outside `ci-triage/`. The skills and scripts live in `.claude/skills/` on main: change them
+  through a PR off main, then merge that branch (or main) into the triage branch.
 - Triage never runs sbt or Canton: it works from the run's logs and artifacts. The fix agent runs the CI static checks
   on every fix branch before it is handed over (ci-triage-fix step 3), never skipped.
 - Artifacts the sandbox downloads go to `log/<ref>/` (gitignored), with `TMPDIR` under `log/` too; keep `.clog.gz`
@@ -150,23 +151,24 @@ is missing or newer than the export.
 ## Scripts and commands for the user
 
 Users have different terminals but the same nix dev shell (`nix/shell.nix`: python3, gh, jq, bash). Anything more
-than a one-liner is a script in `ci-triage/scripts/`: Python 3 standard library plus `gh`, no shell-specific syntax,
-so it runs on every dev machine. The user runs them from the repo root with `direnv exec . ci-triage/scripts/<name>`,
+than a one-liner is a script in `.claude/skills/ci-triage/scripts/`: Python 3 standard library plus `gh`, no shell-specific syntax,
+so it runs on every dev machine. The user runs them from the repo root with `direnv exec . .claude/skills/ci-triage/scripts/<name>`,
 which works from any shell. Scripts that write a file write it under `ci-triage/export/` and print where.
 Scripts are fully typed and pass the same check as the repo's scripts (`scripts/check-python-types.sh`):
-`direnv exec . bash -c 'cd ci-triage/scripts && mypy --config-file= --python-version 3.14 --strict --explicit-package-bases *.py'`.
+`direnv exec . scripts/check-python-types.sh .claude/skills/ci-triage/scripts`.
 
 | Script | Where | What |
 |---|---|---|
 | `export_issues.py --since <date>` | host | recent issues with comments (recipe 9) |
 | `export_board.py [--status <s>]...` | host | open issues of project 48 by Status (Inbox, Triaged, In progress), with closing PRs, to `export/<status>.jsonl` (recipe 10) |
-| `export_circleci.py <ref> <job url or number>... [--all-steps]` | host, `CIRCLECI_TOKEN` | failed step output of CircleCI jobs to `export/<ref>/` |
+| `export_circleci.py <ref> <job url or number>... [--all-steps] [--artifacts [--artifact-filter <regex>]]` | host, `CIRCLECI_TOKEN` | failed step output of CircleCI jobs to `export/<ref>/`; with `--artifacts` also the stored test logs to `export/<ref>/<job>-artifacts/` |
 | `deployment_runs.py [--days N] [--workflow <regex>] [--excerpts]` | host, `CIRCLECI_TOKEN` | CircleCI workflow runs (passed too) as JSON lines to `export/circleci-runs-<date>.jsonl`; failed jobs with step excerpt, issue URL, splice commit |
 | `set_status.py <from> <to> <ref>...` | host | Status change, only from `<from>`; `--dry-run` (recipe 12) |
 | `close_duplicates.py <parent> <ref>... --comment '<text>'` (or `--comment-file <path>`) | host | close open issues as duplicates of one parent, same comment; `--dry-run` |
 | `probe_access.py` | sandbox | which method reads which private data (CLAUDE.md, Access) |
 | `inbox_from_timelines.py` | sandbox, `ghx` or `gh api` | inbox inferred from issue timelines (ci-triage-inbox step 1) |
 | `gcp_logs.py --project <p> --start <t> --end <t> --filter <q>` | sandbox | Logs Explorer URL and `gcloud logging read` command for the user (recipe 13) |
+| `export_gcp_logs.py <ref> --project <p> [--cluster <c>] --start <t> --end <t> --query <name> <filter>...` | host, `gcloud auth login` | k8s container logs as JSON per named query to `export/<ref>/gcp/`, then `tar -czf export/<ref>/<ref>-gcp-logs.tar.gz` |
 | `github_incidents.py <UTC time>...` | sandbox | GitHub status incidents overlapping the times (last 50, about 2 months) |
 | `ref_seq_contention.py <canton .clog.gz>` | sandbox | family L: reference driver `insert block` failures, retry chains, delays over 1 s, per minute |
 
