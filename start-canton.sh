@@ -18,7 +18,7 @@ function usage() {
   echo "  -F               same as -f, but does not start cometBFT, but rather assumes it is already running"
   echo "  -e               start canton using the canton provided BFT sequencer"
   echo "  -m               collect metrics and send them to our CI prometheus instance"
-  echo "  -t               traffic control with a zero base traffic rate on the splitwell synchronizer"
+  echo "  -t               zero base traffic rate, protocol version 37 and permissioned on the splitwell synchronizer"
   echo "  -c <canton>      start a custom canton binary instead of the one on the PATH"
   echo "  -B <script>      path to a custom canton bootstrap script"
   echo "  -k               allow downloading private keys via the admin API (needed, e.g., for identities dumps)"
@@ -37,8 +37,12 @@ use_bft=0
 collect_metrics=0
 enable_key_download=0
 logFileHint=canton
-# Base traffic rate on the splitwell synchronizer in bytes; empty means mainnet's.
+# Base traffic rate on the splitwell synchronizer in bytes; empty means no traffic control there.
 splitwell_max_base_traffic_amount="${SPLITWELL_MAX_BASE_TRAFFIC_AMOUNT-}"
+# Protocol version of the splitwell synchronizer; empty means the bootstrap script's default.
+splitwell_protocol_version="${SPLITWELL_PROTOCOL_VERSION-}"
+# Whether the splitwell synchronizer only admits participants with a permission.
+splitwell_permissioned="${SPLITWELL_PERMISSIONED-}"
 
 args=$(getopt -o "hdDap:cB:wsbtfFegmk" -l "help" -- "$@")
 
@@ -104,8 +108,10 @@ do
             ;;
         -t)
             splitwell_max_base_traffic_amount=0
+            splitwell_protocol_version=37
+            splitwell_permissioned=true
             logFileHint=canton-standalone-sync-operator
-            echo "starting canton with traffic control and a zero base traffic rate on the splitwell synchronizer"
+            echo "starting canton with a zero base traffic rate, protocol version 37 and permissioned on the splitwell synchronizer"
             ;;
         -B)
             bootstrapScriptPath="$2"
@@ -237,6 +243,8 @@ tmux_cmd_canton() {
      COMETBFT_DOCKER_IP=${COMETBFT_DOCKER_IP-} \
      LOG_LEVEL_API_REQUEST=DEBUG \
      SPLITWELL_MAX_BASE_TRAFFIC_AMOUNT=${splitwell_max_base_traffic_amount-} \
+     SPLITWELL_PROTOCOL_VERSION=${splitwell_protocol_version-} \
+     SPLITWELL_PERMISSIONED=${splitwell_permissioned-} \
      CANTON_PROTOCOL_VERSION=${CANTON_PROTOCOL_VERSION:-37} CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" $CANTON \
       -c $baseConfig $confOverrides \
       --log-level-canton=DEBUG \

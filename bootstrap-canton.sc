@@ -13,11 +13,11 @@ import com.digitalasset.canton.console.{
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.synchronizer.config.SynchronizerParametersConfig
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
-import com.digitalasset.canton.admin.api.client.data.TrafficControlParameters
+import com.digitalasset.canton.admin.api.client.data.{OnboardingRestriction, TrafficControlParameters}
 import com.digitalasset.canton.config.PositiveFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeLong
 import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.GenericSignedTopologyTransaction
-import com.digitalasset.canton.topology.transaction.TopologyChangeOp
+import com.digitalasset.canton.topology.transaction.{ParticipantPermission, TopologyChangeOp}
 import com.digitalasset.canton.version.ProtocolVersion
 
 println("Running canton bootstrap script...")
@@ -33,9 +33,9 @@ val domainParametersConfig = SynchronizerParametersConfig(
   topologyChangeDelay = Some(if (tokenFile == "canton-simtime.tokens") NonNegativeFiniteDuration.Zero else NonNegativeFiniteDuration.ofMillis(250)),
 )
 
-def staticParameters(sequencer: LocalInstanceReference) =
+def staticParameters(sequencer: LocalInstanceReference, protocolVersion: ProtocolVersion) =
   domainParametersConfig
-    .toStaticSynchronizerParameters(sequencer.config.crypto, ProtocolVersion.v36, NonNegativeInt.zero)
+    .toStaticSynchronizerParameters(sequencer.config.crypto, protocolVersion, NonNegativeInt.zero)
     .map(StaticSynchronizerParameters(_))
     .getOrElse(sys.error("whatever"))
 
@@ -44,6 +44,16 @@ def staticParameters(sequencer: LocalInstanceReference) =
 val splitwellMaxBaseTrafficAmount = Option(System.getenv("SPLITWELL_MAX_BASE_TRAFFIC_AMOUNT"))
   .filter(_.nonEmpty)
   .map(amount => NonNegativeLong.tryCreate(amount.toLong))
+
+// -t also runs splitwell on protocol version 37, the first that lets the sync operator buy traffic
+// for a participant before it joins.
+val splitwellProtocolVersion = Option(System.getenv("SPLITWELL_PROTOCOL_VERSION"))
+  .filter(_.nonEmpty)
+  .map(ProtocolVersion.tryCreate)
+  .getOrElse(ProtocolVersion.v36)
+
+// -t also makes splitwell permissioned, as a dedicated synchronizer must be.
+val splitwellPermissioned = Option(System.getenv("SPLITWELL_PERMISSIONED")).contains("true")
 
 // The global synchronizer's parameters on mainnet, apart from the base rate. A member only gets
 // a traffic state, and so can only be granted extra traffic, on a synchronizer that has traffic
@@ -65,6 +75,8 @@ def bootstrapOtherDomain(
     // Traffic control is off by default here: only synchronizers that stand in for a dedicated one
     // need it, and enabling it everywhere would change what every other test sequences against.
     trafficControl: Option[TrafficControlParameters] = None,
+    protocolVersion: ProtocolVersion = ProtocolVersion.v36,
+    permissioned: Boolean = false,
 ) = {
   bootstrap.synchronizer(
     name,
@@ -72,7 +84,7 @@ def bootstrapOtherDomain(
     sequencers = Seq(sequencer),
     mediators = Seq(mediator),
     synchronizerThreshold = PositiveInt.one,
-    staticSynchronizerParameters = staticParameters(sequencer),
+    staticSynchronizerParameters = staticParameters(sequencer, protocolVersion),
   )
   // For some stupid reason bootstrap.domain does not allow changing the dynamic domain parameters
   // so we overwrite it here.
@@ -93,6 +105,8 @@ def bootstrapOtherDomain(
         preparationTimeRecordTimeTolerance = NonNegativeFiniteDuration.ofHours(24),
         mediatorDeduplicationTimeout = NonNegativeFiniteDuration.ofHours(48),
         trafficControl = trafficControl.orElse(parameters.trafficControl),
+        onboardingRestriction =
+          if (permissioned) OnboardingRestriction.RestrictedOpen else parameters.onboardingRestriction,
       ),
     signedBy = Some(sequencer.id.uid.namespace.fingerprint),
     // This is test code so just force the change.
@@ -107,7 +121,17 @@ bootstrapOtherDomain(
   splitwellSequencer,
   splitwellMediator,
   trafficControl = splitwellMaxBaseTrafficAmount.map(trafficControlParameters),
+  protocolVersion = splitwellProtocolVersion,
+  permissioned = splitwellPermissioned,
 )
+// SyncOperatorIntegrationTest connects only alice's participant to splitwell during its setup.
+if (splitwellPermissioned) {
+  splitwellSequencer.topology.participant_synchronizer_permissions.propose(
+    splitwellSequencer.synchronizer_id,
+    aliceParticipant.id,
+    ParticipantPermission.Submission,
+  )
+}
 bootstrapOtherDomain("splitwellUpgrade", splitwellUpgradeSequencer, splitwellUpgradeMediator)
 
 // These user allocations are only there

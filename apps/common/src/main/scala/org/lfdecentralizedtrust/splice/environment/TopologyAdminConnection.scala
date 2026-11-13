@@ -1748,6 +1748,23 @@ abstract class TopologyAdminConnection(
         )
     )
 
+  def listParticipantSynchronizerPermissions(synchronizerId: SynchronizerId)(implicit
+      tc: TraceContext
+  ): Future[Seq[TopologyResult[ParticipantSynchronizerPermission]]] =
+    runCmd(
+      TopologyAdminCommands.Read.ListParticipantSynchronizerPermission(
+        BaseQuery(
+          TopologyStoreId.Synchronizer(synchronizerId),
+          proposals = false,
+          timeQuery = TimeQuery.HeadState,
+          ops = Some(TopologyChangeOp.Replace),
+          filterSigningKey = "",
+          protocolVersion = None,
+        ),
+        filterUid = "",
+      )
+    ).map(_.map(r => TopologyResult(r.context, r.item)))
+
   def ensureSynchronizerTrustCertificateRemoved(
       synchronizerId: SynchronizerId,
       member: Member,

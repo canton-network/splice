@@ -386,6 +386,17 @@ class SequencerAdminConnection(
     )
   }
 
+  /** Sets the traffic limit of a member that has not joined yet, which the sequencer only accepts
+    * from protocol version 37. Its traffic state cannot be read before it joins, so this always
+    * uses serial 1. Fails with `TRAFFIC_CONTROL_SERIAL_TOO_LOW` if a limit with that serial is
+    * already recorded.
+    */
+  def setInitialTrafficControlState(
+      member: Member,
+      totalExtraTrafficLimit: NonNegativeLong,
+  )(implicit traceContext: TraceContext): Future[Unit] =
+    setTrafficControlState(member, totalExtraTrafficLimit, PositiveInt.one)
+
   def getSequencerSynchronizerState(topologySnapshot: TopologySnapshot)(implicit
       traceContext: TraceContext
   ): Future[TopologyResult[SequencerSynchronizerState]] = {
