@@ -593,7 +593,7 @@ class SvOnboardingSnapshotServiceTest
         }
     }
 
-    "reuse ACS metadata written before sequencer snapshots were supported" in File
+    "ignore ACS metadata written before sequencer snapshots were supported and export again" in File
       .usingTemporaryDirectory() { directory =>
         withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
           val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
@@ -602,12 +602,30 @@ class SvOnboardingSnapshotServiceTest
           (exportDirectory / "metadata.json").writeText(
             s"""{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z","createdAt":"${clock.now.toInstant}","size":8}"""
           )
-          service
-            .prepare(key("sv1"), _ => fail("must reuse the persisted ACS export"))
-            .futureValue shouldBe id
-          inside(service.lookup(id)) { case Some(SnapshotState.Ready(file)) =>
-            File(file).contentAsString shouldBe "snapshot"
-          }
+          val exports = new AtomicInteger()
+          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+            {
+              service.lookup(id) shouldBe None
+              val newId = service
+                .prepare(
+                  key("sv1"),
+                  file => {
+                    exports.incrementAndGet()
+                    writeSnapshot(Future.unit)(file)
+                  },
+                )
+                .futureValue
+              newId should not be id
+              eventually()(service.lookup(newId) should matchPattern {
+                case Some(SnapshotState.Ready(_)) =>
+              })
+            },
+            entries => {
+              entries should not be empty
+              forAll(entries)(_.warningMessage should include("Cannot recover onboarding snapshot"))
+            },
+          )
+          exports.get() shouldBe 1
         }
       }
 
