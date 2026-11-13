@@ -13,7 +13,11 @@ import org.lfdecentralizedtrust.splice.store.{
   TimestampWithMigrationId,
   UpdateHistory,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
+import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbActivityRecordMetaStore,
+  DbAppActivityRecordStore,
+  DbScanVerdictStore,
+}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{EnvelopeT, TrafficSummaryT}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import com.digitalasset.canton.resource.DbStorage
@@ -1076,20 +1080,28 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
     } yield updateHistory
   }
 
-  private def newVerdictStore(updateHistory: UpdateHistory) =
+  private def newVerdictStore(updateHistory: UpdateHistory) = {
+    val metaStore = new DbActivityRecordMetaStore(
+      storage.underlying,
+      updateHistory,
+      DbActivityRecordMetaStore.IngestionVersions(1, 0),
+      false,
+      loggerFactory,
+    )
     new DbScanVerdictStore(
       storage.underlying,
       updateHistory,
       new DbAppActivityRecordStore(
         storage.underlying,
         updateHistory,
-        DbAppActivityRecordStore.IngestionVersions(1, 0),
+        metaStore,
         false,
         initialRound = 0L,
         loggerFactory,
       ),
       loggerFactory,
     )
+  }
 
   private def insertUpdate(
       updateHistory: UpdateHistory,

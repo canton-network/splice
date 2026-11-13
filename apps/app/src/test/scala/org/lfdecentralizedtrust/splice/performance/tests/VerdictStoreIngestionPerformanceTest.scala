@@ -23,7 +23,11 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{
   VerdictResultDbValue,
   VerdictT,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
+import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbActivityRecordMetaStore,
+  DbAppActivityRecordStore,
+  DbScanVerdictStore,
+}
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
@@ -102,13 +106,20 @@ class VerdictStoreIngestionPerformanceTest(
       )
       .map { updateHistory =>
         updateHistoryRef = Some(updateHistory)
-        val appActivityStore = new DbAppActivityRecordStore(
+        val metaStore = new DbActivityRecordMetaStore(
           storage,
           updateHistory,
-          DbAppActivityRecordStore.IngestionVersions(
+          DbActivityRecordMetaStore.IngestionVersions(
             AppActivityComputation.ActivityIngestionCodeVersion,
             0,
           ),
+          isFirstSv = false,
+          loggerFactory,
+        )
+        val appActivityStore = new DbAppActivityRecordStore(
+          storage,
+          updateHistory,
+          metaStore,
           isFirstSv = false,
           initialRound = 0L,
           loggerFactory,

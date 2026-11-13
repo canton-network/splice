@@ -144,7 +144,7 @@ object DbScanAppRewardsStore {
 class DbScanAppRewardsStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
-    appActivityRecordStore: DbAppActivityRecordStore,
+    metaStore: DbActivityRecordMetaStore,
     rewardMintingAllowanceTolerance: BigDecimal,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
@@ -716,7 +716,7 @@ class DbScanAppRewardsStore(
     import profile.api.jdbcActionExtensionMethods
 
     for {
-      _ <- appActivityRecordStore.assertCompleteActivity(roundNumber)
+      _ <- metaStore.appAssertCompleteActivity(roundNumber)
       _ <- runUpdate(
         (for {
           _ <- aggregateActivityTotalsAction(roundNumber)
@@ -744,7 +744,7 @@ class DbScanAppRewardsStore(
       roundNumber: Long
   )(implicit tc: TraceContext): Future[Unit] =
     for {
-      _ <- appActivityRecordStore.assertCompleteActivity(roundNumber)
+      _ <- metaStore.appAssertCompleteActivity(roundNumber)
       _ <- runUpdate(
         aggregateActivityTotalsAction(roundNumber)
           .map(_ => logger.debug(s"Aggregated activity totals for round $roundNumber.")),
@@ -760,6 +760,12 @@ class DbScanAppRewardsStore(
 
   /** Unnest per-verdict activity arrays and aggregate weights by party.
     * TBAR v1.1 attribution is pre-applied in `app_provider_parties`.
+    *
+    * Reads both `app_activity_record_store` (verdict-derived activity) and
+    * `extra_app_activity_record_store` (CIP-0104 extension-hook activity).
+    * Extra rows sum into existing parties' totals via `UNION ALL` before the
+    * per-party aggregation; a party that only appears via extra activity
+    * still shows up with its extra weight alone.
     */
   private def unnestAndAggregate(historyId: Long, roundNumber: Long) =
     sql"""app_unnested as (
@@ -769,6 +775,13 @@ class DbScanAppRewardsStore(
                  as pw(party, weight)
             where a.history_id = $historyId
               and a.round_number = $roundNumber
+            union all
+            select party, weight
+            from extra_app_activity_record_store x
+            cross join lateral unnest(x.app_provider_parties, x.app_activity_weights)
+                 as pw(party, weight)
+            where x.history_id = $historyId
+              and x.round_number = $roundNumber
           ),
           app_aggregated as (
             select party, sum(weight) as total_app_weight,
@@ -785,6 +798,15 @@ class DbScanAppRewardsStore(
                  as pw(party, weight)
             where a.history_id = $historyId
               and a.round_number = $roundNumber
+            union all
+            select party, weight
+            from extra_app_activity_record_store x
+            cross join lateral unnest(
+                   coalesce(x.asset_activity_provider_parties, '{}'::text[]),
+                   coalesce(x.asset_activity_weights,          '{}'::bigint[]))
+                 as pw(party, weight)
+            where x.history_id = $historyId
+              and x.round_number = $roundNumber
           ),
           asset_aggregated as (
             select party, sum(weight) as total_asset_weight,

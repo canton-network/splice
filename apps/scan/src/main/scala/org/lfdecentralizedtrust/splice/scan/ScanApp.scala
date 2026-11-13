@@ -84,6 +84,7 @@ import org.lfdecentralizedtrust.splice.scan.store.historystart.{
   ScanHistoryStart,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbActivityRecordMetaStore,
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
@@ -314,13 +315,20 @@ class ScanApp(
           )
         }
       )
-      appActivityRecordStore = new DbAppActivityRecordStore(
+      activityRecordMetaStore = new DbActivityRecordMetaStore(
         storage,
         updateHistory,
-        DbAppActivityRecordStore.IngestionVersions(
+        DbActivityRecordMetaStore.IngestionVersions(
           AppActivityComputation.ActivityIngestionCodeVersion,
           config.activityIngestionUserVersion.fold(0)(_.toInt),
         ),
+        config.isFirstSv,
+        loggerFactory,
+      )
+      appActivityRecordStore = new DbAppActivityRecordStore(
+        storage,
+        updateHistory,
+        activityRecordMetaStore,
         config.isFirstSv,
         initialRound.toLong,
         loggerFactory,
@@ -328,7 +336,7 @@ class ScanApp(
       appRewardsStore = new DbScanAppRewardsStore(
         storage,
         updateHistory,
-        appActivityRecordStore,
+        activityRecordMetaStore,
         config.rewardMintingAllowanceTolerance,
         loggerFactory,
       )
@@ -346,7 +354,7 @@ class ScanApp(
         store,
         updateHistory,
         appRewardsStore,
-        appActivityRecordStore,
+        activityRecordMetaStore,
         storage,
         acsSnapshotStore,
         serviceUserPrimaryParty,
@@ -414,6 +422,7 @@ class ScanApp(
         loggerFactory,
         scanAppMetrics.grpcClientMetrics,
         scanVerdictStore,
+        activityRecordMetaStore,
         domainMigrationId,
         synchronizerId,
         scanAppMetrics.verdictIngestion,
@@ -428,7 +437,7 @@ class ScanApp(
         automation,
         updateHistory,
         appRewardsStore,
-        appActivityRecordStore,
+        activityRecordMetaStore,
         acsSnapshotStore,
         scanEventStore,
         store, // TODO(#7728): switch to DbVotesStore once backfilling is ready

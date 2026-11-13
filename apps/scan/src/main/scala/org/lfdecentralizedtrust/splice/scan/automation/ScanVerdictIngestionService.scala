@@ -37,7 +37,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
 import org.lfdecentralizedtrust.splice.scan.mediator.MediatorVerdictsClient
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanMediatorVerdictIngestionMetrics
 import org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputation
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbActivityRecordMetaStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.sequencer.SequencerTrafficClient
 
@@ -106,6 +106,7 @@ class ScanVerdictIngestionService(
     synchronizerNodes: LocalSynchronizerNodes[ScanSynchronizerNode],
     grpcClientMetrics: GrpcClientMetrics,
     store: DbScanVerdictStore,
+    metaStore: DbActivityRecordMetaStore,
     migrationId: Long,
     synchronizerId: SynchronizerId,
     ingestionMetrics: ScanMediatorVerdictIngestionMetrics,
@@ -398,7 +399,7 @@ class ScanVerdictIngestionService(
       verdicts: Seq[v30.Verdict],
       summaryByTime: Map[CantonTimestamp, DbScanVerdictStore.TrafficSummaryT],
   )(implicit tc: TraceContext): Future[Unit] =
-    store.appActivityRecordStore.startedIngestingAt.map { startO =>
+    metaStore.appStartedIngestingAt.map { startO =>
       val missingTimes = ScanVerdictIngestionService.findMissingTrafficSummaries(
         verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime)),
         summaryByTime.keySet,

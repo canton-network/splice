@@ -33,7 +33,9 @@ org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigTest
 org.lfdecentralizedtrust.splice.scan.config.TokenStandardConfigTest
 org.lfdecentralizedtrust.splice.scan.rewards.AppActivityComputationTest
 org.lfdecentralizedtrust.splice.scan.rewards.RewardComputationInputsTest
+org.lfdecentralizedtrust.splice.scan.store.DbActivityRecordMetaStoreTest
 org.lfdecentralizedtrust.splice.scan.store.DbAppActivityRecordStoreTest
+org.lfdecentralizedtrust.splice.scan.store.DbExtraActivityRecordStoreTest
 org.lfdecentralizedtrust.splice.scan.store.DbScanAppRewardsStoreTest
 org.lfdecentralizedtrust.splice.scan.store.QueryAcsSnapshotPaginationTokenTest
 org.lfdecentralizedtrust.splice.scan.store.ScanEventStoreTest
@@ -44,6 +46,7 @@ org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.KvBackfillingProgres
 org.lfdecentralizedtrust.splice.scan.store.db.CheckMetaVersionsTest
 org.lfdecentralizedtrust.splice.scan.store.db.DbVotesStoreTest
 org.lfdecentralizedtrust.splice.scan.store.db.FreezeGovernanceLockJsonTest
+org.lfdecentralizedtrust.splice.scan.store.db.IngestionStatusForTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryReadinessTest
 org.lfdecentralizedtrust.splice.scan.store.historystart.ScanHistoryStartTest
 org.lfdecentralizedtrust.splice.store.DbUnavailablePartiesStoreTest

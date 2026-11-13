@@ -106,12 +106,12 @@ import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics.{
 }
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
-  AppActivityStore,
+  ActivityRecordMetaStore,
   ScanEventStore,
   ScanStore,
   TxLogEntry,
 }
-import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
+import org.lfdecentralizedtrust.splice.scan.store.ActivityRecordMetaStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.{
   BulkObjectKind,
   BulkObjectsAvailability,
@@ -175,7 +175,7 @@ class HttpScanHandler(
     protected val storeWithIngestion: AppStoreWithIngestion[ScanStore],
     updateHistory: UpdateHistory,
     appRewardsStore: DbScanAppRewardsStore,
-    appActivityStore: AppActivityStore,
+    appActivityStore: ActivityRecordMetaStore,
     snapshotStore: AcsSnapshotStore,
     eventStore: ScanEventStore,
     historicalVotesStore: HistoricalVotesStore,

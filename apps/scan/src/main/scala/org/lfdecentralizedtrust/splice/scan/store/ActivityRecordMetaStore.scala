@@ -7,25 +7,27 @@ import com.digitalasset.canton.tracing.TraceContext
 
 import scala.concurrent.Future
 
-/** Store interface for app activity record queries.
-  * Decouples callers from the DB implementation.
+/** Store interface for activity-record-meta queries across the TBAR
+  * app-side store and the CIP-0104 extension hook's extra-activity store.
+  * Implemented by `DbActivityRecordMetaStore`, which owns both meta
+  * tables and returns a combined view to callers.
   */
-trait AppActivityStore {
+trait ActivityRecordMetaStore {
 
   /** Ingestion status for a specific round, used by the Scan HTTP
     * endpoints when no root hash or activity totals are yet stored.
     */
   def ingestionStatusForRound(roundNumber: Long)(implicit
       tc: TraceContext
-  ): Future[AppActivityStore.RoundIngestionStatus]
+  ): Future[ActivityRecordMetaStore.RoundIngestionStatus]
 
-  /** Find the earliest round for which all app activity records have been ingested.
+  /** Find the earliest round for which all activity records have been ingested.
     */
   def earliestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
   ): Future[Option[Long]]
 
-  /** Find the latest round for which all app activity records have been ingested.
+  /** Find the latest round for which all activity records have been ingested.
     */
   def latestRoundWithCompleteAppActivity()(implicit
       tc: TraceContext
@@ -35,7 +37,7 @@ trait AppActivityStore {
   def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]]
 }
 
-object AppActivityStore {
+object ActivityRecordMetaStore {
 
   /** Whether this Scan can ever be authoritative for a given round,
     * or whether the answer will arrive as ingestion catches up.

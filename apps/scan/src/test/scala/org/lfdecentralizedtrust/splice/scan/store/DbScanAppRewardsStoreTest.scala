@@ -6,7 +6,7 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
 import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbAppActivityRecordStore,
+  DbActivityRecordMetaStore,
   DbScanAppRewardsStore,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.*
@@ -497,6 +497,60 @@ class DbScanAppRewardsStoreTest
         roundTotal.value.totalRoundAppActivityWeight shouldBe 0L
         roundTotal.value.activeAppProviderPartiesCount shouldBe 0L
         roundTotal.value.activityRecordsCount shouldBe 0L
+      }
+    }
+
+    "aggregates extra-side activity alongside app-side via UNION ALL" in {
+      for {
+        (store, historyId) <- newStore()
+        _ <- markRoundComplete(historyId, roundNumber)
+        // App side: alice has app 100 + asset 500.
+        _ <- insertActivityRecord(
+          historyId,
+          roundNumber,
+          appParties = Seq("alice::provider"),
+          appWeights = Seq(100L),
+          assetParties = Seq("alice::provider"),
+          assetWeights = Seq(500L),
+        )
+        // Extra side: alice gets app +50 + asset +200 (sums with app side).
+        _ <- insertExtraActivityRecord(
+          historyId,
+          roundNumber,
+          appParties = Seq("alice::provider"),
+          appWeights = Seq(50L),
+          assetParties = Seq("alice::provider"),
+          assetWeights = Seq(200L),
+        )
+        // Extra side: bob is a new party, app 300, no asset.
+        _ <- insertExtraActivityRecord(
+          historyId,
+          roundNumber,
+          appParties = Seq("bob::provider"),
+          appWeights = Seq(300L),
+        )
+        _ <- store.aggregateActivityTotals(roundNumber)
+        partyTotals <- store.getAppActivityPartyTotalsByRound(roundNumber)
+        roundTotal <- store.getAppActivityRoundTotalByRound(roundNumber)
+      } yield {
+        partyTotals should have size 2
+        // Sorted alphabetically: alice first, bob second.
+        partyTotals(0).appProviderParty shouldBe "alice::provider"
+        partyTotals(0).totalAppActivityWeight shouldBe 150L
+        partyTotals(0).totalAssetActivityWeight shouldBe 700L
+        partyTotals(0).numAppActivityRecords shouldBe 2L
+        partyTotals(0).numAssetActivityRecords shouldBe 2L
+
+        partyTotals(1).appProviderParty shouldBe "bob::provider"
+        partyTotals(1).totalAppActivityWeight shouldBe 300L
+        partyTotals(1).totalAssetActivityWeight shouldBe 0L
+        partyTotals(1).numAppActivityRecords shouldBe 1L
+        partyTotals(1).numAssetActivityRecords shouldBe 0L
+
+        roundTotal.value.totalRoundAppActivityWeight shouldBe 450L
+        roundTotal.value.totalRoundAssetActivityWeight shouldBe 700L
+        roundTotal.value.activeAppProviderPartiesCount shouldBe 2L
+        roundTotal.value.activityRecordsCount shouldBe 3L
       }
     }
 
@@ -1466,6 +1520,35 @@ class DbScanAppRewardsStoreTest
     }.map(_ => ())
   }
 
+  private val extraRecordTimeCounter = new java.util.concurrent.atomic.AtomicLong(1000000L)
+
+  /** Insert directly into `extra_app_activity_record_store` (the CIP-0104
+    * extension-hook source). PK is `(history_id, round_number, record_time)`,
+    * so each call bumps a shared record-time counter to stay unique.
+    */
+  private def insertExtraActivityRecord(
+      historyId: Long,
+      round: Long,
+      appParties: Seq[String],
+      appWeights: Seq[Long],
+      assetParties: Seq[String] = Nil,
+      assetWeights: Seq[Long] = Nil,
+  ): Future[Unit] = {
+    val recordTime = extraRecordTimeCounter.getAndIncrement()
+    futureUnlessShutdownToFuture(
+      storage.underlying.queryAndUpdate(
+        sqlu"""insert into extra_app_activity_record_store
+               (history_id, round_number, record_time,
+                app_provider_parties, app_activity_weights,
+                asset_activity_provider_parties, asset_activity_weights)
+               values ($historyId, $round, $recordTime,
+                       $appParties, $appWeights,
+                       $assetParties, $assetWeights)""",
+        "test.insertExtraActivityRecord",
+      )
+    ).map(_ => ())
+  }
+
   /** Insert a meta row marking `round` as complete
     * satisfying the completeness precondition in aggregateActivityTotals.
     */
@@ -1577,18 +1660,17 @@ class DbScanAppRewardsStoreTest
       )
       _ <- updateHistory.ingestionSink.initialize()
     } yield {
-      val appActivityRecordStore = new DbAppActivityRecordStore(
+      val metaStore = new DbActivityRecordMetaStore(
         storage.underlying,
         updateHistory,
-        DbAppActivityRecordStore.IngestionVersions(1, 0),
+        DbActivityRecordMetaStore.IngestionVersions(1, 0),
         isFirstSv,
-        initialRound = 0L,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(
         storage.underlying,
         updateHistory,
-        appActivityRecordStore,
+        metaStore,
         rewardMintingAllowanceTolerance,
         loggerFactory,
       )
