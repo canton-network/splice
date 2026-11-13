@@ -54,6 +54,7 @@ org.lfdecentralizedtrust.splice.store.ScanHistoryBackfillingTest
 org.lfdecentralizedtrust.splice.store.TxLogBackfillingStoreTest
 org.lfdecentralizedtrust.splice.store.UpdateHistoryBackfillingTest
 org.lfdecentralizedtrust.splice.store.UpdateHistoryTest
+org.lfdecentralizedtrust.splice.store.db.AcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.store.db.AdvisoryLocksTest
 org.lfdecentralizedtrust.splice.store.db.DbExternalPartyWalletStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStoreTest
@@ -66,7 +67,6 @@ org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
 org.lfdecentralizedtrust.splice.store.db.InternedStringStoreTest
 org.lfdecentralizedtrust.splice.store.db.LegacyAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
-org.lfdecentralizedtrust.splice.store.db.TablePerAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClientTest
 org.lfdecentralizedtrust.splice.sv.admin.http.OnboardSvSnapshotHandlerTest
 org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTriggerTest

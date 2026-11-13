@@ -77,6 +77,35 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_ANALYZABLE_TIME_WINDOW_DURATION')].value
           pattern: 'analyzable-time-window.duration = "30 days"'
+  - it: "enables ACS snapshot pruning"
+    set:
+      # Things we need just to pass the schema
+      spliceInstanceNames:
+        networkName: MockNet
+        networkFaviconUrl: https://example.net/favicon.ico
+        amuletName: Mocklet
+        amuletNameAcronym: MCK
+        nameServiceName: Mock Name Service
+        nameServiceNameAcronym: MNS
+      sequencerAddress: "current-sequencer-address"
+      mediatorAddress: "current-mediator-address"
+      participantAddress: "mock-address"
+      persistence:
+        host: mock-pg-host
+        schema: scan
+      auth:
+        jwksUrl: "https://example.com/.well-known/jwks.json"
+        targetAudience: "mock_audience"
+      maxDarVersion: 1.0.0
+      # set for this test
+      pruning:
+        snapshots:
+          enabled: true
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_PRUNING')].value
+          pattern: 'pruning.snapshots.enabled = true'
   - it: "sets successor synchronizer"
     set:
       # Things we need just to pass the schema
