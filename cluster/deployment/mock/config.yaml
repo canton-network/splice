@@ -152,8 +152,6 @@ monitoring:
         - Dummy-SV-2
     logAlerts:
       # These are mock values and in no way recommendations
-      forCometBft: |
-        -(resource.labels.container_name="multi-validator" AND jsonPayload.message=~"wallet/transfer-offers.* resulted in a timeout")
       forNonTAPS: |
         -(resource.labels.container_name="multi-participant" AND jsonPayload.message=~"The sequencer clock timestamp.*is already past the max sequencing time")
         -(jsonPayload."span-name"="MergeValidatorLicenseContractsTrigger" AND (severity=WARNING OR "has not vetted"))

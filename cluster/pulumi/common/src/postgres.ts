@@ -138,6 +138,7 @@ export class CloudPostgres
           backupConfiguration: {
             enabled: spliceConfig.pulumiProjectConfig.cloudSql.enableAutoBackups,
             pointInTimeRecoveryEnabled: spliceConfig.pulumiProjectConfig.cloudSql.enableAutoBackups,
+            startTime: cloudSqlConfig.backupStartTime,
           },
           insightsConfig: {
             queryInsightsEnabled: true,

@@ -22,11 +22,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   SynchronizerNodeConfigLimits,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRulesConfig
-import org.lfdecentralizedtrust.splice.codegen.java.splice.{cometbft, dso}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvSynchronizerNode}
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
 import org.lfdecentralizedtrust.splice.sv.config.{
   BeneficiaryConfig,
   SvScanConfig,
@@ -181,7 +180,6 @@ object SvUtil {
   }.sequence
 
   def getSV1SynchronizerNodeConfig(
-      cometBftNode: Option[CometBftNode],
       localSynchronizerNode: LocalSynchronizerNode,
       scanConfig: SvScanConfig,
       synchronizerId: PhysicalSynchronizerId,
@@ -191,30 +189,6 @@ object SvUtil {
       tc: TraceContext,
   ): Future[java.util.Map[String, SynchronizerNodeConfig]] = {
     for {
-      nodeConfigOpt <- cometBftNode
-        .map(_.getLocalNodeConfig())
-        .sequence
-      cometBftConfig = nodeConfigOpt
-        .map { cometBftNodeConfig =>
-          new CometBftConfig(
-            cometBftNodeConfig.cometbftNodes.view
-              .mapValues(config =>
-                new cometbft.CometBftNodeConfig(
-                  config.validatorPubKey,
-                  config.votingPower,
-                )
-              )
-              .toMap
-              .asJava,
-            cometBftNodeConfig.governanceKeys
-              .map(key => new cometbft.GovernanceKeyConfig(key.pubKey))
-              .asJava,
-            cometBftNodeConfig.sequencingKeys
-              .map(key => new cometbft.SequencingKeyConfig(key.pubKey))
-              .asJava,
-          )
-        }
-        .getOrElse(SvUtil.emptyCometBftConfig)
       localSequencerConfig <- getSequencerConfig(Some(localSynchronizerNode))
       sequencerConfig = localSequencerConfig.map(c =>
         new SequencerIdentityConfig(
@@ -231,7 +205,7 @@ object SvUtil {
     } yield {
       Map(
         synchronizerId.logical.toProtoPrimitive -> new SynchronizerNodeConfig(
-          cometBftConfig,
+          SvUtil.emptyCometBftConfig,
           Optional.empty(),
           mediatorConfig.toJava,
           Optional.of(new ScanConfig(scanConfig.publicUrl.toString())),

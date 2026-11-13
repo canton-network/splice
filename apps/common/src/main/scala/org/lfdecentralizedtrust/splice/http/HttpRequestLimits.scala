@@ -15,17 +15,23 @@ object HttpRequestLimits {
 
   /** @param fieldName
     *   the name of the array as it appears in the request body, for the error message.
+    * @param max
+    *   the `maxItems` declared on this particular array; defaults to [[MaxRequestArrayItems]].
     * @return
     *   `items` unchanged, so that this can wrap the field where it is consumed.
     * @throws io.grpc.StatusRuntimeException
-    *   `INVALID_ARGUMENT`, reported as HTTP 400, if `items` exceeds [[MaxRequestArrayItems]].
+    *   `INVALID_ARGUMENT`, reported as HTTP 400, if `items` exceeds `max`.
     */
   @throws[io.grpc.StatusRuntimeException]
-  def maxSizeOrFail(fieldName: String, items: Seq[?]): items.type =
-    if (items.sizeIs > MaxRequestArrayItems)
+  def maxSizeOrFail(
+      fieldName: String,
+      items: Seq[?],
+      max: Int = MaxRequestArrayItems,
+  ): items.type =
+    if (items.sizeIs > max)
       throw io.grpc.Status.INVALID_ARGUMENT
         .withDescription(
-          s"Expected '$fieldName' to contain at most $MaxRequestArrayItems items, but contained ${items.size}."
+          s"Expected '$fieldName' to contain at most $max items, but contained ${items.size}."
         )
         .asRuntimeException()
     else items

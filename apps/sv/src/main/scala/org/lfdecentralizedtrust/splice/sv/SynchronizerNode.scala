@@ -9,8 +9,7 @@ import com.digitalasset.canton.admin.api.client.data.{
   SubscriptionLivenessLimits,
 }
 import org.lfdecentralizedtrust.splice.environment.*
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
-import org.lfdecentralizedtrust.splice.sv.config.{SvCometBftConfig, SvSequencerConfig}
+import org.lfdecentralizedtrust.splice.sv.config.SvSequencerConfig
 
 import java.time.Duration
 
@@ -23,21 +22,17 @@ abstract class SvSynchronizerNode(
     val mediatorSequencerAmplification: SubmissionRequestAmplification,
     val mediatorSequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
     val mediatorSubscriptionLivenessLimits: SubscriptionLivenessLimits,
-    val cometbftNode: Option[CometBftNode],
 ) extends SynchronizerNode(sequencerAdminConnection) {}
 
 sealed trait SequencerConfig {}
 
 object SequencerConfig {
   def fromConfig(
-      sequencerConfig: SvSequencerConfig,
-      cometbftConfig: Option[SvCometBftConfig],
+      sequencerConfig: SvSequencerConfig
   ): SequencerConfig = {
-    // TODO (#8263): remove the CometBFT and reference sequencer cases, DA BFT is the only supported sequencer
+    // TODO (#8263): remove the reference sequencer case, DA BFT is the only supported sequencer
     if (sequencerConfig.isCantonBftSequencer) {
       CantonBftSequencerConfig()
-    } else if (cometbftConfig.exists(_.enabled)) {
-      CometBftSequencerConfig()
     } else {
       ReferenceSequenceConfig()
     }
@@ -45,9 +40,6 @@ object SequencerConfig {
 }
 
 final case class CantonBftSequencerConfig(
-) extends SequencerConfig
-
-final case class CometBftSequencerConfig(
 ) extends SequencerConfig
 
 final case class ReferenceSequenceConfig(

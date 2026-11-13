@@ -376,6 +376,14 @@ object ScanStore {
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
         },
+        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          ScanAcsStoreRowData(contract)
+        },
         mkFilter(splice.amulet.Amulet.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanAcsStoreRowData(
             contract = contract,

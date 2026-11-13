@@ -3,10 +3,15 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  updateAutomationConfig,
+}
 import org.lfdecentralizedtrust.splice.integration.plugins.toxiproxy.UseToxiproxy
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.util.*
+import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.{CompactJson, ProtobufJson}
 import definitions.EventHistoryItem
@@ -39,6 +44,13 @@ class ScanEventHistoryIntegrationTest
           )
         )(config)
       )
+      .addConfigTransforms((_, config) =>
+        // Faucet claims commit transactions in the background, which would otherwise land
+        // between the pre-tap cursor and the check that no events follow it.
+        updateAutomationConfig(ConfigurableApp.Validator)(
+          _.withPausedTrigger[ReceiveFaucetCouponTrigger]
+        )(config)
+      )
 
   private val toxiproxy = UseToxiproxy(createMediatorProxies = true)
   registerPlugin(toxiproxy)
@@ -50,19 +62,22 @@ class ScanEventHistoryIntegrationTest
 
     onboardAliceAndBob()
 
-    val cursorBeforeTap = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
+    // Before doing tap, using the cursor should be empty. Take a fresh cursor on every attempt, so
+    // that a background transaction landing in between only costs a retry.
+    val cursorBeforeTap = eventuallySucceeds() {
+      val cursor = latestEventHistoryCursor(sv1ScanBackend)
+      val eventHistoryAfterCursor = sv1ScanBackend.getEventHistory(
+        count = pageLimit,
+        after = Some(cursor),
+        encoding = CompactJson,
+      )
+      eventHistoryAfterCursor shouldBe empty withClue "EventHistory after pre-tap cursor"
+      cursor
+    }
 
     val countBefore = scanVerdictCountMetric()
     val lastRtBefore = scanVerdictLastRecordTimeUsMetric()
     val errorsBefore = scanVerdictErrorsMetric()
-
-    // Before doing tap, using the cursor should be empty
-    val eventHistoryAfterLastCursor = sv1ScanBackend.getEventHistory(
-      count = pageLimit,
-      after = Some(cursorBeforeTap),
-      encoding = CompactJson,
-    )
-    eventHistoryAfterLastCursor shouldBe empty withClue "EventHistory after pre-tap cursor"
 
     aliceWalletClient.tap(1)
 
