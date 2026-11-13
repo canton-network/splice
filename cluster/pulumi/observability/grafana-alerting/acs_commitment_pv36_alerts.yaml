@@ -6,7 +6,7 @@ groups:
       interval: 1m
       rules:
         - uid: ffghab4ms1ds0e
-          title: ACS Commitment Checkpoint Delay (PV >= 36)
+          title: ACS Commitment Checkpoint Delay
           condition: acs commitment checkpoint delay threshold exceeded
           data:
             - refId: acs commitment checkpoint delay
@@ -48,20 +48,20 @@ groups:
                 maxDataPoints: 43200
                 refId: acs commitment checkpoint delay threshold exceeded
                 type: threshold
-          dashboardUid: cnpqrxx
-          panelId: 11
+          dashboardUid: edkzo5ukgeqyoc
+          panelId: 111
           noDataState: Alerting
           execErrState: Alerting
           for: 5m
           annotations:
-            __dashboardUid__: cnpqrxx
-            __panelId__: "11"
+            __dashboardUid__: edkzo5ukgeqyoc
+            __panelId__: "111"
             severity: critical
             summary: The job {{ $labels.job }} in namespace {{ $labels.namespace }} is reporting an ACS commitment checkpoint delay
           labels: {}
           isPaused: false
         - uid: ffghab4ms1ds0f
-          title: ACS Commitment Delay (PV >= 36)
+          title: ACS Commitment Delay
           condition: acs commitment delay threshold exceeded
           data:
             - refId: acs commitment delay
@@ -103,21 +103,21 @@ groups:
                 maxDataPoints: 43200
                 refId: acs commitment delay threshold exceeded
                 type: threshold
-          dashboardUid: cnpqrxx
-          panelId: 10
+          dashboardUid: edkzo5ukgeqyoc
+          panelId: 110
           noDataState: Alerting
           execErrState: Alerting
           for: 5m
           annotations:
-            __dashboardUid__: cnpqrxx
-            __panelId__: "10"
+            __dashboardUid__: edkzo5ukgeqyoc
+            __panelId__: "110"
             severity: critical
             summary: The job {{ $labels.job }} in namespace {{ $labels.namespace }} is reporting an ACS commitment delay
           labels: {}
           isPaused: false
         # 2 = started so outside_range [2, 2] matches everything but started.
         - uid: ffghab4ms1ds0g
-          title: ACS Commitment Component Failed (PV >= 36)
+          title: ACS Commitment Component Failed
           condition: acs commitment component is not in state started
           data:
             - refId: acs commitment component health
@@ -160,14 +160,14 @@ groups:
                 maxDataPoints: 43200
                 refId: acs commitment component is not in state started
                 type: threshold
-          dashboardUid: cnpqrxx
-          panelId: 13
+          dashboardUid: edkzo5ukgeqyoc
+          panelId: 113
           noDataState: Alerting
           execErrState: Alerting
           for: 5m
           annotations:
-            __dashboardUid__: cnpqrxx
-            __panelId__: "13"
+            __dashboardUid__: edkzo5ukgeqyoc
+            __panelId__: "113"
             severity: critical
             summary: The ACS commitment {{ $labels.component }} of the job {{ $labels.job }} in namespace {{ $labels.namespace }} is not in state started.
           labels: {}
