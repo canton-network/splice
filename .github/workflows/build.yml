@@ -116,6 +116,23 @@ jobs:
       protocol_version: ${{ inputs.protocol_version }}
     secrets: inherit
 
+  # TODO(DACH-NY/cn-test-failures#11255): merge back into scala_test_sim_time once BFT sequencer onboarding is no longer flaky
+  scala_test_sim_time_multi_sv:
+    uses: ./.github/workflows/build.scala_test.yml
+    with:
+      runs_on: self-hosted-k8s-large
+      test_names_file: 'test-full-class-names-sim-time-multi-sv.log'
+      start_canton_options: -s
+      parallelism: 3
+      test_name: simtime-multi-sv
+      retry_on_failure: true
+      # Room for a second attempt after a run into the sbt timeout
+      timeout_minutes: 120
+      commit_sha: ${{ inputs.commit_sha }}
+      daml_base_version: ${{ inputs.daml_base_version }}
+      protocol_version: ${{ inputs.protocol_version }}
+    secrets: inherit
+
   scala_test_resource_intensive:
     uses: ./.github/workflows/build.scala_test.yml
     with:
@@ -352,6 +369,7 @@ jobs:
     - deployment_test
     - daml_test
     - scala_test_sim_time
+    - scala_test_sim_time_multi_sv
     - scala_test_resource_intensive
     - scala_test_key_download
     - scala_test_record_time_tolerance

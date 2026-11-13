@@ -90,6 +90,10 @@ inputs:
   cache_version:
     description: "Cache version"
     required: true
+  retry_on_failure:
+    description: "Retry the tests once, against a fresh Canton instance, if the tests or checkErrors fail"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -318,6 +322,10 @@ runs:
           if [[ "${{ inputs.is_frontend_test }}" == "true" ]]; then
             ./stop-frontends.sh
           fi
+        retry_on_failure: ${{ inputs.retry_on_failure }}
+        with_canton: ${{ inputs.with_canton }}
+        start_canton_options: ${{ inputs.start_canton_options }}
+        logs_artifact_name: "logs-${{ inputs.test_suite_name }}-${{ inputs.runner_index }}"
 
     - name: Post-SBT job
       if: ${{ !cancelled() }}

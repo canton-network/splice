@@ -20,11 +20,29 @@ inputs:
     description: "Command to run after running the tests"
     required: false
     default: ""
+  retry_on_failure:
+    description: "Retry once, against a fresh Canton instance and fresh databases, if the tests or checkErrors fail"
+    required: false
+    default: "false"
+  with_canton:
+    description: "Whether the tests use a shared Canton instance (restarted before a retry)"
+    required: false
+    default: "true"
+  start_canton_options:
+    description: "Options for start-canton.sh (used to restart Canton before a retry)"
+    required: false
+    default: ""
+  logs_artifact_name:
+    description: "Artifact name for the logs of the first attempt, if it is retried"
+    required: false
+    default: "logs"
 
 runs:
   using: "composite"
   steps:
     - name: Run tests
+      id: run_tests
+      continue-on-error: ${{ inputs.retry_on_failure == 'true' }}
       uses: ./.github/actions/sbt/execute_sbt_command
       with:
         extra_env_vars: ${{ inputs.extra_env_vars }}
@@ -35,8 +53,74 @@ runs:
         post_sbt_cmd: ${{ inputs.post_sbt_cmd }}
 
     - name: Check logs for errors
+      id: check_errors
+      if: ${{ steps.run_tests.outcome == 'success' }}
+      continue-on-error: ${{ inputs.retry_on_failure == 'true' }}
       uses: ./.github/actions/sbt/execute_sbt_command
       with:
         # we don't care if some integration test happened to make the repo dirty
+        pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
+        cmd: checkErrors
+
+    # A failure can leave Canton in a state that breaks every later test (e.g. a decentralized namespace that was
+    # not reset), so the retry starts from scratch: stop Canton, drop all databases, start Canton again.
+    - name: Prepare retry
+      id: prepare_retry
+      if: ${{ inputs.retry_on_failure == 'true' && (steps.run_tests.outcome == 'failure' || steps.check_errors.outcome == 'failure') }}
+      uses: ./.github/actions/nix/run
+      env:
+        POSTGRES_HOST: localhost
+        CANTON_DB_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+      with:
+        cmd: |
+          echo "::warning::The first attempt failed, retrying once against a fresh Canton instance. The logs of the first attempt are in the artifact ${{ inputs.logs_artifact_name }}-attempt-1."
+          ./stop-canton.sh external || echo "stop-canton.sh failed, continuing"
+          mkdir -p log /tmp/attempt-1
+          mv log /tmp/attempt-1/log
+          mkdir log
+          # stop-canton.sh leaves the data of an external Postgres in place; the service container belongs to
+          # this job, so it is safe to drop everything in it
+          ./scripts/postgres.sh external reset
+          if [[ "${{ inputs.with_canton }}" == "true" ]]; then
+            ./start-canton.sh -p external -D ${{ inputs.start_canton_options }}
+            if [[ "${{ inputs.start_canton_options }}" == *"-w"* ]]; then
+              ./wait-for-canton.sh -w
+            elif [[ "${{ inputs.start_canton_options }}" == *"-s"* ]]; then
+              ./wait-for-canton.sh -s
+            fi
+          fi
+        additional_nix_args: "--keep POSTGRES_HOST --keep POSTGRES_PORT --keep POSTGRES_USER --keep POSTGRES_PASSWORD"
+
+    - name: Pack logs of the first attempt
+      if: ${{ always() && steps.prepare_retry.outcome != 'skipped' }}
+      shell: bash
+      run: pigz -r /tmp/attempt-1/log/* || true
+
+    - name: Upload logs of the first attempt
+      if: ${{ always() && steps.prepare_retry.outcome != 'skipped' }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.logs_artifact_name }}-attempt-1
+        path: /tmp/attempt-1/log
+
+    - name: Run tests (retry)
+      id: run_tests_retry
+      if: ${{ steps.prepare_retry.outcome == 'success' }}
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        extra_env_vars: ${{ inputs.extra_env_vars }}
+        cmd: ${{ inputs.cmd }}
+        additional_nix_args: "--keep GITHUB_ACTION"
+        extra_parameters: ${{ inputs.extra_parameters }}
+        pre_sbt_cmd: ${{ inputs.pre_sbt_cmd }}
+        post_sbt_cmd: ${{ inputs.post_sbt_cmd }}
+
+    - name: Check logs for errors (retry)
+      if: ${{ steps.run_tests_retry.outcome == 'success' }}
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
         pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
         cmd: checkErrors

@@ -2559,6 +2559,21 @@ updateTestConfigForParallelRuns := {
     name contains "LsuIntegrationTest"
   def isLSURollForwardTest(name: String): Boolean =
     name contains "RollForwardLsu"
+  // Simulated time tests that run more than one SV. They run in a separate CI job that retries on
+  // failure, as a workaround for flaky BFT sequencer onboarding (DACH-NY/cn-test-failures#11255).
+  // TODO(DACH-NY/cn-test-failures#11255): merge back into the simulated time tests once that is fixed
+  def isMultiSvSimTimeTest(name: String): Boolean =
+    Seq(
+      "NonZeroRoundBootstrapBftTimeBasedIntegrationTest",
+      "ScanWithGradualStartsTimeBasedIntegrationTest",
+      "SvExpiredRewardsCollectionTimeBasedIntegrationTest",
+      "SvTimeBasedAmuletPriceIntegrationTest",
+      "SvTimeBasedOnboardingIntegrationTest",
+      "SvTimeBasedRewardCouponIntegrationTest",
+      "SvTimeBasedRoundMgmtIntegrationTest",
+      "TimeBasedTestNetPreviewIntegrationTest",
+      "TrafficBasedRewardsSvAppTimeBasedIntegrationTest",
+    ).exists(simpleName => name.endsWith(s".$simpleName"))
 
   val allTestNames =
     definedTests
@@ -2685,6 +2700,11 @@ updateTestConfigForParallelRuns := {
       "tests with simulated time and docker",
       "test-full-class-names-sim-time-docker.log",
       (t: String) => isWithDockerWithSimtimeCantonTest(t),
+    ),
+    (
+      "tests with simulated time and multiple SVs",
+      "test-full-class-names-sim-time-multi-sv.log",
+      (t: String) => isTimeBasedTest(t) && !isFrontEndTest(t) && isMultiSvSimTimeTest(t),
     ),
     (
       "tests with simulated time",

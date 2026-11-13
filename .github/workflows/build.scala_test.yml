@@ -57,6 +57,16 @@ on:
         description: "Canton protocol version"
         type: string
         required: true
+      retry_on_failure:
+        description: "Retry the tests of a runner once, against a fresh Canton instance, if the tests or checkErrors fail"
+        type: boolean
+        required: false
+        default: false
+      timeout_minutes:
+        description: "Timeout of each test runner job"
+        type: number
+        required: false
+        default: 60 # TODO(#3013): Investigate, and reduce back
       postgres_image:
         description: "The image to use for PostgreSQL"
         required: false
@@ -109,7 +119,7 @@ jobs:
   scala_test:
     runs-on: ${{ inputs.runs_on }}
     name: ${{ inputs.test_name }} (${{ matrix.runner-index }})
-    timeout-minutes: 60 # TODO(#3013): Investigate, and reduce back
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write # Required for GCP Workload Identity for failure notifications
       contents: read
@@ -163,3 +173,4 @@ jobs:
           failure_notifications_slack_channel: ${{ secrets.FAILURE_NOTIFICATIONS_SLACK_CHANNEL }}
           daml_base_version: ${{ inputs.daml_base_version }}
           protocol_version: ${{ inputs.protocol_version }}
+          retry_on_failure: ${{ inputs.retry_on_failure }}
