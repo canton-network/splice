@@ -1,0 +1,20 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.ActivityRecorder where
+
+-- | Template for recording activities via special governance or
+-- operational processes (e.g., the reporting of app activity on a dSync).
+template ActivityRecorder with
+    dso : Party
+  where
+    signatory dso
+
+    nonconsuming choice ActivityRecorder_DsoRecordActivity : ()
+      with
+        appActivity : [(Party, Int)]
+          -- ^ App activities to record for the given featured app parties, denominated in traffic bytes.
+        assetActivity : [(Party, Int)]
+          -- ^ Asset activities to record for the given featured asset parties, denominated in traffic bytes.
+      controller dso
+      do pure ()

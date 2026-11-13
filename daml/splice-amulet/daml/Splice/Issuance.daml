@@ -57,22 +57,33 @@ validIssuanceConfig this@IssuanceConfig{..} =
 data OpenMiningRoundSummary = OpenMiningRoundSummary with
     totalValidatorRewardCoupons : Decimal
     totalFeaturedAppRewardCoupons : Decimal
+      -- If `RewardVersion_FeaturedAppMarkers` is enabled, this is the total of FeaturedAppMarkers.
+      -- Otherwise this is the total amount of Amulet burn associated to app activity; as specified in CIP-104.
     totalUnfeaturedAppRewardCoupons : Decimal
     totalSvRewardWeight : Int
     optTotalValidatorFaucetCoupons : Optional Int
       -- ^ Introduced as part of CIP-3.
     optIssuancePerFeaturedAppRewardCoupon : Optional Decimal
       -- ^ If specified, the off-ledger computed value is used as it is in IssuingMiningRound.
+      --
+      -- The amount of Amulet minted per Amulet burn associated to featured app activity.
+      --
       -- The purpose of that value is to communicate it alongside the other
       -- parameters in the `IssuingMiningRound` to explorers and like apps
       -- via the update stream.
     optUnclaimedAppRewards : Optional Decimal
       -- ^ If specified, the off-ledger computed value is used for UnclaimedReward.
+      --
+      -- This is specified in Amulet and is the portion of the featured app issuance
+      -- tranche which was not minted by the app and asset activity combined.
+
     optTotalFeaturedAssetRewardCoupons : Optional Decimal
       -- ^ Introduced as part of CIP-0104.
+      -- Total amount of Amulet burn associated to asset activity.
+
     optIssuancePerFeaturedAssetRewardCoupon : Optional Decimal
       -- ^ Introduced as part of CIP-0104; this is always computed off-ledger.
-      --   Denominated in amount of Amulet minted per Amulet burned.
+      --   Denominated in amount of Amulet minted per Amulet burn associated to asset activity.
   deriving (Eq, Show, Serializable)
 
 getTotalValidatorFaucetCoupons : OpenMiningRoundSummary -> Int

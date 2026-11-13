@@ -35,6 +35,7 @@ import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
 import Splice.Amulet.RewardAccountingV2
 import Splice.Amulet.TokenApiUtils
+import Splice.ActivityRecorder
 import Splice.AmuletConfig
   ( transferConfigToTransferConfigV2, AmuletConfig(..), TransferConfig(..), TransferConfigV2(..), validAmuletConfig
   , defaultTransferPreapprovalFee, getDevelopmentFundManagerBlacklist, getExternalPartyConfigStateTickDuration
@@ -168,6 +169,18 @@ data AmuletRules_UpdateExternalPartyConfigStatesResult = AmuletRules_UpdateExter
     newExternalPartyConfigStateCid : ContractId ExternalPartyConfigState
   deriving (Show, Eq, Serializable)
 
+data AmuletRules_MigrateContractStateSchemaResult = AmuletRules_MigrateContractStateSchemaResult
+  with
+    newAmuletRulesCid : ContractId AmuletRules
+    activityRecorderCid : Optional (ContractId ActivityRecorder)
+      -- ^ Only set if the ActivityRecorder was created by this migration.
+  deriving (Show, Eq, Serializable)
+
+-- | The latest contract state schema version that AmuletRules can be migrated to.
+-- When bumping this also update the value in SV app trigger (TODO: add trigger name?)
+latestContractStateSchemaVersion : Int
+latestContractStateSchemaVersion = 1
+
 -- | The rules governing how Amulet users can modify the Amulet state managed by the DSO party.
 template AmuletRules
   with
@@ -176,7 +189,6 @@ template AmuletRules
     isDevNet : Bool
     contractStateSchemaVersion : Optional Int
       -- Schema version for amulet rules and associated contracts. Intended for bootstrapping new required contracts.
-      -- Currently still unused but added so apps can start recompiling against the new version and don't break once it will be set.
   where
     ensure validAmuletConfig configSchedule.initialValue && null configSchedule.futureValues && fromOptional 0 contractStateSchemaVersion >= 0
 
@@ -1039,6 +1051,21 @@ template AmuletRules
           amuletSwitchOverTimes = config.amuletSwitchOverTimes
           governanceLockConfig = config.governanceLockConfig
         pure AmuletRules_UpdateExternalPartyConfigStatesResult with ..
+
+    -- | Migrate the contract state schema to latest version and create necessary contracts
+    choice AmuletRules_MigrateContractStateSchema : AmuletRules_MigrateContractStateSchemaResult
+      controller dso
+      do
+        let currentVersion = fromOptional 0 contractStateSchemaVersion
+        require "currentVersion < latestContractStateSchemaVersion"
+          (currentVersion < latestContractStateSchemaVersion)
+        activityRecorderCid <-
+          if currentVersion == 0
+            then Some <$> create ActivityRecorder with dso
+            else pure None
+        newAmuletRulesCid <- create this with
+          contractStateSchemaVersion = Some latestContractStateSchemaVersion
+        pure AmuletRules_MigrateContractStateSchemaResult with newAmuletRulesCid; activityRecorderCid
 
 
 data OpenMiningRoundTriple = OpenMiningRoundTriple
