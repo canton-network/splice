@@ -10,6 +10,7 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmptyReturningOps.*
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.util.HexString
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent.{Assign, Unassign}
@@ -93,11 +94,6 @@ import scala.util.Try
   * The following triggers perform long-running background tasks related to [[UpdateHistory]],
   * and must complete in the following order:
   *
-  *   1. [[DeleteCorruptAcsSnapshotTrigger]] deletes all ACS snapshots that were computed from this UpdateHistory while
-  *      it was missing import updates. Such snapshots are easily identified by the trigger.
-  *      UpdateHistory has an in-memory flag (as part of [[UpdateHistory.State]]) that stores
-  *      whether all corrupt updates have been deleted.
-  *      See [[corruptAcsSnapshotsDeleted]] and [[markCorruptAcsSnapshotsDeleted]].
   *   1. [[ScanHistoryBackfillingTrigger]] backfills missing updates from peer scan applications.
   *      Information on the progress of this backfilling process is stored in the database.
   *      See [[destinationHistory.markBackfillingComplete]] and [[destinationHistory.markImportUpdatesBackfillingComplete]].
@@ -162,6 +158,24 @@ class UpdateHistory private (
 
   def waitUntilInitialized: Future[Unit] = state.get().initialized.future
 
+  // Returns legacy and/or partitioned table, depending on whether the used filters would need data from one or the other.
+  def historyTablesToQuery(
+      tableName: String,
+      atOrAfter: Option[CantonTimestamp] = None,
+      before: Option[CantonTimestamp] = None,
+  ): Seq[String] =
+    lastLegacyRecordTime match {
+      case None => Seq(tableName)
+      case Some(boundary) =>
+        Seq(
+          Option.when(atOrAfter.forall(_ <= boundary))(s"${tableName}_legacy"),
+          Option.when(before.forall(_ > boundary))(tableName),
+        ).flatten
+    }
+
+  def historyTableContainingRecordTime(table: String, recordTime: CantonTimestamp): String =
+    if (lastLegacyRecordTime.exists(recordTime <= _)) s"${table}_legacy" else table
+
   def isReady: Boolean = state.get().initialized.isCompleted
 
   override def close(): Unit = metrics.close()
@@ -187,6 +201,7 @@ class UpdateHistory private (
           _ <- createMissingPartitions(connection, clock.now)
           _ <- storage
             .update(
+              // update_history_last_ingested_offsets_pkey
               sql"""
              insert into update_history_last_ingested_offsets (history_id, migration_id)
              values ($historyId, $domainMigrationId)
@@ -197,6 +212,7 @@ class UpdateHistory private (
 
           lastIngestedOffset <- storage
             .querySingle(
+              // update_history_last_ingested_offsets_pkey
               sql"""
              select last_ingested_offset
              from update_history_last_ingested_offsets
@@ -338,6 +354,7 @@ class UpdateHistory private (
       }
 
       private def updateOffset(offset: Long): DBIOAction[?, NoStream, Effect.Write] =
+        // update_history_last_ingested_offsets_pkey
         sqlu"""
         update update_history_last_ingested_offsets
         set last_ingested_offset = ${lengthLimited(LegacyOffset.Api.fromLong(offset))}
@@ -418,6 +435,7 @@ class UpdateHistory private (
 
     storage
       .query(
+        // catalog: pg_inherits, pg_class
         sql"""
           select parent.relname, child.relname
           from pg_inherits i
@@ -451,10 +469,10 @@ class UpdateHistory private (
       }
   }
 
-  // Requires Postgres 18 to run. Therefore, all Scan operators must be running said version of Postgres.
+  // TODO(#8436) ANALYZE ONLY once all SVs run Postgres 18
   def analyzePartitionedTables()(implicit tc: TraceContext): Future[Unit] =
     storage.update(
-      DBIO.sequence(PartitionedTables.map(table => sqlu"analyze only #$table")).map(_ => ()),
+      DBIO.sequence(PartitionedTables.map(table => sqlu"analyze #$table")).map(_ => ()),
       "analyzePartitionedTables",
     )
 
@@ -566,6 +584,7 @@ class UpdateHistory private (
     val safeUnassignId = lengthLimited(event.unassignId)
     val safeContractId = lengthLimited(event.contractId.contractId)
     metrics.UpdateHistory.unassignments.mark()
+    // insert, deduplicated by updt_hist_unas_hi_mi_ui_u
     sqlu"""
       insert into update_history_unassignments(
         history_id,update_id,record_time,
@@ -614,6 +633,7 @@ class UpdateHistory private (
     metrics.UpdateHistory.assignments.mark()
     for {
       interned <- DBIO.from(internEventStrings(templateId, event.createdEvent.getPackageName))
+      // insert, deduplicated by updt_hist_assi_hi_mi_ui_u
       result <- sqlu"""
       insert into update_history_assignments(
         history_id,update_id,record_time,
@@ -693,6 +713,7 @@ class UpdateHistory private (
 
     import storage.DbStorageConverters.setParameterOptionalByteArray
 
+    // insert, deduplicated by updt_hist_tran_hi_mi_ui_u
     (sql"""
       insert into update_history_transactions(
         history_id, update_id, record_time,
@@ -738,6 +759,7 @@ class UpdateHistory private (
 
     for {
       interned <- DBIO.from(internEventStrings(templateId, event.getPackageName))
+      // insert, no unique index on the partitioned creates, deduplicated by the transaction insert
       result <- sqlu"""
       insert into update_history_creates(
         history_id, event_id, update_row_id,
@@ -831,6 +853,7 @@ class UpdateHistory private (
       interfaceIdInterned <- DBIO.sequenceOption(
         interfaceId.map(id => DBIO.from(internInterfaceId(id)))
       )
+      // insert, no unique index on the partitioned exercises, deduplicated by the transaction insert
       result <- sqlu"""
       insert into update_history_exercises(
         history_id, event_id, update_row_id,
@@ -864,66 +887,6 @@ class UpdateHistory private (
     } yield result
   }
 
-  def migrationsWithCorruptSnapshots()(implicit tc: TraceContext): Future[Set[Long]] = {
-    for {
-      migrationsWithImportUpdates <- storage
-        .query(
-          // The following is equivalent to:
-          //    """select distinct migration_id
-          //    from update_history_transactions
-          //    where history_id = $historyId
-          //    and record_time = ${CantonTimestamp.MinValue}"""
-          // but it uses a recursive CTE to implement a loose index scan
-          sql"""
-              with recursive t as (
-                (
-                  select migration_id
-                  from update_history_transactions
-                  where history_id = $historyId and record_time = ${CantonTimestamp.MinValue}
-                  order by migration_id limit 1
-                )
-                union all
-                select (
-                  select migration_id
-                  from update_history_transactions
-                  where migration_id > t.migration_id and history_id = $historyId and record_time = ${CantonTimestamp.MinValue}
-                  order by migration_id limit 1
-                )
-                from t
-                where t.migration_id is not null
-              )
-              select migration_id from t where migration_id is not null
-             """.as[Long],
-          "deleteInvalidAcsSnapshots.1",
-        )
-      firstMigrationIdO <- getFirstMigrationId(historyId)
-      migrationsWithSnapshots <- storage
-        .query(
-          sql"""
-               select distinct migration_id
-               from acs_snapshot
-               where history_id = $historyId
-             """.as[Long],
-          "deleteInvalidAcsSnapshots.2",
-        )
-    } yield {
-      firstMigrationIdO match {
-        case None =>
-          Set.empty
-        case Some(firstMigrationId) =>
-          val migrationsThatNeedImportUpdates: Set[Long] =
-            migrationsWithSnapshots.toSet - firstMigrationId
-          migrationsThatNeedImportUpdates -- migrationsWithImportUpdates.toSet
-      }
-    }
-  }
-
-  def corruptAcsSnapshotsDeleted: Boolean = state.get.corruptSnapshotsDeleted
-  def markCorruptAcsSnapshotsDeleted(): Unit = {
-    state.updateAndGet(_.copy(corruptSnapshotsDeleted = true))
-    ()
-  }
-
   /** Deletes all ACS snapshots with a record time after the given time.
     *
     * Note: ACS snapshots are managed by [[AcsSnapshotStore]] which is part of the scan app
@@ -944,6 +907,7 @@ class UpdateHistory private (
     )
     val deleteAction = for {
       dataToDelete <-
+        // acs_snapshot_pkey
         sql"""
           delete from acs_snapshot
           where history_id = $historyId and migration_id = $migrationId and snapshot_record_time > $recordTime
@@ -954,6 +918,7 @@ class UpdateHistory private (
         s"Deleted ${dataToDelete.size} rows from acs_snapshot, expecting to delete $expectedDataRows rows from acs_snapshot_data"
       )
       deletedDataRows <- DBIO.traverse(dataToDelete) { case (first_row, last_row) =>
+        // acs_snapshot_data_pkey
         sqlu"""
           delete from acs_snapshot_data
           where row_id between $first_row and $last_row
@@ -972,6 +937,8 @@ class UpdateHistory private (
   }
 
   /** Deletes all updates on the given domain with a record time before the given time.
+    * Does not need to touch legacy tables, because this is only relevant for joining SVs.
+    * Those will never have any data in legacy tables.
     */
   def deleteUpdatesBefore(
       synchronizerId: SynchronizerId,
@@ -1022,16 +989,30 @@ class UpdateHistory private (
   private def afterFilters(
       afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
-  ): NonEmptyList[SQLActionBuilder] = {
+  ): NonEmptyList[UpdatesFilter] = {
     val gtMin = if (includeImportUpdates) ">=" else ">"
+    val minAtOrAfter =
+      if (includeImportUpdates) CantonTimestamp.MinValue
+      else CantonTimestamp.MinValue.immediateSuccessor
     afterO match {
       case None =>
-        NonEmptyList.of(sql"migration_id >= 0 and record_time #$gtMin ${CantonTimestamp.MinValue}")
+        NonEmptyList.of(
+          UpdatesFilter(
+            sql"migration_id >= 0 and record_time #$gtMin ${CantonTimestamp.MinValue}",
+            atOrAfter = Some(minAtOrAfter),
+          )
+        )
       case Some(TimestampWithMigrationId(afterRecordTime, afterMigrationId)) =>
         // This makes it so that the two queries use updt_hist_tran_hi_mi_rt_di,
         NonEmptyList.of(
-          sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
-          sql"migration_id > ${afterMigrationId} and record_time #$gtMin ${CantonTimestamp.MinValue}",
+          UpdatesFilter(
+            sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
+            atOrAfter = Some(afterRecordTime.immediateSuccessor),
+          ),
+          UpdatesFilter(
+            sql"migration_id > ${afterMigrationId} and record_time #$gtMin ${CantonTimestamp.MinValue}",
+            atOrAfter = Some(minAtOrAfter),
+          ),
         )
     }
   }
@@ -1041,53 +1022,71 @@ class UpdateHistory private (
       synchronizerId: SynchronizerId,
       beforeRecordTime: CantonTimestamp,
       atOrAfterRecordTimeO: Option[CantonTimestamp],
-  ): NonEmptyList[SQLActionBuilder] = {
+  ): NonEmptyList[UpdatesFilter] = {
     atOrAfterRecordTimeO match {
       case None =>
         NonEmptyList.of(
           // Uses `> CantonTimestamp.MinValue` to exclude import updates
-          sql"""migration_id = $migrationId and
+          UpdatesFilter(
+            sql"""migration_id = $migrationId and
                 domain_id = $synchronizerId and
                 record_time < $beforeRecordTime and
-                record_time > ${CantonTimestamp.MinValue}"""
+                record_time > ${CantonTimestamp.MinValue}""",
+            atOrAfter = Some(CantonTimestamp.MinValue.immediateSuccessor),
+            before = Some(beforeRecordTime),
+          )
         )
       case Some(atOrAfterRecordTime) =>
         NonEmptyList.of(
-          sql"""migration_id = $migrationId and
+          UpdatesFilter(
+            sql"""migration_id = $migrationId and
                 domain_id = $synchronizerId and
                 record_time < $beforeRecordTime and
                 record_time >= ${atOrAfterRecordTime}
-                """
+                """,
+            atOrAfter = Some(atOrAfterRecordTime),
+            before = Some(beforeRecordTime),
+          )
         )
     }
 
   }
 
   private def updatesQuery(
-      filters: NonEmptyList[SQLActionBuilder],
+      table: String,
+      filters: NonEmptyList[UpdatesFilter],
       orderBy: SQLActionBuilder,
       limit: Limit,
-      makeSubQuery: SQLActionBuilder => SQLActionBuilderChain,
-  ) = {
-    if (filters.size == 1) {
-      makeSubQuery(filters.head)
-    } else {
-      // Using an OR in a query might cause the query planner to do a Seq scan,
-      // whereas using a union all makes it so that the individual queries use the right index,
-      // and are merged via Merge Append.
-      val unionAll = filters.map(makeSubQuery).reduceLeft(_ ++ sql" union all " ++ _)
+      makeSubQuery: (String, SQLActionBuilderChain) => SQLActionBuilderChain,
+  ): Option[SQLActionBuilderChain] = {
+    val subQueries = filters.toList.flatMap { filter =>
+      historyTablesToQuery(table, filter.atOrAfter, filter.before).map { t =>
+        makeSubQuery(t, SQLActionBuilderChain(filter.sql))
+      }
+    }
+    subQueries match {
+      case Nil => None
+      case single :: Nil => Some(single)
+      case first :: rest =>
+        // Using an OR in a query might cause the query planner to do a Seq scan,
+        // whereas using a union all makes it so that the individual queries use the right index,
+        // and are merged via Merge Append.
+        val unionAll = rest.foldLeft(first)(_ ++ sql" union all " ++ _)
 
-      sql"select * from (" ++ unionAll ++ sql") all_queries " ++
-        sql"order by " ++ orderBy ++ sql" limit ${limit.limit}"
+        Some(
+          sql"select * from (" ++ unionAll ++ sql") all_queries " ++
+            sql"order by " ++ orderBy ++ sql" limit ${limit.limit}"
+        )
     }
   }
 
   private def getTxUpdates(
-      filters: NonEmptyList[SQLActionBuilder],
+      filters: NonEmptyList[UpdatesFilter],
       orderBy: SQLActionBuilder,
       limit: Limit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
-    def makeSubQuery(afterFilter: SQLActionBuilder): SQLActionBuilderChain = {
+    def makeSubQuery(table: String, afterFilter: SQLActionBuilderChain): SQLActionBuilderChain = {
+      // after filters: updt_hist_tran_hi_mi_rt_di(_legacy), before filters: updt_hist_tran_hi_mi_di_rt(_legacy)
       sql"""
       (select
         row_id,
@@ -1101,21 +1100,31 @@ class UpdateHistory private (
         workflow_id,
         command_id,
         external_transaction_hash
-      from update_history_transactions
+      from #$table
       where
         history_id = $historyId and """ ++ afterFilter ++
         sql" order by " ++ orderBy ++ sql" limit ${limit.limit})"
     }
 
-    val finalQuery = updatesQuery(filters, orderBy, limit, makeSubQuery)
     for {
-      rows <- storage
-        .query(
-          finalQuery.toActionBuilder.as[SelectFromTransactions],
-          "getTxUpdates",
-        )
-      creates <- queryCreateEvents(rows.map(_.rowId))
-      exercises <- queryExerciseEvents(rows.map(_.rowId))
+      rows <- updatesQuery(
+        "update_history_transactions",
+        filters,
+        orderBy,
+        limit,
+        makeSubQuery,
+      ) match {
+        case None => Future.successful(Vector.empty[SelectFromTransactions])
+        case Some(finalQuery) =>
+          storage.query(
+            finalQuery.toActionBuilder.as[SelectFromTransactions],
+            "getTxUpdates",
+          ): Future[
+            Vector[SelectFromTransactions]
+          ]
+      }
+      creates <- queryCreateEvents(rows)
+      exercises <- queryExerciseEvents(rows)
     } yield {
       rows.map { row =>
         TreeUpdateWithMigrationId(
@@ -1131,12 +1140,13 @@ class UpdateHistory private (
   }
 
   private def getAssignmentUpdates(
-      filters: NonEmptyList[SQLActionBuilder],
+      filters: NonEmptyList[UpdatesFilter],
       orderBy: SQLActionBuilder,
       limit: Limit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
 
-    def makeSubQuery(afterFilter: SQLActionBuilder): SQLActionBuilderChain = {
+    def makeSubQuery(table: String, afterFilter: SQLActionBuilderChain): SQLActionBuilderChain = {
+      // after filters: updt_hist_assi_hi_mi_rt_di(_legacy), before filters: updt_hist_assi_hi_mi_di_rt(_legacy)
       sql"""
     (select
       update_id,
@@ -1159,31 +1169,42 @@ class UpdateHistory private (
       signatories,
       observers,
       contract_key
-    from update_history_assignments
+    from #$table
     where
       history_id = $historyId and """ ++ afterFilter ++
         sql" order by " ++ orderBy ++ sql" limit ${limit.limit})"
     }
 
-    val finalQuery = updatesQuery(filters, orderBy, limit, makeSubQuery)
     for {
-      rows <- storage
-        .query(
-          finalQuery.toActionBuilder.as[SelectFromAssignments],
-          "getAssignmentUpdates",
-        )
+      rows <- updatesQuery(
+        "update_history_assignments",
+        filters,
+        orderBy,
+        limit,
+        makeSubQuery,
+      ) match {
+        case None => Future.successful(Vector.empty[SelectFromAssignments])
+        case Some(finalQuery) =>
+          storage.query(
+            finalQuery.toActionBuilder.as[SelectFromAssignments],
+            "getAssignmentUpdates",
+          ): Future[
+            Vector[SelectFromAssignments]
+          ]
+      }
     } yield {
       rows.map { row => TreeUpdateWithMigrationId(decodeAssignment(row), row.migrationId) }
     }
   }
 
   private def getUnassignmentUpdates(
-      filters: NonEmptyList[SQLActionBuilder],
+      filters: NonEmptyList[UpdatesFilter],
       orderBy: SQLActionBuilder,
       limit: Limit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
 
-    def makeSubQuery(afterFilter: SQLActionBuilder): SQLActionBuilderChain = {
+    def makeSubQuery(table: String, afterFilter: SQLActionBuilderChain): SQLActionBuilderChain = {
+      // after filters: updt_hist_unas_hi_mi_rt_di(_legacy), before filters: updt_hist_unas_hi_mi_di_rt(_legacy)
       sql"""
     (select
       update_id,
@@ -1196,19 +1217,29 @@ class UpdateHistory private (
       reassignment_id,
       submitter,
       contract_id
-    from update_history_unassignments
+    from #$table
     where
       history_id = $historyId and """ ++ afterFilter ++
         sql" order by " ++ orderBy ++ sql" limit ${limit.limit})"
     }
 
-    val finalQuery = updatesQuery(filters, orderBy, limit, makeSubQuery)
     for {
-      rows <- storage
-        .query(
-          finalQuery.toActionBuilder.as[SelectFromUnassignments],
-          "getUnassignmentUpdates",
-        )
+      rows <- updatesQuery(
+        "update_history_unassignments",
+        filters,
+        orderBy,
+        limit,
+        makeSubQuery,
+      ) match {
+        case None => Future.successful(Vector.empty[SelectFromUnassignments])
+        case Some(finalQuery) =>
+          storage.query(
+            finalQuery.toActionBuilder.as[SelectFromUnassignments],
+            "getUnassignmentUpdates",
+          ): Future[
+            Vector[SelectFromUnassignments]
+          ]
+      }
     } yield {
       rows.map { row => TreeUpdateWithMigrationId(decodeUnassignment(row), row.migrationId) }
     }
@@ -1233,7 +1264,12 @@ class UpdateHistory private (
       recordTime: CantonTimestamp
   )(implicit tc: TraceContext): Future[Option[Long]] = {
     // Including migration >= 0 to make sure it hits the indices
-    val filter = NonEmptyList.of(sql"migration_id >= 0 and record_time > ${recordTime}")
+    val filter = NonEmptyList.of(
+      UpdatesFilter(
+        sql"migration_id >= 0 and record_time > ${recordTime}",
+        atOrAfter = Some(recordTime.immediateSuccessor),
+      )
+    )
     val orderBy = sql"migration_id, record_time, domain_id"
     val limit = HardLimit.tryCreate(1)
     for {
@@ -1294,6 +1330,8 @@ class UpdateHistory private (
     * Note: HttpScanHandler rewrites event ids in order to make them consistent across SVs.
     * For import updates, we need to implement the rewrite here, as it needs to implemented
     * in the database query.
+    *
+    * Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
     */
   def getImportUpdates(
       migrationId: Long,
@@ -1301,6 +1339,7 @@ class UpdateHistory private (
       limit: PageLimit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
     val query =
+      // creates: updt_hist_crea_hi_mi_rt (no contract_id index), transactions: primary key on row_id
       sql"""
         select
           tx.record_time,
@@ -1355,7 +1394,8 @@ class UpdateHistory private (
       updateId: String
   )(implicit tc: TraceContext): Future[Option[TreeUpdateWithMigrationId]] = {
     val safeUpdateId = lengthLimited(updateId)
-    val query =
+    def query(table: String) =
+      // updt_hist_tran_hi_ui(_legacy)
       sql"""
       select
         row_id,
@@ -1369,19 +1409,19 @@ class UpdateHistory private (
         workflow_id,
         command_id,
         external_transaction_hash
-      from  update_history_transactions
+      from  #$table
       where update_id = $safeUpdateId
       and history_id = $historyId
         """
 
     for {
-      rows <- storage
-        .query(
-          query.toActionBuilder.as[SelectFromTransactions],
-          "getUpdate",
+      rows <- MonadUtil
+        .sequentialTraverse(historyTablesToQuery("update_history_transactions"))(t =>
+          storage.query(query(t).toActionBuilder.as[SelectFromTransactions], "getUpdate")
         )
-      creates <- queryCreateEvents(rows.map(_.rowId))
-      exercises <- queryExerciseEvents(rows.map(_.rowId))
+        .map(_.flatten)
+      creates <- queryCreateEvents(rows)
+      exercises <- queryExerciseEvents(rows)
     } yield {
       rows.map { row =>
         TreeUpdateWithMigrationId(
@@ -1406,7 +1446,8 @@ class UpdateHistory private (
       val safeExtTxnHash = sanitizedExtTxnHash(parsedExtTxnHash)
 
       import storage.DbStorageConverters.setParameterOptionalByteArray
-      val query =
+      def query(table: String) =
+        // updt_hist_tran_hi_eth(_legacy), the legacy one is created at runtime and might not exist
         sql"""
       select
         row_id,
@@ -1420,19 +1461,20 @@ class UpdateHistory private (
         workflow_id,
         command_id,
         external_transaction_hash
-      from  update_history_transactions
+      from  #$table
       where external_transaction_hash = $safeExtTxnHash
       and history_id = $historyId
         """
 
       for {
-        rows <- storage
-          .query(
-            query.toActionBuilder.as[SelectFromTransactions],
-            "getUpdateByHash",
+        rows <- MonadUtil
+          .sequentialTraverse(historyTablesToQuery("update_history_transactions"))(t =>
+            storage
+              .query(query(t).toActionBuilder.as[SelectFromTransactions], "getUpdateByHash")
           )
-        creates <- queryCreateEvents(rows.map(_.rowId))
-        exercises <- queryExerciseEvents(rows.map(_.rowId))
+          .map(_.flatten)
+        creates <- queryCreateEvents(rows)
+        exercises <- queryExerciseEvents(rows)
       } yield {
         rows.map { row =>
           TreeUpdateWithMigrationId(
@@ -1449,14 +1491,18 @@ class UpdateHistory private (
   }
 
   private def queryCreateEvents(
-      transactionRowIds: Seq[Long]
-  )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromCreateEvents]]] = {
-    NonEmpty.from(transactionRowIds) match {
-      case None => Future.successful(Map.empty)
-      case Some(transactionRowIds) =>
-        storage
-          .query(
-            (sql"""
+      transactions: Seq[SelectFromTransactions]
+  )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromCreateEvents]]] =
+    MonadUtil
+      .sequentialTraverse(
+        transactions
+          .groupBy1(tx => historyTableContainingRecordTime("update_history_creates", tx.recordTime))
+          .toSeq
+      ) { case (table, txs) =>
+        val recordTimes = txs.map(_.recordTime)
+        storage.query(
+          // updt_hist_crea_unique_legacy / updt_hist_crea_uri
+          (sql"""
         select
           update_row_id,
           event_id,
@@ -1471,16 +1517,16 @@ class UpdateHistory private (
           observers,
           contract_key,
           record_time
+        from #$table
+        where """ ++ DbStorage.toInClause("update_row_id", txs.map(_.rowId)) ++
+            sql" and record_time between ${recordTimes.min1} and ${recordTimes.max1}").toActionBuilder
+            .as[SelectFromCreateEvents],
+          "queryCreateEvents",
+        )
+      }
+      .map(_.flatten.groupBy(_.updateRowId))
 
-        from update_history_creates
-        where """ ++ DbStorage.toInClause("update_row_id", transactionRowIds)).toActionBuilder
-              .as[SelectFromCreateEvents],
-            "queryCreateEvents",
-          )
-          .map(_.groupBy(_.updateRowId))
-    }
-  }
-
+  // TODO (#8075): remove this
   def lookupContractById[TCId <: ContractId[?], T <: DamlRecord[?]](
       companion: Contract.Companion.Template[TCId, T]
   )(contractId: TCId)(implicit tc: TraceContext): Future[Option[Contract[TCId, T]]] = {
@@ -1507,7 +1553,7 @@ class UpdateHistory private (
               contract_key,
               history_id,
               record_time
-            from update_history_creates
+            from update_history_creates_legacy
             where contract_id = $contractId)
             select * from unfiltered_contracts where history_id = $historyId""".toActionBuilder
             .as[SelectFromCreateEvents]
@@ -1520,14 +1566,20 @@ class UpdateHistory private (
   }
 
   private def queryExerciseEvents(
-      transactionRowIds: Seq[Long]
-  )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromExerciseEvents]]] = {
-    NonEmpty.from(transactionRowIds) match {
-      case None => Future.successful(Map.empty)
-      case Some(transactionRowIds) =>
-        storage
-          .query(
-            (sql"""
+      transactions: Seq[SelectFromTransactions]
+  )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromExerciseEvents]]] =
+    MonadUtil
+      .sequentialTraverse(
+        transactions
+          .groupBy1(tx =>
+            historyTableContainingRecordTime("update_history_exercises", tx.recordTime)
+          )
+          .toSeq
+      ) { case (table, txs) =>
+        val recordTimes = txs.map(_.recordTime)
+        storage.query(
+          // updt_hist_exer_unique_legacy / updt_hist_exer_uri
+          (sql"""
         select
           update_row_id,
           event_id,
@@ -1545,14 +1597,14 @@ class UpdateHistory private (
           interface_id_package_id,
           interface_id_module_name,
           interface_id_entity_name
-        from update_history_exercises
-        where """ ++ DbStorage.toInClause("update_row_id", transactionRowIds)).toActionBuilder
-              .as[SelectFromExerciseEvents],
-            "queryExerciseEvents",
-          )
-          .map(_.groupBy(_.updateRowId))
-    }
-  }
+        from #$table
+        where """ ++ DbStorage.toInClause("update_row_id", txs.map(_.rowId)) ++
+            sql" and record_time between ${recordTimes.min1} and ${recordTimes.max1}").toActionBuilder
+            .as[SelectFromExerciseEvents],
+          "queryExerciseEvents",
+        )
+      }
+      .map(_.flatten.groupBy(_.updateRowId))
 
   /** Decodes the result of fetching one import contract ([[SelectFromImportUpdates]]) into
     * an artificial update ([[UpdateHistoryResponse]]) with exactly one create event.
@@ -1885,6 +1937,7 @@ class UpdateHistory private (
     }
 
   /** Returns the record time range of sequenced events excluding ACS imports after a HDM.
+    * Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
     */
   def getRecordTimeRangeBySynchronizer(
       migrationId: Long
@@ -1899,6 +1952,7 @@ class UpdateHistory private (
     def range(table: String): Future[Map[SynchronizerId, DomainRecordTimeRange]] = {
       storage
         .query(
+          // loose index scan over updt_hist_*_hi_mi_di_rt
           sql"""
             with recursive domains AS (
               select min(domain_id) AS domain_id FROM #$table where history_id = $historyId and migration_id = $migrationId
@@ -1927,13 +1981,15 @@ class UpdateHistory private (
         )
     }
 
-    for {
-      rangeTransactions <- range("update_history_transactions")
-      rangeAssignments <- range("update_history_assignments")
-      rangeUnassignments <- range("update_history_unassignments")
-    } yield {
-      rangeTransactions |+| rangeUnassignments |+| rangeAssignments
-    }
+    MonadUtil
+      .sequentialTraverse(
+        Seq(
+          "update_history_transactions",
+          "update_history_assignments",
+          "update_history_unassignments",
+        )
+      )(range)
+      .map(_.foldLeft(Map.empty[SynchronizerId, DomainRecordTimeRange])(_ |+| _))
   }
 
   /** Returns the record time range of sequenced events excluding ACS imports after a HDM,
@@ -1944,6 +2000,7 @@ class UpdateHistory private (
   )(implicit tc: TraceContext): Future[Option[DomainRecordTimeRange]] = {
 
     def rangeForTable(table: String): SQLActionBuilder = {
+      // updt_hist_*_hi_mi_rt_di(_legacy)
       sql"""
         select min(record_time) as min_record_time, max(record_time) as max_record_time
         from #$table
@@ -1952,35 +2009,40 @@ class UpdateHistory private (
         and record_time > ${CantonTimestamp.MinValue}
       """
     }
-    storage
-      .query(
-        (sql"""
-          select min(min_record_time) as min_record_time, max(max_record_time) as max_record_time
-          from (
-            (""" ++ rangeForTable("update_history_transactions") ++ sql""")
-            union all
-            (""" ++ rangeForTable("update_history_assignments") ++ sql""")
-            union all
-            (""" ++ rangeForTable("update_history_unassignments") ++ sql""")
-          ) all_ranges
-        """).toActionBuilder
-          .as[(Option[CantonTimestamp], Option[CantonTimestamp])]
-          .head
-          .map(row =>
-            for {
-              min <- row._1
-              max <- row._2
-            } yield DomainRecordTimeRange(min, max)
-          ),
-        s"getRecordTimeRange",
-      )
+    val tables = Seq(
+      "update_history_transactions",
+      "update_history_assignments",
+      "update_history_unassignments",
+    ).flatMap(historyTablesToQuery(_))
+    NonEmpty.from(tables.map(t => sql"(" ++ rangeForTable(t) ++ sql")")) match {
+      case None => Future.successful(None)
+      case Some(ranges) =>
+        storage
+          .query(
+            (sql"""
+              select min(min_record_time) as min_record_time, max(max_record_time) as max_record_time
+              from (""" ++ unionAll(ranges) ++ sql""") all_ranges
+            """).toActionBuilder
+              .as[(Option[CantonTimestamp], Option[CantonTimestamp])]
+              .head
+              .map(row =>
+                for {
+                  min <- row._1
+                  max <- row._2
+                } yield DomainRecordTimeRange(min, max)
+              ),
+            s"getRecordTimeRange",
+          )
+    }
   }
 
+  // Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
   def getLastImportUpdateId(
       migrationId: Long
   )(implicit tc: TraceContext): Future[Option[String]] = {
     if (enableImportUpdateBackfill) {
       storage.query(
+        // updt_hist_crea_hi_mi_rt
         sql"""
         select
           -- Note: to make update ids consistent across SVs, we use the contract id as the update id.
@@ -1999,6 +2061,7 @@ class UpdateHistory private (
     }
   }
 
+  // Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
   def getPreviousMigrationId(migrationId: Long)(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
@@ -2009,6 +2072,7 @@ class UpdateHistory private (
         //     from #$table
         //     where history_id = $historyId and migration_id < $migrationId
         // but uses a recursive CTE to avoid a backwards-index-scan which attempts to read most of the table.
+        // loose index scan over updt_hist_*_hi_mi_rt_di
         sql"""
           WITH RECURSIVE t AS (
              (SELECT migration_id FROM #$table where history_id = $historyId and migration_id < $migrationId ORDER BY migration_id LIMIT 1)
@@ -2023,17 +2087,15 @@ class UpdateHistory private (
       )
     }
 
-    for {
-      transactions <- previousId("update_history_transactions")
-      assignments <- previousId("update_history_assignments")
-      unassignments <- previousId("update_history_unassignments")
-    } yield {
-      List(
-        transactions,
-        assignments,
-        unassignments,
-      ).flatten.maxOption
-    }
+    MonadUtil
+      .sequentialTraverse(
+        Seq(
+          "update_history_transactions",
+          "update_history_assignments",
+          "update_history_unassignments",
+        )
+      )(previousId)
+      .map(_.flatten.maxOption)
   }
 
   private[this] def getFirstMigrationId(historyId: Long)(implicit
@@ -2041,6 +2103,7 @@ class UpdateHistory private (
   ): Future[Option[Long]] = {
     def previousId(table: String) = {
       storage.query(
+        // updt_hist_*_hi_mi_rt_di(_legacy)
         sql"""
              select min(migration_id)
              from #$table
@@ -2050,26 +2113,28 @@ class UpdateHistory private (
       )
     }
 
-    for {
-      transactions <- previousId("update_history_transactions")
-      assignments <- previousId("update_history_assignments")
-      unassignments <- previousId("update_history_unassignments")
-    } yield {
-      List(
-        transactions,
-        assignments,
-        unassignments,
-      ).flatten.minOption
-    }
+    MonadUtil
+      .sequentialTraverse(
+        Seq(
+          "update_history_transactions",
+          "update_history_assignments",
+          "update_history_unassignments",
+        )
+          .flatMap(historyTablesToQuery(_))
+      )(previousId)
+      .map(_.flatten.minOption)
   }
 
-  /** Returns the migration id at which the import update backfilling should start */
+  /** Returns the migration id at which the import update backfilling should start.
+    * Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
+    */
   private[this] def getImportUpdateBackfillingMigrationId()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
     for {
       importUpdateBackfillingComplete <- storage
         .query(
+          // update_history_backfilling_pkey
           sql"""
           select import_updates_complete
           from update_history_backfilling
@@ -2078,6 +2143,7 @@ class UpdateHistory private (
           "getImportUpdateBackfillingMigrationId.1",
         )
       (firstMigration, lastMigration) <- storage.query(
+        // updt_hist_tran_hi_mi_rt_di
         sql"""
              select min(migration_id), max(migration_id)
              from update_history_transactions
@@ -2086,6 +2152,7 @@ class UpdateHistory private (
         s"getImportUpdateBackfillingMigrationId.2",
       )
       firstMigrationWithImportUpdates <- storage.query(
+        // updt_hist_tran_hi_mi_rt_di
         sql"""
              select min(migration_id)
              from update_history_transactions
@@ -2124,6 +2191,7 @@ class UpdateHistory private (
       case BackfillingRequirement.NeedsBackfilling =>
         storage
           .query(
+            // update_history_backfilling_pkey
             sql"""
           select complete, import_updates_complete
           from update_history_backfilling
@@ -2155,6 +2223,7 @@ class UpdateHistory private (
     assert(backfillingRequired == BackfillingRequirement.NeedsBackfilling)
     storage
       .update(
+        // update_history_backfilling_pkey
         sqlu"""
           update update_history_backfilling
           set complete = true
@@ -2170,6 +2239,7 @@ class UpdateHistory private (
   ): Future[Unit] =
     storage
       .update(
+        // update_history_backfilling_pkey
         sqlu"""
           update update_history_backfilling
           set import_updates_complete = true
@@ -2194,6 +2264,7 @@ class UpdateHistory private (
     val safeUpdateId = lengthLimited(joiningUpdateId)
     storage
       .update(
+        // update_history_backfilling_pkey
         sqlu"""
           insert into update_history_backfilling (history_id, joining_migration_id, joining_domain_id, joining_update_id, complete, import_updates_complete)
           values ($historyId, $joiningMigrationId, $joiningSynchronizerId, $safeUpdateId, $complete, $complete)
@@ -2210,6 +2281,7 @@ class UpdateHistory private (
   }
 
   private def readOffsetAction(): DBIOAction[Option[Long], NoStream, Effect.Read] =
+    // update_history_last_ingested_offsets_pkey
     sql"""
         select last_ingested_offset
         from update_history_last_ingested_offsets
@@ -2406,6 +2478,8 @@ class UpdateHistory private (
 
       val action = for {
         itemExists <-
+          // Only reads the partitioned tables, not the legacy ones: this is only used by backfilling, which will go away.
+          // updt_hist_*_hi_mi_ui_u
           sql"""
              select exists(
                select row_id
@@ -2481,6 +2555,7 @@ object UpdateHistory {
     for {
       _ <- storage
         .update(
+          // unique_party_participant_id_store_name
           sql"""
             insert into update_history_descriptors (party, participant_id, store_name)
             values ($updateStreamParty, $participantId, $safeStoreName)
@@ -2491,6 +2566,7 @@ object UpdateHistory {
 
       newHistoryId <- storage
         .querySingle(
+          // unique_party_participant_id_store_name
           sql"""
              select id
              from update_history_descriptors
@@ -2601,6 +2677,7 @@ object UpdateHistory {
   ): Future[Vector[String]] = {
     import com.digitalasset.canton.resource.DbStorage.Implicits.setParameterArrayString
     storage.query(
+      // no index: unnest and to_regclass
       sql"""
           select t
           from unnest(${tables.toArray[String]}) t
@@ -2620,6 +2697,7 @@ object UpdateHistory {
       tc: TraceContext,
       closeContext: CloseContext,
   ): Future[Option[CantonTimestamp]] = {
+    // updt_hist_*_hi_mi_rt_di(_legacy)
     val subQueries = tables
       .map { table =>
         SQLActionBuilderChain(
@@ -2635,6 +2713,16 @@ object UpdateHistory {
       "readLastIngestedRecordTime",
     )
   }
+
+  @SuppressWarnings(Array("org.wartremover.warts.IterableOps"))
+  def unionAll(queries: NonEmpty[Seq[SQLActionBuilderChain]]): SQLActionBuilderChain =
+    queries.tail.foldLeft(queries.head1)(_ ++ sql" union all " ++ _)
+
+  private final case class UpdatesFilter(
+      sql: SQLActionBuilder,
+      atOrAfter: Option[CantonTimestamp] = None,
+      before: Option[CantonTimestamp] = None,
+  )
 
   private val PartitionedTables: Seq[String] = Seq(
     "update_history_transactions",
@@ -2679,14 +2767,12 @@ object UpdateHistory {
 
   case class State(
       initialized: Promise[Unit],
-      corruptSnapshotsDeleted: Boolean,
       lastIngestedRecordTime: Option[CantonTimestamp],
   ) {}
 
   object State {
     def empty(): State = State(
       initialized = Promise[Unit](),
-      corruptSnapshotsDeleted = false,
       lastIngestedRecordTime = None,
     )
   }

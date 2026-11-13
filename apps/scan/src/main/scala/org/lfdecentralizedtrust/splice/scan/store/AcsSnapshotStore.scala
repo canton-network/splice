@@ -484,7 +484,8 @@ class AcsSnapshotStore(
                  contract_key,
                  record_time
               from snapshot
-              join update_history_creates creates on creates.row_id = snapshot.create_id
+              -- legacy snapshots only refer to legacy creates
+              join update_history_creates_legacy creates on creates.row_id = snapshot.create_id
               order by snapshot.row_id
             """).toActionBuilder
             .as[(Long, SelectFromCreateEvents)],
@@ -707,7 +708,8 @@ class AcsSnapshotStore(
           """ ++ table.copyFromUpdateHistorySourceColumns(dsoParty) ++ sql""",
           $snapshotId
         from acs_snapshot_data d
-        join update_history_creates c on d.create_id=c.row_id
+        -- legacy snapshots only refer to legacy creates
+        join update_history_creates_legacy c on d.create_id=c.row_id
         where
           d.row_id between ${initializeFrom.firstRowId} and ${initializeFrom.lastRowId}
           -- The source table `acs_snapshot_data` contains one row per stakeholder for each contract,
@@ -774,7 +776,8 @@ class AcsSnapshotStore(
           select
             """ ++ table.copyFromUpdateHistorySourceColumns(dsoParty) ++ sql""",
             $snapshotId
-          from update_history_creates c
+          -- import updates only exist in legacy
+          from update_history_creates_legacy c
           where history_id = $historyId
             and migration_id = ${migrationId}
             and record_time = ${CantonTimestamp.MinValue}
@@ -1063,9 +1066,17 @@ class AcsSnapshotStore(
     logger.debug(
       s"Updating incremental snapshot ${snapshot.snapshotId} from ${snapshot.recordTime} to $targetRecordTime"
     )
+    def historyTablesToQuery(table: String) =
+      updateHistory.historyTablesToQuery(
+        table,
+        atOrAfter = Some(snapshot.recordTime.immediateSuccessor),
+        before = Some(targetRecordTime.immediateSuccessor),
+      )
     val statement = for {
-      insertedRows <-
-        (sql"""
+      // Legacy table is inserted first, so chronological order is preserved
+      insertedRows <- DBIO
+        .sequence(historyTablesToQuery("update_history_creates").map { creates =>
+          (sql"""
           insert into #${table.tableName} (
             """ ++ table.copyFromUpdateHistoryTargetColumns ++ sql""",
             snapshot_id
@@ -1073,17 +1084,20 @@ class AcsSnapshotStore(
           select
             """ ++ table.copyFromUpdateHistorySourceColumns(dsoParty) ++ sql""",
             ${snapshot.snapshotId}
-          from update_history_creates c
+          from #$creates c
           where history_id = $historyId
             and migration_id = ${snapshot.migrationId}
             and record_time > ${snapshot.recordTime}
             and record_time <= $targetRecordTime
-        """).toActionBuilder.asUpdate
-      deletedRows <-
-        sql"""
+          """).toActionBuilder.asUpdate
+        })
+        .map(_.sum)
+      deletedRows <- DBIO
+        .sequence(historyTablesToQuery("update_history_exercises").map { exercises =>
+          sql"""
           delete
           from #${table.tableName} as s
-          using update_history_exercises as e
+          using #$exercises as e
           where s.snapshot_id = ${snapshot.snapshotId}
             and s.contract_id = e.contract_id
             and e.history_id = $historyId
@@ -1091,7 +1105,9 @@ class AcsSnapshotStore(
             and e.record_time > ${snapshot.recordTime}
             and e.record_time <= $targetRecordTime
             and e.consuming
-        """.as[Int].head
+          """.as[Int].head
+        })
+        .map(_.sum)
       _ <- sqlu"""
           update acs_incremental_snapshot
           set record_time = $targetRecordTime
