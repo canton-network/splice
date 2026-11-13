@@ -367,6 +367,8 @@ class LsuIntegrationTest
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
+      // stop them to avoid errors during the restart of the apps
+      stopAllAsync(aliceValidatorBackend, splitwellValidatorBackend).futureValue
 
       val allNodes = Seq[AppBackendReference](
         sv1ScanBackend,
