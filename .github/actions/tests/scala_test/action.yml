@@ -91,7 +91,7 @@ inputs:
     description: "Cache version"
     required: true
   retry_on_failure:
-    description: "Retry the tests once, against a fresh Canton instance, if the tests or checkErrors fail"
+    description: "Retry the tests once, against a fresh Canton instance, if they fail"
     required: false
     default: "false"
 

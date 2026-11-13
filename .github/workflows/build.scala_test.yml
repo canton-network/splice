@@ -58,7 +58,7 @@ on:
         type: string
         required: true
       retry_on_failure:
-        description: "Retry the tests of a runner once, against a fresh Canton instance, if the tests or checkErrors fail"
+        description: "Retry the tests of a runner once, against a fresh Canton instance, if they fail"
         type: boolean
         required: false
         default: false

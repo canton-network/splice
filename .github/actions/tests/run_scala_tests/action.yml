@@ -21,7 +21,7 @@ inputs:
     required: false
     default: ""
   retry_on_failure:
-    description: "Retry once, against a fresh Canton instance and fresh databases, if the tests or checkErrors fail"
+    description: "Retry the tests once, against a fresh Canton instance and fresh databases, if they fail"
     required: false
     default: "false"
   with_canton:
@@ -40,15 +40,12 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # Each attempt runs the tests and checkErrors in separate sbt invocations
-    - name: Run tests and check logs for errors
+    # A retry covers only the tests, not checkErrors below: the flaky failures that motivate it fail tests
+    - name: Run tests
       uses: ./.github/actions/sbt/execute_sbt_command
       with:
         extra_env_vars: ${{ inputs.extra_env_vars }}
         cmd: ${{ inputs.cmd }}
-        then_cmd: checkErrors
-        # we don't care if some integration test happened to make the repo dirty
-        then_pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
         additional_nix_args: "--keep GITHUB_ACTION"
         extra_parameters: ${{ inputs.extra_parameters }}
         pre_sbt_cmd: ${{ inputs.pre_sbt_cmd }}
@@ -60,6 +57,14 @@ runs:
           ./.github/actions/scripts/reset-canton-for-retry.sh /tmp/attempt-1/log
           "${{ fromJSON(inputs.with_canton) && inputs.start_canton_options || '' }}"
           && export CI_IGNORE_DIRTY_REPO=1
+
+    # After a retry, this checks only the logs of the last attempt
+    - name: Check logs for errors
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        # we don't care if some integration test happened to make the repo dirty
+        pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
+        cmd: checkErrors
 
     - name: Check whether the tests were retried
       id: retried
