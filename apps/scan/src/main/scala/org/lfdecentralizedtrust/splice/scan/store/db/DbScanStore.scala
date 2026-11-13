@@ -524,7 +524,7 @@ class DbScanStore private (
               additionalWhere = sql"""
                     and featured_app_right_provider = $providerPartyId
                  """,
-              orderLimit = sql"limit 1",
+              orderLimit = sql"order by acs.created_at desc, acs.contract_id limit 1",
             ).headOption,
             "findFeaturedAppRight",
           )
@@ -548,7 +548,8 @@ class DbScanStore private (
             additionalWhere = sql"""
                   and featured_app_right_provider = $providerPartyId
                """,
-            orderLimit = sql"""order by event_number limit ${sqlLimit(limit)}""",
+            orderLimit =
+              sql"""order by acs.created_at desc, acs.contract_id limit ${sqlLimit(limit)}""",
           ),
           "listFeaturedAppRightsByProvider",
         )

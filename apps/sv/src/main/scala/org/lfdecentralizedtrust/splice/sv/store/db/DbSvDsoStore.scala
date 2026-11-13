@@ -2114,7 +2114,7 @@ class DbSvDsoStore private (
             domainMigrationId,
             FeaturedAppRight.COMPANION,
             where = sql"""featured_app_right_provider = $providerPartyId""",
-            orderLimit = sql"limit 1",
+            orderLimit = sql"order by acs.created_at desc, acs.contract_id limit 1",
           ).headOption,
           "lookupFeaturedAppRightWithOffset",
         )
