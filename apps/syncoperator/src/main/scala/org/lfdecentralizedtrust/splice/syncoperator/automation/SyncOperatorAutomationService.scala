@@ -12,10 +12,16 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.TriggerClass
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
-import org.lfdecentralizedtrust.splice.environment.RetryProvider
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SynchronizerNodeService}
+import org.lfdecentralizedtrust.splice.lsu.LsuTransferTrafficTrigger
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
-import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorTrafficControlConfig
+import org.lfdecentralizedtrust.splice.syncoperator.config.{
+  SyncOperatorLsuConfig,
+  SyncOperatorTrafficControlConfig,
+}
+
+import java.nio.file.Path
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -25,7 +31,9 @@ class SyncOperatorAutomationService(
     clock: Clock,
     retryProvider: RetryProvider,
     synchronizerId: SynchronizerId,
-    synchronizerNode: SyncOperatorSynchronizerNode,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
+    lsuConfig: Option[SyncOperatorLsuConfig],
+    lsuDumpPath: Option[Path],
     trafficControlConfig: SyncOperatorTrafficControlConfig,
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration,
     protected val loggerFactory: NamedLoggerFactory,
@@ -47,7 +55,7 @@ class SyncOperatorAutomationService(
     new ReconcileDedicatedSynchronizerParametersTrigger(
       triggerContext,
       synchronizerId,
-      synchronizerNode,
+      synchronizerNodeService,
       trafficControlConfig,
     )
   )
@@ -56,10 +64,45 @@ class SyncOperatorAutomationService(
     new UnlimitedTrafficTrigger(
       triggerContext,
       synchronizerId,
-      synchronizerNode,
+      synchronizerNodeService,
       trafficBalanceReconciliationDelay,
     )
   )
+
+  registerLsuTriggers()
+
+  /** The upgrade path runs only once a successor node is configured. */
+  private def registerLsuTriggers(): Unit =
+    synchronizerNodeService.nodes.successor.foreach { successorSynchronizerNode =>
+      lsuConfig.foreach { lsu =>
+        registerTrigger(
+          new DedicatedLsuAnnouncementTrigger(
+            triggerContext,
+            synchronizerNodeService.nodes.current.sequencerAdminConnection,
+            lsu,
+          )
+        )
+      }
+      registerTrigger(
+        new DedicatedLsuTrigger(
+          triggerContext,
+          synchronizerNodeService.nodes,
+          successorSynchronizerNode,
+          lsuDumpPath.getOrElse(
+            throw new IllegalArgumentException(
+              "lsu-dump-path must be set when a successor synchronizer node is configured"
+            )
+          ),
+        )
+      )
+      registerTrigger(
+        new LsuTransferTrafficTrigger(
+          triggerContext,
+          synchronizerNodeService.nodes.current,
+          successorSynchronizerNode,
+        )
+      )
+    }
 }
 
 object SyncOperatorAutomationService extends AutomationServiceCompanion {
@@ -69,5 +112,8 @@ object SyncOperatorAutomationService extends AutomationServiceCompanion {
     Seq(
       aTrigger[ReconcileDedicatedSynchronizerParametersTrigger],
       aTrigger[UnlimitedTrafficTrigger],
+      aTrigger[DedicatedLsuAnnouncementTrigger],
+      aTrigger[DedicatedLsuTrigger],
+      aTrigger[LsuTransferTrafficTrigger],
     )
 }

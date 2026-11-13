@@ -20,7 +20,10 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
-import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection
+import org.lfdecentralizedtrust.splice.environment.{
+  SequencerAdminConnection,
+  SynchronizerNodeService,
+}
 import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection.TrafficState
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
@@ -41,7 +44,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class UnlimitedTrafficTrigger(
     override protected val context: TriggerContext,
     synchronizerId: SynchronizerId,
-    synchronizerNode: SyncOperatorSynchronizerNode,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
     trafficBalanceReconciliationDelay: NonNegativeFiniteDuration,
 )(implicit
     override val ec: ExecutionContext,
@@ -57,14 +60,16 @@ class UnlimitedTrafficTrigger(
   // Both can go once the sequencer reports a state for members that have not joined.
   private val initialLimitSet = TrieMap.empty[Member, Unit]
 
-  private def connection: SequencerAdminConnection = synchronizerNode.sequencerAdminConnection
+  private def connection()(implicit tc: TraceContext): Future[SequencerAdminConnection] =
+    synchronizerNodeService.sequencerAdminConnection()
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[Task]] =
     for {
-      members <- members()
-      states <- trafficStates(members)
+      connection <- connection()
+      members <- members(connection)
+      states <- trafficStates(connection, members)
     } yield members
       .filter { member =>
         states.get(member) match {
@@ -79,47 +84,52 @@ class UnlimitedTrafficTrigger(
   override protected def completeTask(task: Task)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] =
-    connection.lookupSequencerTrafficControlState(task.memberId).flatMap {
-      case Some(trafficState) =>
-        for {
-          sequencerState <- connection.getSequencerSynchronizerState(TopologySnapshot.Sequenced)
-          _ <- connection.setSequencerTrafficControlState(
-            trafficState,
-            sequencerState,
-            UnlimitedTraffic,
-            context.pollingClock,
-            trafficBalanceReconciliationDelay,
-          )
-        } yield TaskSuccess(s"Updated traffic limit for ${task.memberId} to the maximum")
-      case None =>
-        connection
-          .setInitialTrafficControlState(task.memberId, UnlimitedTraffic)
-          .map(_ => s"Updated traffic limit for ${task.memberId} to the maximum before it joined")
-          .recover {
-            // Before the join this is the only sign that the limit is already recorded, since the
-            // sequencer reports no traffic state for the member (see initialLimitSet).
-            case ex: StatusRuntimeException
-                if ErrorDetails.matches(ex, TrafficControlErrors.TrafficControlSerialTooLow) =>
-              s"Traffic limit for ${task.memberId} was already set to the maximum before it joined"
-          }
-          .map { description =>
-            initialLimitSet.put(task.memberId, ()).discard
-            TaskSuccess(description)
-          }
-    }
+    connection().flatMap(connection =>
+      connection.lookupSequencerTrafficControlState(task.memberId).flatMap {
+        case Some(trafficState) =>
+          for {
+            sequencerState <- connection.getSequencerSynchronizerState(TopologySnapshot.Sequenced)
+            _ <- connection.setSequencerTrafficControlState(
+              trafficState,
+              sequencerState,
+              UnlimitedTraffic,
+              context.pollingClock,
+              trafficBalanceReconciliationDelay,
+            )
+          } yield TaskSuccess(s"Updated traffic limit for ${task.memberId} to the maximum")
+        case None =>
+          connection
+            .setInitialTrafficControlState(task.memberId, UnlimitedTraffic)
+            .map(_ => s"Updated traffic limit for ${task.memberId} to the maximum before it joined")
+            .recover {
+              // Before the join this is the only sign that the limit is already recorded, since the
+              // sequencer reports no traffic state for the member (see initialLimitSet).
+              case ex: StatusRuntimeException
+                  if ErrorDetails.matches(ex, TrafficControlErrors.TrafficControlSerialTooLow) =>
+                s"Traffic limit for ${task.memberId} was already set to the maximum before it joined"
+            }
+            .map { description =>
+              initialLimitSet.put(task.memberId, ()).discard
+              TaskSuccess(description)
+            }
+      }
+    )
 
   override protected def isStaleTask(task: Task)(implicit
       tc: TraceContext
   ): Future[Boolean] =
     for {
-      members <- members()
+      connection <- connection()
+      members <- members(connection)
       stateO <- connection.lookupSequencerTrafficControlState(task.memberId)
     } yield !members.contains(task.memberId) || (stateO match {
       case Some(state) => state.extraTrafficLimit == UnlimitedTraffic
       case None => initialLimitSet.contains(task.memberId)
     })
 
-  private def members()(implicit tc: TraceContext): Future[Seq[Member]] =
+  private def members(
+      connection: SequencerAdminConnection
+  )(implicit tc: TraceContext): Future[Seq[Member]] =
     for {
       permissions <- connection.listParticipantSynchronizerPermissions(synchronizerId)
       mediators <- connection.getMediatorSynchronizerState(
@@ -134,7 +144,8 @@ class UnlimitedTrafficTrigger(
   // The sequencer only reports a traffic state for members it knows, so not for participants that
   // have not joined.
   private def trafficStates(
-      members: Seq[Member]
+      connection: SequencerAdminConnection,
+      members: Seq[Member],
   )(implicit tc: TraceContext): Future[Map[Member, TrafficState]] =
     // An empty filter would list every member.
     if (members.isEmpty) Future.successful(Map.empty)

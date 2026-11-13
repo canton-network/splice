@@ -17,7 +17,10 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
-import org.lfdecentralizedtrust.splice.environment.SequencerAdminConnection
+import org.lfdecentralizedtrust.splice.environment.{
+  SequencerAdminConnection,
+  SynchronizerNodeService,
+}
 import org.lfdecentralizedtrust.splice.syncoperator.automation.ReconcileDedicatedSynchronizerParametersTrigger.Task
 import org.lfdecentralizedtrust.splice.syncoperator.SyncOperatorSynchronizerNode
 import org.lfdecentralizedtrust.splice.syncoperator.config.SyncOperatorTrafficControlConfig
@@ -28,7 +31,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class ReconcileDedicatedSynchronizerParametersTrigger(
     override protected val context: TriggerContext,
     synchronizerId: SynchronizerId,
-    synchronizerNode: SyncOperatorSynchronizerNode,
+    synchronizerNodeService: SynchronizerNodeService[SyncOperatorSynchronizerNode],
     trafficControlConfig: SyncOperatorTrafficControlConfig,
 )(implicit
     override val ec: ExecutionContext,
@@ -36,8 +39,10 @@ class ReconcileDedicatedSynchronizerParametersTrigger(
     override val tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task] {
 
-  private def sequencerAdminConnection(): Future[SequencerAdminConnection] =
-    Future.successful(synchronizerNode.sequencerAdminConnection)
+  private def sequencerAdminConnection()(implicit
+      tc: TraceContext
+  ): Future[SequencerAdminConnection] =
+    synchronizerNodeService.sequencerAdminConnection()
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext

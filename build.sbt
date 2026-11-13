@@ -2577,6 +2577,10 @@ updateTestConfigForParallelRuns := {
   // see start-canton.sh -t.
   def isSyncOperatorTest(name: String): Boolean =
     name contains "SyncOperator"
+  // The upgrade leaves the splitwell synchronizer on a new serial, which the other sync operator
+  // tests cannot start against, so this one gets its own canton instance.
+  def isSyncOperatorLsuTest(name: String): Boolean =
+    isSyncOperatorTest(name) && (name contains "Lsu")
 
   val allTestNames =
     definedTests
@@ -2678,6 +2682,11 @@ updateTestConfigForParallelRuns := {
       "tests using docker images",
       "test-full-class-names-docker-based.log",
       (t: String) => isDockerComposeBasedTest(t),
+    ),
+    (
+      "sync operator upgrade tests",
+      "test-full-class-names-sync-operator-lsu.log",
+      (t: String) => isSyncOperatorLsuTest(t),
     ),
     (
       "tests to check logical sync roll-forward upgrade",

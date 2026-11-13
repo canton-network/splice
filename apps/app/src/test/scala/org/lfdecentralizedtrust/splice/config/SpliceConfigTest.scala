@@ -10,7 +10,9 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
   RewardSharingConfig,
 }
 import com.digitalasset.canton.config.{NonNegativeFiniteDuration, PositiveFiniteDuration}
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.version.ProtocolVersion
 
 class SpliceConfigTest extends AsyncWordSpec with BaseTest {
   private implicit val elc: com.digitalasset.canton.logging.ErrorLoggingContext = SpliceConfig.elc
@@ -451,6 +453,85 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       syncOperator.trafficControl.setBalanceRequestSubmissionWindowSize shouldBe
         PositiveFiniteDuration.ofMinutes(2)
       syncOperator.trafficControl.baseEventCost.value shouldBe 0
+      syncOperator.synchronizerNodes.successor shouldBe None
+      syncOperator.lsu shouldBe None
+    }
+
+    "load a scheduled upgrade and its successor node" in {
+      val syncOperatorTopology = ConfigFactory.parseFile(
+        new java.io.File("apps/app/src/test/resources/sync-operator-topology.conf")
+      )
+      val upgrade = ConfigFactory.parseString(
+        """
+          |canton.sync-operator-apps.syncOperator {
+          |  synchronizer-nodes.successor {
+          |    sequencer.admin-api.port = 5809
+          |    mediator.admin-api.port = 5807
+          |  }
+          |  lsu {
+          |    topology-freeze-time = { type = "timestamp", time = "2026-12-01T00:00:00Z" }
+          |    upgrade-time = { type = "timestamp", time = "2026-12-01T01:00:00Z" }
+          |    new-physical-synchronizer-serial = 1
+          |    new-physical-synchronizer-protocol-version = "37"
+          |  }
+          |  lsu-dump-path = "/tmp/sync-operator-lsu"
+          |}
+          """.stripMargin
+      )
+      val loaded =
+        SpliceConfig
+          .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(syncOperatorTopology, upgrade)))
+          .value
+      val syncOperator = loaded.syncOperatorsByString("syncOperator")
+      val successor = syncOperator.synchronizerNodes.successor.value
+      successor.sequencer.adminApi.port.unwrap shouldBe 5809
+      successor.mediator.value.adminApi.port.unwrap shouldBe 5807
+      val lsu = syncOperator.lsu.value
+      lsu.topologyFreezeTime.getTimestamp() shouldBe
+        CantonTimestamp.assertFromString("2026-12-01T00:00:00Z")
+      lsu.upgradeTime.getTimestamp() shouldBe
+        CantonTimestamp.assertFromString("2026-12-01T01:00:00Z")
+      lsu.newPhysicalSynchronizerSerial.value shouldBe 1
+      lsu.newPhysicalSynchronizerProtocolVersion shouldBe ProtocolVersion.v37
+      syncOperator.lsuDumpPath.value shouldBe java.nio.file.Paths.get("/tmp/sync-operator-lsu")
+    }
+
+    "reject a scheduled upgrade without a successor node" in {
+      val syncOperatorTopology = ConfigFactory.parseFile(
+        new java.io.File("apps/app/src/test/resources/sync-operator-topology.conf")
+      )
+      val upgrade = ConfigFactory.parseString(
+        """
+          |canton.sync-operator-apps.syncOperator.lsu {
+          |  topology-freeze-time = { type = "timestamp", time = "2026-12-01T00:00:00Z" }
+          |  upgrade-time = { type = "timestamp", time = "2026-12-01T01:00:00Z" }
+          |  new-physical-synchronizer-serial = 1
+          |  new-physical-synchronizer-protocol-version = "37"
+          |}
+          """.stripMargin
+      )
+      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(syncOperatorTopology, upgrade))
+      SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(
+        "If lsu is configured, synchronizer-nodes.successor must be configured"
+      )
+    }
+
+    "reject a successor node without an lsu dump path" in {
+      val syncOperatorTopology = ConfigFactory.parseFile(
+        new java.io.File("apps/app/src/test/resources/sync-operator-topology.conf")
+      )
+      val successor = ConfigFactory.parseString(
+        """
+          |canton.sync-operator-apps.syncOperator.synchronizer-nodes.successor {
+          |  sequencer.admin-api.port = 5809
+          |  mediator.admin-api.port = 5807
+          |}
+          """.stripMargin
+      )
+      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(syncOperatorTopology, successor))
+      SpliceConfig.loadAndValidate(buggyConfig).left.value.toString should include(
+        "If synchronizer-nodes.successor is configured, lsu-dump-path must be configured"
+      )
     }
   }
 }

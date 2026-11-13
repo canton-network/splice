@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvOnboardingConfig}
-import org.lfdecentralizedtrust.splice.sv.lsu.{LsuNodeInitializer, LsuStateExporter}
+import org.lfdecentralizedtrust.splice.lsu.{LsuNodeInitializer, LsuStateExporter}
 import org.lfdecentralizedtrust.splice.sv.onboarding.{DsoPartyHosting, NodeInitializerUtil}
 import org.lfdecentralizedtrust.splice.sv.onboarding.joining.JoiningNodeInitializer
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}

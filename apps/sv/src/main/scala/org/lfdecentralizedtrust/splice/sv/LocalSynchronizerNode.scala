@@ -43,6 +43,7 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.lsu.LsuSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingUnlimitedTrafficTrigger.UnlimitedTraffic
 import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
@@ -81,11 +82,12 @@ class LocalSynchronizerNode(
       config.mediator.subscriptionLivenessLimits,
       cometbftNode,
     )
+    with LsuSynchronizerNode
     with RetryProvider.Has
     with FlagCloseable
     with NamedLogging {
 
-  val internalSequencerConnection: GrpcSequencerConnection =
+  override val internalSequencerConnection: GrpcSequencerConnection =
     LocalSynchronizerNode.toSequencerConnection(config.sequencer.internalApi)
 
   val sequencerInternalConfig: com.digitalasset.canton.config.ClientConfig =
@@ -95,7 +97,7 @@ class LocalSynchronizerNode(
       : Option[org.lfdecentralizedtrust.splice.sv.config.SequencerPruningConfig] =
     config.sequencer.pruning
 
-  def staticSynchronizerParameters(
+  override def staticSynchronizerParameters(
       serial: NonNegativeInt,
       protocolVersion: ProtocolVersion,
   ): StaticSynchronizerParameters = {

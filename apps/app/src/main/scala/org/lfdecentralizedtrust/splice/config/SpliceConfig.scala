@@ -38,6 +38,8 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.syncoperator.config.{
   SyncOperatorAppBackendConfig,
   SyncOperatorAppClientConfig,
+  SyncOperatorLsuConfig,
+  SyncOperatorMediatorConfig,
   SyncOperatorSequencerConfig,
   SyncOperatorSynchronizerNodeConfig,
   SyncOperatorSynchronizerNodesConfig,
@@ -1030,17 +1032,38 @@ object SpliceConfig {
       deriveReader[SplitwellAppClientConfig]
     implicit val syncOperatorSequencerConfigReader: ConfigReader[SyncOperatorSequencerConfig] =
       deriveReader[SyncOperatorSequencerConfig]
+    implicit val syncOperatorMediatorConfigReader: ConfigReader[SyncOperatorMediatorConfig] =
+      deriveReader[SyncOperatorMediatorConfig]
     implicit val syncOperatorSynchronizerNodeConfigReader
         : ConfigReader[SyncOperatorSynchronizerNodeConfig] =
       deriveReader[SyncOperatorSynchronizerNodeConfig]
     implicit val syncOperatorSynchronizerNodesConfigReader
         : ConfigReader[SyncOperatorSynchronizerNodesConfig] =
       deriveReader[SyncOperatorSynchronizerNodesConfig]
+    implicit val syncOperatorLsuConfigReader: ConfigReader[SyncOperatorLsuConfig] =
+      deriveReader[SyncOperatorLsuConfig]
     implicit val syncOperatorTrafficControlConfigReader
         : ConfigReader[SyncOperatorTrafficControlConfig] =
       deriveReader[SyncOperatorTrafficControlConfig]
     implicit val syncOperatorConfigReader: ConfigReader[SyncOperatorAppBackendConfig] =
-      deriveReader[SyncOperatorAppBackendConfig]
+      deriveReader[SyncOperatorAppBackendConfig].emap { conf =>
+        for {
+          _ <- Either.cond(
+            conf.lsu.isEmpty || conf.synchronizerNodes.successor.isDefined,
+            (),
+            ConfigValidationFailed(
+              "If lsu is configured, synchronizer-nodes.successor must be configured"
+            ),
+          )
+          _ <- Either.cond(
+            conf.synchronizerNodes.successor.isEmpty || conf.lsuDumpPath.isDefined,
+            (),
+            ConfigValidationFailed(
+              "If synchronizer-nodes.successor is configured, lsu-dump-path must be configured"
+            ),
+          )
+        } yield conf
+      }
     implicit val syncOperatorClientConfigReader: ConfigReader[SyncOperatorAppClientConfig] =
       deriveReader[SyncOperatorAppClientConfig]
 
@@ -1386,12 +1409,16 @@ object SpliceConfig {
       deriveWriter[SplitwellAppClientConfig]
     implicit val syncOperatorSequencerConfigWriter: ConfigWriter[SyncOperatorSequencerConfig] =
       deriveWriter[SyncOperatorSequencerConfig]
+    implicit val syncOperatorMediatorConfigWriter: ConfigWriter[SyncOperatorMediatorConfig] =
+      deriveWriter[SyncOperatorMediatorConfig]
     implicit val syncOperatorSynchronizerNodeConfigWriter
         : ConfigWriter[SyncOperatorSynchronizerNodeConfig] =
       deriveWriter[SyncOperatorSynchronizerNodeConfig]
     implicit val syncOperatorSynchronizerNodesConfigWriter
         : ConfigWriter[SyncOperatorSynchronizerNodesConfig] =
       deriveWriter[SyncOperatorSynchronizerNodesConfig]
+    implicit val syncOperatorLsuConfigWriter: ConfigWriter[SyncOperatorLsuConfig] =
+      deriveWriter[SyncOperatorLsuConfig]
     implicit val syncOperatorTrafficControlConfigWriter
         : ConfigWriter[SyncOperatorTrafficControlConfig] =
       deriveWriter[SyncOperatorTrafficControlConfig]

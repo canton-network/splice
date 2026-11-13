@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-package org.lfdecentralizedtrust.splice.sv.lsu
+package org.lfdecentralizedtrust.splice.lsu
 
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
@@ -21,16 +21,16 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
   TriggerEnabledSynchronization,
 }
-import org.lfdecentralizedtrust.splice.sv.SvSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.lsu.LogicalSyncUpgradeTransferTrafficTrigger.TrafficTransferTask
+import org.lfdecentralizedtrust.splice.environment.SynchronizerNode
+import org.lfdecentralizedtrust.splice.lsu.LogicalSyncUpgradeTransferTrafficTrigger.TrafficTransferTask
 
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{ExecutionContext, Future}
 
 class LsuTransferTrafficTrigger(
     baseContext: TriggerContext,
-    currentSynchronizerNode: SvSynchronizerNode,
-    successorSynchronizerNode: SvSynchronizerNode,
+    currentSynchronizerNode: SynchronizerNode,
+    successorSynchronizerNode: SynchronizerNode,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
