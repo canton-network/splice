@@ -15,6 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
 final case class StoreReadPerfMetrics(
     totalTimeNs: BigDecimal,
     peakHeapBytes: BigDecimal,
+    allocatedBytes: BigDecimal,
     cpuToWallClockRatio: BigDecimal,
     updateSizeBytes: Long,
     numUpdates: Long,
@@ -22,7 +23,7 @@ final case class StoreReadPerfMetrics(
 
 final case class ReadOperation(
     name: String,
-    execute: TraceContext => Future[Unit],
+    execute: TraceContext => Future[Option[Long]],
 )
 
 /** Base class for store read performance tests.
@@ -109,6 +110,11 @@ abstract class StoreReadPerformanceTest(
         metrics.peakHeapBytes,
       ),
       metric(
+        "allocated_bytes",
+        "Total bytes allocated during the read. Process-wide for getUpdate, otherwise per-thread.",
+        metrics.allocatedBytes,
+      ),
+      metric(
         "cpu_to_wall_clock_ratio",
         "Ratio of process CPU time to wall-clock time (>0.7=CPU-bound, 0.25~0.7=standard, <0.25=I/O-bound)",
         metrics.cpuToWallClockRatio,
@@ -141,14 +147,25 @@ abstract class StoreReadPerformanceTest(
       accF.flatMap { acc =>
         val wallBefore = System.nanoTime()
         val cpuBefore = getProcessCpuTimeNs
+        val allocBefore = getAllocatedBytes
         val dbSeqBefore = dbExecSeq
-        op.execute(tc).map { _ =>
+        op.execute(tc).map { threadAllocatedBytes =>
           val wallAfter = System.nanoTime()
           val cpuAfter = getProcessCpuTimeNs
+          val allocAfter = getAllocatedBytes
           val db = dbExecWindow(dbSeqBefore)
           val wait = dbWaitWindow(dbSeqBefore)
           val duration = wallAfter - wallBefore
           val cpuDeltaNs = math.max(cpuAfter - cpuBefore, 0L)
+          // get thread-only bytes, if not process-wide bytes
+          val processWideAlloc =
+            if (allocBefore >= 0 && allocAfter >= 0) math.max(allocAfter - allocBefore, 0L)
+            else 0L
+          val (allocatedBytes, allocScope) =
+            threadAllocatedBytes.filter(_ >= 0) match {
+              case Some(bytes) => (bytes, "thread")
+              case None => (processWideAlloc, "process")
+            }
           val dbExecNs = db.totalNanos
           val dbWaitNs = wait.totalNanos
           val heapUsed = getHeapUsedBytes
@@ -161,6 +178,7 @@ abstract class StoreReadPerformanceTest(
               f"dbExec=${BigDecimal(dbExecNs) / 1e6}%.2f ms, " +
               f"nonDb=${BigDecimal(math.max(duration - dbWaitNs - dbExecNs, 0L)) / 1e6}%.2f ms, " +
               f"dbQueries=${db.count}, maxDbQuery=${BigDecimal(db.maxNanos) / 1e6}%.2f ms, " +
+              f"allocated=${BigDecimal(allocatedBytes) / 1e6}%.2f MB ($allocScope), " +
               f"updateSize=$updateSizeBytes bytes, numUpdates=${txs.size}"
           logger.info(msg)
           println(s"${this.getClass.getName}: $msg")
@@ -173,6 +191,7 @@ abstract class StoreReadPerformanceTest(
           val m = StoreReadPerfMetrics(
             totalTimeNs = BigDecimal(duration),
             peakHeapBytes = heapUsed,
+            allocatedBytes = BigDecimal(allocatedBytes),
             cpuToWallClockRatio = cpuToWallClockRatio,
             updateSizeBytes = updateSizeBytes,
             numUpdates = txs.size.toLong,

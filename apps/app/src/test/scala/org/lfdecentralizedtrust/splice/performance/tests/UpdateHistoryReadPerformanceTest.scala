@@ -114,11 +114,16 @@ class UpdateHistoryReadPerformanceTest(
     ReadOperation(
       name = "getUpdate",
       execute = { implicit tc: TraceContext =>
-        updateIds.foldLeft(Future.successful(())) { (accF, updateId) =>
-          accF.flatMap { _ =>
-            store.getUpdate(updateId).map(_ => ())
+        updateIds
+          .foldLeft(Future.successful(())) { (accF, updateId) =>
+            accF.flatMap { _ =>
+              store.getUpdate(updateId).map(_ => ())
+            }
           }
-        }
+          // getUpdate bundles the DB fetch with the pure-CPU decodeTransaction,
+          // and the DB work fans out across pool threads. we therefore deliberately report the
+          // process-wide allocation delta for this phase (not per-thread)
+          .map(_ => None)
       },
     )
   }
@@ -135,16 +140,19 @@ class UpdateHistoryReadPerformanceTest(
         implicit val elc: ErrorLoggingContext =
           ErrorLoggingContext.fromTracedLogger(logger)(tc)
         Future {
-          txs.foreach { tx =>
-            val _ = ScanHttpEncodings.encodeUpdate(
-              tx,
-              encoding = DamlValueEncoding.members.CompactJson,
-              version = ScanHttpEncodings.V1,
-              hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
-              externalTransactionHashThresholdTime =
-                ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
-            )
+          val ((), allocated) = measuringCurrentThreadAllocatedBytes {
+            txs.foreach { tx =>
+              val _ = ScanHttpEncodings.encodeUpdate(
+                tx,
+                encoding = DamlValueEncoding.members.CompactJson,
+                version = ScanHttpEncodings.V1,
+                hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
+                externalTransactionHashThresholdTime =
+                  ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
+              )
+            }
           }
+          Some(allocated)
         }
       },
     )
@@ -181,15 +189,18 @@ class UpdateHistoryReadPerformanceTest(
       execute = { (_: TraceContext) =>
         Future {
           val encodeCountBefore = encodeCount.get()
-          encoded.foreach { item =>
-            // mirror the HTTP layer's circe marshaller exactly
-            val _ = io.circe.Printer.noSpaces.print(item.asJson)
+          val ((), allocated) = measuringCurrentThreadAllocatedBytes {
+            encoded.foreach { item =>
+              // mirror the HTTP layer's circe marshaller exactly
+              val _ = io.circe.Printer.noSpaces.print(item.asJson)
+            }
           }
           require(
             encodeCount.get() == encodeCountBefore,
             s"encode leaked into the timed serialization block: count increased from " +
               s"$encodeCountBefore to ${encodeCount.get()}",
           )
+          Some(allocated)
         }
       },
     )

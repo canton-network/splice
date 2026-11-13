@@ -80,7 +80,7 @@ abstract class BaseStorePerformanceTest(
   def run(): Future[Unit]
 
   /** Metrics factory wired into the storage's [[DbStorageMetrics]].
-    *  The DB executor `exectime` timer is recorded and can be read back to measure DB time.
+    * The DB executor `exectime` timer is recorded and can be read back to measure DB time.
     */
   protected val dbMetricsFactory: NanoInMemoryMetricsFactory = new NanoInMemoryMetricsFactory
 
@@ -206,7 +206,9 @@ abstract class BaseStorePerformanceTest(
     val storage = initializeStorage()
     val started =
       try body(storage)
-      catch { case NonFatal(e) => Future.failed(e) }
+      catch {
+        case NonFatal(e) => Future.failed(e)
+      }
     started.transformWith { result =>
       storage.close()
       Future.fromTry(result)
@@ -307,6 +309,36 @@ abstract class BaseStorePerformanceTest(
   protected def getHeapUsedBytes: BigDecimal = {
     BigDecimal(ManagementFactory.getMemoryMXBean.getHeapMemoryUsage.getUsed)
   }
+
+  private lazy val allocatingThreadMXBean: Option[com.sun.management.ThreadMXBean] =
+    ManagementFactory.getThreadMXBean match {
+      case tb: com.sun.management.ThreadMXBean if tb.isThreadAllocatedMemorySupported =>
+        if (!tb.isThreadAllocatedMemoryEnabled) tb.setThreadAllocatedMemoryEnabled(true)
+        Some(tb)
+      case _ => None
+    }
+
+  protected def getAllocatedBytes: Long =
+    allocatingThreadMXBean match {
+      case Some(tb) =>
+        // getThreadAllocatedBytes returns -1 for threads that exited after getAllThreadIds was called
+        // those are ignored so they don't reduce the total at least
+        tb.getThreadAllocatedBytes(tb.getAllThreadIds)
+          .foldLeft(0L)((acc, bytes) => if (bytes > 0) acc + bytes else acc)
+      case None => -1L
+    }
+
+  protected def measuringCurrentThreadAllocatedBytes[T](body: => T): (T, Long) =
+    allocatingThreadMXBean match {
+      case Some(tb) =>
+        val id = Thread.currentThread().threadId()
+        val before = tb.getThreadAllocatedBytes(id)
+        val result = body
+        val after = tb.getThreadAllocatedBytes(id)
+        (result, if (before >= 0 && after >= 0) math.max(after - before, 0L) else -1L)
+      case None =>
+        (body, -1L)
+    }
 
   protected def mkParticipantId(name: String): ParticipantId =
     ParticipantId.tryFromProtoPrimitive("PAR::" + name + "::dummy")
