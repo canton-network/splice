@@ -54,7 +54,8 @@ class UnavailablePartiesDetectorTest
   private val ignoreDuration = NonNegativeFiniteDuration(1.hour)
 
   private def mkStore(
-      initialParties: Set[PartyId] = Set.empty
+      initialParties: Set[PartyId] = Set.empty,
+      protectedParties: Set[PartyId] = Set(dso),
   ): Future[DbUnavailablePartiesStore] =
     for {
       store <- DbUnavailablePartiesStore(
@@ -63,6 +64,7 @@ class UnavailablePartiesDetectorTest
         ignoreDuration,
         ignoreDuration,
         wallClock,
+        protectedParties,
         loggerFactory,
       )
       _ <- store.addParties(initialParties.toSeq)
@@ -110,12 +112,10 @@ class UnavailablePartiesDetectorTest
   private def splitting(
       store: UnavailablePartiesStore,
       versions: Map[PartyId, Option[PackageVersion]],
-      protectedParties: Set[PartyId] = Set(dso),
   ) =
     new UnavailablePartiesDetector(
       p => _ => Future.successful(versions.getOrElse(p, Some(v2))),
       store,
-      protectedParties,
       loggerFactory,
     )
 
@@ -124,13 +124,12 @@ class UnavailablePartiesDetectorTest
       versions: Map[PartyId, Option[PackageVersion]],
       failingContracts: Set[String],
       store: Future[DbUnavailablePartiesStore] = mkStore(),
-      protectedParties: Set[PartyId] = Set(dso),
       failure: => StatusRuntimeException = submissionFailure(),
   ): Future[
     (UnavailablePartiesDetector.Result, Seq[Seq[String]], DbUnavailablePartiesStore)
   ] = store.flatMap { store =>
     val submissions = new AtomicReference[Seq[Seq[String]]](Seq.empty)
-    splitting(store, versions, protectedParties)
+    splitting(store, versions)
       .processBatch[Contract](
         contracts,
         _.parties,
@@ -214,7 +213,7 @@ class UnavailablePartiesDetectorTest
             contracts,
             Map(alice -> Some(v1), dso -> Some(v2)),
             Set("c1"),
-            protectedParties = Set(dso, alice),
+            mkStore(protectedParties = Set(alice, dso)),
           ).failed,
           _.warningMessage should include("all candidates"),
         )

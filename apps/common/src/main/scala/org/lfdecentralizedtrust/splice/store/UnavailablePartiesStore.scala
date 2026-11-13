@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, Future}
 trait UnavailablePartiesStore {
 
   // Adds or updates parties as of now
-  def addParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Unit]
+  def addParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Set[PartyId]]
 
   // Removes specific parties from the store, returning the parties that were actually removed
   def removeParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Seq[PartyId]]

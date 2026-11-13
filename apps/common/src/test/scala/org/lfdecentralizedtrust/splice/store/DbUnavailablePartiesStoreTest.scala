@@ -47,6 +47,7 @@ class DbUnavailablePartiesStoreTest
       baseDuration,
       maxIgnoreDuration,
       wallClock,
+      Set.empty,
       loggerFactory,
     )
 

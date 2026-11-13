@@ -36,7 +36,6 @@ import scala.util.{Failure, Success}
 class UnavailablePartiesDetector(
     lookupSupportedVersion: PartyId => TraceContext => Future[Option[PackageVersion]],
     unavailablePartiesStore: UnavailablePartiesStore,
-    protectedParties: Set[PartyId],
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends NamedLogging {
@@ -64,15 +63,10 @@ class UnavailablePartiesDetector(
         )
       } yield result
 
-  // TODO(#8428): move this to addParties
-  private def withoutProtected(parties: Set[PartyId]): Set[PartyId] = parties -- protectedParties
-
   private def ignoreParties(
       parties: Set[PartyId]
   )(implicit tc: TraceContext): Future[Set[PartyId]] = {
-    val toIgnore = withoutProtected(parties)
-    if (toIgnore.isEmpty) Future.successful(toIgnore)
-    else unavailablePartiesStore.addParties(toIgnore.toSeq).map(_ => toIgnore)
+    unavailablePartiesStore.addParties(parties.toSeq)
   }
 
   private def lookupLowestSupportedVersions(
@@ -137,21 +131,28 @@ class UnavailablePartiesDetector(
         //    batch is rejected.
         //  - if the batch has more than one task, split it in half and retry both halves.
         //  - if the batch has only one task, mark the parties with the lowest supported version as unavailable.
-        case Failure(UnresponsivePartiesFailure(unresponsiveParties))
-            if shrinks(current, partiesOf, withoutProtected(unresponsiveParties)) =>
+        case Failure(reason @ UnresponsivePartiesFailure(unresponsiveParties))
+            if shrinks(current, partiesOf, unresponsiveParties) =>
           ignoreParties(unresponsiveParties).flatMap { toIgnore =>
-            logger.info(
-              s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
-            )
-            processRemaining(
-              toIgnore,
-              current :: rest,
-              partiesOf,
-              submit,
-              lowestSupportedVersions,
-              result,
-              failedTasks = 0,
-            )
+            if (toIgnore.isEmpty) {
+              logger.warn(
+                s"Not ignoring any party for the rejected batch, all unresponsive parties ($unresponsiveParties) are protected, failing the batch so it is retried"
+              )
+              Future.failed(reason)
+            } else {
+              logger.info(
+                s"Batch of ${current.size} tasks was rejected due to unresponsive parties, ignoring $toIgnore"
+              )
+              processRemaining(
+                toIgnore,
+                current :: rest,
+                partiesOf,
+                submit,
+                lowestSupportedVersions,
+                result,
+                failedTasks = 0,
+              )
+            }
           }
         case Failure(reason @ VettingFailure()) if current.size > 1 =>
           val (left, right) = current.splitAt(current.size / 2)
