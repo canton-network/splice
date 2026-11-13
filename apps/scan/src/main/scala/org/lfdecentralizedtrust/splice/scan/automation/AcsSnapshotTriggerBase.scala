@@ -13,7 +13,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 }
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
+  AcsSnapshotInfo,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
 }
@@ -161,7 +161,7 @@ abstract class AcsSnapshotTriggerBase(
 
   protected def getLatestSnapshot(migrationId: Long)(implicit
       tc: TraceContext
-  ): Future[Option[AcsSnapshot]] = {
+  ): Future[Option[AcsSnapshotInfo]] = {
     store.lookupSnapshotAtOrBefore(migrationId, CantonTimestamp.MaxValue)
   }
 
@@ -230,7 +230,7 @@ object AcsSnapshotTriggerBase {
       migrationId: Long,
       mayStart: (Long) => Future[Boolean],
       getIncrementalSnapshot: () => Future[Option[IncrementalAcsSnapshot]],
-      getLatestSnapshot: (Long) => Future[Option[AcsSnapshot]],
+      getLatestSnapshot: (Long) => Future[Option[AcsSnapshotInfo]],
       getMinRecordTime: (Long) => Future[Option[CantonTimestamp]],
       getMaxRecordTime: (Long) => Future[Option[CantonTimestamp]],
       getLastIngestedRecordTime: (Long) => Option[CantonTimestamp],
@@ -284,7 +284,7 @@ object AcsSnapshotTriggerBase {
   }
 
   private def retrieveTaskFromFullSnapshot(
-      latestSnapshot: AcsSnapshot,
+      latestSnapshot: AcsSnapshotInfo,
       migrationId: Long,
       getMaxRecordTime: (Long) => Future[Option[CantonTimestamp]],
       storageConfig: ScanStorageConfig,
@@ -440,7 +440,7 @@ object AcsSnapshotTriggerBase {
   }
 
   sealed trait Task extends PrettyPrinting
-  case class InitializeIncrementalSnapshotTask(from: AcsSnapshot, nextAt: CantonTimestamp)
+  case class InitializeIncrementalSnapshotTask(from: AcsSnapshotInfo, nextAt: CantonTimestamp)
       extends Task {
     override def pretty: Pretty[this.type] =
       prettyOfClass(

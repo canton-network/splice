@@ -13,7 +13,7 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.PerTableAcsSnapshot
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.AcsSnapshot
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
@@ -24,11 +24,11 @@ class AcsSnapshotIndexTrigger(
     ec: ExecutionContextExecutor,
     override val tracer: Tracer,
     mat: Materializer,
-) extends PollingParallelTaskExecutionTrigger[PerTableAcsSnapshot] {
+) extends PollingParallelTaskExecutionTrigger[AcsSnapshot] {
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
-  ): Future[Seq[PerTableAcsSnapshot]] = {
+  ): Future[Seq[AcsSnapshot]] = {
     if (store.updateHistory.isReady) {
       store.lookupOldestUnindexedSnapshot().map(_.toList)
     } else {
@@ -36,13 +36,13 @@ class AcsSnapshotIndexTrigger(
     }
   }
 
-  override protected def completeTask(task: PerTableAcsSnapshot)(implicit
+  override protected def completeTask(task: AcsSnapshot)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = store
     .indexSnapshotStakeholdersTable(task)
     .map(_ => TaskSuccess(s"Successfully indexed tables of snapshot ${task.snapshotRecordTime}"))
 
-  override protected def isStaleTask(task: PerTableAcsSnapshot)(implicit
+  override protected def isStaleTask(task: AcsSnapshot)(implicit
       tc: TraceContext
   ): Future[Boolean] = {
     store.lookupOldestUnindexedSnapshot().map {

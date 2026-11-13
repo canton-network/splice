@@ -17,7 +17,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.scan.metrics.AcsSnapshotPruningMetrics
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.PerTableAcsSnapshot
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.AcsSnapshot
 import org.lfdecentralizedtrust.splice.store.KeyValueStore
 import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider.timestampCodec
 
@@ -32,7 +32,7 @@ class PruneAcsSnapshotsTrigger(
     ec: ExecutionContextExecutor,
     override val tracer: Tracer,
     mat: Materializer,
-) extends PollingParallelTaskExecutionTrigger[PerTableAcsSnapshot] {
+) extends PollingParallelTaskExecutionTrigger[AcsSnapshot] {
 
   private val pruningMetrics = new AcsSnapshotPruningMetrics(context.metricsFactory)(
     MetricsContext(
@@ -42,12 +42,12 @@ class PruneAcsSnapshotsTrigger(
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
-  ): Future[Seq[PerTableAcsSnapshot]] =
+  ): Future[Seq[AcsSnapshot]] =
     store.updateHistory.startAnalyzableTimeWindow
       .filter(_ => store.updateHistory.isReady)
       .map(startAtw =>
         store
-          .lookupPerTableSnapshotsBefore(startAtw)
+          .lookupSnapshotsBefore(startAtw)
           // one-at-a-time to spread out the DB load when a large # of
           // snapshots suddenly become pruning candidates (e.g. pruning
           // has just been enabled)
@@ -55,7 +55,7 @@ class PruneAcsSnapshotsTrigger(
       )
       .getOrElse(Future.successful(Seq.empty))
 
-  override protected def completeTask(task: PerTableAcsSnapshot)(implicit
+  override protected def completeTask(task: AcsSnapshot)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] =
     for {
@@ -66,7 +66,7 @@ class PruneAcsSnapshotsTrigger(
       TaskSuccess(s"Dropped ACS snapshot ${task.snapshotRecordTime}")
     }
 
-  override protected def isStaleTask(task: PerTableAcsSnapshot)(implicit
+  override protected def isStaleTask(task: AcsSnapshot)(implicit
       tc: TraceContext
   ): Future[Boolean] = Future.successful(false)
 
@@ -80,9 +80,9 @@ object PruneAcsSnapshotsTrigger {
   private val prunedUpToKey = "snapshots_pruned_up_to"
 
   def prunable(
-      snapshotsBeforeAtw: Seq[PerTableAcsSnapshot],
+      snapshotsBeforeAtw: Seq[AcsSnapshot],
       storageConfig: ScanStorageConfig,
-  ): Seq[PerTableAcsSnapshot] =
+  ): Seq[AcsSnapshot] =
     snapshotsBeforeAtw.filterNot(s =>
       storageConfig.shouldDumpSnapshotToBulkStorage(s.snapshotRecordTime)
     )

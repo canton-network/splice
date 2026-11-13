@@ -7,7 +7,7 @@ import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.automation.TriggerContext
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
+  AcsSnapshotInfo,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
 }
@@ -106,7 +106,7 @@ object AcsSnapshotBackfillingTrigger {
       currentMigrationId: Long,
       isHistoryBackfilled: (Long) => Future[Boolean],
       getIncrementalSnapshot: () => Future[Option[IncrementalAcsSnapshot]],
-      getLatestSnapshot: (Long) => Future[Option[AcsSnapshot]],
+      getLatestSnapshot: (Long) => Future[Option[AcsSnapshotInfo]],
       getMinRecordTime: (Long) => Future[Option[CantonTimestamp]],
       getMaxRecordTime: (Long) => Future[Option[CantonTimestamp]],
       getPreviousMigrationId: (Long) => Future[Option[Long]],

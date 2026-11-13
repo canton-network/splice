@@ -35,14 +35,14 @@ import scala.util.{Failure, Success}
 import StoreTestBase.*
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   IncrementalAcsSnapshotTable,
-  PerTableAcsSnapshot,
+  AcsSnapshot,
 }
 import org.lfdecentralizedtrust.splice.scan.automation.PruneAcsSnapshotsTrigger
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.db.AcsJdbcTypes.StoreMemberId
 
-trait AcsSnapshotStoreTest
+trait AcsSnapshotStoreTests
     extends StoreTestBase
     with HasExecutionContext
     with StoreErrors
@@ -70,7 +70,7 @@ trait AcsSnapshotStoreTest
       snapshotRecordTime,
     )
     _ <- snapshot match {
-      case Some(snapshot: PerTableAcsSnapshot) =>
+      case Some(snapshot: AcsSnapshot) =>
         store.indexSnapshotStakeholdersTable(snapshot)
       case Some(_) => Future.unit
       case None =>
@@ -1531,7 +1531,7 @@ trait AcsSnapshotStoreTest
   }
 }
 
-class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTests {
   override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.Next
 
   "same-contract rows have consecutive row_ids" in {
@@ -1577,7 +1577,7 @@ class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
 
 }
 
-class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+class AcsSnapshotStoreTest extends AcsSnapshotStoreTests {
   override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.NextV2
 
   "snapshot pruning" should {
@@ -1609,11 +1609,11 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
           threeHourly.head.minusSeconds(1L),
         )
         _ <- otherStore.insertNewSnapshot(nextTable, DefaultMigrationId, threeHourly.head)
-        beforeAtw <- store.lookupPerTableSnapshotsBefore(startAtw)
+        beforeAtw <- store.lookupSnapshotsBefore(startAtw)
         prunable = PruneAcsSnapshotsTrigger.prunable(beforeAtw, scanStorageConfigV1)
         _ <- MonadUtil.sequentialTraverse(prunable)(store.deleteSnapshot(_))
-        remaining <- store.lookupPerTableSnapshotsBefore(CantonTimestamp.MaxValue)
-        otherRemaining <- otherStore.lookupPerTableSnapshotsBefore(CantonTimestamp.MaxValue)
+        remaining <- store.lookupSnapshotsBefore(CantonTimestamp.MaxValue)
+        otherRemaining <- otherStore.lookupSnapshotsBefore(CantonTimestamp.MaxValue)
       } yield {
         withClue("snapshots before the analyzable time window") {
           beforeAtw.map(_.snapshotRecordTime) shouldBe (dailyBefore +: threeHourly)
