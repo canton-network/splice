@@ -1309,6 +1309,7 @@ object AcsSnapshotStore {
     )
   }
 
+  // TODO(#6317) remove with the legacy ACS snapshots
   sealed trait AcsSnapshotInfo extends PrettyPrinting {
     val snapshotRecordTime: CantonTimestamp
     val migrationId: Long
@@ -1318,6 +1319,7 @@ object AcsSnapshotStore {
     val indexesCreated: Boolean
   }
 
+  // TODO(#6317) remove with the legacy ACS snapshots
   case class LegacyAcsSnapshot(
       snapshotRecordTime: CantonTimestamp,
       migrationId: Long,
