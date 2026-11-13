@@ -28,6 +28,13 @@
       deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
     - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
 
+    - `/v0/events` and `/v0/events/{event_id}` responses now include the optional verdict field
+      `round_number`: the oldest open mining round active at the verdict's `record_time`.
+      Scan only serves it for verdicts with a `record_time` at or after the time set for the switch-over key
+      `scan/always-serve-verdict-round-number` in `svOperationsSwitchOverTimes` of the DSO rules configuration.
+      SVs activate it with a "Set Decentralized Synchronizer Operations (DSO) Rules Configuration" vote.
+      New networks serve it from the start.
+
   - Validator App
 
     - Removed the `/v0/scan-proxy/transfer-command-counter/{party}` and `/v0/scan-proxy/transfer-command/status`
