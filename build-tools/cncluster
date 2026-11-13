@@ -1770,6 +1770,239 @@ EOF
 
 ###
 
+subcommand_whitelist[heap_dump]='Trigger a heap dump of an app through JMX and copy it locally'
+
+_HEAP_DUMP_COMPONENTS_HELP="  component       One of:
+                    participant, scan-app, validator-app, sv-app  (no serial)
+                    sequencer, mediator                           (serial required: the migration id)
+                    participant-<index>, validator-app-<index>    (multi-validator nodes, no serial)"
+
+function _heap_dump_usage() {
+    _error "Usage: $SCRIPTNAME heap_dump [--live] [--keep-remote] [--output-dir <dir>] <namespace> <component> [serial]
+
+  Triggers a heap dump of the JVM running <component> in <namespace> through JMX (port 9010, forwarded to localhost),
+  copies the dump to the local output directory (default: current directory) and deletes it from the pod.
+
+${_HEAP_DUMP_COMPONENTS_HELP}
+  --live          Only dump live objects (triggers a full GC first)
+  --keep-remote   Do not delete the dump from the pod after copying it
+  --output-dir    Local directory to copy the dump to (default: .)
+
+  Example: dumping the sv-1 SV app
+    cncluster heap_dump sv-1 sv-app
+
+  Example: dumping the sv-1 sequencer of migration id 3
+    cncluster heap_dump sv-1 sequencer 3
+
+  Example: dumping the participant of multi-validator node 2
+    cncluster heap_dump multi-validator participant-2"
+}
+
+# Resolves <namespace> <component> [serial] to a running pod and container.
+# Sets heap_dump_pod and heap_dump_container. Calls the given usage function on invalid arguments.
+function _heap_dump_resolve_target() {
+    local usage_fn=$1 namespace=$2 component=$3 serial=${4-}
+    local app_label
+    case "$component" in
+        participant|scan-app|validator-app|sv-app)
+            [ -z "$serial" ] || _error "Component '$component' does not take a serial."
+            app_label="$component"
+            heap_dump_container="$component"
+            ;;
+        sequencer|mediator)
+            [[ "$serial" =~ ^[0-9]+$ ]] || _error "Component '$component' requires the migration id as serial."
+            app_label="global-domain-${serial}-${component}"
+            heap_dump_container="$component"
+            ;;
+        participant-*|validator-app-*)
+            [ -z "$serial" ] || _error "Component '$component' does not take a serial."
+            local index="${component##*-}"
+            [[ "$index" =~ ^[0-9]+$ ]] || "$usage_fn"
+            if [[ "$component" == participant-* ]]; then
+                # Multi-participant app labels are suffixed with the frozen migration id.
+                local migration_id
+                migration_id=$(get_resolved_config | yq '.synchronizerMigration.frozenMigrationId')
+                app_label="multi-participant-${index}-${migration_id}"
+                heap_dump_container="multi-participant"
+            else
+                app_label="multi-validator-${index}"
+                heap_dump_container="multi-validator"
+            fi
+            ;;
+        *)
+            "$usage_fn"
+            ;;
+    esac
+
+    _cluster_must_exist
+
+    if ! heap_dump_pod=$(_get_single_pod "$namespace" "$app_label"); then
+        _error "No pod with label app=${app_label} found in namespace '$namespace'."
+    fi
+    _info "Found pod '$heap_dump_pod' (container '$heap_dump_container') for component '$component' in namespace '$namespace'."
+}
+
+# Copies a heap dump from the pod to the local output dir, and deletes it from the pod if requested.
+function _heap_dump_copy() {
+    local namespace=$1 pod=$2 container=$3 remote_file=$4 output_dir=$5 delete_remote=$6
+    mkdir -p "$output_dir"
+    local local_file
+    local_file="${output_dir}/$(basename "$remote_file")"
+
+    _info "Copying heap dump '${remote_file}' to '${local_file}'..."
+    kubectl cp --retries=10 -n "$namespace" -c "$container" "${pod}:${remote_file}" "$local_file"
+
+    if [ -n "$delete_remote" ]; then
+        _info "Deleting heap dump from pod '$pod'..."
+        kubectl exec -n "$namespace" "$pod" -c "$container" -- rm -f "$remote_file"
+    else
+        _info "Keeping heap dump in pod '$pod' at '${remote_file}'."
+    fi
+
+    _info "Heap dump available at '${local_file}' ($(du -h "$local_file" | cut -f1))."
+}
+
+function subcmd_heap_dump() {
+    local live=false delete_remote=yes output_dir="." jmx_port=9010
+    local positional=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --live) live=true; shift;;
+            --keep-remote) delete_remote=""; shift;;
+            --output-dir) output_dir="${2-}"; shift 2 || _heap_dump_usage;;
+            -h|--help) _heap_dump_usage;;
+            -*) _error "Unknown option: $1";;
+            *) positional+=("$1"); shift;;
+        esac
+    done
+    if [ ${#positional[@]} -lt 2 ] || [ ${#positional[@]} -gt 3 ]; then
+        _heap_dump_usage
+    fi
+
+    local namespace="${positional[0]}"
+    local component="${positional[1]}"
+    local serial="${positional[2]-}"
+    _heap_dump_resolve_target _heap_dump_usage "$namespace" "$component" "$serial"
+    local pod="$heap_dump_pod" container="$heap_dump_container"
+
+    # The JMX RMI stub advertises 127.0.0.1:9010, so the local end of the port-forward must use the same port.
+    if (exec 3<>"/dev/tcp/127.0.0.1/${jmx_port}") 2>/dev/null; then
+        _error "Port ${jmx_port} is already in use on localhost. Please close any processes that might be listening on it."
+    fi
+
+    local remote_dir="/tmp"
+    if kubectl exec -n "$namespace" "$pod" -c "$container" -- sh -c 'test -d /persistent-data && test -w /persistent-data'; then
+        remote_dir="/persistent-data"
+    else
+        _warning "/persistent-data is not available in pod '$pod', writing the dump to /tmp (uses ephemeral storage of the pod)."
+    fi
+    local remote_file
+    remote_file="${remote_dir}/heap-dump-${namespace}-${component}${serial:+-${serial}}-$(date -u +%Y%m%dT%H%M%SZ).hprof"
+
+    _info "Starting port forwarding of JMX port ${jmx_port} from '$namespace/$pod'..."
+    kubectl port-forward -n "$namespace" "$pod" "${jmx_port}:${jmx_port}" > /dev/null &
+    local port_forwarding_pid=$!
+    # shellcheck disable=SC2064
+    trap "kill $port_forwarding_pid 2>/dev/null || true" EXIT
+
+    local attempt
+    for attempt in $(seq 1 30); do
+        if (exec 3<>"/dev/tcp/127.0.0.1/${jmx_port}") 2>/dev/null; then
+            break
+        fi
+        if ! kill -0 "$port_forwarding_pid" 2>/dev/null || [ "$attempt" -eq 30 ]; then
+            _error "Port forwarding of JMX port ${jmx_port} from '$namespace/$pod' failed."
+        fi
+        sleep 1
+    done
+
+    _info "Triggering heap dump (live=${live}) to '${remote_file}' in pod '$pod', this can take a while..."
+    java "${SPLICE_ROOT}/build-tools/JmxHeapDump.java" "127.0.0.1:${jmx_port}" "$remote_file" "$live"
+
+    kill "$port_forwarding_pid" 2>/dev/null || true
+    trap - EXIT
+
+    _heap_dump_copy "$namespace" "$pod" "$container" "$remote_file" "$output_dir" "$delete_remote"
+}
+
+###
+
+subcommand_whitelist[fetch_heap_dump]='Copy a heap dump from the persistent volume of an app (e.g. written on OutOfMemoryError) locally'
+
+function _fetch_heap_dump_usage() {
+    _error "Usage: $SCRIPTNAME fetch_heap_dump [--list] [--file <name>] [--delete-remote] [--output-dir <dir>] <namespace> <component> [serial]
+
+  Copies a heap dump from /persistent-data of <component> in <namespace> to the local output directory.
+  Apps write a heap dump there on OutOfMemoryError (-XX:HeapDumpPath=/persistent-data/heap-dump-<date>.hprof).
+  By default the most recent heap dump is copied.
+
+${_HEAP_DUMP_COMPONENTS_HELP}
+  --list           Only list the heap dumps available in the pod
+  --file           Name of the heap dump in /persistent-data to copy (default: the most recent one)
+  --delete-remote  Delete the dump from the pod after copying it
+  --output-dir     Local directory to copy the dump to (default: .)
+
+  Example: copying the most recent heap dump of the sv-1 SV app
+    cncluster fetch_heap_dump sv-1 sv-app
+
+  Example: listing the heap dumps of the sv-1 mediator of migration id 3
+    cncluster fetch_heap_dump --list sv-1 mediator 3"
+}
+
+function subcmd_fetch_heap_dump() {
+    local list="" file="" delete_remote="" output_dir="." remote_dir="/persistent-data"
+    local positional=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --list) list=yes; shift;;
+            --file) file="${2-}"; shift 2 || _fetch_heap_dump_usage;;
+            --delete-remote) delete_remote=yes; shift;;
+            --output-dir) output_dir="${2-}"; shift 2 || _fetch_heap_dump_usage;;
+            -h|--help) _fetch_heap_dump_usage;;
+            -*) _error "Unknown option: $1";;
+            *) positional+=("$1"); shift;;
+        esac
+    done
+    if [ ${#positional[@]} -lt 2 ] || [ ${#positional[@]} -gt 3 ]; then
+        _fetch_heap_dump_usage
+    fi
+    if [[ "$file" == */* ]]; then
+        _error "--file must be a file name in ${remote_dir}, not a path."
+    fi
+
+    local namespace="${positional[0]}"
+    _heap_dump_resolve_target _fetch_heap_dump_usage "$namespace" "${positional[1]}" "${positional[2]-}"
+    local pod="$heap_dump_pod" container="$heap_dump_container"
+
+    if ! kubectl exec -n "$namespace" "$pod" -c "$container" -- test -d "$remote_dir"; then
+        _error "${remote_dir} is not mounted in pod '$pod'."
+    fi
+
+    local dumps
+    dumps=$(kubectl exec -n "$namespace" "$pod" -c "$container" -- \
+              sh -c "ls -1t ${remote_dir} | grep '\.hprof\$'" || true)
+    if [ -z "$dumps" ]; then
+        _error "No heap dumps found in ${remote_dir} of pod '$pod'."
+    fi
+
+    if [ -n "$list" ]; then
+        _info "Heap dumps in ${remote_dir} of pod '$pod' (most recent first):"
+        kubectl exec -n "$namespace" "$pod" -c "$container" -- sh -c "cd ${remote_dir} && ls -lht -- *.hprof"
+        return
+    fi
+
+    if [ -z "$file" ]; then
+        file=$(head -n 1 <<< "$dumps")
+        _info "Using most recent heap dump '${file}'."
+    elif ! grep -qxF -- "$file" <<< "$dumps"; then
+        _error "Heap dump '${file}' not found in ${remote_dir} of pod '$pod'. Available: $(tr '\n' ' ' <<< "$dumps")"
+    fi
+
+    _heap_dump_copy "$namespace" "$pod" "$container" "${remote_dir}/${file}" "$output_dir" "$delete_remote"
+}
+
+###
+
 subcommand_whitelist[participant_console]='Open a Canton console against a single participant running in the target namespace'
 
 function subcmd_participant_console() {
