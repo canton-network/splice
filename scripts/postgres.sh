@@ -142,6 +142,24 @@ function psql_dropdb() {
     >> "$LOG_FILE"
 }
 
+# Drops all databases and the Canton user, so that `start` and `createdb` work again.
+# Only for an instance that holds nothing but splice data, such as the Postgres service container of a CI job.
+function psql_reset() {
+  export PGPASSWORD="$POSTGRES_PASSWORD"
+  psql_query() {
+    psql -U "$POSTGRES_USER" -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -w -v ON_ERROR_STOP=1 -Atc "$1"
+  }
+  local db
+  for db in $(psql_query "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres';"); do
+    psql_dropdb "$db"
+  done
+  if [[ -n "$(psql_query "SELECT 1 FROM pg_roles WHERE rolname = '$POSTGRES_CANTON_USER';")" ]]; then
+    echo "Dropping database user $POSTGRES_CANTON_USER"
+    psql_query "DROP OWNED BY $POSTGRES_CANTON_USER;" >> "$LOG_FILE"
+    psql_query "DROP USER $POSTGRES_CANTON_USER;" >> "$LOG_FILE"
+  fi
+}
+
 case "$1_$2" in
     docker_pull)
         docker_pull
@@ -199,6 +217,9 @@ case "$1_$2" in
     external_stop)
         echo "Not stopping Postgres, the CI will kill it at the end of the job"
     ;;
+    external_reset)
+        psql_reset
+    ;;
     *)
         echo "Usage: ./postgres.sh MODE COMMAND"
         echo ""
@@ -216,6 +237,8 @@ case "$1_$2" in
         echo "    createdb <name>  creates a new database with the given name"
         echo "    dropdb   <name>  drops an existing database with the given name"
         echo "    stop             removes the postgres instance along with all data"
+        echo "                     (external mode: does nothing, use reset to remove all data)"
+        echo "    reset            (external mode only) drops all databases and the canton user"
         echo "    pull             (docker mode only) makes sure the postgres image is available locally"
         echo "    psql             (docker mode only) starts an interactive psql session for the dockerized postgres"
     ;;
