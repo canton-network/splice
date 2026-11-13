@@ -984,8 +984,23 @@ case class CompactJsonScanHttpEncodings(
 ) extends ScanHttpEncodings {
   import org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegen
 
-  private def maybeTrim(value: javaApi.Value, json: Json): Json =
-    if (dropTrailingNulls) DropTrailingNulls.trim(value, json) else json
+  // If the JSON does not match the value, which should never happen, the JSON is returned untrimmed.
+  private def maybeTrim(value: javaApi.Value, json: Json)(implicit
+      elc: ErrorLoggingContext
+  ): Json =
+    if (dropTrailingNulls)
+      DropTrailingNulls
+        .trim(value, json)
+        .fold(
+          err => {
+            elc.warn(
+              s"Compact JSON does not match the Daml value it was encoded from, not dropping trailing nulls: $err"
+            )
+            json
+          },
+          identity,
+        )
+    else json
 
   override def encodeContractPayload(
       event: javaApi.CreatedEvent

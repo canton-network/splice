@@ -6,11 +6,12 @@ package org.lfdecentralizedtrust.splice.scan.admin.http
 import com.daml.ledger.javaapi.data as javaApi
 import com.digitalasset.canton.BaseTest
 import io.circe.Json
+import org.scalatest.EitherValues
 import org.scalatest.wordspec.AnyWordSpec
 
 import scala.jdk.CollectionConverters.*
 
-class DropTrailingNullsTest extends AnyWordSpec with BaseTest {
+class DropTrailingNullsTest extends AnyWordSpec with BaseTest with EitherValues {
 
   "DropTrailingNulls" should {
     def parseJson(s: String): Json =
@@ -22,7 +23,7 @@ class DropTrailingNullsTest extends AnyWordSpec with BaseTest {
     def some(v: javaApi.Value): javaApi.Value = javaApi.DamlOptional.of(v)
 
     def check(value: javaApi.Value, json: String, expected: String) =
-      DropTrailingNulls.trim(value, parseJson(json)) shouldBe parseJson(expected)
+      DropTrailingNulls.trim(value, parseJson(json)) shouldBe Right(parseJson(expected))
 
     "drop all trailing null record fields" in {
       check(
@@ -96,9 +97,37 @@ class DropTrailingNullsTest extends AnyWordSpec with BaseTest {
       )
     }
 
-    "leave JSON that does not match the value unchanged" in {
-      check(rec(text("x"), none), """["a", null]""", """["a", null]""")
-      check(text("x"), """"x"""", """"x"""")
+    "accept trailing nulls beyond the fields of the value" in {
+      // The value was created before a daml upgrade appended optional fields
+      check(rec(text("x")), """{"a": "x", "b": null, "c": null}""", """{"a": "x"}""")
+    }
+
+    "trim nothing and fail if the JSON does not match the value" in {
+      def mismatch(value: javaApi.Value, json: String, error: String) =
+        DropTrailingNulls.trim(value, parseJson(json)).left.value should include(error)
+
+      mismatch(rec(text("x"), none), """["a", null]""", "$: expected a JSON object for a record")
+      // a mismatch deep inside fails the whole value, even though the outer record could be trimmed
+      mismatch(
+        rec(rec(text("x"), none), none),
+        """{"a": ["x", null], "b": null}""",
+        "$.a: expected a JSON object for a record",
+      )
+      mismatch(
+        rec(javaApi.DamlList.of(text("x")), none),
+        """{"a": ["x", "y"], "b": null}""",
+        "$.a: list has 1 elements but JSON array has 2",
+      )
+      mismatch(
+        rec(text("x"), none),
+        """{"a": "x", "b": null, "c": 1}""",
+        "$.c: non-null JSON field without",
+      )
+      mismatch(
+        rec(text("x"), text("y")),
+        """{"a": "x"}""",
+        "record has 2 fields but JSON object has 1",
+      )
     }
   }
 }
