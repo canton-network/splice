@@ -20,6 +20,7 @@ python_pathspecs=(
   'cluster/*.py'
   'docs/src/*.py'
   '.claude/skills/sarif-unused-symbols/scripts/*.py'
+  '.claude/skills/ci-triage/scripts/*.py'
 )
 
 # Usage: python_files [SUBPATH]

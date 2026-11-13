@@ -1,12 +1,30 @@
 # Command recipes (all verified 2026-09)
 
 ## 1. Run, jobs, job log
+Job id from the issue's `Job:` line. `filter=all` includes earlier attempts of re-run workflows; gh's `--jq`
+takes no `--arg`, so pass the name via the environment:
 ```
-gh run view $RUN --repo canton-network/splice --json headBranch,headSha,displayTitle,createdAt,jobs \
-  --jq '{b:.headBranch,sha:.headSha[0:10],t:.displayTitle,c:.createdAt}, (.jobs[]|select(.conclusion=="failure")|{id:.databaseId,name:.name})'
-gh api repos/canton-network/splice/actions/jobs/$JOB/logs > log/$REF/job.log      # by job id; names like "(1)" also match "(11)"
+RUN=<run id>; ISSUE_JOB='<Job: line from the issue>'
+export NAME="${ISSUE_JOB% in *}"
+gh api --paginate "repos/canton-network/splice/actions/runs/$RUN/jobs?filter=all&per_page=100" \
+  --jq '.jobs[] | select((.name == env.NAME or (.name | endswith(" / " + env.NAME))) and .conclusion == "failure") | "\(.id) attempt=\(.run_attempt) \(.name)"'
+```
+Exactly one line expected. Then fetch the log (gh >= 2.10x refuses to write logs with ANSI codes without the flag):
+```
+gh api --allow-escape-sequences repos/canton-network/splice/actions/jobs/$JOB/logs > log/$REF/job.log
 ```
 Job logs expire after ~90 days (HTTP 410); artifacts sooner. `gh run view --log` often returns nothing; use the API.
+
+canton-network-internal runs (private): the same steps through `$R` (`ci-triage/CLAUDE.md`, Access), with the jq
+filter outside and pages by hand; the log through `ghx` needs no flag, through `gh api` it needs
+`--allow-escape-sequences`:
+```
+C=/repos/DACH-NY/canton-network-internal
+for p in 1 2 3; do $R "$C/actions/runs/$RUN/jobs?filter=all&per_page=100&page=$p"; done \
+  | jq -r '.jobs[] | select((.name == env.NAME or (.name | endswith(" / " + env.NAME))) and .conclusion == "failure") | "\(.id) attempt=\(.run_attempt) \(.name)"'
+ghx "$C/actions/jobs/$JOB/logs" > log/$REF/job.log                                   # R=ghx
+gh api --allow-escape-sequences "$C/actions/jobs/$JOB/logs" > log/$REF/job.log         # R='gh api'
+```
 
 ## 2. Classify the job log
 ```
@@ -31,7 +49,13 @@ export TMPDIR=$PWD/log/ghtmp; mkdir -p $TMPDIR
 gh api "repos/canton-network/splice/actions/runs/$RUN/artifacts?per_page=100" --jq '.artifacts[] | "\(.id) \(.size_in_bytes) \(.name) expired=\(.expired)"'
 gh run download $RUN --repo canton-network/splice -n logs-<job-slug> -D log/$REF/logs-<job-slug>
 ```
-Contents: `canton_network_test.clog.gz` (apps + test framework), `canton.clog.gz` or `canton_before_shutdown.clog.gz`
+canton-network-internal runs: list through `$R`, download the zip by artifact id (the redirect to blob storage is
+followed by both `ghx` and `gh api`):
+```
+$R "/repos/DACH-NY/canton-network-internal/actions/runs/$RUN/artifacts?per_page=100" | jq -r '.artifacts[] | "\(.id) \(.size_in_bytes) \(.name) expired=\(.expired)"'
+$R "/repos/DACH-NY/canton-network-internal/actions/artifacts/<id>/zip" > log/$REF/<name>.zip && unzip -q -d log/$REF/<name> log/$REF/<name>.zip
+```
+Contents of splice test artifacts: `canton_network_test.clog.gz` (apps + test framework), `canton.clog.gz` or `canton_before_shutdown.clog.gz`
 (all canton nodes; simtime shards: `canton-simtime.clog.gz`), `canton-standalone-*.clog.gz` (per standalone
 instance, each with its own ignore file), frontend shards: `browser.<suite>.<user>.N.1.log.gz` (geckodriver, epoch-ms
 timestamps) and `npm-<app>-<user>.out.gz` (Vite dev servers), `webpage-*.html.gz` (DOM dump at failure).
@@ -65,7 +89,9 @@ python3 -c "import zipfile;z=zipfile.ZipFile('<jar>');print([n for n in z.nameli
 javap -p -c -l -cp <jar> <fully.qualified.Class>   # -l prints the LineNumberTable for exact line numbers
 ```
 Public mirror `digital-asset/canton` is squashed (`[main] Update <date>` commits, no shared shas); compare
-sources or jars, not commit ids.
+sources or jars, not commit ids. With access to DACH-NY/canton (`ci-triage/CLAUDE.md`, Access), read a source file
+at a commit or tag with `$R "/repos/DACH-NY/canton/contents/<path>?ref=<ref>" -H "Accept: application/vnd.github.raw"`
+to find the code quickly; the jar of the version that ran stays the authority for citations.
 
 ## 7. Ignore patterns
 `project/ignore-patterns/canton_log.ignore.txt` (canton logs), `canton_network_test_log.ignore.txt` (app/test log),
@@ -76,7 +102,7 @@ sources or jars, not commit ids.
 A separate worktree keeps the triage branch checked out. `-b` refuses to overwrite an existing branch; for a
 stacked follow-up, add a worktree for the existing branch instead.
 ```
-git fetch origin main
+git fetch origin main        # SSH origin unavailable in the sandbox: git fetch https://github.com/canton-network/splice.git main:refs/remotes/https-origin/main, then use https-origin/main
 git worktree add -b <user>/fix-<ref>-<slug> ../fix-<ref> origin/main       # e.g. <user>/fix-10172-multiarch-check-retry
 git worktree add -b <user>/backport-<ref>-<pr>-<release-line> ../backport-<ref> origin/<release-line>   # e.g. <user>/backport-10169-7299-release-line-0.8.3
 git worktree add ../fix-<ref> <user>/fix-<ref>-<slug>                        # stacked follow-up on an existing fix branch
@@ -85,4 +111,100 @@ git -C ../fix-<ref> commit -s -m "[ci] <one subject line>"
 git worktree remove ../fix-<ref>                                             # when done (the branch stays)
 ```
 The ref in the branch name is the cn-test-failures issue the branch fixes (the parent ref when it closes a family).
-Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install prettier --check <files>`.
+Static checks, mandatory for every fix branch (the CI static_tests job; a fresh worktree compiles everything, so run
+it in the background, and a worktree on a newer main than the sandbox image downloads its nix paths first):
+```
+cd ../fix-<ref> && direnv allow .
+direnv exec . sbt --batch formatFix
+direnv exec . sbt --batch Test/compile lint updateTestConfigForParallelRuns updateDarResources   # separate args: one quoted string fails to parse (CI word-splits its cmd)
+git status --short          # must be empty apart from build logs; commit formatFix changes, test-*.log, DarResources
+```
+In the sbx sandbox (15 GB, SSH origin unreachable): lint's DarLockChecker fetches `release-line-*` from `origin` and
+fails with `git fetch origin release-line-<x> failed (exit 128)`; fetch it over HTTPS first (`git fetch --no-tags
+https://github.com/canton-network/splice.git release-line-<x>:refs/remotes/origin/release-line-<x>`). The `.envrc`
+heap (`-Xmx16G`) gets formatFix OOM-killed (exit 137); run both sbt calls inside
+`direnv exec . bash -c 'export SBT_OPTS="${SBT_OPTS/-Xmx16G/-Xmx10G}"; sbt --batch ...'`.
+Even with -Xmx7G, lint was OOM-killed on 2026-11-03: the pulumi lint runs about 12 eslint/tsc node processes (0.6-1 GB
+each) next to the sbt JVM, and they survive the killed sbt (`pkill -f '<worktree>/.*node_modules'`). Fallback until the
+sandbox has more memory: `scalafmtOnly <files>` plus `<project>/Test/compile`, say that lint did not run locally,
+and rely on the PR's static_tests.
+
+## 9. Export recent issues on the host
+
+Manual-export source (`ci-triage/CLAUDE.md`, Access). Ask the user to run, from the host repo root (set the date to
+about two weeks back):
+```
+direnv exec . .claude/skills/ci-triage/scripts/export_issues.py --since <YYYY-MM-DD>
+```
+Read it from the sandbox as `/run/sandbox/source/ci-triage/export/issues-since-<YYYY-MM-DD>.jsonl`; one JSON
+object per line (number, title, state, stateReason, createdAt, closedAt, assignees, labels, body, comments).
+
+## 10. Export the board on the host
+
+Needed with either source (`ghx` cannot read Projects v2). Ask the user to run, from the host repo root:
+```
+direnv exec . .claude/skills/ci-triage/scripts/export_board.py
+```
+Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl`, `triaged.jsonl` and
+`in-progress.jsonl` (open issues of project 48 with that Status, with bodies and comments; `commentCount` shows when
+more than the 100 exported comments exist; `closingPullRequests` lists the PRs whose `Fixes` line names the issue,
+with state OPEN, MERGED or CLOSED). `--status Inbox` exports one Status only.
+
+Reading the exports in the sandbox (one issue, or a text search for the duplicate check):
+```
+X=/run/sandbox/source/ci-triage/export
+ls -la $X
+jq -r --argjson n $REF 'select(.number == $n) | "#\(.number) [\(.state)] \(.title)\n\(.body)", (.comments[] | "-- \(.author) \(.createdAt)\n\(.body)")' $X/issues-since-*.jsonl
+jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " + ([.comments[].body] | join(" "))) | test($p)) | "#\(.number) \(.state)/\(.stateReason // "-") \(.createdAt[0:10]) \(.title[0:110])"' $X/issues-since-*.jsonl
+```
+
+## 11. Private data through ghx or the sandbox token
+
+`R=ghx` or `R='gh api'`, whichever `probe_access.py` reports for the capability (`ci-triage/CLAUDE.md`, Access).
+Shell state does not persist between commands, so set `R` in every command that uses it (`R=ghx; $R ...`); this
+applies to the canton-network-internal variants of recipes 1 and 3 too.
+Both print JSON for a `/repos/...` path and exit non-zero on HTTP errors (the router's reason is in the body). Page
+by hand with `page=N`; filters go to `jq`, never `--jq`.
+```
+T=/repos/DACH-NY/cn-test-failures
+$R $T/issues/$REF | jq -r '"#\(.number) [\(.state)] \(.title)\n\(.body)"'
+$R "$T/issues/$REF/comments?per_page=100" | jq -r '.[] | "-- \(.user.login) \(.created_at)\n\(.body)"'
+for p in 1 2 3 4 5 6 7 8 9 10; do $R "$T/issues?state=all&per_page=100&page=$p&since=<YYYY-MM-DD>T00:00:00Z"; done \
+  | jq -c '.[] | select(.pull_request | not) | {number, title, state, state_reason, created_at, body}' > log/issues-recent.jsonl
+jq -r --arg p '<test name or flagged text>' 'select((.title + " " + (.body // "")) | test($p)) | "#\(.number) \(.state)/\(.state_reason // "-") \(.created_at[0:10]) \(.title[0:110])"' log/issues-recent.jsonl
+C=/repos/DACH-NY/canton-network-internal
+$R "$C/commits/<sha>" | jq -r '.commit.message, (.files[].filename)'
+$R "$C/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"
+$R "$C/commits/<sha>/pulls" | jq -r '.[] | "#\(.number) \(.title)\n\(.body)"'
+$R "$C/actions/runs/$RUN" | jq -r '"\(.name) \(.head_branch) \(.head_sha[0:10]) \(.created_at) \(.conclusion)"'
+```
+`since` filters on last update, not creation. The issue list holds no comments; fetch them per candidate. Read file
+contents only with the raw media type: the JSON form carries a `download_url` with a short-lived access token, which
+must not end up in logs or packets. Jobs, logs and artifacts of canton-network-internal runs: recipes 1 and 3. With
+`ghx` after the router's sandbox setup, `git clone https://github.com/DACH-NY/canton-network-internal.git` goes
+through the router too (into `log/`, never into the triage branch). Whatever no method reaches: ask the user to save
+it to `ci-triage/export/<ref>/` on the host.
+
+## 12. Change an issue's Status on the host
+
+The user runs this; the sandbox has no board access. One line per target Status, any number of refs; an issue is
+only changed when its current Status is FROM, so a second run is harmless. `--dry-run` shows what would change.
+```
+direnv exec . .claude/skills/ci-triage/scripts/set_status.py Inbox Triaged 11140 10495
+```
+
+## 13. GCP logs for an infra failure (user looks)
+
+The sandbox has no GCP access, but the user can read GCP logs. When the cause sits in a GCP service (cluster test
+invoker, failure notifications invoker, cluster apps), do not stop at "not checked": build the query in the
+sandbox and hand the user the link and the command; the pasted `gcloud` output becomes verbatim evidence.
+```
+.claude/skills/ci-triage/scripts/gcp_logs.py --project <project> --start <UTC> --end <UTC> --filter '<query line>' [--filter ...]
+```
+Window: the failing period plus 5 min on each side. Say which parts of the query are guesses (project, resource
+type, service name) and ask the user to correct them; record confirmed values here.
+
+| Target | Project | Filter | Confirmed |
+|---|---|---|---|
+| cluster test invoker (`CLUSTER_TEST_INVOKER_URL`): Cloud Function `invoke-circleci-workflow` (functions_framework, Python 3.12) | da-cn-ci | `resource.type=("cloud_run_revision" OR "cloud_function")`, `(severity>=ERROR OR httpRequest.status>=500)` | yes, 2026-11-03 (11152) |
+| Postgres of a splice GHA test job (service container `postgres` on a self-hosted k8s runner; runner name from `gh api /repos/canton-network/splice/actions/jobs/<job id> --jq .runner_name`) | da-cn-splice (cluster cn-splicenet, namespace gha-runners-splice) | `resource.type="k8s_container"`, `resource.labels.pod_name="<runner name>-workflow"`, `resource.labels.container_name="postgres"`, optionally `textPayload:("could not serialize" OR "Reason code" OR "STATEMENT")`; default logging has ERROR, DETAIL, STATEMENT with `%m [%p]` prefix, bind values not logged | yes, 2026-11-04 (11160) |
