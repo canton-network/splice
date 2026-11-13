@@ -218,7 +218,7 @@
               "properties": {
                 "enabled": {
                   "type": "boolean",
-                  "description": "Drop per-table ACS snapshots older than the analyzable time window, except the daily bulk storage ones."
+                  "description": "Drop ACS snapshots stored in per-snapshot tables that are older than the analyzable time window, except the daily bulk storage ones."
                 }
               },
               "required": ["enabled"]

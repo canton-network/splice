@@ -18,7 +18,7 @@ class AcsSnapshotPruningMetrics(metricsFactory: LabeledMetricsFactory)(implicit
   private val snapshotsDropped: Meter = metricsFactory.meter(
     MetricInfo(
       name = prefix :+ "snapshots_dropped",
-      summary = "Number of per-table ACS snapshots dropped by pruning",
+      summary = "Number of ACS snapshots in per-snapshot tables dropped by pruning",
       qualification = Traffic,
     )
   )(metricsContext)
