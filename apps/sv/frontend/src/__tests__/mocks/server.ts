@@ -3,7 +3,12 @@
 import { setupServer, SetupServer } from 'msw/node';
 import { corsPreflightHandler } from '@canton-network/splice-common-test-handlers';
 
+import { buildScanMock } from './handlers/scan-api';
 import { buildSvMock } from './handlers/sv-api';
 
-export const buildServer = (svApiUrl: string): SetupServer =>
-  setupServer(corsPreflightHandler, ...buildSvMock(svApiUrl));
+export const buildServer = (svApiUrl: string, scanApiUrl?: string): SetupServer =>
+  setupServer(
+    corsPreflightHandler,
+    ...buildSvMock(svApiUrl),
+    ...(scanApiUrl ? buildScanMock(scanApiUrl) : [])
+  );

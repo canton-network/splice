@@ -9,7 +9,7 @@ import * as damlTypes from '@daml/types';
 import { Vote, VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 import { ContractId } from '@daml/types';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 
 function getVoteStatus(votes: damlTypes.Map<string, Vote>): Vote[] {
   const allVotes: Vote[] = [];
@@ -18,7 +18,7 @@ function getVoteStatus(votes: damlTypes.Map<string, Vote>): Vote[] {
 }
 
 export const useListVotes = (contractIds: ContractId<VoteRequest>[]): UseQueryResult<SvVote[]> => {
-  const { listVoteRequestsByTrackingCid } = useSvAdminClient();
+  const { listVoteRequestsByTrackingCid } = useGovernanceReadClient();
   return useQuery({
     queryKey: ['listVoteRequestsByTrackingCid', contractIds],
     queryFn: async () => {

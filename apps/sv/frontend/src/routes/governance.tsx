@@ -50,7 +50,10 @@ export const Governance: React.FC = () => {
     : [];
   const votesQuery = votesHooks.useListVotes(voteRequestIds);
 
+  // Undefined when there is no viewer SV (read-only mode): then there is no Action Required
+  // section and no Your Vote column, and every open proposal is in flight.
   const svPartyId = svInfoQuery.data?.svPartyId;
+  const hasViewer = svPartyId !== undefined;
   const votingThreshold = dsoInfosQuery.data?.votingThreshold;
   const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
   const alreadyVotedRequestIds: Set<ContractId<VoteRequest>> = useMemo(() => {
@@ -61,7 +64,7 @@ export const Governance: React.FC = () => {
 
   const voteHistory = useMemo(() => {
     const pages = voteResultsInfiniteQuery.data?.pages;
-    if (!pages || !svPartyId || votingThreshold === undefined) return [];
+    if (!pages || votingThreshold === undefined) return [];
 
     const allVoteResults = pages.flatMap(page => page.results);
     return buildVoteHistoryData(allVoteResults, amuletName, svPartyId, votingThreshold, svs);
@@ -70,7 +73,7 @@ export const Governance: React.FC = () => {
   const voteRequests = listVoteRequestsQuery.data;
 
   const actionRequiredBase = useMemo(() => {
-    if (!voteRequests) {
+    if (!voteRequests || !hasViewer) {
       return [];
     }
 
@@ -87,7 +90,7 @@ export const Governance: React.FC = () => {
         createdAt: vr.createdAt,
         requester: getRequesterPartyId(vr.payload.requester, svs),
       })) as ActionRequiredData[];
-  }, [voteRequests, alreadyVotedRequestIds, amuletName, svs]);
+  }, [voteRequests, hasViewer, alreadyVotedRequestIds, amuletName, svs]);
 
   const inflightBase = useMemo(() => {
     if (!voteRequests || votingThreshold === undefined) {
@@ -95,7 +98,7 @@ export const Governance: React.FC = () => {
     }
 
     return voteRequests
-      .filter(v => alreadyVotedRequestIds.has(v.payload.trackingCid || v.contractId))
+      .filter(v => !hasViewer || alreadyVotedRequestIds.has(v.payload.trackingCid || v.contractId))
       .map(v => {
         const effectiveAt = v.payload.targetEffectiveAt ? v.payload.targetEffectiveAt : 'Threshold';
         const votes = v.payload.votes.entriesArray().map(e => e[1]);
@@ -116,10 +119,21 @@ export const Governance: React.FC = () => {
           requester: getRequesterPartyId(v.payload.requester, svs),
         } as ProposalListingData;
       });
-  }, [voteRequests, votingThreshold, alreadyVotedRequestIds, amuletName, svPartyId, svs]);
+  }, [
+    voteRequests,
+    votingThreshold,
+    hasViewer,
+    alreadyVotedRequestIds,
+    amuletName,
+    svPartyId,
+    svs,
+  ]);
 
+  // hasViewer comes from svInfoQuery, so wait for it too; otherwise operator mode would briefly
+  // render as if there were no viewer.
   const isLoading =
     dsoInfosQuery.isPending ||
+    svInfoQuery.isPending ||
     listVoteRequestsQuery.isPending ||
     votesQuery.isPending ||
     voteResultsInfiniteQuery.isPending;
@@ -153,7 +167,7 @@ export const Governance: React.FC = () => {
   });
 
   const searchVoteHistoryBase = useMemo(() => {
-    if (!svPartyId || votingThreshold === undefined) {
+    if (votingThreshold === undefined) {
       return [];
     }
 
@@ -209,14 +223,16 @@ export const Governance: React.FC = () => {
       <PageHeader
         title="Governance"
         actionElement={
-          <Button
-            id="initiate-proposal-button"
-            variant="pill"
-            component={RouterLink}
-            to={`/governance/proposals/create`}
-          >
-            Initiate Proposal
-          </Button>
+          votesHooks.isReadOnly ? undefined : (
+            <Button
+              id="initiate-proposal-button"
+              variant="pill"
+              component={RouterLink}
+              to={`/governance/proposals/create`}
+            >
+              Initiate Proposal
+            </Button>
+          )
         }
         data-testid="governance-page-header"
       />
@@ -227,14 +243,16 @@ export const Governance: React.FC = () => {
         <EmptyStateSection />
       ) : (
         <>
-          <ActionRequiredSection
-            actionRequiredRequests={actionRequiredRequests}
-            noDataMessage={
-              hasSearch
-                ? 'No action required items match your search.'
-                : 'No Action Required items available'
-            }
-          />
+          {hasViewer && (
+            <ActionRequiredSection
+              actionRequiredRequests={actionRequiredRequests}
+              noDataMessage={
+                hasSearch
+                  ? 'No action required items match your search.'
+                  : 'No Action Required items available'
+              }
+            />
+          )}
 
           <ProposalListingSection
             sectionTitle="In-flight Proposals"
@@ -243,10 +261,13 @@ export const Governance: React.FC = () => {
             noDataMessage={
               hasSearch
                 ? 'No in-flight proposals match your search.'
-                : 'No proposals are currently in flight. Proposals you have voted on will appear here while awaiting the voting threshold or deadline.'
+                : !hasViewer
+                  ? 'No proposals are currently in flight.'
+                  : 'No proposals are currently in flight. Proposals you have voted on will appear here while awaiting the voting threshold or deadline.'
             }
             uniqueId="inflight-proposals"
             showVoteStats
+            showYourVote={hasViewer}
             showThresholdDeadline
             sortOrder="effectiveAtAsc"
           />
@@ -266,11 +287,14 @@ export const Governance: React.FC = () => {
             noDataMessage={
               hasSearch
                 ? 'No vote history matches your search.'
-                : 'No data to show. You can see your vote history here after proposals meet their threshold deadline.'
+                : !hasViewer
+                  ? 'No data to show. Closed proposals appear here after they meet their threshold deadline.'
+                  : 'No data to show. You can see your vote history here after proposals meet their threshold deadline.'
             }
             uniqueId="vote-history"
             showStatus
             showVoteStats
+            showYourVote={hasViewer}
             fetchNextPage={hasSearch ? undefined : voteResultsInfiniteQuery.fetchNextPage}
             hasNextPage={hasSearch ? false : (voteResultsInfiniteQuery.hasNextPage ?? false)}
             isFetchingNextPage={hasSearch ? false : voteResultsInfiniteQuery.isFetchingNextPage}

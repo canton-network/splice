@@ -10,7 +10,7 @@ import { Contract, PollingStrategy } from '@canton-network/splice-common-fronten
 import { type UseQueryResult, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 import { useConfigPollInterval } from '../utils';
 import { shouldContinueVoteHistorySearch } from '../utils/proposalSearch';
 import { retryOnRateLimit, retryQuery } from '@canton-network/splice-common-frontend';
@@ -29,7 +29,7 @@ export type ListVoteRequestResultParams = {
 export const useListDsoRulesVoteRequests = (
   refetchInterval?: number
 ): UseQueryResult<Contract<VoteRequest>[]> => {
-  const { listDsoRulesVoteRequests } = useSvAdminClient();
+  const { listDsoRulesVoteRequests } = useGovernanceReadClient();
   const defaultRefetchInterval = useConfigPollInterval();
 
   return useQuery({
@@ -47,7 +47,7 @@ export const useListVoteRequestResult = (
   limit: number = 10,
   retry: boolean = true
 ): UseQueryResult<DsoRules_CloseVoteRequestResult[]> => {
-  const { listVoteRequestResults } = useSvAdminClient();
+  const { listVoteRequestResults } = useGovernanceReadClient();
   return useQuery({
     queryKey: [
       'listVoteRequestResults',
@@ -80,7 +80,7 @@ function usePaginatedVoteRequestResultsBucket(
   enabled: boolean,
   shouldContinueRef: React.MutableRefObject<() => boolean>
 ) {
-  const { listVoteRequestResults } = useSvAdminClient();
+  const { listVoteRequestResults } = useGovernanceReadClient();
   const queryKey = [
     PAGINATED_VOTE_RESULTS_QUERY_KEY,
     contractId,

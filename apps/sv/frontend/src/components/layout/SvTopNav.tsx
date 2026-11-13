@@ -16,7 +16,8 @@ import SvNavLink, { SvNavLinkItem } from './SvNavLink';
 
 interface SvTopNavProps {
   navLinks: SvNavLinkItem[];
-  onLogout: () => void;
+  /** Omitted in dApp mode, which has no login; hides the logout control. */
+  onLogout?: () => void;
 }
 
 /**
@@ -26,6 +27,7 @@ interface SvTopNavProps {
  */
 const SvTopNav: React.FC<SvTopNavProps> = ({ navLinks, onLogout }) => (
   <Box
+    component="nav"
     data-testid="sv-top-nav"
     sx={{
       display: 'flex',
@@ -105,16 +107,18 @@ const SvTopNav: React.FC<SvTopNavProps> = ({ navLinks, onLogout }) => (
       }}
     />
 
-    <Box
-      sx={{
-        flexShrink: 0,
-        '@media (max-width: 1400px)': {
-          marginLeft: 'auto',
-        },
-      }}
-    >
-      <LogoutButton onLogout={onLogout} />
-    </Box>
+    {onLogout && (
+      <Box
+        sx={{
+          flexShrink: 0,
+          '@media (max-width: 1400px)': {
+            marginLeft: 'auto',
+          },
+        }}
+      >
+        <LogoutButton onLogout={onLogout} />
+      </Box>
+    )}
   </Box>
 );
 

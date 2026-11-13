@@ -30,7 +30,8 @@ export interface BaseVotesHooks {
   useListVotes: (contractIds: ContractId<VoteRequest>[]) => UseQueryResult<SvVote[]>;
   useAmuletPriceVotes: () => UseQueryResult<AmuletPriceVote[]>;
   useDsoInfos: () => UseQueryResult<DsoInfo>;
-  useSvInfo: () => UseQueryResult<SvInfo>;
+  // The viewer's SV; its fields are undefined when there is none (e.g. the SV UI's dApp mode).
+  useSvInfo: () => UseQueryResult<Partial<SvInfo>>;
   useVoteRequest: (contractId: ContractId<VoteRequest>) => UseQueryResult<Contract<VoteRequest>>;
 }
 

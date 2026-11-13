@@ -7,10 +7,10 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 
 import { AmuletPriceVote } from '@daml.js/splice-dso-governance/lib/Splice/DSO/AmuletPrice';
 
-import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useGovernanceReadClient } from '../contexts/GovernanceReadClientContext';
 
 export const useAmuletPriceVotes = (): UseQueryResult<CPVModel[]> => {
-  const { listAmuletPriceVotes } = useSvAdminClient();
+  const { listAmuletPriceVotes } = useGovernanceReadClient();
   return useQuery({
     queryKey: ['listAmuletPriceVotes'],
     queryFn: async () => {

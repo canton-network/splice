@@ -10,7 +10,8 @@ import { SvNavLinkItem } from './SvNavLink';
 
 interface SvNavigationShellProps {
   navLinks: SvNavLinkItem[];
-  onLogout: () => void;
+  /** Omitted in dApp mode, which has no login; hides the logout control. */
+  onLogout?: () => void;
   pageName: string;
 }
 
