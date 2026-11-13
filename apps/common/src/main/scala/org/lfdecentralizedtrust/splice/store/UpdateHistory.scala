@@ -469,10 +469,10 @@ class UpdateHistory private (
       }
   }
 
-  // Requires Postgres 18 to run. Therefore, all Scan operators must be running said version of Postgres.
+  // TODO(#8436) ANALYZE ONLY once all SVs run Postgres 18
   def analyzePartitionedTables()(implicit tc: TraceContext): Future[Unit] =
     storage.update(
-      DBIO.sequence(PartitionedTables.map(table => sqlu"analyze only #$table")).map(_ => ()),
+      DBIO.sequence(PartitionedTables.map(table => sqlu"analyze #$table")).map(_ => ()),
       "analyzePartitionedTables",
     )
 
