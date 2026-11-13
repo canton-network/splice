@@ -33,7 +33,14 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{
 }
 import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, EventId, LegacyOffset, Trees}
+import org.lfdecentralizedtrust.splice.util.{
+  Codec,
+  Contract,
+  EventId,
+  LegacyOffset,
+  Trees,
+  ValueJsonCodecTranscode,
+}
 
 import java.time.format.DateTimeFormatterBuilder
 import java.time.{Instant, ZoneOffset}
@@ -661,6 +668,7 @@ object ScanHttpEncodings {
   def fromDamlValueEncoding(encoding: definitions.DamlValueEncoding): ScanHttpEncodings =
     encoding match {
       case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
+      case definitions.DamlValueEncoding.members.LedgerApiJson => LedgerApiJsonScanHttpEncodings
       case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
     }
 
@@ -1067,6 +1075,104 @@ case class CompactJsonScanHttpEncodings(
 // A lossy, but much easier to process, encoding. Should be used for all endpoints not used for backfilling Scan.
 object CompactJsonScanHttpEncodings {
   def apply() = new CompactJsonScanHttpEncodings(RemoveFieldLabels.value, RemoveFieldLabels.record)
+}
+
+/** Encodes Daml values like the JSON Ledger API does, with trailing `None` fields of records omitted.
+  * Unlike [[CompactJsonScanHttpEncodings]], the output does not depend on the version of the Java codegen
+  * bundled with the app, see [[org.lfdecentralizedtrust.splice.util.ValueJsonCodecTranscode]].
+  * Should not be used for backfilling Scan.
+  */
+case object LedgerApiJsonScanHttpEncodings extends ScanHttpEncodings {
+
+  private def encodeOrFallback(
+      what: String,
+      encoded: Either[String, String],
+      value: javaApi.Value,
+  )(implicit elc: ErrorLoggingContext): Json =
+    encoded.fold(
+      err => {
+        elc.error(s"Failed to encode $what: $err")
+        encodeValueFallback(err, value)
+      },
+      tryParseJson,
+    )
+
+  private def decodeOrThrow[T](what: String, json: Json, decoded: Either[String, T]): T =
+    decoded.fold(
+      error => throw new RuntimeException(s"Failed to decode $what '${json.noSpaces}': $error"),
+      identity,
+    )
+
+  override def encodeContractPayload(
+      event: javaApi.CreatedEvent
+  )(implicit elc: ErrorLoggingContext): Json =
+    encodeOrFallback(
+      "contract payload",
+      ValueJsonCodecTranscode.serializableContractPayload(event),
+      event.getArguments,
+    )
+
+  override def encodeChoiceArgument(
+      event: javaApi.ExercisedEvent
+  )(implicit elc: ErrorLoggingContext): Json =
+    encodeOrFallback(
+      "choice argument",
+      ValueJsonCodecTranscode.serializeChoiceArgument(event),
+      event.getChoiceArgument,
+    )
+
+  override def encodeExerciseResult(
+      event: javaApi.ExercisedEvent
+  )(implicit elc: ErrorLoggingContext): Json =
+    encodeOrFallback(
+      "exercise result",
+      ValueJsonCodecTranscode.serializeChoiceResult(event),
+      event.getExerciseResult,
+    )
+
+  override def decodeContractPayload(
+      templateId: javaApi.Identifier,
+      json: Json,
+  ): javaApi.DamlRecord =
+    decodeOrThrow(
+      "contract payload",
+      json,
+      ValueJsonCodecTranscode.deserializableContractPayload(templateId, json.noSpaces),
+    )
+
+  override def decodeChoiceArgument(
+      templateId: javaApi.Identifier,
+      interfaceId: Option[javaApi.Identifier],
+      choice: String,
+      json: Json,
+  ): javaApi.Value =
+    decodeOrThrow(
+      "choice argument",
+      json,
+      ValueJsonCodecTranscode.deserializeChoiceArgument(
+        templateId,
+        interfaceId,
+        choice,
+        json.noSpaces,
+      ),
+    )
+
+  override def decodeExerciseResult(
+      templateId: javaApi.Identifier,
+      interfaceId: Option[javaApi.Identifier],
+      choice: String,
+      json: Json,
+  ): javaApi.Value =
+    decodeOrThrow(
+      "exercise result",
+      json,
+      ValueJsonCodecTranscode.deserializeChoiceResult(
+        templateId,
+        interfaceId,
+        choice,
+        json.noSpaces,
+      ),
+    )
 }
 
 // A lossless, but harder to process, encoding. Should be used only for backfilling Scan.

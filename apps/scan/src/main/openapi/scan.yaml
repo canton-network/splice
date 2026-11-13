@@ -3638,10 +3638,17 @@ components:
         "protobuf_json" is a verbose JSON encoding that is more difficult to parse,
         but contains type information, i.e., the values can be parsed losslessly
         without having access to the Daml source code.
+        "ledger_api_json" is the JSON encoding of the JSON Ledger API (v2). It is similar to "compact_json",
+        but the output can differ in details such as the encoding of numbers, maps and variants.
+        Trailing fields of Daml records that are null are omitted.
+        Daml upgrades can add optional fields at the end of a record. With "compact_json", values created
+        before such an upgrade can be returned with or without the new fields (as null) depending on the
+        version of the app that serves the request. This encoding returns the same JSON regardless of the version.
         Optional and defaults to "compact_json".
       enum:
         - "compact_json"
         - "protobuf_json"
+        - "ledger_api_json"
     GetMemberTrafficStatusResponse:
       type: object
       required: [ "traffic_status" ]

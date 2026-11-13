@@ -1300,6 +1300,8 @@ lazy val `apps-common` =
         aws_s3,
         s3mock_testcontainers,
       ),
+      // Needed to use transcode, which is written in Scala 3
+      scalacOptions += "-Ytasty-reader",
       BuildCommon.sharedAppSettings,
       buildInfoKeys := Seq[BuildInfoKey](
         BuildInfoKey(
