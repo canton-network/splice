@@ -36,6 +36,7 @@ import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCodegen}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
@@ -883,7 +884,7 @@ class HttpScanHandler(
       updateO: Option[TreeUpdateWithMigrationId],
       appAndAssetActivityRecordO: Option[AppAndAssetActivityRecordT],
       encoding: definitions.DamlValueEncoding,
-      includeRound: Boolean,
+      dsoRulesO: Option[DsoRules],
   )(implicit tc: TraceContext): definitions.EventHistoryItem = {
     val encodedUpdateV2 = updateO.map(
       ScanHttpEncodings.encodeUpdateV2(
@@ -895,6 +896,8 @@ class HttpScanHandler(
       )
     )
     val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
+      val includeRound =
+        dsoRulesO.exists(SwitchOverTimes.serveVerdictRoundNumber(v.recordTime, _))
       ScanHttpEncodings.encodeVerdict(v, views, includeRound)
     }
     val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
@@ -933,8 +936,6 @@ class HttpScanHandler(
           )
         case Some((verdictWithViewsO, updateO)) =>
           val verdictRowIdO = verdictWithViewsO.map { case (v, _) => v.rowId }
-          val includeRound =
-            dsoRules.exists(c => SwitchOverTimes.alwaysServeVerdictRoundNumber(clock, c.payload))
           for {
             appAndAssetActivityRecordO <- verdictRowIdO match {
               case Some(rowId) =>
@@ -947,7 +948,7 @@ class HttpScanHandler(
               updateO,
               appAndAssetActivityRecordO,
               encoding,
-              includeRound,
+              dsoRules.map(_.payload),
             )
           )
       }
@@ -996,8 +997,6 @@ class HttpScanHandler(
           verdictWithViewsO.map { case (v, _) => v.rowId }
         }
         appAndAssetActivityRecordMap <- eventStore.getAppAndAssetActivityRecords(verdictRowIds)
-        includeRound =
-          dsoRules.exists(c => SwitchOverTimes.alwaysServeVerdictRoundNumber(clock, c.payload))
       } yield events.map { case (verdictWithViewsO, updateO) =>
         val appAndAssetActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
           appAndAssetActivityRecordMap.get(v.rowId)
@@ -1007,7 +1006,7 @@ class HttpScanHandler(
           updateO,
           appAndAssetActivityRecordForEvent,
           encoding,
-          includeRound,
+          dsoRules.map(_.payload),
         )
       }.toVector
     }
