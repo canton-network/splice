@@ -88,3 +88,6 @@ securityContexts:
       security_context_profile: app_security_context
     persistence:
       security_context_profile: persistent_security_context
+
+adminApi:
+  disableAuth: true

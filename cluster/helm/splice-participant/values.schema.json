@@ -238,6 +238,52 @@
     },
     "affinity": {
       "type": "object"
+    },
+    "adminApi": {
+      "type": "object",
+      "description": "Configuration parameters for the participant Admin API",
+      "properties": {
+        "disableAuth": {
+          "type": "boolean"
+        },
+        "auth": {
+          "type": "object",
+          "required": ["jwksUrl", "targetAudience", "user"],
+          "properties": {
+            "jwksUrl": {
+              "type": "string"
+            },
+            "targetAudience": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            },
+            "additionalUsers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "disableAuth": {
+                "const": "false"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "auth"
+            ]
+          }
+        }
+      ]
     }
   }
 }

@@ -462,18 +462,18 @@ Any more specific run requires using NPM directly. To do that the following prer
 
 To run all tests from one or more Pulumi projects execute the following command.
 ```
-npm exec -- jest --selectProjects <project> [project]...
+npm run test --selectProjects <project> [project]...
 ```
 Specific suites are selected by passing one or more patterns as positional arguments. For example
 the following matches `$SPLICE_ROOT/cluster/pulumi/common/src/retries.test.ts` but also any suite
 that contains `retries` in its path.
 ```
-npm exec -- jest retries
+npm run test retries
 ```
 Lastly, individual tests can be filtered using the `--testNamePattern` or `-t` for short as shown
 in the following example:
 ```
-npm exec -- jest -t "retry runs the action again if it fails with an exception"
+npm run test -t "retry runs the action again if it fails with an exception"
 ```
 All the above ways of filtering tests can be combined to achieve the desired run. More information
 on jest CLI can be found [here](https://jestjs.io/docs/cli). One might also opt for an IDE extension.

@@ -118,3 +118,7 @@ securityContexts:
       security_context_profile: ui_security_context
     persistence:
       security_context_profile: persistent_security_context
+
+participantClient:
+  adminApi:
+    disableAuth: true

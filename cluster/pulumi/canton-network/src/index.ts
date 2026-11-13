@@ -8,13 +8,13 @@ import { installCluster } from './installCluster';
 import { scheduleLoadGenerator } from './scheduleLoadGenerator';
 
 async function auth0CacheAndInstallCluster(auth0Fetch: Auth0Fetch) {
-  await auth0Fetch.loadAuth0Cache();
+  await auth0Fetch.loadFixedTokensCache();
 
   installClusterVersion();
 
   await installCluster(auth0Fetch);
 
-  await auth0Fetch.saveAuth0Cache();
+  await auth0Fetch.persistFixedTokensCache();
 }
 
 async function main() {

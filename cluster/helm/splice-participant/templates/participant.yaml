@@ -116,6 +116,25 @@ spec:
         - name: ADDITIONAL_CONFIG_HTTP_HEALTH_SERVER
           value: canton.participants.participant.monitoring.http-health-server.port = 5071
         {{- end }}
+        {{- if .Values.adminApi.disableAuth }}
+        - name: ADDITIONAL_CONFIG_DISABLE_ADMIN_API_AUTH
+          value: canton.participants.participant.admin-api.auth-services=[]
+        {{- else}}
+        - name: SPLICE_PARTICIPANT_ADMIN_API_JWKS_URL
+          value: {{ .Values.adminApi.auth.jwksUrl }}
+        - name: SPLICE_PARTICIPANT_ADMIN_API_TARGET_AUDIENCE
+          value: {{ .Values.adminApi.auth.targetAudience }}
+        - name: SPLICE_PARTICIPANT_ADMIN_API_USER
+          value: {{ .Values.adminApi.auth.user }}
+        - name: ADDITIONAL_CONFIG_ADMIN_API_USERS
+          value: |
+            {{- range .Values.adminApi.auth.additionalUsers }}
+            _admin_api_users += {
+              user-id = "{{ . }}"
+              allowed-services = ${_default_admin_api_user_allowed_services}
+            }
+            {{- end }}
+        {{- end}}
         {{- include "splice-util-lib.additional-env-vars" .Values.additionalEnvVars | indent 8}}
         {{- include "splice-util-lib.log-level" .Values | indent 8}}
         ports:

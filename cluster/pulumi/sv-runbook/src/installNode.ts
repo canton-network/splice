@@ -305,6 +305,11 @@ async function installSvAndValidator(
     additionalJvmOptions: getAdditionalJvmOptions(svConfig.svApp?.additionalJvmOptions),
     resources: svConfig.svApp?.resources,
     persistentDataPvc: persistentHeapDumpsPvc(),
+    participantClient: {
+      adminApi: {
+        disableAuth: svConfig.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   const svValuesWithSpecifiedAud: ChartValues = {
@@ -400,6 +405,11 @@ async function installSvAndValidator(
       .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
     pvc: persistentHeapDumpsPvc(),
+    participantClient: {
+      adminApi: {
+        disableAuth: svConfig.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   const scanValuesWithFixedTokens = {
@@ -454,6 +464,11 @@ async function installSvAndValidator(
     maxVettingDelay: networkWideConfig?.maxVettingDelay,
     resources: svConfig.validatorApp?.resources,
     persistentDataPvc: persistentHeapDumpsPvc(),
+    participantClient: {
+      adminApi: {
+        disableAuth: svConfig.participant?.disableParticipantAdminApiAuth ?? false,
+      },
+    },
   };
 
   const validatorValuesWithSpecifiedAud: ChartValues = {

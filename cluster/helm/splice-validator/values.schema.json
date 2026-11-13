@@ -175,6 +175,45 @@
         "walletWebUi": { "type": "string" },
         "ansWebUi": { "type": "string" }
       }
+    },
+    "participantClient": {
+      "type": "object",
+      "description": "Configuration parameters for the participant client.",
+      "properties": {
+        "adminApi": {
+          "type": "object",
+          "properties": {
+            "disableAuth": {
+              "type": "boolean"
+            },
+            "auth": {
+              "type": "object",
+              "properties": {
+                "secretName": {
+                  "type": "string"
+                },
+                "secretOverrides": {
+                  "type": "object",
+                  "properties": {
+                    "audience": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
