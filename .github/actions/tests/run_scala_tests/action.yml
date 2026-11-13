@@ -1,0 +1,42 @@
+name: Run Scala tests
+description: Run the given sbt test command, then check the logs for errors
+inputs:
+  cmd:
+    description: "The sbt command that runs the tests"
+    required: true
+  extra_env_vars:
+    description: "Extra environment variables to set before running the tests"
+    required: false
+    default: ""
+  extra_parameters:
+    description: "Extra parameters to pass to sbt"
+    required: false
+    default: ""
+  pre_sbt_cmd:
+    description: "Command to run before running the tests"
+    required: false
+    default: ""
+  post_sbt_cmd:
+    description: "Command to run after running the tests"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run tests
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        extra_env_vars: ${{ inputs.extra_env_vars }}
+        cmd: ${{ inputs.cmd }}
+        additional_nix_args: "--keep GITHUB_ACTION"
+        extra_parameters: ${{ inputs.extra_parameters }}
+        pre_sbt_cmd: ${{ inputs.pre_sbt_cmd }}
+        post_sbt_cmd: ${{ inputs.post_sbt_cmd }}
+
+    - name: Check logs for errors
+      uses: ./.github/actions/sbt/execute_sbt_command
+      with:
+        # we don't care if some integration test happened to make the repo dirty
+        pre_sbt_cmd: "export CI_IGNORE_DIRTY_REPO=1"
+        cmd: checkErrors
