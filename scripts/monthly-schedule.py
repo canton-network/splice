@@ -739,7 +739,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
             [
                 ScheduledEvent(
                     title=str(spec["daml_title"]),
-                    date=schedule_date(month, "tuesday", int(spec["daml_week"])),
+                    date=schedule_date(month, "monday", int(spec["daml_week"])),
                     timed=True,
                     network=str(network),
                     activity=(ACTIVITY_DAML),
