@@ -17,6 +17,10 @@
 // so the `-C` flag defines a dummy remote participant that the script never connects to.
 // The input is streamed, so a small heap is enough (e.g. JAVA_OPTS=-Xmx256m).
 //
+// Each setting below can also be given as a JVM system property of the same name, which takes
+// precedence over the environment variable. That is how code running the script in-process (e.g.
+// PeriodicTopologySnapshotIntegrationTest, via ConsoleScriptRunner) configures it.
+//
 // Outputs:
 //   SNAPSHOT_OUT          one line per topology transaction
 //   SNAPSHOT_MEMBERS_OUT  one line per sequencer member, with its status, its latest traffic
@@ -26,7 +30,7 @@
 //                         bq load --replace --source_format=NEWLINE_DELIMITED_JSON \
 //                           <dataset>.<table> <out.jsonl> <out-schema.json>
 //
-// Optional env vars:
+// Optional settings:
 //   SNAPSHOT_HEADER_OUT  file for the static synchronizer parameters + the rest of the
 //                        sequencer snapshot (JSON), without the per-member data
 //   SNAPSHOT_LIMIT       stop after this many messages (useful for debugging)
@@ -49,16 +53,19 @@ import java.io.{BufferedInputStream, BufferedWriter, FileInputStream, FileWriter
 import java.util.Base64
 import scala.collection.mutable
 
-def requireEnv(name: String): String =
-  sys.env.getOrElse(name, sys.error(s"Environment variable $name must be set"))
+def setting(name: String): Option[String] = sys.props.get(name).orElse(sys.env.get(name))
+def requiredSetting(name: String): String =
+  setting(name).getOrElse(
+    sys.error(s"$name must be set, as an environment variable or a system property")
+  )
 
-val inPath = requireEnv("SNAPSHOT_IN")
-val outPath = requireEnv("SNAPSHOT_OUT")
-val membersOutPath = requireEnv("SNAPSHOT_MEMBERS_OUT")
-val txSchemaOutPath = requireEnv("SNAPSHOT_SCHEMA_OUT")
-val membersSchemaOutPath = requireEnv("SNAPSHOT_MEMBERS_SCHEMA_OUT")
-val headerOutPath = sys.env.get("SNAPSHOT_HEADER_OUT")
-val limit = sys.env.get("SNAPSHOT_LIMIT").map(_.toLong).getOrElse(Long.MaxValue)
+val inPath = requiredSetting("SNAPSHOT_IN")
+val outPath = requiredSetting("SNAPSHOT_OUT")
+val membersOutPath = requiredSetting("SNAPSHOT_MEMBERS_OUT")
+val txSchemaOutPath = requiredSetting("SNAPSHOT_SCHEMA_OUT")
+val membersSchemaOutPath = requiredSetting("SNAPSHOT_MEMBERS_SCHEMA_OUT")
+val headerOutPath = setting("SNAPSHOT_HEADER_OUT")
+val limit = setting("SNAPSHOT_LIMIT").map(_.toLong).getOrElse(Long.MaxValue)
 
 // Generic ScalaPB -> JSON, following the protobuf JSON mapping conventions with proto field names:
 // default scalar values are omitted, 64-bit ints are strings, bytes are base64, enums are names,
