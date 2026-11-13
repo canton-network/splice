@@ -2016,7 +2016,7 @@ function subcmd_backup_nodes() {
 
     for node in $nodes; do
         case "$node" in
-            sv-1|sv-2|sv-3|sv-4|sv-da-1)
+            sv-1|sv-2|sv-3|sv-4|sv-da-1|sv)
                 _info "Backing up sv node $node"
                 SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-backup.sh sv "$node" "$migration_id"
                 ;;
