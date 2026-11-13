@@ -154,6 +154,8 @@ Failed to get status of BFT sequencer with p2p url.*(RollForwardLsu.*|Lsu)Integr
 
 # Roll forward tests
 Failed to connect to scan of FAILED Seed URL.*RollForwardLsu.*IntegrationTest
+# The test stops all scans while aliceValidator keeps running, so its BFT scan reads fail until the scans are restarted
+Consensus not reached.*BftScanConnection:RollForwardLsu.*IntegrationTest.*validator=aliceValidator
 Found roll forward config.*but available sequencers.*is less than the trust threshold in the configuration.*RollForwardLsuIntegrationTest
 
 # slow future supervision, ignore logs as we want them just for debugging
