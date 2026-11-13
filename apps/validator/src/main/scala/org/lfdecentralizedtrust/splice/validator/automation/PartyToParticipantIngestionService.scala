@@ -3,9 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.validator.automation
 
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.tracing.TraceContext
@@ -38,6 +39,7 @@ class PartyToParticipantIngestionService(
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
+    esf: ExecutionSequencerFactory,
     tracer: Tracer,
 ) extends RetryingService(config, backoffClock, "party to participant ingestion") {
 
@@ -79,20 +81,16 @@ class PartyToParticipantIngestionService(
           )
           .asRuntimeException(),
       )
-      mappings <- participantAdminConnection.listPartyToParticipant(
-        store = Some(TopologyStoreId.Synchronizer(synchronizerId)),
+      mappings <- participantAdminConnection.foldPartyToParticipantSnapshot(
+        store = TopologyStoreId.Synchronizer(synchronizerId),
         // Snapshot queries are exclusive so we use immediateSuccessor.
         timeQuery = TimeQuery.Snapshot(recordTime.immediateSuccessor),
-      )
+        zero = Map.empty[PartyId, Seq[ParticipantId]],
+      )((acc, mapping) => acc + (mapping.partyId -> mapping.participants.map(_.participantId)))
       _ = logger.info(
         s"Initializing party to participant store with ${mappings.size} parties at offset $offset and record time $recordTime"
       )
-      _ <- store.initialize(
-        offset,
-        mappings
-          .map(result => result.mapping.partyId -> result.mapping.participants.map(_.participantId))
-          .toMap,
-      )
+      _ <- store.initialize(offset, mappings)
     } yield offset
 
   start()
