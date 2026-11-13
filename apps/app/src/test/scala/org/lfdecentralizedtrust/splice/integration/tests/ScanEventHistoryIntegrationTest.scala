@@ -1,6 +1,13 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRulesConfig,
+  DsoRules_SetConfig,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_SetConfig
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -23,9 +30,12 @@ import definitions.UpdateHistoryItemV2.members.{
 
 import scala.concurrent.duration.*
 import com.digitalasset.canton.config.RequireTypes.Port
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.metrics.MetricValue
 import monocle.macros.syntax.lens.*
+import java.time.Instant
+import java.util.Optional
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 
 class ScanEventHistoryIntegrationTest
@@ -62,16 +72,6 @@ class ScanEventHistoryIntegrationTest
       )
       .addConfigTransform((_, config) =>
         ConfigTransforms.updateInitialTickDuration(NonNegativeFiniteDuration.ofMillis(500))(config)
-      )
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(dsoConfig =>
-          dsoConfig.copy(
-            initialSvOperationsSwitchOverTimes = Some(
-              dsoConfig.initialSvOperationsSwitchOverTimes.getOrElse(Map.empty) +
-                (SwitchOverTimes.AlwaysServeVerdictRoundNumber -> CantonTimestamp.MinValue)
-            )
-          )
-        )(config)
       )
 
   private val toxiproxy = UseToxiproxy(createMediatorProxies = true)
@@ -412,6 +412,114 @@ class ScanEventHistoryIntegrationTest
     withClue("ids should not have duplicates") {
       finalIds.distinct.size shouldBe finalIds.size
     }
+  }
+
+  "should serve verdict round numbers only for verdicts at or after the switch-over time" in {
+    implicit env =>
+      startAllSync(sv1Backend, sv1ScanBackend, sv1ValidatorBackend)
+
+      val _ = onboardAliceAndBob()
+      val cursorBeforeTaps = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
+
+      // The DSO is founded with the switch-over at MinValue, so every verdict is served with its round.
+      def tapAndGetVerdictWithRound(amount: Double): definitions.EventHistoryVerdict =
+        eventuallySucceeds() {
+          advanceRoundsByOneTickViaAutomation()
+          aliceWalletClient.tap(amount)
+          val eventId = withoutDevNetTopups(
+            aliceWalletClient.listTransactions(beginAfterId = None, pageSize = 10)
+          ).headOption
+            .map(_.eventId)
+            .getOrElse(fail("Expected a wallet transaction after tap"))
+          val verdict = sv1ScanBackend
+            .getEventById(EventId.updateIdFromEventId(eventId), Some(CompactJson))
+            .flatMap(_.verdict)
+            .getOrElse(fail("Expected a verdict for the tap"))
+          verdict.roundNumber shouldBe defined withClue "verdict round_number not populated yet"
+          verdict
+        }
+
+      val verdictBefore = tapAndGetVerdictWithRound(4)
+      val verdictAtSwitchOver = tapAndGetVerdictWithRound(5)
+      val switchOverTime =
+        CantonTimestamp.assertFromInstant(Instant.parse(verdictAtSwitchOver.recordTime))
+      CantonTimestamp.assertFromInstant(
+        Instant.parse(verdictBefore.recordTime)
+      ) should be < switchOverTime
+
+      actAndCheck(
+        "Vote in a switch-over time equal to the record time of the second verdict",
+        setAlwaysServeVerdictRoundNumberSwitchOverTime(switchOverTime),
+      )(
+        "Scan observes the new switch-over time",
+        _ =>
+          sv1ScanBackend
+            .getDsoInfo()
+            .dsoRules
+            .payload
+            .config
+            .svOperationsSwitchOverTimes
+            .toScala
+            .flatMap(times => Option(times.get(SwitchOverTimes.AlwaysServeVerdictRoundNumber)))
+            shouldBe Some(switchOverTime.toInstant),
+      )
+
+      def roundFromEventById(verdict: definitions.EventHistoryVerdict) =
+        sv1ScanBackend
+          .getEventById(verdict.updateId, Some(CompactJson))
+          .flatMap(_.verdict)
+          .getOrElse(fail(s"Expected a verdict for ${verdict.updateId}"))
+          .roundNumber
+
+      clue("getEventById serves the round only at or after the switch-over time") {
+        roundFromEventById(verdictBefore) shouldBe None
+        roundFromEventById(verdictAtSwitchOver) shouldBe verdictAtSwitchOver.roundNumber
+      }
+
+      clue("getEventHistory serves the round only at or after the switch-over time") {
+        val roundsByUpdateId = getEventHistoryAndCheckTxVerdicts(after = Some(cursorBeforeTaps))
+          .flatMap(_.verdict)
+          .map(v => v.updateId -> v.roundNumber)
+          .toMap
+        roundsByUpdateId.get(verdictBefore.updateId) shouldBe Some(None)
+        roundsByUpdateId.get(verdictAtSwitchOver.updateId) shouldBe Some(
+          verdictAtSwitchOver.roundNumber
+        )
+      }
+  }
+
+  // Keeps the other switch-over times so that only round-number serving changes.
+  private def setAlwaysServeVerdictRoundNumberSwitchOverTime(
+      switchOverTime: CantonTimestamp
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val config = sv1Backend.getDsoInfo().dsoRules.payload.config
+    val switchOverTimes =
+      config.svOperationsSwitchOverTimes.toScala.fold(Map.empty[String, Instant])(_.asScala.toMap) +
+        (SwitchOverTimes.AlwaysServeVerdictRoundNumber -> switchOverTime.toInstant)
+    val newConfig = new DsoRulesConfig(
+      config.numUnclaimedRewardsThreshold,
+      config.numMemberTrafficContractsThreshold,
+      config.actionConfirmationTimeout,
+      config.svOnboardingRequestTimeout,
+      config.svOnboardingConfirmedTimeout,
+      config.voteRequestTimeout,
+      config.dsoDelegateInactiveTimeout,
+      config.synchronizerNodeConfigLimits,
+      config.maxTextLength,
+      config.decentralizedSynchronizer,
+      config.nextScheduledSynchronizerUpgrade,
+      config.voteCooldownTime,
+      config.nextScheduledLogicalSynchronizerUpgrade,
+      Optional.of(switchOverTimes.asJava),
+    )
+    sv1Backend.createVoteRequest(
+      sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+      new ARC_DsoRules(new SRARC_SetConfig(new DsoRules_SetConfig(newConfig, Optional.empty()))),
+      "url",
+      "set the always-serve-verdict-round-number switch-over time",
+      config.voteRequestTimeout,
+      None,
+    )
   }
 
   // Fetch events and assert every tx update has a matching verdict
