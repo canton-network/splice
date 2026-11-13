@@ -19,6 +19,12 @@ on:
         default: true
         type: boolean
 
+      dev_only:
+        description: "Only create/update dev events"
+        required: true
+        default: false
+        type: boolean
+
 permissions:
   contents: read
 
@@ -44,6 +50,8 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_MONTH: ${{ inputs.month }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_DEV_ONLY: ${{ inputs.dev_only }}
+          MONDAY_REFRESH_STAGING_CALENDAR: ${{ secrets.MONDAY_REFRESH_STAGING_CALENDAR }}
         shell: bash
         run: |
           ARGS=(
@@ -53,6 +61,10 @@ jobs:
 
           if [[ "$INPUT_DRY_RUN" == "true" ]]; then
             ARGS+=("--dry-run")
+          fi
+
+          if [[ "$INPUT_DEV_ONLY" == "true" ]]; then
+            ARGS+=("--dev-only")
           fi
 
           python3 scripts/monthly-schedule.py "${ARGS[@]}"

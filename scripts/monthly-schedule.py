@@ -15,14 +15,19 @@ from typing import Any, Optional
 
 DEFAULT_GROUP_NAME = "Upcoming"
 
-DATE_COLUMN_NAME = "Date/Time US EST"
+DATE_COLUMN_NAME = "Date"
+TIME_COLUMN_NAME = "Time US Eastern"
 STATUS_COLUMN_NAME = "Submission Status"
 NETWORK_COLUMN_NAME = "Network"
 ACTIVITY_COLUMN_NAME = "Type of Activity"
 VERSION_COLUMN_NAME = "Minor Versions"
 DEPENDENCY_COLUMN_NAME = "Dependent On"
+DEV_COLUMN_NAME = "Dev"
 
 INITIAL_STATUS = "To Be Confirmed"
+
+# "Time US Eastern" label for events that have a time of day.
+EVENT_TIME_LABEL = "9:00 am"
 
 NETWORK_DEVNET = "DevNet"
 NETWORK_TESTNET = "TestNet"
@@ -32,6 +37,7 @@ ACTIVITY_WEEKLY = "Weekly Upgrades"
 ACTIVITY_DAML = "Splice Daml Model Effectivity"
 ACTIVITY_LSU = "Protocol Upgrades (LSU)"
 ACTIVITY_CONFIG = "Configuration Change"
+ACTIVITY_RELEASE = "Release Cadence"
 
 _BOARD_CACHE: dict[int, dict[str, Any]] = {}
 _ITEMS_CACHE: dict[int, dict[str, list[str]]] = {}
@@ -44,8 +50,9 @@ class ScheduledEvent:
     network: str
     activity: str
     minor_version: str
-    time_utc: Optional[str] = None
+    timed: bool = False
     depends_on: Optional[str] = None
+    dev: bool = False
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,6 +68,12 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Validate and show changes without modifying monday.com.",
+    )
+
+    parser.add_argument(
+        "--dev-only",
+        action="store_true",
+        help="Only create/update dev events.",
     )
 
     args = parser.parse_args()
@@ -109,9 +122,6 @@ def schedule_date(month: str, weekday: str, week_number: int) -> datetime.date:
 
     if key not in weekdays:
         raise ValueError(f"Unknown weekday: {weekday}")
-
-    if week_number < 0:
-        raise ValueError("week_number must be >= 0")
 
     return first_monday_in_month(month) + datetime.timedelta(weeks=week_number, days=weekdays[key])
 
@@ -168,6 +178,24 @@ def monday_request(token: str, query: str, variables: dict[str, Any]) -> dict[st
         )
 
     return parsed
+
+
+def trigger_website_update() -> None:
+    request = urllib.request.Request(required_env("MONDAY_REFRESH_STAGING_CALENDAR"), method="GET")
+
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+
+        raise RuntimeError(
+            f"Website update trigger failed ({exc.code}): {response_body}"
+        ) from exc
+
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Could not reach website update endpoint: {exc}") from exc
 
 
 def get_board(token: str, board_id: int) -> dict[str, Any]:
@@ -321,6 +349,8 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
 
     date_col = get_column(board, DATE_COLUMN_NAME)
 
+    time_col = get_column(board, TIME_COLUMN_NAME)
+
     status_col = get_column(board, STATUS_COLUMN_NAME)
 
     network_col = get_column(board, NETWORK_COLUMN_NAME)
@@ -331,7 +361,11 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
 
     dependency_col = get_column(board, DEPENDENCY_COLUMN_NAME)
 
+    dev_col = get_column(board, DEV_COLUMN_NAME)
+
     ensure_column_type(date_col, {"date"})
+
+    ensure_column_type(time_col, {"dropdown"})
 
     ensure_column_type(status_col, {"status", "color"})
 
@@ -343,7 +377,11 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
 
     ensure_column_type(dependency_col, {"dependency"})
 
+    ensure_column_type(dev_col, {"checkbox"})
+
     require_label(status_col, INITIAL_STATUS)
+
+    require_label(time_col, EVENT_TIME_LABEL)
 
     for label in (NETWORK_DEVNET, NETWORK_TESTNET, NETWORK_MAINNET):
         require_label(network_col, label)
@@ -354,7 +392,7 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
     return (board, get_group_id(board, group_name))
 
 
-def choice_value(column: dict[str, Any], label: str) -> dict[str, Any] | str:
+def choice_value(column: dict[str, Any], label: str | bool) -> dict[str, Any] | str:
     column_type = str(column.get("type", "")).lower()
 
     if column_type in {"status", "color"}:
@@ -366,19 +404,14 @@ def choice_value(column: dict[str, Any], label: str) -> dict[str, Any] | str:
     if column_type in {"text", "long_text"}:
         return label
 
+    if column_type == "checkbox":
+        return {"checked": "true"} if label else None
+
     raise RuntimeError(f"Unsupported choice column type {column_type!r} for {column['title']!r}")
 
 
-def date_value(event_date: datetime.date, time_utc: Optional[str]) -> dict[str, Any]:
-    value = {"date": event_date.isoformat()}
-
-    if time_utc is not None:
-        if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_utc) is None:
-            raise ValueError(f"Invalid UTC time {time_utc!r}; expected HH:MM")
-
-        value["time"] = f"{time_utc}:00"
-
-    return value
+def date_value(event_date: datetime.date) -> dict[str, Any]:
+    return {"date": event_date.isoformat()}
 
 
 def build_column_values(
@@ -392,12 +425,20 @@ def build_column_values(
 
     version_col = get_column(board, VERSION_COLUMN_NAME)
 
+    dev_col = get_column(board, DEV_COLUMN_NAME)
+
     values = {
-        str(date_col["id"]): date_value(event.date, event.time_utc),
+        str(date_col["id"]): date_value(event.date),
         str(network_col["id"]): choice_value(network_col, event.network),
         str(activity_col["id"]): choice_value(activity_col, event.activity),
         str(version_col["id"]): choice_value(version_col, event.minor_version),
+        str(dev_col["id"]): choice_value(dev_col, event.dev),
     }
+
+    if event.timed:
+        time_col = get_column(board, TIME_COLUMN_NAME)
+
+        values[str(time_col["id"])] = choice_value(time_col, EVENT_TIME_LABEL)
 
     if include_submission_status:
         status_col = get_column(board, STATUS_COLUMN_NAME)
@@ -542,10 +583,10 @@ def update_item(
 def describe_event(event: ScheduledEvent) -> str:
     when = event.date.isoformat()
 
-    if event.time_utc:
-        when += f" {event.time_utc} UTC"
+    if event.timed:
+        when += f" {EVENT_TIME_LABEL} ET"
 
-    return f"{when} | {event.network} | {event.activity} | {event.minor_version}"
+    return f"{when} | {event.network} | {event.activity} | {event.minor_version}" + (" (Dev)" if event.dev else "")
 
 
 def upsert_event(
@@ -698,8 +739,8 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
             [
                 ScheduledEvent(
                     title=str(spec["daml_title"]),
-                    date=schedule_date(month, "tuesday", int(spec["daml_week"])),
-                    time_utc="12:00",
+                    date=schedule_date(month, "monday", int(spec["daml_week"])),
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_DAML),
                     minor_version=(version),
@@ -707,7 +748,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=freeze_title,
                     date=schedule_date(month, str(spec["freeze_day"]), int(spec["freeze_week"])),
-                    time_utc="13:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_LSU),
                     minor_version=(version),
@@ -715,7 +756,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=lsu_title,
                     date=lsu_date,
-                    time_utc="13:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_LSU),
                     minor_version=(version),
@@ -724,7 +765,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
                 ScheduledEvent(
                     title=str(spec["config_title"]),
                     date=schedule_date(month, "tuesday", int(spec["config_week"])),
-                    time_utc="12:00",
+                    timed=True,
                     network=str(network),
                     activity=(ACTIVITY_CONFIG),
                     minor_version=(version),
@@ -732,7 +773,148 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
             ]
         )
 
+    # Dev events
+    for patch in range(patch_count):
+        splice_cut_date = schedule_date(month, "thursday", patch - 1)
+
+        events.append(
+            ScheduledEvent(
+                title=(f"Cut Splice {version}.{patch}"),
+                date=splice_cut_date,
+                network="",
+                activity=(ACTIVITY_RELEASE),
+                minor_version=(version),
+                dev=True,
+            )
+        )
+
+        # Canton & WG releases are cut the day before the Splice release.
+        events.append(
+            ScheduledEvent(
+                title=(f"Cut Canton & WG releases for Splice {version}.{patch}"),
+                date=splice_cut_date - datetime.timedelta(days=1),
+                network="",
+                activity=(ACTIVITY_RELEASE),
+                minor_version=(version),
+                dev=True,
+            )
+        )
+
+    events.append(
+        ScheduledEvent(
+            title=(f"Canton version for Splice {version}.0 deployed to CILR"),
+            date=schedule_date(month, "monday", -2),
+            network="",
+            activity=(ACTIVITY_RELEASE),
+            minor_version=(version),
+            dev=True,
+        )
+    )
+
+    events.append(
+        ScheduledEvent(
+            title=(f"CILR Daml votes for Splice {version}.x"),
+            date=schedule_date(month, "thursday", -1),
+            network="",
+            activity=(ACTIVITY_RELEASE),
+            minor_version=(version),
+            dev=True,
+        )
+    )
+
+    events.append(
+        ScheduledEvent(
+            title=(f"CILR LSU for Splice {version}.0"),
+            date=schedule_date(month, "monday", -1),
+            network="",
+            activity=(ACTIVITY_RELEASE),
+            minor_version=(version),
+            dev=True,
+        )
+    )
+
+    events.append(
+        ScheduledEvent(
+            title=(f"Splice Upgrades to new Canton minor release Line for Splice {version}.0"),
+            date=schedule_date(month, "wednesday", -3),
+            network="",
+            activity=(ACTIVITY_RELEASE),
+            minor_version=(version),
+            dev=True,
+        )
+    )
+
+    events.append(
+        ScheduledEvent(
+            title=(f"Cut Canton & WG release line for Splice {version}.0"),
+            date=schedule_date(month, "tuesday", -3),
+            network="",
+            activity=(ACTIVITY_RELEASE),
+            minor_version=(version),
+            dev=True,
+        )
+    )
+
     return events
+
+
+def calendar_markdown(version: str, month: str, events: list[ScheduledEvent]) -> str:
+    first_monday = first_monday_in_month(month)
+
+    def week_of(event: ScheduledEvent) -> int:
+        return (event.date - first_monday).days // 7
+
+    def label(event: ScheduledEvent) -> str:
+        text = event.title.replace("|", "\\|")
+
+        if event.dev:
+            text = f"Dev: {text}"
+
+        if event.timed:
+            text += f" ({EVENT_TIME_LABEL} ET)"
+
+        return text
+
+    cells: dict[tuple[int, int], list[str]] = {}
+
+    for event in sorted(events, key=lambda e: e.date):
+        cells.setdefault((week_of(event), event.date.weekday()), []).append(label(event))
+
+    weeks = range(min(week for week, _ in cells), max(week for week, _ in cells) + 1)
+
+    weekdays = sorted({weekday for _, weekday in cells})
+
+    lines = [
+        f"## Splice {version}.x schedule for {month}",
+        "",
+        "Week 0 starts on the first Monday of the month. Times are US Eastern.",
+        "",
+        "| Week | " + " | ".join(calendar.day_abbr[weekday] for weekday in weekdays) + " |",
+        "|---" * (len(weekdays) + 1) + "|",
+    ]
+
+    for week in weeks:
+        monday = first_monday + datetime.timedelta(weeks=week)
+
+        row = [f"{week} ({monday:%b %d})"] + [
+            "<br>".join(cells.get((week, weekday), [])) for weekday in weekdays
+        ]
+
+        lines.append("| " + " | ".join(row) + " |")
+
+    return "\n".join(lines) + "\n"
+
+
+def write_calendar(version: str, month: str, events: list[ScheduledEvent]) -> None:
+    markdown = calendar_markdown(version, month, events)
+
+    print(markdown)
+
+    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as summary:
+            summary.write(markdown)
 
 
 def main() -> None:
@@ -759,6 +941,9 @@ def main() -> None:
     if args.dry_run:
         print("DRY RUN — validating the board and showing changes only.")
 
+    if args.dev_only:
+        print("DEV ONLY — only dev events are created/updated.")
+
     board, group_id = preflight(token, board_id, group_name)
 
     print(f"Board name: {board.get('name', '')}")
@@ -767,9 +952,15 @@ def main() -> None:
 
     events = make_schedule(args.version, args.month)
 
+    if args.dev_only:
+        events = [event for event in events if event.dev]
+
     print(f"Schedule events: {len(events)}")
 
     print()
+
+    if args.dry_run:
+        write_calendar(args.version, args.month, events)
 
     item_ids_by_title: dict[str, str] = {}
 
@@ -814,6 +1005,12 @@ def main() -> None:
         print(f"LINKED: {event.title} depends on {event.depends_on}")
 
     print()
+
+    if args.dry_run:
+        print("SKIPPED: Website update trigger (dry run)")
+    else:
+        trigger_website_update()
+        print("TRIGGERED: Website update")
 
     print("Done.")
 
