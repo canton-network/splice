@@ -75,8 +75,7 @@ export class Auth0Fetch implements Auth0Client {
     return kc.makeApiClient(CoreV1Api);
   }
 
-  // TODO: rename
-  public async loadAuth0Cache(): Promise<void> {
+  public async loadFixedTokensCache(): Promise<void> {
     if (!fixedTokens()) {
       await pulumi.log.debug('Fixed tokens not enabled, skipping Auth0 cache load');
       this.fixedTokensCache = undefined;
@@ -86,8 +85,7 @@ export class Auth0Fetch implements Auth0Client {
     this.fixedTokensCache = await loadFixedTokesCache(this.getK8sClient());
   }
 
-  // TODO: rename
-  public async saveAuth0Cache(): Promise<void> {
+  public async persistFixedTokensCache(): Promise<void> {
     if (this.fixedTokensCache === undefined) {
       await pulumi.log.debug('No auth0 cache to save');
       return;
@@ -104,15 +102,16 @@ export class Auth0Fetch implements Auth0Client {
     return this.secrets;
   }
 
-  // TODO: rename
-  public async getClientAccessToken(
+  public async getClientFixedToken(
     clientId: string,
     clientSecret: string,
     audience: string,
     api: 'ledgerApi' | 'participantAdminApi'
   ): Promise<string> {
     if (this.fixedTokensCache === undefined) {
-      throw new Error(); // TODO: only used for fixed tokens setup
+      throw new Error(
+        `${this.getClientFixedToken.name} was called but fixed tokens are not enabled. This is probably a bug in IaC.`
+      );
     }
     return await getOrUpdateToken(this.fixedTokensCache, clientId, api, async () => {
       await pulumi.log.debug(

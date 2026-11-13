@@ -17,7 +17,7 @@ async function main() {
   await installCluster.installCluster({
     getSecrets: () => Promise.resolve(secrets),
 
-    getClientAccessToken: (clientId: string, clientSecret: string, audience: string) =>
+    getClientFixedToken: (clientId: string, clientSecret: string, audience: string) =>
       Promise.resolve('access_token'),
     getCfg: () => cantonNetworkAuth0Config,
   });

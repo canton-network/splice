@@ -31,7 +31,7 @@ async function main() {
       installNode.installNode(sv.nodeName, {
         getSecrets: () => Promise.resolve(secrets),
 
-        getClientAccessToken: (clientId: string, clientSecret: string, audience: string) =>
+        getClientFixedToken: (clientId: string, clientSecret: string, audience: string) =>
           Promise.resolve('access_token'),
         getCfg: () => (sv.nodeName === 'sv' ? svRunbookAuth0Config : cantonNetworkAuth0Config),
       })

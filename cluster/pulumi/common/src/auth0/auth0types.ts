@@ -52,7 +52,7 @@ export interface Auth0ClientAccessToken {
 
 export interface Auth0Client {
   getSecrets: () => Promise<Auth0SecretMap>;
-  getClientAccessToken: (
+  getClientFixedToken: (
     clientId: string,
     clientSecret: string,
     audience: string,
