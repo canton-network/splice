@@ -4,7 +4,7 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import org.apache.pekko.http.scaladsl.model.Uri
-import org.lfdecentralizedtrust.splice.config.{CircuitBreakersConfig, ConfigTransforms}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -15,6 +15,10 @@ import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageBackfillingConfig
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryStart
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests}
+import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
+  CalculateRewardsTrigger,
+  SummarizingMiningRoundTrigger,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.{
   LocalSequencerConnectionsTrigger,
   ReceiveSvRewardCouponTrigger,
@@ -45,17 +49,14 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
-      // The sim-clock steps time out in-flight submissions of the SVs' medium-priority triggers,
-      // which can trip their circuit breakers; that is not what this test is about.
-      .addConfigTransforms((_, config) =>
-        ConfigTransforms.updateAllSvAppConfigs_(c =>
-          c.copy(parameters = c.parameters.copy(circuitBreakers = CircuitBreakersConfig.never))
-        )(config)
-      )
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[LocalSequencerConnectionsTrigger]
             .withPausedTrigger[ReceiveSvRewardCouponTrigger]
+            // The test does not need rewards. The hourly sim-clock steps time out the in-flight
+            // submissions of these triggers, which then trip the medium-priority circuit breaker.
+            .withPausedTrigger[SummarizingMiningRoundTrigger]
+            .withPausedTrigger[CalculateRewardsTrigger]
         )(config)
       )
       .addConfigTransforms((_, config) =>
