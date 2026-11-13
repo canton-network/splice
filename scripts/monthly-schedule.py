@@ -392,7 +392,7 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
     return (board, get_group_id(board, group_name))
 
 
-def choice_value(column: dict[str, Any], label: str | bool) -> dict[str, Any] | str:
+def choice_value(column: dict[str, Any], label: str | bool) -> dict[str, Any] | str | bool | None:
     column_type = str(column.get("type", "")).lower()
 
     if column_type in {"status", "color"}:
