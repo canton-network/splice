@@ -467,16 +467,25 @@ class LocalSynchronizerNode(
         RetryFor.WaitingOnInitDependencyLong,
         "onboarding_sequencer",
         "Onboarding sequencer through sponsoring SV",
-        svConnection.prepareSequencerOnboardingSnapshot(sequencerId).flatMap { id =>
-          snapshotDownload.downloadWithRetries(
-            id,
-            svConnection.downloadOnboardingSnapshot,
-            retryProvider,
+        retryProvider
+          .retry(
             RetryFor.WaitingOnInitDependencyLong,
+            "prepare_sequencer_onboarding_snapshot",
+            s"Prepare the onboarding state of sequencer $sequencerId on sponsoring SV",
+            svConnection.prepareSequencerOnboardingSnapshot(sequencerId),
             logger,
           )
-        },
+          .flatMap(id =>
+            snapshotDownload.downloadWithRetries(
+              id,
+              svConnection.downloadOnboardingSnapshot,
+              retryProvider,
+              RetryFor.WaitingOnInitDependencyLong,
+              logger,
+            )
+          ),
         logger,
+        SvOnboardingSnapshotDownload.RetryOnPrepareAgain(_),
       )
       _ = logger.info(s"Onboarded sequencer $sequencerId")
       _ = logger.info(

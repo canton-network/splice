@@ -33,7 +33,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.{
   SvOnboardingSnapshotSha256,
 }
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.*
-import org.lfdecentralizedtrust.splice.util.Codec
+import org.lfdecentralizedtrust.splice.sv.util.JsonCodec.*
 
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.time.Instant
@@ -337,7 +337,7 @@ class SvOnboardingSnapshotService(
                       job.key,
                       clock.now.toInstant.toString,
                       Files.size(queued.file),
-                      sha256Base64,
+                      Some(sha256Base64),
                     )
                     writeAtomically(queued.file.getParent, "metadata", metadata.asJson.noSpaces)
                   }
@@ -417,63 +417,21 @@ object SvOnboardingSnapshotService {
       traceContext: TraceContext,
   )
 
+  private implicit val acsKeyEncoder: Encoder[SnapshotKey.Acs] = deriveEncoder
+  private implicit val acsKeyDecoder: Decoder[SnapshotKey.Acs] = deriveDecoder
+  private implicit val sequencerKeyEncoder: Encoder[SnapshotKey.SequencerOnboardingState] =
+    deriveEncoder
+  private implicit val sequencerKeyDecoder: Decoder[SnapshotKey.SequencerOnboardingState] =
+    deriveDecoder
+  private implicit val keyEncoder: Encoder[SnapshotKey] = deriveEncoder
+  private implicit val keyDecoder: Decoder[SnapshotKey] = deriveDecoder
+
   private final case class PersistedSnapshot(
-      synchronizerId: String,
-      party: Option[String],
-      activationTime: Option[String],
-      sequencerId: Option[String],
+      key: SnapshotKey,
       createdAt: String,
       size: Long,
       sha256Base64: Option[String],
-  ) {
-    def key: SnapshotKey = {
-      val synchronizer = SynchronizerId.tryFromString(synchronizerId)
-      (party, activationTime, sequencerId) match {
-        case (Some(party), Some(activationTime), None) =>
-          SnapshotKey.Acs(
-            synchronizer,
-            PartyId.tryFromProtoPrimitive(party),
-            Instant.parse(activationTime),
-          )
-        case (None, None, Some(sequencerId)) =>
-          SnapshotKey.SequencerOnboardingState(
-            synchronizer,
-            Codec.tryDecode(Codec.Sequencer)(sequencerId),
-          )
-        case _ => throw new IllegalArgumentException("Unknown onboarding snapshot key")
-      }
-    }
-  }
-  private object PersistedSnapshot {
-    def apply(
-        key: SnapshotKey,
-        createdAt: String,
-        size: Long,
-        sha256Base64: String,
-    ): PersistedSnapshot =
-      key match {
-        case SnapshotKey.Acs(synchronizerId, party, activationTime) =>
-          PersistedSnapshot(
-            synchronizerId.toProtoPrimitive,
-            Some(party.toProtoPrimitive),
-            Some(activationTime.toString),
-            None,
-            createdAt,
-            size,
-            Some(sha256Base64),
-          )
-        case SnapshotKey.SequencerOnboardingState(synchronizerId, sequencerId) =>
-          PersistedSnapshot(
-            synchronizerId.toProtoPrimitive,
-            None,
-            None,
-            Some(sequencerId.toProtoPrimitive),
-            createdAt,
-            size,
-            Some(sha256Base64),
-          )
-      }
-  }
+  )
   private implicit val encoder: Encoder[PersistedSnapshot] = deriveEncoder
   private implicit val decoder: Decoder[PersistedSnapshot] = deriveDecoder
 

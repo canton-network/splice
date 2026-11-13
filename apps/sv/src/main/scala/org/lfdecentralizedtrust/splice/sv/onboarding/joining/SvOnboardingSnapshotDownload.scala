@@ -15,6 +15,7 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{FileIO, Sink}
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.retry.{ErrorKind, ExceptionRetryPolicy}
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient.{
@@ -264,6 +265,7 @@ final class SvOnboardingSnapshotDownload private (
             .withDescription(
               s"Sponsor answered ${cause.status} for onboarding snapshot $id, preparing a new one"
             )
+            .withCause(PrepareAgain(cause))
             .asRuntimeException()
         )
       }
@@ -286,6 +288,21 @@ object SvOnboardingSnapshotDownload {
 
   final case class PrepareAgain(cause: HttpCommandException)
       extends RetryProvider.QuietNonRetryableException(cause.getMessage)
+
+  final case class RetryOnPrepareAgain(operationName: String) extends ExceptionRetryPolicy {
+    override def determineExceptionErrorKind(exception: Throwable, logger: TracedLogger)(implicit
+        tc: TraceContext
+    ): ErrorKind = exception.getCause match {
+      case _: PrepareAgain =>
+        logger.info(
+          s"The operation $operationName needs a new onboarding snapshot: ${exception.getMessage}"
+        )
+        ErrorKind.TransientErrorKind()
+      case _ =>
+        logThrowable(exception, logger)
+        ErrorKind.FatalErrorKind
+    }
+  }
 
   def downloadDirectory(config: SvOnboardingSnapshotsConfig, name: String): Path =
     config.directory.resolve("downloads").resolve(name)

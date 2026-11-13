@@ -647,23 +647,23 @@ class SvOnboardingSnapshotServiceTest
           Seq[(SnapshotKey, String, String)](
             (
               key("sv1"),
-              """"party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z"""",
+              """{"Acs":{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z"}}""",
               noDigest,
             ),
             (
               sequencer,
-              s""""party":null,"activationTime":null,"sequencerId":"${sequencer.sequencerId.toProtoPrimitive}"""",
+              s"""{"SequencerOnboardingState":{"synchronizerId":"synchronizer::dummy","sequencerId":"${sequencer.sequencerId.toProtoPrimitive}"}}""",
               noDigest,
             ),
             (
               key("sv2"),
-              s""""party":"sv2::dummy","activationTime":"1970-01-01T00:00:00Z","sha256Base64":"${Base64.getEncoder
+              s"""{"Acs":{"synchronizerId":"synchronizer::dummy","party":"sv2::dummy","activationTime":"1970-01-01T00:00:00Z"}},"sha256Base64":"${Base64.getEncoder
                   .encodeToString("short".getBytes)}"""",
               "Snapshot has an invalid SHA-256 digest",
             ),
             (
               key("sv3"),
-              """"party":"sv3::dummy","activationTime":"1970-01-01T00:00:00Z","sha256Base64":"not-base64!"""",
+              """{"Acs":{"synchronizerId":"synchronizer::dummy","party":"sv3::dummy","activationTime":"1970-01-01T00:00:00Z"}},"sha256Base64":"not-base64!"""",
               "Snapshot has an invalid SHA-256 digest",
             ),
           ).foreach { case (snapshotKey, keyFields, reason) =>
@@ -671,7 +671,7 @@ class SvOnboardingSnapshotServiceTest
             val exportDirectory = (directory / "exports" / legacyId.value).createDirectories()
             (exportDirectory / "snapshot").writeText("snapshot")
             (exportDirectory / "metadata.json").writeText(
-              s"""{"synchronizerId":"synchronizer::dummy",$keyFields,"createdAt":"${clock.now.toInstant}","size":8}"""
+              s"""{"key":$keyFields,"createdAt":"${clock.now.toInstant}","size":8}"""
             )
             val id =
               service.prepare(snapshotKey, writeSnapshot(Future.unit)).futureValue
@@ -684,6 +684,42 @@ class SvOnboardingSnapshotServiceTest
               case Some(SnapshotState.Ready(_, `sha256Base64`)) =>
             })
           }
+        }
+      }
+
+    "ignore ACS metadata written before sequencer snapshots were supported and export again" in File
+      .usingTemporaryDirectory() { directory =>
+        withService(_ => SvOnboardingSnapshotsConfig(directory.path)) { (service, clock, _) =>
+          val id = SvOnboardingSnapshotId(UUID.randomUUID().toString)
+          val exportDirectory = (directory / "exports" / id.value).createDirectories()
+          (exportDirectory / "snapshot").writeText("snapshot")
+          (exportDirectory / "metadata.json").writeText(
+            s"""{"synchronizerId":"synchronizer::dummy","party":"sv1::dummy","activationTime":"1970-01-01T00:00:00Z","createdAt":"${clock.now.toInstant}","size":8}"""
+          )
+          val exports = new AtomicInteger()
+          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+            {
+              service.lookup(id) shouldBe None
+              val newId = service
+                .prepare(
+                  key("sv1"),
+                  file => {
+                    exports.incrementAndGet()
+                    writeSnapshot(Future.unit)(file)
+                  },
+                )
+                .futureValue
+              newId should not be id
+              eventually()(service.lookup(newId) should matchPattern {
+                case Some(SnapshotState.Ready(_, _)) =>
+              })
+            },
+            entries => {
+              entries should not be empty
+              forAll(entries)(_.warningMessage should include("Cannot recover onboarding snapshot"))
+            },
+          )
+          exports.get() shouldBe 1
         }
       }
 

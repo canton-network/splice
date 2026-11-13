@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.sv.onboarding.joining
 import better.files.File
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.logging.{LogEntry, SuppressionRule}
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.http.scaladsl.model.{
@@ -163,6 +163,24 @@ class SvOnboardingSnapshotDownloadTest
       logger,
     )
 
+  private def prepareAndDownload(
+      snapshotDownload: SvOnboardingSnapshotDownload,
+      prepare: => Future[SvOnboardingSnapshotId],
+      downloadFrom: (SvOnboardingSnapshotId, Long) => Future[OnboardSvDownloadResponse],
+  ) =
+    retryProvider.retry(
+      quickly,
+      "prepare_and_download",
+      "prepare and download the snapshot",
+      retryProvider
+        .retry(quickly, "prepare", "prepare the snapshot", prepare, logger)
+        .flatMap(
+          snapshotDownload.downloadWithRetries(_, downloadFrom, retryProvider, quickly, logger)
+        ),
+      logger,
+      SvOnboardingSnapshotDownload.RetryOnPrepareAgain(_),
+    )
+
   private def httpError(status: StatusCode) = HttpCommandException(
     HttpRequest(),
     status,
@@ -253,22 +271,101 @@ class SvOnboardingSnapshotDownloadTest
         sponsor.requests shouldBe Seq("id" -> 0L)
     }
 
-    "prepare again with a new id when the sponsor no longer has the snapshot" in withDownload {
+    "retry prepare on its own and keep the id while the download is pending or fails" in withDownload {
       snapshotDownload =>
         val prepares = new AtomicInteger()
-        val sponsor = new UnreliableSponsor(Left(httpError(StatusCodes.Gone)), Right(full()))
-        val file = retryProvider
-          .retry(
-            quickly,
-            "prepare_and_download",
-            "prepare and download the snapshot",
-            downloadWithRetries(snapshotDownload, s"id${prepares.incrementAndGet()}", sponsor),
-            logger,
-          )
-          .futureValue
+        val sponsor = new UnreliableSponsor(
+          Right(pendingResponse(definitions.OnboardSvDownloadPendingResponse.Status.Queued)),
+          Left(httpError(StatusCodes.ServiceUnavailable)),
+          Left(new ConnectException("connection refused")),
+          Right(full()),
+        )
+        val file = prepareAndDownload(
+          snapshotDownload,
+          if (prepares.incrementAndGet() == 1)
+            Future.failed(httpError(StatusCodes.ServiceUnavailable))
+          else Future.successful(SvOnboardingSnapshotId("id")),
+          sponsor.download,
+        ).futureValue
         Files.readAllBytes(file) shouldBe content
         prepares.get() shouldBe 2
-        sponsor.requests shouldBe Seq("id1" -> 0L, "id2" -> 0L)
+        sponsor.requests shouldBe Seq.fill(4)("id" -> 0L)
+    }
+
+    "prepare again with a new id when the sponsor answers 404 or 410" in {
+      Seq[StatusCode](StatusCodes.NotFound, StatusCodes.Gone).foreach { status =>
+        withDownload { snapshotDownload =>
+          val prepares = new AtomicInteger()
+          val sponsor = new UnreliableSponsor(Left(httpError(status)), Right(full()))
+          val file = prepareAndDownload(
+            snapshotDownload,
+            Future.successful(SvOnboardingSnapshotId(s"id${prepares.incrementAndGet()}")),
+            sponsor.download,
+          ).futureValue
+          Files.readAllBytes(file) shouldBe content
+          prepares.get() shouldBe 2
+          sponsor.requests shouldBe Seq("id1" -> 0L, "id2" -> 0L)
+        }
+      }
+    }
+
+    "stop without retrying when prepare or download fails with another client error" in withDownload {
+      snapshotDownload =>
+        val error = httpError(StatusCodes.Unauthorized)
+        def nonRetryable(entries: Seq[LogEntry]) = {
+          entries should not be empty
+          forAll(entries)(_.warningMessage should include("non-retryable HTTP error"))
+        }
+        val prepares = new AtomicInteger()
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          prepareAndDownload(
+            snapshotDownload,
+            { prepares.incrementAndGet(); Future.failed(error) },
+            new UnreliableSponsor().download,
+          ).failed.futureValue shouldBe error,
+          nonRetryable,
+        )
+        prepares.get() shouldBe 1
+        val sponsor = new UnreliableSponsor(Left(error), Right(full()))
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          prepareAndDownload(
+            snapshotDownload,
+            { prepares.incrementAndGet(); Future.successful(SvOnboardingSnapshotId("id")) },
+            sponsor.download,
+          ).failed.futureValue shouldBe error,
+          nonRetryable,
+        )
+        prepares.get() shouldBe 2
+        sponsor.requests shouldBe Seq("id" -> 0L)
+    }
+
+    "fail without preparing again once the download retries for an id are exhausted" in withDownload {
+      snapshotDownload =>
+        val prepares = new AtomicInteger()
+        val error = httpError(StatusCodes.ServiceUnavailable)
+        val requests = mutable.ListBuffer.empty[String]
+        prepareAndDownload(
+          snapshotDownload,
+          Future.successful(SvOnboardingSnapshotId(s"id${prepares.incrementAndGet()}")),
+          (id, _) => {
+            requests += id.value
+            Future.failed(error)
+          },
+        ).failed.futureValue shouldBe error
+        prepares.get() shouldBe 1
+        requests shouldBe Seq.fill(quickly.maxRetries + 1)("id1")
+    }
+
+    "fail with the last error once the prepare retries are exhausted" in withDownload {
+      snapshotDownload =>
+        val prepares = new AtomicInteger()
+        val error = httpError(StatusCodes.ServiceUnavailable)
+        prepareAndDownload(
+          snapshotDownload,
+          { prepares.incrementAndGet(); Future.failed(error) },
+          new UnreliableSponsor().download,
+        ).failed.futureValue shouldBe error
+        prepares.get() shouldBe quickly.maxRetries + 1
     }
 
     "resume an interrupted download from where it stopped with the same id" in withDownload {
