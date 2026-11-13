@@ -82,6 +82,11 @@ logLevel: DEBUG
 #     secretName:
 # publicUrl:
 
+# ACS snapshot pruning (needs a finite analyzable time window)
+# pruning:
+#   snapshots:
+#     enabled: true
+
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
 

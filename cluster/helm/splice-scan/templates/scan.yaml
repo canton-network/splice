@@ -104,6 +104,13 @@ spec:
               analyzable-time-window.duration = "{{ . }}"
             }
         {{- end }}
+        {{- with .Values.pruning }}
+        - name: ADDITIONAL_CONFIG_PRUNING
+          value: |
+            canton.scan-apps.scan-app {
+              pruning.snapshots.enabled = {{ .snapshots.enabled }}
+            }
+        {{- end }}
         {{- with .Values.sponsorScanUrl }}
         - name: ADDITIONAL_CONFIG_SPONSOR_SCAN_URL
           value: |
