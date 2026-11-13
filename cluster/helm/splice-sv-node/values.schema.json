@@ -101,9 +101,6 @@
                     },
                     "clientSecret": {
                       "type": "string"
-                    },
-                    "scope": {
-                      "type": "string"
                     }
                   }
                 }

@@ -29,6 +29,7 @@ export type Auth0NamespaceUiClientIds = {
 };
 
 export type Auth0NamespaceConfig = {
+  // TODO(#2873): Audiences can be fully determined at preview time so they don't need to be passed through the stack output.
   audiences: Auth0NamespaceAudiences;
   backendClientIds: Auth0NamespaceBackendClientIds;
   uiClientIds: Auth0NamespaceUiClientIds;
@@ -42,6 +43,7 @@ export type Auth0Config = {
   auth0Domain: string;
   auth0MgtClientId: string;
   auth0MgtClientSecret: string;
+  // TODO(#2873): This is no longer read from the stack output.
   fixedTokenCacheName: string;
 };
 
