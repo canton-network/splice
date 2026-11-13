@@ -6,6 +6,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.util.HexString
 import com.google.protobuf.ByteString
+import io.circe.Json
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   amulet as amuletCodegen,
@@ -922,6 +923,96 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       ) { case httpApi.UpdateHistoryItem.members.UpdateHistoryTransaction(value) =>
         value.externalTransactionHash shouldBe None
       }
+    }
+  }
+
+  "LedgerApiJsonScanHttpEncodings" should {
+    val validator = mkPartyId("validator")
+    val sponsor = mkPartyId("sponsor")
+    val licenseContract = validatorLicense(validator, sponsor)
+    val licenseFields = licenseContract.payload.toValue.getFields.asScala.toList.map(_.getValue)
+    val partyFields = licenseFields.take(3)
+    val encodings = LedgerApiJsonScanHttpEncodings
+
+    def eventWithFields(fields: Seq[javaApi.Value]): javaApi.CreatedEvent = {
+      val e = toCreatedEvent(licenseContract)
+      new javaApi.CreatedEvent(
+        e.getWitnessParties,
+        e.getOffset,
+        e.getNodeId,
+        e.getTemplateId,
+        e.getPackageName,
+        e.getContractId,
+        new javaApi.DamlRecord(fields.map(new javaApi.DamlRecord.Field(_)).asJava),
+        e.getCreatedEventBlob,
+        e.getInterfaceViews,
+        e.getFailedInterfaceViews,
+        e.getContractKey,
+        e.getSignatories,
+        e.getObservers,
+        e.getCreatedAt,
+        e.isAcsDelta,
+        e.getRepresentativePackageId,
+      )
+    }
+
+    val partyFieldsJson = Json.obj(
+      "validator" -> Json.fromString(validator.toProtoPrimitive),
+      "sponsor" -> Json.fromString(sponsor.toProtoPrimitive),
+      "dso" -> Json.fromString(dsoParty.toProtoPrimitive),
+    )
+
+    "decode the output to a contract with the same fields" in {
+      val event = toCreatedEvent(licenseContract)
+      val json = encodings.encodeContractPayload(event)
+      val decoded = encodings.decodeContractPayload(event.getTemplateId, json)
+      encodings.encodeContractPayload(
+        eventWithFields(decoded.getFields.asScala.toList.map(_.getValue))
+      ) shouldBe json
+    }
+
+    "fall back and log an error for values of unknown packages" in {
+      val event = toCreatedEvent(licenseContract)
+      val unknown = new javaApi.CreatedEvent(
+        event.getWitnessParties,
+        event.getOffset,
+        event.getNodeId,
+        new javaApi.Identifier("0" * 64, "Mod", "Ent"),
+        event.getPackageName,
+        event.getContractId,
+        event.getArguments,
+        event.getCreatedEventBlob,
+        event.getInterfaceViews,
+        event.getFailedInterfaceViews,
+        event.getContractKey,
+        event.getSignatories,
+        event.getObservers,
+        event.getCreatedAt,
+        event.isAcsDelta,
+        event.getRepresentativePackageId,
+      )
+      loggerFactory.assertLogs(
+        encodings
+          .encodeContractPayload(unknown)
+          .hcursor
+          .downField("error")
+          .as[String]
+          .getOrElse("") should include("Unknown package"),
+        _.errorMessage should include("Failed to encode contract payload"),
+      )
+    }
+
+    "be selected by the ledger_api_json encoding" in {
+      val event = eventWithFields(partyFields)
+      ScanHttpEncodings
+        .fromDamlValueEncoding(DamlValueEncoding.LedgerApiJson)
+        .encodeContractPayload(event) shouldBe partyFieldsJson
+      ScanHttpEncodings
+        .fromDamlValueEncoding(DamlValueEncoding.CompactJson)
+        .encodeContractPayload(event)
+        .hcursor
+        .downField("lastActiveAt")
+        .focus shouldBe Some(Json.Null)
     }
   }
 }

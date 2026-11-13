@@ -92,6 +92,7 @@ org.lfdecentralizedtrust.splice.util.SpliceUtilTest
 org.lfdecentralizedtrust.splice.util.TransactionTreeExtensionsTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecCodegenTest
 org.lfdecentralizedtrust.splice.util.ValueJsonCodecProtobufTest
+org.lfdecentralizedtrust.splice.util.ValueJsonCodecTranscodeTest
 org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnectorTest
 org.lfdecentralizedtrust.splice.validator.store.DbValidatorConfigProviderTest
 org.lfdecentralizedtrust.splice.validator.store.DbValidatorStoreTest

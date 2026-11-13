@@ -2663,11 +2663,17 @@ class HttpScanHandler(
 
   private def getStorageEncodings(
       damlValueEncoding: Option[DamlValueEncoding]
-  ): NonEmptyList[ScanStorageConfig.Encoding] =
-    NonEmptyList.one(
-      ScanStorageConfig.Encoding
-        .fromDamlValueEncoding(damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson))
-    )
+  ): NonEmptyList[ScanStorageConfig.Encoding] = {
+    val requested = damlValueEncoding.getOrElse(DamlValueEncoding.CompactJson)
+    val encoding = ScanStorageConfig.Encoding
+      .fromDamlValueEncoding(requested)
+      .getOrElse(
+        throw io.grpc.Status.INVALID_ARGUMENT
+          .withDescription(s"Encoding '${requested.value}' is not available in bulk storage")
+          .asRuntimeException()
+      )
+    NonEmptyList.one(encoding)
+  }
 
   private def encodeBulkStorageObjects(objects: Seq[ObjectKeyAndChecksum], publicUrl: Uri) =
     objects.map { case ObjectKeyAndChecksum(key, digest) =>
