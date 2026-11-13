@@ -2333,27 +2333,40 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[ScanResource.GetImportUpdatesResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getImportUpdates") { _ => _ =>
-      updateHistory
-        .getImportUpdates(
-          migrationId = body.migrationId,
-          afterUpdateId = body.afterUpdateId,
-          limit = PageLimit.tryCreate(body.limit),
-        )
-        .map { txs =>
-          definitions.GetImportUpdatesResponse(
-            txs
-              .map(
-                ScanHttpEncodings.encodeUpdate(
-                  _,
-                  encoding = definitions.DamlValueEncoding.members.ProtobufJson,
-                  version = ScanHttpEncodings.V1,
-                  hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
-                  externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
+      updateHistory.lastLegacyRecordTime match {
+        case Some(_) =>
+          Future.successful(
+            ScanResource.GetImportUpdatesResponse.NotFound(
+              definitions.ErrorResponse(
+                s"No import updates for migration ${body.migrationId} after the cutover to partitioned tables"
+              )
+            )
+          )
+        case None =>
+          updateHistory
+            .getImportUpdates(
+              migrationId = body.migrationId,
+              afterUpdateId = body.afterUpdateId,
+              limit = PageLimit.tryCreate(body.limit),
+            )
+            .map { txs =>
+              ScanResource.GetImportUpdatesResponse.OK(
+                definitions.GetImportUpdatesResponse(
+                  txs
+                    .map(
+                      ScanHttpEncodings.encodeUpdate(
+                        _,
+                        encoding = definitions.DamlValueEncoding.members.ProtobufJson,
+                        version = ScanHttpEncodings.V1,
+                        hashInclusionPolicy = ExternalHashInclusionPolicy.ApplyThreshold,
+                        externalTransactionHashThresholdTime = externalTransactionHashThresholdTime,
+                      )
+                    )
+                    .toVector
                 )
               )
-              .toVector
-          )
-        }
+            }
+      }
     }
   }
 
