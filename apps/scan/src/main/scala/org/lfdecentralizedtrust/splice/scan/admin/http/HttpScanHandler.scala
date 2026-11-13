@@ -36,6 +36,7 @@ import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCodegen}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
@@ -150,6 +151,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DsoInfo,
   PackageQualifiedName,
   QualifiedName,
+  SwitchOverTimes,
 }
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
@@ -882,6 +884,7 @@ class HttpScanHandler(
       updateO: Option[TreeUpdateWithMigrationId],
       appAndAssetActivityRecordO: Option[AppAndAssetActivityRecordT],
       encoding: definitions.DamlValueEncoding,
+      dsoRulesO: Option[DsoRules],
   )(implicit tc: TraceContext): definitions.EventHistoryItem = {
     val encodedUpdateV2 = updateO.map(
       ScanHttpEncodings.encodeUpdateV2(
@@ -893,7 +896,9 @@ class HttpScanHandler(
       )
     )
     val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-      ScanHttpEncodings.encodeVerdict(v, views)
+      val includeRound =
+        dsoRulesO.exists(SwitchOverTimes.serveVerdictRoundNumber(v.recordTime, _))
+      ScanHttpEncodings.encodeVerdict(v, views, includeRound)
     }
     val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
       v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
@@ -919,6 +924,7 @@ class HttpScanHandler(
   ): Future[Either[definitions.ErrorResponse, definitions.EventHistoryItem]] = {
     implicit val tc = extracted
     for {
+      dsoRules <- store.lookupDsoRules()
       eventO <- eventStore.getEventByUpdateId(
         updateId,
         updateHistory.domainMigrationId,
@@ -942,6 +948,7 @@ class HttpScanHandler(
               updateO,
               appAndAssetActivityRecordO,
               encoding,
+              dsoRules.map(_.payload),
             )
           )
       }
@@ -980,6 +987,7 @@ class HttpScanHandler(
 
     confirmBackfillingIsCompleteThen(updateHistory) {
       for {
+        dsoRules <- store.lookupDsoRules()
         events <- eventStore.getEvents(
           afterO = afterO,
           currentMigrationId = updateHistory.domainMigrationId,
@@ -998,6 +1006,7 @@ class HttpScanHandler(
           updateO,
           appAndAssetActivityRecordForEvent,
           encoding,
+          dsoRules.map(_.payload),
         )
       }.toVector
     }

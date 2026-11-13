@@ -17,10 +17,16 @@ object SwitchOverTimes {
     */
   val UseCip104AmendedCalculationAfter = "cip-104/use-amended-calculation-after"
 
+  /** Verdicts with a record time at or after this time are served with their round number.
+    * Gating on the verdict's record time keeps the served value identical across SVs.
+    */
+  val AlwaysServeVerdictRoundNumber = "scan/always-serve-verdict-round-number"
+
   /** The default switch-over times used when founding a new DSO. */
   val defaultSvOperationsSwitchOverTimes: Map[String, CantonTimestamp] = Map(
     NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue,
     UseCip104AmendedCalculationAfter -> CantonTimestamp.MinValue,
+    AlwaysServeVerdictRoundNumber -> CantonTimestamp.MinValue,
   )
 
   private def hasSwitchedOverAsOf(
@@ -39,6 +45,9 @@ object SwitchOverTimes {
   private def shouldSwitchOver(clock: Clock, dsoRules: DsoRules, key: String): Boolean =
     hasSwitchedOverAsOf(clock.now, dsoRules, key)
 
-  def omitFeaturedAppRightInChoiceContext(clock: Clock, dsoRules: DsoRules) =
+  def omitFeaturedAppRightInChoiceContext(clock: Clock, dsoRules: DsoRules): Boolean =
     shouldSwitchOver(clock, dsoRules, NoFeaturedAppChoiceContext)
+
+  def serveVerdictRoundNumber(recordTime: CantonTimestamp, dsoRules: DsoRules): Boolean =
+    hasSwitchedOverAsOf(recordTime, dsoRules, AlwaysServeVerdictRoundNumber)
 }
