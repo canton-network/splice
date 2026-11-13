@@ -77,7 +77,7 @@ class PruneAcsSnapshotsTrigger(
 
 object PruneAcsSnapshotsTrigger {
 
-  val prunedUpToKey = "snapshots_pruned_up_to"
+  private val prunedUpToKey = "snapshots_pruned_up_to"
 
   def prunable(
       snapshotsBeforeAtw: Seq[PerTableAcsSnapshot],
