@@ -27,6 +27,8 @@ import Splice.Types
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.Ans
+import Splice.CredentialRegistryConfig
+import Splice.Credentials (CredentialRegistry)
 import Splice.ExternalPartyAmuletRules
 import Splice.ExternalPartyConfigState
 import Splice.Expiry
@@ -37,6 +39,7 @@ import Splice.AmuletAllocation
 import Splice.AmuletAllocationV2
 import Splice.Wallet.Subscriptions
 
+import Splice.DsoBootstrap
 import Splice.DsoRules
 import Splice.Util
 
@@ -446,6 +449,48 @@ testCreateExternalPartyAmuletRules = script do
       sv = Some sv1
 
   _ <- getExternalPartyAmuletRules app
+
+  pure ()
+
+testCreateCredentialRegistryConfig : Script ()
+testCreateCredentialRegistryConfig = script do
+  (_, dso, (sv1, sv2, sv3, _)) <- initDevNet
+  -- Different from the bootstrap config, so the test shows the choice uses its arguments.
+  let newFreePeriod = days 180
+      newExtensionUsdPerYear = 3.0
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  [(bootConfigCid, bootConfig)] <- query @CredentialRegistryConfig dso
+  bootConfig.dso === dso
+  bootConfig.freePeriod === initialCredentialRegistryFreePeriod
+  bootConfig.extensionUsdPerYear === initialCredentialRegistryExtensionUsdPerYear
+  [_] <- query @CredentialRegistry dso
+
+  -- Catch-up for a network that bootstrapped before the config existed.
+  submit dso $ archiveCmd bootConfigCid
+
+  let action = ARC_DsoRules with
+        dsoAction = SRARC_CreateCredentialRegistryConfig DsoRules_CreateCredentialRegistryConfig with
+          freePeriod = newFreePeriod
+          extensionUsdPerYear = newExtensionUsdPerYear
+
+  confirmationCids <- forA [sv1, sv2, sv3] $ \svParty -> do
+    result <- submit (actAs svParty <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = svParty
+      action
+    return result.confirmation
+
+  submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid
+    DsoRules_ExecuteConfirmedAction with
+      action
+      amuletRulesCid = None
+      confirmationCids
+      sv = Some sv1
+
+  [(_, config)] <- query @CredentialRegistryConfig dso
+  config.dso === dso
+  config.freePeriod === newFreePeriod
+  config.extensionUsdPerYear === newExtensionUsdPerYear
+  [_] <- query @CredentialRegistry dso
 
   pure ()
 

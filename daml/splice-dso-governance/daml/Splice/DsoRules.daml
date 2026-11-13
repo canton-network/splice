@@ -20,6 +20,7 @@ import DA.Time
 import Splice.Amulet
 import Splice.Amulet.RewardAccountingV2 qualified as RewardAccountingV2
 import Splice.AmuletRules
+import Splice.CredentialRegistryConfig
 import Splice.ExternalPartyAmuletRules
 import Splice.GovernanceLock
 import Splice.GovernanceLock.Substitution
@@ -128,6 +129,10 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Update a specific featured app right.
   | SRARC_CreateFeaturedAppConfigUpdateInstruction DsoRules_CreateFeaturedAppConfigUpdateInstruction
     -- ^ Voted action to change to a featured app right's config.
+  | SRARC_CreateCredentialRegistryConfig DsoRules_CreateCredentialRegistryConfig
+    -- ^ Create the initial credential registry config if it was not part of network bootstrapping.
+  | SRARC_SetCredentialRegistryConfig DsoRules_SetCredentialRegistryConfig
+    -- ^ Voted action to replace the credential registry free period and extension price.
   deriving (Eq, Show, Serializable)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -397,6 +402,16 @@ data DsoRules_CreateExternalPartyAmuletRulesResult = DsoRules_CreateExternalPart
   with
     externalPartyAmuletRulesCid : ContractId ExternalPartyAmuletRules
   deriving (Show, Eq, Serializable)
+
+data DsoRules_CreateCredentialRegistryConfigResult = DsoRules_CreateCredentialRegistryConfigResult
+  with
+    credentialRegistryConfigCid : ContractId CredentialRegistryConfig
+  deriving (Show, Eq, Serializable)
+
+data DsoRules_SetCredentialRegistryConfigResult = DsoRules_SetCredentialRegistryConfigResult
+  with
+    result : CredentialRegistryConfig_SetConfigResult
+  deriving (Serializable)
 
 data DsoRules_CreateTransferCommandCounterResult = DsoRules_CreateTransferCommandCounterResult
   with
@@ -1831,6 +1846,31 @@ template DsoRules with
       do cid <- create ExternalPartyAmuletRules with dso
          pure (DsoRules_CreateExternalPartyAmuletRulesResult cid)
 
+    -- | Initial free period and extension price, for a network bootstrapped before this existed.
+    -- `DsoBootstrap` already creates it. Later changes go through `DsoRules_SetCredentialRegistryConfig`.
+    nonconsuming choice DsoRules_CreateCredentialRegistryConfig : DsoRules_CreateCredentialRegistryConfigResult
+      with
+        freePeriod : RelTime
+        extensionUsdPerYear : Decimal
+      controller dso
+      do
+        credentialRegistryConfigCid <- create CredentialRegistryConfig with ..
+        pure DsoRules_CreateCredentialRegistryConfigResult with ..
+
+    -- | Replace the free period and extension price. The disclosed config id is archived.
+    nonconsuming choice DsoRules_SetCredentialRegistryConfig : DsoRules_SetCredentialRegistryConfigResult
+      with
+        configCid : ContractId CredentialRegistryConfig
+        newFreePeriod : RelTime
+        newExtensionUsdPerYear : Decimal
+      controller dso
+      do
+        void $ fetchChecked (ForDso with dso) configCid
+        result <- exercise configCid CredentialRegistryConfig_SetConfig with
+          newFreePeriod
+          newExtensionUsdPerYear
+        return DsoRules_SetCredentialRegistryConfigResult with result
+
     nonconsuming choice DsoRules_CreateTransferCommandCounter : DsoRules_CreateTransferCommandCounterResult
       with
         sender : Party
@@ -2026,6 +2066,8 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateFeaturedAppConfigUpdateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_CreateCredentialRegistryConfig choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_SetCredentialRegistryConfig choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
