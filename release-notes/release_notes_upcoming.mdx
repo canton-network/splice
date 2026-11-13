@@ -14,6 +14,19 @@
       that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
       `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
 
+  - Scan App
+
+    - Add the `ledger_api_json` option to the `DamlValueEncoding` enum, used by the `daml_value_encoding`
+      parameter of the update history and event history endpoints.
+      It encodes Daml values like the JSON Ledger API (v2) does. The encoding is identical to the existing
+      `compact_json`, with two differences: numeric values are encoded differently ("1e-3" vs "0.001"),
+      and it omits trailing `null` fields of Daml records. The latter is important: with `compact_json`,
+      a daml upgrade that added new optional fields to templates caused old values to be returned with those
+      fields included in the JSON object (as `null`), so the returned JSON depends on the Scan version.
+      The new `ledger_api_json` encoding returns the same JSON regardless of the Scan version.
+      `compact_json` remains the default for now. Clients that compare responses across Scan instances should switch to
+      the new encoding.
+
 ## Upcoming for next minor release (template):
 
 {/* If you introduce any breaking changes in the next minor release,
