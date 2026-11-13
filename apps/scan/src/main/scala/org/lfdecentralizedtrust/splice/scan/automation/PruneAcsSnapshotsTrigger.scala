@@ -48,6 +48,9 @@ class PruneAcsSnapshotsTrigger(
       .map(startAtw =>
         store
           .lookupPerTableSnapshotsBefore(startAtw)
+          // one-at-a-time to spread out the DB load when a large # of
+          // snapshots suddenly become pruning candidates (e.g. pruning
+          // has just been enabled)
           .map(PruneAcsSnapshotsTrigger.prunable(_, storageConfig).take(1))
       )
       .getOrElse(Future.successful(Seq.empty))
