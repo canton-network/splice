@@ -18,8 +18,10 @@ awaitAllOrThrowAllExceptions(
       console.log(preview.stdout);
       console.log(JSON.stringify(preview.changeSummary));
     },
-    true,
-    true
+    true, // requiresExistingStack
+    true, // forceSvRunbook
+    [], // forceMigrations
+    true // onlyMigrationsFollowingCurrentReference
   )
 ).catch(err => {
   console.error('Failed to run preview');
