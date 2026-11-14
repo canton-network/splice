@@ -671,6 +671,11 @@ function subcmd_init_stacks() {
 subcommand_whitelist[pulumi_preview_canton]="Preview the changes for the sv-canton migrations"
 
 function subcmd_pulumi_preview_canton() {
+  if [ -n "${SPLICE_PREVIEW_GIT_REFERENCE:-}" ]; then
+    _info "SPLICE_PREVIEW_GIT_REFERENCE=${SPLICE_PREVIEW_GIT_REFERENCE}: previewing only sv-canton migrations tracking this reference"
+  else
+    _info "SPLICE_PREVIEW_GIT_REFERENCE unset: previewing all sv-canton migrations"
+  fi
   npm --prefix "${SPLICE_ROOT}/cluster/pulumi/sv-canton" run preview
 }
 
