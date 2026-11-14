@@ -77,10 +77,10 @@ class PeriodicTopologySnapshotTrigger(
     for {
       res <- Future {
         blocking {
-          val blobs = BackupDump.getBlobs(config.location, s"$startOffset", loggerFactory)
-          Seq("onboarding-state.zst", "authorized", "metadata").forall(suffix =>
-            blobs.exists(_.getName.endsWith(suffix))
-          ) && blobs.size == 3
+          val blobs = BackupDump.getBlobs(config.location, s"$startOffset/", loggerFactory)
+          Seq("onboarding-state.zst", "authorized", "metadata").forall(name =>
+            blobs.exists(_.getName.endsWith(s"/$name"))
+          )
         }
       }
     } yield res
