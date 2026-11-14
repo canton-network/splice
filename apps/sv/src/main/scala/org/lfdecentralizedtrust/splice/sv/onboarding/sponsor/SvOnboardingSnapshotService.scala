@@ -14,7 +14,7 @@ import com.digitalasset.canton.lifecycle.{
 }
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{PartyId, SequencerId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Mutex
 import io.circe.{Decoder, Encoder}
@@ -28,8 +28,12 @@ import org.apache.pekko.stream.scaladsl.{Keep, Sink, Source}
 import org.apache.pekko.stream.{Materializer, QueueOfferResult}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingSnapshotsConfig
-import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
+import org.lfdecentralizedtrust.splice.sv.onboarding.{
+  SvOnboardingSnapshotId,
+  SvOnboardingSnapshotSha256,
+}
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.*
+import org.lfdecentralizedtrust.splice.sv.util.JsonCodec.*
 
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.time.Instant
@@ -97,14 +101,10 @@ class SvOnboardingSnapshotService(
             else if (!Files.isRegularFile(file) || Files.size(file) != persisted.size)
               Stored.Unusable("Snapshot file size has changed")
             else
-              Stored.Finished(
-                SnapshotKey.Acs(
-                  SynchronizerId.tryFromString(persisted.synchronizerId),
-                  PartyId.tryFromProtoPrimitive(persisted.party),
-                  Instant.parse(persisted.activationTime),
-                ),
-                file,
-              )
+              SvOnboardingSnapshotSha256.canonicalBase64(persisted.sha256Base64) match {
+                case Some(sha256Base64) => Stored.Finished(persisted.key, file, sha256Base64)
+                case None => Stored.Unusable("Snapshot has an invalid SHA-256 digest")
+              }
           Some(Snapshot(timestamp(persisted.createdAt), stored))
         } else None
       } match {
@@ -187,7 +187,7 @@ class SvOnboardingSnapshotService(
         readSnapshot(id) match {
           case Some(Snapshot(createdAt, stored)) if createdAt.plus(config.retention.asJava) > now =>
             stored match {
-              case Stored.Finished(_, _) => ()
+              case Stored.Finished(_, _, _) => ()
               case Stored.Failed(_) => removeLeftovers(id)
               case Stored.Unusable(reason) => recordUnusable(id, createdAt, reason)
             }
@@ -234,7 +234,7 @@ class SvOnboardingSnapshotService(
         .orElse {
           storedIds.find(id =>
             readSnapshot(id).exists {
-              case Snapshot(createdAt, Stored.Finished(`key`, _)) =>
+              case Snapshot(createdAt, Stored.Finished(`key`, _, _)) =>
                 createdAt.plus(config.retention.asJava) > clock.now
               case _ => false
             }
@@ -275,7 +275,8 @@ class SvOnboardingSnapshotService(
             Some(SnapshotState.Exporting(queuedAt, startedAt))
           case None =>
             readSnapshot(id).filter(_.createdAt.plus(config.retention.asJava) > clock.now).map {
-              case Snapshot(_, Stored.Finished(_, file)) => SnapshotState.Ready(file)
+              case Snapshot(_, Stored.Finished(_, file, sha256Base64)) =>
+                SnapshotState.Ready(file, sha256Base64)
               case Snapshot(_, Stored.Failed(reason)) => SnapshotState.Failed(reason)
               case Snapshot(createdAt, Stored.Unusable(reason)) =>
                 recordUnusable(id, createdAt, reason)
@@ -321,19 +322,18 @@ class SvOnboardingSnapshotService(
           queued.exportTo(queued.file)
         })
         .flatten
+        .flatMap(_ => Future(blocking(SvOnboardingSnapshotSha256.base64OfFile(queued.file))))
         .transform { result =>
           blocking {
             mutex.exclusive {
               jobs.get(queued.id).foreach { job =>
-                val published = result.flatMap { _ =>
+                val published = result.flatMap { sha256Base64 =>
                   Try {
-                    val SnapshotKey.Acs(synchronizerId, party, activationTime) = job.key
                     val metadata = PersistedSnapshot(
-                      synchronizerId.toProtoPrimitive,
-                      party.toProtoPrimitive,
-                      activationTime.toString,
+                      job.key,
                       clock.now.toInstant.toString,
                       Files.size(queued.file),
+                      sha256Base64,
                     )
                     writeAtomically(queued.file.getParent, "metadata", metadata.asJson.noSpaces)
                   }
@@ -377,6 +377,10 @@ object SvOnboardingSnapshotService {
   object SnapshotKey {
     final case class Acs(synchronizerId: SynchronizerId, party: PartyId, activationTime: Instant)
         extends SnapshotKey
+    final case class SequencerOnboardingState(
+        synchronizerId: SynchronizerId,
+        sequencerId: SequencerId,
+    ) extends SnapshotKey
   }
 
   sealed trait SnapshotState
@@ -384,7 +388,7 @@ object SvOnboardingSnapshotService {
     final case class Queued(queuedAt: CantonTimestamp) extends SnapshotState
     final case class Exporting(queuedAt: CantonTimestamp, startedAt: CantonTimestamp)
         extends SnapshotState
-    final case class Ready(file: Path) extends SnapshotState
+    final case class Ready(file: Path, sha256Base64: String) extends SnapshotState
     final case class Failed(reason: String) extends SnapshotState
   }
 
@@ -397,7 +401,7 @@ object SvOnboardingSnapshotService {
   private final case class Snapshot(createdAt: CantonTimestamp, stored: Stored)
   private sealed trait Stored
   private object Stored {
-    final case class Finished(key: SnapshotKey, file: Path) extends Stored
+    final case class Finished(key: SnapshotKey, file: Path, sha256Base64: String) extends Stored
     final case class Unusable(reason: String) extends Stored
     final case class Failed(reason: String) extends Stored
   }
@@ -409,12 +413,20 @@ object SvOnboardingSnapshotService {
       traceContext: TraceContext,
   )
 
+  private implicit val acsKeyEncoder: Encoder[SnapshotKey.Acs] = deriveEncoder
+  private implicit val acsKeyDecoder: Decoder[SnapshotKey.Acs] = deriveDecoder
+  private implicit val sequencerKeyEncoder: Encoder[SnapshotKey.SequencerOnboardingState] =
+    deriveEncoder
+  private implicit val sequencerKeyDecoder: Decoder[SnapshotKey.SequencerOnboardingState] =
+    deriveDecoder
+  private implicit val keyEncoder: Encoder[SnapshotKey] = deriveEncoder
+  private implicit val keyDecoder: Decoder[SnapshotKey] = deriveDecoder
+
   private final case class PersistedSnapshot(
-      synchronizerId: String,
-      party: String,
-      activationTime: String,
+      key: SnapshotKey,
       createdAt: String,
       size: Long,
+      sha256Base64: String,
   )
   private implicit val encoder: Encoder[PersistedSnapshot] = deriveEncoder
   private implicit val decoder: Decoder[PersistedSnapshot] = deriveDecoder

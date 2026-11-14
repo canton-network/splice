@@ -13,8 +13,9 @@ import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.parser.decode
-import org.apache.pekko.http.scaladsl.model.StatusCodes
-import org.apache.pekko.http.scaladsl.server.Directives.provide
+import org.apache.pekko.http.scaladsl.model.headers.{ByteRange, Range, RawHeader, `Content-Range`}
+import org.apache.pekko.http.scaladsl.model.{ContentRange, StatusCodes}
+import org.apache.pekko.http.scaladsl.server.Directives.{provide, withRangeSupport}
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
@@ -36,7 +37,9 @@ import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
 
 import java.nio.file.{Files, Path}
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.Base64
 import scala.concurrent.{Future, Promise}
 
 class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with ScalatestRouteTest {
@@ -59,10 +62,6 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
   }
 
   private val handler = new SvPublicStreamHandler[TraceContext] {
-    private def unsupported[T] = Future.failed[T](new UnsupportedOperationException)
-    override def onboardSvSequencer(
-        respond: SvPublicStreamResource.OnboardSvSequencerResponse.type
-    )(body: definitions.OnboardSvSequencerRequest)(extracted: TraceContext) = unsupported
     override def onboardSvDownload(
         respond: SvPublicStreamResource.OnboardSvDownloadResponse.type
     )(id: String)(extracted: TraceContext) =
@@ -70,7 +69,10 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
   }
 
   private val route = Route.seal(
-    SvPublicStreamResource.routes(handler, _ => provide(traceContext))
+    SvPublicStreamResource.routes(
+      handler,
+      _ => withRangeSupport.tflatMap(_ => provide(traceContext)),
+    )
   )
 
   private val content = "0123456789".getBytes
@@ -86,6 +88,9 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
         exportTo,
       )
       .futureValue
+
+  private val contentSha256Base64 =
+    Base64.getEncoder.encodeToString(MessageDigest.getInstance("SHA-256").digest(content))
 
   private def writeSnapshot(file: Path): Future[Unit] = {
     Files.write(file, content)
@@ -155,6 +160,9 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
           pendingBody.status shouldBe definitions.OnboardSvDownloadPendingResponse.Status.Exporting
           pendingBody.startedAt shouldBe defined
         }
+        download(exporting) ~> addHeader(Range(ByteRange.fromOffset(4))) ~> route ~> check {
+          status shouldBe StatusCodes.Accepted
+        }
         download(queued) ~> route ~> check {
           status shouldBe StatusCodes.Accepted
           pendingBody.status shouldBe definitions.OnboardSvDownloadPendingResponse.Status.Queued
@@ -163,10 +171,37 @@ class OnboardSvSnapshotHandlerTest extends AnyWordSpec with BaseTest with Scalat
       } finally exported.trySuccess(()).discard
     }
 
+    "serve a ready snapshot with its digest, in full and in ranges" in {
+      val id = prepare("ready", writeSnapshot)
+      eventually()(snapshotService.lookup(id) should matchPattern {
+        case Some(SnapshotState.Ready(_, _)) =>
+      })
+      val reprDigest = RawHeader(
+        "Repr-Digest",
+        s"sha-256=:$contentSha256Base64:",
+      )
+      download(id) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[Array[Byte]] shouldBe content
+        header("Repr-Digest") shouldBe Some(reprDigest)
+      }
+      download(id) ~> addHeader(Range(ByteRange.fromOffset(4))) ~> route ~> check {
+        status shouldBe StatusCodes.PartialContent
+        responseAs[Array[Byte]] shouldBe content.drop(4)
+        header[`Content-Range`].map(_.contentRange) shouldBe Some(ContentRange(4, 9, 10))
+        header("Repr-Digest") shouldBe Some(reprDigest)
+      }
+      download(id) ~> addHeader(
+        Range(ByteRange.fromOffset(content.length.toLong))
+      ) ~> route ~> check {
+        status shouldBe StatusCodes.RangeNotSatisfiable
+      }
+    }
+
     "report a completed snapshot whose file is missing as gone and record it once" in {
       val id = prepare("missing-file", writeSnapshot)
       val file = eventually() {
-        inside(snapshotService.lookup(id)) { case Some(SnapshotState.Ready(file)) => file }
+        inside(snapshotService.lookup(id)) { case Some(SnapshotState.Ready(file, _)) => file }
       }
       Files.delete(file)
       loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(Level.WARN))(
