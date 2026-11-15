@@ -107,6 +107,8 @@ defaultAmuletConfig = AmuletConfig with
 
   governanceLockConfig = None
 
+  credentialRegistryConfig = None
+
 -- | Default configuration schedule with single current amulet config
 defaultAmuletConfigSchedule : Schedule Time (AmuletConfig USD)
 defaultAmuletConfigSchedule = Schedule with
