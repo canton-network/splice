@@ -472,12 +472,18 @@ class UpdateHistory private (
       }
   }
 
-  // TODO(#8436) ANALYZE ONLY once all SVs run Postgres 18
   def analyzePartitionedTables()(implicit tc: TraceContext): Future[Unit] =
-    storage.update(
-      DBIO.sequence(PartitionedTables.map(table => sqlu"analyze #$table")).map(_ => ()),
-      "analyzePartitionedTables",
-    )
+    for {
+      serverVersion <- storage.query(
+        sql"select current_setting('server_version_num')::int".as[Int].head,
+        "serverVersionNum",
+      )
+      analyze = analyzeCommand(serverVersion)
+      _ <- storage.update(
+        DBIO.sequence(PartitionedTables.map(table => sqlu"#$analyze #$table")).map(_ => ()),
+        "analyzePartitionedTables",
+      )
+    } yield ()
 
   def missingPartitionDays(now: CantonTimestamp)(implicit
       tc: TraceContext
@@ -2713,6 +2719,9 @@ object UpdateHistory {
     "update_history_assignments",
     "update_history_unassignments",
   )
+
+  private[store] def analyzeCommand(serverVersionNum: Int): String =
+    if (serverVersionNum >= 180000) "analyze only" else "analyze"
 
   sealed trait BackfillingRequirement
   object BackfillingRequirement {
