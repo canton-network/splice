@@ -57,9 +57,8 @@ class BootstrapTest extends IntegrationTestWithIsolatedEnvironment {
             .or(include("Encountered 4 consecutive transient failures"))
             // Warnings because of things being slow
             .or(
-              include(
-                "Waiting for domain Synchronizer 'splitwell' to be connected has not completed after"
-              )
+              include("Waiting for domain Synchronizer")
+                .and(include("to be connected has not completed after"))
             )
             .or(include("Supervised futures for the following trace IDs have not completed"))
         }
