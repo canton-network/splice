@@ -70,6 +70,23 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
       }
     }
 
+    "analyzePartitionedTables" should {
+
+      "use ANALYZE ONLY from Postgres 18 and plain ANALYZE before" in {
+        UpdateHistory.analyzeCommand(170006) shouldBe "analyze"
+        UpdateHistory.analyzeCommand(180000) shouldBe "analyze only"
+        UpdateHistory.analyzeCommand(180004) shouldBe "analyze only"
+      }
+
+      "analyze the partitioned tables" in {
+        val store = mkStore()
+        for {
+          _ <- initStore(store)
+          _ <- store.analyzePartitionedTables()
+        } yield succeed
+      }
+    }
+
     "initialize with a connection" should {
 
       def daysAfter(days: Long) = CantonTimestamp.Epoch.plus(java.time.Duration.ofDays(days))
