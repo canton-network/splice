@@ -698,7 +698,7 @@ template DsoRules with
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
-    svRightOwners : Optional (Set Text)
+    svRightOwners : Optional (Map Text (Set Text)) -- ^ The SV rights minting shard ids of each SV right owner, keyed by its name.
   where
     ensure and
       [ config.numUnclaimedRewardsThreshold > 0
@@ -1643,7 +1643,7 @@ template DsoRules with
       with
         svOperator : Party
         openRoundCid : ContractId OpenMiningRound
-        svRightOwnerRewardInputs : TextMap (ContractId SvRightOwner, ContractId SvRewardState)
+        svRightOwnerRewardInputs : TextMap (ContractId SvRightOwner, TextMap (ContractId SvRewardState))
           -- ^ The SV right owners to mint rewards for, keyed by their name. They must all be
           -- hosted by `svOperator`.
       controller svOperator
@@ -2268,7 +2268,7 @@ template DsoRules with
       with
         instructionCid : ContractId RemoveSvRightOwnerInstruction
         svRightOwnerCid : ContractId SvRightOwner
-        svRewardStateCid : ContractId SvRewardState
+        svRewardStateCids : TextMap (ContractId SvRewardState)
         svOperator : Party
       controller svOperator
       do
@@ -2331,6 +2331,8 @@ template DsoRules with
       with
         instructionCid : ContractId UpdateSvRightOwnerInfoInstruction
         svRightOwnerCid : ContractId SvRightOwner
+        removedSvRewardStateCids : TextMap (ContractId SvRewardState)
+        openMiningRoundTriple : OpenMiningRoundTriple
         svOperator : Party
       controller svOperator
       do
@@ -2366,8 +2368,10 @@ template DsoRules with
       with
         name : Text -- ^ The name of the SV right owner whose beneficiaries are set.
         svRightOwnerCid : ContractId SvRightOwner
-        beneficiaries : Map.Map Party BeneficiaryInfo
+        svRightsMintingShardId : Text
+        beneficiaries : [BeneficiaryInfo]
           -- ^ The complete new set of beneficiaries, replacing the existing ones.
+        defaultBeneficiary : Party
         rightOwner : Party -- ^ The party of the SV right owner; must own `svRightOwnerCid`.
       controller rightOwner
       do

@@ -8,8 +8,9 @@ import Prelude hiding (all, sum)
 import DA.Foldable (forA_, all, sum)
 import DA.Map (Map)
 import qualified DA.Map as Map
+import DA.TextMap (TextMap)
 import Splice.Types (ForDso(..))
-import Splice.Util (HasCheckedFetch(..), Patchable(..), patchScalar, require)
+import Splice.Util (HasCheckedFetch(..), Patchable(..), patchListAsScalar, require)
 
 -- | An SV right owner, i.e., an entity that owns SV rights and thereby earns SV rewards.
 --
@@ -24,6 +25,8 @@ template SvRightOwner
   where
     signatory dso
     ensure validSvRightOwnerInfo info
+    key (dso, name) : (Party, Text)
+    maintainer key._1
 
 instance HasCheckedFetch SvRightOwner ForDso where
   contractGroupId SvRightOwner{dso} = ForDso with dso
@@ -32,43 +35,51 @@ instance HasCheckedFetch SvRightOwner ForDso where
 data SvRightOwnerInfo = SvRightOwnerInfo
   with
     rightOwnerParty : Party
-      -- ^ The party of the SV right owner; receives the rewards not shared with beneficiaries.
-    rewardWeight : Int
-      -- ^ The weight of an SV Right Owner for reward minting
-    rewardNodeOperatorName : Text
-      -- ^ Name of the SV node operator through which rewards are minted.
-    beneficiaries : Map Party BeneficiaryInfo
-      -- ^ Map of beneficiaries and their percentages for reward distribution. Must not include the right owner's party. Remainder goes to right owner.
-      -- At most 20 beneficiaries are allowed to bound the number of coupons minted per round.
+      -- ^ The party of the SV right owner; manages the SV right owner controlled information.
+    description : Text
+    operatorAssignments : TextMap OperatorAssignment
+      -- ^ Keyed by the SV rights minting shard id; unique among all SV right owners.
   deriving (Eq, Show, Serializable)
 
 instance Patchable SvRightOwnerInfo where
   patch new base current = SvRightOwnerInfo
     with
       rightOwnerParty = patch new.rightOwnerParty base.rightOwnerParty current.rightOwnerParty
+      description = patch new.description base.description current.description
+      operatorAssignments = patch new.operatorAssignments base.operatorAssignments current.operatorAssignments
+
+data OperatorAssignment = OperatorAssignment
+  with
+    operatorName : Text
+      -- ^ Name of the SV node operator through which rewards are minted.
+    rewardWeight : Int
+      -- ^ The weight of an SV Right Owner for reward minting
+    beneficiaries : [BeneficiaryInfo]
+      -- ^ At most 20 beneficiaries, paid in order until no weight remains.
+    defaultBeneficiary : Party
+      -- ^ Receives the weight not paid to the beneficiaries.
+  deriving (Eq, Show, Serializable)
+
+instance Patchable OperatorAssignment where
+  patch new base current = OperatorAssignment
+    with
+      operatorName = patch new.operatorName base.operatorName current.operatorName
       rewardWeight = patch new.rewardWeight base.rewardWeight current.rewardWeight
-      rewardNodeOperatorName = patch new.rewardNodeOperatorName base.rewardNodeOperatorName current.rewardNodeOperatorName
-      beneficiaries = patch new.beneficiaries base.beneficiaries current.beneficiaries
+      beneficiaries = patchListAsScalar new.beneficiaries base.beneficiaries current.beneficiaries
+      defaultBeneficiary = patch new.defaultBeneficiary base.defaultBeneficiary current.defaultBeneficiary
 
 -- | Information about a beneficiary.
 data BeneficiaryInfo = BeneficiaryInfo
   with
-    rewardRatio : Decimal
-      -- ^ The proportion of rewards of the SV Right Owner that are shared with this beneficiary. It should be >0.0 and <=1.0
+    beneficiary : Party
+    weight : Int
   deriving (Eq, Show, Serializable)
-
-instance Patchable BeneficiaryInfo where
-  patch new base current = BeneficiaryInfo
-    with
-      rewardRatio = patchScalar new.rewardRatio base.rewardRatio current.rewardRatio
 
 svRightOwnerInfoChecks : [(SvRightOwnerInfo -> Bool, Text)]
 svRightOwnerInfoChecks =
-  [ (\SvRightOwnerInfo{..} -> rewardWeight >= 0, "SV right owner's reward weight is non-negative")
-  , (\SvRightOwnerInfo{..} -> all ((> 0.0) . rewardRatio) beneficiaries, "Beneficiary reward ratios are positive")
-  , (\SvRightOwnerInfo{..} -> sum (fmap (.rewardRatio) beneficiaries) <= 1.0, "Beneficiary reward ratios add up to at most 1.0")
-  , (\SvRightOwnerInfo{..} -> not $ Map.member rightOwnerParty beneficiaries, "SV right owner is not a beneficiary")
-  , (\SvRightOwnerInfo{..} -> Map.size beneficiaries <= 20, "There are at most 20 beneficiaries")
+  [ (all ((>= 0) . (.rewardWeight)) . (.operatorAssignments), "SV right owner's reward weight is non-negative")
+  , (all (all ((> 0) . (.weight)) . (.beneficiaries)) . (.operatorAssignments), "Beneficiary weights are positive")
+  , (all ((<= 20) . length . (.beneficiaries)) . (.operatorAssignments), "There are at most 20 beneficiaries")
   ]
 
 validSvRightOwnerInfo : SvRightOwnerInfo -> Bool
@@ -79,11 +90,11 @@ requireValidSvRightOwnerInfo info =
   forA_ svRightOwnerInfoChecks $ \(check, message) -> require message (check info)
 
 -- | The absolute reward weight for each party that receives rewards in the context of this SV Right Owner.
-svRewardCouponWeights : SvRightOwnerInfo -> Map Party Int
-svRewardCouponWeights SvRightOwnerInfo{..} =
-  if remainingWeight > 0
-  then Map.insert rightOwnerParty remainingWeight beneficiaryWeights
-  else beneficiaryWeights
+svRewardCouponWeights : OperatorAssignment -> Map Party Int
+svRewardCouponWeights OperatorAssignment{..} =
+  Map.filter (> 0) $ Map.insertWith (+) defaultBeneficiary remainingWeight $ Map.fromListWithR (+) paidWeights
   where
-    remainingWeight = rewardWeight - sum beneficiaryWeights
-    beneficiaryWeights = fmap (\BeneficiaryInfo{rewardRatio} -> floor (intToDecimal rewardWeight * rewardRatio)) beneficiaries
+    (remainingWeight, paidWeights) = foldl pay (rewardWeight, []) beneficiaries
+    pay (remaining, paid) BeneficiaryInfo{beneficiary, weight} =
+      let paidWeight = min weight remaining
+      in (remaining - paidWeight, (beneficiary, paidWeight) :: paid)
