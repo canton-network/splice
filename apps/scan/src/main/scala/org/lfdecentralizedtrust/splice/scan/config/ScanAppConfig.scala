@@ -107,6 +107,8 @@ case class ScanAppBackendConfig(
       NonNegativeFiniteDuration.ofDays(7),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
+    // TODO(#8518): remove once no SV config sets it anymore
+    perAcsSnapshotTablesEnabled: Boolean = true,
     analyzableTimeWindow: AnalyzableTimeWindowConfig = AnalyzableTimeWindowConfig(),
     pruning: ScanPruningConfig = ScanPruningConfig(),
     // The migration id is normally read from the DB (the highest known migration id in the
@@ -157,8 +159,10 @@ case class ScanAppBackendConfig(
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig
 
-  // Hardcoding until cleanup
-  val perAcsSnapshotTablesEnabled: Boolean = true
+  require(
+    perAcsSnapshotTablesEnabled,
+    "per-acs-snapshot-tables-enabled can no longer be disabled: ACS snapshots are always stored in per-snapshot tables",
+  )
 }
 
 case class AnalyzableTimeWindowConfig(

@@ -8,6 +8,12 @@
       After Scan switches to the partitioned update history tables, they no longer find transfer commands created after
       the switch.
     - The `DeleteCorruptAcsSnapshotTrigger` is removed because it is obsolete.
+    - Scan switches its update history to tables partitioned by record time. On the first start, a database migration
+      renames the existing update history tables to `*_legacy` (no data is copied) and creates the new tables. Scan reads
+      from both. After this migration, Scan cannot be downgraded to an earlier version.
+    - ACS snapshots are now always stored in per-snapshot tables. The `per-acs-snapshot-tables-enabled` setting is
+      deprecated: `true` is accepted and has no effect, `false` is rejected at startup. Remove it from your configuration.
+    - An SV that joins after the switch cannot backfill update history from other SVs until a later release.
     - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
       value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
       per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
