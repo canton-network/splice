@@ -32,6 +32,9 @@ query($owner: String!, $name: String!, $n: Int!) {
 }
 """
 
+REPO = "DACH-NY/cn-test-failures"
+PROJECT = 48
+
 UPDATE = """
 mutation($p: ID!, $i: ID!, $f: ID!, $o: String!) {
   updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f, value: {singleSelectOptionId: $o}}) {
@@ -72,14 +75,12 @@ def main() -> None:
     ap.add_argument("src", metavar="FROM")
     ap.add_argument("dst", metavar="TO")
     ap.add_argument("refs", nargs="+", type=int)
-    ap.add_argument("--repo", default="DACH-NY/cn-test-failures")
-    ap.add_argument("--project", type=int, default=48)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     failed = False
     for ref in args.refs:
         try:
-            print(move(args.repo, args.project, ref, args.src, args.dst, args.dry_run))
+            print(move(REPO, PROJECT, ref, args.src, args.dst, args.dry_run))
         except subprocess.CalledProcessError as e:
             failed = True
             print(f"#{ref}: gh failed: {e.stderr.strip()}", file=sys.stderr)

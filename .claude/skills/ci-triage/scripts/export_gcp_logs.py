@@ -12,12 +12,13 @@ project's logs. From the repo root:
       --query seq-p2p 'resource.labels.container_name="sequencer"' \
       --query sv-ns 'resource.labels.namespace_name="sv"'
 Each query's filter lines are ANDed with the time window and, with --cluster, the cluster name. Output:
-ci-triage/export/<ref>/gcp/<name>.json (gcloud --format json, ascending), and the archive
-ci-triage/export/<ref>/<ref>-gcp-logs.tar.gz with every file in that gcp directory (also from earlier runs).
+log/ci-triage-export/<ref>/gcp/<name>.json (gcloud --format json, ascending), and the archive
+log/ci-triage-export/<ref>/<ref>-gcp-logs.tar.gz with every file in that gcp directory (also from earlier runs).
 """
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,7 +26,7 @@ import sys
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("ref", help="cn-test-failures issue number")
+    ap.add_argument("ref", type=int, help="cn-test-failures issue number")
     ap.add_argument("--project", required=True)
     ap.add_argument("--cluster", help="resource.labels.cluster_name, e.g. cn-ciperiodicnet")
     ap.add_argument("--start", required=True, help="UTC, e.g. 2026-11-12T00:45:00Z")
@@ -39,7 +40,7 @@ def main() -> None:
         sys.exit("gcloud not found; install the Google Cloud CLI and run gcloud auth login")
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], check=True, capture_output=True,
                           text=True).stdout.strip()
-    ref_dir = os.path.join(root, "ci-triage", "export", args.ref)
+    ref_dir = os.path.join(root, "log", "ci-triage-export", str(args.ref))
     out_dir = os.path.join(ref_dir, "gcp")
     os.makedirs(out_dir, exist_ok=True)
 
@@ -47,6 +48,9 @@ def main() -> None:
     if args.cluster:
         base.append(f'resource.labels.cluster_name="{args.cluster}"')
     queries: list[list[str]] = args.query
+    for name, _ in queries:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            sys.exit(f"query name must be letters, digits, - or _: {name!r}")
     for name, flt in queries:
         full = " AND ".join(base + [f"({flt})"])
         path = os.path.join(out_dir, f"{name}.json")

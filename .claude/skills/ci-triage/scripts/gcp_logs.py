@@ -11,14 +11,30 @@ The sandbox has no GCP access; the user looks at the logs (recipe 13). Usage, in
 Filters are Logging query language lines, ANDed.
 """
 import argparse
+import re
 import urllib.parse
+
+PROJECT = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
+TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?Z")
+
+
+def project_id(s: str) -> str:
+    if not PROJECT.fullmatch(s):
+        raise argparse.ArgumentTypeError(f"not a GCP project id: {s!r}")
+    return s
+
+
+def utc_time(s: str) -> str:
+    if not TIMESTAMP.fullmatch(s):
+        raise argparse.ArgumentTypeError(f"not a UTC time like 2026-11-03T09:15:00Z: {s!r}")
+    return s
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--project", required=True)
-    ap.add_argument("--start", required=True, help="UTC, e.g. 2026-11-03T09:15:00Z")
-    ap.add_argument("--end", required=True, help="UTC, e.g. 2026-11-03T09:45:00Z")
+    ap.add_argument("--project", required=True, type=project_id)
+    ap.add_argument("--start", required=True, type=utc_time, help="UTC, e.g. 2026-11-03T09:15:00Z")
+    ap.add_argument("--end", required=True, type=utc_time, help="UTC, e.g. 2026-11-03T09:45:00Z")
     ap.add_argument("--filter", action="append", default=[], help="query line; repeat to AND several")
     ap.add_argument("--limit", type=int, default=200, help="entries for the gcloud command")
     args = ap.parse_args()
@@ -31,7 +47,7 @@ def main() -> None:
         raise SystemExit("filter must not contain single quotes or backslashes (shell-neutral command)")
     print(url)
     print()
-    print(f"gcloud logging read '{gcloud_filter}' --project {args.project} --order asc --limit {args.limit}"
+    print(f"gcloud logging read '{gcloud_filter}' --project '{args.project}' --order asc --limit {args.limit}"
           " --format 'value(timestamp,severity,resource.labels.service_name,resource.labels.function_name,"
           "httpRequest.status,textPayload,jsonPayload.message)'")
 

@@ -7,7 +7,7 @@
 
 Runs in the sandbox, read-only, one cheap request per capability and method. Methods, best first: ghx (the
 host-side credential router, per-repo tokens), then gh api (the single token the sandbox proxy injects). See
-ci-triage/CLAUDE.md, Access. Usage, from the repo root:
+ci-triage/CLAUDE.md in the dataset clone, Access. Usage, from the repo root:
   .claude/skills/ci-triage/scripts/probe_access.py
 """
 import shutil

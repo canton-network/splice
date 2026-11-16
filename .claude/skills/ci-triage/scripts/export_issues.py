@@ -7,7 +7,7 @@
 
 Runs on the host (needs a gh login that can read the repository). Usage, from the repo root:
   direnv exec . .claude/skills/ci-triage/scripts/export_issues.py --since 2026-10-19
-Writes ci-triage/export/issues-since-<date>.jsonl unless --out is given.
+Writes log/ci-triage-export/issues-since-<date>.jsonl unless --out is given.
 """
 import argparse
 import datetime
@@ -16,6 +16,7 @@ import pathlib
 import subprocess
 from typing import Any
 
+REPO = "DACH-NY/cn-test-failures"
 FIELDS = "number,title,state,stateReason,createdAt,closedAt,assignees,labels,body,comments"
 SEARCH_CAP = 1000  # GitHub search returns at most 1000 results per query
 WINDOW = datetime.timedelta(days=7)
@@ -36,18 +37,17 @@ def fetch_window(repo: str, start: datetime.date, end: datetime.date) -> list[di
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--since", required=True, help="creation date, YYYY-MM-DD")
-    ap.add_argument("--repo", default="DACH-NY/cn-test-failures")
+    ap.add_argument("--since", required=True, type=datetime.date.fromisoformat, help="creation date, YYYY-MM-DD")
     ap.add_argument("--out")
     args = ap.parse_args()
-    out = pathlib.Path(args.out or f"ci-triage/export/issues-since-{args.since}.jsonl")
+    out = pathlib.Path(args.out or f"log/ci-triage-export/issues-since-{args.since}.jsonl")
 
     issues: dict[int, dict[str, Any]] = {}
-    start = datetime.date.fromisoformat(args.since)
+    start: datetime.date = args.since
     today = datetime.datetime.now(datetime.timezone.utc).date()
     while start <= today:
         end = min(start + WINDOW - datetime.timedelta(days=1), today)
-        for i in fetch_window(args.repo, start, end):
+        for i in fetch_window(REPO, start, end):
             issues[i["number"]] = i
         start = end + datetime.timedelta(days=1)
 

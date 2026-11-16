@@ -11,7 +11,7 @@ Runs on the host and needs a CircleCI personal API token in CIRCLECI_TOKEN; the 
 and never written to a file. Usage, from the repo root:
   direnv exec . .claude/skills/ci-triage/scripts/deployment_runs.py                       # all workflows, last 7 days
   direnv exec . .claude/skills/ci-triage/scripts/deployment_runs.py --days 3 --workflow 'deploy_.*' --excerpts
-Writes ci-triage/export/circleci-runs-<UTC date>.jsonl unless --out is given.
+Writes log/ci-triage-export/circleci-runs-<UTC date>.jsonl unless --out is given.
 
 Per run: pipeline (number, branch, revision, commit subject, actor), workflow (name, id, status, created, stopped,
 url) and, for runs that did not succeed, their jobs (name, number, status, started, stopped, url). With
@@ -124,7 +124,7 @@ def main() -> None:
     if not token:
         raise SystemExit("set CIRCLECI_TOKEN to a CircleCI personal API token")
     now = datetime.datetime.now(datetime.timezone.utc)
-    out = pathlib.Path(args.out or f"ci-triage/export/circleci-runs-{now:%Y-%m-%d}.jsonl")
+    out = pathlib.Path(args.out or f"log/ci-triage-export/circleci-runs-{now:%Y-%m-%d}.jsonl")
     name_re = re.compile(args.workflow)
 
     pipelines = recent_pipelines(token, now - datetime.timedelta(days=args.days))

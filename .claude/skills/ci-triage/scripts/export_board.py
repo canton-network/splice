@@ -11,7 +11,7 @@ repo root:
   direnv exec . .claude/skills/ci-triage/scripts/export_board.py                      # Inbox, Triaged, In progress
   direnv exec . .claude/skills/ci-triage/scripts/export_board.py --status Inbox
 Closed issues are skipped, whatever their Status.
-Writes ci-triage/export/<status>.jsonl (inbox.jsonl, triaged.jsonl, in-progress.jsonl) unless --out-dir is given.
+Writes log/ci-triage-export/<status>.jsonl (inbox.jsonl, triaged.jsonl, in-progress.jsonl) unless --out-dir is given.
 """
 import argparse
 import json
@@ -55,8 +55,12 @@ query($ids: [ID!]!) {
 }
 """
 
+ORG = "DACH-NY"
+PROJECT = 48
+REPO = "DACH-NY/cn-test-failures"
 ISSUES_BATCH = 20
 DEFAULT_STATUSES = ("Inbox", "Triaged", "In progress")
+STATUSES = DEFAULT_STATUSES + ("Infrequent / no repro",)
 
 
 def graphql(query: str, variables: dict[str, Any]) -> Any:
@@ -88,25 +92,22 @@ def pages(org: str, number: int) -> Iterator[list[Any]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--org", default="DACH-NY")
-    ap.add_argument("--project", type=int, default=48)
-    ap.add_argument("--repo", default="DACH-NY/cn-test-failures")
-    ap.add_argument("--status", action="append", help="board Status to export, repeatable (default: " + ", ".join(DEFAULT_STATUSES) + ")")
-    ap.add_argument("--out-dir", default="ci-triage/export")
+    ap.add_argument("--status", action="append", choices=STATUSES, help="board Status to export, repeatable (default: " + ", ".join(DEFAULT_STATUSES) + ")")
+    ap.add_argument("--out-dir", default="log/ci-triage-export")
     args = ap.parse_args()
     statuses: list[str] = args.status or list(DEFAULT_STATUSES)
     out_dir = pathlib.Path(args.out_dir)
 
     ids: dict[str, list[str]] = {s: [] for s in statuses}
     seen = 0
-    for nodes in pages(args.org, args.project):
+    for nodes in pages(ORG, PROJECT):
         for n in nodes:
             seen += 1
             c = n.get("content") or {}
             status = (n.get("status") or {}).get("name")
             if status not in ids:
                 continue
-            if (c.get("repository") or {}).get("nameWithOwner") != args.repo:
+            if (c.get("repository") or {}).get("nameWithOwner") != REPO:
                 continue
             if c.get("state") != "OPEN":
                 continue

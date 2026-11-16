@@ -16,6 +16,8 @@ import json
 import subprocess
 import sys
 
+REPO = "DACH-NY/cn-test-failures"
+
 
 def state(repo: str, ref: int) -> str:
     out = subprocess.run(["gh", "issue", "view", str(ref), "-R", repo, "--json", "state"],
@@ -31,7 +33,6 @@ def main() -> None:
     body = ap.add_mutually_exclusive_group(required=True)
     body.add_argument("--comment", help="closing comment, the same for every issue")
     body.add_argument("--comment-file", help="file with the closing comment (any characters, Markdown)")
-    ap.add_argument("--repo", default="DACH-NY/cn-test-failures")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     comment = args.comment if args.comment is not None else pathlib.Path(args.comment_file).read_text()
@@ -42,14 +43,14 @@ def main() -> None:
             if ref == args.parent:
                 print(f"#{ref}: is the parent, left as is")
                 continue
-            current = state(args.repo, ref)
+            current = state(REPO, ref)
             if current != "OPEN":
                 print(f"#{ref}: {current}, left as is")
                 continue
             if args.dry_run:
                 print(f"#{ref}: would close as duplicate of #{args.parent}")
                 continue
-            subprocess.run(["gh", "issue", "close", str(ref), "-R", args.repo, "--duplicate-of", str(args.parent),
+            subprocess.run(["gh", "issue", "close", str(ref), "-R", REPO, "--duplicate-of", str(args.parent),
                             "--comment", comment], capture_output=True, text=True, check=True)
             print(f"#{ref}: closed as duplicate of #{args.parent}")
         except subprocess.CalledProcessError as e:

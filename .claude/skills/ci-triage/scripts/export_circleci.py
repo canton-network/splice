@@ -11,8 +11,8 @@ Usage, from the repo root:
   direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py 11183 https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/88081/workflows/.../jobs/528694
   direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py 11183 528694 --all-steps
   direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py 11383 531501 --artifacts
-Writes ci-triage/export/<ref>/<job>-<step>.txt per step and <job>-steps.txt (name and status of every step).
-With --artifacts also downloads the job's stored artifacts (test logs) to ci-triage/export/<ref>/<job>-artifacts/,
+Writes log/ci-triage-export/<ref>/<job>-<step>.txt per step and <job>-steps.txt (name and status of every step).
+With --artifacts also downloads the job's stored artifacts (test logs) to log/ci-triage-export/<ref>/<job>-artifacts/,
 optionally only those whose path matches --artifact-filter (a regex).
 """
 import argparse
@@ -51,11 +51,11 @@ def download(url: str, token: str, dest: pathlib.Path) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("ref", help="cn-test-failures issue number, names the export directory")
+    ap.add_argument("ref", type=int, help="cn-test-failures issue number, names the export directory")
     ap.add_argument("jobs", nargs="+", help="CircleCI job URLs or job numbers")
     ap.add_argument("--slug", default="DACH-NY/canton-network-internal")
     ap.add_argument("--all-steps", action="store_true", help="save every step, not only failed ones")
-    ap.add_argument("--out", default="ci-triage/export")
+    ap.add_argument("--out", default="log/ci-triage-export")
     ap.add_argument("--artifacts", action="store_true", help="also download the job's stored artifacts")
     ap.add_argument("--artifact-filter", default="", help="regex on the artifact path (with --artifacts)")
     args = ap.parse_args()
@@ -63,7 +63,7 @@ def main() -> None:
     token = os.environ.get("CIRCLECI_TOKEN")
     if not token:
         raise SystemExit("set CIRCLECI_TOKEN to a CircleCI personal API token")
-    out = pathlib.Path(args.out) / args.ref
+    out = pathlib.Path(args.out) / str(args.ref)
     out.mkdir(parents=True, exist_ok=True)
 
     for job_arg in args.jobs:
