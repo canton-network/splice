@@ -8,7 +8,7 @@
       value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
       per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
       releases extend this setting to the daily snapshots once they are in bulk storage.
-      Point-in-time ACS queries on Scan for a time older than the window then resolve to the daily 00:00 UTC snapshot.
+      ACS snapshot queries with `record_time_match=exact` for a time whose snapshot was pruned then return not found.
 
   - SV App
 
