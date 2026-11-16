@@ -19,8 +19,6 @@ participant:
       memory: '12Gi'
     limits:
       memory: '18Gi'
-  additionalEnvVars:
-    - !include(./participant_pruning.yaml)
 validatorApp:
   resources:
     requests:
