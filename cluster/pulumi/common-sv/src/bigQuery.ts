@@ -388,9 +388,9 @@ const appendSqlTemplates: Record<AppendMode, string> = {
 const createProdTableSqlTemplate = readSql('create_prod_table.sql');
 
 // the per-table routine that fixes a production table's schema, and
-// its {{fillAddedColumns}}
+// its {{fillSinceColumns}}
 const fixProdSchemaSqlTemplate = readSql('fix_prod_schema.sql');
-const fillAddedColumnsSqlTemplate = readSql('fill_added_columns.sql');
+const fillSinceColumnsSqlTemplate = readSql('fill_since_columns.sql');
 
 // Replaces each `{{name}}` in `template` with `vars[name]`. A
 // multi-line value whose placeholder starts a line gets that line's
@@ -429,7 +429,7 @@ function expandSql(template: string, vars: Record<string, string>): string {
 // the columns they were created with. For those tables, the append
 // first checks that production has every listed column, and a
 // separate hourly routine per table adds the missing ones, and fills
-// them in the rows that staging still has.
+// the `since` columns in the rows that staging still has.
 
 const checkProdSchemaRoutineId = 'sp_check_prod_schema';
 const fixProdSchemaRoutineId = 'sp_fix_prod_schema';
@@ -483,28 +483,62 @@ function recordDateExprFor(tableConfig: ReplicatedTableConfig): string {
   return `CAST(${recordTimestampExprFor(tableConfig)} AS DATE)`;
 }
 
-// {{fillAddedColumns}} of fix_prod_schema.sql for `tableConfig`;
+// where fill_since_columns.sql reads and writes, all fully qualified
+// and quoted but the table names
+export interface FillTarget {
+  prodTable: string;
+  stagingTable: string;
+  prodColumnsView: string;
+  stagingColumnsView: string;
+  prodTableName: string;
+  stagingTableName: string;
+}
+
+// whether a value lacks one: NULL, or an empty array, which is what a
+// REPEATED column that ALTER TABLE added holds in older rows
+function lacksValue(expr: string): string {
+  return `TO_JSON_STRING(${expr}) IN ('null', '[]')`;
+}
+function hasValue(expr: string): string {
+  return `TO_JSON_STRING(${expr}) NOT IN ('null', '[]')`;
+}
+
+// {{fillSinceColumns}} of fix_prod_schema.sql for `tableConfig`;
 // empty if it has no `since` columns yet. Exported for tests.
-export function fillAddedColumnsSql(
+export function fillSinceColumnsSql(
   tableConfig: ReplicatedTableConfig,
-  prodTable: string,
-  stagingTable: string
+  target: FillTarget
 ): string {
   const { sinceColumns } = tableConfig;
   if (sinceColumns.length === 0) {
     return '';
   }
   const keys = tableConfig.primaryKey.split(',').map(key => key.trim());
-  return expandSql(fillAddedColumnsSqlTemplate, {
+  const quoted = (alias: string, column: string) => `${alias}.\`${column}\``;
+  return expandSql(fillSinceColumnsSqlTemplate, {
+    ...target,
+    sinceColumnArray: `[${sinceColumns.map(column => `'${column}'`).join(', ')}]`,
     recordDateExpr: recordDateExprFor(tableConfig),
-    prodTable,
-    stagingTable,
     primaryKeyExpr: tableConfig.primaryKey,
-    fillColumns: sinceColumns.map(column => `\`${column}\` = latest.\`${column}\``).join(',\n'),
-    fillSourceColumns: [...keys, ...sinceColumns]
-      .map(column => `staging.\`${column}\``)
+    prodLacksAny: sinceColumns.map(column => lacksValue(quoted('prod', column))).join('\nOR '),
+    fillColumns: sinceColumns
+      .map(
+        column =>
+          `\`${column}\` = IF(${lacksValue(quoted('prod', column))}, ${quoted('latest', column)}, ${quoted('prod', column)})`
+      )
       .join(',\n'),
-    primaryKeyMatch: keys.map(key => `prod.\`${key}\` = latest.\`${key}\``).join(' AND '),
+    fillSourceColumns: [...keys, ...sinceColumns]
+      .map(column => quoted('staging', column))
+      .join(',\n'),
+    primaryKeyMatch: keys
+      .map(key => `${quoted('prod', key)} = ${quoted('latest', key)}`)
+      .join(' AND '),
+    fillableAny: sinceColumns
+      .map(
+        column =>
+          `(${lacksValue(quoted('prod', column))} AND ${hasValue(quoted('latest', column))})`
+      )
+      .join('\nOR '),
   });
 }
 
@@ -585,19 +619,16 @@ END`,
   });
 
   // Adds the listed columns missing from production, with their
-  // staging types, in one ALTER TABLE, and returns them as `added`.
-  // The DDL is built as a string only because those types are read
-  // from staging.
+  // staging types, in one ALTER TABLE. The DDL is built as a string
+  // only because those types are read from staging.
   const fixRoutine = new gcp.bigquery.Routine('prod-schema-fix-routine', {
     datasetId: prodDataset.datasetId,
     routineId: fixProdSchemaRoutineId,
     routineType: 'PROCEDURE',
     language: 'SQL',
-    arguments: [
-      ...prodSchemaRoutineArguments,
-      { name: 'added', dataType: stringArrayType, mode: 'OUT' },
-    ],
+    arguments: prodSchemaRoutineArguments,
     definitionBody: pulumi.interpolate`BEGIN
+  DECLARE added ARRAY<STRING>;
   DECLARE add_columns STRING;
 
   SET added = [];
@@ -634,17 +665,23 @@ END`,
   });
 
   // Per table, so that the CALL that the check names also fills the
-  // added columns.
+  // `since` columns.
   const tableFixRoutines = migratingTables.map(([tableName, tableConfig]) => {
     const definitionBody = pulumi
       .all([projectId, prodDataset.datasetId, stagingDataset.datasetId, fixRoutineName])
       .apply(([proj, prodDs, stagingDs, fixRoutineQualified]) => {
-        const prodTable = `\`${proj}.${prodDs}.${tableName}\``;
-        const stagingTable = `\`${proj}.${stagingDs}.${stagingTableNameFor(namespace, tableName)}\``;
+        const stagingTableName = stagingTableNameFor(namespace, tableName);
         return expandSql(fixProdSchemaSqlTemplate, {
           fixRoutineName: fixRoutineQualified,
           fixRoutineArgs: prodSchemaRoutineArgs(namespace, tableName, tableConfig.columns),
-          fillAddedColumns: fillAddedColumnsSql(tableConfig, prodTable, stagingTable),
+          fillSinceColumns: fillSinceColumnsSql(tableConfig, {
+            prodTable: `\`${proj}.${prodDs}.${tableName}\``,
+            stagingTable: `\`${proj}.${stagingDs}.${stagingTableName}\``,
+            prodColumnsView: `\`${proj}.${prodDs}.INFORMATION_SCHEMA.COLUMNS\``,
+            stagingColumnsView: `\`${proj}.${stagingDs}.INFORMATION_SCHEMA.COLUMNS\``,
+            prodTableName: tableName,
+            stagingTableName,
+          }),
         });
       });
     return new gcp.bigquery.Routine(

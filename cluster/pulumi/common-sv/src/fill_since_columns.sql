@@ -1,0 +1,44 @@
+-- 2. Production rows appended before a `since` column was listed lack
+-- its value: NULL, or an empty array. Fill those that staging still
+-- has, from their latest change, where that has a value; older rows
+-- keep theirs. This runs every hour, so it also fills the rows of an
+-- append that ran before the fix, and retries a fill that failed.
+-- Skipped until both staging and production have every such column.
+IF (
+  SELECT COUNT(DISTINCT column_name) FROM {{stagingColumnsView}} AS staging_columns
+  WHERE table_name = '{{stagingTableName}}'
+    AND column_name IN UNNEST({{sinceColumnArray}})
+) = ARRAY_LENGTH({{sinceColumnArray}}) AND (
+  SELECT COUNT(DISTINCT column_name) FROM {{prodColumnsView}} AS prod_columns
+  WHERE table_name = '{{prodTableName}}'
+    AND column_name IN UNNEST({{sinceColumnArray}})
+) = ARRAY_LENGTH({{sinceColumnArray}}) THEN
+  SET oldest_record_date = (
+    SELECT MIN({{recordDateExpr}})
+    FROM {{stagingTable}} AS staging
+  );
+  IF EXISTS (
+    SELECT 1 FROM {{prodTable}} AS prod
+    WHERE prod.record_date >= oldest_record_date
+      AND ({{prodLacksAny}})
+  ) THEN
+    UPDATE {{prodTable}} AS prod
+    SET
+      {{fillColumns}}
+    FROM (
+      SELECT
+        {{fillSourceColumns}}
+      FROM {{stagingTable}} AS staging
+      WHERE TRUE
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY {{primaryKeyExpr}}
+        ORDER BY
+          staging.datastream_metadata.source_timestamp DESC,
+          staging.datastream_metadata.change_sequence_number DESC
+      ) = 1
+    ) AS latest
+    WHERE prod.record_date >= oldest_record_date
+      AND {{primaryKeyMatch}}
+      AND ({{fillableAny}});
+  END IF;
+END IF;

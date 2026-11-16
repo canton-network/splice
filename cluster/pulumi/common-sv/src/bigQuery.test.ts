@@ -240,16 +240,15 @@ describe('configureScanBigQuery', () => {
     const fix = routines.get('sp_fix_prod_schema');
     expect(check).toBeDefined();
     expect(fix).toBeDefined();
-    const argNames = ['staging_table_name', 'prod_table_name', 'columns'];
-    for (const [routine, names] of [
-      [check!, argNames],
-      [fix!, [...argNames, 'added']],
-    ] as const) {
+    for (const routine of [check!, fix!]) {
       expect(await outputValue(routine.routineType)).toBe('PROCEDURE');
       const args = await outputValue(routine.arguments);
-      expect(args?.map(arg => arg.name)).toEqual(names);
+      expect(args?.map(arg => arg.name)).toEqual([
+        'staging_table_name',
+        'prod_table_name',
+        'columns',
+      ]);
     }
-    expect((await outputValue(fix!.arguments))?.[3]?.mode).toBe('OUT');
     const checkBody = await outputValue(check!.definitionBody);
     // names the per-table fix routine
     expect(checkBody).toContain("'sp_fix_prod_schema', prod_table_name");
@@ -258,6 +257,11 @@ describe('configureScanBigQuery', () => {
     expect(fixBody.match(/EXECUTE IMMEDIATE/g)).toHaveLength(1);
     expect(fixBody).toContain("'ALTER TABLE `%s.%s.%s` %s'");
     expect(fixBody).toMatch(/STRING_AGG\(\s*FORMAT\('ADD COLUMN IF NOT EXISTS/);
+    // every INFORMATION_SCHEMA view has an alias, so that `columns` is
+    // the argument
+    for (const body of [checkBody, fixBody]) {
+      expect(body).not.toMatch(/INFORMATION_SCHEMA\.\w+`(?! AS \w)/);
+    }
 
     const queries = new Map<string, [string, string | undefined]>();
     for (const config of resources.filter(gcp.bigquery.DataTransferConfig.isInstance)) {
@@ -281,7 +285,7 @@ describe('configureScanBigQuery', () => {
     ['V077__verdict_add_round_number.sql', true],
     ['V074__string_interning.sql', false],
   ] as const)(
-    'waiting for %s, the per-table fix fills added columns from staging: %s',
+    'waiting for %s, the per-table fix fills `since` columns from staging: %s',
     async (migration, fills) => {
       const resources = await installBigQuery(true, true, migration);
       const bodies = new Map<string, string>();
@@ -292,21 +296,29 @@ describe('configureScanBigQuery', () => {
       expect(body).toBeDefined();
       expect(body).not.toContain('{{');
       expect(body).toMatch(
-        /CALL `[\w.-]+\.sp_fix_prod_schema`\('scan_sv_1_scan_verdict_store', 'scan_verdict_store', \[.*\], added\);/
+        /CALL `[\w.-]+\.sp_fix_prod_schema`\('scan_sv_1_scan_verdict_store', 'scan_verdict_store', \[.*\]\);/
       );
       expect(body!.includes('UPDATE')).toBe(fills);
       if (fills) {
-        expect(body).toContain('`round_number` = latest.`round_number`');
+        // only where production lacks a value that staging has
+        expect(body).toContain(
+          "`round_number` = IF(TO_JSON_STRING(prod.`round_number`) IN ('null', '[]'), latest.`round_number`, prod.`round_number`)"
+        );
         expect(body).toContain('WHERE prod.record_date >= oldest_record_date');
-        expect(body).toContain('AND prod.`row_id` = latest.`row_id`;');
-        expect(body).toContain('IF ARRAY_LENGTH(added) > 0 THEN');
+        expect(body).toContain('AND prod.`row_id` = latest.`row_id`\n');
+        expect(body).toContain(
+          "AND ((TO_JSON_STRING(prod.`round_number`) IN ('null', '[]') AND TO_JSON_STRING(latest.`round_number`) NOT IN ('null', '[]')));"
+        );
+        // not only in the hour that adds the column
+        expect(body).not.toContain('added');
+        expect(body).toMatch(/column_name IN UNNEST\(\['round_number'\]\)/);
       }
     }
   );
 
   test('the fill matches every column of a composite primary key', async () => {
-    const { fillAddedColumnsSql } = await import('./bigQuery');
-    const sql = fillAddedColumnsSql(
+    const { fillSinceColumnsSql } = await import('./bigQuery');
+    const sql = fillSinceColumnsSql(
       {
         primaryKey: 'verdict_row_id, view_id',
         datePartitionColumn: 'source_timestamp',
@@ -316,8 +328,14 @@ describe('configureScanBigQuery', () => {
         sinceColumns: ['x'],
         migratesSchema: true,
       },
-      '`p`',
-      '`s`'
+      {
+        prodTable: '`p`',
+        stagingTable: '`s`',
+        prodColumnsView: '`pc`',
+        stagingColumnsView: '`sc`',
+        prodTableName: 'p',
+        stagingTableName: 's',
+      }
     );
     expect(sql).toContain(
       'prod.`verdict_row_id` = latest.`verdict_row_id` AND prod.`view_id` = latest.`view_id`'
