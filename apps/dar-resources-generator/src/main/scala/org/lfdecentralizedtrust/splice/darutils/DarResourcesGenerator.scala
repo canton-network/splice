@@ -18,13 +18,13 @@ object DarResourcesGenerator {
 
   // TODO(DACH-NY/canton-network-internal#7639): consider moving this to a dedicated config file if it bugs us here
   private val minimumInitializations: Map[String, String] = Map(
-    "splice-amulet" -> "0.1.19",
-    "splice-amulet-name-service" -> "0.1.20",
-    "splice-dso-governance" -> "0.1.25",
-    "splice-wallet" -> "0.1.20",
-    "splice-wallet-payments" -> "0.1.19",
-    "splitwell" -> "0.1.20",
-    "splice-validator-lifecycle" -> "0.1.5",
+    "splice-amulet" -> "0.1.21",
+    "splice-amulet-name-service" -> "0.1.22",
+    "splice-dso-governance" -> "0.1.27",
+    "splice-wallet" -> "0.1.22",
+    "splice-wallet-payments" -> "0.1.21",
+    "splitwell" -> "0.1.22",
+    "splice-validator-lifecycle" -> "0.1.8",
     "splice-util-batched-markers" -> "1.0.0",
     "splice-api-token-metadata-v1" -> "1.0.0",
     "splice-api-token-holding-v1" -> "1.0.0",

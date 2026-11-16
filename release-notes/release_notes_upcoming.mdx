@@ -98,3 +98,19 @@
         SV apps pass the node states once this version is vetted.
 
       - Security hardening: add extra assertions to the `WalletAppInstall` choices.
+
+      - The minimum supported Daml package versions are raised to the ones introduced in Splice 0.6.11, which
+        are the first to implement the token standard V2 and thus emit V2 transaction-history events for
+        all Canton Coin transactions:
+
+          | name | version |
+          | :--- | :--- |
+          | amulet | 0.1.21 |
+          | amuletNameService | 0.1.22 |
+          | dsoGovernance | 0.1.27 |
+          | validatorLifecycle | 0.1.8 |
+          | wallet | 0.1.22 |
+          | walletPayments | 0.1.21 |
+
+        Nodes no longer upload or vet older versions of these packages, and downgrading the Daml models
+        below these versions is no longer supported.
