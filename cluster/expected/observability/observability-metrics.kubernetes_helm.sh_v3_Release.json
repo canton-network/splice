@@ -93,9 +93,48 @@
                   "alertname=~\"Watchdog|InfoInhibitor\""
                 ],
                 "receiver": "null"
+              },
+              {
+                "continue": false,
+                "matchers": [
+                  "alertname=~\"NodeCPUHighUsage|KubeDeploymentReplicasMismatch\"",
+                  "namespace=\"sv-1\""
+                ],
+                "mute_time_intervals": [
+                  "prometheus-sv1-mute"
+                ],
+                "receiver": "slack"
               }
             ]
-          }
+          },
+          "time_intervals": [
+            {
+              "name": "prometheus-sv1-mute",
+              "time_intervals": [
+                {
+                  "location": "UTC",
+                  "times": [
+                    {
+                      "end_time": "04:00",
+                      "start_time": "02:00"
+                    }
+                  ],
+                  "weekdays": [
+                    "saturday:sunday"
+                  ]
+                },
+                {
+                  "location": "UTC",
+                  "times": [
+                    {
+                      "end_time": "23:30",
+                      "start_time": "22:00"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "enabled": true,
         "templateFiles": {
