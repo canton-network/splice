@@ -2,10 +2,24 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
+import org.lfdecentralizedtrust.splice.http.v0.definitions
+import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicClient
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.sv.onboarding.joining.{
+  JoiningNodeDsoPartyHosting,
+  SvOnboardingSnapshotDownload,
+}
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
 import com.digitalasset.canton.topology.{PartyId, UniqueIdentifier}
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest, ResponseEntity, StatusCodes}
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.util.ByteString
+
+import java.nio.file.Files
 
 class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with WalletTestUtil {
 
@@ -46,6 +60,7 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
       clue("Starting DSO app and SV1 app") {
         startAllSync((sv1Nodes ++ sv3Nodes)*)
       }
+      val sponsor = sponsorClient()
 
       val dsoParty = sv1Backend.getDsoInfo().dsoParty
       val dsoPartyStr: String = dsoParty.toProtoPrimitive
@@ -64,15 +79,19 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
         "DSO party hosting authorization request with party which is not confirmed will be rejected by sponsor SV"
       ) {
         val randomParty = allocateRandomSvParty("random")
-        assertThrowsAndLogsCommandFailures(
-          sv1Backend.onboardSvPartyMigrationAuthorize(
-            sv3Backend.participantClient.id,
-            randomParty,
-          ),
-          _.errorMessage should include(
+        inside(
+          sponsor
+            .onboardSvPartyMigrationPrepare(
+              definitions.OnboardSvPartyMigrationAuthorizeRequest(randomParty.toProtoPrimitive)
+            )
+            .value
+            .futureValue
+        ) { case Left(Right(response)) =>
+          response.status shouldBe StatusCodes.NotFound
+          new String(bytesOf(response.entity)) should include(
             "Candidate party is not an sv and no `SvOnboardingConfirmed` for the candidate party is found."
-          ),
-        )
+          )
+        }
       }
 
       clue(
@@ -197,11 +216,50 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
         }
       }
 
-      clue("sv3 can restart") {
+      clue("SV1 answers unknown onboarding paths with 404") {
+        implicit val actorSystem: ActorSystem = env.actorSystem
+        val response = Http()
+          .singleRequest(
+            HttpRequest(
+              HttpMethods.POST,
+              s"${sv1Backend.httpClientConfig.url}/api/sv/v0/onboard/sv/unknown",
+            )
+          )
+          .futureValue
+        response.status shouldBe StatusCodes.NotFound
+        new String(bytesOf(response.entity)) should include("could not be found")
+      }
+
+      clue("sv3 can restart and deletes a leftover DSO party snapshot download") {
         sv3Backend.stop()
+        val download = SvOnboardingSnapshotDownload.downloadDirectory(
+          sv3Backend.config.onboardingSnapshots,
+          JoiningNodeDsoPartyHosting.SnapshotDownloadName,
+        )
+        val leftover =
+          Files.write(Files.createDirectories(download).resolve("snapshot"), "leftover".getBytes)
+        Files.exists(leftover) shouldBe true
         sv3Backend.startSync()
+        Files.exists(download) shouldBe false
       }
   }
+
+  private def sponsorClient()(implicit env: SpliceTestConsoleEnvironment): SvPublicClient = {
+    implicit val actorSystem: ActorSystem = env.actorSystem
+    registerHttpConnectionPoolsCleanup(env)
+    SvPublicClient.httpClient(Http().singleRequest(_), sv1Backend.httpClientConfig.url.toString)(
+      env.executionContext,
+      Materializer(actorSystem),
+    )
+  }
+
+  private def bytesOf(entity: ResponseEntity)(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Array[Byte] =
+    entity.dataBytes
+      .runFold(ByteString.empty)(_ ++ _)(Materializer(env.actorSystem))
+      .futureValue
+      .toArray
 
   private def getAmulets(
       participant: ParticipantClientReference,
