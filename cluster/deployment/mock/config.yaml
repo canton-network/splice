@@ -184,6 +184,20 @@ monitoring:
                 endTime: '13:00'
             weekdays:
               - thursday
+      - name: prometheus-sv1-mute
+        prometheus: true
+        objectMatchers:
+          - [ 'alertname', '=~', 'NodeCPUHighUsage|KubeDeploymentReplicasMismatch' ]
+          - [ 'namespace', '=', 'sv-1' ]
+        timeWindows:
+          - times:
+              - startTime: '02:00'
+                endTime: '04:00'
+            weekdays:
+              - saturday:sunday
+          - times:
+              - startTime: '22:00'
+                endTime: '23:30'
 operatorDeployment:
   reference:
     gitReference: refs/heads/main
