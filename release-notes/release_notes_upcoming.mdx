@@ -2,6 +2,13 @@
 
 {/* Add all release notes in this section */}
 
+  - Scan
+
+    - `/v0/transfer-command/status` and the validator's `/v0/scan-proxy/transfer-command/status` are deprecated.
+      After Scan switches to the partitioned update history tables, they no longer find transfer commands created after
+      the switch.
+    - The `DeleteCorruptAcsSnapshotTrigger` is removed because it is obsolete.
+
 
 ## Upcoming for next minor release (template):
 

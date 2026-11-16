@@ -590,6 +590,18 @@ object UpdateHistoryTestBase {
     } yield ()
   }
 
+  def forgetLastLegacyRecordTime(
+      storage: DbStorage,
+      historyId: Long,
+  )(implicit ec: ExecutionContext, tc: TraceContext, cc: CloseContext): Future[Unit] =
+    storage
+      .update(
+        sqlu"delete from key_value_store where key = ${UpdateHistory.lastLegacyRecordTimeKey(historyId)}",
+        "forgetLastLegacyRecordTime",
+      )
+      .failOnShutdownToAbortException("forgetLastLegacyRecordTime")
+      .map(_ => ())
+
   def createUpdateHistoryPartitions(
       updateHistory: UpdateHistory,
       timeStart: CantonTimestamp,

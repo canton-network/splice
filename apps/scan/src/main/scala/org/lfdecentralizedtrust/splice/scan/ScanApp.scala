@@ -244,6 +244,12 @@ class ScanApp(
         clock,
         partitionRunwayDays = config.updateHistoryPartitionRunwayDays,
       )
+      automationConfig = ScanApp.withoutHistoryBackfillingAfterCutover(config, updateHistory)
+      _ = updateHistory.lastLegacyRecordTime.foreach(_ =>
+        logger.info(
+          "Update history backfilling is off: this SV has update history from before the cutover to partitioned tables"
+        )
+      )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
         updateHistory,
@@ -340,7 +346,7 @@ class ScanApp(
         loggerFactory,
       )
       automation = new ScanAutomationService(
-        config,
+        automationConfig,
         clock,
         ledgerClient,
         retryProvider,
@@ -644,6 +650,19 @@ class ScanApp(
 }
 
 object ScanApp {
+
+  def withoutHistoryBackfillingAfterCutover(
+      config: ScanAppBackendConfig,
+      updateHistory: UpdateHistory,
+  ): ScanAppBackendConfig =
+    updateHistory.lastLegacyRecordTime
+      .map(_ =>
+        config.copy(
+          updateHistoryBackfillEnabled = false,
+          updateHistoryBackfillImportUpdatesEnabled = false,
+        )
+      )
+      .getOrElse(config)
 
   case class State(
       participantAdminConnection: ParticipantAdminConnection,

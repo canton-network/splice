@@ -23,10 +23,7 @@ import org.lfdecentralizedtrust.splice.scan.store.historystart.{
   HistoryStart,
   ParticipantHistoryStartSources,
 }
-import org.lfdecentralizedtrust.splice.scan.automation.{
-  DeleteCorruptAcsSnapshotTrigger,
-  ScanHistoryBackfillingTrigger,
-}
+import org.lfdecentralizedtrust.splice.scan.automation.ScanHistoryBackfillingTrigger
 import org.lfdecentralizedtrust.splice.store.{
   PageLimit,
   TreeUpdateWithMigrationId,
@@ -73,7 +70,6 @@ class ScanHistoryBackfillingIntegrationTest
         updateAutomationConfig(ConfigurableApp.Scan)(
           _.withPausedTrigger[ScanHistoryBackfillingTrigger]
             .withPausedTrigger[TxLogBackfillingTrigger[TxLogEntry]]
-            .withPausedTrigger[DeleteCorruptAcsSnapshotTrigger]
         )(config)
       )
       .addConfigTransform((_, config) =>
@@ -344,28 +340,6 @@ class ScanHistoryBackfillingIntegrationTest
     }
 
     clue(
-      "Backfilling triggers state. All idle while waiting for corrupt snapshots to be deleted."
-    ) {
-      sv1BackfillTrigger.retrieveTasks().futureValue should be(empty)
-      sv2BackfillTrigger.retrieveTasks().futureValue should be(empty)
-      sv1ScanTxLogBackfillTrigger.retrieveTasks().futureValue should be(empty)
-      sv2ScanTxLogBackfillTrigger.retrieveTasks().futureValue should be(empty)
-    }
-
-    actAndCheck(
-      "Run trigger that checks for corrupt snapshots once on all scans", {
-        sv1DeleteSnapshotsTrigger.runOnce().futureValue
-        sv2DeleteSnapshotsTrigger.runOnce().futureValue
-      },
-    )(
-      "History marked as free of corrupt snapshots",
-      _ => {
-        sv1ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
-        sv2ScanBackend.appState.automation.updateHistory.corruptAcsSnapshotsDeleted shouldBe true
-      },
-    )
-
-    clue(
       "Backfilling triggers state. SV1+SV2: update is about to initialize, txlog is not doing anything yet"
     ) {
       sv1BackfillTrigger
@@ -626,10 +600,6 @@ class ScanHistoryBackfillingIntegrationTest
     sv1ScanBackend.automation.trigger[TxLogBackfillingTrigger[TxLogEntry]]
   private def sv2ScanTxLogBackfillTrigger(implicit env: SpliceTestConsoleEnvironment) =
     sv2ScanBackend.automation.trigger[TxLogBackfillingTrigger[TxLogEntry]]
-  private def sv1DeleteSnapshotsTrigger(implicit env: SpliceTestConsoleEnvironment) =
-    sv1ScanBackend.automation.trigger[DeleteCorruptAcsSnapshotTrigger]
-  private def sv2DeleteSnapshotsTrigger(implicit env: SpliceTestConsoleEnvironment) =
-    sv2ScanBackend.automation.trigger[DeleteCorruptAcsSnapshotTrigger]
 
   private def allUpdatesFromScanBackend(scanBackend: ScanAppBackendReference) = {
     // Need to use the store directly, as the HTTP endpoint refuses to return data unless it's completely backfilled

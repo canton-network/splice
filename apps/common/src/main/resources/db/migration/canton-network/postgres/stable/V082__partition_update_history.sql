@@ -167,6 +167,7 @@ create table update_history_exercises
 select setval(pg_get_serial_sequence('update_history_exercises', 'row_id'), last_value, is_called)
 from update_history_exercises_legacy_row_id_seq;
 create index updt_hist_exer_hi_mi_rt_co on update_history_exercises (history_id, migration_id, record_time, consuming);
+create index updt_hist_exer_uri on update_history_exercises (update_row_id);
 
 create table update_history_assignments
 (
