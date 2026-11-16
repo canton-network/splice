@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "dataSourceId": "scheduled_query",
+    "displayName": "mock_update_history_creates Daily Retention Purge",
+    "location": "europe-west6",
+    "params": {
+      "query": "CALL `test-project.mock_da2_scan_staging.sp_purge_old_records_update_history_creates`();"
+    },
+    "schedule": "every day 05:21",
+    "serviceAccountName": "bigquery@test-project.iam.gserviceaccount.com"
+  },
+  "name": "mock_update_history_creates-daily-purge",
+  "provider": "",
+  "type": "gcp:bigquery/dataTransferConfig:DataTransferConfig"
+}
