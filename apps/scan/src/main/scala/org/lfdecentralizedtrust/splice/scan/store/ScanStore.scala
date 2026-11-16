@@ -497,13 +497,8 @@ object ScanStore {
               Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
           )
         },
-        mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(
-          co => co.payload.allocation.admin == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) =>
-              pkgVersionSupport
-                .supportsAmuletAllocationV2(Seq(key.dsoParty), now)(tc)
-          },
+        mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(co =>
+          co.payload.allocation.admin == dso
         ) { contract =>
           ScanAcsStoreRowData(
             contract = contract,
