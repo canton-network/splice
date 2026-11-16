@@ -68,19 +68,18 @@ export function migrationsFollowingReference(
     const follows = migrationFollowsReference(migration, currentRef, activeMigration);
     if (!follows) {
       const trackedRef =
-        migration.releaseReference?.gitReference ?? '<inherited from active migration>';
+        migration.releaseReference?.gitReference ?? activeMigration.releaseReference?.gitReference;
+      const inheritedNote = migration.releaseReference ? '' : ' (inherited from active migration)';
       console.error(
         `Skipping migration ${migration.id} (version ${describeVersion(migration)}): ` +
-        `it follows ${trackedRef}, not ${currentRef}`
+          `it follows ${trackedRef}${inheritedNote}, not ${currentRef}`
       );
     }
     return follows;
   });
 
   if (filteredMigrations.length === 0) {
-    throw new Error(
-      `Sanity check failed: No migrations found tracking ${currentRef}.`
-    );
+    throw new Error(`Sanity check failed: No migrations found tracking ${currentRef}.`);
   }
 
   return filteredMigrations;
