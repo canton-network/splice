@@ -32,11 +32,14 @@ with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
 
-Body files: `<D>/CLAUDE.md`, Commands for the user. Every comment except a single line of plain text goes into
-`<round dir>/comments/<ref>.md`, is handed over (ci-triage skill, Dataset) and is posted from the user's host clone
-with `--body-file <checkout>/ci-triage/rounds/<round>/comments/<ref>.md` (or `close_duplicates.py --comment-file`
-with the same path, which accepts only such files); never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
-content in a `~~~` fence (so inner ``` fences render as part of it).
+Body files (shell rules for the commands: `<D>/CLAUDE.md`, Commands for the user). A comment that is a single line
+of plain text (no Markdown, backticks, quotes, backslashes or `$`) is passed inline with `--body` or `--comment`;
+duplicate-close comments are always written that way. Every other comment, and always one with a code block or a
+log line, goes into `<round dir>/comments/<ref>.md`, is handed over (ci-triage skill, Dataset) and is posted from
+the user's host clone with `--body-file <checkout>/ci-triage/rounds/<round>/comments/<ref>.md` (or
+`close_duplicates.py --comment-file` with the same path, which accepts only such files). Never edit a log line to
+fit a quoting rule. Print the full body in chat for review: the command, then the file content in a `~~~` fence (so
+inner ``` fences render as part of it).
 
 ## What the user changes when posting (drafts vs posted comments, 2026-11-05: 11164, 11170, 11172, 11175, 11186, 11219, 11226, 11228, 11232)
 
