@@ -46,12 +46,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- end }}
-        {{- /* TODO (#8263): remove the CometBFT sequencer driver */}}
-        {{- if eq .Values.sequencer.driver.type "cometbft"}}
-          image: {{ .Values.imageRepo }}/{{ .Values.sequencer.cometbft.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_cometbft_sequencer) }}
-        {{- else}}
           image: {{ .Values.imageRepo }}/{{ .Values.sequencer.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_sequencer) }}
-        {{- end}}
           env:
             - name: JAVA_TOOL_OPTIONS
               value: "{{ .Values.defaultJvmOptions }} {{ .Values.sequencer.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
@@ -72,19 +67,6 @@ spec:
             - name: CANTON_SEQUENCER_POSTGRES_DB
               value: {{ .Values.sequencer.persistence.databaseName }}
         {{- end }}
-        {{- /* TODO (#8263): remove the CometBFT sequencer driver */}}
-        {{- if eq .Values.sequencer.driver.type "cometbft"}}
-            - name: ADDITIONAL_CONFIG_SEQUENCER_DRIVER_COMETBFT
-              value: |
-                canton.sequencers.sequencer.sequencer {
-                  config {
-                    cometbft-node-host = {{ .Values.sequencer.driver.host }}
-                    cometbft-node-port = {{ .Values.sequencer.driver.port }}
-                    health-check-attempts = 100000
-                  }
-                  type = "CometBFT"
-                }
-        {{- else if eq .Values.sequencer.driver.type "cantonbft"}}
             - name: ADDITIONAL_CONFIG_SEQUENCER_DRIVER_BFT
               value: |
                 canton.sequencers.sequencer.sequencer {
@@ -120,7 +102,6 @@ spec:
                   name: {{ ((.Values.sequencer.driver).persistence).secretName | default .Values.sequencer.persistence.secretName }}
                   key: postgresPassword
               {{- end}}
-        {{- end}}
             {{- with .Values.sequencer.tokenExpirationTime }}
             - name: SEQUENCER_TOKEN_EXPIRATION_TIME
               value: "{{ . }}"
@@ -221,7 +202,7 @@ spec:
                 echo "trying to create postgres database {{ .Values.sequencer.persistence.databaseName }}, last error: $errmsg";
                 sleep 2;
               done
-      {{- if and (eq .Values.sequencer.driver.type "cantonbft") ((.Values.sequencer.driver).persistence) }}
+      {{- if (.Values.sequencer.driver).persistence }}
         {{- $p := .Values.sequencer.driver.persistence }}
         {{- $dbHost := $p.host | default .Values.sequencer.persistence.host }}
         {{- $dbPort := $p.port | default .Values.sequencer.persistence.port }}
@@ -310,18 +291,16 @@ spec:
     - name: grpc-cs-adm-api
       port: 5009
       protocol: TCP
-    {{- if eq .Values.sequencer.driver.type "cantonbft"}}
     - name: grpc-cs-p2p-api
       port: 5010
       protocol: TCP
-    {{- end }}
     - name: cs-metrics
       port: 10013
       protocol: TCP
 ---
 {{- if .Values.enablePostgresMetrics }}
 {{- include "splice-util-lib.postgres-metrics" (dict "name" (print "postgres-" (.Values.sequencer.persistence.databaseName | replace "_" "-" ) "-e") "namespace" .Release.Namespace "persistence" .Values.sequencer.persistence "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "priorityClassName" .Values.priorityClassName "serviceAccountName" .Values.serviceAccountName ) }}
-{{- if and (eq .Values.sequencer.driver.type "cantonbft") ((.Values.sequencer.driver).persistence) (((.Values.sequencer.driver).persistence).databaseName) (ne .Values.sequencer.driver.persistence.databaseName .Values.sequencer.persistence.databaseName) }}
+{{- if and ((.Values.sequencer.driver).persistence) (((.Values.sequencer.driver).persistence).databaseName) (ne .Values.sequencer.driver.persistence.databaseName .Values.sequencer.persistence.databaseName) }}
 {{- $driverPersistence := dict "postgresName" (print .Values.sequencer.persistence.postgresName "-driver") "databaseName" .Values.sequencer.driver.persistence.databaseName "host" (.Values.sequencer.driver.persistence.host | default .Values.sequencer.persistence.host) "port" (.Values.sequencer.driver.persistence.port | default .Values.sequencer.persistence.port) "secretName" (.Values.sequencer.driver.persistence.secretName | default .Values.sequencer.persistence.secretName) }}
 ---
 {{- include "splice-util-lib.postgres-metrics" (dict "namespace" .Release.Namespace "persistence" $driverPersistence "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "priorityClassName" .Values.priorityClassName "serviceAccountName" .Values.serviceAccountName ) }}

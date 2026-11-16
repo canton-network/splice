@@ -1428,6 +1428,32 @@ components:
     SelfGrantFeaturedAppRightRequest:
       type: object
       nullable: true
+      description: |
+        Configuration of the self-granted featured app right. All fields are optional,
+        unset fields are defaulted by the Daml code (`app_kind` defaults to `basic`).
+        Setting any of the fields requires splice-wallet >= 0.1.26 to be vetted,
+        otherwise the request fails.
+      properties:
+        app_kind:
+          $ref: "#/components/schemas/FeaturedAppKind"
+        activity_weight:
+          description: Decimal specifying this provider's app composition weight. Defaults to 1.0 if not set.
+          type: string
+        ops_party_ids:
+          description: |
+            Operational parties of the featured app whose submissions are considered
+            submissions by this featured app. At most 10 entries. Defaults to [] if not set.
+          type: array
+          maxItems: 10
+          items:
+            type: string
+
+    FeaturedAppKind:
+      type: string
+      enum:
+        - basic
+        - asset_moving
+        - asset
 
     SelfGrantFeaturedAppRightResponse:
       type: object

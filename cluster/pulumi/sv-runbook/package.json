@@ -20,6 +20,7 @@
     "lint:check": "eslint --max-warnings=0 -- src",
     "dump-config": "env -u KUBECONFIG ts-node ./dump-config.ts",
     "up": "PULUMI_CONFIG_PASSPHRASE= ts-node ./pulumiUp.ts",
-    "down": "PULUMI_CONFIG_PASSPHRASE= ts-node ./pulumiDown.ts"
+    "down": "PULUMI_CONFIG_PASSPHRASE= ts-node ./runPulumiDown.ts",
+    "reset": "PULUMI_CONFIG_PASSPHRASE= ts-node ./runPulumiReset.ts"
   }
 }

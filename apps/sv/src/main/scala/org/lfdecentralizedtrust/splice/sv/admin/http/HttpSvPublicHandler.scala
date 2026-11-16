@@ -4,9 +4,10 @@
 package org.lfdecentralizedtrust.splice.sv.admin.http
 
 import cats.data.{EitherT, OptionT}
-import cats.syntax.applicative.*
 import cats.syntax.option.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.*
@@ -18,7 +19,7 @@ import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.Status.Code
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity}
-import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.stream.scaladsl.{FileIO, Source}
 import org.apache.pekko.util.ByteString as PekkoByteString
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
@@ -40,16 +41,26 @@ import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStoreWithInge
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
-import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
+import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting.DsoPartyMigrationFailure
+import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
+import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.{
+  DsoPartyMigration,
+  SvOnboardingSnapshotService,
+}
+import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.SvOnboardingSnapshotService.{
+  SnapshotKey,
+  SnapshotState,
+}
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
 
-import scala.concurrent.{ExecutionContext, Future}
+import java.nio.file.{Files, NoSuchFileException, Path}
+import java.time.ZoneOffset
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -63,6 +74,7 @@ class HttpSvPublicHandler(
     synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
     retryProvider: RetryProvider,
     dsoPartyMigration: DsoPartyMigration,
+    onboardingSnapshotService: SvOnboardingSnapshotService,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
@@ -378,132 +390,64 @@ class HttpSvPublicHandler(
     }
   }
 
-  /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
-    *
-    * Protection: Endpoint is protected by IP allowlisting
-    */
-  override def getCometBftNodeStatus(
-      respond: r0.GetCometBftNodeStatusResponse.type
-  )()(extracted: TraceContext): Future[
-    r0.GetCometBftNodeStatusResponse
-  ] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.getCometBftNodeStatus") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) {
-        _.nodeStatus()
-          .map(status =>
-            definitions.CometBftNodeStatusOrErrorResponse(
-              definitions.CometBftNodeStatusResponse(
-                status.nodeInfo.id,
-                status.syncInfo.catchingUp,
-                BigDecimal(status.validatorInfo.votingPower),
-              )
-            )
-          )
-      }
-    }
-  }
-
-  /** Intended use: Interacting with CometBFT node monitoring/debugging/testing purposes
-    *
-    * Protection: Endpoint is protected by IP allowlisting
-    */
-  override def cometBftJsonRpcRequest(
-      respond: r0.CometBftJsonRpcRequestResponse.type
-  )(
-      body: definitions.CometBftJsonRpcRequest
-  )(extracted: TraceContext): Future[r0.CometBftJsonRpcRequestResponse] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.cometBftJsonRpcRequest") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) { client =>
-        client
-          .jsonRpcCall(body.id, body.method.value, body.params.getOrElse(Map.empty))
-          .map(res =>
-            r0.CometBftJsonRpcRequestResponse.OK(
-              definitions.CometBftJsonRpcResponse(
-                res.jsonrpc,
-                res.id,
-                res.result,
-              )
-            )
-          )
-      }
-    }
-  }
-
   /** Intended use: Used by other SV operators
     *
     * Protection: Endpoint is protected by IP allowlisting
     */
-  override def onboardSvPartyMigrationAuthorize(
-      respond: rStream.OnboardSvPartyMigrationAuthorizeResponse.type
+  override def onboardSvPartyMigrationPrepare(
+      respond: r0.OnboardSvPartyMigrationPrepareResponse.type
   )(
       body: definitions.OnboardSvPartyMigrationAuthorizeRequest
   )(
       extracted: TraceContext
-  ): Future[rStream.OnboardSvPartyMigrationAuthorizeResponse] = {
+  ): Future[r0.OnboardSvPartyMigrationPrepareResponse] = {
     implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.onboardSvPartyMigrationAuthorize") { _ => _ =>
-      (for {
-        candidateParty <- Codec.decode(Codec.Party)(body.candidatePartyId)
-      } yield {
-        val errorMessage =
-          s"Candidate party is not an sv and no `SvOnboardingConfirmed` for the candidate party is found."
-        for {
-          isCandidateOnboardingConfirmed <- isOnboardingConfirmed(candidateParty)
-          dsoRules <- dsoStore.getDsoRules()
-          isCandidateSv = SvApp.isSvParty(candidateParty, dsoRules)
-          contract <- dsoStore.lookupSvOnboardingConfirmedByParty(candidateParty)
-          candidateParticipantId = contract
-            .getOrElse(
-              throw Status.NOT_FOUND
-                .withDescription(errorMessage)
-                .asRuntimeException()
-            )
-          res <-
-            if (!isCandidateOnboardingConfirmed && !isCandidateSv)
-              Future.failed(
-                HttpErrorHandler.unauthorized(
-                  errorMessage
-                )
+    withSpan(s"$workflowId.onboardSvPartyMigrationPrepare") { _ => _ =>
+      Codec
+        .decode(Codec.Party)(body.candidatePartyId)
+        .fold(
+          errMsg => Future.failed(HttpErrorHandler.badRequest(errMsg)),
+          candidateParty =>
+            for {
+              participantId <- candidateParticipant(candidateParty)
+              prepared <- dsoPartyMigration
+                .authorizeParticipantForHostingDsoParty(participantId)
+                .value
+              response <- HttpSvPublicHandler.onboardSvPartyMigrationPrepareResponse(
+                onboardingSnapshotService,
+                prepared,
+                dsoPartyMigration.exportSnapshotToFile(_, participantId, _),
               )
-            else
-              authorizeParticipantForHostingDsoParty(
-                ParticipantId.tryFromProtoPrimitive(candidateParticipantId.payload.svParticipantId)
-              )
-        } yield res
-      }).fold(errMsg => Future.failed(HttpErrorHandler.badRequest(errMsg)), identity)
+            } yield response,
+        )
     }
   }
 
-  private def authorizeParticipantForHostingDsoParty(
-      participantId: ParticipantId
-  )(implicit tc: TraceContext): Future[rStream.OnboardSvPartyMigrationAuthorizeResponse] = {
-    dsoPartyMigration
-      .authorizeParticipantForHostingDsoParty(participantId)
-      .fold(
-        {
-          case DsoPartyHosting
-                .RequiredProposalNotFound(
-                  partyToParticipantSerial
-                ) =>
-            rStream.OnboardSvPartyMigrationAuthorizeResponseBadRequest(
-              definitions.ProposalNotFoundErrorResponse(
-                proposalNotFound = definitions.ProposalNotFoundErrorResponse.ProposalNotFound(
-                  BigInt(partyToParticipantSerial.value)
-                )
-              )
-            )
-        },
-        { acsChunks =>
-          rStream.OnboardSvPartyMigrationAuthorizeResponseOK(
-            HttpEntity(
-              ContentTypes.`application/octet-stream`,
-              Source(acsChunks.map(chunk => PekkoByteString(chunk.asReadOnlyByteBuffer()))),
+  private def candidateParticipant(
+      candidateParty: PartyId
+  )(implicit tc: TraceContext): Future[ParticipantId] = {
+    val errorMessage =
+      s"Candidate party is not an sv and no `SvOnboardingConfirmed` for the candidate party is found."
+    for {
+      isCandidateOnboardingConfirmed <- isOnboardingConfirmed(candidateParty)
+      dsoRules <- dsoStore.getDsoRules()
+      isCandidateSv = SvApp.isSvParty(candidateParty, dsoRules)
+      contract <- dsoStore.lookupSvOnboardingConfirmedByParty(candidateParty)
+      candidateParticipantId = contract
+        .getOrElse(
+          throw Status.NOT_FOUND
+            .withDescription(errorMessage)
+            .asRuntimeException()
+        )
+      _ <-
+        if (!isCandidateOnboardingConfirmed && !isCandidateSv)
+          Future.failed(
+            HttpErrorHandler.unauthorized(
+              errorMessage
             )
           )
-        },
-      )
+        else Future.unit
+    } yield ParticipantId.tryFromProtoPrimitive(candidateParticipantId.payload.svParticipantId)
   }
 
   /** Intended use: Used by other SV operators
@@ -544,21 +488,21 @@ class HttpSvPublicHandler(
     }
   }
 
-  private def withClientOrNotFound[T](
-      notFound: definitions.ErrorResponse => T
-  )(call: CometBftClient => Future[T])(implicit tc: TraceContext) =
-    synchronizerNodeService
-      .activeSynchronizerNode()
-      .flatMap { node =>
-        node.cometbftNode
-          .map(_.cometBftClient)
-          .fold {
-            notFound(definitions.ErrorResponse("CometBFT is not configured."))
-              .pure[Future]
-          } {
-            call
-          }
-      }
+  /** Intended use: Used by other SV operators
+    *
+    * Protection: Endpoint is protected by IP allowlisting
+    */
+  override def onboardSvDownload(
+      respond: rStream.OnboardSvDownloadResponse.type
+  )(id: String)(extracted: TraceContext): Future[rStream.OnboardSvDownloadResponse] = {
+    implicit val traceContext: TraceContext = extracted
+    withSpan(s"$workflowId.onboardSvDownload") { _ => _ =>
+      HttpSvPublicHandler.onboardSvDownloadResponse(
+        onboardingSnapshotService,
+        SvOnboardingSnapshotId(id),
+      )
+    }
+  }
 
   private def isOnboardingConfirmed(party: PartyId)(implicit tc: TraceContext): Future[Boolean] = {
     // wait for a bit as it is possible the store ingression is not complete
@@ -866,6 +810,95 @@ class HttpSvPublicHandler(
               .value
         }
       } yield outcome
+    }
+  }
+}
+
+object HttpSvPublicHandler {
+
+  private val DownloadChunkSize = 1024 * 1024
+
+  private def proposalNotFoundResponse(
+      partyToParticipantSerial: PositiveInt
+  ): definitions.ProposalNotFoundErrorResponse =
+    definitions.ProposalNotFoundErrorResponse(
+      proposalNotFound = definitions.ProposalNotFoundErrorResponse.ProposalNotFound(
+        BigInt(partyToParticipantSerial.value)
+      )
+    )
+
+  private def acceptedStateNotFoundResponse(
+      participantId: ParticipantId
+  ): definitions.AcceptedStateNotFoundErrorResponse =
+    definitions.AcceptedStateNotFoundErrorResponse(
+      definitions.ErrorResponse(
+        s"Transaction where the participant $participantId was activated not found."
+      )
+    )
+
+  private[http] def onboardSvPartyMigrationPrepareResponse(
+      snapshotService: SvOnboardingSnapshotService,
+      prepared: Either[DsoPartyMigrationFailure, SnapshotKey.Acs],
+      exportSnapshot: (SnapshotKey.Acs, Path) => Future[Unit],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[r0.OnboardSvPartyMigrationPrepareResponse] = {
+    val respond = r0.OnboardSvPartyMigrationPrepareResponse
+    prepared match {
+      case Left(DsoPartyHosting.RequiredProposalNotFound(partyToParticipantSerial)) =>
+        Future.successful(respond.BadRequest(proposalNotFoundResponse(partyToParticipantSerial)))
+      case Left(DsoPartyHosting.AcceptedStateNotFound(participantId)) =>
+        Future.successful(respond.BadRequest(acceptedStateNotFoundResponse(participantId)))
+      case Right(key) =>
+        snapshotService
+          .prepare(key, exportSnapshot(key, _))
+          .map(id => respond.OK(definitions.OnboardSvSnapshotPrepareResponse(id.value)))
+    }
+  }
+
+  private[http] def onboardSvDownloadResponse(
+      snapshotService: SvOnboardingSnapshotService,
+      id: SvOnboardingSnapshotId,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[rStream.OnboardSvDownloadResponse] = {
+    val respond = rStream.OnboardSvDownloadResponse
+    val Pending = definitions.OnboardSvDownloadPendingResponse
+    def utc(time: CantonTimestamp) = time.toInstant.atOffset(ZoneOffset.UTC)
+    def notFound = respond.NotFound(definitions.ErrorResponse(s"Onboarding snapshot $id not found"))
+    def gone(reason: String) =
+      respond.Gone(definitions.ErrorResponse(s"Onboarding snapshot $id failed: $reason"))
+    Future {
+      blocking {
+        snapshotService.lookup(id) match {
+          case None => notFound
+          case Some(SnapshotState.Queued(queuedAt)) =>
+            respond.Accepted(Pending(Pending.Status.Queued, utc(queuedAt)))
+          case Some(SnapshotState.Exporting(queuedAt, startedAt)) =>
+            respond.Accepted(
+              Pending(Pending.Status.Exporting, utc(queuedAt), Some(utc(startedAt)))
+            )
+          case Some(SnapshotState.Failed(reason)) => gone(reason)
+          case Some(SnapshotState.Ready(file)) =>
+            try
+              respond.OK(
+                HttpEntity(
+                  ContentTypes.`application/octet-stream`,
+                  Files.size(file),
+                  FileIO.fromPath(file, DownloadChunkSize),
+                )
+              )
+            catch {
+              case _: NoSuchFileException =>
+                snapshotService.lookup(id) match {
+                  case Some(SnapshotState.Failed(reason)) => gone(reason)
+                  case _ => notFound
+                }
+            }
+        }
+      }
     }
   }
 }

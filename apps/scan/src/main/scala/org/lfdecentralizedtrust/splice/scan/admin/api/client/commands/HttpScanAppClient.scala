@@ -562,6 +562,35 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetRewardCouponsV2Disclosures(contractIds: Seq[String])
+      extends InternalBaseCommand[
+        http.GetRewardCouponsV2DisclosuresResponse,
+        Map[String, ByteString],
+      ] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], http.GetRewardCouponsV2DisclosuresResponse] =
+      client.getRewardCouponsV2Disclosures(
+        definitions.GetRewardCouponsV2DisclosuresRequest(contractIds.toVector),
+        headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetRewardCouponsV2DisclosuresResponse.OK(response) =>
+      Right(
+        response.createdEventBlobs.view
+          .mapValues(blob => ByteString.copyFrom(Base64.getDecoder.decode(blob)))
+          .toMap
+      )
+    }
+  }
+
   case class ListAnsEntries(
       namePrefix: Option[String],
       pageSize: Int,

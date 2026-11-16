@@ -30,6 +30,7 @@ import org.lfdecentralizedtrust.splice.validator.config.{
 import org.lfdecentralizedtrust.splice.wallet.config.WalletAppClientConfig
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.*
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
 import com.digitalasset.canton.topology.PartyId
 import monocle.macros.syntax.lens.*
 import org.apache.pekko.http.scaladsl.model.Uri
@@ -695,6 +696,21 @@ object ConfigTransforms {
 
   def withPerAcsSnapshotTablesEnabled: ConfigTransform =
     updateAllScanAppConfigs_(c => c.copy(perAcsSnapshotTablesEnabled = true))
+
+  // A BFT sequencer that misses its segment (e.g., right after onboarding or under load) is
+  // blacklisted for several epochs, during which it rejects all client submissions.
+  // In simtime tests this causes flakes right after sequencer onboarding (rejected sends, lost
+  // verdicts). Applied in EnvironmentDefinition.withSimTime only.
+  def disableBftBlacklisting(): ConfigTransform =
+    updateAllSvAppConfigs_(c =>
+      c.copy(cantonBftSequencingParameters =
+        c.cantonBftSequencingParameters.map(
+          _.copy(blacklistLeaderSelectionPolicyConfig =
+            SequencingParameters.NoBlacklistingLeaderSelectionPolicyConfig
+          )
+        )
+      )
+    )
 
   def withFeaturedAppMarkers: ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = None))

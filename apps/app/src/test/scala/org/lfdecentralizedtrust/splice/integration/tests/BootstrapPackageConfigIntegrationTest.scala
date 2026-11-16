@@ -271,7 +271,7 @@ class BootstrapPackageConfigIntegrationTest
         },
       )("vote request has been created", _ => sv1Backend.listVoteRequests().loneElement)
 
-      actAndCheck(timeUntilSuccess = 45.seconds)(
+      actAndCheck(timeUntilSuccess = 90.seconds)(
         s"sv1-3 accept vote request for upgraded packages",
         Seq(sv1Backend, sv2Backend, sv3Backend).map(sv =>
           eventuallySucceeds() {

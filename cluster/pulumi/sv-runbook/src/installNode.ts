@@ -395,6 +395,7 @@ async function installSvAndValidator(
     },
     ...synchronizerValues,
     additionalEnvVars: (defaultScanValues.additionalEnvVars || [])
+      .concat(svConfig.scanApp?.additionalEnvVars || [])
       .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
       .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
@@ -518,7 +519,6 @@ function installInfoEndpoint(
       MD5_HASH_OF_APPROVED_SV_IDENTITIES: `"${createHash('md5')
         .update(readFileOrEmptyString(approvedSvIdentitiesFile()))
         .digest('hex')}"`,
-      CHAIN_ID_SUFFIX: `"0"`,
     }
   );
 

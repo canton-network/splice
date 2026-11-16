@@ -6,12 +6,8 @@ import {
   activeVersion,
   CLUSTER_BASENAME,
   CnChartVersion,
-  config,
 } from '@canton-network/splice-pulumi-common';
-import {
-  allSvNamesToDeploy,
-  svRunbookNodeName,
-} from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
+import { allSvNamesToDeploy } from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import {
   deployedValidators,
   validatorRunbookStackName,
@@ -77,22 +73,13 @@ export function installSpliceStacks(
   gcpSecret: k8s.core.v1.Secret
 ): void {
   if (deploymentConf.projectsToDeploy.has('sv-runbook')) {
-    createStackCR(
-      'sv-runbook',
-      'sv-runbook',
-      namespace,
-      config.envFlag('SUPPORTS_SV_RUNBOOK_RESET'),
-      reference,
-      envRefs,
-      gcpSecret
-    );
+    createStackCR('sv-runbook', 'sv-runbook', namespace, reference, envRefs, gcpSecret);
   }
   if (deploymentConf.projectsToDeploy.has('multi-validator')) {
     createStackCR(
       'multi-validator',
       'multi-validator',
       namespace,
-      false,
       reference,
       envRefs,
       gcpSecret,
@@ -101,38 +88,22 @@ export function installSpliceStacks(
     );
   }
   if (deploymentConf.projectsToDeploy.has('validator1')) {
-    createStackCR('validator1', 'validator1', namespace, false, reference, envRefs, gcpSecret);
+    createStackCR('validator1', 'validator1', namespace, reference, envRefs, gcpSecret);
   }
   if (deploymentConf.projectsToDeploy.has('splitwell')) {
-    createStackCR('splitwell', 'splitwell', namespace, false, reference, envRefs, gcpSecret);
+    createStackCR('splitwell', 'splitwell', namespace, reference, envRefs, gcpSecret);
   }
   if (deploymentConf.projectsToDeploy.has('infra')) {
-    createStackCR('infra', 'infra', namespace, false, reference, envRefs, gcpSecret);
+    createStackCR('infra', 'infra', namespace, reference, envRefs, gcpSecret);
   }
   if (
     deploymentConf.projectsToDeploy.has('observability') &&
     isVersionAtLeastOrSnapshot(activeVersion, '0.6.0')
   ) {
-    createStackCR(
-      'observability',
-      'observability',
-      namespace,
-      false,
-      reference,
-      envRefs,
-      gcpSecret
-    );
+    createStackCR('observability', 'observability', namespace, reference, envRefs, gcpSecret);
   }
   if (deploymentConf.projectsToDeploy.has('canton-network')) {
-    createStackCR(
-      'canton-network',
-      'canton-network',
-      namespace,
-      false,
-      reference,
-      envRefs,
-      gcpSecret
-    );
+    createStackCR('canton-network', 'canton-network', namespace, reference, envRefs, gcpSecret);
   }
   installSvStacks(reference, envRefs, namespace, gcpSecret);
 }
@@ -145,9 +116,7 @@ function installSvStacks(
 ): void {
   if (deploymentConf.projectsToDeploy.has('sv')) {
     for (const sv of allSvNamesToDeploy) {
-      const isRunbookReset =
-        sv === svRunbookNodeName && config.envFlag('SUPPORTS_SV_RUNBOOK_RESET');
-      createStackCR(`sv.${sv}`, 'sv', namespace, isRunbookReset, reference, envRefs, gcpSecret, {
+      createStackCR(`sv.${sv}`, 'sv', namespace, reference, envRefs, gcpSecret, {
         SPLICE_SV: sv,
       });
     }

@@ -24,7 +24,6 @@ function localSynchronizerNodeValues(
     sequencerAddress: node.namespaceInternalSequencerAddress,
     mediatorAddress: node.namespaceInternalMediatorAddress,
     sequencerPublicUrl: `https://sequencer-${nodeConfig.id}.${ingressName}.${CLUSTER_HOSTNAME}`,
-    enableBftSequencer: true,
     ...(sequencerPruningConfig ? { sequencerPruningConfig } : {}),
   };
 }

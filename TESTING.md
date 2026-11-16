@@ -18,7 +18,7 @@
     - [Running The Preflight Check](#running-the-preflight-check)
       - [Configure Auth0 Environment](#configure-auth0-environment)
       - [Configure SV Web UI Password](#configure-sv-web-ui-password)
-    - [Setting up `lnav` to Inspect Canton and CometBFT logs](#setting-up-lnav-to-inspect-canton-and-cometbft-logs)
+    - [Setting up `lnav` to Inspect Canton logs](#setting-up-lnav-to-inspect-canton-logs)
       - [Using `lnav` to inspect logs from Docker compose containers](#using-lnav-to-inspect-logs-from-docker-compose-containers)
     - [Handling Errors in Integration Tests](#handling-errors-in-integration-tests)
     - [Connecting external tools to the shared Canton instances](#connecting-external-tools-to-the-shared-canton-instances)
@@ -328,16 +328,15 @@ For testing that we can interact with the web UIs of our own SVs (sv1-4), the pr
 At the moment all 4 SVs share the same password, which needs to be configured via the `SV_DEV_NET_WEB_UI_PASSWORD` environment variable.
 Contact the Maintainers for the currently used password.
 
-### Setting up `lnav` to Inspect Canton and CometBFT logs
+### Setting up `lnav` to Inspect Canton logs
 
-If you have never used `lnav` to inspect Canton or CometBFT logs, then we recommend:
+If you have never used `lnav` to inspect Canton logs, then we recommend:
 
 1. Call `lnav --help` to determine the configuration directory. It should be something like `~/.lnav` or `~/.config/lnav`.
 2. Set `export LNAV_CONFIG_DIR=<the directory output by the help text above>`
-3. Create the following symlinks to automatically keep the format definitions up to date:
+3. Create the following symlink to automatically keep the format definition up to date:
    ```
    ln -sf $PWD/canton/canton-json.lnav.json $LNAV_CONFIG_DIR/formats/installed/canton_logstash_json.json
-   ln -sf $PWD/network-health/cometbft-json.lnav.json $LNAV_CONFIG_DIR/formats/installed/cometbft-json.json
    ```
 4. Type `lnav log/canton_network_test.clog` to inspect the test logs.
 5. Take the time to familiarize yourself with docs for the `lnav` [UI](https://docs.lnav.org/en/latest/ui.html#ui)
