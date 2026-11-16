@@ -1038,6 +1038,7 @@ template AmuletRules
           rewardCalculationVersion = (.mintingVersion) <$> validatedRounds.latestUsableRound.rewardConfig
           amuletSwitchOverTimes = config.amuletSwitchOverTimes
           governanceLockConfig = config.governanceLockConfig
+          credentialRegistryConfig = config.credentialRegistryConfig
         pure AmuletRules_UpdateExternalPartyConfigStatesResult with ..
 
 
@@ -2485,6 +2486,7 @@ bootstrapExternalPartyConfigState AmuletRules{..} openMiningRoundTriple = do
         rewardCalculationVersion = (.mintingVersion) <$> validatedRounds.latestUsableRound.rewardConfig
         amuletSwitchOverTimes = config.amuletSwitchOverTimes
         governanceLockConfig = config.governanceLockConfig
+        credentialRegistryConfig = config.credentialRegistryConfig
       configState1 = configState0 with
         targetArchiveAfter = configState0.targetArchiveAfter `addRelTime` getExternalPartyConfigStateTickDuration config
   create configState0

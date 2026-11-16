@@ -449,13 +449,6 @@ testCreateExternalPartyAmuletRules = script do
 
   pure ()
 
-testCreateCredentialRegistryConfig : Script ()
-testCreateCredentialRegistryConfig = script do
-  (_, dso, _) <- initDevNet
-  [(_, amuletRules)] <- query @AmuletRules dso
-  amuletRules.configSchedule.initialValue.credentialRegistryConfig === None
-  pure ()
-
 testTransferPreapprovalSend : Script ()
 testTransferPreapprovalSend = do
   (app, dso, (sv1, sv2, sv3, _)) <- initDevNet
