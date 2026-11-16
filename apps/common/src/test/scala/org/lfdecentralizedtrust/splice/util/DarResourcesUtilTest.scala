@@ -36,20 +36,17 @@ class DarResourcesUtilTest extends AnyWordSpec with BaseTest {
     "list each DAR once, even if the latest one is also listed under its versioned path" in {
       val rows = for {
         pkg <- DarResources.corePackageResources
-        enableUnsupportedDarsUnvetting <- Seq(false, true)
       } yield (
         pkg.latest.metadata.name,
         pkg.latest.metadata.version,
         pkg.latest.packageId,
-        enableUnsupportedDarsUnvetting,
       )
       forEvery(
-        Table(("name", "latestVersion", "latestPackageId", "enableUnsupportedDarsUnvetting"), rows*)
-      ) { case (name, latestVersion, latestPackageId, enableUnsupportedDarsUnvetting) =>
+        Table(("name", "latestVersion", "latestPackageId"), rows*)
+      ) { case (name, latestVersion, latestPackageId) =>
         val required = DarResourcesUtil.getRequiredPackageVersions(
           name,
           latestVersion,
-          enableUnsupportedDarsUnvetting,
         )
         required.map(_.identification).distinct should have size required.size.toLong
         required.count(_.packageId == latestPackageId) shouldBe 1

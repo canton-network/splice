@@ -19,6 +19,8 @@ awaitAllOrThrowAllExceptions(
       console.log(JSON.stringify(preview.changeSummary));
     },
     true,
+    true,
+    [],
     true
   )
 ).catch(err => {

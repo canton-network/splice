@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "dataSourceId": "scheduled_query",
+    "displayName": "mock_scan_verdict_transaction_view_store Daily Retention Purge",
+    "location": "europe-west6",
+    "params": {
+      "query": "CALL `test-project.mock_da2_scan_staging.sp_purge_old_records_scan_verdict_transaction_view_store`();"
+    },
+    "schedule": "every day 05:21",
+    "serviceAccountName": "bigquery@test-project.iam.gserviceaccount.com"
+  },
+  "name": "mock_scan_verdict_transaction_view_store-daily-purge",
+  "provider": "",
+  "type": "gcp:bigquery/dataTransferConfig:DataTransferConfig"
+}

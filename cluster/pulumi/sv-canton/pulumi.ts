@@ -4,6 +4,7 @@ import * as automation from '@pulumi/pulumi/automation';
 
 import { allSvNamesToDeploy } from '../common-sv/src/dsoConfig';
 import { DeploySvRunbook, isDevNet } from '../common/src/config';
+import { spliceEnvConfig } from '../common/src/config/envConfig';
 // We have to be explicit with the imports here, if we import a module that creates a pulumi resource running the preview will fail
 // as we have no pulumi runtime
 import {
@@ -13,6 +14,11 @@ import {
   MigrationInfo,
 } from '../common/src/domainMigration';
 import { pulumiOptsWithPrefix, stack } from '../pulumi';
+import {
+  migrationsFollowingReference,
+  parsePreviewGitReference,
+  PREVIEW_GIT_REFERENCE_ENV,
+} from './src/previewGitReference';
 
 export function pulumiOptsForMigration(
   migration: DomainMigrationIndex,
@@ -43,6 +49,12 @@ export async function stackForMigration(
 }
 
 const migrations = DecentralizedSynchronizerUpgradeConfig.allMigrations;
+
+// The git reference the current preview is being run from, if provided by CI.
+export function currentPreviewGitReference(): string | undefined {
+  return parsePreviewGitReference(spliceEnvConfig.optionalEnv(PREVIEW_GIT_REFERENCE_ENV));
+}
+
 export const svsToDeploy = allSvNamesToDeploy;
 
 export function runSvCantonForAllMigrations<T>(
@@ -53,7 +65,10 @@ export function runSvCantonForAllMigrations<T>(
   // this also requires that the cluster is a dev cluster
   // used to ensure down/refresh always takes care of the runbook as well
   forceSvRunbook: boolean = false,
-  forceMigrations: DomainMigrationIndex[] = []
+  forceMigrations: DomainMigrationIndex[] = [],
+  // when true and SPLICE_PREVIEW_GIT_REFERENCE is set, skip migrations whose
+  // releaseReference tracks a different branch than the one we are running from
+  onlyMigrationsFollowingCurrentReference: boolean = false
 ): { name: string; promise: Promise<T> }[] {
   const svsToRunFor = svsToDeploy.concat(
     !DeploySvRunbook && forceSvRunbook && isDevNet ? ['sv'] : []
@@ -63,7 +78,8 @@ export function runSvCantonForAllMigrations<T>(
     operation,
     runForStack,
     requiresExistingStack,
-    forceMigrations
+    forceMigrations,
+    onlyMigrationsFollowingCurrentReference
   );
 }
 
@@ -72,13 +88,21 @@ export function runSvCantonForSvs<T>(
   operation: string,
   runForStack: (stack: automation.Stack, migration: MigrationInfo, sv: string) => Promise<T>,
   requiresExistingStack: boolean,
-  forceMigrations: DomainMigrationIndex[] = []
+  forceMigrations: DomainMigrationIndex[] = [],
+  onlyMigrationsFollowingCurrentReference: boolean = false
 ): { name: string; promise: Promise<T> }[] {
-  const migrationIds = migrations.map(migration => migration.id);
+  const relevantMigrations = onlyMigrationsFollowingCurrentReference
+    ? migrationsFollowingReference(
+        migrations,
+        currentPreviewGitReference(),
+        DecentralizedSynchronizerUpgradeConfig.active
+      )
+    : migrations;
+  const migrationIds = relevantMigrations.map(migration => migration.id);
   console.log(
     `Running for migration ${JSON.stringify(migrationIds)} and svs ${JSON.stringify(svsToRunFor)}`
   );
-  const migrationsToRunFor: MigrationInfo[] = migrations.concat(
+  const migrationsToRunFor: MigrationInfo[] = relevantMigrations.concat(
     forceMigrations
       .filter(migration => {
         return !migrationIds.includes(migration);

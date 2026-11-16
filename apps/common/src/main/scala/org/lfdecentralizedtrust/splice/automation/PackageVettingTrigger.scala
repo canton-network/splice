@@ -20,7 +20,6 @@ abstract class PackageVettingTrigger(
     maxVettingDelay: NonNegativeFiniteDuration,
     latestPackagesOnly: Boolean,
     enableUnvetting: Boolean,
-    enableUnsupportedDarsUnvetting: Boolean,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
 ) extends PollingTrigger
     with PackageIdResolver.HasAmuletRules
@@ -41,7 +40,6 @@ abstract class PackageVettingTrigger(
     participantAdminConnection,
     loggerFactory,
     latestPackagesOnly,
-    enableUnsupportedDarsUnvetting,
   )
 
   override def performWorkIfAvailable()(implicit traceContext: TraceContext): Future[Boolean] = {
@@ -84,7 +82,7 @@ abstract class PackageVettingTrigger(
         ) ++ pendingPackageConfigs.map(_.toString) ++ additionalPackagesToUnvet.map(_.toString()),
         previouslyRunInputRefForUnvetting,
         "unvetting",
-        enabled = enableUnvetting && enableUnsupportedDarsUnvetting,
+        enabled = enableUnvetting,
       )(
         vetting.unvetPackages(
           domainId,

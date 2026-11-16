@@ -1,0 +1,16 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "datasetId": "mock_da2_scan_prod",
+    "deleteContentsOnDestroy": false,
+    "friendlyName": "mock_da2_scan Production Dataset",
+    "labels": {
+      "cluster": "mock"
+    },
+    "location": "europe-west6"
+  },
+  "name": "mock_da2_scan-prod",
+  "provider": "",
+  "type": "gcp:bigquery/dataset:Dataset"
+}
