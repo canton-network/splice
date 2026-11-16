@@ -192,18 +192,19 @@ describe('configureScanBigQuery', () => {
   });
 
   test('appends copy the listed columns by name, checking production first if they change', async () => {
-    const resources = await installBigQuery(
-      true,
-      true,
-      'V082__tbar_v1_1_asset_activity_columns.sql'
-    );
+    const resources = await installBigQuery(true, true, 'V084__partition_update_history.sql');
     const bodies = new Map<string, string>();
     for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
       bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
     }
     const appends = [...bodies].filter(([routineId]) => routineId.startsWith('sp_append_'));
     expect(appends).toHaveLength(6);
-    const checking = new Set(['scan_verdict_store', 'app_activity_record_store']);
+    const checking = new Set([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
     for (const [routineId, body] of appends) {
       const tableName = routineId.replace('sp_append_', '');
       expect(body).not.toContain('{{');
@@ -225,14 +226,12 @@ describe('configureScanBigQuery', () => {
     }
     expect(bodies.get('sp_append_scan_verdict_store')).toContain('`round_number`');
     expect(bodies.get('sp_append_app_activity_record_store')).toContain('`asset_activity_weights`');
+    expect(bodies.get('sp_append_update_history_creates')).toContain('`package_name_interned`');
+    expect(bodies.get('sp_append_update_history_exercises')).toContain('`choice_interned`');
   });
 
   test('a routine fixes and another checks the schemas of production tables', async () => {
-    const resources = await installBigQuery(
-      true,
-      true,
-      'V082__tbar_v1_1_asset_activity_columns.sql'
-    );
+    const resources = await installBigQuery(true, true, 'V084__partition_update_history.sql');
     const routines = new Map<string, gcp.bigquery.Routine>();
     for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
       routines.set(await outputValue(routine.routineId), routine);
@@ -273,10 +272,15 @@ describe('configureScanBigQuery', () => {
         .split('\n')
         .map(call => /^ {2}CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
         .filter(tableName => tableName)
-    ).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    ).toEqual([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
     // each CALL in its own block, so that a failing one doesn't skip
     // the others
-    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(2);
+    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(4);
     expect(fixQuery).toContain("RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');");
     const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
     expect(fixSchedule).not.toBe(appendSchedule);
@@ -357,7 +361,7 @@ describe('configureScanBigQuery', () => {
 });
 
 describe('flywayMigrationToWaitFor', () => {
-  test('waits for V068 by default and allows V074, V077 and V082', async () => {
+  test('waits for V068 by default and allows V074, V077, V082 and V084', async () => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
@@ -366,6 +370,7 @@ describe('flywayMigrationToWaitFor', () => {
       'V074__string_interning.sql',
       'V077__verdict_add_round_number.sql',
       'V082__tbar_v1_1_asset_activity_columns.sql',
+      'V084__partition_update_history.sql',
     ] as const) {
       expect(FlywayMigrationToWaitForSchema.parse(migration)).toBe(migration);
     }
@@ -410,9 +415,10 @@ describe('replicatedTablesFor', () => {
     const v074 = replicatedTablesFor('V074__string_interning.sql');
     const v077 = replicatedTablesFor('V077__verdict_add_round_number.sql');
     const v082 = replicatedTablesFor('V082__tbar_v1_1_asset_activity_columns.sql');
+    const v084 = replicatedTablesFor('V084__partition_update_history.sql');
     expect(Object.keys(v068)).not.toContain('interned_strings');
     expect(v074.interned_strings?.columns).toEqual(['id', 'value', 'datastream_metadata']);
-    for (const tables of [v074, v077, v082]) {
+    for (const tables of [v074, v077, v082, v084]) {
       expect(Object.keys(tables)).toEqual([...Object.keys(v068), 'interned_strings']);
     }
     const verdicts = (tables: typeof v068) => tables.scan_verdict_store?.columns ?? [];
@@ -424,6 +430,14 @@ describe('replicatedTablesFor', () => {
     const activity = (tables: typeof v068) => tables.app_activity_record_store?.columns ?? [];
     expect(activity(v077)).not.toContain('asset_activity_weights');
     expect(activity(v082)).toContain('asset_activity_weights');
+    // added by #7770's V084
+    const creates = (tables: typeof v068) => tables.update_history_creates?.columns ?? [];
+    const exercises = (tables: typeof v068) => tables.update_history_exercises?.columns ?? [];
+    expect(creates(v082).filter(column => column.endsWith('_interned'))).toEqual([]);
+    expect(exercises(v082).filter(column => column.endsWith('_interned'))).toEqual([]);
+    expect(creates(v084).filter(column => column.endsWith('_interned'))).toHaveLength(4);
+    expect(exercises(v084).filter(column => column.endsWith('_interned'))).toHaveLength(8);
+    expect(creates(v084).slice(-1)).toEqual(['datastream_metadata']);
   });
 
   test('only tables whose columns have a `since` migrate their schema', async () => {
@@ -431,7 +445,12 @@ describe('replicatedTablesFor', () => {
     const migrating = Object.entries(replicatedTablesFor('V074__string_interning.sql'))
       .filter(([, table]) => table.migratesSchema)
       .map(([tableName]) => tableName);
-    expect(migrating).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    expect(migrating).toEqual([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
   });
 
   // Production tables keep the columns they were created with, and

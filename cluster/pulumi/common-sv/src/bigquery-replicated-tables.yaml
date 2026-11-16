@@ -56,6 +56,14 @@ update_history_creates:
     - update_id
     - domain_id
     - migration_id
+    - name: template_id_package_id_interned
+      since: V084__partition_update_history.sql
+    - name: template_id_module_name_interned
+      since: V084__partition_update_history.sql
+    - name: template_id_entity_name_interned
+      since: V084__partition_update_history.sql
+    - name: package_name_interned
+      since: V084__partition_update_history.sql
 update_history_exercises:
   primaryKey: row_id
   datePartitionColumn: record_time
@@ -85,6 +93,22 @@ update_history_exercises:
     - update_id
     - domain_id
     - migration_id
+    - name: template_id_package_id_interned
+      since: V084__partition_update_history.sql
+    - name: template_id_module_name_interned
+      since: V084__partition_update_history.sql
+    - name: template_id_entity_name_interned
+      since: V084__partition_update_history.sql
+    - name: package_name_interned
+      since: V084__partition_update_history.sql
+    - name: choice_interned
+      since: V084__partition_update_history.sql
+    - name: interface_id_package_id_interned
+      since: V084__partition_update_history.sql
+    - name: interface_id_module_name_interned
+      since: V084__partition_update_history.sql
+    - name: interface_id_entity_name_interned
+      since: V084__partition_update_history.sql
 scan_verdict_store:
   primaryKey: row_id
   datePartitionColumn: record_time
