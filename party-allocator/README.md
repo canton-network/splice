@@ -25,6 +25,10 @@ A failed setup is retried up to 3 times. Setups that have not finished are marke
 file in the key directory and are resumed after a restart. A retried setup reuses the key of the party
 and skips the steps that have already completed.
 
+Keys and pending markers are stored in `<keyDirectory>/shards/<index / 10000>/` because a single
+directory with millions of entries fails with `ENOSPC` on ext4 once its index is full. Files written by
+older versions directly to `<keyDirectory>` are still read.
+
 The number of parties set up in parallel adapts to errors up to the configured `parallelism`.
 
 ## Tests
