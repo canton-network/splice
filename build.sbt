@@ -1452,6 +1452,8 @@ lazy val `apps-scan` =
         pekko_http_cors,
         scalapb_runtime_grpc,
         scalapb_runtime,
+        // ScanStoreTest reads cluster/pulumi's bigquery-replicated-tables.yaml
+        circe_yaml % Test,
       ),
       BuildCommon.sharedAppSettings,
       templateDirectory := (`openapi-typescript-template` / patchTemplate).value,

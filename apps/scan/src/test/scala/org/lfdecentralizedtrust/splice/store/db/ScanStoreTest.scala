@@ -1960,7 +1960,17 @@ class DbScanStoreTest
     // appends copy only the listed columns to production. Listed
     // columns that Postgres has dropped are allowed.
     "list every column of the tables replicated to BigQuery" in {
-      val file = Paths.get("cluster/pulumi/common-sv/src/bigquery-replicated-tables.yaml")
+      // relative to the repository root: the working directory, or one
+      // of its ancestors when tests run elsewhere
+      val relative = Paths.get("cluster/pulumi/common-sv/src/bigquery-replicated-tables.yaml")
+      val workingDir = Paths.get("").toAbsolutePath
+      val file = Iterator
+        .iterate(Option(workingDir))(_.flatMap(dir => Option(dir.getParent)))
+        .takeWhile(_.isDefined)
+        .flatten
+        .map(_.resolve(relative))
+        .find(Files.exists(_))
+        .getOrElse(fail(s"$relative not found in $workingDir or its ancestors"))
       val tables = yaml.parser
         .parse(Files.readString(file))
         .flatMap(_.as[Map[String, Json]])
