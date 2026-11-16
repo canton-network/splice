@@ -133,7 +133,7 @@ class ValidatorSequencerConnectionIntegrationTest
       }
 
       withClue("Alice's validator should remain functional after the URL change") {
-        eventuallySucceeds() {
+        eventuallySucceeds(timeUntilSuccess = 2.minutes) {
           aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
         }
       }

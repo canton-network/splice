@@ -77,7 +77,6 @@ export function createStackCR(
   name: string,
   projectName: string,
   namespaceName: string,
-  supportsResetOnSameCommit: boolean,
   ref: GitFluxRef,
   envRefs: EnvRefs,
   gcpSecret: k8s.core.v1.Secret,
@@ -200,7 +199,8 @@ export function createStackCR(
             },
             dir: `${ref.config.pulumiBaseDir}/${projectName}`,
           },
-          // Do not resync the stack when the commit hash matches the last one
+          // Do not resync the stack when the commit hash matches the last one.
+          // Resets force a resync by annotating the stack (see requestOperatorStackReconciliation).
           continueResyncOnCommitMatch: false,
           destroyOnFinalize: false,
           // Enforce that the stack already exists
@@ -297,14 +297,6 @@ export function createStackCR(
             },
           },
         },
-        ...(supportsResetOnSameCommit
-          ? {
-              continueResyncOnCommitMatch: true,
-              resyncFrequencySeconds: 300,
-              // TODO(#16186): consider scaling down the operator instead
-              refresh: true,
-            }
-          : {}),
       },
     },
     {

@@ -375,6 +375,31 @@ function subcmd_ci_pdown_sv(){
 
 ###
 
+subcommand_whitelist[reset_sv]="Take the current sv-runbook Pulumi configuration down and, if deployed through the operator, trigger its redeployment"
+
+function subcmd_reset_sv(){
+    _production_gate
+    _prompt_to_confirm
+    _cluster_must_exist
+
+    _pulumi_automation_run_reset "sv-runbook"
+}
+
+###
+
+subcommand_whitelist[ci_reset_sv]="Run only by CircleCI"
+
+function subcmd_ci_reset_sv(){
+
+    if ! (env-bool CI); then
+        _error "This subcommand is available to CI jobs only."
+    fi
+
+    _pulumi_automation_run_reset "sv-runbook"
+}
+
+###
+
 subcommand_whitelist[apply_validator]="Apply the validator-runbook Pulumi stack"
 
 function subcmd_apply_validator(){
@@ -460,6 +485,31 @@ function subcmd_ci_pdown_validator(){
     fi
 
     subcmd_pulumi validator-runbook down --yes --skip-preview
+}
+
+###
+
+subcommand_whitelist[reset_validator]="Take the current validator-runbook Pulumi configuration down and, if deployed through the operator, trigger its redeployment"
+
+function subcmd_reset_validator(){
+    _production_gate
+    _prompt_to_confirm
+    _cluster_must_exist
+
+    _pulumi_automation_run_reset "validator-runbook"
+}
+
+###
+
+subcommand_whitelist[ci_reset_validator]="Run only by CircleCI"
+
+function subcmd_ci_reset_validator(){
+
+    if ! (env-bool CI); then
+        _error "This subcommand is available to CI jobs only."
+    fi
+
+    _pulumi_automation_run_reset "validator-runbook"
 }
 
 ###

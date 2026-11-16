@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import com.digitalasset.canton.time.Clock
 import org.lfdecentralizedtrust.splice.automation.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice

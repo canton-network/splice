@@ -53,6 +53,13 @@ jobs:
           cmd: "token-standard-cli/npmTest"
           fail_on_error_in_output: true
 
+      - name: Run Party Allocator tests
+        if: steps.skip.outputs.skip != 'true'
+        uses: ./.github/actions/sbt/execute_sbt_command
+        with:
+          cmd: "party-allocator/npmTest"
+          fail_on_error_in_output: true
+
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
