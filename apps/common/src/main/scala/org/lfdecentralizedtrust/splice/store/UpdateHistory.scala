@@ -168,7 +168,7 @@ class UpdateHistory private (
     lastLegacyRecordTime match {
       case None => Seq(tableName)
       case Some(boundary) =>
-        // migration id always increased monotonically with record time
+        // record time always increased monotonically across migration ids
         // in practice
         Seq(
           Option.when(atOrAfter.forall(_ <= boundary))(s"${tableName}_legacy"),
