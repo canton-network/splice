@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.store
 
 import cats.data.{NonEmptyList, OptionT}
-import cats.syntax.semigroup.*
+import cats.syntax.foldable.*
 import com.daml.ledger.api.v2.TraceContextOuterClass
 import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
@@ -158,7 +158,8 @@ class UpdateHistory private (
 
   def waitUntilInitialized: Future[Unit] = state.get().initialized.future
 
-  // Returns legacy and/or partitioned table, depending on whether the used filters would need data from one or the other.
+  // Returns legacy and/or partitioned table, *or neither*,
+  // depending on whether the used filters would need data from one or the other.
   def historyTablesToQuery(
       tableName: String,
       atOrAfter: Option[CantonTimestamp] = None,
@@ -167,6 +168,8 @@ class UpdateHistory private (
     lastLegacyRecordTime match {
       case None => Seq(tableName)
       case Some(boundary) =>
+        // migration id always increased monotonically with record time
+        // in practice
         Seq(
           Option.when(atOrAfter.forall(_ <= boundary))(s"${tableName}_legacy"),
           Option.when(before.forall(_ > boundary))(tableName),
@@ -1982,14 +1985,8 @@ class UpdateHistory private (
     }
 
     MonadUtil
-      .sequentialTraverse(
-        Seq(
-          "update_history_transactions",
-          "update_history_assignments",
-          "update_history_unassignments",
-        )
-      )(range)
-      .map(_.foldLeft(Map.empty[SynchronizerId, DomainRecordTimeRange])(_ |+| _))
+      .sequentialTraverse(updateTables)(range)
+      .map(_.foldMap(identity))
   }
 
   /** Returns the record time range of sequenced events excluding ACS imports after a HDM,
@@ -2009,11 +2006,7 @@ class UpdateHistory private (
         and record_time > ${CantonTimestamp.MinValue}
       """
     }
-    val tables = Seq(
-      "update_history_transactions",
-      "update_history_assignments",
-      "update_history_unassignments",
-    ).flatMap(historyTablesToQuery(_))
+    val tables = updateTables.flatMap(historyTablesToQuery(_))
     NonEmpty.from(tables.map(t => sql"(" ++ rangeForTable(t) ++ sql")")) match {
       case None => Future.successful(None)
       case Some(ranges) =>
@@ -2088,13 +2081,7 @@ class UpdateHistory private (
     }
 
     MonadUtil
-      .sequentialTraverse(
-        Seq(
-          "update_history_transactions",
-          "update_history_assignments",
-          "update_history_unassignments",
-        )
-      )(previousId)
+      .sequentialTraverse(updateTables)(previousId)
       .map(_.flatten.maxOption)
   }
 
@@ -2114,14 +2101,7 @@ class UpdateHistory private (
     }
 
     MonadUtil
-      .sequentialTraverse(
-        Seq(
-          "update_history_transactions",
-          "update_history_assignments",
-          "update_history_unassignments",
-        )
-          .flatMap(historyTablesToQuery(_))
-      )(previousId)
+      .sequentialTraverse(updateTables.flatMap(historyTablesToQuery(_)))(previousId)
       .map(_.flatten.minOption)
   }
 
@@ -2714,10 +2694,12 @@ object UpdateHistory {
     )
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.IterableOps"))
   def unionAll(queries: NonEmpty[Seq[SQLActionBuilderChain]]): SQLActionBuilderChain =
-    queries.tail.foldLeft(queries.head1)(_ ++ sql" union all " ++ _)
+    queries.reduceLeft(_ ++ sql" union all " ++ _)
 
+  // `atOrAfter` or `before` are never expanded into boolean
+  // subexpressions by consumers of this type that generate SQL; you
+  // must include any needed such filters yourself in `sql`
   private final case class UpdatesFilter(
       sql: SQLActionBuilder,
       atOrAfter: Option[CantonTimestamp] = None,

@@ -877,12 +877,12 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
             Some(time(6)),
             PageLimit.tryCreate(2),
           )
-          byId <- MonadUtil.sequentialTraverse(updateIds)(store.getUpdate)
+          byId <- Future.traverse(updateIds)(store.getUpdate)
           range <- store.getRecordTimeRange(migration1)
           previousMigration <- store.getPreviousMigrationId(migration1)
           importUpdates <- store.getImportUpdates(migration1, "", PageLimit.tryCreate(1000))
           lastImportUpdateId <- store.getLastImportUpdateId(migration1)
-          lowestMigrations <- MonadUtil.sequentialTraverse(Seq(time(0), time(5), time(8)))(
+          lowestMigrations <- Future.traverse(Seq(time(0), time(5), time(8)))(
             store.getLowestMigrationForRecordTime
           )
           backfillingState <- store.getBackfillingState()

@@ -1064,7 +1064,10 @@ paths:
 
   /v0/transfer-command/status:
     get:
-      description: Retrieve the status of all transfer commands (up to a limit of 100) of the given sender for the specified nonce.
+      deprecated: true
+      description: |
+        Retrieve the status of all transfer commands (up to a limit of 100) of the given sender for the specified nonce.
+        Deprecated: does not find transfer commands created after the switch to partitioned update history tables.
       tags: [internal, scan]
       x-jvm-package: scan
       operationId: "lookupTransferCommandStatus"

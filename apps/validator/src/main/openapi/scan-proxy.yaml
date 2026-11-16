@@ -215,7 +215,10 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
   /v0/scan-proxy/transfer-command/status:
     get:
-      description: Retrieve the status of all transfer commands of the given sender for the specified nonce.
+      deprecated: true
+      description: |
+        Retrieve the status of all transfer commands of the given sender for the specified nonce.
+        Deprecated: does not find transfer commands created after the switch to partitioned update history tables.
       tags: [scan-proxy]
       x-jvm-package: scanproxy
       operationId: "lookupTransferCommandStatus"
