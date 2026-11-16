@@ -22,7 +22,6 @@ class ValidatorPackageVettingTrigger(
     override protected val context: TriggerContext,
     maxVettingDelay: NonNegativeFiniteDuration,
     latestPackagesOnly: Boolean,
-    enableUnsupportedDarsUnvetting: Boolean,
     enableValidatorDarsUnvetting: Boolean,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
 )(implicit
@@ -33,7 +32,6 @@ class ValidatorPackageVettingTrigger(
       maxVettingDelay,
       latestPackagesOnly,
       enableUnvetting = enableValidatorDarsUnvetting,
-      enableUnsupportedDarsUnvetting,
       additionalPackagesToUnvet,
     ) {
 

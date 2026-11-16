@@ -226,7 +226,6 @@ class SV1Initializer(
               participantAdminConnection,
               loggerFactory,
               config.latestPackagesOnly,
-              config.parameters.enabledFeatures.enableUnsupportedDarsUnvetting,
             )
             vetting
               .vetCurrentPackages(

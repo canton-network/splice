@@ -22,7 +22,6 @@ class SvPackageVettingTrigger(
     override protected val context: TriggerContext,
     maxVettingDelay: NonNegativeFiniteDuration,
     latestPackagesOnly: Boolean,
-    enableUnsupportedDarsUnvetting: Boolean,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
 )(implicit
     override val ec: ExecutionContext,
@@ -32,7 +31,6 @@ class SvPackageVettingTrigger(
       maxVettingDelay,
       latestPackagesOnly,
       true,
-      enableUnsupportedDarsUnvetting,
       additionalPackagesToUnvet,
     ) {
 
