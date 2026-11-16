@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "dataSourceId": "scheduled_query",
+    "displayName": "mock_app_activity_record_store Hourly Append Pipeline",
+    "location": "europe-west6",
+    "params": {
+      "query": "CALL `test-project.mock_da2_scan_prod.sp_append_app_activity_record_store`();"
+    },
+    "schedule": "every 1 hours from 00:07 to 23:07",
+    "serviceAccountName": "bigquery@test-project.iam.gserviceaccount.com"
+  },
+  "name": "mock_app_activity_record_store-hourly-append",
+  "provider": "",
+  "type": "gcp:bigquery/dataTransferConfig:DataTransferConfig"
+}

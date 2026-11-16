@@ -1,0 +1,12 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "member": "serviceAccount:service-undefined@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com",
+    "project": "test-project",
+    "role": "roles/iam.serviceAccountTokenCreator"
+  },
+  "name": "bq-transfer-token-creator",
+  "provider": "",
+  "type": "gcp:projects/iAMMember:IAMMember"
+}

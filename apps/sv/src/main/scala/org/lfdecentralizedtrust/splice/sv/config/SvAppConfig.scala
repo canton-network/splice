@@ -693,7 +693,6 @@ final case class SvSynchronizerNodeConfig(
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMillis(250),
-    // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
     synchronizerLimits: Option[SynchronizerLimits] = Some(
       SvSynchronizerNodeConfig.defaultSynchronizerLimits
     ),

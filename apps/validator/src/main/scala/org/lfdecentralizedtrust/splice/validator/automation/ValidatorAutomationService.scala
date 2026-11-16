@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.validator.automation
 
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.config.NonNegativeFiniteDuration as ConfigNonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.SynchronizerAlias
@@ -89,6 +90,7 @@ class ValidatorAutomationService(
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
+    esf: ExecutionSequencerFactory,
     tracer: Tracer,
 ) extends SpliceAppAutomationService(
       automationConfig,

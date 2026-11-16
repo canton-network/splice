@@ -72,7 +72,8 @@ object DarResourcesUtil extends NamedLogging {
           (!latestPackagesOnly && version < upToRequiredVersion) || version == upToRequiredVersion
         }
       })
-      .distinct
+      // `all` lists the latest DAR a second time under its versioned path
+      .distinctBy(_.identification)
   }
 
   def filterUnsupportedPackageVersions(
