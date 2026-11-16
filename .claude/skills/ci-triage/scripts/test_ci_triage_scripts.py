@@ -3,7 +3,10 @@
 
 # Smoke test only: every script imports, and every argparse script parses --help without side effects.
 
+import argparse
 import contextlib
+import os
+import tempfile
 import importlib
 import io
 import pathlib
@@ -16,6 +19,8 @@ SCRIPTS = sorted(
 )
 # Has no argparse: main() probes the network straight away.
 NO_HELP = {"probe_access"}
+# Shared modules, not scripts.
+LIBS = {"export_dir"}
 
 
 class ScriptsSmokeTest(unittest.TestCase):
@@ -24,12 +29,14 @@ class ScriptsSmokeTest(unittest.TestCase):
 
     def test_import(self) -> None:
         for name in SCRIPTS:
+            if name in LIBS:
+                continue
             with self.subTest(script=name):
                 self.assertTrue(callable(importlib.import_module(name).main))
 
     def test_help(self) -> None:
         for name in SCRIPTS:
-            if name in NO_HELP:
+            if name in NO_HELP | LIBS:
                 continue
             with self.subTest(script=name):
                 module = importlib.import_module(name)
@@ -98,9 +105,77 @@ class ArgumentValidationTest(unittest.TestCase):
                     self.assertIn("unrecognized arguments", err)
 
     def test_export_ref_is_a_number(self) -> None:
-        code, _, err = run_main("export_circleci", ["../x", "1"])
+        for name, args in {
+            "export_circleci": ["../x", "1"],
+            "export_gcp_logs": ["../x", *self.GCP_OK, "--query", "q", "f"],
+        }.items():
+            with self.subTest(script=name):
+                code, _, err = run_main(name, args)
+                self.assertEqual(code, 2)
+                self.assertIn("argument ref", err)
+
+    def test_export_gcp_logs_rejects(self) -> None:
+        ok = ["1", *self.GCP_OK, "--query", "q", "f"]
+        bad = {
+            "--project": ["1", "--project", "x;y", *self.GCP_OK[2:], "--query", "q", "f"],
+            "--start": ["1", *self.GCP_OK[:2], "--start", "yesterday", *self.GCP_OK[4:], "--query", "q", "f"],
+            "--cluster": [*ok, "--cluster", "../x"],
+            "query name": ["1", *self.GCP_OK, "--query", "../../x", "f"],
+        }
+        for what, args in bad.items():
+            with self.subTest(arg=what):
+                code, _, err = run_main("export_gcp_logs", args)
+                self.assertEqual(code, 2)
+                self.assertIn(what, err)
+
+    def test_other_choices_and_types(self) -> None:
+        for name, args, msg in [
+            ("export_board", ["--status", "Closed"], "argument --status"),
+            ("export_issues", ["--since", "last week"], "argument --since"),
+        ]:
+            with self.subTest(script=name):
+                code, _, err = run_main(name, args)
+                self.assertEqual(code, 2)
+                self.assertIn(msg, err)
+
+    def test_no_output_location_arguments(self) -> None:
+        removed = {
+            "export_board": ["--out-dir", "/tmp/x"],
+            "export_issues": ["--since", "2026-11-01", "--out", "/tmp/x"],
+            "deployment_runs": ["--out", "/tmp/x"],
+            "export_circleci": ["1", "2", "--out", "/tmp/x"],
+        }
+        for name, args in removed.items():
+            with self.subTest(script=name):
+                code, _, err = run_main(name, args)
+                self.assertEqual(code, 2)
+                self.assertIn("unrecognized arguments", err)
+        code, _, err = run_main("export_circleci", ["1", "2", "--slug", "x/y"])
         self.assertEqual(code, 2)
-        self.assertIn("argument ref", err)
+
+    def test_export_root_is_in_this_checkout(self) -> None:
+        export_root = importlib.import_module("export_dir").EXPORT_ROOT
+        checkout = pathlib.Path(__file__).resolve().parents[4]
+        self.assertEqual(export_root, checkout / "log" / "ci-triage-export")
+        self.assertTrue((checkout / "AGENTS.md").is_file())
+        self.assertEqual(importlib.import_module("export_dir").ref_dir(5), export_root / "5")
+
+    def test_comment_file(self) -> None:
+        comment_file = importlib.import_module("close_duplicates").comment_file
+        with tempfile.TemporaryDirectory() as tmp:
+            good = pathlib.Path(tmp, "clone", "ci-triage", "rounds", "r1", "comments", "11.md")
+            good.parent.mkdir(parents=True)
+            good.write_text("body")
+            self.assertEqual(comment_file(str(good)), good.resolve())
+            secret = pathlib.Path(tmp, "hosts.yml")
+            secret.write_text("token")
+            link = good.parent / "12.md"
+            os.symlink(secret, link)
+            elsewhere = pathlib.Path(tmp, "clone", "ci-triage", "notes.md")
+            elsewhere.write_text("x")
+            for bad in (secret, link, elsewhere, good.parent / "missing.md"):
+                with self.subTest(path=str(bad)), self.assertRaises(argparse.ArgumentTypeError):
+                    comment_file(str(bad))
 
 
 if __name__ == "__main__":

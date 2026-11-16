@@ -17,6 +17,7 @@ ROUTER = "http://host.docker.internal:18555/api/repos/DACH-NY/canton"
 
 CAPABILITIES = [
     ("cn-test-failures issues", "/repos/DACH-NY/cn-test-failures/issues?per_page=1&state=all"),
+    ("cn-test-failures contents", "/repos/DACH-NY/cn-test-failures/commits?per_page=1"),
     ("canton-network-internal contents", "/repos/DACH-NY/canton-network-internal/commits?per_page=1"),
     ("canton-network-internal actions", "/repos/DACH-NY/canton-network-internal/actions/runs?per_page=1"),
     ("canton-network-internal pulls", "/repos/DACH-NY/canton-network-internal/pulls?per_page=1&state=all"),
@@ -26,6 +27,7 @@ CAPABILITIES = [
 
 WORKAROUND = {
     "cn-test-failures issues": "exports (recipes 9, 10)",
+    "cn-test-failures contents": "none: the triage dataset clone needs a token with cn-test-failures Contents read (Contents write for access=rw); ask the user",
     "canton-network-internal contents": "ask the user for the file or commit",
     "canton-network-internal actions": "user saves logs to log/ci-triage-export/<ref>/",
     "canton-network-internal pulls": "ask the user, or the commit message",

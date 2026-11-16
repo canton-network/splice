@@ -19,6 +19,19 @@ import sys
 REPO = "DACH-NY/cn-test-failures"
 
 
+def comment_file(s: str) -> pathlib.Path:
+    """A comment body file from the triage dataset: <...>/ci-triage/rounds/<round>/comments/<name>.md.
+
+    Anything else is refused, so a command the user runs without reading it closely cannot post another file."""
+    p = pathlib.Path(s).resolve()
+    parts = p.parts
+    ok = (p.suffix == ".md" and len(parts) >= 5 and parts[-5:-3] == ("ci-triage", "rounds")
+          and parts[-2] == "comments" and p.is_file())
+    if not ok:
+        raise argparse.ArgumentTypeError(f"not an existing ci-triage/rounds/<round>/comments/<file>.md: {s!r}")
+    return p
+
+
 def state(repo: str, ref: int) -> str:
     out = subprocess.run(["gh", "issue", "view", str(ref), "-R", repo, "--json", "state"],
                          capture_output=True, text=True, check=True).stdout
@@ -32,10 +45,10 @@ def main() -> None:
     ap.add_argument("refs", nargs="+", type=int)
     body = ap.add_mutually_exclusive_group(required=True)
     body.add_argument("--comment", help="closing comment, the same for every issue")
-    body.add_argument("--comment-file", help="file with the closing comment (any characters, Markdown)")
+    body.add_argument("--comment-file", type=comment_file, help="comment body file ci-triage/rounds/<round>/comments/<file>.md in the dataset clone (any characters, Markdown)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    comment = args.comment if args.comment is not None else pathlib.Path(args.comment_file).read_text()
+    comment = args.comment if args.comment is not None else args.comment_file.read_text()
 
     failed = False
     for ref in dict.fromkeys(args.refs):

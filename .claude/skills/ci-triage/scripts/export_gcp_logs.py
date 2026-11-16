@@ -23,34 +23,44 @@ import shutil
 import subprocess
 import sys
 
+from export_dir import ref_dir
+from gcp_logs import project_id, utc_time
+
+CLUSTER = re.compile(r"[a-z]([-a-z0-9]{0,38}[a-z0-9])?")
+QUERY_NAME = re.compile(r"[A-Za-z0-9_-]{1,60}")
+
+
+def cluster_name(s: str) -> str:
+    if not CLUSTER.fullmatch(s):
+        raise argparse.ArgumentTypeError(f"not a GKE cluster name: {s!r}")
+    return s
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("ref", type=int, help="cn-test-failures issue number")
-    ap.add_argument("--project", required=True)
-    ap.add_argument("--cluster", help="resource.labels.cluster_name, e.g. cn-ciperiodicnet")
-    ap.add_argument("--start", required=True, help="UTC, e.g. 2026-11-12T00:45:00Z")
-    ap.add_argument("--end", required=True, help="UTC, e.g. 2026-11-12T01:38:00Z")
+    ap.add_argument("--project", required=True, type=project_id)
+    ap.add_argument("--cluster", type=cluster_name, help="resource.labels.cluster_name, e.g. cn-ciperiodicnet")
+    ap.add_argument("--start", required=True, type=utc_time, help="UTC, e.g. 2026-11-12T00:45:00Z")
+    ap.add_argument("--end", required=True, type=utc_time, help="UTC, e.g. 2026-11-12T01:38:00Z")
     ap.add_argument("--query", nargs=2, action="append", metavar=("NAME", "FILTER"), required=True,
                     help="output name and Logging query; repeat for several files")
     ap.add_argument("--limit", type=int, default=200000, help="max entries per query")
     args = ap.parse_args()
+    queries: list[list[str]] = args.query
+    for name, _ in queries:
+        if not QUERY_NAME.fullmatch(name):
+            ap.error(f"query name must be 1 to 60 letters, digits, - or _: {name!r}")
 
     if shutil.which("gcloud") is None:
         sys.exit("gcloud not found; install the Google Cloud CLI and run gcloud auth login")
-    root = subprocess.run(["git", "rev-parse", "--show-toplevel"], check=True, capture_output=True,
-                          text=True).stdout.strip()
-    ref_dir = os.path.join(root, "log", "ci-triage-export", str(args.ref))
-    out_dir = os.path.join(ref_dir, "gcp")
+    rdir = str(ref_dir(args.ref))
+    out_dir = os.path.join(rdir, "gcp")
     os.makedirs(out_dir, exist_ok=True)
 
     base = [f'timestamp>="{args.start}"', f'timestamp<="{args.end}"', 'resource.type="k8s_container"']
     if args.cluster:
         base.append(f'resource.labels.cluster_name="{args.cluster}"')
-    queries: list[list[str]] = args.query
-    for name, _ in queries:
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
-            sys.exit(f"query name must be letters, digits, - or _: {name!r}")
     for name, flt in queries:
         full = " AND ".join(base + [f"({flt})"])
         path = os.path.join(out_dir, f"{name}.json")
@@ -64,8 +74,8 @@ def main() -> None:
         n = len(entries)
         print(f"  {n} entries -> {path}" + ("  (hit --limit)" if n >= args.limit else ""), flush=True)
 
-    tar = os.path.join(ref_dir, f"{args.ref}-gcp-logs.tar.gz")
-    tar_cmd = ["tar", "-czf", tar, "-C", ref_dir, "gcp"]
+    tar = os.path.join(rdir, f"{args.ref}-gcp-logs.tar.gz")
+    tar_cmd = ["tar", "-czf", tar, "-C", rdir, "gcp"]
     print(" ".join(tar_cmd), flush=True)
     subprocess.run(tar_cmd, check=True)
     print(f"wrote {tar} ({os.path.getsize(tar)} bytes)")

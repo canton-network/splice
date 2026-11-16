@@ -11,15 +11,16 @@ repo root:
   direnv exec . .claude/skills/ci-triage/scripts/export_board.py                      # Inbox, Triaged, In progress
   direnv exec . .claude/skills/ci-triage/scripts/export_board.py --status Inbox
 Closed issues are skipped, whatever their Status.
-Writes log/ci-triage-export/<status>.jsonl (inbox.jsonl, triaged.jsonl, in-progress.jsonl) unless --out-dir is given.
+Writes log/ci-triage-export/<status>.jsonl (inbox.jsonl, triaged.jsonl, in-progress.jsonl) of this checkout.
 """
 import argparse
 import json
-import pathlib
 import subprocess
 import time
 from collections.abc import Iterator
 from typing import Any
+
+from export_dir import EXPORT_ROOT
 
 # Pass 1 pages through the whole board (thousands of closed items), so it fetches only what selects an item.
 ITEMS_QUERY = """
@@ -93,10 +94,9 @@ def pages(org: str, number: int) -> Iterator[list[Any]]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--status", action="append", choices=STATUSES, help="board Status to export, repeatable (default: " + ", ".join(DEFAULT_STATUSES) + ")")
-    ap.add_argument("--out-dir", default="log/ci-triage-export")
     args = ap.parse_args()
     statuses: list[str] = args.status or list(DEFAULT_STATUSES)
-    out_dir = pathlib.Path(args.out_dir)
+    out_dir = EXPORT_ROOT
 
     ids: dict[str, list[str]] = {s: [] for s in statuses}
     seen = 0

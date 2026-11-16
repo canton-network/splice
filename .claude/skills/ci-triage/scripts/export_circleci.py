@@ -11,7 +11,7 @@ Usage, from the repo root:
   direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py 11183 https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/88081/workflows/.../jobs/528694
   direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py 11183 528694 --all-steps
   direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py 11383 531501 --artifacts
-Writes log/ci-triage-export/<ref>/<job>-<step>.txt per step and <job>-steps.txt (name and status of every step).
+Writes log/ci-triage-export/<ref>/ of this checkout:<job>-<step>.txt per step and <job>-steps.txt (name and status of every step).
 With --artifacts also downloads the job's stored artifacts (test logs) to log/ci-triage-export/<ref>/<job>-artifacts/,
 optionally only those whose path matches --artifact-filter (a regex).
 """
@@ -24,7 +24,10 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-API = "https://circleci.com/api/v1.1/project/github/{slug}/{job}"
+from export_dir import ref_dir
+
+SLUG = "DACH-NY/canton-network-internal"
+API = "https://circleci.com/api/v1.1/project/github/" + SLUG + "/{job}"
 
 
 def get_json(url: str, token: str | None) -> Any:
@@ -53,9 +56,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("ref", type=int, help="cn-test-failures issue number, names the export directory")
     ap.add_argument("jobs", nargs="+", help="CircleCI job URLs or job numbers")
-    ap.add_argument("--slug", default="DACH-NY/canton-network-internal")
     ap.add_argument("--all-steps", action="store_true", help="save every step, not only failed ones")
-    ap.add_argument("--out", default="log/ci-triage-export")
     ap.add_argument("--artifacts", action="store_true", help="also download the job's stored artifacts")
     ap.add_argument("--artifact-filter", default="", help="regex on the artifact path (with --artifacts)")
     args = ap.parse_args()
@@ -63,7 +64,7 @@ def main() -> None:
     token = os.environ.get("CIRCLECI_TOKEN")
     if not token:
         raise SystemExit("set CIRCLECI_TOKEN to a CircleCI personal API token")
-    out = pathlib.Path(args.out) / str(args.ref)
+    out = ref_dir(args.ref)
     out.mkdir(parents=True, exist_ok=True)
 
     for job_arg in args.jobs:
@@ -71,7 +72,7 @@ def main() -> None:
         if not m:
             raise SystemExit(f"cannot find a job number in {job_arg}")
         job = m.group(1)
-        info = get_json(API.format(slug=args.slug, job=job), token)
+        info = get_json(API.format(job=job), token)
         summary = [f"job {job} {info.get('workflows', {}).get('job_name', '')} status={info.get('status')} "
                    f"branch={info.get('branch')} vcs_revision={info.get('vcs_revision')} start={info.get('start_time')}"]
         for i, step in enumerate(info.get("steps", [])):
@@ -91,7 +92,7 @@ def main() -> None:
                 path.write_text(text, encoding="utf-8", errors="replace")
                 print(f"{path} ({len(text)} chars, {status})")
         if args.artifacts:
-            arts = get_json(API.format(slug=args.slug, job=job) + "/artifacts", token)
+            arts = get_json(API.format(job=job) + "/artifacts", token)
             adir = out / f"{job}-artifacts"
             for art in arts:
                 apath = str(art.get("path", ""))

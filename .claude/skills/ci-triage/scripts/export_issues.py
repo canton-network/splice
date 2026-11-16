@@ -7,14 +7,15 @@
 
 Runs on the host (needs a gh login that can read the repository). Usage, from the repo root:
   direnv exec . .claude/skills/ci-triage/scripts/export_issues.py --since 2026-10-19
-Writes log/ci-triage-export/issues-since-<date>.jsonl unless --out is given.
+Writes log/ci-triage-export/issues-since-<date>.jsonl of this checkout.
 """
 import argparse
 import datetime
 import json
-import pathlib
 import subprocess
 from typing import Any
+
+from export_dir import EXPORT_ROOT
 
 REPO = "DACH-NY/cn-test-failures"
 FIELDS = "number,title,state,stateReason,createdAt,closedAt,assignees,labels,body,comments"
@@ -38,9 +39,8 @@ def fetch_window(repo: str, start: datetime.date, end: datetime.date) -> list[di
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", required=True, type=datetime.date.fromisoformat, help="creation date, YYYY-MM-DD")
-    ap.add_argument("--out")
     args = ap.parse_args()
-    out = pathlib.Path(args.out or f"log/ci-triage-export/issues-since-{args.since}.jsonl")
+    out = EXPORT_ROOT / f"issues-since-{args.since}.jsonl"
 
     issues: dict[int, dict[str, Any]] = {}
     start: datetime.date = args.since

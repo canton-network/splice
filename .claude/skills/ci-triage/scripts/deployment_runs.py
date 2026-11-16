@@ -11,7 +11,7 @@ Runs on the host and needs a CircleCI personal API token in CIRCLECI_TOKEN; the 
 and never written to a file. Usage, from the repo root:
   direnv exec . .claude/skills/ci-triage/scripts/deployment_runs.py                       # all workflows, last 7 days
   direnv exec . .claude/skills/ci-triage/scripts/deployment_runs.py --days 3 --workflow 'deploy_.*' --excerpts
-Writes log/ci-triage-export/circleci-runs-<UTC date>.jsonl unless --out is given.
+Writes log/ci-triage-export/circleci-runs-<UTC date>.jsonl of this checkout.
 
 Per run: pipeline (number, branch, revision, commit subject, actor), workflow (name, id, status, created, stopped,
 url) and, for runs that did not succeed, their jobs (name, number, status, started, stopped, url). With
@@ -23,13 +23,14 @@ import argparse
 import datetime
 import json
 import os
-import pathlib
 import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+
+from export_dir import EXPORT_ROOT
 
 PROJECT_SLUG = "github/DACH-NY/canton-network-internal"
 API_V2 = "https://circleci.com/api/v2"
@@ -117,14 +118,13 @@ def main() -> None:
     ap.add_argument("--workflow", default=".*", help="regex the whole workflow name must match")
     ap.add_argument("--excerpts", action="store_true", help="add failed steps, issue URL and splice commit per failed job")
     ap.add_argument("--lines", type=int, default=40, help="excerpt length in lines")
-    ap.add_argument("--out")
     args = ap.parse_args()
 
     token = os.environ.get("CIRCLECI_TOKEN")
     if not token:
         raise SystemExit("set CIRCLECI_TOKEN to a CircleCI personal API token")
     now = datetime.datetime.now(datetime.timezone.utc)
-    out = pathlib.Path(args.out or f"log/ci-triage-export/circleci-runs-{now:%Y-%m-%d}.jsonl")
+    out = EXPORT_ROOT / f"circleci-runs-{now:%Y-%m-%d}.jsonl"
     name_re = re.compile(args.workflow)
 
     pipelines = recent_pipelines(token, now - datetime.timedelta(days=args.days))
