@@ -31,7 +31,7 @@ function isBranchReference(ref: string): boolean {
 // - only branch refs (`refs/heads/...`) are comparable; tags or missing refs are never skipped.
 export function migrationFollowsReference(
   migration: MigrationInfo,
-  currentRef: string,
+  normalizedCurrent: string,
   activeMigration: MigrationInfo
 ): boolean {
   const trackedRef = (migration.releaseReference ?? activeMigration.releaseReference)?.gitReference;
@@ -39,7 +39,6 @@ export function migrationFollowsReference(
     return true;
   }
   const normalizedTracked = normalizeGitReference(trackedRef);
-  const normalizedCurrent = normalizeGitReference(currentRef);
   if (!isBranchReference(normalizedTracked) || !isBranchReference(normalizedCurrent)) {
     return true;
   }
@@ -64,16 +63,25 @@ export function migrationsFollowingReference(
     return all;
   }
   console.error(`Only running for migrations following ${currentRef}`);
-  return all.filter(migration => {
+
+  const filteredMigrations = all.filter(migration => {
     const follows = migrationFollowsReference(migration, currentRef, activeMigration);
     if (!follows) {
       const trackedRef =
         migration.releaseReference?.gitReference ?? '<inherited from active migration>';
       console.error(
         `Skipping migration ${migration.id} (version ${describeVersion(migration)}): ` +
-          `it follows ${trackedRef}, not ${currentRef}`
+        `it follows ${trackedRef}, not ${currentRef}`
       );
     }
     return follows;
   });
+
+  if (filteredMigrations.length === 0) {
+    throw new Error(
+      `Sanity check failed: No migrations found tracking ${currentRef}.`
+    );
+  }
+
+  return filteredMigrations;
 }

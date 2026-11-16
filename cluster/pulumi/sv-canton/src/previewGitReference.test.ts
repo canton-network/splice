@@ -3,12 +3,20 @@
 import type { MigrationInfo } from '@canton-network/splice-pulumi-common/src/domainMigration';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import {
-  migrationFollowsReference,
-  migrationsFollowingReference,
-  normalizeGitReference,
-  parsePreviewGitReference,
-} from './previewGitReference';
+
+
+import { migrationFollowsReference, migrationsFollowingReference, normalizeGitReference, parsePreviewGitReference } from './previewGitReference';
+
+
+
+
+
+
+
+
+
+
+
 
 const CURRENT = 'refs/heads/release-line-0.6.7';
 const OTHER = 'refs/heads/release-line-0.4.25';
@@ -82,12 +90,6 @@ describe('migrationFollowsReference', () => {
     expect(migrationFollowsReference(migration(3, TAG), CURRENT, active)).toBe(true);
     expect(migrationFollowsReference(migration(3, OTHER), TAG, active)).toBe(true);
   });
-
-  test('normalizes bare branch names before comparing', () => {
-    expect(migrationFollowsReference(migration(4, CURRENT), 'release-line-0.6.7', active)).toBe(
-      true
-    );
-  });
 });
 
 describe('migrationsFollowingReference', () => {
@@ -112,4 +114,12 @@ describe('migrationsFollowingReference', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping migration 3'));
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(OTHER));
   });
+
+  test('throws an error if no migrations match', () => {
+    const noneMatch = [migration(3, OTHER)];
+    expect(() => migrationsFollowingReference(noneMatch, CURRENT, active)).toThrow(
+      'Sanity check failed: No migrations found tracking refs/heads/release-line-0.6.7.'
+    );
+  });
+
 });
