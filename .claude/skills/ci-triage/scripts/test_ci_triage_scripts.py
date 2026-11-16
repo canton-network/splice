@@ -10,6 +10,7 @@ import tempfile
 import importlib
 import io
 import pathlib
+import shlex
 import sys
 import unittest
 from unittest import mock
@@ -74,9 +75,19 @@ class ArgumentValidationTest(unittest.TestCase):
     GCP_OK = ["--project", "da-cn-ci", "--start", "2026-11-03T09:15:00Z", "--end", "2026-11-03T09:45:00Z"]
 
     def test_gcp_logs_valid(self) -> None:
-        code, out, _ = run_main("gcp_logs", self.GCP_OK + ["--filter", "severity>=ERROR"])
+        code, out, _ = run_main("gcp_logs", self.GCP_OK + ["--filter", 'resource.labels.x="a b"'])
         self.assertIsNone(code)
-        self.assertIn("--project 'da-cn-ci'", out)
+        command = out.splitlines()[-1]
+        self.assertEqual(shlex.split(command)[:6], [
+            "gcloud", "logging", "read",
+            'timestamp>="2026-11-03T09:15:00Z" AND timestamp<="2026-11-03T09:45:00Z" AND (resource.labels.x="a b")',
+            "--project", "da-cn-ci"])
+
+    def test_gcp_logs_rejects_quote_and_backslash(self) -> None:
+        for flt in ["a='b'", "a=b\\c"]:
+            with self.subTest(filter=flt):
+                code, _, _ = run_main("gcp_logs", self.GCP_OK + ["--filter", flt])
+                self.assertIn("single quotes or backslashes", str(code))
 
     def test_gcp_logs_rejects(self) -> None:
         bad = {

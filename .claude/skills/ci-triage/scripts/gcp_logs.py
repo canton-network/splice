@@ -12,6 +12,7 @@ Filters are Logging query language lines, ANDed.
 """
 import argparse
 import re
+import shlex
 import urllib.parse
 
 PROJECT = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
@@ -43,13 +44,17 @@ def main() -> None:
     url = ("https://console.cloud.google.com/logs/query;query=" + urllib.parse.quote(query, safe="")
            + f";startTime={args.start};endTime={args.end}?project={urllib.parse.quote(args.project)}")
     gcloud_filter = " AND ".join([f'timestamp>="{args.start}"', f'timestamp<="{args.end}"'] + [f"({f})" for f in args.filter])
+    # shlex quotes for POSIX shells; fish also treats \\ and \' as escapes inside single quotes, so neither may occur.
     if "'" in gcloud_filter or "\\" in gcloud_filter:
         raise SystemExit("filter must not contain single quotes or backslashes (shell-neutral command)")
     print(url)
     print()
-    print(f"gcloud logging read '{gcloud_filter}' --project '{args.project}' --order asc --limit {args.limit}"
-          " --format 'value(timestamp,severity,resource.labels.service_name,resource.labels.function_name,"
-          "httpRequest.status,textPayload,jsonPayload.message)'")
+    print(shlex.join([
+        "gcloud", "logging", "read", gcloud_filter, "--project", args.project, "--order", "asc",
+        "--limit", str(args.limit), "--format",
+        "value(timestamp,severity,resource.labels.service_name,resource.labels.function_name,"
+        "httpRequest.status,textPayload,jsonPayload.message)",
+    ]))
 
 
 if __name__ == "__main__":
