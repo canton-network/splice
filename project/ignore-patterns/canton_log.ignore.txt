@@ -112,7 +112,7 @@ Failed to send commitment message batch for period CommitmentPeriod.*RequestRefu
 Failed to send commitment message batch for period CommitmentPeriod.*RequestInvalid\(Unregistered
 SEQUENCER_UNKNOWN_RECIPIENTS.*(?:alice-validatorLocalForValidatorReonboardingIT|da-ComposeValidator-1)
 
-# TODO(#919) Figure out where this is coming from
+# TODO(#447) Figure out where this is coming from
 Instrument rpc\.server\.duration has exceeded the maximum allowed cardinality
 Too many log messages detected
 
