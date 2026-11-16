@@ -368,8 +368,8 @@ function installBigqueryDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.
     friendlyName: `${scanBigQuery.dataset} Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true, //retaining old value
-    // TODO (canton-network/splice#1167) reduce time travel window
-    // from 7-day default to 2 days if it makes a cost difference
+    // TODO (#1167) reduce time travel window from 7-day default to 2
+    // days if it makes a cost difference
     labels: {
       cluster: CLUSTER_BASENAME,
       datastream_id: 'legacy',
