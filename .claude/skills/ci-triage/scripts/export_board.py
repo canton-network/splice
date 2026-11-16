@@ -20,7 +20,7 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
-from export_dir import EXPORT_ROOT
+from export_dir import export_root
 
 # Pass 1 pages through the whole board (thousands of closed items), so it fetches only what selects an item.
 ITEMS_QUERY = """
@@ -96,7 +96,7 @@ def main() -> None:
     ap.add_argument("--status", action="append", choices=STATUSES, help="board Status to export, repeatable (default: " + ", ".join(DEFAULT_STATUSES) + ")")
     args = ap.parse_args()
     statuses: list[str] = args.status or list(DEFAULT_STATUSES)
-    out_dir = EXPORT_ROOT
+    out_dir = export_root()
 
     ids: dict[str, list[str]] = {s: [] for s in statuses}
     seen = 0

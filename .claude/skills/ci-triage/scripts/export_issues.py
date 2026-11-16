@@ -15,7 +15,7 @@ import json
 import subprocess
 from typing import Any
 
-from export_dir import EXPORT_ROOT
+from export_dir import export_root
 
 REPO = "DACH-NY/cn-test-failures"
 FIELDS = "number,title,state,stateReason,createdAt,closedAt,assignees,labels,body,comments"
@@ -40,7 +40,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", required=True, type=datetime.date.fromisoformat, help="creation date, YYYY-MM-DD")
     args = ap.parse_args()
-    out = EXPORT_ROOT / f"issues-since-{args.since}.jsonl"
+    out = export_root() / f"issues-since-{args.since}.jsonl"
 
     issues: dict[int, dict[str, Any]] = {}
     start: datetime.date = args.since

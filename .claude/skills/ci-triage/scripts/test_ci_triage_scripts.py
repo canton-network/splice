@@ -153,12 +153,13 @@ class ArgumentValidationTest(unittest.TestCase):
         code, _, err = run_main("export_circleci", ["1", "2", "--slug", "x/y"])
         self.assertEqual(code, 2)
 
-    def test_export_root_is_in_this_checkout(self) -> None:
-        export_root = importlib.import_module("export_dir").EXPORT_ROOT
-        checkout = pathlib.Path(__file__).resolve().parents[4]
-        self.assertEqual(export_root, checkout / "log" / "ci-triage-export")
-        self.assertTrue((checkout / "AGENTS.md").is_file())
-        self.assertEqual(importlib.import_module("export_dir").ref_dir(5), export_root / "5")
+    def test_export_root_from_splice_root(self) -> None:
+        export_dir = importlib.import_module("export_dir")
+        with mock.patch.dict(os.environ, {"SPLICE_ROOT": "/checkout"}):
+            self.assertEqual(export_dir.export_root(), pathlib.Path("/checkout/log/ci-triage-export"))
+            self.assertEqual(export_dir.ref_dir(5), pathlib.Path("/checkout/log/ci-triage-export/5"))
+        with mock.patch.dict(os.environ, {"SPLICE_ROOT": ""}), self.assertRaises(SystemExit):
+            export_dir.export_root()
 
     def test_comment_file(self) -> None:
         comment_file = importlib.import_module("close_duplicates").comment_file

@@ -30,7 +30,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from export_dir import EXPORT_ROOT
+from export_dir import export_root
 
 PROJECT_SLUG = "github/DACH-NY/canton-network-internal"
 API_V2 = "https://circleci.com/api/v2"
@@ -124,7 +124,7 @@ def main() -> None:
     if not token:
         raise SystemExit("set CIRCLECI_TOKEN to a CircleCI personal API token")
     now = datetime.datetime.now(datetime.timezone.utc)
-    out = EXPORT_ROOT / f"circleci-runs-{now:%Y-%m-%d}.jsonl"
+    out = export_root() / f"circleci-runs-{now:%Y-%m-%d}.jsonl"
     name_re = re.compile(args.workflow)
 
     pipelines = recent_pipelines(token, now - datetime.timedelta(days=args.days))
