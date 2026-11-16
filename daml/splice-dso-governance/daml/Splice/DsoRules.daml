@@ -1278,7 +1278,6 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
-        -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
         svOnboardingRequest <- fetchAndArchive (ForDso with dso) svOnboardingRequestCid
         let maybeSv = Map.lookup svOnboardingRequest.candidateParty svs
         require "SV party is an SV" (isSome maybeSv)
