@@ -3,20 +3,12 @@
 import type { MigrationInfo } from '@canton-network/splice-pulumi-common/src/domainMigration';
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-
-
-import { migrationFollowsReference, migrationsFollowingReference, normalizeGitReference, parsePreviewGitReference } from './previewGitReference';
-
-
-
-
-
-
-
-
-
-
-
+import {
+  migrationFollowsReference,
+  migrationsFollowingReference,
+  normalizeGitReference,
+  parsePreviewGitReference,
+} from './previewGitReference';
 
 const CURRENT = 'refs/heads/release-line-0.6.7';
 const OTHER = 'refs/heads/release-line-0.4.25';
@@ -121,5 +113,4 @@ describe('migrationsFollowingReference', () => {
       'Sanity check failed: No migrations found tracking refs/heads/release-line-0.6.7.'
     );
   });
-
 });
