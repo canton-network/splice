@@ -439,6 +439,102 @@ describe('replicatedTablesFor', () => {
     expect(migrating).toEqual(['scan_verdict_store', 'app_activity_record_store']);
   });
 
+  // Production tables keep the columns they were created with, and
+  // only a column with a `since` makes its table check and fix them.
+  // So a column added to Postgres later must get a `since`; a column
+  // listed without one would fail every append of an older production
+  // table. Extend this only for a new table, or a new column on a table
+  // with a `since` of its own that no deployment replicates yet.
+  test('columns without a `since` are those production tables were created with', async () => {
+    const { loadReplicatedTablesConfig } = await import('./bigQueryReplicatedTables');
+    const plainColumns = Object.fromEntries(
+      Object.entries(loadReplicatedTablesConfig()).map(([tableName, table]) => [
+        tableName,
+        table.columns.filter(column => typeof column === 'string'),
+      ])
+    );
+    expect(plainColumns).toEqual({
+      update_history_creates: [
+        'history_id',
+        'row_id',
+        'ingested_at',
+        'event_id',
+        'update_row_id',
+        'contract_id',
+        'created_at',
+        'template_id_package_id',
+        'template_id_module_name',
+        'template_id_entity_name',
+        'package_name',
+        'create_arguments',
+        'signatories',
+        'observers',
+        'contract_key',
+        'record_time',
+        'update_id',
+        'domain_id',
+        'migration_id',
+      ],
+      update_history_exercises: [
+        'history_id',
+        'row_id',
+        'ingested_at',
+        'event_id',
+        'update_row_id',
+        'child_event_ids',
+        'choice',
+        'template_id_package_id',
+        'template_id_module_name',
+        'template_id_entity_name',
+        'contract_id',
+        'consuming',
+        'argument',
+        'result',
+        'package_name',
+        'interface_id_package_id',
+        'interface_id_module_name',
+        'interface_id_entity_name',
+        'acting_parties',
+        'record_time',
+        'update_id',
+        'domain_id',
+        'migration_id',
+      ],
+      scan_verdict_store: [
+        'row_id',
+        'ingested_at',
+        'migration_id',
+        'domain_id',
+        'record_time',
+        'finalization_time',
+        'submitting_participant_uid',
+        'verdict_result',
+        'mediator_group',
+        'update_id',
+        'submitting_parties',
+        'transaction_root_views',
+        'history_id',
+        'total_traffic_cost',
+        'envelope_traffic_costs',
+      ],
+      scan_verdict_transaction_view_store: [
+        'verdict_row_id',
+        'view_id',
+        'informees',
+        'confirming_parties',
+        'sub_views',
+      ],
+      app_activity_record_store: [
+        'history_id',
+        'verdict_row_id',
+        'round_number',
+        'app_provider_parties',
+        'app_activity_weights',
+      ],
+      interned_strings: ['id', 'value'],
+    });
+  });
+
   test('rejects a `since` that is not an allowed migration', async () => {
     const { ReplicatedTablesConfigSchema } = await import('./bigQueryReplicatedTables');
     const table = {
