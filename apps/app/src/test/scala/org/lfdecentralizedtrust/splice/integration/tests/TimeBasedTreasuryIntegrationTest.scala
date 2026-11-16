@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
   updateAllSvAppFoundDsoConfigs_,
+  updateAllValidatorConfigs,
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
@@ -17,11 +18,20 @@ import org.lfdecentralizedtrust.splice.util.{
   TriggerTestUtil,
   WalletTestUtil,
 }
-import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
-import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
+import org.lfdecentralizedtrust.splice.validator.automation.{
+  ReceiveFaucetCouponTrigger,
+  TopupMemberTrafficTrigger,
+}
+import org.lfdecentralizedtrust.splice.wallet.automation.{
+  CollectRewardsAndMergeAmuletsTrigger,
+  OperatorBalanceMonitor,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletTrigger
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.logging.SuppressionRule
 import monocle.macros.syntax.lens.*
+
+import org.slf4j.event.Level
 
 import java.time.Duration
 
@@ -36,6 +46,9 @@ class TimeBasedTreasuryIntegrationTest
   // without running into problematic because of, e.g., create fees.
   val holdingFee = BigDecimal(0.5)
 
+  // The limit above which alice's validator operator stops collecting rewards after a while.
+  private val maxOperatorBalance = BigDecimal(100)
+
   override def environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
@@ -48,6 +61,12 @@ class TimeBasedTreasuryIntegrationTest
         updateAllSvAppFoundDsoConfigs_(c => c.focus(_.initialHoldingFee).replace(holdingFee))(
           config
         )
+      )
+      .addConfigTransforms((_, config) =>
+        updateAllValidatorConfigs {
+          case ("aliceValidator", c) => c.copy(maxAllowedOperatorBalance = maxOperatorBalance)
+          case (_, c) => c
+        }(config)
       )
       // TODO (#965) remove and fix test failures
       .withAmuletPrice(walletAmuletPrice)
@@ -116,6 +135,61 @@ class TimeBasedTreasuryIntegrationTest
           _.payload.round.number == 1
         ) should have size 0 withClue "round 1 ValidatorRewardCoupons"
     })
+  }
+
+  "stop collecting the operator's rewards once its balance was above the limit for too long" in {
+    implicit env =>
+      onboardAliceAndBob()
+      waitForWalletUser(aliceValidatorWalletClient)
+      val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+
+      // The operator's top-ups are transfers that would collect reward coupons as inputs,
+      // which would hide whether CollectRewardsAndMergeAmuletsTrigger does so.
+      aliceValidatorBackend.appState.automation
+        .trigger[TopupMemberTrafficTrigger]
+        .pause()
+        .futureValue
+
+      def createOperatorRewardAndMakeItCollectable() = {
+        createRewards(
+          validatorRewards = Seq.empty,
+          appRewards = Seq((aliceValidatorParty, 0.43, false)),
+        )
+        eventually()(
+          aliceValidatorWalletClient
+            .listAppRewardCoupons() should have size 1 withClue "alice validator AppRewardCoupons"
+        )
+        // advance such that the issuing round of the coupon is open to rewards collection
+        advanceRoundsToNextRoundOpening
+        advanceRoundsToNextRoundOpening
+        advanceRoundsToNextRoundOpening
+        advanceTimeForRewardAutomationToRunForCurrentRound
+      }
+
+      clue("Rewards are collected while the operator balance is below the limit") {
+        createOperatorRewardAndMakeItCollectable()
+        eventually()(
+          aliceValidatorWalletClient
+            .listAppRewardCoupons() should have size 0 withClue "alice validator AppRewardCoupons"
+        )
+      }
+
+      clue("Push the operator balance above the limit for longer than allowed") {
+        aliceValidatorWalletClient.tap(maxOperatorBalance + 100)
+        advanceTime(OperatorBalanceMonitor.maxTimeAboveLimit.plus(Duration.ofHours(1)))
+      }
+
+      clue("Rewards are not collected anymore") {
+        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+          createOperatorRewardAndMakeItCollectable(),
+          logEntries =>
+            forAtLeast(1, logEntries)(
+              _.warningMessage should include("Not collecting rewards")
+            ),
+        )
+        aliceValidatorWalletClient
+          .listAppRewardCoupons() should have size 1 withClue "alice validator AppRewardCoupons"
+      }
   }
 
   "allow calling tap, list the created amulets, and get the balance - locally and remotely" in {
