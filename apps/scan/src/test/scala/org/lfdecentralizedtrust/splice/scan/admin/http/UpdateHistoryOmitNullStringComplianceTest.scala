@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.admin.http
 
 import com.digitalasset.canton.BaseTest
-import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullString}
+import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullLong, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   ActivityRecord,
   AppActivityRecord,
@@ -24,6 +24,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryTransactionV2,
   UpdateHistoryTransactionV2WithHash,
   UpdateHistoryUnassignment,
+  VerdictResult,
 }
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -37,12 +38,13 @@ import scala.reflect.runtime.universe.*
   * When a new optional field is added, SVs that have the field emit `"field": null` while
   * SVs that don't have the field omit the key entirely — causing JSON divergence.
   *
-  * The permitted optional types are `Option[OmitNullString]` and `Option[OmitNullArray[_]]`;
-  * both are handled by [[ScanJsonSupport]] to omit the key from JSON when `None`.
+  * The permitted optional types are `Option[OmitNullString]`, `Option[OmitNullLong]` and
+  * `Option[OmitNullArray[_]]`; all are handled by [[ScanJsonSupport]] to omit the key from
+  * JSON when `None`.
   *
   * Any other `Option[_]` field on these types will cause this test to fail, guiding the
-  * developer to either make the field required or use `OmitNullString` / `OmitNullArray`
-  * with the necessary wiring in `ScanJsonSupport`.
+  * developer to either make the field required or use `OmitNullString` / `OmitNullLong` /
+  * `OmitNullArray` with the necessary wiring in `ScanJsonSupport`.
   */
 class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTest {
 
@@ -64,25 +66,28 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
       .getOrElse(fail(s"No primary constructor found for ${tpe.typeSymbol.name}"))
   }
 
-  /** Returns all `Option[_]` fields that are NOT one of the sanctioned
-    * omit-when-None types (`Option[OmitNullString]` or `Option[OmitNullArray[_]]`).
+  /** Returns all `Option[_]` fields that are NOT one of the sanctioned omit-when-None types
+    * (`Option[OmitNullString]`, `Option[OmitNullLong]` or `Option[OmitNullArray[_]]`).
     */
   private def unsafeOptionFields[A: TypeTag]: List[String] = {
-    val omitNullStringOption = typeOf[Option[OmitNullString]]
     val omitNullArrayCtor = typeOf[OmitNullArray[Any]].typeConstructor
     primaryConstructor[A].paramLists.flatten.collect {
       case param
           if param.typeSignature.typeConstructor =:= typeOf[Option[Any]].typeConstructor &&
-            !(param.typeSignature =:= omitNullStringOption) &&
+            !isOmitNullScalarOption(param.typeSignature) &&
             !param.typeSignature.typeArgs.headOption
               .exists(_.typeConstructor =:= omitNullArrayCtor) =>
         param.name.toString
     }
   }
 
+  private def isOmitNullScalarOption(tpe: Type): Boolean =
+    tpe =:= typeOf[Option[OmitNullString]] || tpe =:= typeOf[Option[OmitNullLong]]
+
+  /** The `Option[OmitNullString]` and `Option[OmitNullLong]` fields of `A`. */
   private def omitNullStringFields[A: TypeTag]: List[String] =
     primaryConstructor[A].paramLists.flatten.collect {
-      case param if param.typeSignature =:= typeOf[Option[OmitNullString]] =>
+      case param if isOmitNullScalarOption(param.typeSignature) =>
         param.name.toString
     }
 
@@ -132,6 +137,7 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
       omitNullStringFields[UpdateHistoryTransaction] should contain("externalTransactionHash")
       omitNullStringFields[UpdateHistoryTransactionV2] should contain("externalTransactionHash")
       unsafeOptionFields[ExercisedEvent] should contain("interfaceId")
+      omitNullStringFields[EventHistoryVerdict] should contain("roundNumber")
 
       // Verify that unsafeOptionFields catches Option[_] of any type parameter, not just String
       unsafeOptionFields[HasOptionInt] should contain("y")
@@ -227,6 +233,28 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
         .Encoder[EventHistoryItem]
         .apply(EventHistoryItem())
 
+      val verdict = EventHistoryVerdict(
+        updateId = "",
+        migrationId = 0L,
+        domainId = "",
+        recordTime = "",
+        finalizationTime = "",
+        submittingParties = Vector.empty,
+        submittingParticipantUid = "",
+        verdictResult = VerdictResult.VerdictResultAccepted,
+        mediatorGroup = 0,
+        transactionViews = TransactionViews(views = Vector.empty, rootViews = Vector.empty),
+      )
+      val eventHistoryVerdictJson = io.circe.Encoder[EventHistoryVerdict].apply(verdict)
+      // The verdict is nested in EventHistoryItem, so check it is omitted there too
+      val nestedVerdictJson = io.circe
+        .Encoder[EventHistoryItem]
+        .apply(EventHistoryItem(verdict = Some(verdict)))
+        .hcursor
+        .downField("verdict")
+        .focus
+        .getOrElse(fail("verdict missing from encoded EventHistoryItem"))
+
       val unhandled = Seq(
         new TypeCheck[UpdateHistoryTransaction]("UpdateHistoryTransaction", txV0Json),
         new TypeCheck[UpdateHistoryTransactionV2]("UpdateHistoryTransactionV2", txV2Json),
@@ -235,6 +263,8 @@ class UpdateHistoryOmitNullStringComplianceTest extends AnyWordSpec with BaseTes
           txV2WithHashJson,
         ),
         new TypeCheck[EventHistoryItem]("EventHistoryItem", eventHistoryItemJson),
+        new TypeCheck[EventHistoryVerdict]("EventHistoryVerdict", eventHistoryVerdictJson),
+        new TypeCheck[EventHistoryVerdict]("EventHistoryItem.verdict", nestedVerdictJson),
       ).flatMap(_.check).collect { case (desc, true) => desc }
 
       if (unhandled.nonEmpty) {

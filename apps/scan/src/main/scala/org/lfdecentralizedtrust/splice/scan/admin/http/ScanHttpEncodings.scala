@@ -14,7 +14,7 @@ import com.google.protobuf.ByteString
 import io.circe.Json
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.ledger.api as ledgerApi
-import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullString}
+import org.lfdecentralizedtrust.splice.http.{OmitNullArray, OmitNullLong, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItem,
@@ -611,7 +611,7 @@ object ScanHttpEncodings {
       verdictResult = verdictResultEnum,
       mediatorGroup = verdict.mediatorGroup,
       transactionViews = txViews,
-      roundNumber = if (includeRound) verdict.roundNumber else None,
+      roundNumber = if (includeRound) verdict.roundNumber.map(OmitNullLong(_)) else None,
     )
   }
 
