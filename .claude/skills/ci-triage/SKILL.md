@@ -1,23 +1,75 @@
 ---
 name: ci-triage
-description: 'Triage one DACH-NY/cn-test-failures issue (auto-filed for a failed GitHub Actions or CircleCI job) into a reproducible evidence packet - resolve the issue to its exact CI job, fetch the job log and artifacts, isolate the flagged lines or failing assertion, check known flake families and recent issues for duplicates, find the root cause with commands and verbatim log output, record it on the triage branch, and suggest one action on the issue (comment, close as duplicate, Status) for the user to review. Use for "triage cn-test-failures #N", "is this a dup", "root cause of shard failure", checkErrors WARN/ERROR failures, integration test flakes. For the whole inbox use ci-triage-inbox; to write the fix use ci-triage-fix.'
+description: 'Triage one DACH-NY/cn-test-failures issue (auto-filed for a failed GitHub Actions or CircleCI job) into a reproducible evidence packet - resolve the issue to its exact CI job, fetch the job log and artifacts, isolate the flagged lines or failing assertion, check known flake families and recent issues for duplicates, find the root cause with commands and verbatim log output, record it in the triage dataset (DACH-NY/cn-test-failures), and suggest one action on the issue (comment, close as duplicate, Status) for the user to review. Use for "triage cn-test-failures #N", "is this a dup", "root cause of shard failure", checkErrors WARN/ERROR failures, integration test flakes. For the whole inbox use ci-triage-inbox; to write the fix use ci-triage-fix.'
+argument-hint: '[ref] [repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=log/cn-test-failures] [access=ro|rw]'
 ---
 
 # Triage one cn-test-failures issue
 
-Context, access to private data and conventions: `ci-triage/CLAUDE.md` on the triage branch. Read it first; if the
-triage branch is not checked out, ask the user which one is current before writing anything.
+Context, access to private data and conventions: `<D>/CLAUDE.md` in the triage dataset (section Dataset: where it
+is and how to set it up). Read it first.
 
 Input: one ref. Read its body and comments with the method `probe_access.py` reports for cn-test-failures issues
-(`ci-triage/CLAUDE.md` on the triage branch, Access). If no method has it, stop and ask the user to fix access or rerun the export.
+(`<D>/CLAUDE.md`, Access). If no method has it, stop and ask the user to fix access or rerun the export.
 
-Output: a packet `ci-triage/evidence/<ref>-<slug>.md`, its row in `ci-triage/evidence/INDEX.tsv`, a duplicate verdict,
+Output: a packet `<D>/evidence/<ref>-<slug>.md`, its row in `<D>/evidence/INDEX.tsv`, a duplicate verdict,
 and one suggested action on the issue (commands plus comment body) for the user. Everything you write must be reproducible by someone else:
 every claim is a command plus its verbatim output.
 
 When run as one of several parallel agents (ci-triage-inbox), follow the brief: it usually limits you to your own
 packet and the round files of your group, and asks for the INDEX rows, catalogue notes and commands instead of
 edits to shared files.
+
+## Dataset
+
+The triage records live in their own repository, not in splice: packets (`evidence/`), `evidence/INDEX.tsv`,
+`known-families.md`, `STATE.md`, `rounds/`, `lessons/`, and `CLAUDE.md` with access, priority and conventions, all
+under `ci-triage/`. The three ci-triage skills take its location as arguments (`key=value` in the skill
+arguments; an inbox round passes them on to its background agents):
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `repo` | `DACH-NY/cn-test-failures` | GitHub repository of the dataset (private) |
+| `branch` | `app-dev/ci-triage` | its branch |
+| `dir` | `log/cn-test-failures` | the local clone, relative to the splice checkout root (`log/` is gitignored) |
+| `access` | `ro` | `ro`: the sandbox can read the repository but not push, so the user pushes; `rw`: it pushes itself |
+
+`<D>` below and in the other two skills is `<dir>/ci-triage`. Arguments given: $ARGUMENTS
+
+Setup, once per session, before reading anything in `<D>`:
+```
+git clone --single-branch --branch <branch> https://github.com/<repo>.git <dir>     # <dir> missing
+git -C <dir> fetch origin <branch> && git -C <dir> merge --ff-only origin/<branch>    # <dir> present
+```
+A 403 or "not found" means the sandbox token cannot read `<repo>`: stop and tell the user. When the merge is not a
+fast-forward, the clone has commits that were never handed over or not yet pushed: show `git -C <dir> log --oneline
+origin/<branch>...HEAD` and ask the user before rebasing or resetting.
+
+Commits: in `<dir>`, only paths under `ci-triage/`, `git -C <dir> add <paths> && git -C <dir> commit -s -m
+'<subject>' -- <paths>` (never `-a`; on `index.lock` errors wait and retry). No CI tags: the dataset repository runs
+no CI for it.
+
+Hand-over, after the commits a user needs (comment body files, packets) and before printing commands that use them:
+- `access=rw`: `git -C <dir> push origin <branch>`.
+- `access=ro`: write a bundle of the commits the remote lacks, and give the user the commands to apply it:
+  ```
+  B=$PWD/log/ci-triage-$(date -u +%Y%m%dT%H%M%SZ).bundle
+  git -C <dir> bundle create $B origin/<branch>..<branch>      # refuses an empty bundle: nothing to hand over
+  git remote | sed -n 's/^sandbox-//p'        # the sandbox name
+  ```
+  For the user, on the host (`<checkout>` is their clone of `<repo>` on `<branch>`; `sbx cp` takes
+  `<sandbox>:<path>` like `docker cp`, check `sbx cp --help` if it complains):
+  ```
+  sbx cp <sandbox name>:<B> <checkout>/
+  git -C <checkout> pull --ff-only <checkout>/<bundle file name> <branch>
+  git -C <checkout> push origin <branch>
+  ```
+  When the host branch has moved on, a plain `git pull` (merge) instead of `--ff-only`; never a rebase, which
+  orphans the commits in the sandbox clone. Then `rm` the bundle on both sides.
+
+Exports: scripts that the user runs on the host write to `log/ci-triage-export/` in the host splice checkout; read
+them in the sandbox as `/run/sandbox/source/log/ci-triage-export/` (clone mode). Logs the user saves for a ref go
+to `log/ci-triage-export/<ref>/`.
 
 ## Procedure
 
@@ -38,10 +90,10 @@ edits to shared files.
    - `*** FAILED ***` = assertion or command failure: take the failing clue and stack head.
    - no report, job cancelled or exit without summary = evidence loss (JVM exit, timeout); say so.
    canton-network-internal Actions: recipes 1 and 3 through the method chosen for that capability; without one, the
-   logs the user saved in `export/<ref>/`. CircleCI: always the user's download in `export/<ref>/`. If the needed
-   logs are not reachable either way, name the exact job and step to download and stop.
+   logs the user saved in `log/ci-triage-export/<ref>/`. CircleCI: always the user's download there (recipe 14).
+   If the needed logs are not reachable either way, name the exact job and step to download and stop.
 3. Duplicate check BEFORE deep analysis: compare the flagged line and the shard's suite list against
-   `ci-triage/known-families.md`, `ci-triage/evidence/INDEX.tsv` and recent issues (title, body, comments; recipe 11
+   `<D>/known-families.md`, `<D>/evidence/INDEX.tsv` and recent issues (title, body, comments; recipe 11
    with `ghx` or `gh api`, else the recipe 9 export). A match still needs the confirming grep listed in the family. Say
    "duplicate of X" only after that grep. Also search closed issues for the most distinctive string of the failure (a repo, file or
    error name; `gh api -X GET search/issues -f q='repo:DACH-NY/cn-test-failures is:issue "<string>"'`): the
@@ -60,8 +112,8 @@ edits to shared files.
    fix that already exists on main, check `git merge-base --is-ancestor <sha> origin/<branch>`: a missing
    backport is the most common resolution for release-line failures.
 7. Write the packet from `references/packet-template.md`: command, then verbatim output, per finding.
-   Add or update the ref's row in `ci-triage/evidence/INDEX.tsv` (format in the template). New families or
-   occurrences go into `ci-triage/known-families.md` (and its index table).
+   Add or update the ref's row in `<D>/evidence/INDEX.tsv` (format in the template). New families or
+   occurrences go into `<D>/known-families.md` (and its index table).
 8. Issue commands for the user (never run them yourself):
    - Not a duplicate: a comment with the findings and the suggested fix, optionally a retitle to
      `<Suite or job>: <cause>` while the title still starts with `GHA Run` or `Pipeline`, and
@@ -84,7 +136,8 @@ edits to shared files.
    when the evidence points at one or two people: the PR that introduced the failure, the one clear owner git blame
    shows for the code the fix touches, or the component owner for infra or Canton (ci-triage-inbox, Assignee). No branch here: the fix agent
    (`ci-triage-fix`) picks the issue up from Status Triaged and agrees the change with the user first.
-10. Commit on the triage branch with `[skip ci]` and `-s`. Report: one line per ref with the verdict, then the
+10. Commit in the dataset clone and hand it over (Dataset: Commits, Hand-over); under ci-triage-inbox the main
+    thread does both. Report: one line per ref with the verdict, then the
     action from step 8 with the full comment bodies.
 
 ## Rules of evidence

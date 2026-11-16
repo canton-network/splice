@@ -1,5 +1,8 @@
 # Command recipes (all verified 2026-09)
 
+`<D>` is the `ci-triage/` directory of the triage dataset clone (ci-triage skill, Dataset). Host exports land
+in `log/ci-triage-export/` of the host splice checkout, read in the sandbox under `/run/sandbox/source/`.
+
 ## 1. Run, jobs, job log
 Job id from the issue's `Job:` line. `filter=all` includes earlier attempts of re-run workflows; gh's `--jq`
 takes no `--arg`, so pass the name via the environment:
@@ -15,7 +18,7 @@ gh api --allow-escape-sequences repos/canton-network/splice/actions/jobs/$JOB/lo
 ```
 Job logs expire after ~90 days (HTTP 410); artifacts sooner. `gh run view --log` often returns nothing; use the API.
 
-canton-network-internal runs (private): the same steps through `$R` (`ci-triage/CLAUDE.md`, Access), with the jq
+canton-network-internal runs (private): the same steps through `$R` (`<D>/CLAUDE.md`, Access), with the jq
 filter outside and pages by hand; the log through `ghx` needs no flag, through `gh api` it needs
 `--allow-escape-sequences`:
 ```
@@ -89,7 +92,7 @@ python3 -c "import zipfile;z=zipfile.ZipFile('<jar>');print([n for n in z.nameli
 javap -p -c -l -cp <jar> <fully.qualified.Class>   # -l prints the LineNumberTable for exact line numbers
 ```
 Public mirror `digital-asset/canton` is squashed (`[main] Update <date>` commits, no shared shas); compare
-sources or jars, not commit ids. With access to DACH-NY/canton (`ci-triage/CLAUDE.md`, Access), read a source file
+sources or jars, not commit ids. With access to DACH-NY/canton (`<D>/CLAUDE.md`, Access), read a source file
 at a commit or tag with `$R "/repos/DACH-NY/canton/contents/<path>?ref=<ref>" -H "Accept: application/vnd.github.raw"`
 to find the code quickly; the jar of the version that ran stays the authority for citations.
 
@@ -99,7 +102,7 @@ to find the code quickly; the jar of the version that ran stays the authority fo
 `.github/actions/scripts/check-logs.sh` prints ignored lines with the suffix and real problems without it.
 
 ## 8. Fix branch
-A separate worktree keeps the triage branch checked out. `-b` refuses to overwrite an existing branch; for a
+A separate worktree keeps the splice checkout on its own branch. `-b` refuses to overwrite an existing branch; for a
 stacked follow-up, add a worktree for the existing branch instead.
 ```
 git fetch origin main        # SSH origin unavailable in the sandbox: git fetch https://github.com/canton-network/splice.git main:refs/remotes/https-origin/main, then use https-origin/main
@@ -131,12 +134,12 @@ and rely on the PR's static_tests.
 
 ## 9. Export recent issues on the host
 
-Manual-export source (`ci-triage/CLAUDE.md`, Access). Ask the user to run, from the host repo root (set the date to
+Manual-export source (`<D>/CLAUDE.md`, Access). Ask the user to run, from the host repo root (set the date to
 about two weeks back):
 ```
 direnv exec . .claude/skills/ci-triage/scripts/export_issues.py --since <YYYY-MM-DD>
 ```
-Read it from the sandbox as `/run/sandbox/source/ci-triage/export/issues-since-<YYYY-MM-DD>.jsonl`; one JSON
+Read it from the sandbox as `/run/sandbox/source/log/ci-triage-export/issues-since-<YYYY-MM-DD>.jsonl`; one JSON
 object per line (number, title, state, stateReason, createdAt, closedAt, assignees, labels, body, comments).
 
 ## 10. Export the board on the host
@@ -145,14 +148,14 @@ Needed with either source (`ghx` cannot read Projects v2). Ask the user to run, 
 ```
 direnv exec . .claude/skills/ci-triage/scripts/export_board.py
 ```
-Read it from the sandbox as `/run/sandbox/source/ci-triage/export/inbox.jsonl`, `triaged.jsonl` and
+Read it from the sandbox as `/run/sandbox/source/log/ci-triage-export/inbox.jsonl`, `triaged.jsonl` and
 `in-progress.jsonl` (open issues of project 48 with that Status, with bodies and comments; `commentCount` shows when
 more than the 100 exported comments exist; `closingPullRequests` lists the PRs whose `Fixes` line names the issue,
 with state OPEN, MERGED or CLOSED). `--status Inbox` exports one Status only.
 
 Reading the exports in the sandbox (one issue, or a text search for the duplicate check):
 ```
-X=/run/sandbox/source/ci-triage/export
+X=/run/sandbox/source/log/ci-triage-export
 ls -la $X
 jq -r --argjson n $REF 'select(.number == $n) | "#\(.number) [\(.state)] \(.title)\n\(.body)", (.comments[] | "-- \(.author) \(.createdAt)\n\(.body)")' $X/issues-since-*.jsonl
 jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " + ([.comments[].body] | join(" "))) | test($p)) | "#\(.number) \(.state)/\(.stateReason // "-") \(.createdAt[0:10]) \(.title[0:110])"' $X/issues-since-*.jsonl
@@ -160,7 +163,7 @@ jq -r --arg p '<test name or flagged text>' 'select((.title + " " + .body + " " 
 
 ## 11. Private data through ghx or the sandbox token
 
-`R=ghx` or `R='gh api'`, whichever `probe_access.py` reports for the capability (`ci-triage/CLAUDE.md`, Access).
+`R=ghx` or `R='gh api'`, whichever `probe_access.py` reports for the capability (`<D>/CLAUDE.md`, Access).
 Shell state does not persist between commands, so set `R` in every command that uses it (`R=ghx; $R ...`); this
 applies to the canton-network-internal variants of recipes 1 and 3 too.
 Both print JSON for a `/repos/...` path and exit non-zero on HTTP errors (the router's reason is in the body). Page
@@ -182,8 +185,8 @@ $R "$C/actions/runs/$RUN" | jq -r '"\(.name) \(.head_branch) \(.head_sha[0:10]) 
 contents only with the raw media type: the JSON form carries a `download_url` with a short-lived access token, which
 must not end up in logs or packets. Jobs, logs and artifacts of canton-network-internal runs: recipes 1 and 3. With
 `ghx` after the router's sandbox setup, `git clone https://github.com/DACH-NY/canton-network-internal.git` goes
-through the router too (into `log/`, never into the triage branch). Whatever no method reaches: ask the user to save
-it to `ci-triage/export/<ref>/` on the host.
+through the router too (into `log/`, never into the dataset). Whatever no method reaches: ask the user to save it to
+`log/ci-triage-export/<ref>/` on the host (recipe 14 for CircleCI and GCP).
 
 ## 12. Change an issue's Status on the host
 
@@ -208,3 +211,19 @@ type, service name) and ask the user to correct them; record confirmed values he
 |---|---|---|---|
 | cluster test invoker (`CLUSTER_TEST_INVOKER_URL`): Cloud Function `invoke-circleci-workflow` (functions_framework, Python 3.12) | da-cn-ci | `resource.type=("cloud_run_revision" OR "cloud_function")`, `(severity>=ERROR OR httpRequest.status>=500)` | yes, 2026-11-03 (11152) |
 | Postgres of a splice GHA test job (service container `postgres` on a self-hosted k8s runner; runner name from `gh api /repos/canton-network/splice/actions/jobs/<job id> --jq .runner_name`) | da-cn-splice (cluster cn-splicenet, namespace gha-runners-splice) | `resource.type="k8s_container"`, `resource.labels.pod_name="<runner name>-workflow"`, `resource.labels.container_name="postgres"`, optionally `textPayload:("could not serialize" OR "Reason code" OR "STATEMENT")`; default logging has ERROR, DETAIL, STATEMENT with `%m [%p]` prefix, bind values not logged | yes, 2026-11-04 (11160) |
+
+## 14. CircleCI and GCP logs saved on the host
+
+Neither is reachable from the sandbox. When the evidence for a ref needs them, ask the user to run one of these from
+the host repo root; they write under `log/ci-triage-export/<ref>/`, read in the sandbox as
+`/run/sandbox/source/log/ci-triage-export/<ref>/`. Quote from these files in packets only what the finding needs.
+```
+direnv exec . .claude/skills/ci-triage/scripts/export_circleci.py <ref> <job url or number>... [--all-steps] [--artifacts [--artifact-filter <regex>]]   # CIRCLECI_TOKEN
+direnv exec . .claude/skills/ci-triage/scripts/deployment_runs.py [--days N] [--workflow <regex>] [--excerpts]   # CIRCLECI_TOKEN; to log/ci-triage-export/circleci-runs-<date>.jsonl
+direnv exec . .claude/skills/ci-triage/scripts/export_gcp_logs.py <ref> --project <p> [--cluster <c>] --start <UTC> --end <UTC> --query <name> '<filter>' [--query ...]   # gcloud auth login
+```
+`export_circleci.py` saves the failed steps' output (`--all-steps`: every step) and with `--artifacts` the job's
+stored test logs. `deployment_runs.py` lists the CircleCI workflow runs, passed ones too, for counting runs against
+failures (Priority); `--excerpts` adds the tail of each failed step, its issue URL and splice commit.
+`export_gcp_logs.py` saves one JSON file per named query plus a tar of them; prefer recipe 13 (the user looks and
+pastes) when a few lines decide it.

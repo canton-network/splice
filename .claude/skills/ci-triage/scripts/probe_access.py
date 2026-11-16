@@ -27,7 +27,7 @@ CAPABILITIES = [
 WORKAROUND = {
     "cn-test-failures issues": "exports (recipes 9, 10)",
     "canton-network-internal contents": "ask the user for the file or commit",
-    "canton-network-internal actions": "user saves logs to export/<ref>/",
+    "canton-network-internal actions": "user saves logs to log/ci-triage-export/<ref>/",
     "canton-network-internal pulls": "ask the user, or the commit message",
     "canton contents": "digital-asset/canton mirror, release jars (recipe 6)",
     "splice (public)": "-",

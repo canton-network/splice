@@ -1,6 +1,6 @@
 # Issue comments
 
-Reader: a senior engineer who knows splice and Canton but never opens the triage branch. The comment must stand on
+Reader: a senior engineer who knows splice and Canton but never opens the triage dataset. The comment must stand on
 its own: no packet paths or other triage-branch references.
 
 Shape (Markdown, short paragraphs of one to three sentences; as short as the facts allow):
@@ -32,7 +32,7 @@ with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
 
-Body files: `ci-triage/CLAUDE.md`, Commands for the user. Every comment except a single line of plain text goes
+Body files: `<D>/CLAUDE.md` (the dataset's, ci-triage skill Dataset), Commands for the user. Every comment except a single line of plain text goes
 into `<round dir>/comments/<ref>.md` and is posted with `--body-file` (or `close_duplicates.py --comment-file`);
 never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
 content in a `~~~` fence (so inner ``` fences render as part of it).
