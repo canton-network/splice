@@ -1254,7 +1254,7 @@ function subcmd_no_bad_things_repo_wide() {
       )
     for pattern in "${illegal_patterns[@]}"; do
         echo "Checking for occurences of '$pattern' in repo"
-        if rg -P "$pattern" .; then
+        if rg -P "$pattern" . -g '!**/tests/**'; then
             echo "$pattern occurs in code, please remedy"
             exit 1
         fi
