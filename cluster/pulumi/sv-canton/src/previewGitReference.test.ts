@@ -108,7 +108,7 @@ describe('migrationsFollowingReference', () => {
     expect(migrationsFollowingReference(all, undefined, active)).toEqual(all);
   });
 
-  test('filters out migrations tracking a different branch and logs them', () => {
+  test('filters out migrations tracking a different branch', () => {
     const result = migrationsFollowingReference(all, CURRENT, active);
     expect(result.map(m => m.id)).toEqual([4, 5, 2]);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping migration 3'));
