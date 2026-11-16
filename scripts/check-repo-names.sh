@@ -32,7 +32,6 @@ function check_patterns_locally() {
     'Headers.scala:.*"configs"'
     'Headers.scala:.*"configs-private"'
     'istio-gateway/.*gateway\.yaml:.*credentialName: cn-' # TODO (DACH-NY/canton-network-internal#396) TLS credential names in istio-gateway
-    'bigquery-import.sql:.*da-cn-ci-2' # TODO (DACH-NY/canton-network-internal#362) parameterized project
     'GcpConfig\.scala:' # cluster-specific
     '/da-cn-shared/cn-images|GOOGLE_CLOUD_PROJECT=da-cn-shared|"KMS_PROJECT_ID" -> "da-cn-shared"' # gcp
     '/cn-release-bundles' # docs route

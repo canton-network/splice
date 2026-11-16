@@ -368,15 +368,17 @@ function installBigqueryDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.
     friendlyName: `${scanBigQuery.dataset} Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true, //retaining old value
-    // TODO (DACH-NY/canton-network-internal#343) reduce time travel window from 7-day default to 2 days if
-    // it makes a cost difference
+    // TODO (canton-network/splice#1167) reduce time travel window
+    // from 7-day default to 2 days if it makes a cost difference
     labels: {
       cluster: CLUSTER_BASENAME,
       datastream_id: 'legacy',
     },
   });
 }
-/* TODO (DACH-NY/canton-network-internal#341) remove this comment when enabled on all relevant clusters
+/* The Datastream API must be enabled manually in each cluster's GCP
+project; see "Enabling the Datastream API" in this project's README.
+
 If you see an error like this
   gcp:datastream:ConnectionProfile (sv-4-scan-bq-cxn):
     error: 1 error occurred:
@@ -387,8 +389,6 @@ or the same for
   gcp:datastream:PrivateConnection (sv-4-scan-update-history-datastream-vpc)
 
 you have to manually enable the API as described for that cluster.
-- done for da-cn-scratchnet
-- done for da-cn-ci-2
  */
 
 function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
@@ -936,7 +936,7 @@ export async function configureScanBigQuery({
   namespace,
   bigQueryConfig,
   scanReference,
-}: ScanBigQueryArgs): Promise<ScanBigQuery> {
+}: ScanBigQueryArgs): Promise<void> {
   // Use config file to determine which datastreams to enable and their desired states
 
   const {
@@ -1048,14 +1048,6 @@ export async function configureScanBigQuery({
       replicatedTables
     );
   }
-  // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
-  // but we need to return something to satisfy the ScanBigQuery type.
-  // For now, we return the legacy dataset's ID, as it is always defined.
-  // we should consider removing the return datasetId if it's not needed
-
-  return {
-    datasetId: legacyDataset.id,
-  };
 }
 
 export type ScanBigQueryArgs = {
@@ -1074,10 +1066,6 @@ type ScanReference =
       type: 'external';
       databaseInstanceNamePrefix: string;
     };
-
-export type ScanBigQuery = {
-  datasetId: pulumi.Output<string>;
-};
 
 async function getScanDb(
   instanceNamePrefix: string,
