@@ -709,16 +709,23 @@ END`,
       schedule: 'every 1 hours from 00:02 to 23:02',
 
       params: {
-        query: pulumi
-          .all([projectId, prodDataset.datasetId])
-          .apply(([proj, prodDs]) =>
-            migratingTables
-              .map(
-                ([tableName]) =>
-                  `CALL \`${proj}.${prodDs}.${fixTableSchemaRoutineId(tableName)}\`();`
-              )
-              .join('\n')
-          ),
+        // Each table's fix runs even if another's fails; the query
+        // still fails, naming every table that did.
+        query: pulumi.all([projectId, prodDataset.datasetId]).apply(([proj, prodDs]) =>
+          [
+            'DECLARE failed ARRAY<STRING> DEFAULT [];',
+            ...migratingTables.map(
+              ([tableName]) => `BEGIN
+  CALL \`${proj}.${prodDs}.${fixTableSchemaRoutineId(tableName)}\`();
+EXCEPTION WHEN ERROR THEN
+  SET failed = ARRAY_CONCAT(failed, [FORMAT('%s: %s', '${tableName}', @@error.message)]);
+END;`
+            ),
+            `IF ARRAY_LENGTH(failed) > 0 THEN
+  RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');
+END IF;`,
+          ].join('\n')
+        ),
       },
     },
     {

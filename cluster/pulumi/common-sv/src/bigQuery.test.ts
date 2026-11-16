@@ -275,8 +275,13 @@ describe('configureScanBigQuery', () => {
     expect(
       fixQuery
         .split('\n')
-        .map(call => /^CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
+        .map(call => /^ {2}CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
+        .filter(tableName => tableName)
     ).toEqual(['scan_verdict_store', 'app_activity_record_store']);
+    // each CALL in its own block, so that a failing one doesn't skip
+    // the others
+    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(2);
+    expect(fixQuery).toContain("RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');");
     const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
     expect(fixSchedule).not.toBe(appendSchedule);
   });
