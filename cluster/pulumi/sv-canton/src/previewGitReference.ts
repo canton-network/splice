@@ -38,11 +38,10 @@ export function migrationFollowsReference(
   if (trackedRef === undefined) {
     return true;
   }
-  const normalizedTracked = normalizeGitReference(trackedRef);
-  if (!isBranchReference(normalizedTracked) || !isBranchReference(normalizedCurrent)) {
+  if (!isBranchReference(trackedRef) || !isBranchReference(normalizedCurrent)) {
     return true;
   }
-  return normalizedTracked === normalizedCurrent;
+  return trackedRef === normalizedCurrent;
 }
 
 function describeVersion(migration: MigrationInfo): string {
