@@ -7,6 +7,7 @@ import io.circe.Encoder
 import io.circe.syntax.*
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryItem,
+  EventHistoryVerdict,
   EventHistoryResponse,
   GetImportUpdatesResponse,
   GetUpdatesBeforeResponse,
@@ -20,7 +21,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 
 /** Provides implicit circe `Encoder` instances that omit `Option[_]` fields when `None`,
-  * for the sanctioned marker types [[org.lfdecentralizedtrust.splice.http.OmitNullString]]
+  * for the sanctioned marker types [[org.lfdecentralizedtrust.splice.http.OmitNullString]],
+  * [[org.lfdecentralizedtrust.splice.http.OmitNullLong]]
   * (via `x-scala-type`) and [[org.lfdecentralizedtrust.splice.http.OmitNullArray]]
   * (via `x-scala-array-type`). Using these marker types makes it explicit in both the
   * OpenAPI spec and the generated Scala code which fields receive this treatment.
@@ -119,13 +121,24 @@ object ScanJsonSupport {
       _.transactions,
     )
 
+  implicit val encodeEventHistoryVerdict: Encoder.AsObject[EventHistoryVerdict] =
+    omitWhenNone(
+      EventHistoryVerdict.encodeEventHistoryVerdict,
+      "round_number",
+      _.roundNumber,
+    )
+
   implicit val encodeEventHistoryItem: Encoder.AsObject[EventHistoryItem] =
     omitWhenNone(
       omitWhenNone(
         reEncode(
-          EventHistoryItem.encodeEventHistoryItem,
-          "update",
-          _.update,
+          reEncode(
+            EventHistoryItem.encodeEventHistoryItem,
+            "update",
+            _.update,
+          ),
+          "verdict",
+          _.verdict,
         ),
         "submitting_app_provider",
         _.submittingAppProvider,

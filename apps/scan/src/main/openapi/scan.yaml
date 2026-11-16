@@ -3926,11 +3926,13 @@ components:
         round_number:
           description: |
             The oldest open mining round active at record_time.  Same as the round assigned to the `app_activity_records` associated with this verdict, if there are any.
-            Null for
+            Omitted from JSON for
               - verdicts at a record_time before the SVs started populating this field
               - verdicts served by an SV node that is in the process of onboarding
+            (see OmitNullLong).
           type: integer
           format: int64
+          x-scala-type: org.lfdecentralizedtrust.splice.http.OmitNullLong
     TransactionViews:
       type: object
       required:

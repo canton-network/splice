@@ -18,7 +18,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ReassignmentUpdate,
   TransactionTreeUpdate,
 }
-import org.lfdecentralizedtrust.splice.http.OmitNullString
+import org.lfdecentralizedtrust.splice.http.{OmitNullLong, OmitNullString}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent.members.CreatedEvent as HttpCreatedEvent
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItem.members.{
@@ -810,7 +810,7 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
 
     ScanHttpEncodings
       .encodeVerdict(withRound, viewsIn, includeRound = true)
-      .roundNumber shouldBe Some(11L)
+      .roundNumber shouldBe Some(OmitNullLong(11L))
 
     ScanHttpEncodings
       .encodeVerdict(withRound, viewsIn, includeRound = false)
