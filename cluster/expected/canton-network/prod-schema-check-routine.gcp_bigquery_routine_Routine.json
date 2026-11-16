@@ -1,0 +1,28 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "arguments": [
+      {
+        "dataType": "{\"typeKind\":\"STRING\"}",
+        "name": "staging_table_name"
+      },
+      {
+        "dataType": "{\"typeKind\":\"STRING\"}",
+        "name": "prod_table_name"
+      },
+      {
+        "dataType": "{\"typeKind\":\"ARRAY\",\"arrayElementType\":{\"typeKind\":\"STRING\"}}",
+        "name": "columns"
+      }
+    ],
+    "datasetId": "mock_da2_scan_prod",
+    "definitionBody": "BEGIN\n  DECLARE missing ARRAY<STRING>;\n\n  -- Datastream adds a column to staging once it replicates a row\n  -- that has it\n  SET missing = ARRAY(\n    SELECT listed FROM UNNEST(columns) AS listed\n    WHERE listed NOT IN (\n      SELECT column_name FROM `test-project.mock_da2_scan_staging.INFORMATION_SCHEMA.COLUMNS`\n      WHERE table_name = staging_table_name\n    )\n    ORDER BY listed\n  );\n  IF ARRAY_LENGTH(missing) > 0 THEN\n    RAISE USING MESSAGE = FORMAT(\n      'Staging %s lacks columns %s, which Datastream adds once it replicates them',\n      staging_table_name, ARRAY_TO_STRING(missing, ', '));\n  END IF;\n\n  SET missing = ARRAY(\n    SELECT listed FROM UNNEST(columns) AS listed\n    WHERE listed NOT IN (\n      SELECT column_name FROM `test-project.mock_da2_scan_prod.INFORMATION_SCHEMA.COLUMNS`\n      WHERE table_name = prod_table_name\n    )\n    ORDER BY listed\n  );\n  IF ARRAY_LENGTH(missing) > 0 THEN\n    RAISE USING MESSAGE = FORMAT(\n      'Production %s lacks columns %s; CALL `%s.%s.%s_%s`(), which also runs hourly, adds and fills them',\n      prod_table_name, ARRAY_TO_STRING(missing, ', '), 'test-project',\n      'mock_da2_scan_prod', 'sp_fix_prod_schema', prod_table_name);\n  END IF;\nEND",
+    "language": "SQL",
+    "routineId": "sp_check_prod_schema",
+    "routineType": "PROCEDURE"
+  },
+  "name": "prod-schema-check-routine",
+  "provider": "",
+  "type": "gcp:bigquery/routine:Routine"
+}

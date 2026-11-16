@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "dataSourceId": "scheduled_query",
+    "displayName": "mock Production Schema Hourly Fix",
+    "location": "europe-west6",
+    "params": {
+      "query": "CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema_scan_verdict_store`();\nCALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema_app_activity_record_store`();"
+    },
+    "schedule": "every 1 hours from 00:02 to 23:02",
+    "serviceAccountName": "bigquery@test-project.iam.gserviceaccount.com"
+  },
+  "name": "mock_prod-schema-hourly-fix",
+  "provider": "",
+  "type": "gcp:bigquery/dataTransferConfig:DataTransferConfig"
+}
