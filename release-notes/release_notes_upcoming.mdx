@@ -2,6 +2,17 @@
 
 {/* Add all release notes in this section */}
 
+  - Participant
+
+    - **Breaking** The participant's repair service (`canton.features.enable-repair-commands`) is now disabled by default.
+      This was originally announced for 0.10.0, but the default change was blocked by a bug.
+      **SVs must enable the repair service**, as Scan's `/v0/acs/{party}` endpoint, which validators use to restore from an identities dump,
+      exports the ACS through it. To enable it, set `enableRepairCommands: true` in the `splice-participant` Helm chart
+      (see updated example `participant-values.yaml` for SVs).
+      Validators only need the repair service while restoring from an identities dump (`migrateValidatorParty`) or while running
+      repair commands such as `participant.repair.import_acs`.
+      The Docker Compose validator's `start.sh -i` enables the repair service automatically for the restore.
+
   - Scan App
 
     - `/v0/events` responses now include two new per-event fields:
