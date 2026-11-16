@@ -122,7 +122,7 @@ describe('configureScanBigQuery', () => {
   test.each([
     'V068__app_activity_record_meta.sql',
     'V074__string_interning.sql',
-    'V082__partition_update_history.sql',
+    'V084__partition_update_history.sql',
   ] as const)('both publication and slot commands wait for %s', async migration => {
     const resources = await installBigQuery(true, true, migration);
     const commands = resources.filter(command.local.Command.isInstance);
