@@ -138,6 +138,11 @@ object SvOnboardingConfig {
       ),
       initialProtocolVersion: ProtocolVersion = ProtocolVersion.v37,
       initialGovernanceLockConfig: Option[InitialGovernanceLockConfig] = None,
+      // New networks start with the credential registry enabled at the recommended values.
+      // Networks started before it existed enable it by SV voting.
+      initialCredentialRegistryConfig: Option[InitialCredentialRegistryConfig] = Some(
+        InitialCredentialRegistryConfig()
+      ),
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -327,6 +332,23 @@ final case class InitialGovernanceLockConfig(
       toRelTime(featuredAppLockVestingDuration),
     )
   }
+}
+
+/** Free period and yearly extension price of the credential registry.
+  * The defaults are the recommended values.
+  */
+final case class InitialCredentialRegistryConfig(
+    freePeriod: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
+    extensionUsdPerYear: NonNegativeNumeric[BigDecimal] =
+      NonNegativeNumeric.tryCreate(BigDecimal(1.0)),
+) {
+  final def toCredentialRegistryConfig: splice.amuletconfig.CredentialRegistryConfig =
+    new splice.amuletconfig.CredentialRegistryConfig(
+      new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+        TimeUnit.NANOSECONDS.toMicros(freePeriod.duration.toNanos)
+      ),
+      extensionUsdPerYear.value.bigDecimal,
+    )
 }
 
 final case class SynchronizerFeesConfig(

@@ -184,6 +184,7 @@ export function amuletRules(zeroTransferFees: boolean): any {
         minDevelopmentFundMintingDelay: null,
         amuletSwitchOverTimes: null,
         governanceLockConfig: null,
+        credentialRegistryConfig: null,
       },
       futureValues: [],
     },

@@ -603,6 +603,9 @@ object SpliceConfig {
       deriveReader[InitialRewardConfig]
     implicit val initialGovernanceLockConfigReader: ConfigReader[InitialGovernanceLockConfig] =
       deriveReader[InitialGovernanceLockConfig]
+    implicit val initialCredentialRegistryConfigReader
+        : ConfigReader[InitialCredentialRegistryConfig] =
+      deriveReader[InitialCredentialRegistryConfig]
     implicit val svOnboardingFoundDsoReader: ConfigReader[SvOnboardingConfig.FoundDso] =
       deriveReader[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyReader: ConfigReader[SvOnboardingConfig.JoinWithKey] =
@@ -1152,6 +1155,9 @@ object SpliceConfig {
       deriveWriter[InitialRewardConfig]
     implicit val initialGovernanceLockConfigWriter: ConfigWriter[InitialGovernanceLockConfig] =
       deriveWriter[InitialGovernanceLockConfig]
+    implicit val initialCredentialRegistryConfigWriter
+        : ConfigWriter[InitialCredentialRegistryConfig] =
+      deriveWriter[InitialCredentialRegistryConfig]
     implicit val svOnboardingFoundDsoWriter: ConfigWriter[SvOnboardingConfig.FoundDso] =
       deriveWriter[SvOnboardingConfig.FoundDso]
     implicit val svOnboardingJoinWithKeyWriter: ConfigWriter[SvOnboardingConfig.JoinWithKey] =

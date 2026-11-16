@@ -3,7 +3,10 @@
 
 import { describe, expect, test } from 'vitest';
 import { ConfigChange } from '../../utils/types';
-import { buildAmuletRulesConfigFromChanges } from '../../utils/buildAmuletRulesConfigFromChanges';
+import {
+  buildAmuletRulesConfigFromChanges,
+  credentialRegistryConfigError,
+} from '../../utils/buildAmuletRulesConfigFromChanges';
 
 describe('buildAmuletRulesConfigFromChanges', () => {
   test('should build AmuletConfig with provided changes', () => {
@@ -610,6 +613,48 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     const result = buildAmuletRulesConfigFromChanges(changes);
 
     expect(result.governanceLockConfig).toBeNull();
+  });
+
+  describe('credential registry config', () => {
+    const changes = (freePeriod: string, extensionUsdPerYear: string): ConfigChange[] => [
+      {
+        fieldName: 'credentialRegistryConfigFreePeriod',
+        label: 'Credential registry: free period (microseconds)',
+        currentValue: '',
+        newValue: freePeriod,
+      },
+      {
+        fieldName: 'credentialRegistryConfigExtensionUsdPerYear',
+        label: 'Credential registry: extension fee (USD per year)',
+        currentValue: '',
+        newValue: extensionUsdPerYear,
+      },
+    ];
+
+    test('builds the config when both fields are set', () => {
+      const result = buildAmuletRulesConfigFromChanges(changes('7776000000000', '1.0'));
+      expect(result.credentialRegistryConfig).toEqual({
+        freePeriod: { microseconds: '7776000000000' },
+        extensionUsdPerYear: '1.0',
+      });
+    });
+
+    test('maps both empty fields to null', () => {
+      const result = buildAmuletRulesConfigFromChanges(changes('', ''));
+      expect(result.credentialRegistryConfig).toBeNull();
+    });
+
+    test('flags a config with only one field set, without failing the build', () => {
+      expect(
+        buildAmuletRulesConfigFromChanges(changes('7776000000000', '')).credentialRegistryConfig
+      ).toBeNull();
+      expect(credentialRegistryConfigError(changes('7776000000000', ''))).toContain(
+        'Credential registry'
+      );
+      expect(credentialRegistryConfigError(changes('', '1.0'))).toContain('Credential registry');
+      expect(credentialRegistryConfigError(changes('7776000000000', '1.0'))).toBeUndefined();
+      expect(credentialRegistryConfigError(changes('', ''))).toBeUndefined();
+    });
   });
 });
 
