@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
@@ -21,8 +22,10 @@ import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 import org.lfdecentralizedtrust.splice.util.{
   SynchronizerFeesTestUtil,
   TokenStandardMetadata,
+  TriggerTestUtil,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.validator.automation.TopupMemberTrafficTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.wallet.store.{
   BalanceChangeTxLogEntry,
@@ -433,7 +436,6 @@ class TokenStandardTransferIntegrationTest
       "org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25"
     ) in { implicit env =>
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
-      aliceWalletClient.tap(100)
 
       val memberId = aliceValidatorBackend.participantClient.id
       val synchronizerId = activeSynchronizerId
@@ -453,26 +455,47 @@ class TokenStandardTransferIntegrationTest
         s"splice/memo:member-id=${memberId.toProtoPrimitive}" +
           s"&synchronizer-id=${synchronizerId.toProtoPrimitive}" +
           s"&migration-id=${sv1ScanBackend.getMigrationId()}"
-      val purchasedTrafficBefore = getTotalPurchasedTraffic(memberId, synchronizerId)
-      val balanceBefore = aliceWalletClient.balance().unlockedQty
+      val topupMemberTrafficTrigger =
+        aliceValidatorBackend.appState.automation.trigger[TopupMemberTrafficTrigger]
 
-      val (result, _) = actAndCheck(
-        "Alice buys traffic via a V1 transfer to the traffic purchase receiver",
-        aliceWalletClient.createTokenStandardTransfer(
-          PartyId.tryFromProtoPrimitive(TokenStandardMetadata.trafficPurchaseReceiver),
-          spentAmuletAmount,
-          memo,
-          CantonTimestamp.now().plusSeconds(3600L),
-          UUID.randomUUID().toString,
-        ),
-      )(
-        "The DSO sees the purchased traffic",
-        _ =>
-          getTotalPurchasedTraffic(
-            memberId,
-            synchronizerId,
-          ) shouldBe purchasedTrafficBefore + purchasedTrafficAmount,
-      )
+      val (result, balanceBefore) =
+        TriggerTestUtil.setTriggersWithin(triggersToPauseAtStart = Seq(topupMemberTrafficTrigger)) {
+          // Wait for this tap to reach SV1 participant before taking the
+          // baseline. Both reads use SV1 participant's ACS, so observing this
+          // later tap confirms eventual, earlier top-ups from the top-up trigger are included.
+          actAndCheck(
+            "Alice taps after automatic top-ups are paused",
+            aliceWalletClient.tap(100),
+          )(
+            "The DSO sees Alice's amulet",
+            tapCid =>
+              sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+                .filterJava(Amulet.COMPANION)(
+                  dsoParty,
+                  _.id.contractId == tapCid.contractId,
+                ) should not be empty,
+          )
+          val purchasedTrafficBefore = getTotalPurchasedTraffic(memberId, synchronizerId)
+          val balanceBefore = aliceWalletClient.balance().unlockedQty
+          val (result, _) = actAndCheck(
+            "Alice buys traffic via a V1 transfer to the traffic purchase receiver",
+            aliceWalletClient.createTokenStandardTransfer(
+              PartyId.tryFromProtoPrimitive(TokenStandardMetadata.trafficPurchaseReceiver),
+              spentAmuletAmount,
+              memo,
+              CantonTimestamp.now().plusSeconds(3600L),
+              UUID.randomUUID().toString,
+            ),
+          )(
+            "The DSO sees the purchased traffic",
+            _ =>
+              getTotalPurchasedTraffic(
+                memberId,
+                synchronizerId,
+              ) shouldBe purchasedTrafficBefore + purchasedTrafficAmount,
+          )
+          (result, balanceBefore)
+        }
       inside(result.output) { case members.TransferInstructionCompleted(value) =>
         value.receiverHoldingCids shouldBe empty
       }

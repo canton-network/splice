@@ -4,7 +4,7 @@ import BigNumber from 'bignumber.js';
 import { Counter, Trend } from 'k6/metrics';
 
 import { syncRetryUndefined } from '../../utils';
-import { GetBalanceResponse } from './models';
+import { FeaturedAppRightSpec, GetBalanceResponse, damlFeaturedAppKinds } from './models';
 import { ValidatorClient } from './validator';
 
 const createOfferLatency = new Trend('create_offer_latency', true);
@@ -17,9 +17,17 @@ const transfersFailed = new Counter('transfers_failed');
 export function doIfOnboarded(validatorClient: ValidatorClient, action: () => void): void {
   const userStatus = validatorClient.v0.wallet.userStatus();
   if (userStatus?.user_onboarded && userStatus?.user_wallet_installed) {
-    if (!userStatus.has_featured_app_right && validatorClient.featured === true) {
-      validatorClient.v0.wallet.selfGrantFeatureAppRight();
-    } else if (userStatus.has_featured_app_right && validatorClient.featured === false) {
+    const wanted = validatorClient.featured;
+    if (!userStatus.has_featured_app_right && wanted) {
+      validatorClient.v0.wallet.selfGrantFeatureAppRight(wanted);
+    } else if (userStatus.has_featured_app_right && wanted === false) {
+      validatorClient.v0.wallet.cancelFeaturedAppRights();
+    } else if (
+      userStatus.has_featured_app_right &&
+      wanted &&
+      hasOtherFeaturedAppRight(validatorClient, userStatus.party_id, wanted)
+    ) {
+      // Wrong config: cancel the right, a later iteration grants it with the wanted config
       validatorClient.v0.wallet.cancelFeaturedAppRights();
     } else {
       action();
@@ -27,6 +35,32 @@ export function doIfOnboarded(validatorClient: ValidatorClient, action: () => vo
   } else {
     validatorClient.v0.register();
   }
+}
+
+// Whether the party's featured app right is known to differ from the wanted config.
+// Returns false if the right can't be looked up, so that we never cancel rights based on guesses.
+function hasOtherFeaturedAppRight(
+  validatorClient: ValidatorClient,
+  partyId: string,
+  wanted: FeaturedAppRightSpec,
+): boolean {
+  const right =
+    validatorClient.v0.scanProxy.lookupFeaturedAppRight(partyId)?.featured_app_right?.payload;
+  if (right === undefined) {
+    return false;
+  }
+  const actualWeight = right.activityWeight == null ? undefined : Number(right.activityWeight);
+  const actualOpsParties = right.opsParties ?? undefined;
+  const matches =
+    (right.appKind ?? undefined) === (wanted.kind && damlFeaturedAppKinds[wanted.kind]) &&
+    actualWeight === wanted.weight &&
+    JSON.stringify(actualOpsParties) === JSON.stringify(wanted.opsParties);
+  if (!matches) {
+    console.log(
+      `Featured app right of ${partyId} is ${JSON.stringify(right)}, wanted ${JSON.stringify(wanted)}`,
+    );
+  }
+  return !matches;
 }
 
 export function sendAndWaitForTransferOffer(

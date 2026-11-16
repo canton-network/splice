@@ -1,6 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as automation from '@pulumi/pulumi/automation';
+import { requestOperatorStackReconciliation } from '@canton-network/splice-pulumi-common/src/operator/reconcile';
+import { CLUSTER_BASENAME } from '@canton-network/splice-pulumi-common/src/utils';
 import { UpOptions } from '@pulumi/pulumi/automation/stack';
 import util from 'node:util';
 
@@ -126,4 +128,17 @@ export function previewOperation(
 
 export function operation(name: string, promise: Promise<void>): Operation {
   return { name, promise };
+}
+
+// Automation stacks are named `organization/<project>/<name>.<cluster basename>`, the operator Stack CRs `<name>`
+function operatorStackName(stack: automation.Stack): string {
+  const shortName = stack.name.substring(stack.name.lastIndexOf('/') + 1);
+  const suffix = `.${CLUSTER_BASENAME}`;
+  return shortName.endsWith(suffix) ? shortName.slice(0, -suffix.length) : shortName;
+}
+
+export async function requestOperatorReconciliation(stacks: automation.Stack[]): Promise<void> {
+  await Promise.all(
+    stacks.map(stack => requestOperatorStackReconciliation(operatorStackName(stack)))
+  );
 }

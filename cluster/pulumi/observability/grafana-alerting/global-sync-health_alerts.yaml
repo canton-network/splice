@@ -5,8 +5,8 @@ groups:
     folder: canton-network
     interval: 1m
     rules:
-      # Confirmation requests that were sequenced but never processed by the mediator
-      # (e.g. dropped due to CometBFT replays). There is no dedicated Canton metric for
+      # Confirmation requests that were sequenced but never processed by the mediator.
+      # There is no dedicated Canton metric for
       # discarded events yet, so we approximate it as the difference between sequenced
       # send-confirmation-request events and requests received by the mediator.
       - uid: gsh0discarded0cr
@@ -63,7 +63,7 @@ groups:
           runbook_url: ""
           severity: warning
           summary: "{{ $labels.namespace }} discarded more than $DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD of sequenced confirmation requests over the last 10 minutes"
-          description: 'A significant fraction of sequenced confirmation requests was never processed by the mediator. This typically matches CometBFT replays.'
+          description: 'A significant fraction of sequenced confirmation requests was never processed by the mediator.'
         labels:
           # if high => alert on #team-canton-network-high-prio-prod-alerts
           priority: $PRIORITY

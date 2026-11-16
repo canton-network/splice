@@ -117,6 +117,10 @@ function _pulumi_automation_run_down() {
     fi
 }
 
+function _pulumi_automation_run_reset() {
+    _killable_pulumi_automation_run --prefix "${SPLICE_ROOT}/cluster/pulumi/$1" run reset
+}
+
 function _pulumi_automation_run_refresh() {
   _killable_pulumi_automation_run --prefix "${SPLICE_ROOT}/cluster/pulumi" run refresh
 }

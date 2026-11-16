@@ -23,8 +23,6 @@ resources:
 sequencer:
   imageName: "canton-sequencer"
   additionalJvmOptions: ""
-  cometbft:
-    imageName: "canton-cometbft-sequencer"
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"

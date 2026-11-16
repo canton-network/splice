@@ -155,6 +155,7 @@ class ExternalPartyWalletManager(
         partyLoggerFactory,
         externalPartyRetryProvider,
         migrationId,
+        store.multiDomainAcsStore.synchronizerId,
         participantId,
         automationConfig.ingestion,
         params.defaultLimit,

@@ -5,6 +5,8 @@ package org.lfdecentralizedtrust.splice.environment
 
 import cats.data.EitherT
 import com.daml.grpc.AuthCallCredentials
+import com.daml.grpc.adapter.ExecutionSequencerFactory
+import com.daml.grpc.adapter.client.pekko.ClientAdapter
 import org.lfdecentralizedtrust.splice.admin.api.client.TraceContextPropagation.*
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
 import org.lfdecentralizedtrust.splice.admin.api.client.{
@@ -36,10 +38,13 @@ import com.digitalasset.canton.networking.grpc.ClientChannelBuilder
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
 import com.digitalasset.canton.util.EitherTUtil
 import io.circe.Json
-import io.grpc.{Deadline, Status}
+import io.grpc.{Channel, Deadline, Status}
+import io.grpc.stub.{AbstractStub, StreamObserver}
+import org.apache.pekko.NotUsed
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, MediaTypes, StatusCode, Uri}
 import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
 import org.lfdecentralizedtrust.splice.auth.AuthTokenProvider
 
@@ -241,6 +246,35 @@ abstract class AppConnection(
       result <- toFuture(cmd.handleResponseInternal(response))
     } yield result
   }
+
+  /** Server-streaming gRPC call exposed as a Pekko source with backpressure.
+    *
+    * Uses the same channel, interceptors and auth as [[runCmd]]. No deadline is set as streams can
+    * be arbitrarily long.
+    */
+  protected def runServerStreaming[Svc <: AbstractStub[Svc], Req, Resp](
+      createStub: Channel => Svc,
+      request: Req,
+  )(
+      call: Svc => (Req, StreamObserver[Resp]) => Unit
+  )(implicit
+      traceContext: TraceContext,
+      esf: ExecutionSequencerFactory,
+  ): Source[Resp, NotUsed] =
+    Source.future(tokenProvider.getToken).flatMapConcat { maybeToken =>
+      val stub = createStub(channel.channel).withInterceptors(
+        new ApiClientRequestLogger(loggerFactory, apiLoggingConfig),
+        new GrpcMetricsClientInterceptor(grpcClientMetrics),
+      )
+      val stubAuth = maybeToken.fold(stub)(token =>
+        stub.withCallCredentials(new AuthCallCredentials(token.accessToken))
+      )
+      ClientAdapter.serverStreaming(
+        request,
+        (req: Req, observer: StreamObserver[Resp]) =>
+          TraceContextGrpc.withGrpcContext(traceContext)(call(stubAuth)(req, observer)),
+      )
+    }
 
 }
 

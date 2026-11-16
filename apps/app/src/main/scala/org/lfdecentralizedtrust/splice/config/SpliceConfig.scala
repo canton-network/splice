@@ -20,7 +20,9 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanAppBackendConfig,
   ScanAppClientConfig,
   ScanCacheConfig,
+  ScanPruningConfig,
   ScanRollForwardLsuConfig,
+  ScanSnapshotPruningConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
   TokenStandardConfig,
@@ -545,6 +547,10 @@ object SpliceConfig {
       deriveReader[ScanRollForwardLsuConfig]
     implicit val analyzableTimeWindowConfigReader: ConfigReader[AnalyzableTimeWindowConfig] =
       deriveReader[AnalyzableTimeWindowConfig]
+    implicit val scanSnapshotPruningConfigReader: ConfigReader[ScanSnapshotPruningConfig] =
+      deriveReader[ScanSnapshotPruningConfig]
+    implicit val scanPruningConfigReader: ConfigReader[ScanPruningConfig] =
+      deriveReader[ScanPruningConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
       deriveReader[ScanAppBackendConfig].emap { conf =>
         for {
@@ -629,8 +635,6 @@ object SpliceConfig {
       deriveReader[ExpectedValidatorOnboardingConfig]
     implicit val approvedSvIdentityConfigReader: ConfigReader[ApprovedSvIdentityConfig] =
       deriveReader[ApprovedSvIdentityConfig]
-    implicit val cometBftConfigReader: ConfigReader[SvCometBftConfig] = deriveReader
-    implicit val cometBftGovernanceKeyReader: ConfigReader[CometBftGovernanceKey] = deriveReader
     implicit val sequencerPruningConfig: ConfigReader[SequencerPruningConfig] =
       deriveReader[SequencerPruningConfig]
     implicit val SubmissionRequestAmplificationReader
@@ -713,6 +717,8 @@ object SpliceConfig {
     implicit val unavailablePartiesBackoffParametersReader
         : ConfigReader[UnavailablePartiesBackoffParameters] =
       deriveReader[UnavailablePartiesBackoffParameters]
+    implicit val svOnboardingSnapshotsConfigReader: ConfigReader[SvOnboardingSnapshotsConfig] =
+      deriveReader[SvOnboardingSnapshotsConfig]
     implicit val svConfigReader: ConfigReader[SvAppBackendConfig] =
       deriveReader[SvAppBackendConfig].emap { conf =>
         def checkFoundDsoConfig(check: (SvAppBackendConfig, FoundDso) => Boolean) =
@@ -1090,6 +1096,10 @@ object SpliceConfig {
       deriveWriter[ScanRollForwardLsuConfig]
     implicit val analyzableTimeWindowConfigWriter: ConfigWriter[AnalyzableTimeWindowConfig] =
       deriveWriter[AnalyzableTimeWindowConfig]
+    implicit val scanSnapshotPruningConfigWriter: ConfigWriter[ScanSnapshotPruningConfig] =
+      deriveWriter[ScanSnapshotPruningConfig]
+    implicit val scanPruningConfigWriter: ConfigWriter[ScanPruningConfig] =
+      deriveWriter[ScanPruningConfig]
     implicit val scanConfigWriter: ConfigWriter[ScanAppBackendConfig] =
       deriveWriter[ScanAppBackendConfig]
     implicit val scanCacheConfigWriter: ConfigWriter[ScanCacheConfig] =
@@ -1179,9 +1189,6 @@ object SpliceConfig {
       )
     implicit val approvedSvIdentityConfigWriter: ConfigWriter[ApprovedSvIdentityConfig] =
       deriveWriter[ApprovedSvIdentityConfig]
-    implicit val cometBftConfigWriter: ConfigWriter[SvCometBftConfig] = deriveWriter
-    implicit val cometBftGovernanceKeyWriter: ConfigWriter[CometBftGovernanceKey] =
-      confidentialWriter[CometBftGovernanceKey](CometBftGovernanceKey.hideConfidential)
     implicit val svSequencerConfig: ConfigWriter[SvSequencerConfig] =
       deriveWriter[SvSequencerConfig]
     implicit val submissionRequestAmplificationWriter
@@ -1248,6 +1255,8 @@ object SpliceConfig {
     implicit val unavailablePartiesBackoffParametersWriter
         : ConfigWriter[UnavailablePartiesBackoffParameters] =
       deriveWriter[UnavailablePartiesBackoffParameters]
+    implicit val svOnboardingSnapshotsConfigWriter: ConfigWriter[SvOnboardingSnapshotsConfig] =
+      deriveWriter[SvOnboardingSnapshotsConfig]
     implicit val svConfigWriter: ConfigWriter[SvAppBackendConfig] =
       deriveWriter[SvAppBackendConfig]
 

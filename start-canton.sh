@@ -14,9 +14,6 @@ function usage() {
   echo "  -p postgres_mode postgres mode used in scripts/postgres.sh, default 'docker'"
   echo "  -w               only start canton instance with wall clock time"
   echo "  -s               only start canton instance with simulated time"
-  echo "  -f               start canton using the CometBFT driver for the global sequencers"
-  echo "  -F               same as -f, but does not start cometBFT, but rather assumes it is already running"
-  echo "  -e               start canton using the canton provided BFT sequencer"
   echo "  -m               collect metrics and send them to our CI prometheus instance"
   echo "  -c <canton>      start a custom canton binary instead of the one on the PATH"
   echo "  -B <script>      path to a custom canton bootstrap script"
@@ -30,9 +27,6 @@ simtime=1
 POSTGRES_MODE=docker
 CANTON=canton
 bootstrapScriptPath=bootstrap-canton.sc
-start_cometbft=0
-use_cometbft=0
-use_bft=0
 collect_metrics=0
 enable_key_download=0
 logFileHint=canton
@@ -78,19 +72,9 @@ do
             shift
             echo "using custom canton binary: $CANTON"
             ;;
-        -f)
-            start_cometbft=1
-            use_cometbft=1
-            echo "start canton with the cometbft driver (and start CometBFT)"
-            ;;
-        -F)
-            start_cometbft=0
-            use_cometbft=1
-            echo "start canton with the cometbft driver (assuming CometBFT is already running)"
-            ;;
-        -e)
-            use_bft=1
-            echo "start canton with the bft sequencer"
+        -f|-F|-e)
+            >&2 echo "$1 is no longer supported: Canton always uses the DA BFT sequencer, drop the flag"
+            exit 1
             ;;
         -m)
             collect_metrics=1
@@ -126,20 +110,11 @@ rm -f canton*.tokens
 # Start Postgres
 ./scripts/postgres.sh "$POSTGRES_MODE" start
 
-# Start CometBFT
-if [[ $start_cometbft -eq 1 ]]; then
-  # Sourcing this to get exported variables.
-  . scripts/cometbft.sh start
-fi;
-
 any_time_db_names=(
   "participant_sv1"
   "participant_sv2"
   "participant_sv3"
   "participant_sv4"
-  "sequencer_driver"
-  "sequencer_driver_splitwell"
-  "sequencer_driver_splitwell_upgrade"
   "sequencer_sv1"
   "sequencer_sv2"
   "sequencer_sv3"
@@ -150,6 +125,8 @@ any_time_db_names=(
   "sequencer_sv4_bft"
   "sequencer_splitwell"
   "sequencer_splitwell_upgrade"
+  "sequencer_splitwell_bft"
+  "sequencer_splitwell_upgrade_bft"
   "mediator_sv1"
   "mediator_sv2"
   "mediator_sv3"
@@ -159,7 +136,6 @@ any_time_db_names=(
   "participant_alice"
   "participant_bob"
   "participant_splitwell"
-  "sequencer_driver_global_reonboard"
 )
 
 db_names=()
@@ -206,14 +182,6 @@ JAVA_TOOL_OPTIONS="-Xms6g -Xmx8g -Dlogback.configurationFile=./scripts/canton-lo
 config_overrides=""
 config_overrides_simtime=""
 
-if [[ $use_cometbft -eq 1 ]]; then
-  config_overrides="$config_overrides -c ./apps/app/src/test/resources/cometbft-sequencer-global-domain-overrides.conf"
-fi;
-
-if [[ $use_bft -eq 1 ]]; then
-  config_overrides="$config_overrides -c ./apps/app/src/test/resources/bft-sequencer-global-domain-overrides.conf"
-fi;
-
 if [[ $enable_key_download -eq 1 ]]; then
   config_overrides="$config_overrides -C canton.parameters.enable-key-download=yes"
   config_overrides_simtime="$config_overrides_simtime -C canton.parameters.enable-key-download=yes"
@@ -225,9 +193,7 @@ tmux_cmd_canton() {
   mainLogFile="log/${logFileHint}.clog"
   consoleLogFile="log/${logFileHint}.out"
   tmux_cmd "$windowName" \
-    "EXTRA_CLASSPATH=$COMETBFT_DRIVER/driver.jar \
-     COMETBFT_DOCKER_IP=${COMETBFT_DOCKER_IP-} \
-     LOG_LEVEL_API_REQUEST=DEBUG \
+    "LOG_LEVEL_API_REQUEST=DEBUG \
      CANTON_PROTOCOL_VERSION=${CANTON_PROTOCOL_VERSION:-37} CANTON_TOKEN_FILENAME=$tokensFile CANTON_PARTICIPANTS_FILENAME=$participantsFile JAVA_TOOL_OPTIONS=\"$JAVA_TOOL_OPTIONS\" $CANTON \
       -c $baseConfig $confOverrides \
       --log-level-canton=DEBUG \

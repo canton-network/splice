@@ -86,11 +86,12 @@ final case class EnabledFeaturesConfig(
     // For now, we always need to do this as Canton does not update the configuration until a reconnect.
     // On 3.5 we should be able to set it to false.
     reconnectOnSynchronizerConfigurationChange: Boolean = true,
-    enableUnsupportedDarsUnvetting: Boolean = true,
     enableValidatorDarsUnvetting: Boolean = true,
     ignorePartyIdWithIgnoredAmulet: Boolean = true,
     naiveUnresponsivePartiesAutoIgnore: Boolean = true,
     enablePersistedUnavailableParties: Boolean = false,
+    // only takes effect together with enablePersistedUnavailableParties
+    enableVettingFailureBatchSplitting: Boolean = false,
 )
 
 final case class SpliceCachingConfigs(
@@ -129,6 +130,7 @@ case class SharedSpliceAppParameters(
 ) extends CantonNodeParameters {
   override def alphaVersionSupport: Boolean = false
   override def betaVersionSupport: Boolean = false
+  override def enableKeyDownload: Boolean = false
 
   override def tracing: TracingConfig = monitoringConfig.tracing
 

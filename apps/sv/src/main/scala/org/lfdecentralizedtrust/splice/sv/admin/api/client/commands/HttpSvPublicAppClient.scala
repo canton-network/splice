@@ -7,7 +7,7 @@ import cats.data.EitherT
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.synchronizer.sequencer.SequencerSnapshot as CantonSequencerSnapshot
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
-import com.digitalasset.canton.topology.{ParticipantId, PartyId, SequencerId}
+import com.digitalasset.canton.topology.{PartyId, SequencerId}
 import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
@@ -20,6 +20,7 @@ import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryab
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_public as http}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient
 import org.lfdecentralizedtrust.splice.sv.http.SvHttpClient.BaseCommandPublic
+import org.lfdecentralizedtrust.splice.sv.onboarding.SvOnboardingSnapshotId
 import org.lfdecentralizedtrust.splice.util.{Codec, TemplateJsonDecoder}
 
 import scala.concurrent.Future
@@ -188,24 +189,15 @@ object HttpSvPublicAppClient {
         s"Party migration failed as required proposals were not found. Found base mappings: PartyToParticipant($partyToParticipantMappingSerial)"
       )
 
-  case class OnboardSvPartyMigrationAuthorizeResponse(
-      acsSnapshot: Seq[ByteString]
-  )
-
-  case class OnboardSvPartyMigrationAuthorize(
-      participantId: ParticipantId,
-      candidate: PartyId,
-  ) extends HttpCommand[
-        SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse,
+  case class OnboardSvPartyMigrationPrepare(
+      candidate: PartyId
+  ) extends BaseCommandPublic[
+        http.OnboardSvPartyMigrationPrepareResponse,
         Either[
           OnboardSvPartyMigrationAuthorizeProposalNotFound,
-          OnboardSvPartyMigrationAuthorizeResponse,
+          SvOnboardingSnapshotId,
         ],
-        SvStreamClient,
       ] {
-    override val createGenClientFn = (fn, host, ec, mat) =>
-      SvStreamClient.httpClient(fn, host)(ec, mat)
-
     override val nonErrorStatusCodes = Set(StatusCodes.BadRequest)
 
     override def submitRequest(
@@ -214,8 +206,8 @@ object HttpSvPublicAppClient {
     ): EitherT[Future, Either[
       Throwable,
       HttpResponse,
-    ], SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse] =
-      client.onboardSvPartyMigrationAuthorize(
+    ], http.OnboardSvPartyMigrationPrepareResponse] =
+      client.onboardSvPartyMigrationPrepare(
         body = definitions.OnboardSvPartyMigrationAuthorizeRequest(
           candidate.toProtoPrimitive
         ),
@@ -225,14 +217,14 @@ object HttpSvPublicAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = {
-      case SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
+      case http.OnboardSvPartyMigrationPrepareResponse.BadRequest(
             definitions.OnboardSvPartyMigrationAuthorizeErrorResponse.members
               .AcceptedStateNotFoundErrorResponse(
                 response
               )
           ) =>
         Left(response.acceptedStateNotFound.error)
-      case SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
+      case http.OnboardSvPartyMigrationPrepareResponse.BadRequest(
             definitions.OnboardSvPartyMigrationAuthorizeErrorResponse.members
               .ProposalNotFoundErrorResponse(
                 response
@@ -245,14 +237,8 @@ object HttpSvPublicAppClient {
             )
           )
         )
-      case SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse.OK(acsSnapshotChunks) =>
-        Right(
-          Right(
-            OnboardSvPartyMigrationAuthorizeResponse(
-              acsSnapshotChunks.map(chunk => ByteString.copyFrom(chunk.asByteBuffer))
-            )
-          )
-        )
+      case http.OnboardSvPartyMigrationPrepareResponse.OK(response) =>
+        Right(Right(SvOnboardingSnapshotId(response.id)))
     }
   }
 
@@ -288,71 +274,27 @@ object HttpSvPublicAppClient {
     }
   }
 
-  case class GetCometBftNodeStatus()
-      extends BaseCommandPublic[
-        http.GetCometBftNodeStatusResponse,
-        definitions.CometBftNodeStatusResponse,
+  case class OnboardSvDownload(
+      id: SvOnboardingSnapshotId
+  ) extends HttpCommand[
+        SvStreamClient.OnboardSvDownloadResponse,
+        SvStreamClient.OnboardSvDownloadResponse,
+        SvStreamClient,
       ] {
+    override val createGenClientFn = (fn, host, ec, mat) =>
+      SvStreamClient.httpClient(fn, host)(ec, mat)
 
     override def submitRequest(
         client: Client,
         headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetCometBftNodeStatusResponse] =
-      client.getCometBftNodeStatus(
-        headers = headers
-      )
+    ): EitherT[Future, Either[
+      Throwable,
+      HttpResponse,
+    ], SvStreamClient.OnboardSvDownloadResponse] =
+      client.onboardSvDownload(id.value, headers = headers)
 
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ): PartialFunction[
-      http.GetCometBftNodeStatusResponse,
-      Either[String, definitions.CometBftNodeStatusResponse],
-    ] = {
-      case http.GetCometBftNodeStatusResponse.OK(
-            definitions.CometBftNodeStatusOrErrorResponse.members
-              .CometBftNodeStatusResponse(response)
-          ) =>
-        Right(response)
-      case http.GetCometBftNodeStatusResponse.OK(
-            definitions.CometBftNodeStatusOrErrorResponse.members.ErrorResponse(response)
-          ) =>
-        Left(response.error)
-    }
-  }
-
-  case class CometBftJsonRpcRequest(
-      id: definitions.CometBftJsonRpcRequestId,
-      method: definitions.CometBftJsonRpcRequest.Method,
-      params: Map[String, io.circe.Json],
-  ) extends BaseCommandPublic[
-        http.CometBftJsonRpcRequestResponse,
-        definitions.CometBftJsonRpcResponse,
-      ] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.CometBftJsonRpcRequestResponse] =
-      client.cometBftJsonRpcRequest(
-        headers = headers,
-        body = definitions.CometBftJsonRpcRequest(id, method, Some(params)),
-      )
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ): PartialFunction[
-      http.CometBftJsonRpcRequestResponse,
-      Either[String, definitions.CometBftJsonRpcResponse],
-    ] = {
-      case http.CometBftJsonRpcRequestResponse.OK(
-            definitions.CometBftJsonRpcOrErrorResponse.members.CometBftJsonRpcResponse(response)
-          ) =>
-        Right(response)
-      case http.CometBftJsonRpcRequestResponse.OK(
-            definitions.CometBftJsonRpcOrErrorResponse.members.ErrorResponse(response)
-          ) =>
-        Left(response.error)
-      case http.CometBftJsonRpcRequestResponse.NotFound(response) => Left(response.error)
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = { case response =>
+      Right(response)
     }
   }
 

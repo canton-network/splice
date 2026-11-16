@@ -9,6 +9,7 @@ import cats.syntax.applicative.*
 import cats.syntax.either.*
 import cats.syntax.functorFilter.*
 import com.daml.grpc.{GrpcException, GrpcStatus}
+import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
@@ -52,6 +53,7 @@ import com.digitalasset.canton.time.{Clock, FetchTimeResponse}
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.admin.grpc
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, BaseWriteRequest, TopologyStoreId}
+import com.digitalasset.canton.topology.admin.v30
 import com.digitalasset.canton.topology.admin.v30.ExportTopologySnapshotResponse
 import com.digitalasset.canton.topology.store.{StoredTopologyTransaction, TimeQuery}
 import com.digitalasset.canton.topology.transaction.*
@@ -59,10 +61,14 @@ import com.digitalasset.canton.topology.transaction.SignedTopologyTransaction.Ge
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.validation.ProtoUnvalidated.syntax.*
 import com.digitalasset.canton.version.{ProtocolVersion, ReleaseVersion}
 import com.google.protobuf.ByteString
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.{Source, StreamConverters}
+import org.apache.pekko.util.ByteString as PekkoByteString
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.auth.{AuthTokenProvider, AuthTokenSourceNone}
 import org.lfdecentralizedtrust.splice.config.Thresholds
@@ -78,6 +84,7 @@ import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.Topol
   ProposalSignedByOwnKey,
 }
 
+import java.io.InputStream
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -682,6 +689,69 @@ abstract class TopologyAdminConnection(
       )
     )(traceContext).discard
     observer.resultBytes
+  }
+
+  /** Streams all active PartyToParticipant mappings of the given store at the given time and
+    * folds them into a state as they arrive.
+    *
+    * Unlike [[listPartyToParticipant]], this uses the streaming ExportTopologySnapshotV2 endpoint
+    * and therefore works for stores with millions of parties where a single unary response
+    * would be too large.
+    */
+  def foldPartyToParticipantSnapshot[S](
+      store: TopologyStoreId,
+      timeQuery: TimeQuery,
+      zero: S,
+  )(f: (S, PartyToParticipant) => S)(implicit
+      traceContext: TraceContext,
+      esf: ExecutionSequencerFactory,
+      mat: Materializer,
+  ): Future[S] = {
+    val request = v30.ExportTopologySnapshotV2Request(
+      baseQuery = Some(
+        BaseQuery(
+          store = store,
+          proposals = false,
+          timeQuery = timeQuery,
+          ops = Some(TopologyChangeOp.Replace),
+          filterSigningKey = "",
+          protocolVersion = None,
+        ).toProtoV1
+      ),
+      excludeMappings = TopologyMapping.Code.all
+        .filterNot(_ == TopologyMapping.Code.PartyToParticipant)
+        .map(_.code.toProtoUnvalidated),
+      filterNamespace = "",
+    )
+    val chunks = runServerStreaming(v30.TopologyManagerReadServiceGrpc.stub, request)(stub =>
+      stub.exportTopologySnapshotV2
+    ).map(response => PekkoByteString.fromArrayUnsafe(response.chunk.toByteArray))
+    Source
+      .unfoldResource[PartyToParticipant, InputStream](
+        create = () =>
+          chunks.runWith(
+            StreamConverters.asInputStream(retryProvider.timeouts.unbounded.asFiniteApproximation)
+          ),
+        read = input =>
+          StoredTopologyTransaction.parseDelimitedFromTrusted(input).map {
+            case Left(err) =>
+              throw Status.INTERNAL
+                .withDescription(s"Failed to parse topology snapshot: $err")
+                .asRuntimeException()
+            case Right(tx) =>
+              tx.selectMapping[PartyToParticipant]
+                .getOrElse(
+                  throw Status.INTERNAL
+                    .withDescription(
+                      s"Expected a PartyToParticipant mapping but got ${tx.mapping.code}"
+                    )
+                    .asRuntimeException()
+                )
+                .mapping
+          },
+        close = _.close(),
+      )
+      .runFold(zero)(f)
   }
 
   // ImportTopologySnapshot currently causes a PROTO_DESERIALIZATION_FAILURE
@@ -1660,7 +1730,6 @@ abstract class TopologyAdminConnection(
         BaseVaultRequest(clientVersion = ReleaseVersion.current),
         filterFingerprint = "",
         filterName = name,
-        serverVersion = None,
       )
     )
   }
@@ -1687,7 +1756,6 @@ abstract class TopologyAdminConnection(
         name,
         usage,
         None,
-        serverVersion = None,
       )
     )
   }
@@ -1707,7 +1775,6 @@ abstract class TopologyAdminConnection(
         kmsKeyId,
         usage,
         name,
-        serverVersion = None,
       )
     )
   }

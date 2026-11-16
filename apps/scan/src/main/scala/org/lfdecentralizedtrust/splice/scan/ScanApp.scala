@@ -204,6 +204,14 @@ class ScanApp(
       domainMigrationId <- appInitStep("Resolving domain migration id") {
         resolveDomainMigrationId()
       }
+      synchronizerId <-
+        retryProvider.getValueWithRetries(
+          RetryFor.WaitingOnInitDependency,
+          "synchronizer id",
+          "synchronizer id from participant",
+          participantAdminConnection.getSynchronizerId(config.globalSynchronizerAlias),
+          logger,
+        )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       store <- ScanStore(
         key = ScanStore.Key(dsoParty = dsoParty),
@@ -211,6 +219,7 @@ class ScanApp(
         loggerFactory,
         retryProvider,
         domainMigrationId,
+        synchronizerId,
         participantId,
         config.cache,
         scanAppMetrics.dbScanStore,
@@ -332,14 +341,6 @@ class ScanApp(
         config.rewardMintingAllowanceTolerance,
         loggerFactory,
       )
-      synchronizerId <-
-        retryProvider.getValueWithRetries(
-          RetryFor.WaitingOnInitDependency,
-          "synchronizer id",
-          "synchronizer id from participant",
-          participantAdminConnection.getSynchronizerId(config.globalSynchronizerAlias),
-          logger,
-        )
       packageVersionSupport = PackageVersionSupport.createPackageVersionSupport(
         synchronizerId,
         appInitConnection,
@@ -362,6 +363,7 @@ class ScanApp(
         amuletAppParameters.upgradesConfig,
         packageVersionSupport,
         historyReadiness,
+        kvStore,
       )
       _ = automation.registerHistoryStartTrigger(historyStart)
       scanVerdictStore = DbScanVerdictStore(

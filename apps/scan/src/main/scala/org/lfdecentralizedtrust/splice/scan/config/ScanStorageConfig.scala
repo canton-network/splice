@@ -7,7 +7,7 @@ import cats.data.NonEmptyList
 import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
+  AcsSnapshotInfo,
   IncrementalAcsSnapshot,
 }
 
@@ -44,8 +44,8 @@ case class ScanStorageConfig(
   private def timesToDoSnapshot(periodHours: Int) = (0 to 23).filter(_ % periodHours == 0)
 
   // Simplified version of computeSnapshotTimeAfter, which is correct only if `lastSnapshot` is a "legal" snapshot timestamp
-  // Since we get an AcsSnapshot here and not an arbitrary CantonTimestamp, we can assume that this snapshot is valid.
-  def nextSnapshotTime(lastSnapshot: AcsSnapshot): CantonTimestamp = {
+  // Since we get an AcsSnapshotInfo here and not an arbitrary CantonTimestamp, we can assume that this snapshot is valid.
+  def nextSnapshotTime(lastSnapshot: AcsSnapshotInfo): CantonTimestamp = {
     lastSnapshot.snapshotRecordTime.plus(Duration.ofHours(dbAcsSnapshotPeriodHours.toLong))
   }
   def nextSnapshotTime(lastSnapshot: IncrementalAcsSnapshot): CantonTimestamp = {

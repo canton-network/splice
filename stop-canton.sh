@@ -25,9 +25,6 @@ fi
 rm -f canton.tokens canton-simtime.tokens
 rm -f canton.participants canton-simtime.participants
 
-echo "Stopping cometbft"
-./scripts/cometbft.sh stop
-
 echo "Stopping postgres"
 ./scripts/postgres.sh "$POSTGRES_MODE" stop
 

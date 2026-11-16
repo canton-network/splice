@@ -14,8 +14,9 @@ This directory contains hard forks from that tree where we no longer wish to tra
   Splice additions to `canton/community/base`, such as access classes for config, crypto and
   protocol internals, and extension methods for `CantonTimestamp` and `ErrorUtil`.
 `common`::
-  Splice additions to `canton/community/common`, such as access classes for topology admin
-  internals.
+  Splice additions to Canton's `community/common`, which we use as the published
+  `community-common` artifact instead of a copy in `../canton/`. Such as access classes for
+  topology admin internals.
 `testing`::
   Splice additions to `canton/community/testing`: `BaseTestExtensions`, which Splice's
   `TestCommon` mixes in.

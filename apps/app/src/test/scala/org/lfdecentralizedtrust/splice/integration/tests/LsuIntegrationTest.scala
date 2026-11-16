@@ -247,7 +247,6 @@ class LsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "cancel-global-synchronizer-upgrade",
       // LSU exports the sequencer and mediator keys
       enableKeyDownload = true,
@@ -362,13 +361,14 @@ class LsuIntegrationTest
         None,
       ),
       participants = false,
-      enableBftSequencer = true,
       logSuffix = "global-synchronizer-upgrade",
       // LSU exports the sequencer and mediator keys
       enableKeyDownload = true,
     )(
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
+      // stop them to avoid errors during the restart of the apps
+      stopAllAsync(aliceValidatorBackend, splitwellValidatorBackend).futureValue
 
       val allNodes = Seq[AppBackendReference](
         sv1ScanBackend,

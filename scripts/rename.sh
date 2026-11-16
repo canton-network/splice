@@ -754,7 +754,6 @@ function subcmd_cn_splice {
     | (?:apps|(?:public-)?http)-gateway
     | cluster-ingress-runbook
     | cluster-loopback-gateway
-    | cometbft
     # | docs
     | domain
     | global-domain

@@ -262,6 +262,7 @@ object ScanStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       cacheConfigs: ScanCacheConfig,
       metrics: DbScanStoreMetrics,
@@ -283,6 +284,7 @@ object ScanStore {
         loggerFactory,
         retryProvider,
         migrationId,
+        synchronizerId,
         participantId,
         ingestionConfig,
         metrics,
@@ -362,6 +364,14 @@ object ScanStore {
               featuredAppRightProvider =
                 Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
             )
+        },
+        mkFilter(splice.amulet.RewardCouponV2.COMPANION)(
+          co => co.payload.dso == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          ScanAcsStoreRowData(contract)
         },
         mkFilter(splice.amulet.Amulet.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanAcsStoreRowData(

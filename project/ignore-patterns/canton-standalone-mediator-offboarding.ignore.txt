@@ -15,6 +15,8 @@ Failed to send result to sequencer for request.*Unregistered recipients.*unregis
 
 Member MED::sv4SvOffboarding.* access is disabled
 
+SEQUENCER_SUBMISSION_REQUEST_MALFORMED.*MED::sv4SvOffboarding.*(is not part of the mediator group|Validation of aggregation rule failed)
+
 Could not send a time-advancing message
 
 Request failed for server.*Sequencer.* Is the server running?

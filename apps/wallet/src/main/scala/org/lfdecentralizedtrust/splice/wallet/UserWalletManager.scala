@@ -205,6 +205,7 @@ class UserWalletManager(
         userLoggerFactory,
         userRetryProvider,
         migrationId,
+        store.multiDomainAcsStore.synchronizerId,
         participantId,
         automationConfig.ingestion,
         params.defaultLimit,

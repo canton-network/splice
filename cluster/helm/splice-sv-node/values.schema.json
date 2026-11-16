@@ -74,35 +74,6 @@
   },
   "allOf": [
     {
-      "if": {
-        "properties": {
-          "cometbft": {
-            "properties": {
-              "enabled": {
-                "const": "true"
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "cometbft": {
-            "type": "object",
-            "required": ["connectionUri"],
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              },
-              "connectionUri": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "oneOf": [
         {
           "required": ["domain"],
@@ -284,9 +255,6 @@
               }
             },
             "skipInitialization": {
-                "type": "boolean"
-            },
-            "enableBftSequencer": {
                 "type": "boolean"
             }
           }
@@ -663,24 +631,6 @@
             },
             "pruningInterval": {
               "type": "string"
-            }
-          }
-        },
-        "enableBftSequencer": {
-          "type": "boolean"
-        },
-        "cometBFT": {
-          "type": "object",
-          "required": ["enabled"],
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "connectionUri": {
-              "type": "string"
-            },
-            "externalGovernanceKey": {
-              "type": "boolean"
             }
           }
         }

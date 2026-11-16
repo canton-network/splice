@@ -52,16 +52,20 @@ import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import TreasuryService.{AmuletOperationDedupConfig, basicAccount}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
-import org.lfdecentralizedtrust.splice.wallet.util.{TopupUtil, ValidatorTopupConfig}
+import org.lfdecentralizedtrust.splice.wallet.util.{
+  FeaturedAppKindUtil,
+  TopupUtil,
+  ValidatorTopupConfig,
+}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ErrorUtil
 import org.lfdecentralizedtrust.splice.util.ErrorUtilExtensions.*
-import io.circe.Json
 import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulettransferinstruction.AmuletTransferInstruction
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1.allocationinstructionresult_output as instructionresultv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2.allocationinstructionresult_output as instructionresultv2
@@ -326,11 +330,19 @@ class HttpWalletHandler(
 
   override def selfGrantFeatureAppRight(
       respond: v0.WalletResource.SelfGrantFeatureAppRightResponse.type
-  )(request: Option[Json])(
+  )(request: Option[d0.SelfGrantFeaturedAppRightRequest])(
       tuser: WalletUserRequest
   ): Future[r0.SelfGrantFeatureAppRightResponse] = {
     implicit val WalletUserRequest(_, userWallet, traceContext) = tuser
     withSpan(s"$workflowId.selfGrantFeatureAppRight") { implicit traceContext => _ =>
+      val appKind = request.flatMap(_.appKind).map(FeaturedAppKindUtil.toDaml)
+      val activityWeight =
+        request.flatMap(_.activityWeight).map(Codec.tryDecode(Codec.JavaBigDecimal)(_))
+      val opsParties = request.flatMap(_.opsPartyIds).map { partyIds =>
+        // Same limit as enforced by WalletAppInstall_FeaturedAppRights_SelfGrant
+        maxSizeOrFail("ops_party_ids", partyIds, 10)
+          .map(Codec.tryDecode(Codec.Party)(_).toProtoPrimitive)
+      }
       for {
         amuletRules <- scanConnection.getAmuletRulesWithState()
         result <- exerciseWalletAction((installCid, _) =>
@@ -338,10 +350,11 @@ class HttpWalletHandler(
             installCid
               .exerciseWalletAppInstall_FeaturedAppRights_SelfGrant(
                 amuletRules.contractId,
-                // TODO(#8057): allow setting these fields
-                java.util.Optional.empty(),
-                java.util.Optional.empty(),
-                java.util.Optional.empty(),
+                // Unset fields are defaulted by the Daml code. Setting any of them fails
+                // command submission as long as splice-wallet < 0.1.26 is vetted.
+                activityWeight.toJava,
+                appKind.toJava,
+                opsParties.map(_.asJava).toJava,
               )
               .map(_.exerciseResult.featuredAppRight)
           )

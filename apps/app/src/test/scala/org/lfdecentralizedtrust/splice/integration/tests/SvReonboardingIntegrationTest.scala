@@ -425,6 +425,11 @@ class SvReonboardingIntegrationTest
           "EXTRA_PARTICIPANT_ADMIN_USER" -> validatorLocalBackend.config.ledgerApiUser,
           "EXTRA_PARTICIPANT_DB" -> s"participant_reonboard_new",
         ),
+        // TODO(DACH-NY/canton-network-internal#8155): Reuse the sv4 port once fixed upstream.
+        extraSequencerConfig = Seq(
+          "sequencer.config.initial-network.server-endpoint.port=27810",
+          "sequencer.config.initial-network.server-endpoint.external-port=27810",
+        ),
       )() {
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {

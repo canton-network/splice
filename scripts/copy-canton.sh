@@ -61,6 +61,7 @@ rsync -av --delete \
     --exclude 'base/test-evidence' \
     --exclude 'base/testing-utils' \
     --exclude 'base/timer-utils' \
+    --exclude 'base/validation' \
     --exclude 'community/lib/Blake2b' \
     --exclude 'community/lib/google-common-protos-scala' \
     --exclude 'community/lib/magnolify' \
@@ -70,6 +71,8 @@ rsync -av --delete \
     --exclude 'community/bindings-java' --exclude "community/transcode" \
     --exclude 'community/kms-driver-api' \
     --exclude 'community/util-observability' \
+    --exclude 'community/admin-api' \
+    --exclude 'community/common' \
     --exclude 'community/ledger-api-scala' --exclude "**/ledger-api-proto" \
     --exclude '*/canton-community-app/test/scala/*/integration/tests' \
     --exclude 'community/ledger/ledger-api-core' \
