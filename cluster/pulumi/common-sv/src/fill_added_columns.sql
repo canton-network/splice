@@ -14,6 +14,7 @@ IF ARRAY_LENGTH(added) > 0 THEN
     SELECT
       {{fillSourceColumns}}
     FROM {{stagingTable}} AS staging
+    WHERE TRUE
     QUALIFY ROW_NUMBER() OVER (
       PARTITION BY {{primaryKeyExpr}}
       ORDER BY

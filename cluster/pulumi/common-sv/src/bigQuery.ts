@@ -532,11 +532,14 @@ function installProdSchemaMigrationRoutines(
     pulumi.interpolate`\`${projectId}.${prodDataset.datasetId}.${routineId}\``;
   const checkRoutineName = routineName(checkProdSchemaRoutineId);
   const fixRoutineName = routineName(fixProdSchemaRoutineId);
-  const infoSchema = (dataset: gcp.bigquery.Dataset, view: string) =>
-    pulumi.interpolate`\`${projectId}.${dataset.datasetId}.INFORMATION_SCHEMA.${view}\``;
-  const stagingColumns = infoSchema(stagingDataset, 'COLUMNS');
-  const prodColumns = infoSchema(prodDataset, 'COLUMNS');
-  const prodTables = infoSchema(prodDataset, 'TABLES');
+  // Each view gets an alias: unaliased, `INFORMATION_SCHEMA.COLUMNS`
+  // would be the range variable COLUMNS, which names are matched
+  // against case-insensitively, before the `columns` argument.
+  const infoSchema = (dataset: gcp.bigquery.Dataset, view: string, alias: string) =>
+    pulumi.interpolate`\`${projectId}.${dataset.datasetId}.INFORMATION_SCHEMA.${view}\` AS ${alias}`;
+  const stagingColumns = infoSchema(stagingDataset, 'COLUMNS', 'staging_columns');
+  const prodColumns = infoSchema(prodDataset, 'COLUMNS', 'prod_columns');
+  const prodTables = infoSchema(prodDataset, 'TABLES', 'prod_tables');
 
   // Fails the calling append if a listed column is missing.
   const checkRoutine = new gcp.bigquery.Routine('prod-schema-check-routine', {
