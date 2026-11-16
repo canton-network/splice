@@ -1,7 +1,7 @@
 ---
 name: ci-triage
 description: 'Triage one DACH-NY/cn-test-failures issue (auto-filed for a failed GitHub Actions or CircleCI job) into a reproducible evidence packet - resolve the issue to its exact CI job, fetch the job log and artifacts, isolate the flagged lines or failing assertion, check known flake families and recent issues for duplicates, find the root cause with commands and verbatim log output, record it in the triage dataset (DACH-NY/cn-test-failures), and suggest one action on the issue (comment, close as duplicate, Status) for the user to review. Use for "triage cn-test-failures #N", "is this a dup", "root cause of shard failure", checkErrors WARN/ERROR failures, integration test flakes. For the whole inbox use ci-triage-inbox; to write the fix use ci-triage-fix.'
-argument-hint: '[ref] [repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=log/cn-test-failures] [access=ro|rw]'
+argument-hint: '[ref] [repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=cn-test-failures] [access=ro|rw]'
 ---
 
 # Triage one cn-test-failures issue
@@ -31,43 +31,57 @@ arguments; an inbox round passes them on to its background agents):
 |---|---|---|
 | `repo` | `DACH-NY/cn-test-failures` | GitHub repository of the dataset (private) |
 | `branch` | `app-dev/ci-triage` | its branch |
-| `dir` | `log/cn-test-failures` | the local clone, relative to the splice checkout root (`log/` is gitignored) |
+| `dir` | `cn-test-failures` | the local clone; a relative path is taken from the directory that holds the main splice checkout, so it is shared by all worktrees and survives clearing `log/` |
 | `access` | `ro` | `ro`: the sandbox can read the repository but not push, so the user pushes; `rw`: it pushes itself |
 
-`<D>` below and in the other two skills is `<dir>/ci-triage`. Arguments given: $ARGUMENTS
+`<dir>` below is always the absolute path, and `<D>` (here and in the other two skills) is `<dir>/ci-triage`.
+Arguments of this invocation: $ARGUMENTS (when another ci-triage skill or a brief sent you here, this line shows a
+literal placeholder; take the arguments from that skill or the brief).
 
 Setup, once per session, before reading anything in `<D>`:
-```
-git clone --single-branch --branch <branch> https://github.com/<repo>.git <dir>     # <dir> missing
-git -C <dir> fetch origin <branch> && git -C <dir> merge --ff-only origin/<branch>    # <dir> present
-```
-A 403 or "not found" means the sandbox token cannot read `<repo>`: stop and tell the user. When the merge is not a
-fast-forward, the clone has commits that were never handed over or not yet pushed: show `git -C <dir> log --oneline
-origin/<branch>...HEAD` and ask the user before rebasing or resetting.
+1. `.claude/skills/ci-triage/scripts/probe_access.py`. The clone needs `cn-test-failures contents` in the `gh`
+   column (git uses the sandbox token), or `ghx` after the router's sandbox setup. Without it, stop and tell the
+   user: the sandbox token needs cn-test-failures Contents read (Contents write for `access=rw`), fine-grained,
+   resource owner DACH-NY; the rest of the access setup is in `<D>/CLAUDE.md`, Access, once the clone exists.
+2. Resolve `<dir>` and clone or update it (shell state does not persist; repeat the absolute path in every command):
+   ```
+   echo "$(cd "$(git rev-parse --git-common-dir)/../.." && pwd)/cn-test-failures"                   # default <dir>
+   git clone --single-branch --branch <branch> https://github.com/<repo>.git <dir>                 # <dir> missing
+   git -C <dir> fetch origin <branch> && git -C <dir> merge --ff-only origin/<branch>              # <dir> present
+   ```
+   When the merge is not a fast-forward, the clone has commits that were not handed over or not yet pushed: show
+   `git -C <dir> log --oneline --graph origin/<branch>...HEAD` and ask the user before merging, rebasing or resetting.
+3. Ask the user once per session for the path of their own clone of `<repo>` on the host, on `<branch>`
+   (`<checkout>` below); commands that read dataset files on the host (`--body-file`, `--comment-file`) use it.
 
 Commits: in `<dir>`, only paths under `ci-triage/`, `git -C <dir> add <paths> && git -C <dir> commit -s -m
-'<subject>' -- <paths>` (never `-a`; on `index.lock` errors wait and retry). No CI tags: the dataset repository runs
-no CI for it.
+'<subject>' -- <paths>` (never `-a`; on `index.lock` errors wait and retry). No CI tags.
 
 Hand-over, after the commits a user needs (comment body files, packets) and before printing commands that use them:
-- `access=rw`: `git -C <dir> push origin <branch>`.
-- `access=ro`: write a bundle of the commits the remote lacks, and give the user the commands to apply it:
+- `access=rw`: `git -C <dir> push origin <branch>`. If it is rejected because the remote moved: `git -C <dir> fetch
+  origin <branch> && git -C <dir> merge --no-edit origin/<branch>`, then push again; on a conflict stop and ask.
+- `access=ro`: write a bundle of the commits the remote lacks into the clone's git directory, and print the commands
+  that apply it:
   ```
-  B=$PWD/log/ci-triage-$(date -u +%Y%m%dT%H%M%SZ).bundle
+  B=$(git -C <dir> rev-parse --absolute-git-dir)/ci-triage-$(date -u +%Y%m%dT%H%M%SZ).bundle
   git -C <dir> bundle create $B origin/<branch>..<branch>      # refuses an empty bundle: nothing to hand over
-  git remote | sed -n 's/^sandbox-//p'        # the sandbox name
+  echo "$SANDBOX_NAME"; git remote | sed -n 's/^sandbox-//p'  # the sandbox name
   ```
-  For the user, on the host (`<checkout>` is their clone of `<repo>` on `<branch>`; `sbx cp` takes
-  `<sandbox>:<path>` like `docker cp`, check `sbx cp --help` if it complains):
+  The sandbox name is `$SANDBOX_NAME`; if that is empty, the one `sandbox-<name>` remote of the splice checkout;
+  if there is none or several, ask. For the user, on the host (`sbx cp` takes `<sandbox>:<path>` like `docker cp`;
+  check `sbx cp --help` if it complains):
   ```
   sbx cp <sandbox name>:<B> <checkout>/
-  git -C <checkout> pull --ff-only <checkout>/<bundle file name> <branch>
+  git -C <checkout> pull --ff-only origin <branch>
+  git -C <checkout> pull --no-rebase --no-edit <checkout>/<bundle file name> <branch>
   git -C <checkout> push origin <branch>
+  rm <checkout>/<bundle file name>
   ```
-  When the host branch has moved on, a plain `git pull` (merge) instead of `--ff-only`; never a rebase, which
-  orphans the commits in the sandbox clone. Then `rm` the bundle on both sides.
+  The first pull brings the host clone up to the remote, which the bundle needs. `--no-rebase` matters even when
+  the user's config says `pull.rebase=true`: a rebase would give the commits new ids and orphan them in the sandbox
+  clone. Then delete `<B>` in the sandbox.
 
-Exports: scripts that the user runs on the host write to `log/ci-triage-export/` in the host splice checkout; read
+Exports: scripts that the user runs on the host write to `log/ci-triage-export/` in their splice checkout; read
 them in the sandbox as `/run/sandbox/source/log/ci-triage-export/` (clone mode). Logs the user saves for a ref go
 to `log/ci-triage-export/<ref>/`.
 

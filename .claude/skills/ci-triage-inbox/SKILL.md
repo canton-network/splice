@@ -1,7 +1,7 @@
 ---
 name: ci-triage-inbox
 description: 'The triage agent for the cn-test-failures board (DACH-NY project 48) - find the root cause of every Status = Inbox item. Fetch the inbox export, group the items by run, sha and failure signature, triage the groups in parallel background agents with the ci-triage skill, then present them to the user one at a time - evidence, cause and one suggested action (comment and Triaged, close as duplicate, Infrequent / no repro, a log request or a question) with its commands and the full comment text - discuss, apply the user''s corrections, and commit. Does not write fixes (that is ci-triage-fix). Use for "triage the inbox", "empty the inbox", "what''s in the inbox", "/ci-triage-inbox".'
-argument-hint: '[repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=log/cn-test-failures] [access=ro|rw]'
+argument-hint: '[repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=cn-test-failures] [access=ro|rw]'
 ---
 
 # Triage the CI inbox
@@ -41,9 +41,8 @@ back because the analysis is unfinished.
 
 ## 1. Fetch
 
-- Run `.claude/skills/ci-triage/scripts/probe_access.py` once per session and tell the user which method you use per capability
-  (`<D>/CLAUDE.md`, Access).
-- Set up the dataset clone (ci-triage, Dataset).
+- Set up the dataset clone (ci-triage, Dataset; it starts with `probe_access.py`), then tell the user which method
+  you use per capability (`<D>/CLAUDE.md`, Access).
 - Read `<D>/STATE.md` and the last round's README: actions handed out but not run, open log requests.
 - Create the round directory `<D>/rounds/<YYYY-MM-DDTHHMMSSZ>[-<slug>]/` (UTC start, `date -u
   +%Y-%m-%dT%H%M%SZ`) and name it in `STATE.md`. Someone resuming it without the chat must see what was found,

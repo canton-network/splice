@@ -1,7 +1,7 @@
 # Issue comments
 
 Reader: a senior engineer who knows splice and Canton but never opens the triage dataset. The comment must stand on
-its own: no packet paths or other triage-branch references.
+its own: no packet paths or other triage-dataset references.
 
 Shape (Markdown, short paragraphs of one to three sentences; as short as the facts allow):
 1. Verdict in one line: what kind of failure, and whether splice needs a change. State it as certain only when
@@ -17,7 +17,7 @@ Shape (Markdown, short paragraphs of one to three sentences; as short as the fac
    of the investigation, no list of runs checked.
 5. Resolution only when someone has to act and the action is not obvious from the verdict: the fix in one sentence
    (file and change) and the owner. No reference to the fix PR or branch: the PR links the issue with `Fixes ...`.
-Do not claim evidence is absent ("not in the artifacts", "the logs do not show") unless a stated search settled it; an unexplained step is left out or named as open ("not found" is a statement about our search, not the logs). No triage-branch vocabulary: no family letters ("family L") or packet names; describe the mechanism instead. No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
+Do not claim evidence is absent ("not in the artifacts", "the logs do not show") unless a stated search settled it; an unexplained step is left out or named as open ("not found" is a statement about our search, not the logs). No triage-dataset vocabulary: no family letters ("family L") or packet names; describe the mechanism instead. No speculation about causes the evidence does not show (who or what did something, why), no @mentions (the
 assignee is set with the command), and no "Not checked" paragraph unless the missing evidence decides whether
 someone has to act; then one sentence, and if the evidence is in a system the user can read (GCP logs: recipe 13),
 hand them the link first.
@@ -32,9 +32,10 @@ with `close_duplicates.py --comment '...'` (no body file; no backticks or quotes
 name the parent (no "Duplicate of #N"): `close_duplicates.py` closes with `--duplicate-of`, which links the parent
 already.
 
-Body files: `<D>/CLAUDE.md` (the dataset's, ci-triage skill Dataset), Commands for the user. Every comment except a single line of plain text goes
-into `<round dir>/comments/<ref>.md` and is posted with `--body-file` (or `close_duplicates.py --comment-file`);
-never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
+Body files: `<D>/CLAUDE.md`, Commands for the user. Every comment except a single line of plain text goes into
+`<round dir>/comments/<ref>.md`, is handed over (ci-triage skill, Dataset) and is posted from the user's host clone
+with `--body-file <checkout>/ci-triage/rounds/<round>/comments/<ref>.md` (or `close_duplicates.py --comment-file`
+with the same path, which accepts only such files); never edit a log line to fit a quoting rule. Print the full body in chat for review: the command, then the file
 content in a `~~~` fence (so inner ``` fences render as part of it).
 
 ## What the user changes when posting (drafts vs posted comments, 2026-11-05: 11164, 11170, 11172, 11175, 11186, 11219, 11226, 11228, 11232)
@@ -79,7 +80,7 @@ The secrets are set (the `Check required secrets are set` step added by canton-n
 ## Older example (shape of 11152, accepted by the user on 2026-11-03, longer than the user now prefers; details made up)
 
 ```
-gh issue comment 11152 -R DACH-NY/cn-test-failures --body-file ci-triage/rounds/2026-11-03T131520Z/comments/11152.md
+gh issue comment 11152 -R DACH-NY/cn-test-failures --body-file <checkout>/ci-triage/rounds/2026-11-03T131520Z/comments/11152.md
 ```
 
 Body (an earlier draft of that file):

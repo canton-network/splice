@@ -1,7 +1,7 @@
 ---
 name: ci-triage-fix
 description: 'The fix agent for cn-test-failures issues with Status Triaged and no assignee - pick one from the board export (or the issue the user names), read its root cause from the issue comments and the evidence packet if there is one, propose a fix and iterate on it with the user, then write it on a fix branch in its own worktree, pass the CI static checks, and hand over the fetch commands, the PR title and description (closing the issue) and the board commands; also follows the user''s open fix PRs (CI failures, review comments). Use for "fix a triaged issue", "what can be fixed", "fix #11165", "PR 8238 failed static_tests", "/ci-triage-fix".'
-argument-hint: '[ref] [repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=log/cn-test-failures] [access=ro|rw]'
+argument-hint: '[ref] [repo=DACH-NY/cn-test-failures] [branch=app-dev/ci-triage] [dir=cn-test-failures] [access=ro|rw]'
 ---
 
 # Fix a triaged CI failure
@@ -63,7 +63,8 @@ Print, in this order:
    when longer than a screen).
 2. What was and was not verified.
 3. The PR title (`<Suite or component>: <change>`) and the description in a `~~~` fence: what failed in two or three
-   sentences (no triage-branch references), the change, how it was verified, and as last lines
+   sentences (no triage-dataset references, and nothing from private sources: canton-network-internal,
+   CircleCI or GCP logs), the change, how it was verified, and as last lines
    `Fixes DACH-NY/cn-test-failures#<ref>`, one per issue it fixes. The merge then closes the issues.
 
 ## 5. Follow open PRs
