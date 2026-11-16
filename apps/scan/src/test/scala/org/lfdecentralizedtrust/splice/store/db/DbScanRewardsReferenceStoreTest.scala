@@ -1088,6 +1088,7 @@ class DbScanRewardsReferenceStoreTest
         _ <- initWithAcs()(store.multiDomainAcsStore)
 
         // Before any archives: returns empty
+        _ <- advanceRecordTime(store, ts(100))
         emptyResult <- store.lookupActiveOpenMiningRounds(Seq(ts(100)))
         _ = emptyResult shouldBe empty
 
@@ -1154,6 +1155,33 @@ class DbScanRewardsReferenceStoreTest
             ),
           )
         )
+      }
+    }
+
+    "wait for the first archival up to the requested time before resolving rounds" in {
+      val store = mkStore()
+      val round3 =
+        openMiningRound(dsoParty, round = 3, amuletPrice = 1.0, opensAt = ts(100).toInstant)
+          .copy(createdAt = ts(100).toInstant)
+      val round4 =
+        openMiningRound(dsoParty, round = 4, amuletPrice = 1.5, opensAt = ts(300).toInstant)
+          .copy(createdAt = ts(200).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(round3, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(round4, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+        // The store has not ingested the archival of round3 at t=250 yet
+        pendingActive = store.lookupActiveOpenMiningRounds(Seq(ts(300)))
+        pendingLatestArchived = store.lookupLatestArchivedOpenMiningRound(ts(300))
+        _ = pendingActive.isCompleted shouldBe false
+        _ = pendingLatestArchived.isCompleted shouldBe false
+        _ <- sync1.archive(round3, recordTime = ts(250).toInstant)(store.multiDomainAcsStore)
+        _ <- advanceRecordTime(store, ts(300))
+        active <- pendingActive
+        latestArchived <- pendingLatestArchived
+      } yield {
+        active shouldBe Map(ts(300) -> roundInfo(4L, ts(300)))
+        latestArchived shouldBe Some(3L)
       }
     }
   }
