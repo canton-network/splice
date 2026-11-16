@@ -127,7 +127,7 @@ class UnavailablePartiesDetector(
         //  - if the batch has only one task, mark the parties with the lowest supported version as unavailable.
         case Failure(reason @ UnresponsivePartiesFailure(unresponsiveParties))
             if shrinks(current, partiesOf, unresponsiveParties) =>
-          unavailablePartiesStore.addParties(unresponsiveParties).flatMap { toIgnore =>
+          unavailablePartiesStore.addParties(unresponsiveParties.toSeq).flatMap { toIgnore =>
             if (toIgnore.isEmpty) {
               logger.warn(
                 s"Not ignoring any party for the rejected batch, all unresponsive parties ($unresponsiveParties) are protected, failing the batch so it is retried"
@@ -168,7 +168,7 @@ class UnavailablePartiesDetector(
           val candidates =
             partiesWithMinimalSupportedVersion(involvedParties, lowestSupportedVersions)
           for {
-            result <- unavailablePartiesStore.addParties(candidates).flatMap { toIgnore =>
+            result <- unavailablePartiesStore.addParties(candidates.toSeq).flatMap { toIgnore =>
               if (toIgnore.isEmpty) {
                 logger.warn(
                   s"Not ignoring any party for the failing task, all candidates ($candidates) are protected, failing the batch so it is retried"
