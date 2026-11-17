@@ -37,7 +37,7 @@
         "spec": {
           "id": 10,
           "title": "Discarded confirmation requests (fraction)",
-          "description": "Fraction of sequenced confirmation requests that were never processed by the mediator (e.g. dropped due to CometBFT replays).",
+          "description": "Fraction of sequenced confirmation requests that were never processed by the mediator.",
           "links": [],
           "data": {
             "kind": "QueryGroup",

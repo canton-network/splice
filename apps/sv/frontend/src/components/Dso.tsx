@@ -5,21 +5,18 @@ import React from 'react';
 import 'react-json-pretty/themes/monikai.css';
 
 import { useDsoInfos } from '../contexts/SvContext';
-import { useCometBftDebug } from '../hooks/useCometBftDebug';
 import { useMediatorStatus } from '../hooks/useMediatorStatus';
 import { useSequencerStatus } from '../hooks/useSequencerStatus';
 import { useSvConfig } from '../utils';
 
 const WithProvider: React.FC = () => {
   const dsoInfoQuery = useDsoInfos();
-  const cometBftNodeDebugQuery = useCometBftDebug();
   const sequencerStatusQuery = useSequencerStatus();
   const mediatorStatusQuery = useMediatorStatus();
   return (
     <DsoViewPrettyJSON
       dsoInfoQuery={dsoInfoQuery}
       svInfoQuery={dsoInfoQuery}
-      cometBftNodeDebugQuery={cometBftNodeDebugQuery}
       sequencerStatusQuery={sequencerStatusQuery}
       mediatorStatusQuery={mediatorStatusQuery}
     />

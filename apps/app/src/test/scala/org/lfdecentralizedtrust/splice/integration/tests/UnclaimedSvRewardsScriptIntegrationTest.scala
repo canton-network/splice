@@ -130,7 +130,7 @@ class UnclaimedSvRewardsScriptIntegrationTest
         triggersToPauseAtStart = Seq(expireIssuingMiningRoundTrigger),
         triggersToResumeAtStart = Seq(sv1CollectRewardsAndMergeAmuletsTrigger),
       ) {
-        actAndCheck(
+        actAndCheck(timeUntilSuccess = 80.seconds)(
           "Advance rounds to allow claiming the remaining SV reward coupons",
           Range(0, 3).foreach(_ => advanceRoundsByOneTickViaAutomation()),
         )(

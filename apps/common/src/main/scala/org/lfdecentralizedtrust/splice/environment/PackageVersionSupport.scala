@@ -166,6 +166,18 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
+  def supportsTbarV1_1(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] =
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceAmulet,
+      now,
+      DarResources.amulet,
+      DarResources.amulet_0_1_25,
+      ignoreRedundantCheck = true,
+    )
+
   def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =

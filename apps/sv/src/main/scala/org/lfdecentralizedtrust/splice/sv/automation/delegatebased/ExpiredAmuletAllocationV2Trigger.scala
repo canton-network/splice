@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
+import org.lfdecentralizedtrust.splice.sv.automation.unavailableparties.UnavailablePartiesGuard
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
@@ -55,11 +56,9 @@ class ExpiredAmuletAllocationV2Trigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeUnlessAmuletVersionIgnored(
-      task.work.vettedVersion.toString,
-      task.work.stakeholders,
-      ignoreUnresponsiveParties = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+    completeExpiryBatchWithSplitting(task, ExpiredAmuletAllocationV2Trigger.getStakeholders)(
+      completeExpiryTaskAsDsoDelegate(_, controller)
+    )
   }
 
   private def completeExpiryTaskAsDsoDelegate(

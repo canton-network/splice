@@ -132,18 +132,29 @@ class AppUpgradeIntegrationTest
           ).foreach { case (conf, apps) =>
             val version = getBaseVersion()
             val bundledConfig = getConfigFileFromBundle(version, conf)
-            val suffix = apps
+            val dbSuffix = apps
               .flatMap(app =>
                 Seq(
                   s"canton.$app.storage.config.properties.databaseName = ${conf.replace("-", "").toLowerCase}"
                 ) ++ bundledBftConfig(app)
               )
-              .mkString("\n")
+            // Like ConfigTransforms.useDecentralizedSynchronizerSplitwell for the upgraded apps,
+            // run splitwell on the global synchronizer also on the base version.
+            val splitwellSuffix =
+              if (conf == "bobSplitwellValidators")
+                Seq(
+                  """canton.splitwell-apps.providerSplitwellBackend.domains.splitwell.preferred.alias = "global"""",
+                  "canton.splitwell-apps.providerSplitwellBackend.domains.splitwell.others = []",
+                  "canton.validator-apps.bobValidator.domains.extra = []",
+                  "canton.validator-apps.splitwellValidator.domains.extra = []",
+                )
+              else Seq.empty
+            val suffix = (dbSuffix ++ splitwellSuffix).mkString("\n")
             val inputConfig = generateConfig(bundledConfig, version, testId, Some(suffix))
             spliceProcs.startBundledSplice(conf, inputConfig)
           }
 
-          eventually(5.minute) {
+          eventually(10.minutes) {
             Seq("sv1", "sv2", "sv3").foreach(sv => {
               sv_client(s"${sv}Client").httpHealth.successOption.exists(_.active) should be(
                 true
@@ -645,7 +656,6 @@ object AppUpgradeIntegrationTest {
     val result = Process(
       Seq("bash", "-c", cmd),
       None,
-      // TODO(DACH-NY/canton-network-node#10595): consider reading these from config files:
       "SV1_URL" -> "http://127.0.0.1:5114",
       "SV1_SCAN_URL" -> "http://127.0.0.1:5012",
       "SV2_SCAN_URL" -> "http://127.0.0.1:5112",

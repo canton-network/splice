@@ -88,14 +88,8 @@ pulumiStacks:
 validator1:
   logging:
     level: DEBUG
-  participant:
-    additionalEnvVars:
-      - !include(./participant_pruning.yaml)
   walletGateway: !include(./wallet_gateway.yaml) { }
 splitwell:
-  participant:
-    additionalEnvVars:
-      - !include(./participant_pruning.yaml)
   walletGateway: !include(./wallet_gateway.yaml) { }
 # initial round used only on fresh initialization or resets
 # first SV bootstraps the network with it, other SVs learn it via their sponsors
@@ -139,8 +133,6 @@ monitoring:
         excludedLimiters: [ ]
       cloudSql:
         maintenance: false
-      cometbft:
-        expectedMaxBlocksPerSecond: 3.5
       loadTester:
         minRate: 0.95
       mediators:
@@ -185,7 +177,7 @@ monitoring:
         tolerance: 1.5
       globalSynchronizerHealth:
         # Fraction (0-1) of sequenced confirmation requests that were discarded
-        # (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+        # (i.e., never processed by the mediator)
         # above which the alert fires.
         discardedConfirmationRequestsThreshold: 0.2
         # Fraction (0-1) of confirmation requests that failed (as observed by the

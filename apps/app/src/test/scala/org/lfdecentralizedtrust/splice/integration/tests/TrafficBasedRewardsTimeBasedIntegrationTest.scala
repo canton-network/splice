@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.api.v2.event.Event
 import com.daml.ledger.api.v2.transaction_filter
+import com.daml.ledger.javaapi.data.codegen.ValueDecoder
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands.UpdateService.TransactionWrapper
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
@@ -9,21 +10,26 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import java.time.Duration
-import java.util.UUID
+import java.util.{Optional, UUID}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationrequestv1,
   allocationv1,
   metadatav1,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight_Update
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_UpdateFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppKind
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_MiningRound_StartIssuing
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_GrantFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.issuance.OpenMiningRoundSummary
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantFeaturedAppRight
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.util.Contract
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.splice.http.v0.definitions
@@ -59,8 +65,6 @@ import scala.util.Random
 // event as described in CIP-104
 //
 // DvP settlement from TokenStandardTest is used here just to confirm distribution of rewards
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
-@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -72,9 +76,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     with TokenStandardTest {
 
   protected def rewardConfigMode: TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode
-
-  // Applicable for rounds >= 7
-  private val aliceActivityWeight = BigDecimal("2.2")
 
   private def dryRunEnabled: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
@@ -107,6 +108,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             ),
             appRewardCouponThreshold =
               TrafficBasedRewardsTimeBasedIntegrationTestBase.appRewardCouponThreshold,
+            // Set to the CIP-104 defaults to exercise the daml plumbing end-to-end.
+            extraFeaturedAssetActivityWeight = Some(BigDecimal("0.2")),
+            maxExtraFeaturedAssetActivityWeightPerAsset = Some(BigDecimal("0.1")),
+            dsoAppActivityWeight = Some(BigDecimal("0.1")),
           )
         )(config)
       )
@@ -181,6 +186,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       updateId7,
       aliceCreateId,
       svExpireId,
+      round10BeginOffset,
     ) =
       setTriggersWithin(triggersToPauseAtStart =
         calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
@@ -223,8 +229,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(5)
 
-          updateFeaturedAppRightWeight(aliceParty, aliceActivityWeight)
-
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
 
@@ -246,6 +250,18 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           // alice creates an AmuletTransferInstruction which is archived by an SV
           val (aliceCreateId, svExpireId) =
             aliceCreateAndSvExpireInstruction(aliceParty, bobParty)
+
+          // Kind swap: cancel venue's and alice's FAK_Basic FARs, re-grant as
+          // FAK_ASSETMOVING and FAK_ASSET respectively. Done here (not just
+          // before round 10 opens) so the voting flow has multiple rounds to
+          // complete — otherwise the new FARs are not visible at round 10's
+          // open time (lookupFeaturedAppPartiesAsOf is as-of round open time).
+          swapFeaturedAppRightKind(
+            splitwellWalletClient,
+            venueParty,
+            FeaturedAppKind.FAK_ASSETMOVING,
+          )
+          swapFeaturedAppRightKind(aliceWalletClient, aliceParty, FeaturedAppKind.FAK_ASSET)
 
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(8)
@@ -270,13 +286,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             bobWalletClient.acceptTransferOffer(offerCid)
           }
 
-          actAndCheck(
-            "Cancel venue's featured app right",
-            retryCommandSubmission(splitwellWalletClient.cancelFeaturedAppRight()),
-          )(
-            "Wait for right cancellation to be ingested",
-            _ => sv1ScanBackend.lookupFeaturedAppRight(venueParty) shouldBe None,
-          )
+          // Snapshot the SV offset before round-10 opens; later used to walk
+          // the AmuletRules_MiningRound_StartIssuing exercises emitted as
+          // rounds close.
+          val round10BeginOffset =
+            sv1Backend.participantClientWithAdminToken.ledger_api.state.end()
 
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(10)
@@ -332,7 +346,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             }
           }
 
-          (id0, id1, id3, id4, id5, id6, id7, aliceCreateId, svExpireId)
+          (id0, id1, id3, id4, id5, id6, id7, aliceCreateId, svExpireId, round10BeginOffset)
         }
       }
 
@@ -350,6 +364,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       event.update shouldBe defined
       assertTrafficSummary(event, "updateId0")
       assertNoAppActivity(event, "updateId0")
+      assertSubmittingAppProvider(event, "updateId0", None)
     }
 
     // We don't see activity for updateId1, even though venue was granted FAP
@@ -364,21 +379,20 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId3") {
       val event = fetchEvent(updateId3, "updateId3")
       assertTrafficSummary(event, "updateId3")
-      // Round 6 opened before the weight change, so alice still has the default weight.
-      assertAppActivity(event, "updateId3", Set(venueParty, aliceParty), expectedRound = 6)
+      // CIP-104 FA-submitted path: venue is the submitting app, so the whole
+      // burn is attributed to venue alone — alice's FAK_Basic FAR as a
+      // confirmer no longer adds her to appActivityRecords. (The
+      // submittingAppProvider field is pinned once per FA party: here for
+      // venue, below in the aliceCreateId clue for alice.)
+      assertAppActivity(event, "updateId3", Set(venueParty), expectedRound = 6)
+      assertSubmittingAppProvider(event, "updateId3", Some(venueParty))
     }
 
     clue("updateId4") {
       val event = fetchEvent(updateId4, "updateId4")
       assertTrafficSummary(event, "updateId4")
-      // From round 7 onwards we see aliceActivityWeight
-      assertAppActivity(
-        event,
-        "updateId4",
-        Set(aliceParty, venueParty),
-        expectedRound = 7,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
-      )
+      // See updateId3.
+      assertAppActivity(event, "updateId4", Set(venueParty), expectedRound = 7)
     }
 
     clue("Alice-submitted create TransferInstruction has app activity for alice") {
@@ -390,8 +404,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         "aliceCreateId",
         Set(aliceParty),
         expectedRound = 7,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
       )
+      assertSubmittingAppProvider(event, "aliceCreateId", Some(aliceParty))
     }
 
     clue("SV-submitted expire TransferInstruction creates no app activity for alice") {
@@ -404,44 +418,69 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId5") {
       val event = fetchEvent(updateId5, "updateId5")
       assertTrafficSummary(event, "updateId5")
-      // Round 9: one DvP — venue has activity but will be below the coupon threshold;
-      // alice's additional transfers push her above it.
-      assertAppActivity(
-        event,
-        "updateId5",
-        Set(aliceParty, venueParty),
-        expectedRound = 9,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
-      )
+      // See updateId3. updateId5 is the venue's settlement. Alice's own
+      // allocation submissions are separate updates that this block
+      // doesn't fetch: their app activity contributes to assertRewardCalcs,
+      // and they generate no asset activity because Alice is FAK_Basic
+      // through round 9.
+      assertAppActivity(event, "updateId5", Set(venueParty), expectedRound = 9)
     }
 
     clue("updateId6") {
       val event = fetchEvent(updateId6, "updateId6")
       assertTrafficSummary(event, "updateId6")
-      assertAppActivity(
-        event,
-        "updateId6",
-        Set(aliceParty, venueParty),
-        expectedRound = 10,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
-      )
+      // See updateId3.
+      assertAppActivity(event, "updateId6", Set(venueParty), expectedRound = 10)
+      // Venue is now FAK_ASSETMOVING and alice is FAK_Asset. Asset-activity
+      // records attribute (a) alice directly (as a FAK_Asset confirmer) and
+      // (b) DSO's dsoAppActivityWeight contribution — but DSO's share is
+      // credited to the submitting app (venue), not to DSO itself.
+      assertAssetActivity(event, "updateId6", Set(aliceParty, venueParty))
     }
 
     clue("updateId7") {
       val event = fetchEvent(updateId7, "updateId7")
       assertTrafficSummary(event, "updateId7")
-      // Round 11: venue's FAP was cancelled in round 9, so only alice is a
-      // featured-app provider here.
-      assertAppActivity(
-        event,
-        "updateId7",
-        Set(aliceParty),
-        expectedRound = 11,
-        scaledProvider = Some(aliceParty -> aliceActivityWeight),
-      )
+      // Round 11: venue is still FAK_ASSETMOVING (set at end of round 7);
+      // see updateId3 for the FA-submitted attribution rule.
+      assertAppActivity(event, "updateId7", Set(venueParty), expectedRound = 11)
+      // See updateId6 for the asset-side attribution shape.
+      assertAssetActivity(event, "updateId7", Set(aliceParty, venueParty))
     }
 
     assertRewardCalcs(aliceParty, venueParty)
+
+    clue("Issuing rounds have the expected issuancePerFeaturedAppRewardCoupon") {
+      eventually() {
+        val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+        issuingRounds should not be empty
+        issuingRounds.foreach { issuingRound =>
+          val round = issuingRound.contract.payload.round.number.toLong
+          val issuanceRatio =
+            BigDecimal(issuingRound.contract.payload.issuancePerFeaturedAppRewardCoupon)
+          if (mintingTrafficBased) {
+            val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+              case GetRewardAccountingActivityTotalsResponse.members
+                    .RewardAccountingActivityTotalsOk(t) =>
+                t
+            }
+            issuanceRatio shouldBe BigDecimal(totals.issuancePerFeaturedAppActivity) withClue
+              s"Round $round"
+          } else {
+            issuanceRatio should be > BigDecimal(0) withClue s"Round $round"
+          }
+        }
+      }
+    }
+
+    // Opt fields on OpenMiningRoundSummary are only populated under TBAR
+    // minting; the dry-run variant intentionally leaves them None.
+    if (mintingTrafficBased) {
+      // Round 8 is the zero-activity round; round 10 is the main activity round.
+      assertOpenMiningRoundSummariesOptFieldsPopulated(round10BeginOffset, Set(8L, 10L))
+    } else {
+      assertOpenMiningRoundSummariesOptFieldsEmpty(round10BeginOffset)
+    }
 
     // Other misc API tests
     clue("404 for non-existent batch data") {
@@ -489,7 +528,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         logger.info(s"Round $round minting: $amounts")(TraceContext.empty)
       }
 
-      // Rounds 6, 7, 10: both alice and venue did DvP trades.
+      // Rounds 6, 7, 10: each settleTrade produces three submissions — alice
+      // and bob allocate (alice earns via FA-submitted path for her own
+      // allocation and as the FA confirmer on bob's), then venue settles
+      // (venue earns via FA-submitted path).
       Seq(6L, 7L, 10L).foreach { round =>
         providersFor(round) shouldBe Seq(aliceParty, venueParty)
           .map(_.toProtoPrimitive)
@@ -511,6 +553,29 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       providersFor(9L) shouldBe Set(aliceParty.toProtoPrimitive) withClue
         "Round 9: venue is below reward threshold so only alice should be rewarded"
 
+    }
+
+    clue(
+      "Round 8 scan totals: TBAR v1.1 reward-accounting fields are zero, except for the unclaimed budget"
+    ) {
+      val t = totalsByRound(8L)
+      t.totalAssetActivityWeight shouldBe 0L
+      BigDecimal(t.totalAppRewardFromAppActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.totalAppRewardFromAssetActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAppActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAssetActivity) shouldBe BigDecimal(0)
+      BigDecimal(t.totalAppRewardUnclaimed) should be > BigDecimal(0)
+    }
+
+    clue("Round 10 scan totals: TBAR v1.1 reward-accounting fields are all non-zero") {
+      val t = totalsByRound(10L)
+      t.totalAssetActivityWeight should be > 0L
+      BigDecimal(t.totalAppRewardFromAppActivity) should be > BigDecimal(0)
+      BigDecimal(t.totalAppRewardFromAssetActivity) should be > BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAppActivity) should be > BigDecimal(0)
+      BigDecimal(t.issuancePerFeaturedAssetActivity) should be > BigDecimal(0)
+      // There still is some allowance left-over.
+      BigDecimal(t.totalAppRewardUnclaimed) should be > BigDecimal(0)
     }
 
     // The remaining assertions cover the handling of V2 contracts created on ledger.
@@ -669,7 +734,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       cluePrefix: String,
       expectedProviders: Set[PartyId],
       expectedRound: Long,
-      scaledProvider: Option[(PartyId, BigDecimal)] = None,
   ): Unit = {
     withClue(s"$cluePrefix should have app activity") {
       event.appActivityRecords shouldBe defined
@@ -687,55 +751,87 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           r.weight should be > 0L
         }
       }
+      val weightSum = activity.records.map(_.weight).sum
       val numFeaturedAppParties = expectedProviders.size.toLong
-
-      // Convert the assigned activity back to burn amount using app weight
-      val reconstructedBurnSum = activity.records.map { r =>
-        val activityWeight = scaledProvider match {
-          case Some((party, w)) if r.party == party.toProtoPrimitive => w
-          case _ => BigDecimal(1)
-        }
-        BigDecimal(r.weight) / activityWeight
-      }.sum
       withClue(
-        s"$cluePrefix reconstructed burn should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
+        s"$cluePrefix sum of weights should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
       ) {
-        reconstructedBurnSum should be >= BigDecimal(totalTrafficCost - numFeaturedAppParties)
-        reconstructedBurnSum should be <= BigDecimal(totalTrafficCost)
+        weightSum should be >= (totalTrafficCost - numFeaturedAppParties)
+        weightSum should be <= totalTrafficCost
       }
     }
   }
 
-  private def updateFeaturedAppRightWeight(
-      party: PartyId,
-      newWeight: BigDecimal,
-  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
-    val rightCid = clue(s"Look up featured app right for $party") {
-      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
+  private def assertSubmittingAppProvider(
+      event: definitions.EventHistoryItem,
+      cluePrefix: String,
+      expected: Option[PartyId],
+  ): Unit =
+    withClue(s"$cluePrefix submitting app provider") {
+      event.submittingAppProvider.map(_.value) shouldBe expected.map(_.toProtoPrimitive)
     }
+
+  private def assertAssetActivity(
+      event: definitions.EventHistoryItem,
+      cluePrefix: String,
+      expectedProviders: Set[PartyId],
+  ): Unit = {
+    val records = event.assetActivityRecords
+      .map(_.value)
+      .getOrElse(fail(s"$cluePrefix: event has no assetActivityRecords"))
+    withClue(s"$cluePrefix asset activity provider parties") {
+      records.map(_.party).toSet shouldBe expectedProviders.map(_.toProtoPrimitive)
+    }
+    withClue(s"$cluePrefix each asset activity weight should be positive") {
+      records.foreach(_.weight should be > 0L)
+    }
+  }
+
+  private def grantFeaturedAppRightWithKind(
+      party: PartyId,
+      kind: FeaturedAppKind,
+      opsParties: Seq[PartyId] = Seq.empty,
+      weight: BigDecimal = BigDecimal(1),
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val opsPartiesArg: java.util.Optional[java.util.List[String]] =
+      Option
+        .when(opsParties.nonEmpty)(opsParties.map(_.toProtoPrimitive).asJava)
+        .toJava
     val action = new ARC_DsoRules(
-      new SRARC_UpdateFeaturedAppRight(
-        new DsoRules_UpdateFeaturedAppRight(
-          rightCid,
-          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
+      new SRARC_GrantFeaturedAppRight(
+        new DsoRules_GrantFeaturedAppRight(
+          party.toProtoPrimitive,
+          java.util.Optional.of(weight.bigDecimal),
+          java.util.Optional.of(kind),
+          opsPartiesArg,
         )
       )
     )
     votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
-    clue(s"Wait for $party featured app right weight to be $newWeight") {
+    clue(s"Wait for $party FA right to be ingested with kind=$kind weight=$weight") {
       eventually() {
-        val weight = sv1ScanBackend
-          .lookupFeaturedAppRight(party)
-          .value
-          .payload
-          .activityWeight
-          .toScala
+        val right = sv1ScanBackend.lookupFeaturedAppRight(party).value
+        right.payload.appKind.toScala shouldBe Some(kind)
+        right.payload.activityWeight.toScala
           .map(BigDecimal(_))
-        withClue(s"activity weight for $party: ") {
-          weight.getOrElse(BigDecimal(1)).compare(newWeight) shouldBe 0
-        }
+          .getOrElse(BigDecimal(1)) shouldBe weight
       }
     }
+  }
+
+  private def swapFeaturedAppRightKind(
+      client: WalletAppClientReference,
+      party: PartyId,
+      newKind: FeaturedAppKind,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    actAndCheck(
+      s"Cancel $party's featured app right",
+      retryCommandSubmission(client.cancelFeaturedAppRight()),
+    )(
+      "Wait for right cancellation to be ingested",
+      _ => sv1ScanBackend.lookupFeaturedAppRight(party) shouldBe None,
+    )
+    grantFeaturedAppRightWithKind(party, newKind)
   }
 
   private def assertZeroTotals(
@@ -888,6 +984,242 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     )
     new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
   }
+
+  /** Assert every `AmuletRules_MiningRound_StartIssuing` exercise in the window populates its `OpenMiningRoundSummary` opt fields, with `pinnedRounds` also matched against scan totals. */
+  private def assertOpenMiningRoundSummariesOptFieldsPopulated(
+      beginOffset: Long,
+      pinnedRounds: Set[Long],
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    clue(
+      "OpenMiningRoundSummary opt fields are populated on AmuletRules_MiningRound_StartIssuing exercises"
+    ) {
+      val exercises = eventually() {
+        val exs = openMiningRoundExercisesSince(beginOffset)
+        pinnedRounds.foreach { r =>
+          withClue(
+            s"expected AmuletRules_MiningRound_StartIssuing exercise for round $r in the window"
+          ) {
+            exs.exists(_.round == r) shouldBe true
+          }
+        }
+        exs
+      }
+
+      withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
+        exercises should not be empty
+      }
+
+      exercises.filterNot(ex => pinnedRounds(ex.round)).foreach { ex =>
+        summaryOptFields.foreach { case (name, extractor, _) =>
+          withClue(s"round ${ex.round}: $name populated") {
+            extractor(ex.summary).toScala shouldBe defined
+          }
+        }
+      }
+
+      pinnedRounds.foreach(r => assertRoundMatchesScan(exercises, r))
+    }
+  }
+
+  /** Assert `round`'s `OpenMiningRoundSummary` opt fields match scan totals. */
+  private def assertRoundMatchesScan(
+      exercises: Seq[OpenMiningRoundExercise],
+      round: Long,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val summary = exercises
+      .find(_.round == round)
+      .map(_.summary)
+      .getOrElse(
+        fail(
+          s"expected AmuletRules_MiningRound_StartIssuing exercise for round $round in the window"
+        )
+      )
+    val totals = inside(sv1ScanBackend.getRewardAccountingActivityTotals(round)) {
+      case GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk(t) =>
+        t
+    }
+    summaryOptFields.foreach { case (name, extractor, scanField) =>
+      withClue(s"round $round: $name matches scan total") {
+        decimalMatches(extractor(summary), scanField(totals))
+      }
+    }
+  }
+
+  /** Assert every `AmuletRules_MiningRound_StartIssuing` exercise in the window leaves all `OpenMiningRoundSummary` opt fields unset — the dry-run variant's expected state. */
+  private def assertOpenMiningRoundSummariesOptFieldsEmpty(
+      beginOffset: Long
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    clue(
+      "OpenMiningRoundSummary opt fields are unset on AmuletRules_MiningRound_StartIssuing exercises (dry-run)"
+    ) {
+      val exercises = eventually() {
+        val exs = openMiningRoundExercisesSince(beginOffset)
+        withClue("at least one AmuletRules_MiningRound_StartIssuing exercise in the window") {
+          exs should not be empty
+        }
+        exs
+      }
+
+      exercises.foreach { ex =>
+        summaryOptFields.foreach { case (name, extractor, _) =>
+          withClue(s"round ${ex.round}: $name unset") {
+            extractor(ex.summary).toScala shouldBe empty
+          }
+        }
+      }
+    }
+  }
+
+  private val summaryOptFields: Seq[
+    (
+        String,
+        OpenMiningRoundSummary => Optional[java.math.BigDecimal],
+        definitions.RewardAccountingActivityTotalsOk => String,
+    )
+  ] = Seq(
+    (
+      "optIssuancePerFeaturedAppRewardCoupon",
+      _.optIssuancePerFeaturedAppRewardCoupon,
+      _.issuancePerFeaturedAppActivity,
+    ),
+    (
+      "optIssuancePerFeaturedAssetRewardCoupon",
+      _.optIssuancePerFeaturedAssetRewardCoupon,
+      _.issuancePerFeaturedAssetActivity,
+    ),
+    (
+      "optTotalFeaturedAssetRewardCoupons",
+      _.optTotalFeaturedAssetRewardCoupons,
+      _.totalAppRewardFromAssetActivity,
+    ),
+    (
+      "optUnclaimedAppRewards",
+      _.optUnclaimedAppRewards,
+      _.totalAppRewardUnclaimed,
+    ),
+  )
+
+  /** A decoded `AmuletRules_MiningRound_StartIssuing` exercise, paired with the
+    * round number of the `IssuingMiningRound` contract created in the same
+    * transaction. The round number is not carried on `OpenMiningRoundSummary`
+    * itself; it has to be lifted from the sibling create event.
+    */
+  private case class OpenMiningRoundExercise(round: Long, summary: OpenMiningRoundSummary)
+
+  /** Decode every `AmuletRules_MiningRound_StartIssuing` exercise emitted on the
+    * SV participant since `beginOffsetExclusive`. Each returned
+    * [[OpenMiningRoundExercise]] pairs the exercise's `OpenMiningRoundSummary`
+    * with the round number of the `IssuingMiningRound` contract created in the
+    * same transaction.
+    */
+  private def openMiningRoundExercisesSince(
+      beginOffsetExclusive: Long
+  )(implicit env: SpliceTestConsoleEnvironment): Seq[OpenMiningRoundExercise] = {
+    val dsoParty = sv1Backend.getDsoInfo().dsoParty
+    val participant = sv1Backend.participantClientWithAdminToken
+    val ledgerEnd = participant.ledger_api.state.end()
+
+    val txFormat = transaction_filter.TransactionFormat(
+      eventFormat = Some(
+        transaction_filter.EventFormat(
+          filtersByParty = Map(dsoParty.toLf -> transaction_filter.Filters(Nil)),
+          filtersForAnyParty = None,
+          verbose = true,
+        )
+      ),
+      transactionShape = transaction_filter.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
+    )
+
+    val updates = participant.ledger_api.updates.updates(
+      updateFormat = transaction_filter.UpdateFormat(
+        includeTransactions = Some(txFormat),
+        includeReassignments = None,
+        includeTopologyEvents = None,
+      ),
+      completeAfter = PositiveInt.MaxValue,
+      beginOffsetExclusive = beginOffsetExclusive,
+      endOffsetInclusive = Some(ledgerEnd),
+    )
+
+    updates.toSeq.flatMap {
+      case TransactionWrapper(tx) =>
+        val summaries: Seq[OpenMiningRoundSummary] = tx.events
+          .collect { case event if event.event.isExercised => event.event.exercised }
+          .flatten
+          .collect {
+            case e
+                if matchesTemplate(e.templateId, AmuletRules.TEMPLATE_ID) &&
+                  e.choice == AmuletRules.CHOICE_AmuletRules_MiningRound_StartIssuing.name =>
+              decodeScalapb(
+                e.getChoiceArgument,
+                AmuletRules_MiningRound_StartIssuing.valueDecoder(),
+              ).summary
+          }
+        val issuingRounds: Seq[Long] = tx.events
+          .collect { case event if event.event.isCreated => event.event.created }
+          .flatten
+          .collect {
+            case c if matchesTemplate(c.templateId, IssuingMiningRound.TEMPLATE_ID) =>
+              val javaCreated = com.daml.ledger.javaapi.data.CreatedEvent.fromProto(
+                com.daml.ledger.api.v2.event.CreatedEvent.toJavaProto(c)
+              )
+              Contract
+                .fromCreatedEvent(IssuingMiningRound.COMPANION)(javaCreated)
+                .value
+                .payload
+                .round
+                .number: Long
+          }
+        if (summaries.isEmpty) Seq.empty
+        else {
+          withClue(
+            s"tx ${tx.updateId}: expected one IssuingMiningRound create per AmuletRules_MiningRound_StartIssuing exercise"
+          ) {
+            issuingRounds.size shouldBe summaries.size
+          }
+          summaries.zip(issuingRounds).map { case (s, r) => OpenMiningRoundExercise(r, s) }
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  /** Assert that an optional java BigDecimal is defined and numerically equal
+    * to the given decimal string at daml Decimal precision (10 fractional
+    * digits). Tolerates scale mismatches (e.g. `3.1` vs `3.10`).
+    */
+  private def decimalMatches(
+      actual: Optional[java.math.BigDecimal],
+      expected: String,
+  ): Unit =
+    withClue(s"expected $expected") {
+      BigDecimal(actual.toScala.value) should beEqualUpTo(BigDecimal(expected), 10)
+    }
+
+  /** Decode a scalapb `Value` (from the ledger-api gRPC client) into a typed
+    * Daml-codegen value, routing through the javaapi `Value` representation
+    * the codegen's `ValueDecoder` expects.
+    */
+  private def decodeScalapb[T](
+      v: com.daml.ledger.api.v2.value.Value,
+      decoder: ValueDecoder[T],
+  ): T =
+    decoder.decode(
+      com.daml.ledger.javaapi.data.Value.fromProto(
+        com.daml.ledger.api.v2.value.Value.toJavaProto(v)
+      )
+    )
+
+  /** True iff `templateId` names the template given by `expected`, ignoring
+    * the package id. Compares module and entity names only, since the
+    * package id varies between upgrade versions.
+    */
+  private def matchesTemplate(
+      templateId: Option[com.daml.ledger.api.v2.value.Identifier],
+      expected: com.daml.ledger.javaapi.data.Identifier,
+  ): Boolean =
+    templateId.exists(id =>
+      id.moduleName == expected.getModuleName && id.entityName == expected.getEntityName
+    )
 }
 
 object TrafficBasedRewardsTimeBasedIntegrationTestBase {
@@ -913,6 +1245,8 @@ object TrafficBasedRewardsTimeBasedIntegrationTestBase {
   val appRewardCouponThreshold = BigDecimal("50")
 }
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class TrafficBasedRewardsTimeBasedIntegrationTest
     extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
   override protected val rewardConfigMode
@@ -920,6 +1254,8 @@ class TrafficBasedRewardsTimeBasedIntegrationTest
     TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.MintingTrafficBased
 }
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_25
 class TrafficBasedRewardsDryRunTimeBasedIntegrationTest
     extends TrafficBasedRewardsTimeBasedIntegrationTestBase {
   override protected val rewardConfigMode

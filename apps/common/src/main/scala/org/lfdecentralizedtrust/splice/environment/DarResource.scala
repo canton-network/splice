@@ -16,7 +16,16 @@ final case class DarResource(
     packageId: String,
     metadata: PackageMetadata,
     dependencyPackageIds: Set[String],
-)
+) {
+
+  /** What makes two DARs the same for upload and vetting, ignoring
+    * where the resource lives. `upgradedPackageId` is part of the
+    * package metadata (and of the hashed package), so the whole
+    * metadata is included.
+    */
+  def identification: (String, PackageMetadata, Set[String]) =
+    (packageId, metadata, dependencyPackageIds)
+}
 
 /** All DARs for a given package
   */

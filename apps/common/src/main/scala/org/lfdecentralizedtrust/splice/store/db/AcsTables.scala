@@ -4,8 +4,7 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
-import com.digitalasset.canton.config.CantonRequireTypes.String255
-import com.digitalasset.canton.topology.{SynchronizerId, PartyId}
+import com.digitalasset.canton.topology.SynchronizerId
 import io.circe.Json
 import slick.jdbc.{GetResult, PostgresProfile}
 
@@ -31,15 +30,6 @@ trait AcsTables extends AcsJdbcTypes {
 }
 
 object AcsTables extends AcsTables {
-
-  case class ContractStateRowData(
-      assignedDomain: Option[SynchronizerId],
-      reassignmentCounter: Long,
-      reassignmentTargetDomain: Option[SynchronizerId],
-      reassignmentSourceDomain: Option[SynchronizerId],
-      reassignmentSubmitter: Option[PartyId],
-      reassignmentUnassignId: Option[String255],
-  )
 
   case class TxLogStoreRowTemplate(
       storeId: Int,

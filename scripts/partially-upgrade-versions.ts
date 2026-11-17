@@ -19,7 +19,6 @@ function main(
   const svCharts = [
     'splice-participant',
     'splice-global-domain',
-    'splice-cometbft',
     'splice-scan',
     'splice-sv-node',
     'splice-validator',

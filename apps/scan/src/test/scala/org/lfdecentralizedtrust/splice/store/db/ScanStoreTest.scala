@@ -191,13 +191,34 @@ abstract class ScanStoreTest
             .futureValue should be(expectedResult)
         }
       }
+
+      "return the newest FeaturedAppRight, breaking ties by contract id" in {
+        val t1 = Instant.parse("2024-03-01T10:00:00Z")
+        val t2 = t1.plusSeconds(1)
+        val older = featuredAppRight(userParty(1), validContractId(1)).copy(createdAt = t1)
+        val newerHighCid =
+          featuredAppRight(userParty(1), validContractId(3)).copy(createdAt = t2)
+        val newerLowCid =
+          featuredAppRight(userParty(1), validContractId(2)).copy(createdAt = t2)
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(newerHighCid, older, newerLowCid))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.lookupFeaturedAppRight(userParty(1))
+        } yield result.map(_.contract) shouldBe Some(newerLowCid)
+      }
     }
 
     "listFeaturedAppRightsByProvider" should {
 
-      "return the FeaturedAppRights of the wanted provider in creation order, up to the limit" in {
-        val wanted = (1 to 3).map(_ => featuredAppRight(userParty(1)))
-        val unwanted = featuredAppRight(userParty(2))
+      "return the FeaturedAppRights of the wanted provider newest first, up to the limit" in {
+        val base = Instant.parse("2024-03-01T10:00:00Z")
+        val wanted = (1 to 3).map(i =>
+          featuredAppRight(userParty(1)).copy(createdAt = base.plusSeconds(i.toLong))
+        )
+        val unwanted = featuredAppRight(userParty(2)).copy(createdAt = base.plusSeconds(10))
+        val expected = wanted.reverse
         for {
           store <- mkStore()
           _ <- MonadUtil.sequentialTraverse(wanted :+ unwanted)(
@@ -212,9 +233,53 @@ abstract class ScanStoreTest
             ).and(include("Result size: 3. Limit: 2")),
           )
         } yield {
-          all.map(_.contract) shouldBe wanted
-          page.map(_.contract) shouldBe wanted.take(2)
-          hard.map(_.contract) shouldBe wanted.take(2)
+          all.map(_.contract) shouldBe expected
+          page.map(_.contract) shouldBe expected.take(2)
+          hard.map(_.contract) shouldBe expected.take(2)
+        }
+      }
+
+      "break ties on creation time by contract id" in {
+        val t1 = Instant.parse("2024-03-01T10:00:00Z")
+        val t2 = t1.plusSeconds(1)
+        val older = featuredAppRight(userParty(1), validContractId(1)).copy(createdAt = t1)
+        val newerHighCid =
+          featuredAppRight(userParty(1), validContractId(3)).copy(createdAt = t2)
+        val newerLowCid =
+          featuredAppRight(userParty(1), validContractId(2)).copy(createdAt = t2)
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(newerHighCid, older, newerLowCid))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          all <- store.listFeaturedAppRightsByProvider(userParty(1), HardLimit.tryCreate(3))
+        } yield all.map(_.contract) shouldBe Seq(newerLowCid, newerHighCid, older)
+      }
+    }
+
+    "RewardCouponV2 ingestion" should {
+
+      "ingest RewardCouponV2 of the DSO and make them retrievable by contract id" in {
+        val coupon1 = rewardCouponV2(round = 1, provider = userParty(1))
+        val coupon2 = rewardCouponV2(round = 2, provider = userParty(2))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(coupon1)(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(coupon2)(store.multiDomainAcsStore)
+          found <- store.multiDomainAcsStore.lookupContractsById(
+            amuletCodegen.RewardCouponV2.COMPANION
+          )(
+            Seq(
+              coupon1.contractId,
+              coupon2.contractId,
+              new amuletCodegen.RewardCouponV2.ContractId(nextCid()),
+            )
+          )
+        } yield {
+          found.map(_.contract.contractId.contractId) should contain theSameElementsAs Seq(
+            coupon1.contractId.contractId,
+            coupon2.contractId.contractId,
+          )
         }
       }
     }
@@ -1829,6 +1894,7 @@ class DbScanStoreTest
         loggerFactory,
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
         domainMigrationId,
+        synchronizerId = dummyDomain,
         participantId = mkParticipantId("ScanStoreTest"),
         IngestionConfig(),
         new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
@@ -1843,14 +1909,10 @@ class DbScanStoreTest
           store.multiDomainAcsStore.testIngestionSink.ingestAcs(
             nextOffset(),
             Seq.empty,
-            Seq.empty,
-            Seq.empty,
           )
         case InitializeAcsAtOffset(_) =>
           store.multiDomainAcsStore.testIngestionSink.ingestAcs(
             nextOffset(),
-            Seq.empty,
-            Seq.empty,
             Seq.empty,
           )
       }

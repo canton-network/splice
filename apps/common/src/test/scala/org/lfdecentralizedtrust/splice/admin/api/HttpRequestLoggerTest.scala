@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.admin.api
 import com.digitalasset.canton.config.ApiLoggingConfig
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.concurrent.Threading
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, RemoteAddress, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.{RawHeader, `X-Forwarded-For`}
 import org.apache.pekko.http.scaladsl.server.{RejectionHandler, Route}
@@ -99,6 +100,35 @@ class HttpRequestLoggerTest extends AnyWordSpec with BaseTest with ScalatestRout
 
           // Exactly one response log from mapResponse
           forExactly(1, logEntries)(_.message should include("Responding with status code"))
+        },
+      )
+    }
+
+    "log the request duration with the response" in {
+      val delayMs = 300L
+      val slowRoute: Route =
+        loggerDirective(RateLimitersConfig.DefaultClientIpHeaders) {
+          path("api" / "slow") {
+            complete {
+              Threading.sleep(delayMs)
+              "slow"
+            }
+          }
+        }
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.DEBUG))(
+        {
+          Get("/api/slow") ~> slowRoute ~> check {
+            status shouldBe StatusCodes.OK
+            responseAs[String] shouldBe "slow"
+          }
+        },
+        { logEntries =>
+          val tookMs = """Responding with status code: 200 OK, took (\d+) ms""".r
+          forExactly(1, logEntries) { entry =>
+            inside(tookMs.findFirstMatchIn(entry.message)) { case Some(m) =>
+              m.group(1).toLong should be >= delayMs
+            }
+          }
         },
       )
     }

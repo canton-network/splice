@@ -8,12 +8,12 @@ import com.daml.ledger.javaapi.data.{CreatedEvent, Identifier}
 import com.digitalasset.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
+  AcsSnapshotInfo,
   AcsSnapshotDDL,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
   LegacyAcsSnapshot,
-  PerTableAcsSnapshot,
+  AcsSnapshot,
   QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
 }
@@ -73,7 +73,7 @@ class AcsSnapshotStore(
       migrationId: Long,
       before: CantonTimestamp,
       onlyIndexed: Boolean = false,
-  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
+  )(implicit tc: TraceContext): Future[Option[AcsSnapshotInfo]] = {
     storage
       .querySingle(
         sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
@@ -83,7 +83,7 @@ class AcsSnapshotStore(
               and history_id = $historyId
               and (indexes_created or not $onlyIndexed)
             order by snapshot_record_time desc
-            limit 1""".as[AcsSnapshot].headOption,
+            limit 1""".as[AcsSnapshotInfo].headOption,
         "lookupSnapshotBefore",
       )
       .value
@@ -92,7 +92,7 @@ class AcsSnapshotStore(
   def lookupSnapshotAfter(
       migrationId: Long,
       after: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
+  )(implicit tc: TraceContext): Future[Option[AcsSnapshotInfo]] = {
 
     val select =
       sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created "
@@ -110,7 +110,7 @@ class AcsSnapshotStore(
 
     storage
       .querySingle(
-        query.toActionBuilder.as[AcsSnapshot].headOption,
+        query.toActionBuilder.as[AcsSnapshotInfo].headOption,
         "lookupSnapshotAfter",
       )
       .value
@@ -119,7 +119,7 @@ class AcsSnapshotStore(
 
   def lookupOldestUnindexedSnapshot()(implicit
       tc: TraceContext
-  ): Future[Option[PerTableAcsSnapshot]] = {
+  ): Future[Option[AcsSnapshot]] = {
     storage
       .querySingle(
         sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
@@ -127,11 +127,11 @@ class AcsSnapshotStore(
             where not indexes_created
             and   history_id = $historyId
             order by snapshot_record_time;
-         """.as[AcsSnapshot].headOption,
+         """.as[AcsSnapshotInfo].headOption,
         "getOldestUnindexedSnapshot",
       )
       .map {
-        case snapshot: PerTableAcsSnapshot =>
+        case snapshot: AcsSnapshot =>
           snapshot
         case _: LegacyAcsSnapshot =>
           throw io.grpc.Status.FAILED_PRECONDITION
@@ -140,6 +140,21 @@ class AcsSnapshotStore(
       }
       .value
   }
+
+  def lookupSnapshotsBefore(
+      before: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Seq[AcsSnapshot]] =
+    storage
+      .query(
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name, indexes_created
+            from acs_snapshot
+            where snapshot_record_time < $before
+              and history_id = $historyId
+              and creates_table_name is not null
+            order by snapshot_record_time""".as[AcsSnapshotInfo],
+        "lookupSnapshotsBefore",
+      )
+      .map(_.collect { case snapshot: AcsSnapshot => snapshot })
 
   /** *
     * TESTING ONLY
@@ -185,7 +200,7 @@ class AcsSnapshotStore(
         )
         snapshot <- lookupSnapshotAtOrBefore(migrationId, until)
         _ <- snapshot match {
-          case Some(snapshot: PerTableAcsSnapshot) if shouldIndexSnapshot =>
+          case Some(snapshot: AcsSnapshot) if shouldIndexSnapshot =>
             indexSnapshotStakeholdersTable(snapshot)
           case Some(_) => Future.unit
           case None =>
@@ -202,7 +217,7 @@ class AcsSnapshotStore(
   }
 
   def deleteSnapshot(
-      snapshot: AcsSnapshot
+      snapshot: AcsSnapshotInfo
   )(implicit
       tc: TraceContext
   ): Future[Unit] = {
@@ -212,10 +227,14 @@ class AcsSnapshotStore(
           sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
           sqlu"""delete from acs_snapshot_data where row_id between ${snapshot.firstRowId} and ${snapshot.lastRowId}""",
         )
-      case _: PerTableAcsSnapshot =>
+      case _: AcsSnapshot =>
         for {
           tableNames <-
-            sql"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime} returning creates_table_name, stakeholders_table_name"""
+            sql"""delete from acs_snapshot
+                        where snapshot_record_time = ${snapshot.snapshotRecordTime}
+                          and history_id = ${snapshot.historyId}
+                          and migration_id = ${snapshot.migrationId}
+                    returning creates_table_name, stakeholders_table_name"""
               .as[(String, String)]
               .headOption
           _ <- tableNames match {
@@ -256,7 +275,7 @@ class AcsSnapshotStore(
             where snapshot_record_time = $snapshot
               and migration_id = $migrationId
               and history_id = $historyId
-            limit 1""".as[AcsSnapshot].headOption,
+            limit 1""".as[AcsSnapshotInfo].headOption,
           "queryAcsSnapshot.getSnapshot",
         )
         .value
@@ -268,7 +287,7 @@ class AcsSnapshotStore(
       events <- snapshot match {
         case snapshot: LegacyAcsSnapshot =>
           queryLegacyTable(snapshot, after, limit, partyIds, templates)
-        case ownTable: PerTableAcsSnapshot =>
+        case ownTable: AcsSnapshot =>
           querySnapshotInOwnTable(ownTable, after, limit, partyIds, templates)
       }
     } yield {
@@ -285,7 +304,7 @@ class AcsSnapshotStore(
   }
 
   private def querySnapshotInOwnTable(
-      snapshot: PerTableAcsSnapshot,
+      snapshot: AcsSnapshot,
       after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: Seq[PartyId],
@@ -665,17 +684,17 @@ class AcsSnapshotStore(
     */
   def initializeIncrementalSnapshot(
       table: IncrementalAcsSnapshotTable,
-      initializeFromT: AcsSnapshot,
+      initializeFromT: AcsSnapshotInfo,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
     val initializeFrom = initializeFromT match {
       case legacy: LegacyAcsSnapshot => legacy
-      case _: PerTableAcsSnapshot =>
-        // If we enable PerTableAcsSnapshots, we will necessarily initialize from a LegacyAcsSnapshot,
-        // never from a PerTableAcsSnapshot. Then initializeIncrementalSnapshot will never be called again.
+      case _: AcsSnapshot =>
+        // If we enable per-snapshot tables, we will necessarily initialize from a LegacyAcsSnapshot,
+        // never from a AcsSnapshot. Then initializeIncrementalSnapshot will never be called again.
         throw io.grpc.Status.FAILED_PRECONDITION
           .withDescription(
-            "BUG: This shouldn't be called: we shouldn't be initializing from a PerTableAcsSnapshot."
+            "BUG: This shouldn't be called: we shouldn't be initializing from a AcsSnapshot."
           )
           .asRuntimeException()
     }
@@ -920,7 +939,7 @@ class AcsSnapshotStore(
   }
 
   def indexSnapshotStakeholdersTable(
-      snapshot: PerTableAcsSnapshot
+      snapshot: AcsSnapshot
   )(implicit tc: TraceContext): Future[Unit] = {
     // This doesn't have to be transactional:
     // - if the `set indexes_created = true` executes, we know everything succeeded.
@@ -1294,7 +1313,8 @@ object AcsSnapshotStore {
     )
   }
 
-  sealed trait AcsSnapshot extends PrettyPrinting {
+  // TODO(#6317) remove with the legacy ACS snapshots
+  sealed trait AcsSnapshotInfo extends PrettyPrinting {
     val snapshotRecordTime: CantonTimestamp
     val migrationId: Long
     val historyId: Long
@@ -1303,6 +1323,7 @@ object AcsSnapshotStore {
     val indexesCreated: Boolean
   }
 
+  // TODO(#6317) remove with the legacy ACS snapshots
   case class LegacyAcsSnapshot(
       snapshotRecordTime: CantonTimestamp,
       migrationId: Long,
@@ -1312,7 +1333,7 @@ object AcsSnapshotStore {
       unlockedAmuletBalance: Option[BigDecimal],
       lockedAmuletBalance: Option[BigDecimal],
       indexesCreated: Boolean,
-  ) extends AcsSnapshot {
+  ) extends AcsSnapshotInfo {
     import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("snapshotRecordTime", _.snapshotRecordTime),
@@ -1326,7 +1347,7 @@ object AcsSnapshotStore {
     )
   }
 
-  case class PerTableAcsSnapshot(
+  case class AcsSnapshot(
       snapshotRecordTime: CantonTimestamp,
       migrationId: Long,
       historyId: Long,
@@ -1335,7 +1356,7 @@ object AcsSnapshotStore {
       unlockedAmuletBalance: Option[BigDecimal],
       lockedAmuletBalance: Option[BigDecimal],
       indexesCreated: Boolean,
-  ) extends AcsSnapshot {
+  ) extends AcsSnapshotInfo {
     import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("snapshotRecordTime", _.snapshotRecordTime),
@@ -1349,8 +1370,8 @@ object AcsSnapshotStore {
     )
   }
 
-  object AcsSnapshot {
-    implicit val acsSnapshotGetResult: GetResult[AcsSnapshot] = GetResult { r =>
+  object AcsSnapshotInfo {
+    implicit val acsSnapshotGetResult: GetResult[AcsSnapshotInfo] = GetResult { r =>
       val snapshotRecordTime = r.<<[CantonTimestamp]
       val migrationId = r.<<[Long]
       val historyId = r.<<[Long]
@@ -1374,7 +1395,7 @@ object AcsSnapshotStore {
             indexesCreated,
           )
         case (None, None, Some(createsTableName), Some(stakeholdersTableName)) =>
-          PerTableAcsSnapshot(
+          AcsSnapshot(
             snapshotRecordTime,
             migrationId,
             historyId,

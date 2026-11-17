@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store
 
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
@@ -79,7 +80,6 @@ trait UserWalletStore extends TxLogAppStore[TxLogEntry] with TransferInputStore 
   ] =
     // Note: a party can have WalletAppInstall contracts if there are multiple end-users that share the same party
     // here we just take the first one, preferring an assigned one if available
-    // TODO(DACH-NY/canton-network-node#12550): remove this confusing behavior and create only one WalletAppInstall per user-party
     lookupArbitraryPreferAssigned(installCodegen.WalletAppInstall.COMPANION)
 
   final def getInstall()(implicit ec: ExecutionContext, tc: TraceContext): Future[
@@ -575,6 +575,7 @@ object UserWalletStore {
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
       migrationId: Long,
+      synchronizerId: SynchronizerId,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -590,6 +591,7 @@ object UserWalletStore {
       loggerFactory,
       retryProvider,
       migrationId,
+      synchronizerId,
       participantId,
       ingestionConfig,
       defaultLimit,
