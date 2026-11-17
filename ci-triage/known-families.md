@@ -436,6 +436,17 @@ State as recorded in the family section, not rechecked against the tracker on 20
   `ListConnectedSynchronizers()`. Earlier hit 5051 (2025-07, unanalysed). Fix: `eventually()` around the read.
 - 11394 (2026-11-12, wall-clock-time (5), main 0911e29902): sv4Participant disconnected 14:43:55.610 by the sv4Validator
   reconnect, test list_connected 14:43:55.800, reconnect answered 14:43:55.865. Second hit; fixed, #8416 (2026-11-12).
+- 11528 (2026-11-16, wall-clock-time (4), main 213565d133, Canton 3.7.4-snapshot.20261112): same bounce, on the submit
+  path. FeaturedAppActivityMarkerIntegrationTest submits `FeaturedAppRight_CreateActivityMarker` through the console
+  on bobParticipant at 22:16:53.832 while bobValidator's ReconcileSequencerConnectionsTrigger adds sv4's sequencer
+  (disconnected 22:16:53.845-22:16:53.956). Signature: `CommandFailure` with
+  `NOT_FOUND/SUBMISSION_SYNCHRONIZER_NOT_READY ... Trying to submit to a disconnected or not configured synchronizer`.
+  Confirm: test log `Got canton error ... SUBMISSION_SYNCHRONIZER_NOT_READY ... Retrying: false`, and on the
+  participant `Disconnecting from Synchronizer 'global'` within a few ms of `Routing the transaction to synchronizer`
+  for the same trace id. The console retry policy (`EnvironmentSetup.scala`, splice#2816) covers
+  NOT_CONNECTED_TO_SYNCHRONIZER and NOT_CONNECTED_TO_ANY_SYNCHRONIZER only. Fix: add
+  `TransactionRoutingError.ConfigurationErrors.SubmissionSynchronizerNotReady` to `retryableErrorCodes`, branch
+  `pperek/fix-11528-retry-submission-synchronizer-not-ready`. A hit on a sha with that fix is a different cause.
 
 
 ## K. Sim time: mediator pruning scheduler backoff after a jump of at least the retention period
