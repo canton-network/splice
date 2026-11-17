@@ -8,12 +8,17 @@ BEGIN
 
   {{createProdTable}}
 
+  {{checkProdSchema}}
+
   -- 2. Append the staging rows whose key production doesn't have yet,
   -- one per key: staging is append-only, so a key can be there more
   -- than once, e.g. when a backfill re-delivers a row
-  INSERT INTO {{prodTable}}
+  INSERT INTO {{prodTable}} (
+    {{columns}},
+    record_date
+  )
   SELECT
-    staging.*,
+    {{stagingColumns}},
     {{recordDateExpr}} AS record_date
   FROM {{stagingTable}} AS staging
   WHERE NOT EXISTS (
