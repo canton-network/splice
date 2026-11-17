@@ -8,8 +8,9 @@ import scala.math.BigDecimal.RoundingMode
 
 trait BigDecimalMatchers extends Matchers {
 
-  // Upper bound for fees in any of the above transfers
-  // TODO(#806): Figure out something better for upper bounds of fees
+  // Upper bound for fees in any of the above transfers. Since fees
+  // have been removed this should not be used in any new tests but we have
+  // not done the work to adjust all existing tests to remove their reliance on this.
   val smallAmount: BigDecimal = BigDecimal(1.0)
 
   def beWithin(lower: BigDecimal, upper: BigDecimal): Matcher[BigDecimal] =

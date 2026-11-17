@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.sv.store.ExpiredRewardCouponsBatch
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.MonadUtil
@@ -163,18 +164,35 @@ class ExpireRewardCouponsTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = ValidatorCoupons.getInformeesFromContracts(task.batch.validatorCoupons) ++
-      AppRewardCoupons.getInformeesFromContracts(task.batch.appCoupons) ++
-      SvRewardCoupons.getInformeesFromContracts(task.batch.svRewardCoupons) ++
-      ValidatorFaucetCoupons.getInformeesFromContracts(task.batch.validatorFaucets) ++
-      ValidatorLivenessActivityRecords.getInformeesFromContracts(
-        task.batch.validatorLivenessActivityRecords
-      )
-    completeUnlessAmuletVersionIgnored(
+    def withParties[T](coupons: Seq[Contract[?, T]], stakeholders: ContractStakeholders[T]) =
+      coupons.map(c => (c.contractId.contractId, stakeholders.getStakeholders(c.payload).toSet))
+    val batch = task.batch
+    val coupons =
+      withParties(batch.validatorCoupons, ValidatorCoupons) ++
+        withParties(batch.appCoupons, AppRewardCoupons) ++
+        withParties(batch.svRewardCoupons, SvRewardCoupons) ++
+        withParties(batch.validatorFaucets, ValidatorFaucetCoupons) ++
+        withParties(batch.validatorLivenessActivityRecords, ValidatorLivenessActivityRecords)
+    completeWithBatchSplitting(
       task.vettedAmuletVersion.toString,
-      informees,
-      ignoreUnresponsiveParties = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller))
+      task,
+      coupons,
+      (c: (String, Set[PartyId])) => c._2,
+      (t: Task, subBatch: Seq[(String, Set[PartyId])]) => {
+        val cids = subBatch.map(_._1).toSet
+        def keep[C <: Contract[?, ?]](cs: Seq[C]) =
+          cs.filter(c => cids.contains(c.contractId.contractId))
+        t.copy(batch =
+          t.batch.copy(
+            validatorCoupons = keep(t.batch.validatorCoupons),
+            appCoupons = keep(t.batch.appCoupons),
+            svRewardCoupons = keep(t.batch.svRewardCoupons),
+            validatorFaucets = keep(t.batch.validatorFaucets),
+            validatorLivenessActivityRecords = keep(t.batch.validatorLivenessActivityRecords),
+          )
+        )
+      },
+    )(completeExpiryTaskAsDsoDelegate(_, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(

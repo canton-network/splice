@@ -6,8 +6,9 @@ import { logger } from "./logger.js";
 // - Until the first failure (slow start), the limit grows by one per success, i.e. it roughly
 //   doubles each time all in-flight tasks complete.
 // - Afterwards, it grows by one per `limit` consecutive successes.
-// - Failures halve the limit, at most once per decreaseCooldownMs so that a burst of failures
-//   caused by a single overload event only counts once.
+// - Failures reduce the limit by at most 10% (but at least by one), at most once per
+//   decreaseCooldownMs, so that persistent failures lower parallelism gradually and a burst of
+//   failures caused by a single overload event only counts once.
 // - After a failure, the limit is held for holdAfterFailureMs before growing again.
 export class AdaptiveConcurrency {
   private currentLimit = 1;
@@ -18,7 +19,7 @@ export class AdaptiveConcurrency {
 
   constructor(
     private readonly maxLimit: number,
-    private readonly decreaseCooldownMs: number = 30_000,
+    private readonly decreaseCooldownMs: number = 90_000,
     private readonly holdAfterFailureMs: number = 60_000,
     private readonly onChange: (limit: number) => void = () => {},
     private readonly now: () => number = Date.now,
@@ -54,7 +55,10 @@ export class AdaptiveConcurrency {
     this.lastDecrease = now;
     if (this.currentLimit > 1) {
       this.setLimit(
-        Math.max(1, Math.floor(this.currentLimit / 2)),
+        Math.max(
+          1,
+          Math.min(this.currentLimit - 1, Math.ceil(this.currentLimit * 0.9)),
+        ),
         "decreasing",
       );
     }

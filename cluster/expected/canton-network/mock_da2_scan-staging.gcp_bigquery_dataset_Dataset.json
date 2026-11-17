@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "datasetId": "mock_da2_scan_staging",
+    "deleteContentsOnDestroy": true,
+    "friendlyName": "mock_da2_scan Staging Dataset",
+    "labels": {
+      "cluster": "mock",
+      "datastream_id": "stag_prod"
+    },
+    "location": "europe-west6"
+  },
+  "name": "mock_da2_scan-staging",
+  "provider": "",
+  "type": "gcp:bigquery/dataset:Dataset"
+}

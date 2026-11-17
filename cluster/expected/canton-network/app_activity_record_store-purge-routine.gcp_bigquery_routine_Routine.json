@@ -1,0 +1,14 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "datasetId": "mock_da2_scan_staging",
+    "definitionBody": "\n          DELETE FROM `test-project.mock_da2_scan_staging.scan_sv_1_app_activity_record_store`\n          WHERE TIMESTAMP_MILLIS(datastream_metadata.source_timestamp) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 604800 SECOND);\n        ",
+    "language": "SQL",
+    "routineId": "sp_purge_old_records_app_activity_record_store",
+    "routineType": "PROCEDURE"
+  },
+  "name": "app_activity_record_store-purge-routine",
+  "provider": "",
+  "type": "gcp:bigquery/routine:Routine"
+}

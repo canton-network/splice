@@ -11,8 +11,10 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 
 // TODO(#6817): Remove in-memory in favor of DbUnavailablePartiesStore
-class InMemoryUnavailablePartiesStore(initialParties: Set[PartyId])
-    extends UnavailablePartiesStore {
+class InMemoryUnavailablePartiesStore(
+    initialParties: Set[PartyId],
+    protectedParties: Set[PartyId] = Set.empty,
+) extends UnavailablePartiesStore {
 
   private val parties: ConcurrentHashMap.KeySetView[PartyId, java.lang.Boolean] = {
     val set = ConcurrentHashMap.newKeySet[PartyId]()
@@ -22,9 +24,10 @@ class InMemoryUnavailablePartiesStore(initialParties: Set[PartyId])
 
   override def addParties(newParties: Seq[PartyId])(implicit
       tc: TraceContext
-  ): Future[Unit] = {
-    newParties.foreach(parties.add)
-    Future.unit
+  ): Future[Set[PartyId]] = {
+    val partiesToIgnore = newParties.toSet -- protectedParties
+    partiesToIgnore.foreach(parties.add)
+    Future.successful(partiesToIgnore)
   }
 
   override def removeParties(toRemove: Seq[PartyId])(implicit

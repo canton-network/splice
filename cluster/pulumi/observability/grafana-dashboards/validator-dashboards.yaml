@@ -3,7 +3,6 @@
 include:
   - canton/node-health.json
   - canton/participant.json
-  - canton/participant-pruning.json
   - canton/sequencer-client.json
   - canton/sequencer-connection-pool.json
   - canton-network/automations.json

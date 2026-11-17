@@ -3,7 +3,9 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{FrontendLoginUtil, AnsFrontendTestUtil, WalletTestUtil}
 
-import org.openqa.selenium.support.ui.ExpectedConditions
+import org.openqa.selenium.WebDriver
+
+import scala.concurrent.duration.*
 
 class AnsFrontendIntegrationTest
     extends FrontendIntegrationTestWithIsolatedEnvironment("alice")
@@ -15,6 +17,15 @@ class AnsFrontendIntegrationTest
       : org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+
+  // The search button is remounted whenever the debounced name lookup starts or finishes, so a
+  // click can hit a stale element or a disabled button. Find the button again and click it on
+  // every attempt, and only accept the click once the "unavailable" result shows up.
+  private def searchForUnavailableEntryName()(implicit webDriver: WebDriver): Unit =
+    eventually() {
+      eventuallyClickOn(id("search-entry-button"))
+      waitForQuery(id("unavailable-icon"), Some(5.seconds))
+    }
 
   "A Name Service UI" should {
 
@@ -47,9 +58,7 @@ class AnsFrontendIntegrationTest
           eventuallyClickOn(id("entry-name-field"))
           textField("entry-name-field").value = entryNameWithoutSufffix
 
-          waitForCondition(id("search-entry-button")) { ExpectedConditions.elementToBeClickable(_) }
-          eventuallyClickOn(id("search-entry-button"))
-          waitForQuery(id("unavailable-icon"))
+          searchForUnavailableEntryName()
         }
       }
     }
@@ -98,10 +107,8 @@ class AnsFrontendIntegrationTest
           eventuallyClickOn(id("entry-name-field"))
           textField("entry-name-field").value = entryName;
 
-          waitForCondition(id("search-entry-button")) { ExpectedConditions.elementToBeClickable(_) }
-          eventuallyClickOn(id("search-entry-button"))
+          searchForUnavailableEntryName()
 
-          waitForQuery(id("unavailable-icon"))
           find(id("entry-name-validation-message")).fold(fail("Unable to find validation message"))(
             _.text should startWith("The provided entry name has an invalid format")
           )
@@ -127,10 +134,8 @@ class AnsFrontendIntegrationTest
           eventuallyClickOn(id("entry-name-field"))
           textField("entry-name-field").value = entryNameJustOverLimit;
 
-          waitForCondition(id("search-entry-button")) { ExpectedConditions.elementToBeClickable(_) }
-          eventuallyClickOn(id("search-entry-button"))
+          searchForUnavailableEntryName()
 
-          waitForQuery(id("unavailable-icon"))
           find(id("entry-name-validation-message")).fold(fail("Unable to find validation message"))(
             _.text should startWith(
               "The provided entry name has an invalid format. Maximum 60 characters(including suffix), a-z, 0-9, - and _ are supported."

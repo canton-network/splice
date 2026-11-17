@@ -36,11 +36,9 @@ object DarResourcesUtil extends NamedLogging {
   def lookupAllPackageVersions(name: PackageName): Seq[DarResource] =
     corePackageResources.view.flatMap(_.all).toSeq.filter(_.metadata.name == name)
 
-  // TODO(canton-network/splice#4049): remove `enableUnsupportedDarsUnvetting` once not needed anymore
   def getRequiredPackageVersions(
       name: PackageName,
       upToRequiredVersion: PackageVersion,
-      enableUnsupportedDarsUnvetting: Boolean,
       latestPackagesOnly: Boolean = false,
       additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]] = Map.empty,
   )(implicit tc: TraceContext): Seq[DarResource] = {
@@ -64,20 +62,18 @@ object DarResourcesUtil extends NamedLogging {
       .filter(_.metadata.name == name)
       .filter(pkg => {
         val version = pkg.metadata.version
-        if (unsupportedVersions.contains(version) && enableUnsupportedDarsUnvetting) {
+        if (unsupportedVersions.contains(version)) {
           false
-        } else if (enableUnsupportedDarsUnvetting) {
-          (!latestPackagesOnly && minimumInitializationVersion <= version && version < upToRequiredVersion) || version == upToRequiredVersion
         } else {
-          (!latestPackagesOnly && version < upToRequiredVersion) || version == upToRequiredVersion
+          (!latestPackagesOnly && minimumInitializationVersion <= version && version < upToRequiredVersion) || version == upToRequiredVersion
         }
       })
-      .distinct
+      // `all` lists the latest DAR a second time under its versioned path
+      .distinctBy(_.identification)
   }
 
   def filterUnsupportedPackageVersions(
       vettedPackageIds: Seq[LfPackageId],
-      enableUnsupportedDarsUnvetting: Boolean,
       latestPackagesOnly: Boolean,
       additionalPackageIdsToUnvet: Map[PackageName, Set[PackageVersion]],
       // current package config followed by those of accepted vote requests not yet effective; a version stays vetted if any of them requires it
@@ -94,7 +90,6 @@ object DarResourcesUtil extends NamedLogging {
             getRequiredPackageVersions(
               pkg.latest.metadata.name,
               versionFromAmuletRules,
-              enableUnsupportedDarsUnvetting,
               latestPackagesOnly,
               additionalPackageIdsToUnvet,
             )
