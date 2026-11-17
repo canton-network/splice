@@ -73,6 +73,9 @@ When you change a Daml package, bump the version of that package and of every pa
 
 ### Daml Code Style
 
+Apply these rules to code you write or change. Don't rewrite existing code only to follow them:
+that adds review noise, and changing released templates and choices is often not upgrade-compatible.
+
 #### Readability
 
 Write Daml so that developers who know mainstream languages, but not Haskell, can read it.
@@ -81,7 +84,6 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
   over Haskell operators such as `<$`, `$>`, `<*>`, `>>=` and `=<<`. `<$>`, `$` and `<>` are fine.
   Use point-free composition with `.` judiciously.
 * To discard a result, use `void` or end a `do` block with `pure ()`.
-* Don't rewrite existing code only to remove operators; apply this to code you write or change.
 * Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
 * Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
 * Inline helpers that are used only once or whose type signature is longer than their body.
