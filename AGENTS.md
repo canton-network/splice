@@ -90,11 +90,8 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
   Give each constructor of a variant its own record type if some functions handle only one of them.
 * Spell out names; avoid single letters and non-standard abbreviations. Prefix `Optional` values with `opt`.
   Use one naming scheme per module.
-* Write code with future changes in mind: not by making it more general than needed, but by leaving room for new names
-  and by making the compiler flag code that must handle new fields or constructors.
-* Name things as specifically as what they implement, so that the general name stays free for the general concept.
-  E.g., put a codec for lists of parties in memos into `Splice.Util.Memo`, not into a `Splice.Util.Json` module,
-  and call controllers that only apply to governance locks `GovernanceLockControllers`, not `Controllers`.
+* Write code with future changes in mind: not by making it more general than needed,
+  but by making the compiler flag code that must handle new fields or constructors.
 * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
   Where every field must be processed, match positionally and name unused fields `_field`.
 * Use a wildcard case `_ ->` only when it is safe for constructors added in later upgrades and saves a lot of code.
