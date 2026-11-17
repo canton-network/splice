@@ -428,10 +428,13 @@ function expandSql(template: string, vars: Record<string, string>): string {
   return expanded;
 }
 
+// BigQuery's service account in `projectId`, which runs the
+// scheduled queries
 function bigQueryServiceAccountName(projectId: pulumi.Input<string>): pulumi.Output<string> {
   return pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`;
 }
 
+// a scheduled query's schedule: every hour, `minute` past
 function hourlySchedule(minute: number): string {
   const mm = String(minute).padStart(2, '0');
   return `every 1 hours from 00:${mm} to 23:${mm}`;
@@ -488,6 +491,8 @@ function prodSchemaRoutineArgs(
   return `'${stagingTableNameFor(namespace, tableName)}', '${tableName}', [${columnsArray}]`;
 }
 
+// the record time of a staging row, as a TIMESTAMP, from the
+// table's `datePartitionColumn` or Datastream's source timestamp
 function recordTimestampExprFor(tableConfig: ReplicatedTableConfig): string {
   const colName = tableConfig.datePartitionColumn;
   if (tableConfig.timeType === 'micros') {
@@ -546,19 +551,31 @@ export function fillSinceColumnsSql(
     sinceColumnArray: `[${sinceColumns.map(column => `'${column}'`).join(', ')}]`,
     recordDateExpr: recordDateExprFor(tableConfig),
     primaryKeyExpr: tableConfig.primaryKey,
+    // whether a production row lacks a value for any `since`
+    // column; with none, the IF EXISTS skips the UPDATE
     prodLacksAny: sinceColumns.map(column => lacksValue(quoted('prod', column))).join('\nOR '),
+    // the UPDATE's SET: each `since` column from staging where
+    // production lacks a value, else production's own
     fillColumns: sinceColumns
       .map(
         column =>
           `\`${column}\` = IF(${lacksValue(quoted('prod', column))}, ${quoted('latest', column)}, ${quoted('prod', column)})`
       )
       .join(',\n'),
+    // what the fill reads from each row's latest staging change:
+    // the primary key, to match production's row, and the `since`
+    // columns
     fillSourceColumns: [...keys, ...sinceColumns]
       .map(column => quoted('staging', column))
       .join(',\n'),
+    // matches a production row with its latest staging change, on
+    // every primary key column
     primaryKeyMatch: keys
       .map(key => `${quoted('prod', key)} = ${quoted('latest', key)}`)
       .join(' AND '),
+    // limits the UPDATE to rows where staging has a value for some
+    // `since` column that production lacks, so that rows already
+    // filled aren't rewritten every hour
     fillableAny: sinceColumns
       .map(
         column =>
@@ -569,11 +586,18 @@ export function fillSinceColumnsSql(
 }
 
 interface ProdSchemaMigration {
+  // sp_check_prod_schema, which the appends of tables with `since`
+  // columns call, so they depend on it
   checkRoutine: gcp.bigquery.Routine;
   // fully qualified and quoted, for CALL
   checkRoutineName: pulumi.Output<string>;
 }
 
+// For the tables with `since` columns, installs the shared
+// sp_check_prod_schema and sp_fix_prod_schema, an
+// sp_fix_prod_schema_<table> per table, and the hourly query that
+// calls the latter. Returns undefined, installing nothing, if no
+// table has a `since` column.
 function installProdSchemaMigrationRoutines(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,

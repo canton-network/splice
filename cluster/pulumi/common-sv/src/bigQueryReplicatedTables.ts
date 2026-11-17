@@ -62,6 +62,8 @@ export interface ReplicatedTableConfig {
 
 export type ReplicatedTables = Record<string, ReplicatedTableConfig>;
 
+// `xs` with `f` applied to every value, without the keys for which
+// `f` returns undefined
 function filterMapValues<K extends string, A, B>(
   xs: Record<K, A>,
   f: (a: A) => B | undefined
