@@ -30,7 +30,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, DbKeyValueStore}
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
-import org.lfdecentralizedtrust.splice.scan.store.ScanKeyValueProvider
 import org.lfdecentralizedtrust.splice.store.events.DsoRulesCloseVoteRequest
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
@@ -71,7 +70,7 @@ class DbVotesStore private (
     * Vote results from before that time have to be backfilled.
     */
   def getFirstIngestedRecordTime()(implicit tc: TraceContext): Future[Option[CantonTimestamp]] = {
-    import ScanKeyValueProvider.timestampCodec
+    import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
     kvStore
       .readValueAndLogOnDecodingFailure[CantonTimestamp](firstIngestedRecordTimeKey(storeId))
       .value
@@ -233,7 +232,7 @@ object DbVotesStore {
       storeId: Int,
       recordTime: CantonTimestamp,
   ) extends PreparedIngestionAction {
-    import ScanKeyValueProvider.timestampCodec
+    import org.lfdecentralizedtrust.splice.store.KeyValueStore.timestampCodec
 
     override def action =
       kvStore.setValueIfNotExistsAction(firstIngestedRecordTimeKey(storeId), recordTime)

@@ -6,6 +6,7 @@ org.lfdecentralizedtrust.splice.auth.SignatureVerifierTest
 org.lfdecentralizedtrust.splice.automation.AutomationMetricsTest
 org.lfdecentralizedtrust.splice.automation.RoundBasedRewardTriggerTest
 org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTriggerStoreTest
+org.lfdecentralizedtrust.splice.automation.UpdateHistoryPartitionMaintenanceTriggerTest
 org.lfdecentralizedtrust.splice.build_tools.DarLockCheckerTest
 org.lfdecentralizedtrust.splice.config.SpliceConfigTest
 org.lfdecentralizedtrust.splice.config.SpliceDbConfigTest
@@ -65,7 +66,6 @@ org.lfdecentralizedtrust.splice.store.db.DbSvSvStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
 org.lfdecentralizedtrust.splice.store.db.InternedStringStoreTest
-org.lfdecentralizedtrust.splice.store.db.LegacyAcsSnapshotStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
 org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClientTest
 org.lfdecentralizedtrust.splice.sv.admin.http.OnboardSvSnapshotHandlerTest

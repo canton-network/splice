@@ -1325,6 +1325,7 @@ class DbAppActivityRecordStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage,
         migrationId,
@@ -1333,12 +1334,14 @@ class DbAppActivityRecordStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = false,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
     } yield {
       val store = new DbAppActivityRecordStore(
         storage,
@@ -1360,6 +1363,7 @@ class DbAppActivityRecordStoreTest
   ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     for {
+      kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       updateHistory <- UpdateHistory.create(
         storage,
         migrationId,
@@ -1368,12 +1372,14 @@ class DbAppActivityRecordStoreTest
         dsoParty,
         BackfillingRequirement.BackfillingNotRequired,
         internedStringStore(storage),
+        kvStore,
         analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableImportUpdateBackfill = false,
         HistoryMetrics(NoOpMetricsFactory, migrationId),
+        clock,
       )
-      _ <- updateHistory.ingestionSink.initialize()
+      _ <- updateHistory.ingestionSink.initialize(mockLedgerConnection())
     } yield {
       val appStore = new DbAppActivityRecordStore(
         storage.underlying,
