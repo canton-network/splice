@@ -84,6 +84,7 @@ node_images=(
   validator-app
   scan-app
   splitwell-app
+  sync-operator-app
 )
 
 # The markers with which the two kinds of nodes start their config log message.
