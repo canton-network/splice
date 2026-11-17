@@ -120,6 +120,8 @@ Write code that can evolve within these limits, not code that is more general th
 
 * Give every new choice its own result record and every contract key its own record, even if they have only one field:
   unlike a bare type, a record can gain fields later. Choices of interfaces return the result type that the interface defines.
+* Derive `Serializable` only for types that templates, choices or interface views need.
+  A serializable type cannot be removed from later package versions and can only change in SCU-compatible ways.
 * Make the compiler flag code that must handle new fields or constructors.
 * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
   Where every field must be processed, match positionally and name unused fields `_field`.
