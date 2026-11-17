@@ -78,18 +78,15 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Prefer `do` blocks, `case` expressions, explicit lambdas and named functions (`void`, `forA`, `mapA`)
   over Haskell operators such as `<$`, `$>`, `<*>`, `>>=` and `=<<`. `<$>`, `$` and `<>` are fine.
   Use point-free composition with `.` judiciously.
-* To discard a result, end a `do` block with `pure ()`, or use `void` where a `do` block does not work,
-  e.g., on `Commands` in Daml Script, which is only an `Applicative`. Do not add `ApplicativeDo` just for this.
+* To discard a result, use `void` or end a `do` block with `pure ()`.
 * Don't rewrite existing code only to remove operators; apply this to code you write or change.
 * Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
-  Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
+* Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
 * Inline helpers that are used only once or whose type signature is longer than their body.
-  Do not add argument records just to call such a helper.
 * Name recurring tuples and argument groups with a record type or type synonym.
-  Keep the specification of a request separate from the state of the contract that records it.
-  Give each constructor of a variant its own record type if some functions handle only one of them.
-* Spell out names; avoid single letters and non-standard abbreviations. Prefix `Optional` values with `opt`.
-  Use one naming scheme per module.
+* Give each constructor of a variant its own record type if some functions handle only one of them.
+* Spell out names; avoid single letters and non-standard abbreviations.
+* Follow the naming scheme of the code you are editing to maintain consistency.
 * Write code with future changes in mind: not by making it more general than needed,
   but by making the compiler flag code that must handle new fields or constructors.
 * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
@@ -99,7 +96,7 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
   State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
 
-### Daml Templates and Choices
+#### Daml Templates and Choices
 
 * Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
 * Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
