@@ -37,6 +37,15 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
 * Inline helpers that are used only once or whose type signature is longer than their body.
 
+## Records
+
+Use Daml's record syntax, not Haskell's.
+
+* Construct and update records with `with`, e.g. `Transfer with sender; amount = 1.0` and `transfer with amount = 2.0`. Braces only appear in patterns.
+* Pun fields whose value is a variable of the same name: `with owner; amount`, not `with owner = owner; amount = amount`.
+* Read single fields with dot syntax, e.g. `transfer.amount`. Destructure records only where you process all their fields (see [Future Proofing](#future-proofing)).
+* Put one field per line; short lists of punned fields may share a line, e.g. `with dso; provider`.
+
 ## Documentation
 
 Doc comments in non-test Daml packages are published as the Daml API reference (see `docs/gen-daml-docs.sh`). Write them for app developers and auditors, and only where they add information.
