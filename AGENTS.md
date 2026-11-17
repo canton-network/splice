@@ -14,6 +14,11 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 
 Every contribution must be tested in an automated test. For further details see the [Testing README](TESTING.md).
 
+* Compare whole values with `===` instead of checking fields one by one.
+  Use uneven amounts and splits, so that swapped arguments or contract ids make the test fail.
+* Cover variants and edge cases in Daml Script tests. Scala integration tests are expensive:
+  test one representative path, and add related test cases to an existing suite to share its environment.
+
 ## Building and Running Tests
 
 * Run `sbt` inside the direnv/nix dev shell, e.g. `direnv exec . sbt -batch "apps-scan/testOnly <FullyQualifiedSuite>"`. `-batch` avoids the interactive prompt; redirect output to a file and grep for `^\[error\]` and `Tests:`.
@@ -76,6 +81,31 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * To discard a result, end a `do` block with `pure ()`, or use `void` where a `do` block does not work,
   e.g., on `Commands` in Daml Script, which is only an `Applicative`. Do not add `ApplicativeDo` just for this.
 * Don't rewrite existing code only to remove operators; apply this to code you write or change.
+* Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
+  Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
+* Inline helpers that are used only once or whose type signature is longer than their body.
+  Do not add argument records just to call such a helper.
+* Name recurring tuples and argument groups with a record type or type synonym.
+  Keep the specification of a request separate from the state of the contract that records it.
+  Give each constructor of a variant its own record type if some functions handle only one of them.
+* Spell out names; avoid single letters and non-standard abbreviations. Prefix `Optional` values with `opt`.
+  Use one naming scheme per module.
+* Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
+  State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
+
+### Daml Templates and Choices
+
+* Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
+* Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
+  even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade.
+  Choices of interfaces return the result type that the interface defines.
+* Don't add choices, fields or parameters without a concrete need: a released choice cannot be removed.
+  Prefer one choice with an `Optional` argument over several near-duplicate choices.
+* Validate inside the choice body, not only in the helper that exercises the choice.
+  `fetchChecked` every contract id taken from a choice argument, and comment on each `potentiallyUnsafeArchive` why it is safe.
+* Fail early: use `require`, `fail` or `error` instead of threading `Optional` or `Either` through `Update` code
+  or falling back to defaults. Guard impossible cases explicitly.
+* New feature flags in Daml config default to off, so that voting in a package does not enable the feature.
 
 ## Message Definitions
 
@@ -138,4 +168,5 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 
 - Every commit needs a DCO `Signed-off-by:` line; use `git commit -s`.
 - PRs are squash-merged, so the PR title and description become the commit message.
+- Tag TODOs with their tracking issue, e.g., `TODO(#1234)`, or with `TODO(tech-debt)`, so that left-over ones can be found.
 - On branches in this repository, CI only runs if the last commit message contains `[ci]` (or `[static]` for static checks only). See [TESTING.md](TESTING.md) for other tags and for cluster tests.
