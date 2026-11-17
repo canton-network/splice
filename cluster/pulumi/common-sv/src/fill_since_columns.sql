@@ -13,6 +13,11 @@ IF (
   WHERE table_name = '{{prodTableName}}'
     AND column_name IN UNNEST({{sinceColumnArray}})
 ) = ARRAY_LENGTH({{sinceColumnArray}}) THEN
+  -- Bounded by production's record_date, not the record time: it is
+  -- production's partition column, so the bound prunes partitions,
+  -- and every table has it, whereas the record time is `record_time`
+  -- in micros in some tables and `datastream_metadata.source_timestamp`
+  -- in others. A whole day covers every row that staging still has.
   SET oldest_record_date = (
     SELECT MIN({{recordDateExpr}})
     FROM {{stagingTable}} AS staging

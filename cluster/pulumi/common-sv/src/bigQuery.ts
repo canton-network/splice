@@ -389,7 +389,15 @@ const createProdTableSqlTemplate = readSql('create_prod_table.sql');
 
 // the per-table routine that fixes a production table's schema, and
 // its {{fillSinceColumns}}
-const fixProdSchemaSqlTemplate = readSql('fix_prod_schema.sql');
+const fixProdSchemaSqlTemplate = `BEGIN
+  DECLARE oldest_record_date DATE;
+
+  -- 1. Add the listed columns that production lacks
+  CALL {{fixRoutineName}}({{fixRoutineArgs}});
+
+  {{fillSinceColumns}}
+END;
+`;
 const fillSinceColumnsSqlTemplate = readSql('fill_since_columns.sql');
 
 // Replaces each `{{name}}` in `template` with `vars[name]`. A
@@ -501,7 +509,7 @@ function hasValue(expr: string): string {
   return `TO_JSON_STRING(${expr}) NOT IN ('null', '[]')`;
 }
 
-// {{fillSinceColumns}} of fix_prod_schema.sql for `tableConfig`;
+// {{fillSinceColumns}} of fixProdSchemaSqlTemplate for `tableConfig`;
 // empty if it has no `since` columns yet. Exported for tests.
 export function fillSinceColumnsSql(
   tableConfig: ReplicatedTableConfig,
