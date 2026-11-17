@@ -89,7 +89,7 @@ requireValidSvRightOwnerInfo : SvRightOwnerInfo -> Update ()
 requireValidSvRightOwnerInfo info =
   forA_ svRightOwnerInfoChecks $ \(check, message) -> require message (check info)
 
--- | The absolute reward weight for each party that receives rewards in the context of this SV Right Owner.
+-- | The absolute reward weight for each party that receives rewards in the context of this SV rights operator assignment.
 svRewardCouponWeights : OperatorAssignment -> Map Party Int
 svRewardCouponWeights OperatorAssignment{..} =
   Map.filter (> 0) $ Map.insertWith (+) defaultBeneficiary remainingWeight $ Map.fromListWithR (+) paidWeights
