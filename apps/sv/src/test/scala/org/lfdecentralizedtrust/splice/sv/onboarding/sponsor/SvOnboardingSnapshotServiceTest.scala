@@ -266,7 +266,7 @@ class SvOnboardingSnapshotServiceTest
         }
       }
 
-    "limit concurrent ACS and sequencer exports and reject a full queue" in withService(
+    "limit concurrent exports of one kind and reject a full queue" in withService(
       SvOnboardingSnapshotsConfig(_, parallelism = PositiveInt.two, queueSize = PositiveInt.one)
     ) { (service, _, _) =>
       final class Export(snapshotKey: SnapshotKey) {
@@ -284,8 +284,8 @@ class SvOnboardingSnapshotServiceTest
           .futureValue
       }
       val slow = new Export(key("sv1"))
-      val fast = new Export(sequencerKey("sv2"))
-      val queued = new Export(sequencerKey("sv3"))
+      val fast = new Export(key("sv2"))
+      val queued = new Export(key("sv3"))
       try {
         Seq(slow, fast).foreach { running =>
           running.prepare()
@@ -305,6 +305,24 @@ class SvOnboardingSnapshotServiceTest
         fast.done.success(())
         queued.started.future.futureValue
       } finally Seq(slow, fast, queued).foreach(_.done.trySuccess(()))
+    }
+
+    "export a sequencer onboarding state while all ACS exports are blocked" in withService() {
+      (service, _, _) =>
+        val blocked = Promise[Unit]()
+        try {
+          val acs = service.prepare(key("sv1"), writeSnapshot(blocked.future)).futureValue
+          eventually()(service.lookup(acs) should matchPattern {
+            case Some(SnapshotState.Exporting(_, _)) =>
+          })
+          val queuedAcs = service.prepare(key("sv2"), writeSnapshot(Future.unit)).futureValue
+          val sequencer =
+            service.prepare(sequencerKey("sv3"), writeSnapshot(Future.unit)).futureValue
+          eventually()(service.lookup(sequencer) should matchPattern {
+            case Some(SnapshotState.Ready(_)) =>
+          })
+          service.lookup(queuedAcs) should matchPattern { case Some(SnapshotState.Queued(_)) => }
+        } finally { val _ = blocked.trySuccess(()) }
     }
 
     "remove snapshots after the retention period from the cleanup trigger" in withService(
