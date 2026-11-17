@@ -51,6 +51,7 @@ function usage() {
   echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
   echo "  --enable-key-download: Allow downloading the participant's private keys via its admin API. Required for participant identities dumps (e.g., for backups)."
   echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). Requires LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE to be equal, and with -a also WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
+  # TODO(DACH-NY/canton-network-internal#8256): replace this with disable-participant-admin-api-auth
   echo "  --enable-participant-admin-api-auth: enables authentication on the participant admin API"
 
   echo ""

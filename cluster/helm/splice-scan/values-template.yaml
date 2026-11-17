@@ -118,4 +118,5 @@ securityContexts:
 
 participantClient:
   adminApi:
+    # TODO(DACH-NY/canton-network-internal#8256): change this to false when we're ready to enable admin API auth by default
     disableAuth: true

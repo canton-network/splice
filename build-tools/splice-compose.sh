@@ -345,6 +345,7 @@ function usage_start {
   _info "      -k: Disable the validator participant db conflict check (forwarded to the validator start.sh as -k)."
   _info "      -g: Also deploy the wallet gateway and portfolio UI (forwarded to the validator start.sh as -g)."
   _info "      --enable-key-download: Allow downloading the participant's private keys (forwarded to the validator start.sh)."
+  # TODO(DACH-NY/canton-network-internal#8256): replace this with disable-participant-admin-api-auth
   _info "      --enable-participant-admin-api-auth: enables authentication on the participant admin API"
 }
 

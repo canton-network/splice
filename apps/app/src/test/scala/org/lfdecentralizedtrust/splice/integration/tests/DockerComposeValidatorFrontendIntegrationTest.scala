@@ -450,6 +450,7 @@ class DockerComposeValidatorFrontendIntegrationTest
       clue("Restart the validator, with auth") {
         startComposeValidator(
           extraClue = "with auth",
+          // TODO(DACH-NY/canton-network-internal#8256): remove --enable-participant-admin-api-auth once it is on by default
           startFlags =
             Seq("-a", "--enable-participant-admin-api-auth", "-g", "-P", "da-composeValidator-13"),
           extraEnv = Seq(

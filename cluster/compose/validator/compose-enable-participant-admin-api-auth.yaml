@@ -1,3 +1,4 @@
+# TODO(DACH-NY/canton-network-internal#8256): make admin API auth on by default
 services:
   participant:
     environment:
