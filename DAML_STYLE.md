@@ -39,10 +39,12 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 
 ## Records
 
-Use Daml's record syntax, not Haskell's.
+Build records with Daml's `with` syntax, not Haskell's braces.
 
-* Construct and update records with `with`, e.g. `Transfer with sender; amount = 1.0` and `transfer with amount = 2.0`. Braces only appear in patterns.
+* Construct and update records with `with`, e.g. `Transfer with sender; amount = 1.0` and `transfer with amount = 2.0`.
+* Match records with braces, e.g. `Transfer{sender, amount}`. Unlike `with` patterns, they work in every position without parentheses.
 * Pun fields whose value is a variable of the same name: `with owner; amount`, not `with owner = owner; amount = amount`.
+* Use `with ..` to fill a record from same-named variables only for the result record at the end of a choice, e.g. `return AmuletRules_MintResult with ..`.
 * Read single fields with dot syntax, e.g. `transfer.amount`. Destructure records only where you process all their fields (see [Future Proofing](#future-proofing)).
 * Put one field per line; short lists of punned fields may share a line, e.g. `with dso; provider`.
 
