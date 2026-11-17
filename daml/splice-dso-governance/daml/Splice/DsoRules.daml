@@ -2367,11 +2367,9 @@ template DsoRules with
       -- right owners are free to share their own rewards as they see fit.
       with
         name : Text -- ^ The name of the SV right owner whose beneficiaries are set.
-        svRightsMintingShardId : Text
-        beneficiaries : [BeneficiaryInfo]
-          -- ^ The complete new set of beneficiaries, replacing the existing ones.
-        defaultBeneficiary : Party
-        rightOwner : Party -- ^ The party of the SV right owner; must own `svRightOwnerCid`.
+        baseInfo : SvRightOwnerInfo
+        newInfo : SvRightOwnerInfo
+        rightOwner : Party -- ^ The party of the SV rights owner.
       controller rightOwner
       do
         requireOnLedgerSvRightOwners this
