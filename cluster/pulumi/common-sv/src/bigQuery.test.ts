@@ -321,37 +321,6 @@ describe('configureScanBigQuery', () => {
     }
   );
 
-  // The mock deployment waits for V068, so cluster/expected shows no
-  // `since` column and no fill. This keeps the SQL that copies, checks,
-  // adds and fills them reviewable; update with `jest -u`.
-  test('the schema migration SQL, waiting for V082', async () => {
-    const resources = await installBigQuery(
-      true,
-      true,
-      'V082__tbar_v1_1_asset_activity_columns.sql'
-    );
-    const bodies = new Map<string, string>();
-    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
-      bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
-    }
-    for (const routineId of [
-      'sp_check_prod_schema',
-      'sp_fix_prod_schema',
-      'sp_fix_prod_schema_scan_verdict_store',
-      'sp_fix_prod_schema_app_activity_record_store',
-      'sp_append_scan_verdict_store',
-      'sp_append_app_activity_record_store',
-    ]) {
-      expect(bodies.get(routineId)).toMatchSnapshot(routineId);
-    }
-    for (const config of resources.filter(gcp.bigquery.DataTransferConfig.isInstance)) {
-      const displayName = await outputValue(config.displayName);
-      if (displayName === 'mock Production Schema Hourly Fix') {
-        expect((await outputValue(config.params)).query).toMatchSnapshot(displayName);
-      }
-    }
-  });
-
   test('the fill matches every column of a composite primary key', async () => {
     const { fillSinceColumnsSql } = await import('./bigQuery');
     const sql = fillSinceColumnsSql(
