@@ -122,6 +122,8 @@ describe('configureScanBigQuery', () => {
   test.each([
     'V068__app_activity_record_meta.sql',
     'V074__string_interning.sql',
+    'V077__verdict_add_round_number.sql',
+    'V082__tbar_v1_1_asset_activity_columns.sql',
     'V084__partition_update_history.sql',
   ] as const)('both publication and slot commands wait for %s', async migration => {
     const resources = await installBigQuery(true, true, migration);
@@ -189,6 +191,164 @@ describe('configureScanBigQuery', () => {
     }
   });
 
+  test('appends copy the listed columns by name, checking production first if they change', async () => {
+    const resources = await installBigQuery(true, true, 'V084__partition_update_history.sql');
+    const bodies = new Map<string, string>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
+    }
+    const appends = [...bodies].filter(([routineId]) => routineId.startsWith('sp_append_'));
+    expect(appends).toHaveLength(6);
+    const checking = new Set([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
+    for (const [routineId, body] of appends) {
+      const tableName = routineId.replace('sp_append_', '');
+      expect(body).not.toContain('{{');
+      // an empty {{checkProdSchema}} leaves no blank lines behind
+      expect(body).not.toContain('\n\n\n');
+      expect(body).not.toContain('EXECUTE IMMEDIATE');
+      expect(body).not.toContain('ALTER TABLE');
+      expect(body).not.toContain('staging.*');
+      expect(body).not.toContain('SELECT *');
+      expect(body).toMatch(
+        /INSERT INTO `[\w.-]+` \([^)]*`datastream_metadata`,\s+record_date\s+\)/
+      );
+      expect(body.includes('sp_check_prod_schema`(')).toBe(checking.has(tableName));
+      if (checking.has(tableName)) {
+        expect(body).toMatch(
+          new RegExp(`sp_check_prod_schema\`\\('scan_sv_1_${tableName}', '${tableName}', \\[`)
+        );
+      }
+    }
+    expect(bodies.get('sp_append_scan_verdict_store')).toContain('`round_number`');
+    expect(bodies.get('sp_append_app_activity_record_store')).toContain('`asset_activity_weights`');
+    expect(bodies.get('sp_append_update_history_creates')).toContain('`package_name_interned`');
+    expect(bodies.get('sp_append_update_history_exercises')).toContain('`choice_interned`');
+  });
+
+  test('a routine fixes and another checks the schemas of production tables', async () => {
+    const resources = await installBigQuery(true, true, 'V084__partition_update_history.sql');
+    const routines = new Map<string, gcp.bigquery.Routine>();
+    for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+      routines.set(await outputValue(routine.routineId), routine);
+    }
+    const check = routines.get('sp_check_prod_schema');
+    const fix = routines.get('sp_fix_prod_schema');
+    expect(check).toBeDefined();
+    expect(fix).toBeDefined();
+    for (const routine of [check!, fix!]) {
+      expect(await outputValue(routine.routineType)).toBe('PROCEDURE');
+      const args = await outputValue(routine.arguments);
+      expect(args?.map(arg => arg.name)).toEqual([
+        'staging_table_name',
+        'prod_table_name',
+        'columns',
+      ]);
+    }
+    const checkBody = await outputValue(check!.definitionBody);
+    // names the per-table fix routine
+    expect(checkBody).toContain("'sp_fix_prod_schema', prod_table_name");
+    expect(checkBody).toContain('RAISE USING MESSAGE');
+    const fixBody = await outputValue(fix!.definitionBody);
+    expect(fixBody.match(/EXECUTE IMMEDIATE/g)).toHaveLength(1);
+    expect(fixBody).toContain("'ALTER TABLE `%s.%s.%s` %s'");
+    expect(fixBody).toMatch(/STRING_AGG\(\s*FORMAT\('ADD COLUMN IF NOT EXISTS/);
+
+    const queries = new Map<string, [string, string | undefined]>();
+    for (const config of resources.filter(gcp.bigquery.DataTransferConfig.isInstance)) {
+      const params = await outputValue(config.params);
+      queries.set(await outputValue(config.displayName), [
+        params.query,
+        await outputValue(config.schedule),
+      ]);
+    }
+    const [fixQuery, fixSchedule] = queries.get('mock Production Schema Hourly Fix')!;
+    expect(
+      fixQuery
+        .split('\n')
+        .map(call => /^ {2}CALL `[\w.-]+\.sp_fix_prod_schema_(\w+)`\(\);$/.exec(call)?.[1])
+        .filter(tableName => tableName)
+    ).toEqual([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
+    // each CALL in its own block, so that a failing one doesn't skip
+    // the others
+    expect(fixQuery.match(/EXCEPTION WHEN ERROR THEN/g)).toHaveLength(4);
+    expect(fixQuery).toContain("RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');");
+    const [, appendSchedule] = queries.get('mock_scan_verdict_store Hourly Append Pipeline')!;
+    expect(fixSchedule).not.toBe(appendSchedule);
+  });
+
+  test.each([
+    ['V077__verdict_add_round_number.sql', true],
+    ['V074__string_interning.sql', false],
+  ] as const)(
+    'waiting for %s, the per-table fix fills `since` columns from staging: %s',
+    async (migration, fills) => {
+      const resources = await installBigQuery(true, true, migration);
+      const bodies = new Map<string, string>();
+      for (const routine of resources.filter(gcp.bigquery.Routine.isInstance)) {
+        bodies.set(await outputValue(routine.routineId), await outputValue(routine.definitionBody));
+      }
+      const body = bodies.get('sp_fix_prod_schema_scan_verdict_store');
+      expect(body).toBeDefined();
+      expect(body).not.toContain('{{');
+      expect(body).toMatch(
+        /CALL `[\w.-]+\.sp_fix_prod_schema`\('scan_sv_1_scan_verdict_store', 'scan_verdict_store', \[.*\]\);/
+      );
+      expect(body!.includes('UPDATE')).toBe(fills);
+      if (fills) {
+        // only where production lacks a value that staging has
+        expect(body).toContain(
+          '`round_number` = COALESCE(prod.`round_number`, latest.`round_number`)'
+        );
+        expect(body).toContain('WHERE prod.record_date >= oldest_record_date');
+        expect(body).toContain('AND prod.`row_id` = latest.`row_id`\n');
+        expect(body).toContain(
+          'AND ((prod.`round_number` IS NULL AND latest.`round_number` IS NOT NULL));'
+        );
+        // not only in the hour that adds the column
+        expect(body).not.toContain('added');
+        expect(body).toMatch(/column_name IN UNNEST\(\['round_number'\]\)/);
+      }
+    }
+  );
+
+  test('the fill matches every column of a composite primary key', async () => {
+    const { fillSinceColumnsSql } = await import('./bigQuery');
+    const sql = fillSinceColumnsSql(
+      {
+        primaryKey: 'verdict_row_id, view_id',
+        datePartitionColumn: 'source_timestamp',
+        timeType: 'datastream_metadata',
+        appendMode: 'watermark',
+        columns: ['verdict_row_id', 'view_id', 'x', 'datastream_metadata'],
+        sinceColumns: ['x'],
+        migratesSchema: true,
+      },
+      {
+        project: 'proj',
+        prodDataset: 'prod',
+        stagingDataset: 'staging',
+        prodTableName: 'p',
+        stagingTableName: 's',
+      }
+    );
+    expect(sql).toContain(
+      'prod.`verdict_row_id` = latest.`verdict_row_id` AND prod.`view_id` = latest.`view_id`'
+    );
+    expect(sql).toContain('PARTITION BY verdict_row_id, view_id');
+    expect(sql).toMatch(/staging\.`verdict_row_id`,\s+staging\.`view_id`,\s+staging\.`x`\n/);
+    expect(sql).toContain('TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)');
+  });
+
   test('neither Datastream backfills automatically', async () => {
     const resources = await installBigQuery(true, true, 'V074__string_interning.sql');
     const streams = resources.filter(gcp.datastream.Stream.isInstance);
@@ -201,32 +361,34 @@ describe('configureScanBigQuery', () => {
 });
 
 describe('flywayMigrationToWaitFor', () => {
-  test('waits for V068 by default and allows V074', async () => {
+  test('waits for V068 by default and allows V074, V077, V082 and V084', async () => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.parse(undefined)).toBe(
       'V068__app_activity_record_meta.sql'
     );
-    expect(FlywayMigrationToWaitForSchema.parse('V074__string_interning.sql')).toBe(
-      'V074__string_interning.sql'
-    );
+    for (const migration of [
+      'V074__string_interning.sql',
+      'V077__verdict_add_round_number.sql',
+      'V082__tbar_v1_1_asset_activity_columns.sql',
+      'V084__partition_update_history.sql',
+    ] as const) {
+      expect(FlywayMigrationToWaitForSchema.parse(migration)).toBe(migration);
+    }
   });
 
   test.each([
-    'V077__verdict_add_round_number.sql',
+    'V076__dso_unavailable_parties_store_id_pk.sql',
     'V074__string_interning',
-    'V081__partition_update_history.sql',
+    'V082__partition_update_history.sql',
   ])('rejects %s', async migration => {
     const { FlywayMigrationToWaitForSchema } = await import('./bigQueryFlywayMigration');
     expect(FlywayMigrationToWaitForSchema.safeParse(migration).success).toBe(false);
   });
 
-  test('only migrations from V074 on include interned_strings', async () => {
-    const { flywayMigrationVersion, migrationIncludesInternedStrings } =
-      await import('./bigQueryFlywayMigration');
+  test('flywayMigrationVersion reads the version', async () => {
+    const { flywayMigrationVersion } = await import('./bigQueryFlywayMigration');
     expect(flywayMigrationVersion('V074__string_interning.sql')).toBe(74);
     expect(() => flywayMigrationVersion('R__repeatable.sql')).toThrow(/R__repeatable\.sql/);
-    expect(migrationIncludesInternedStrings('V068__app_activity_record_meta.sql')).toBe(false);
-    expect(migrationIncludesInternedStrings('V074__string_interning.sql')).toBe(true);
   });
 
   test('checkFlywayMigrationsExist names the missing migrations', async () => {
@@ -243,5 +405,180 @@ describe('flywayMigrationToWaitFor', () => {
     } finally {
       fs.rmSync(dir, { recursive: true });
     }
+  });
+});
+
+describe('replicatedTablesFor', () => {
+  test('replicates tables and copies columns from their `since` on', async () => {
+    const { replicatedTablesFor } = await import('./bigQueryReplicatedTables');
+    const v068 = replicatedTablesFor('V068__app_activity_record_meta.sql');
+    const v074 = replicatedTablesFor('V074__string_interning.sql');
+    const v077 = replicatedTablesFor('V077__verdict_add_round_number.sql');
+    const v082 = replicatedTablesFor('V082__tbar_v1_1_asset_activity_columns.sql');
+    const v084 = replicatedTablesFor('V084__partition_update_history.sql');
+    expect(Object.keys(v068)).not.toContain('interned_strings');
+    expect(v074.interned_strings?.columns).toEqual(['id', 'value', 'datastream_metadata']);
+    for (const tables of [v074, v077, v082, v084]) {
+      expect(Object.keys(tables)).toEqual([...Object.keys(v068), 'interned_strings']);
+    }
+    const verdicts = (tables: typeof v068) => tables.scan_verdict_store?.columns ?? [];
+    expect(verdicts(v074)).toContain('record_time');
+    expect(verdicts(v074)).not.toContain('round_number');
+    // added by V077, and in scan's database on 0.10.0 already
+    expect(verdicts(v077)).toContain('round_number');
+    expect(verdicts(v077).slice(-1)).toEqual(['datastream_metadata']);
+    const activity = (tables: typeof v068) => tables.app_activity_record_store?.columns ?? [];
+    expect(activity(v077)).not.toContain('asset_activity_weights');
+    expect(activity(v082)).toContain('asset_activity_weights');
+    // added by #7770's V084
+    const creates = (tables: typeof v068) => tables.update_history_creates?.columns ?? [];
+    const exercises = (tables: typeof v068) => tables.update_history_exercises?.columns ?? [];
+    expect(creates(v082).filter(column => column.endsWith('_interned'))).toEqual([]);
+    expect(exercises(v082).filter(column => column.endsWith('_interned'))).toEqual([]);
+    expect(creates(v084).filter(column => column.endsWith('_interned'))).toHaveLength(4);
+    expect(exercises(v084).filter(column => column.endsWith('_interned'))).toHaveLength(8);
+    expect(creates(v084).slice(-1)).toEqual(['datastream_metadata']);
+  });
+
+  test('only tables whose columns have a `since` migrate their schema', async () => {
+    const { replicatedTablesFor } = await import('./bigQueryReplicatedTables');
+    const migrating = Object.entries(replicatedTablesFor('V074__string_interning.sql'))
+      .filter(([, table]) => table.migratesSchema)
+      .map(([tableName]) => tableName);
+    expect(migrating).toEqual([
+      'update_history_creates',
+      'update_history_exercises',
+      'scan_verdict_store',
+      'app_activity_record_store',
+    ]);
+  });
+
+  // Production tables keep the columns they were created with, and
+  // only a column with a `since` makes its table check and fix them.
+  // So a column added to Postgres later must get a `since`; a column
+  // listed without one would fail every append of an older production
+  // table. Extend this only for a new table, or a new column on a table
+  // with a `since` of its own that no deployment replicates yet.
+  test('columns without a `since` are those production tables were created with', async () => {
+    const { loadReplicatedTablesConfig } = await import('./bigQueryReplicatedTables');
+    const plainColumns = Object.fromEntries(
+      Object.entries(loadReplicatedTablesConfig()).map(([tableName, table]) => [
+        tableName,
+        table.columns.filter(column => typeof column === 'string'),
+      ])
+    );
+    const createdWith = {
+      update_history_creates: [
+        'history_id',
+        'row_id',
+        'ingested_at',
+        'event_id',
+        'update_row_id',
+        'contract_id',
+        'created_at',
+        'template_id_package_id',
+        'template_id_module_name',
+        'template_id_entity_name',
+        'package_name',
+        'create_arguments',
+        'signatories',
+        'observers',
+        'contract_key',
+        'record_time',
+        'update_id',
+        'domain_id',
+        'migration_id',
+      ],
+      update_history_exercises: [
+        'history_id',
+        'row_id',
+        'ingested_at',
+        'event_id',
+        'update_row_id',
+        'child_event_ids',
+        'choice',
+        'template_id_package_id',
+        'template_id_module_name',
+        'template_id_entity_name',
+        'contract_id',
+        'consuming',
+        'argument',
+        'result',
+        'package_name',
+        'interface_id_package_id',
+        'interface_id_module_name',
+        'interface_id_entity_name',
+        'acting_parties',
+        'record_time',
+        'update_id',
+        'domain_id',
+        'migration_id',
+      ],
+      scan_verdict_store: [
+        'row_id',
+        'ingested_at',
+        'migration_id',
+        'domain_id',
+        'record_time',
+        'finalization_time',
+        'submitting_participant_uid',
+        'verdict_result',
+        'mediator_group',
+        'update_id',
+        'submitting_parties',
+        'transaction_root_views',
+        'history_id',
+        'total_traffic_cost',
+        'envelope_traffic_costs',
+      ],
+      scan_verdict_transaction_view_store: [
+        'verdict_row_id',
+        'view_id',
+        'informees',
+        'confirming_parties',
+        'sub_views',
+      ],
+      app_activity_record_store: [
+        'history_id',
+        'verdict_row_id',
+        'round_number',
+        'app_provider_parties',
+        'app_activity_weights',
+      ],
+      interned_strings: ['id', 'value'],
+    };
+    try {
+      expect(plainColumns).toEqual(createdWith);
+    } catch (e) {
+      throw new Error(
+        'A column without a `since` changed. Do NOT edit this test for that: give a new ' +
+          'column the `since` of the migration that adds it, in ' +
+          'bigquery-replicated-tables.yaml. Only the cases in the comment above this test ' +
+          `extend its list.\n\n${(e as Error).message}`
+      );
+    }
+  });
+
+  test('rejects a `since` that is not an allowed migration', async () => {
+    const { ReplicatedTablesConfigSchema } = await import('./bigQueryReplicatedTables');
+    const table = {
+      primaryKey: 'id',
+      datePartitionColumn: 'source_timestamp',
+      timeType: 'datastream_metadata',
+      appendMode: 'newKeys',
+    };
+    expect(
+      ReplicatedTablesConfigSchema.safeParse({
+        t: { ...table, columns: ['id', { name: 'x', since: 'V074__string_interning.sql' }] },
+      }).success
+    ).toBe(true);
+    expect(
+      ReplicatedTablesConfigSchema.safeParse({
+        t: {
+          ...table,
+          columns: ['id', { name: 'x', since: 'V076__dso_unavailable_parties_store_id_pk.sql' }],
+        },
+      }).success
+    ).toBe(false);
   });
 });

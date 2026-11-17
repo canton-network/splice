@@ -1,0 +1,17 @@
+{
+  "custom": true,
+  "id": "",
+  "inputs": {
+    "dataSourceId": "scheduled_query",
+    "displayName": "mock Production Schema Hourly Fix",
+    "location": "europe-west6",
+    "params": {
+      "query": "DECLARE failed ARRAY<STRING> DEFAULT [];\nBEGIN\n  CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema_update_history_creates`();\nEXCEPTION WHEN ERROR THEN\n  SET failed = ARRAY_CONCAT(failed, [FORMAT('%s: %s', 'update_history_creates', @@error.message)]);\nEND;\nBEGIN\n  CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema_update_history_exercises`();\nEXCEPTION WHEN ERROR THEN\n  SET failed = ARRAY_CONCAT(failed, [FORMAT('%s: %s', 'update_history_exercises', @@error.message)]);\nEND;\nBEGIN\n  CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema_scan_verdict_store`();\nEXCEPTION WHEN ERROR THEN\n  SET failed = ARRAY_CONCAT(failed, [FORMAT('%s: %s', 'scan_verdict_store', @@error.message)]);\nEND;\nBEGIN\n  CALL `test-project.mock_da2_scan_prod.sp_fix_prod_schema_app_activity_record_store`();\nEXCEPTION WHEN ERROR THEN\n  SET failed = ARRAY_CONCAT(failed, [FORMAT('%s: %s', 'app_activity_record_store', @@error.message)]);\nEND;\nIF ARRAY_LENGTH(failed) > 0 THEN\n  RAISE USING MESSAGE = ARRAY_TO_STRING(failed, '; ');\nEND IF;"
+    },
+    "schedule": "every 1 hours from 00:02 to 23:02",
+    "serviceAccountName": "bigquery@test-project.iam.gserviceaccount.com"
+  },
+  "name": "mock_prod-schema-hourly-fix",
+  "provider": "",
+  "type": "gcp:bigquery/dataTransferConfig:DataTransferConfig"
+}
