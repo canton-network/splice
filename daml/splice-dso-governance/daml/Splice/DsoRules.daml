@@ -698,7 +698,7 @@ template DsoRules with
     config : DsoRulesConfig
     initialTrafficState: Map.Map Text TrafficState -- ^ Map from participant/mediator ID to its traffic state at the time of synchronizer bootstrapping. Used for testing, empty in prod.
     isDevNet : Bool
-    svRightOwners : Optional (Map Text (Set Text)) -- ^ The SV rights minting shard ids of each SV right owner, keyed by its name.
+    svRightOwners : Optional (Set Text) -- ^ The current SV rights owners.
   where
     ensure and
       [ config.numUnclaimedRewardsThreshold > 0
