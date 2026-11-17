@@ -1960,17 +1960,10 @@ class DbScanStoreTest
     // appends copy only the listed columns to production. Listed
     // columns that Postgres has dropped are allowed.
     "list every column of the tables replicated to BigQuery" in {
-      // relative to the repository root: the working directory, or one
-      // of its ancestors when tests run elsewhere
-      val relative = Paths.get("cluster/pulumi/common-sv/src/bigquery-replicated-tables.yaml")
-      val workingDir = Paths.get("").toAbsolutePath
-      val file = Iterator
-        .iterate(Option(workingDir))(_.flatMap(dir => Option(dir.getParent)))
-        .takeWhile(_.isDefined)
-        .flatten
-        .map(_.resolve(relative))
-        .find(Files.exists(_))
-        .getOrElse(fail(s"$relative not found in $workingDir or its ancestors"))
+      val file = Paths.get(
+        sys.env("SPLICE_ROOT"),
+        "cluster/pulumi/common-sv/src/bigquery-replicated-tables.yaml",
+      )
       val tables = yaml.parser
         .parse(Files.readString(file))
         .flatMap(_.as[Map[String, Json]])
@@ -2003,17 +1996,10 @@ class DbScanStoreTest
             .map(table -> _.toSet)
         }
       } yield {
-        forAll(dbColumns) { case (table, columns) =>
-          withClue(s"$table in scan's database: ") {
-            columns should not be empty
-          }
-        }
-        val unlisted = dbColumns.flatMap { case (table, columns) =>
-          val missing = columns -- listedColumns(table)
-          Option.when(missing.nonEmpty)(table -> missing.toSeq.sorted)
-        }
-        withClue(s"columns to list in $file: ") {
-          unlisted shouldBe empty
+        forEvery(dbColumns) { case (table, columns) =>
+          columns should not be empty withClue s"$table in scan's database"
+          listedColumns(table) should contain allElementsOf columns withClue
+            s"$table's columns in $file"
         }
       }
     }
