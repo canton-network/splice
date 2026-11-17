@@ -307,12 +307,12 @@ describe('configureScanBigQuery', () => {
       if (fills) {
         // only where production lacks a value that staging has
         expect(body).toContain(
-          "`round_number` = IF(TO_JSON_STRING(prod.`round_number`) IN ('null', '[]'), latest.`round_number`, prod.`round_number`)"
+          '`round_number` = COALESCE(prod.`round_number`, latest.`round_number`)'
         );
         expect(body).toContain('WHERE prod.record_date >= oldest_record_date');
         expect(body).toContain('AND prod.`row_id` = latest.`row_id`\n');
         expect(body).toContain(
-          "AND ((TO_JSON_STRING(prod.`round_number`) IN ('null', '[]') AND TO_JSON_STRING(latest.`round_number`) NOT IN ('null', '[]')));"
+          'AND ((prod.`round_number` IS NULL AND latest.`round_number` IS NOT NULL));'
         );
         // not only in the hour that adds the column
         expect(body).not.toContain('added');

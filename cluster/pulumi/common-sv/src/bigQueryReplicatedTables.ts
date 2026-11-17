@@ -64,16 +64,16 @@ export type ReplicatedTables = Record<string, ReplicatedTableConfig>;
 
 // `xs` with `f` applied to every value, without the keys for which
 // `f` returns undefined
-function filterMapValues<K extends string, A, B>(
-  xs: Record<K, A>,
+function filterMapValues<A, B>(
+  xs: Record<string, A>,
   f: (a: A) => B | undefined
-): Record<K, B> {
+): Record<string, B> {
   return Object.fromEntries(
     Object.entries<A>(xs).flatMap(([key, a]) => {
       const b = f(a);
       return b === undefined ? [] : [[key, b]];
     })
-  ) as Record<K, B>;
+  );
 }
 
 // What tables from Scan to replicate to BigQuery, and their columns.

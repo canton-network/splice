@@ -1,9 +1,10 @@
--- 2. Production rows appended before a `since` column was listed lack
--- its value: NULL, or an empty array. Fill those that staging still
--- has, from their latest change, where that has a value; older rows
--- keep theirs. This runs every hour, so it also fills the rows of an
--- append that ran before the fix, and retries a fill that failed.
--- Skipped until both staging and production have every such column.
+-- 2. Production rows appended before a `since` column was listed have
+-- it NULL. Fill those that staging still has, from their latest
+-- change, where that is not NULL, including an empty array, which
+-- Datastream replicates as JSON `[]`; older rows keep NULL. This runs
+-- every hour, so it also fills the rows of an append that ran before
+-- the fix, and retries a fill that failed. Skipped until both staging
+-- and production have every such column.
 IF (
   SELECT COUNT(DISTINCT column_name) FROM {{stagingColumnsView}}
   WHERE table_name = '{{stagingTableName}}'
