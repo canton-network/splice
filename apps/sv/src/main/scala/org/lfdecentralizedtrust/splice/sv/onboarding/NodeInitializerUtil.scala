@@ -206,7 +206,8 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
     */
   protected def newUnavailablePartiesStore(
       dsoStore: SvDsoStore
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[UnavailablePartiesStore] =
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[UnavailablePartiesStore] = {
+    val protectedPartiesWithDso = config.protectedPartyIds + dsoStore.dsoPartyId
     if (config.parameters.enabledFeatures.enablePersistedUnavailableParties) {
       implicit val closeContext: CloseContext = CloseContext(retryProvider)
       participantAdminConnection.getParticipantId().flatMap { participantId =>
@@ -222,12 +223,19 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
           config.unavailablePartiesBackoffParameters.baseIgnoreDuration,
           config.unavailablePartiesBackoffParameters.maxIgnoreDuration,
           clock,
+          protectedPartiesWithDso,
           loggerFactory,
         )
       }
     } else {
-      Future.successful(new InMemoryUnavailablePartiesStore(config.automation.ignoredPartyIds))
+      Future.successful(
+        new InMemoryUnavailablePartiesStore(
+          config.automation.ignoredPartyIds,
+          protectedPartiesWithDso,
+        )
+      )
     }
+  }
 
   protected def newDsoPartyHosting(
       dsoParty: PartyId

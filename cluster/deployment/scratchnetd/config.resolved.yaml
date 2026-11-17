@@ -231,10 +231,6 @@ pulumiStacks:
       requests:
         memory: '6Gi'
 splitwell:
-  participant:
-    additionalEnvVars:
-      - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-        value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
   walletGateway:
     enabled: false
     portfolioVersion: '1.14.0'
@@ -280,9 +276,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -351,9 +344,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -425,9 +415,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -496,9 +483,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -567,9 +551,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -638,9 +619,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -709,9 +687,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -780,9 +755,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -851,9 +823,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -922,9 +891,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -993,9 +959,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1064,9 +1027,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1135,9 +1095,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1206,9 +1163,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1277,9 +1231,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1348,9 +1299,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1419,9 +1367,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1490,9 +1435,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     participant:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-          value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
       bftSequencerConnection: true
       resources:
         limits:
@@ -1568,10 +1510,6 @@ validator1:
   deduplicationDuration: '30m'
   logging:
     level: 'DEBUG'
-  participant:
-    additionalEnvVars:
-      - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
-        value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
   participantPruningSchedule:
     cron: '0 /10 * * * ?'
     maxDuration: '5m'

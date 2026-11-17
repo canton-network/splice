@@ -68,8 +68,9 @@ class SvTimeBasedOnboardingIntegrationTest
           sv4Backend.start()
         }
         clue("An `SvOnboardingRequest` contract is created") {
-          // Increased timeout, because SV4 takes a while to start up
-          eventually(timeUntilSuccess = 60.seconds)(
+          // Increased timeout, because SV4 uploads about 65 DARs during init,
+          // which took about 60 s on a slow runner
+          eventually(timeUntilSuccess = 90.seconds)(
             // The onboarding is requested by SV4 during SvApp init.
             sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
               .filterJava(splice.svonboarding.SvOnboardingRequest.COMPANION)(

@@ -86,6 +86,7 @@ const MuteTimeWindowSchema = z.object({
 const MuteTimeIntervalSchema = z.array(
   z.object({
     name: z.string(),
+    prometheus: z.boolean().default(false),
     objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
     timeWindows: z.array(MuteTimeWindowSchema),
   })
@@ -240,6 +241,13 @@ const MonitoringConfigSchema = z
   .strict();
 
 export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('monitoring'));
+
+export const grafanaMuteTimeIntervals = monitoringConfig.alerting.muteTimeIntervals.filter(
+  i => !i.prometheus
+);
+export const prometheusMuteTimeIntervals = monitoringConfig.alerting.muteTimeIntervals.filter(
+  i => i.prometheus
+);
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
 

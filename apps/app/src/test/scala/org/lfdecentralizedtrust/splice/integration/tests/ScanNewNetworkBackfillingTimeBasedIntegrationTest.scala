@@ -15,6 +15,10 @@ import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageBackfillingConfig
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.scan.store.historystart.HistoryStart
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests}
+import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
+  CalculateRewardsTrigger,
+  SummarizingMiningRoundTrigger,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.{
   LocalSequencerConnectionsTrigger,
   ReceiveSvRewardCouponTrigger,
@@ -49,6 +53,10 @@ class ScanNewNetworkBackfillingTimeBasedIntegrationTest
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[LocalSequencerConnectionsTrigger]
             .withPausedTrigger[ReceiveSvRewardCouponTrigger]
+            // The test does not need rewards. The hourly sim-clock steps time out the in-flight
+            // submissions of these triggers, which then trip the medium-priority circuit breaker.
+            .withPausedTrigger[SummarizingMiningRoundTrigger]
+            .withPausedTrigger[CalculateRewardsTrigger]
         )(config)
       )
       .addConfigTransforms((_, config) =>

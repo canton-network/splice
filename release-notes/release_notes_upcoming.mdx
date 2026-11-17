@@ -2,11 +2,21 @@
 
 {/* Add all release notes in this section */}
 
+  - Scan App
+
+    - New ACS snapshot pruning, off by default. With `canton.scan-apps.scan-app.pruning.snapshots.enabled = true` (Helm
+      value `pruning.snapshots.enabled`) and a finite analyzable time window, Scan deletes the ACS snapshots stored in
+      per-snapshot tables that are older than the window, except the daily snapshot that bulk storage exports. Later
+      releases extend this setting to the daily snapshots once they are in bulk storage.
+      ACS snapshot queries with `record_time_match=exact` for a time whose snapshot was pruned then return not found.
+
   - SV App
 
-    - Joining SVs now download the DSO party ACS from their sponsor as a file instead of receiving it in memory,
-      so onboarding works with large snapshots. SVs that restrict SV app ingress must allow other SVs to reach
-      the new `/v0/onboard/sv/party-migration/prepare` and `/v0/onboard/sv/download/{id}` endpoints.
+    - Joining SVs now download the DSO party ACS and sequencer onboarding state from their sponsor as files
+      instead of keeping the responses in the SV app's memory, reducing SV app memory usage for large
+      snapshots. SVs that restrict SV app ingress must allow other SVs to reach the new
+      `/v0/onboard/sv/party-migration/prepare`, `/v0/onboard/sv/sequencer/prepare` and
+      `/v0/onboard/sv/download/{id}` endpoints, which are tagged `x-external-audience: svs`.
 
   - Deployment
 

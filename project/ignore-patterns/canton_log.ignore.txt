@@ -112,7 +112,7 @@ Failed to send commitment message batch for period CommitmentPeriod.*RequestRefu
 Failed to send commitment message batch for period CommitmentPeriod.*RequestInvalid\(Unregistered
 SEQUENCER_UNKNOWN_RECIPIENTS.*(?:alice-validatorLocalForValidatorReonboardingIT|da-ComposeValidator-1)
 
-# TODO(#919) Figure out where this is coming from
+# TODO(#447) Figure out where this is coming from
 Instrument rpc\.server\.duration has exceeded the maximum allowed cardinality
 Too many log messages detected
 
@@ -145,15 +145,11 @@ Timeout .*expired, but readers are still active
 # test significantly so for now we don't bother.
 ACS_COMMITMENT_MISMATCH.*(bob|alice)Participant
 
-# TODO(#1450) - investigate this on the canton side
 FAILED_PRECONDITION/SEQUENCER_SENDER_UNKNOWN.*Senders are unknown: MED::sv
 Rejected transaction due to a participant determined timeout
 
 # Seems like sometimes mediators time out maybe around onboarding, not worth investigating unless it causes issues.
 Sequencing result message timed out.*mediator=
-
-# TODO (DACH-NY/canton-network-internal#966) - remove if not necessary anymore
-ACS_COMMITMENT_DEGRADATION
 
 #Todo(DACH-NY/cn-test-failures/7808)
 The synchronizer Synchronizer 'global' failed the following topology transactions

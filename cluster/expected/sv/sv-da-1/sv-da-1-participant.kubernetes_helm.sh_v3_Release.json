@@ -19,10 +19,6 @@
           "value": "canton.participants.participant.crypto.session-signing-keys.enabled = true"
         },
         {
-          "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
-          "value": "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
-        },
-        {
           "name": "CUSTOM_MOCK_ENV_VAR_NAME",
           "value": "CUSTOM_MOCK_ENV_VAR_VALUE"
         }
