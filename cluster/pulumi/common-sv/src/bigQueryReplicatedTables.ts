@@ -62,6 +62,18 @@ export interface ReplicatedTableConfig {
 
 export type ReplicatedTables = Record<string, ReplicatedTableConfig>;
 
+function filterMapValues<K extends string, A, B>(
+  xs: Record<K, A>,
+  f: (a: A) => B | undefined
+): Record<K, B> {
+  return Object.fromEntries(
+    Object.entries<A>(xs).flatMap(([key, a]) => {
+      const b = f(a);
+      return b === undefined ? [] : [[key, b]];
+    })
+  ) as Record<K, B>;
+}
+
 // What tables from Scan to replicate to BigQuery, and their columns.
 // All should exist once `flywayMigrationToWaitFor` has been applied,
 // so the publication, both Datastreams and the scheduled queries always
@@ -73,16 +85,11 @@ export function replicatedTablesFor(
   const applied = (since: FlywayMigrationToWaitFor | undefined) =>
     since === undefined ||
     flywayMigrationVersion(since) <= flywayMigrationVersion(flywayMigrationToWaitFor);
-  return Object.fromEntries(
-    Object.entries(config)
-      .filter(([, table]) => applied(table.since))
-      .map(
-        ([tableName, { primaryKey, datePartitionColumn, timeType, appendMode, columns }]): [
-          string,
-          ReplicatedTableConfig,
-        ] => [
-          tableName,
-          {
+  return filterMapValues(
+    config,
+    ({ since, primaryKey, datePartitionColumn, timeType, appendMode, columns }) =>
+      applied(since)
+        ? {
             primaryKey,
             datePartitionColumn,
             timeType,
@@ -97,8 +104,7 @@ export function replicatedTablesFor(
               typeof column !== 'string' && applied(column.since) ? [column.name] : []
             ),
             migratesSchema: columns.some(column => typeof column !== 'string'),
-          },
-        ]
-      )
+          }
+        : undefined
   );
 }
