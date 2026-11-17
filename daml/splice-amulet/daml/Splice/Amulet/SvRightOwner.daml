@@ -12,6 +12,11 @@ import DA.TextMap (TextMap)
 import Splice.Types (ForDso(..))
 import Splice.Util (HasCheckedFetch(..), Patchable(..), patchListAsScalar, require)
 
+data SvRightsOwnerKey = SvRightsOwnerKey with
+    dso : Party
+    name : Text
+  deriving (Eq, Show, Serializable)
+
 -- | An SV right owner, i.e., an entity that owns SV rights and thereby earns SV rewards.
 --
 -- SV right owners are hosted by an SV node operator, which mints their rewards on their
@@ -25,8 +30,8 @@ template SvRightOwner
   where
     signatory dso
     ensure validSvRightOwnerInfo info
-    key (dso, name) : (Party, Text)
-    maintainer key._1
+    key ( SvRightsOwnerKey with dso; name ) : SvRightsOwnerKey
+    maintainer key.dso
 
 instance HasCheckedFetch SvRightOwner ForDso where
   contractGroupId SvRightOwner{dso} = ForDso with dso
