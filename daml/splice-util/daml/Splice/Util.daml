@@ -120,8 +120,8 @@ fetchPublicReferenceData expectedCgid cid arg = do
 -- Unchecked variants of the above functions
 -- Avoid these whenever possible! Actually, we should not need these at all.
 
--- TODO(#9465): remove their use in ANS
--- TODO(#9464): remove their use in Splitwell and drop them completely
+-- Still used in ANS and Splitwell.
+
 
 -- | Fetch and archive a contract in one go.
 --

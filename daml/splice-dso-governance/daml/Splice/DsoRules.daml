@@ -838,7 +838,7 @@ template DsoRules with
     -- Voting as part of on-ledger governance (version 3)
     -----------------------------------------------------
 
-    -- TODO(#9317): rate limit inidiviual SVs wrt requesting votes
+    -- TODO(canton-network/splice#8273): rate limit individual SVs wrt requesting votes
     nonconsuming choice DsoRules_RequestVote : DsoRules_RequestVoteResult
       with
         requester : Party
@@ -978,8 +978,8 @@ template DsoRules with
                     None | numYays >= s.requiredNumVotes ->
                       do
                         executeActionRequiringConfirmation dso self amuletRulesCid request.action
-                        -- TODO(#16139): Remove Config Schedule from AmuletConfig
-                        -- TODO(#16137): Implement effectivity on all actions
+                        -- TODO(canton-network/splice#8540): Remove Config Schedule from AmuletConfig
+                        -- TODO(canton-network/splice#8540): Implement effectivity on all actions
                         pure $ VRO_Accepted with
                             effectiveAt = fromOptional now $
                               actionRequiringConfirmationEffectiveAt request.action
@@ -1028,7 +1028,7 @@ template DsoRules with
       -- Note: we do not archive the AmuletPriceVote of an SV on its removal,
       -- as that would allow that SV to block the removal via updating its AmuletPriceVote at the right time.
       --
-      -- TODO(#10063): drop this code in favor of just keeping AmuletPriceVotes around.
+      --
       with
         nonSvVoteCids : [ContractId AmuletPriceVote]
         duplicateVoteCids : [[ContractId AmuletPriceVote]]
@@ -1256,7 +1256,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this sv
-        -- TODO(#3756) Enable archiving also before the sv is added, after a matching `SvOnboardingConfirmed` contract is created.
+
         svOnboardingRequest <- fetchAndArchive (ForDso with dso) svOnboardingRequestCid
         let maybeSv = Map.lookup svOnboardingRequest.candidateParty svs
         require "SV party is an SV" (isSome maybeSv)
