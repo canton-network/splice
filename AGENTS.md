@@ -90,6 +90,12 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
   Give each constructor of a variant its own record type if some functions handle only one of them.
 * Spell out names; avoid single letters and non-standard abbreviations. Prefix `Optional` values with `opt`.
   Use one naming scheme per module.
+* Write code with future changes in mind: not by making it more general than needed, but by leaving room for new names
+  and by making the compiler flag code that must handle new fields or constructors.
+* Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
+  Where every field must be processed, match positionally and name unused fields `_field`.
+* Use a wildcard case `_ ->` only when it is safe for constructors added in later upgrades and saves a lot of code.
+  Otherwise a new constructor silently takes the wildcard branch instead of being flagged as unhandled.
 * Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
   State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
 
@@ -97,7 +103,8 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 
 * Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
 * Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
-  even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade.
+  even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade,
+  which leaves room for future changes.
   Choices of interfaces return the result type that the interface defines.
 * Don't add choices, fields or parameters without a concrete need: a released choice cannot be removed.
   Prefer one choice with an `Optional` argument over several near-duplicate choices.
