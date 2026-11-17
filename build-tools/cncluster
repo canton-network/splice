@@ -1516,6 +1516,12 @@ function subcmd_deploy_upgrade() {
     _deploy_cluster_workflow "deploy_scratchnet_upgrade.yml" "Upgrade test" "$@"
 }
 
+subcommand_whitelist[deploy_lsu]='Trigger a scratchnet logical synchronizer upgrade (LSU) test deploy for a PR and post the run link back on the PR.'
+
+function subcmd_deploy_lsu() {
+    _deploy_cluster_workflow "deploy_scratchnet_lsu.yml" "LSU test" "$@"
+}
+
 function _deploy_cluster_workflow() {
     local deploy_workflow="$1" label="$2"; shift 2
 
