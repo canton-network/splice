@@ -423,6 +423,20 @@ test_settleBatchV2_nextIterationFunding_wrongInstrumentId = test_settleBatchV2_g
     expectMessageContains "Not enough funds for allocation of Account" <>
     expectMessageContains ("Instrument: " <> show wrongInstrId)
 
+test_settleBatchV2_nextIterationFunding_negativeAmount : Script ()
+test_settleBatchV2_nextIterationFunding_negativeAmount = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
+  let choiceArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2]
+        allocations =
+          [ V2.FinalizedAllocation aliceAllocCid [TSU.senderSide legV2] (Some $ TextMap.fromList [(instrId.id, -10.0)])
+          , V2.FinalizedAllocation bobAllocCid [] None
+          ]
+        extraArgs = emptyExtraArgs
+        actors = [provider]
+  pure $ (,) choiceArg $
+    expectMessageContains "'finalizedAllocation.nextIterationFunding.amount' is not greater than 'zero'"
+
 -- | Test overflow from the net amount of two legs being larger than the max or min decimal value.
 test_settleBatchV2_decimal_overflow : Script ()
 test_settleBatchV2_decimal_overflow = do
