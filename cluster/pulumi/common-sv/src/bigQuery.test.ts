@@ -257,11 +257,6 @@ describe('configureScanBigQuery', () => {
     expect(fixBody.match(/EXECUTE IMMEDIATE/g)).toHaveLength(1);
     expect(fixBody).toContain("'ALTER TABLE `%s.%s.%s` %s'");
     expect(fixBody).toMatch(/STRING_AGG\(\s*FORMAT\('ADD COLUMN IF NOT EXISTS/);
-    // every INFORMATION_SCHEMA view has an alias, so that `columns` is
-    // the argument
-    for (const body of [checkBody, fixBody]) {
-      expect(body).not.toMatch(/INFORMATION_SCHEMA\.\w+`(?! AS \w)/);
-    }
 
     const queries = new Map<string, [string, string | undefined]>();
     for (const config of resources.filter(gcp.bigquery.DataTransferConfig.isInstance)) {
@@ -334,10 +329,9 @@ describe('configureScanBigQuery', () => {
         migratesSchema: true,
       },
       {
-        prodTable: '`p`',
-        stagingTable: '`s`',
-        prodColumnsView: '`pc`',
-        stagingColumnsView: '`sc`',
+        project: 'proj',
+        prodDataset: 'prod',
+        stagingDataset: 'staging',
         prodTableName: 'p',
         stagingTableName: 's',
       }

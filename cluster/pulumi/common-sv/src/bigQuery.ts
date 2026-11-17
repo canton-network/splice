@@ -483,13 +483,11 @@ function recordDateExprFor(tableConfig: ReplicatedTableConfig): string {
   return `CAST(${recordTimestampExprFor(tableConfig)} AS DATE)`;
 }
 
-// where fill_since_columns.sql reads and writes, all fully qualified
-// and quoted but the table names
+// where fill_since_columns.sql reads and writes
 export interface FillTarget {
-  prodTable: string;
-  stagingTable: string;
-  prodColumnsView: string;
-  stagingColumnsView: string;
+  project: string;
+  prodDataset: string;
+  stagingDataset: string;
   prodTableName: string;
   stagingTableName: string;
 }
@@ -513,10 +511,16 @@ export function fillSinceColumnsSql(
   if (sinceColumns.length === 0) {
     return '';
   }
+  const { project, prodDataset, stagingDataset, prodTableName, stagingTableName } = target;
   const keys = tableConfig.primaryKey.split(',').map(key => key.trim());
   const quoted = (alias: string, column: string) => `${alias}.\`${column}\``;
   return expandSql(fillSinceColumnsSqlTemplate, {
-    ...target,
+    prodTable: `\`${project}.${prodDataset}.${prodTableName}\``,
+    stagingTable: `\`${project}.${stagingDataset}.${stagingTableName}\``,
+    prodColumnsView: `\`${project}.${prodDataset}.INFORMATION_SCHEMA.COLUMNS\``,
+    stagingColumnsView: `\`${project}.${stagingDataset}.INFORMATION_SCHEMA.COLUMNS\``,
+    prodTableName,
+    stagingTableName,
     sinceColumnArray: `[${sinceColumns.map(column => `'${column}'`).join(', ')}]`,
     recordDateExpr: recordDateExprFor(tableConfig),
     primaryKeyExpr: tableConfig.primaryKey,
@@ -566,14 +570,11 @@ function installProdSchemaMigrationRoutines(
     pulumi.interpolate`\`${projectId}.${prodDataset.datasetId}.${routineId}\``;
   const checkRoutineName = routineName(checkProdSchemaRoutineId);
   const fixRoutineName = routineName(fixProdSchemaRoutineId);
-  // Each view gets an alias: unaliased, `INFORMATION_SCHEMA.COLUMNS`
-  // would be the range variable COLUMNS, which names are matched
-  // against case-insensitively, before the `columns` argument.
-  const infoSchema = (dataset: gcp.bigquery.Dataset, view: string, alias: string) =>
-    pulumi.interpolate`\`${projectId}.${dataset.datasetId}.INFORMATION_SCHEMA.${view}\` AS ${alias}`;
-  const stagingColumns = infoSchema(stagingDataset, 'COLUMNS', 'staging_columns');
-  const prodColumns = infoSchema(prodDataset, 'COLUMNS', 'prod_columns');
-  const prodTables = infoSchema(prodDataset, 'TABLES', 'prod_tables');
+  const infoSchema = (dataset: gcp.bigquery.Dataset, view: string) =>
+    pulumi.interpolate`\`${projectId}.${dataset.datasetId}.INFORMATION_SCHEMA.${view}\``;
+  const stagingColumns = infoSchema(stagingDataset, 'COLUMNS');
+  const prodColumns = infoSchema(prodDataset, 'COLUMNS');
+  const prodTables = infoSchema(prodDataset, 'TABLES');
 
   // Fails the calling append if a listed column is missing.
   const checkRoutine = new gcp.bigquery.Routine('prod-schema-check-routine', {
@@ -670,17 +671,15 @@ END`,
     const definitionBody = pulumi
       .all([projectId, prodDataset.datasetId, stagingDataset.datasetId, fixRoutineName])
       .apply(([proj, prodDs, stagingDs, fixRoutineQualified]) => {
-        const stagingTableName = stagingTableNameFor(namespace, tableName);
         return expandSql(fixProdSchemaSqlTemplate, {
           fixRoutineName: fixRoutineQualified,
           fixRoutineArgs: prodSchemaRoutineArgs(namespace, tableName, tableConfig.columns),
           fillSinceColumns: fillSinceColumnsSql(tableConfig, {
-            prodTable: `\`${proj}.${prodDs}.${tableName}\``,
-            stagingTable: `\`${proj}.${stagingDs}.${stagingTableName}\``,
-            prodColumnsView: `\`${proj}.${prodDs}.INFORMATION_SCHEMA.COLUMNS\``,
-            stagingColumnsView: `\`${proj}.${stagingDs}.INFORMATION_SCHEMA.COLUMNS\``,
+            project: proj,
+            prodDataset: prodDs,
+            stagingDataset: stagingDs,
             prodTableName: tableName,
-            stagingTableName,
+            stagingTableName: stagingTableNameFor(namespace, tableName),
           }),
         });
       });

@@ -5,11 +5,11 @@
 -- append that ran before the fix, and retries a fill that failed.
 -- Skipped until both staging and production have every such column.
 IF (
-  SELECT COUNT(DISTINCT column_name) FROM {{stagingColumnsView}} AS staging_columns
+  SELECT COUNT(DISTINCT column_name) FROM {{stagingColumnsView}}
   WHERE table_name = '{{stagingTableName}}'
     AND column_name IN UNNEST({{sinceColumnArray}})
 ) = ARRAY_LENGTH({{sinceColumnArray}}) AND (
-  SELECT COUNT(DISTINCT column_name) FROM {{prodColumnsView}} AS prod_columns
+  SELECT COUNT(DISTINCT column_name) FROM {{prodColumnsView}}
   WHERE table_name = '{{prodTableName}}'
     AND column_name IN UNNEST({{sinceColumnArray}})
 ) = ARRAY_LENGTH({{sinceColumnArray}}) THEN
