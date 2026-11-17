@@ -144,8 +144,7 @@ case class ScanAppBackendConfig(
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
-    with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
-    {
+    with BaseScanAppConfig {
   override val nodeTypeName: String = "scan"
 
   override def clientAdminApi: ClientConfig = adminApi.clientConfig
