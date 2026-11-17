@@ -14,11 +14,6 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 
 Every contribution must be tested in an automated test. For further details see the [Testing README](TESTING.md).
 
-* Compare whole values with `===` instead of checking fields one by one.
-  Use uneven amounts and splits, so that swapped arguments or contract ids make the test fail.
-* Cover variants and edge cases in Daml Script tests. Scala integration tests are expensive:
-  test one representative path, and add related test cases to an existing suite to share its environment.
-
 ## Building and Running Tests
 
 * Run `sbt` inside the direnv/nix dev shell, e.g. `direnv exec . sbt -batch "apps-scan/testOnly <FullyQualifiedSuite>"`. `-batch` avoids the interactive prompt; redirect output to a file and grep for `^\[error\]` and `Tests:`.
@@ -41,6 +36,7 @@ Every contribution must be tested in an automated test. For further details see 
 * All test cases of a suite extending `IntegrationTest` share one environment (`IntegrationTestWithIsolatedEnvironment` creates one per test case). Use `perTestCaseName(...)` for party and other names to avoid collisions between test cases.
 * Wrap actions that are expected to log warnings or errors in `loggerFactory.assertLogs` (or a related `SuppressingLogger` method); otherwise `checkErrors` fails in CI.
 * Simulated-time tests mix in `TimeTestUtil` and move the clock with `advanceTime` and related helpers.
+* Integration tests are expensive: cover variants and edge cases in Daml Script tests, test one representative path here, and add related test cases to an existing suite to share its environment.
 
 ## DB Migrations
 
@@ -54,7 +50,7 @@ If you make intentional changes in Daml code, run `sbt damlDarsLockFileUpdate` a
 
 ### Backwards-compatible Daml changes
 
-All Daml changes must be backwards-compatible. See the [Smart Contract Upgrading Reference from the Canton docs](https://docs.canton.network/appdev/deep-dives/smart-contract-upgrading-reference).
+All Daml changes must be backwards-compatible. See the [Smart Contract Upgrading Reference from the Canton docs](https://docs.canton.network/appdev/deep-dives/smart-contract-upgrading-reference). In particular, records only gain `Optional` fields at the end, variants only gain constructors at the end, and templates, choices, fields and constructors can be neither removed nor renamed.
 
 When adding to enums, make sure to only add further nullary constructors to types that only have nullary constructors.
 
@@ -73,16 +69,13 @@ When you change a Daml package, bump the version of that package and of every pa
 
 ### Daml Code Style
 
-Apply these rules to code you write or change. Don't rewrite existing code only to follow them:
-that adds review noise, and changing released templates and choices is often not upgrade-compatible.
+Apply these rules to code you write or change. Don't rewrite existing code only to follow them, as that adds review noise.
 
 #### Readability
 
 Write Daml so that developers who know mainstream languages, but not Haskell, can read it.
 
-* Prefer `do` blocks, `case` expressions, explicit lambdas and named functions (`void`, `forA`, `mapA`)
-  over Haskell operators such as `<$`, `$>`, `<*>`, `>>=` and `=<<`. `<$>`, `$` and `<>` are fine.
-  Use point-free composition with `.` judiciously.
+* Prefer `do` blocks, `case` expressions, explicit lambdas and named functions (`void`, `forA`, `mapA`) over Haskell operators such as `<$`, `$>`, `<*>`, `>>=` and `=<<`. `<$>`, `$` and `<>` are fine. Use point-free composition with `.` judiciously.
 * To discard a result, use `void` or end a `do` block with `pure ()`.
 * Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
 * Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
@@ -90,53 +83,42 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 
 #### Types and Names
 
-* Within a module, follow its existing naming scheme; apply the naming rules below where there is none.
 * Name recurring tuples and argument groups with a record type or type synonym.
 * Give each constructor of a variant its own record type if some functions handle only one of them.
+* Within a module, follow its existing naming scheme; apply the naming rules below where it has none.
 * Spell out names; avoid single letters and non-standard abbreviations.
-* Name choices `<Template>_<Verb>`, their result records `<Choice>Result` and contract key records `<Template>Key`,
-  e.g., `AmuletRules_BuyMemberTraffic` and `AmuletRules_BuyMemberTrafficResult`.
+* Name choices `<Template>_<Verb>`, their result records `<Choice>Result` and contract key records `<Template>Key`, e.g. `AmuletRules_BuyMemberTraffic` and `AmuletRules_BuyMemberTrafficResult`.
 
 #### Documentation
 
-Doc comments in non-test Daml packages are published as the Daml API reference (see `docs/gen-daml-docs.sh`).
-Write them for app developers and auditors, and only where they add information.
+Doc comments in non-test Daml packages are published as the Daml API reference (see `docs/gen-daml-docs.sh`). Write them for app developers and auditors, and only where they add information.
 
-* Document each template, choice, interface and serializable type you add, and give modules that define them
-  a `-- |` header. Say who acts, what it is for, and which invariants and lifecycle the code enforces.
-* Document a field or argument only if its name and type leave something open: units, the meaning of `None` or `[]`,
-  time semantics, constraints, or who sets it. E.g., `-- ^ Absolute, inclusive deadline as of which the lock expires.`,
-  but not `-- ^ The amount.`
-* On internal helpers, comment only on caller obligations ("Callers MUST ...") and non-obvious choices.
-  Explain why, not what the code does.
+* Document each template, choice, interface and serializable type you add, and give modules that define them a `-- |` header. Say who acts, what it is for, and which invariants and lifecycle the code enforces.
+* Document a field or argument only if its name and type leave something open: units, the meaning of `None` or `[]`, time semantics, constraints, or who sets it. E.g. `-- ^ Absolute, inclusive deadline as of which the lock expires.`, but not `-- ^ The amount.`
+* On internal helpers, comment only on caller obligations ("Callers MUST ...") and non-obvious choices. Explain why, not what the code does.
 * Where a definition implements a CIP, link to the relevant section instead of restating it.
 
 #### Future Proofing
 
-Released Daml can only change in SCU-compatible ways (see "Backwards-compatible Daml changes" above):
-records only gain `Optional` fields at the end, variants only gain constructors at the end,
-and templates, choices, fields and constructors can be neither removed nor renamed.
-Write code that can evolve within these limits, not code that is more general than needed.
+Released Daml can only change in SCU-compatible ways (see "Backwards-compatible Daml changes" above). Write code that can evolve within these limits, not code that is more general than needed.
 
-* Give every new choice its own result record and every contract key its own record, even if they have only one field:
-  unlike a bare type, a record can gain fields later. Choices of interfaces return the result type that the interface defines.
-* Derive `Serializable` only for types that templates, choices or interface views need.
-  A serializable type cannot be removed from later package versions and can only change in SCU-compatible ways.
-* Make the compiler flag code that must handle new fields or constructors.
-* Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
-  Where every field must be processed, match positionally and name unused fields `_field`.
-* Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them
-  instead of being flagged as unhandled. Use one only if it saves a lot of code and is correct for any future constructor.
+* Don't add choices, fields or parameters without a concrete need, as they cannot be removed once released. Prefer one choice with an `Optional` argument over several near-duplicate choices.
+* Give every new choice its own result record and every contract key its own record, even if they have only one field: unlike a bare type, a record can gain fields later.
+* Derive `Serializable` only for types that templates, choices or interface views need, as only serializable types are bound by SCU.
+* Make the compiler flag code that must handle new fields or constructors:
+  * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later. Where every field must be processed, match positionally and name unused fields `_field`.
+  * Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them instead of being flagged as unhandled. Use one only if it saves a lot of code and is correct for any future constructor.
 
-#### Daml Templates and Choices
+#### Templates and Choices
 
-* Don't add choices, fields or parameters without a concrete need: a released choice cannot be removed.
-  Prefer one choice with an `Optional` argument over several near-duplicate choices.
-* Validate inside the choice body, not only in the helper that exercises the choice.
-  `fetchChecked` every contract id taken from a choice argument, and comment on each `potentiallyUnsafeArchive` why it is safe.
-* Fail early: use `require`, `fail` or `error` instead of threading `Optional` or `Either` through `Update` code
-  or falling back to defaults. Guard impossible cases explicitly.
-* New feature flags in Daml config default to off, so that voting in a package does not enable the feature.
+* Validate inside the choice body, not only in the helper that exercises the choice. `fetchChecked` every contract id taken from a choice argument, and comment on each `potentiallyUnsafeArchive` why it is safe.
+* Fail early: use `require`, `fail` or `error` instead of threading `Optional` or `Either` through `Update` code or falling back to defaults. Guard impossible cases explicitly.
+* New feature flags in Daml config default to off, so that voting in a package does not enable the feature. Name them as described in "Config Parameters".
+
+#### Tests
+
+* In Daml Script tests, compare whole values with `===` instead of checking fields one by one.
+* Use uneven amounts and splits, so that swapped arguments or contract ids make the test fail.
 
 ## Message Definitions
 
