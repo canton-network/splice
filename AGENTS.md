@@ -175,5 +175,8 @@ The `common-frontend` package (`@canton-network/splice-common-frontend`) contain
 
 - Every commit needs a DCO `Signed-off-by:` line; use `git commit -s`.
 - PRs are squash-merged, so the PR title and description become the commit message.
-- Tag TODOs with their tracking issue, e.g., `TODO(#1234)`, or with `TODO(tech-debt)`, so that left-over ones can be found.
+- Mark work that is still to be done with the most specific tag, so that it is tracked and done when it is due:
+  - `FIXME`: must be fixed before the PR is merged. The static CI checks reject FIXMEs.
+  - `TODO(#1234)`: must be fixed as part of that issue. Use the feature's tracking issue if a separate issue makes no sense.
+  - `TODO(tech-debt)`: only for real tech debt that will not be addressed as part of the feature you are delivering.
 - On branches in this repository, CI only runs if the last commit message contains `[ci]` (or `[static]` for static checks only). See [TESTING.md](TESTING.md) for other tags and for cluster tests.
