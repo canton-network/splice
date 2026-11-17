@@ -69,7 +69,7 @@ When you change a Daml package, bump the version of that package and of every pa
 
 ### Daml Code Style
 
-Before writing or reviewing Daml code in `daml/` or `token-standard/`, read the [Daml Style Guide](DAML_STYLE.md).
+Before writing or reviewing `.daml` files, read the [Daml Style Guide](DAML_STYLE.md).
 
 ## Message Definitions
 
