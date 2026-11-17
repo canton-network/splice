@@ -10,12 +10,12 @@ Released Daml can only change in SCU-compatible ways (see [Backwards-compatible 
 * Give every new choice its own result record and every contract key its own record, even if they have only one field: unlike a bare type, a record can gain fields later.
 * Derive `Serializable` only for types that templates, choices or interface views need, as only serializable types are bound by SCU.
 * Make the compiler flag code that must handle new fields or constructors:
-  * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later. Where every field must be processed, match positionally and name unused fields `_field`.
+  * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later. Where every field must be processed, match positionally and name unused fields `_field`. `{..}` on test setup records such as `DefaultAppWithUsers` is fine.
   * Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them instead of being flagged as unhandled. Use one only if it saves a lot of code and is correct for any future constructor.
 
 ## Templates and Choices
 
-* Validate inside the choice body, not only in the helper that exercises the choice. `fetchChecked` every contract id taken from a choice argument, and comment on each `potentiallyUnsafeArchive` why it is safe.
+* Validate inside the choice body, not only in the helper that exercises the choice. `fetchChecked` every contract id taken from a choice argument; for templates without a `HasCheckedFetch` instance, fetch the contract and check the relevant party field instead. Comment on each `potentiallyUnsafeArchive` why it is safe.
 * Fail early: use `require`, `fail` or `error` instead of threading `Optional` or `Either` through `Update` code or falling back to defaults. Guard impossible cases explicitly.
 * New feature flags in Daml config default to off, so that voting in a package does not enable the feature. Name them as described in [Config Parameters](AGENTS.md#config-parameters).
 
@@ -46,7 +46,7 @@ Build records with Daml's `with` syntax, not Haskell's braces.
 * Use `with ..` to fill a record from same-named variables only for the result record at the end of a choice, e.g. `return AmuletRules_MintResult with ..`.
 * Read single fields with dot syntax, e.g. `transfer.amount`, instead of destructuring the record (see [Future Proofing](#future-proofing)).
 * Where a pattern names fields, e.g. to match on a field's value as in `Transfer{lock = None}`, use braces, not `with`: brace patterns work in every position without parentheses.
-* Put one field per line; short lists of punned fields may share a line, e.g. `with dso; provider`.
+* Put one field per line; short field lists may share a line, e.g. `ForOwner with dso; owner = provider`.
 
 ## Documentation
 
