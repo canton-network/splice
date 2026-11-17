@@ -1643,7 +1643,7 @@ template DsoRules with
       with
         svOperator : Party
         openRoundCid : ContractId OpenMiningRound
-        svRightOwnerRewardInputs : TextMap (ContractId SvRightOwner, TextMap (ContractId SvRewardState))
+        svRightOwnerRewardInputs : TextMap (ContractId SvRightOwner, ContractId SvRewardState)
           -- ^ The SV right owners to mint rewards for, keyed by their name. They must all be
           -- hosted by `svOperator`.
       controller svOperator
