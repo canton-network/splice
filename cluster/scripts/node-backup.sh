@@ -266,7 +266,6 @@ function main() {
   local config
   config=$(get_resolved_config)
 
-  # TODO(#9361): support multiple domains / non-default-ID'd ones
   if [ "$1" == "validator" ]; then
     _info "Backing up validator $namespace"
     backup_component "$namespace" "validator" "$requested_component" "$migration_id"

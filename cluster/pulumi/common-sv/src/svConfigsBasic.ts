@@ -25,7 +25,6 @@ export function fromSingleSvConfigBasic(nodeName: string): StaticSvConfigBasic {
   };
 }
 
-// TODO(DACH-NY/canton-network-node#12169): consider making nodeName and ingressName the same (also for all other SVs)
 export const standardSvConfigsBasic: StaticSvConfigBasic[] = isMainNet
   ? [
       {
