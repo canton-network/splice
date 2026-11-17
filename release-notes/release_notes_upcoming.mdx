@@ -23,6 +23,9 @@
     - SV onboarding snapshots are kept in `canton.sv-apps.sv.onboarding-snapshots.directory`, a new required setting
       that must point to persistent storage. The SV Helm chart now always creates a dedicated 35 GiB
       `onboardingSnapshotsPvc` for it, mounted at `/onboarding-snapshots`.
+    - The Postgres images used by the Docker Compose deployments and by the Helm `pg-init` init containers are bumped
+      to `postgres:18.7-trixie`, and the `splice-postgres` chart to `postgres:14.25-trixie`. If you run the Compose
+      Postgres or the `splice-postgres` chart, recreate the Postgres container to pick up the new version.
 
 ## Upcoming for next minor release (template):
 
