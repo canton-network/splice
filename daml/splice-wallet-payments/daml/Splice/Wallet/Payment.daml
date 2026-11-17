@@ -261,3 +261,6 @@ template AcceptedAppPayment
          amuletSum <- legacyAmuletCreateSummary dso sender context.openMiningRound result.amuletCid
          return AcceptedAppPayment_ExpireResult with
             amulet = amuletSum
+
+instance HasCheckedFetch AppPaymentRequest ForOwner where
+  contractGroupId AppPaymentRequest{dso, sender} = ForOwner with dso; owner = sender
