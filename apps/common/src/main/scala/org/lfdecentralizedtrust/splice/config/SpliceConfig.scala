@@ -118,7 +118,6 @@ case class SharedSpliceAppParameters(
     upgradesConfig: UpgradesConfig = UpgradesConfig(),
     circuitBreakers: CircuitBreakersConfig = CircuitBreakersConfig(),
     enabledFeatures: EnabledFeaturesConfig = EnabledFeaturesConfig(),
-    // TODO(DACH-NY/canton-network-node#736): likely remove all of the following:
     override val cachingConfigs: CachingConfigs,
     override val enableAdditionalConsistencyChecks: Boolean,
     override val enablePreviewFeatures: Boolean,
