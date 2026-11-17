@@ -73,6 +73,8 @@ When you change a Daml package, bump the version of that package and of every pa
 
 ### Daml Code Style
 
+#### Readability
+
 Write Daml so that developers who know mainstream languages, but not Haskell, can read it.
 
 * Prefer `do` blocks, `case` expressions, explicit lambdas and named functions (`void`, `forA`, `mapA`)
@@ -83,16 +85,26 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
 * Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
 * Inline helpers that are used only once or whose type signature is longer than their body.
+
+#### Types and Names
+
 * Name recurring tuples and argument groups with a record type or type synonym.
 * Give each constructor of a variant its own record type if some functions handle only one of them.
 * Spell out names; avoid single letters and non-standard abbreviations.
 * Follow the naming scheme of the code you are editing to maintain consistency.
-* Write code with future changes in mind: not by making it more general than needed,
-  but by making the compiler flag code that must handle new fields or constructors.
+
+#### Future Changes
+
+Write code with future changes in mind: not by making it more general than needed,
+but by making the compiler flag code that must handle new fields or constructors.
+
 * Use `{..}` and `{field}` record patterns cautiously: they silently ignore fields that are added later.
   Where every field must be processed, match positionally and name unused fields `_field`.
 * Avoid catch-all branches (`_ -> ...`) in `case` expressions: a constructor added later silently takes them
   instead of being flagged as unhandled. Use one only if it saves a lot of code and is correct for any future constructor.
+
+#### Documentation
+
 * Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
   State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
 
