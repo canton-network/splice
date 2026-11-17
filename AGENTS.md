@@ -73,8 +73,9 @@ When you change a Daml package, bump the version of that package and of every pa
 
 ### Daml Code Style
 
-Apply these rules to code you write or change. Don't rewrite existing code only to follow them:
-that adds review noise, and changing released templates and choices is often not upgrade-compatible.
+Apply these rules to code you write or change, but follow the naming scheme of the code you are editing.
+Don't rewrite existing code only to follow them: that adds review noise,
+and changing released templates and choices is often not upgrade-compatible.
 
 #### Readability
 
@@ -87,20 +88,31 @@ Write Daml so that developers who know mainstream languages, but not Haskell, ca
 * Use `case` expressions, or one definition per constructor, instead of fold-style helpers.
 * Instead of passing continuations or function parameters that are called only once, return a data type that the caller can `case` on.
 * Inline helpers that are used only once or whose type signature is longer than their body.
-* Give each module a `-- |` header, and document each record field and non-trivial function argument with `-- ^`.
-  State caller obligations as "Callers MUST ...". Explain non-obvious representation choices.
 
 #### Types and Names
 
 * Name recurring tuples and argument groups with a record type or type synonym.
 * Give each constructor of a variant its own record type if some functions handle only one of them.
 * Spell out names; avoid single letters and non-standard abbreviations.
-* Follow the naming scheme of the code you are editing to maintain consistency.
 * Name choices `<Template>_<Verb>`, e.g., `AmuletRules_Transfer`.
 * Give every choice its own result record `<Choice>Result`, and every contract key its own record `<Template>Key`,
   even if they have only one field. Unlike a bare type, a record can gain optional fields in an SCU-compatible upgrade,
   which leaves room for future changes.
   Choices of interfaces return the result type that the interface defines.
+
+#### Documentation
+
+Doc comments in non-test Daml packages are published as the Daml API reference (see `docs/gen-daml-docs.sh`).
+Write them for app developers and auditors, and only where they add information.
+
+* Document each template, choice, interface and serializable type you add, and give modules that define them
+  a `-- |` header. Say who acts, what it is for, and which invariants and lifecycle the code enforces.
+* Document a field or argument only if its name and type leave something open: units, the meaning of `None` or `[]`,
+  time semantics, constraints, or who sets it. E.g., `-- ^ Absolute, inclusive deadline as of which the lock expires.`,
+  but not `-- ^ The amount.`
+* On internal helpers, comment only on caller obligations ("Callers MUST ...") and non-obvious choices.
+  Explain why, not what the code does.
+* Where a definition implements a CIP, link to the relevant section instead of restating it.
 
 #### Future Changes
 
