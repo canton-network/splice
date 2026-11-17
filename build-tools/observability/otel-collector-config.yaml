@@ -7,10 +7,6 @@ receivers:
   prometheus:
     config:
       scrape_configs:
-        - job_name: 'cometbft'
-          scrape_interval: 15s
-          static_configs:
-            - targets: [ 'localhost:26610', 'localhost:26620', 'localhost:26630', 'localhost:26640']
         - job_name: 'cn_app'
           scrape_interval: 15s
           static_configs:

@@ -93,11 +93,6 @@ class GcpProject extends pulumi.ComponentResource {
     this.importSecretIdFromDevnet('sv2-id');
     this.importSecretIdFromDevnet('sv3-id');
     this.importSecretIdFromDevnet('sv4-id');
-    // TODO (#8263): remove the CometBFT key secrets
-    // Import CometBft keys from devnet
-    for (let i = 1; i <= 16; i++) {
-      this.importSecretIdFromDevnet(`sv${i}-cometbft-keys`);
-    }
     // Import Observability grafana key secret from devnet
     this.importSecretIdFromDevnet('grafana-keys');
 
@@ -122,16 +117,6 @@ class GcpProject extends pulumi.ComponentResource {
               description: '(managed by Pulumi)',
               expression: `
           resource.name.endsWith("-id/versions/latest")
-          `,
-            },
-          },
-          {
-            id: 'roles/secretmanager.secretAccessor',
-            condition: {
-              title: 'CometBft keys',
-              description: '(managed by Pulumi)',
-              expression: `
-          resource.name.endsWith("-cometbft-keys/versions/latest")
           `,
             },
           },

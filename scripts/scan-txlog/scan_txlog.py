@@ -489,8 +489,6 @@ class SteppedRate:
         return total
 
 
-# TODO(DACH-NY/canton-network-node#12755) Replace these assertions by a real unit testing framework
-
 stepped_rate_example = SteppedRate(
     DamlDecimal("0.1"),
     [

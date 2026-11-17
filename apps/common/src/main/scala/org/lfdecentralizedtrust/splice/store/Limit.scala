@@ -10,7 +10,6 @@ import io.grpc.Status
 
 sealed trait Limit {
   val limit: Int
-  // TODO (#767): make configurable (it's currently an argument, but not user-configurable e.g. via config values)
   val maxPageSize: Int
 }
 

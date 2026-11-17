@@ -38,3 +38,10 @@ cluster/format: cluster/pulumi/format
 cluster/clean: cluster/images/clean cluster/pulumi/clean cluster/helm/clean
 
 .PHONY: force-update-version
+
+.PHONY: cluster/check_release_public
+cluster/check_release_public: write-images cluster/helm/write-app-charts
+	./build-tools/check_release_artifacts_public.sh \
+		-v '$(shell get-snapshot-version)' \
+		-i $(images_file) \
+		-c $(APP_CHARTS_FILE)

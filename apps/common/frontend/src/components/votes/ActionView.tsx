@@ -565,7 +565,7 @@ const RemoveFutureConfigValueTable: React.FC<{
     return <p>no VoteRequest contractId is specified</p>;
   }
 
-  // TODO(DACH-NY/canton-network-node#15154): Implement config diffs of CRARC_RemoveFutureAmuletConfigSchedule action
+  // TODO(canton-network/splice#8540): Implement config diffs of CRARC_RemoveFutureAmuletConfigSchedule action
   return (
     <>
       {amuletConfigToCompareWith && (

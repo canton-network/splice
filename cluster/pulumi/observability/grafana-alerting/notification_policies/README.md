@@ -11,6 +11,10 @@ They are configured in the `monitoring.alerting.muteTimeIntervals` field in the 
 Each interval inherits the default notification channel, specifies a name, some Grafana label matchers, a UTC time range, and an optional list of weekdays.
 If `weekdays` is omitted, the mute applies every day.
 
+By default an interval applies to Grafana alerts. Set `prometheus: true` to apply it instead to Prometheus rule alerts
+(e.g. the kube-prometheus-stack `Kube*` alerts), which are routed by Alertmanager rather than Grafana.
+The matchers then apply to the Prometheus alert labels.
+
 See [official grafana docs](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/mute-timings/) for more info.
 
 For example, mute all `Health of a connection` alerts in the `sv` and `sv-1` namespace from 04:00 to 07:00 UTC on weekdays:

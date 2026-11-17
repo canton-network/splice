@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.sv.admin.http
 
-import cats.syntax.applicative.*
 import cats.syntax.either.*
 import com.digitalasset.canton.config.{
   NonNegativeDuration,
@@ -40,7 +39,6 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   VoteResultsFilters,
 }
-import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
@@ -605,30 +603,6 @@ class HttpSvOperatorHandler(
     }
   }
 
-  override def getCometBftNodeDebugDump(
-      respond: r0.GetCometBftNodeDebugDumpResponse.type
-  )()(extracted: ActAsKnownUserRequest): Future[
-    r0.GetCometBftNodeDebugDumpResponse
-  ] = {
-    implicit val ActAsKnownUserRequest(traceContext) = extracted
-    withSpan(s"$workflowId.getCometBftNodeDebugDump") { _ => _ =>
-      withClientOrNotFound(respond.NotFound) { client =>
-        client
-          .nodeDebugDump()
-          .map(response =>
-            definitions.CometBftNodeDumpOrErrorResponse(
-              definitions.CometBftNodeDumpResponse(
-                status = response.status,
-                networkInfo = response.networkInfo,
-                abciInfo = response.abciInfo,
-                validators = response.validators,
-              )
-            )
-          )
-      }
-    }
-  }
-
   override def cancelLogicalSynchronizerUpgrade(
       respond: r0.CancelLogicalSynchronizerUpgradeResponse.type
   )()(
@@ -643,17 +617,6 @@ class HttpSvOperatorHandler(
       } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
     }
   }
-
-  private def withClientOrNotFound[T](
-      notFound: definitions.ErrorResponse => T
-  )(call: CometBftClient => Future[T])(implicit tc: TraceContext) =
-    synchronizerNodeService.activeSynchronizerNode().flatMap { node =>
-      node.cometbftNode.map(_.cometBftClient) match {
-        case None =>
-          notFound(definitions.ErrorResponse("CometBFT is not configured.")).pure[Future]
-        case Some(client) => call(client)
-      }
-    }
 
   private def withSequencerConnection[T](
       call: SequencerAdminConnection => Future[T]

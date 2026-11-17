@@ -5,11 +5,11 @@ import { Auth0ClientType, getAuth0Config, Auth0Fetch } from '@canton-network/spl
 import { installNode } from './installNode';
 
 async function auth0CacheAndInstallCluster(auth0Fetch: Auth0Fetch) {
-  await auth0Fetch.loadAuth0Cache();
+  await auth0Fetch.loadFixedTokensCache();
 
   const cluster = await installNode(auth0Fetch);
 
-  await auth0Fetch.saveAuth0Cache();
+  await auth0Fetch.persistFixedTokensCache();
 
   return cluster;
 }

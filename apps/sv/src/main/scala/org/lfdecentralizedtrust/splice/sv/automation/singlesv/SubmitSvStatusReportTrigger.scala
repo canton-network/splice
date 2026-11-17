@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.singlesv
 
-import cats.syntax.traverse.*
 import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
@@ -50,7 +49,6 @@ class SubmitSvStatusReportTrigger(
       statusReport <- store.getSvStatusReport(store.key.svParty)
       openMiningRounds <- store.getOpenMiningRoundTriple()
       currentNode <- synchronizerNodeService.activeSynchronizerNode()
-      cometBftHeight <- currentNode.cometbftNode.traverse(_.getLatestBlockHeight())
       mediatorSynchronizerTimeLb <- getDomainTimeLowerBound(
         currentNode.mediatorAdminConnection,
         dsoRules.domain,
@@ -62,9 +60,8 @@ class SubmitSvStatusReportTrigger(
       now = context.clock.now
       status = new SvStatus(
         now.toInstant,
-        // Production deployments always define all of these values, which is why we don't embed the 'Option' value
-        // into the status report. We'll only see the magic default values in our tests.
-        cometBftHeight.getOrElse[Long](-1L),
+        // CometBFT is no longer supported, so there is no CometBFT height to report.
+        -1L,
         mediatorSynchronizerTimeLb,
         participantSynchronizerTimeLb,
         openMiningRounds.newest.payload.round,

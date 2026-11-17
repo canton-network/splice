@@ -40,10 +40,8 @@ function get_component_backup_names_kube() {
 function latest_full_backup_run_id_kube() {
   local namespace=$1
   local migration_id=$2
-  local is_sv=$3
-  local expected_components=$4
-  local before_timestamp=$5
-  local include_cometbft=$6
+  local expected_components=$3
+  local before_timestamp=$4
 
   local expected_patterns=""
   for component in $expected_components; do
@@ -51,10 +49,6 @@ function latest_full_backup_run_id_kube() {
     instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
     expected_patterns="${expected_patterns:+$expected_patterns }-${instance}-pg-"
   done
-
-  if [ "$is_sv" == "true" ] && [ "$include_cometbft" == "true" ]; then
-      expected_patterns="$expected_patterns cometbft"
-  fi
 
   local all_run_ids
   # get all run id postgres
@@ -173,17 +167,6 @@ function main() {
 
   local config
   config=$(get_resolved_config)
-  local bft_sequencer_enabled
-  bft_sequencer_enabled=$(echo "$config" | yq "
-    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
-      + (.synchronizerMigration.archived // [])
-      + (.synchronizerMigration.additionalLegacy // []))
-    | map(select(.id == $migration_id))
-    | .[0].sequencer.enableBftSequencer // false")
-  local include_cometbft="true"
-  if [ "$bft_sequencer_enabled" == "true" ]; then
-    include_cometbft="false"
-  fi
 
   case "$namespace" in
       sv|sv-[0-9]|sv-[0-9][0-9]|sv-da-*)
@@ -208,7 +191,7 @@ function main() {
   type=$(get_postgres_type "$full_instance" "$stack")
   # We only check the postgres type of one component and assume other components have the same type.
   if [ "$type" == "canton:network:postgres" ]; then
-    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp" "$include_cometbft")
+    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$expected_components" "$before_timestamp")
     echo "$backup_run_id"
   elif [ "$type" == "canton:cloud:postgres" ]; then
     backup_map_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")

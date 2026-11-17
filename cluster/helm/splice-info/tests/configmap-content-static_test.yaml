@@ -21,13 +21,12 @@ tests:
             value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         synchronizer:
           current:
-            chainIdSuffix: "id0"
             migrationId: 4
             synchronizerSerialId: 5
     asserts:
       - equal:
           path: data["index.html"]
-          value: '{"deploymentInfo":{"configDigest":{"allowed-ip-ranges":"md5:d41d8cd98f00b204e9800998ecf8427e","approved-sv-id-values":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"network":"dev","sv":{"version":"0.3.1"},"synchronizer":{"current":{"chainIdSuffix":"id0","migrationId":4,"synchronizerSerialId":5,"version":"0.3.1"},"legacy":null,"successor":null}}}'
+          value: '{"deploymentInfo":{"configDigest":{"allowed-ip-ranges":"md5:d41d8cd98f00b204e9800998ecf8427e","approved-sv-id-values":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"network":"dev","sv":{"version":"0.3.1"},"synchronizer":{"current":{"migrationId":4,"synchronizerSerialId":5,"version":"0.3.1"},"legacy":null,"successor":null}}}'
 
   - it: "should render full configmap with deployment details in JSON format"
     set:
@@ -44,21 +43,18 @@ tests:
             value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         synchronizer:
           current:
-            chainIdSuffix: "id0"
             migrationId: 4
             synchronizerSerialId: 6
             version: "0.3.3"
           successor:
-            chainIdSuffix: "id1"
             migrationId: 4
             synchronizerSerialId: 7
             version: "0.3.4"
           legacy:
-            chainIdSuffix: "id9"
             migrationId: 4
             synchronizerSerialId: 5
             version: "0.3.2"
     asserts:
       - equal:
           path: data["index.html"]
-          value: '{"deploymentInfo":{"configDigest":{"allowed-ip-ranges":"md5:d41d8cd98f00b204e9800998ecf8427e","approved-sv-id-values":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"network":"dev","sv":{"version":"0.3.3"},"synchronizer":{"current":{"chainIdSuffix":"id0","migrationId":4,"synchronizerSerialId":6,"version":"0.3.3"},"legacy":{"chainIdSuffix":"id9","migrationId":4,"synchronizerSerialId":5,"version":"0.3.2"},"successor":{"chainIdSuffix":"id1","migrationId":4,"synchronizerSerialId":7,"version":"0.3.4"}}}}'
+          value: '{"deploymentInfo":{"configDigest":{"allowed-ip-ranges":"md5:d41d8cd98f00b204e9800998ecf8427e","approved-sv-id-values":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"network":"dev","sv":{"version":"0.3.3"},"synchronizer":{"current":{"migrationId":4,"synchronizerSerialId":6,"version":"0.3.3"},"legacy":{"migrationId":4,"synchronizerSerialId":5,"version":"0.3.2"},"successor":{"migrationId":4,"synchronizerSerialId":7,"version":"0.3.4"}}}}'

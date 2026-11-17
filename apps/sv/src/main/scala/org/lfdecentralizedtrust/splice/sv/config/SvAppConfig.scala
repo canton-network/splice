@@ -557,6 +557,8 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    // Safety list of parties that must never be marked as unavailable by the automation
+    protectedPartyIds: Set[PartyId] = Set.empty,
     // Capped exponential backoff used by the persisted unavailable parties store
     // (used when `enablePersistedUnavailableParties` is set)
     unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
@@ -568,6 +570,7 @@ case class SvAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
+    onboardingSnapshots: SvOnboardingSnapshotsConfig,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
@@ -611,26 +614,6 @@ object SvAppBackendConfig {
     NonNegativeFiniteDuration.ofSeconds(10),
   )
 
-}
-
-case class SvCometBftConfig(
-    enabled: Boolean = false,
-    connectionUri: String = "",
-    // `None` means that we will be abusing the SV participant for generating and storing that key
-    // (which doesn't work if the participant uses an external KMS).
-    governanceKey: Option[CometBftGovernanceKey] = None,
-)
-
-case class CometBftGovernanceKey(
-    // both base64 encoded
-    publicKey: String,
-    privateKey: String,
-)
-object CometBftGovernanceKey {
-  def hideConfidential(config: CometBftGovernanceKey): CometBftGovernanceKey = {
-    val hidden = "****"
-    config.copy(privateKey = hidden)
-  }
 }
 
 // Removes unnecessary data from the Sequencer that is earlier than the configured retention period
@@ -708,13 +691,10 @@ final case class SvScanConfig(
 final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
-    // TODO (#8263): remove, CometBFT is no longer supported
-    cometBftConfig: Option[SvCometBftConfig] = None,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMillis(250),
-    // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
     synchronizerLimits: Option[SynchronizerLimits] = Some(
       SvSynchronizerNodeConfig.defaultSynchronizerLimits
     ),
@@ -784,4 +764,11 @@ final case class UnavailablePartiesBackoffParameters(
     baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
     // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
     maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
+)
+
+final case class SvOnboardingSnapshotsConfig(
+    directory: Path,
+    retention: PositiveFiniteDuration = PositiveFiniteDuration.ofHours(24),
+    parallelism: PositiveInt = PositiveInt.one,
+    queueSize: PositiveInt = PositiveInt.tryCreate(4),
 )

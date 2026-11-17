@@ -3,10 +3,9 @@
   "$defs": {
     "synchronizer_current": {
       "type": "object",
-      "required": [ "chainIdSuffix", "migrationId", "synchronizerSerialId" ],
+      "required": [ "migrationId", "synchronizerSerialId" ],
       "additionalProperties": false,
       "properties": {
-        "chainIdSuffix": { "type": "string", "minLength": 1 },
         "migrationId": { "type": "integer", "minimum": 0 },
         "synchronizerSerialId": { "type": "integer", "minimum": 0 },
         "version": { "type": "string", "minLength": 1 }
@@ -14,10 +13,9 @@
     },
     "synchronizer": {
       "type": "object",
-      "required": [ "chainIdSuffix", "migrationId", "synchronizerSerialId", "version" ],
+      "required": [ "migrationId", "synchronizerSerialId", "version" ],
       "additionalProperties": false,
       "properties": {
-        "chainIdSuffix": { "type": "string", "minLength": 1 },
         "migrationId": { "type": "integer", "minimum": 0 },
         "synchronizerSerialId": { "type": "integer", "minimum": 0 },
         "version": { "type": "string", "minLength": 1 }

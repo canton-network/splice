@@ -10,7 +10,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.Integration
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.BracketSynchronous.bracket
 import org.lfdecentralizedtrust.splice.integration.tests.WalletTxLogTestUtil
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
 import org.lfdecentralizedtrust.splice.util.{WalletTestUtil, JavaDecodeUtil as DecodeUtil}
 import org.lfdecentralizedtrust.splice.validator.automation.AcceptTransferPreapprovalProposalTrigger
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.CreateTransferPreapprovalResponse
@@ -23,8 +22,8 @@ import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import com.digitalasset.canton.{HasExecutionContext, SynchronizerAlias}
+import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
@@ -37,6 +36,8 @@ import java.time.Duration
 import java.util.UUID
 import scala.concurrent.Future
 import scala.util.Try
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
 import com.digitalasset.canton.util.MonadUtil
 
@@ -352,53 +353,44 @@ class WalletIntegrationTest
       )
     }
 
-    "accept AppPaymentRequest created on 3rdparty synchronizer" in { implicit env =>
-      val splitwellSynchronizerId =
-        aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
-          SynchronizerAlias.tryCreate("splitwell")
+    "support self-granting featured app rights with a custom config" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_25) in {
+      implicit env =>
+        onboardWalletUser(splitwellWalletClient, splitwellValidatorBackend)
+        val alice = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+
+        actAndCheck(
+          "splitwell cancels any existing featured app right",
+          splitwellWalletClient.cancelFeaturedAppRight(),
+        )(
+          "splitwell provider is not featured",
+          _ => splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe false,
         )
-      val decentralizedSynchronizerId =
-        aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
-          SynchronizerAlias.tryCreate("global")
-        )
-      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
-      aliceWalletClient.tap(50)
-      val (_, requestId) = actAndCheck(
-        "Create payment request on private domain",
-        createSelfPaymentRequest(
-          aliceValidatorBackend.participantClientWithAdminToken,
-          aliceWalletClient.config.ledgerApiUser,
-          aliceParty,
-          synchronizerId = Some(splitwellSynchronizerId),
-        ),
-      )(
-        "request and delivery are created on splitwell domain id",
-        { case (request, _) =>
-          val domains =
-            aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .lookup_contract_domain(aliceParty, Set(request.contractId))
-          domains shouldBe Map[String, SynchronizerId](
-            request.contractId -> splitwellSynchronizerId
-          )
-          request
-        },
-      )
-      val request = eventually() {
-        inside(aliceWalletClient.listAppPaymentRequests()) { case Seq(req) =>
-          req
-        }
-      }
-      request.contractId shouldBe requestId
-      actAndCheck(
-        "Accept payment request",
-        aliceWalletClient.acceptAppPaymentRequest(request.contractId),
-      )(
-        "wait for the accepted payment to appear",
-        _ =>
-          inside(aliceWalletClient.listAcceptedAppPayments()) { case Seq(accepted) =>
-            accepted.state shouldBe ContractState.Assigned(decentralizedSynchronizerId)
+
+        actAndCheck(
+          "Splitwell provider grants itself an asset-moving featured app right",
+          retryCommandSubmission(
+            splitwellWalletClient.selfGrantFeaturedAppRight(
+              appKind = Some(amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING),
+              activityWeight = Some(BigDecimal("2.5")),
+              opsParties = Some(Seq(alice)),
+            )
+          ),
+        )(
+          "splitwell provider is featured with the requested config",
+          { featuredAppRight =>
+            inside(sv1ScanBackend.listFeaturedAppRights()) { case Seq(r) =>
+              r.contractId shouldBe featuredAppRight
+              r.payload.appKind.toScala shouldBe Some(
+                amuletCodegen.FeaturedAppKind.FAK_ASSETMOVING
+              )
+              r.payload.activityWeight.toScala.map(BigDecimal(_)) shouldBe Some(BigDecimal("2.5"))
+              r.payload.opsParties.toScala.map(_.asScala.toSeq) shouldBe Some(
+                Seq(alice.toProtoPrimitive)
+              )
+            }
+            splitwellWalletClient.userStatus().hasFeaturedAppRight shouldBe true
           },
-      )
+        )
     }
 
     "automation and offboarding work even if the recipient user does not exist" in { implicit env =>

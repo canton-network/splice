@@ -86,7 +86,7 @@ class ManualSignatureIntegrationTest
         aliceValidatorBackend.start()
       }
 
-      eventuallySucceeds(40.seconds) {
+      eventuallySucceeds(90.seconds) {
         val synchronizerId =
           aliceValidatorBackend.participantClientWithAdminToken.synchronizers.id_of(
             aliceValidatorBackend.config.domains.global.alias

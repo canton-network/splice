@@ -354,7 +354,6 @@ object ScanRewardsReferenceStore {
         },
       ),
       interfaceFilters = Map.empty,
-      synchronizerFilter = Some(key.synchronizerId),
     )
   }
 }

@@ -109,8 +109,7 @@ class ScanTimeBasedIntegrationTest
   }
 
   "return correct amulet configs" in { implicit env =>
-    // TODO(DACH-NY/canton-network-node#2930) test also with changing amulet prices.
-    // TODO(DACH-NY/canton-network-node#2930) Currently we are not guaranteed that the first three rounds are correctly
+    // Currently we are not guaranteed that the first three rounds are correctly
     // captured in the tx log, so for now we first advance a round, and query only on that
     // round and beyond. Once that is fixed, we should make sure that querying for round 0 is reliable as well.
 

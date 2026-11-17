@@ -9,8 +9,6 @@ import { deploymentConf } from '@canton-network/splice-pulumi-common/src/operato
 import { GitFluxRef } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
 import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 
-import { config } from '../../../common';
-
 export function installAllValidatorStacks(
   reference: GitFluxRef,
   envRefs: EnvRefs,
@@ -29,7 +27,6 @@ export function installAllValidatorStacks(
         validator.stackName,
         'validator-runbook',
         namespace,
-        config.envFlag('SUPPORTS_VALIDATOR_RUNBOOK_RESET'),
         reference,
         envRefs,
         gcpSecret,

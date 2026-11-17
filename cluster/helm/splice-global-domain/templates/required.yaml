@@ -10,12 +10,5 @@
 {{ $_ := required ".Values.sequencer.persistence.secretName is required" .Values.sequencer.persistence.secretName }}
 {{ $_ := required ".Values.mediator.persistence.host  is required." .Values.mediator.persistence.host }}
 {{ $_ := required ".Values.mediator.persistence.secretName  is required" .Values.mediator.persistence.secretName }}
-{{ $_ := required ".Values.sequencer.driver.type is required." (.Values.sequencer.driver).type }}
-{{- /* TODO (#8263): remove the CometBFT sequencer driver */}}
-{{- if eq .Values.sequencer.driver.type "cometbft"}}
-{{ $_ := required ".Values.sequencer.driver.host is required." (.Values.sequencer.driver).host }}
-{{ $_ := required ".Values.sequencer.driver.port is required." (.Values.sequencer.driver).port }}
-  {{- else if eq .Values.sequencer.driver.type "cantonbft"}}
 {{ $_ := required ".Values.sequencer.driver.externalAddress is required." (.Values.sequencer.driver).externalAddress }}
 {{ $_ := required ".Values.sequencer.driver.externalPort is required." (.Values.sequencer.driver).externalPort }}
-{{- end}}

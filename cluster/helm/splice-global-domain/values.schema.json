@@ -1,7 +1,24 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "required": ["sequencer"],
   "properties": {
+    "sequencer": {
+      "type": "object",
+      "required": ["driver"],
+      "properties": {
+        "driver": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "cantonbft",
+              "description": "The sequencer driver. Only the Canton BFT (DA BFT) driver is supported."
+            }
+          }
+        }
+      }
+    },
     "serviceAccountName": {
       "type": "string"
     },

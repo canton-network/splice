@@ -4,18 +4,23 @@ import cats.data.NonEmptyList
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.GrpcSequencerConnection
+import com.digitalasset.canton.logging.SuppressionRule
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.console.{ParticipantClientReference, SvAppBackendReference}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTestWithIsolatedEnvironment,
+  SpliceTestConsoleEnvironment,
+}
 import org.lfdecentralizedtrust.splice.util.{SvTestUtil, WalletTestUtil}
 
 import scala.jdk.OptionConverters.*
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority.Low
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
   PhysicalSynchronizerNodeConfig,
   SequencerConnectionConfig,
+  SequencerIdentityConfig,
   SynchronizerNodeConfig,
 }
 
@@ -23,6 +28,7 @@ import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorTrustedSynchronizerConfig
+import org.slf4j.event.Level
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
 class ValidatorSequencerConnectionIntegrationTest
@@ -77,18 +83,7 @@ class ValidatorSequencerConnectionIntegrationTest
       // Alice's DomainConnector correctly ignores these "not yet available" sequencers.
       // If Alice only finds 1 valid sequencer but is configured with a trust threshold of 2,
       // her validator app will crash on startup to prevent operating with insufficient trust.
-      withClue("Wait for all 4 SV sequencers to be available and valid in Scan") {
-        eventually(60.seconds, 1.second) {
-          val allSequencers = sv1ScanBackend.listDsoSequencers()
-          val now = env.environment.clock.now
-          val availableSequencers = for {
-            domain <- allSequencers
-            sequencer <- domain.sequencers
-            if sequencer.url.nonEmpty && !now.toInstant.isBefore(sequencer.availableAfter)
-          } yield sequencer
-          availableSequencers.size shouldBe 4
-        }
-      }
+      waitForAllSequencersAvailable()
 
       aliceValidatorBackend.startSync()
 
@@ -138,12 +133,95 @@ class ValidatorSequencerConnectionIntegrationTest
       }
 
       withClue("Alice's validator should remain functional after the URL change") {
-        eventuallySucceeds() {
+        eventuallySucceeds(timeUntilSuccess = 2.minutes) {
           aliceValidatorBackend.onboardUser(aliceWalletClient.config.ledgerApiUser)
         }
       }
 
   }
+
+  "scan does not serve a sequencer id claimed by multiple SVs and validators connect to the remaining sequencers" in {
+    implicit env =>
+      startAllSync(
+        sv1Backend,
+        sv1ScanBackend,
+        sv2Backend,
+        sv2ScanBackend,
+        sv3Backend,
+        sv3ScanBackend,
+        sv4Backend,
+        sv4ScanBackend,
+      )
+      waitForAllSequencersAvailable()
+
+      val initialSequencers = sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers)
+      val sv2SequencerId = initialSequencers.find(_.svName == getSvName(2)).value.id
+      val sv4SequencerId = initialSequencers.find(_.svName == getSvName(4)).value.id
+
+      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+        {
+          // sv4 claims sv2's sequencer id while publishing its own url
+          setSequencerId(sv4Backend, sv2SequencerId.toProtoPrimitive).futureValue
+
+          withClue("Scan should serve neither of the entries claiming sv2's sequencer id") {
+            eventually() {
+              val servedSequencers = sv1ScanBackend.listDsoSequencers().flatMap(_.sequencers)
+              servedSequencers.map(_.svName).toSet shouldBe Set(getSvName(1), getSvName(3))
+              servedSequencers.map(_.id) should not contain sv2SequencerId
+            }
+          }
+
+          bobValidatorBackend.startSync()
+
+          withClue("Validator should connect to the sequencers with a unique id") {
+            eventually(120.seconds, 1.second) {
+              getSequencerPublicUrls(
+                bobValidatorBackend.participantClientWithAdminToken,
+                globalSyncAlias,
+              ) shouldBe Set(getPublicSequencerUrl(sv1Backend), getPublicSequencerUrl(sv3Backend))
+            }
+          }
+
+          withClue("Restoring sv4's sequencer id makes scan serve all sequencers again") {
+            setSequencerId(sv4Backend, sv4SequencerId.toProtoPrimitive).futureValue
+            eventually() {
+              forAll(Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend)) {
+                scanBackend =>
+                  scanBackend.listDsoSequencers().flatMap(_.sequencers).map(_.svName).toSet shouldBe
+                    Set(getSvName(1), getSvName(2), getSvName(3), getSvName(4))
+              }
+            }
+          }
+        },
+        entries => {
+          entries should not be empty
+          forAll(entries)(_.warningMessage should include("as it is claimed by multiple SVs"))
+        },
+      )
+
+      withClue("Validator should reconcile to all sequencers once the duplicate is gone") {
+        eventually(120.seconds, 1.second) {
+          getSequencerPublicUrls(
+            bobValidatorBackend.participantClientWithAdminToken,
+            globalSyncAlias,
+          ) shouldBe Set(sv1Backend, sv2Backend, sv3Backend, sv4Backend).map(getPublicSequencerUrl)
+        }
+      }
+  }
+
+  private def waitForAllSequencersAvailable()(implicit env: SpliceTestConsoleEnvironment): Unit =
+    withClue("Wait for all 4 SV sequencers to be available and valid in Scan") {
+      eventually(60.seconds, 1.second) {
+        val allSequencers = sv1ScanBackend.listDsoSequencers()
+        val now = env.environment.clock.now
+        val availableSequencers = for {
+          domain <- allSequencers
+          sequencer <- domain.sequencers
+          if sequencer.url.nonEmpty && !now.toInstant.isBefore(sequencer.availableAfter)
+        } yield sequencer
+        availableSequencers.size shouldBe 4
+      }
+    }
 
   private def getPublicSequencerUrl(sv: SvAppBackendReference): String = {
     val fullUrl = sv.config.localSynchronizerNodes.current.sequencer.externalPublicApiUrl
@@ -193,9 +271,55 @@ class ValidatorSequencerConnectionIntegrationTest
   private def setSequencerUrl(
       svBackend: SvAppBackendReference,
       newUrl: String,
-  )(implicit
-      ec: ExecutionContext
-  ): Future[Unit] = {
+  ): Future[Unit] =
+    updateSynchronizerNodeConfig(svBackend) { synchronizerNodeConfig =>
+      new SynchronizerNodeConfig(
+        synchronizerNodeConfig.cometBft,
+        None.toJava,
+        synchronizerNodeConfig.mediator,
+        synchronizerNodeConfig.scan,
+        None.toJava,
+        synchronizerNodeConfig.sequencerIdentity,
+        synchronizerNodeConfig.physicalSynchronizers.toScala
+          .map(
+            _.asScala
+              .map { case (serial, _) =>
+                serial -> new PhysicalSynchronizerNodeConfig(
+                  Some(
+                    new SequencerConnectionConfig(
+                      newUrl
+                    )
+                  ).toJava
+                )
+              }
+              .toMap
+              .asJava
+          )
+          .toJava,
+      )
+    }
+
+  private def setSequencerId(
+      svBackend: SvAppBackendReference,
+      sequencerId: String,
+  ): Future[Unit] =
+    updateSynchronizerNodeConfig(svBackend) { synchronizerNodeConfig =>
+      new SynchronizerNodeConfig(
+        synchronizerNodeConfig.cometBft,
+        synchronizerNodeConfig.sequencer,
+        synchronizerNodeConfig.mediator,
+        synchronizerNodeConfig.scan,
+        synchronizerNodeConfig.legacySequencerConfig,
+        synchronizerNodeConfig.sequencerIdentity.toScala
+          .map(identity => new SequencerIdentityConfig(sequencerId, identity.availableAfter))
+          .toJava,
+        synchronizerNodeConfig.physicalSynchronizers,
+      )
+    }
+
+  private def updateSynchronizerNodeConfig(
+      svBackend: SvAppBackendReference
+  )(update: SynchronizerNodeConfig => SynchronizerNodeConfig): Future[Unit] = {
 
     val appState = svBackend.appState
 
@@ -218,36 +342,11 @@ class ValidatorSequencerConnectionIntegrationTest
         sys.error(s"No config found for synchronizer $synchronizerId"),
       )
 
-      newNodeConfig = new SynchronizerNodeConfig(
-        synchronizerNodeConfig.cometBft,
-        None.toJava,
-        synchronizerNodeConfig.mediator,
-        synchronizerNodeConfig.scan,
-        None.toJava,
-        synchronizerNodeConfig.sequencerIdentity,
-        synchronizerNodeConfig.physicalSynchronizers.toScala
-          .map(
-            _.asScala
-              .map { case (long, _) =>
-                long -> new PhysicalSynchronizerNodeConfig(
-                  Some(
-                    new SequencerConnectionConfig(
-                      newUrl
-                    )
-                  ).toJava
-                )
-              }
-              .toMap
-              .asJava
-          )
-          .toJava,
-      )
-
       cmd = rulesAndState.dsoRules.exercise(
         _.exerciseDsoRules_SetSynchronizerNodeConfig(
           svParty.toProtoPrimitive,
           synchronizerId.toProtoPrimitive,
-          newNodeConfig,
+          update(synchronizerNodeConfig),
           rulesAndState.svNodeState.contractId,
         )
       )

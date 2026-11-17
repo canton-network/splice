@@ -23,7 +23,6 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 
 import java.util.Optional
 
-//TODO(DACH-NY/canton-network-node#3756) reconsider this trigger
 class CompletedSvOnboardingTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,

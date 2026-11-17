@@ -23,12 +23,10 @@ contentType: "application/json"
 #     version: "0.3.3"  # Optional, the default is set to the Chart version
 #   synchronizer:
 #     current:
-#       chainIdSuffix: "id0"
 #       migrationId: 4
 #       synchronizerSerialId: 5
 #       version: "0.3.3"  # Optional, the default is set to the Chart version
 #     successor:
-#       chainIdSuffix: "id1"
 #       migrationId: 4
 #       synchronizerSerialId: 6
 #       version: "0.3.4"
