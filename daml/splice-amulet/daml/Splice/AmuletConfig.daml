@@ -156,12 +156,6 @@ defaultTransferPreapprovalFee = 0.00274
 defaultTransferPreapprovalBaseDuration : RelTime
 defaultTransferPreapprovalBaseDuration = days 90
 
--- | 90 days of free validity and $1 per extra year.
-defaultCredentialRegistryConfig : CredentialRegistryConfig
-defaultCredentialRegistryConfig = CredentialRegistryConfig with
-  freePeriod = days 90
-  extensionUsdPerYear = 1.0
-
 -- | Retrieve the base transfer pre-approval duration from the config.
 getTransferPreapprovalBaseDuration : AmuletConfig unit -> RelTime
 getTransferPreapprovalBaseDuration config =
