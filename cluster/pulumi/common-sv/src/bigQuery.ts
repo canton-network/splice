@@ -518,15 +518,6 @@ export interface FillTarget {
   stagingTableName: string;
 }
 
-// whether a value lacks one: NULL, or an empty array, which is what a
-// REPEATED column that ALTER TABLE added holds in older rows
-function lacksValue(expr: string): string {
-  return `TO_JSON_STRING(${expr}) IN ('null', '[]')`;
-}
-function hasValue(expr: string): string {
-  return `TO_JSON_STRING(${expr}) NOT IN ('null', '[]')`;
-}
-
 // {{fillSinceColumns}} of fixProdSchemaSqlTemplate for `tableConfig`;
 // empty if it has no `since` columns yet. Exported for tests.
 export function fillSinceColumnsSql(
@@ -552,13 +543,12 @@ export function fillSinceColumnsSql(
     primaryKeyExpr: tableConfig.primaryKey,
     // whether a production row lacks a value for any `since`
     // column; with none, the IF EXISTS skips the UPDATE
-    prodLacksAny: sinceColumns.map(column => lacksValue(quoted('prod', column))).join('\nOR '),
+    prodLacksAny: sinceColumns.map(column => `${quoted('prod', column)} IS NULL`).join('\nOR '),
     // the UPDATE's SET: each `since` column from staging where
     // production lacks a value, else production's own
     fillColumns: sinceColumns
       .map(
-        column =>
-          `\`${column}\` = IF(${lacksValue(quoted('prod', column))}, ${quoted('latest', column)}, ${quoted('prod', column)})`
+        column => `\`${column}\` = COALESCE(${quoted('prod', column)}, ${quoted('latest', column)})`
       )
       .join(',\n'),
     // what the fill reads from each row's latest staging change:
@@ -577,8 +567,7 @@ export function fillSinceColumnsSql(
     // filled aren't rewritten every hour
     fillableAny: sinceColumns
       .map(
-        column =>
-          `(${lacksValue(quoted('prod', column))} AND ${hasValue(quoted('latest', column))})`
+        column => `(${quoted('prod', column)} IS NULL AND ${quoted('latest', column)} IS NOT NULL)`
       )
       .join('\nOR '),
   });
